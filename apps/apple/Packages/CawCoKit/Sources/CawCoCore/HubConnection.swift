@@ -1,4 +1,4 @@
-import CawCoAPI
+public import CawCoAPI
 public import Foundation
 import Observation
 import OpenAPIRuntime
@@ -245,6 +245,66 @@ public final class HubConnection {
             guard let client else { throw URLError(.notConnectedToInternet) }
             return HubAPI(client: client)
         }
+    }
+
+    /// The mutation and its list refresh finish together: every rail reads
+    /// the hub's project list before the caller dismisses its form or menu.
+    public func createProject(name: String, cwd: String, machineId: String) async throws -> Components.Schemas.PostApiProjects200 {
+        let api = try self.api
+        let response = try await api.projects.create(.init(body: .json(.init(name: name, cwd: cwd, machineId: machineId))))
+        let created: Components.Schemas.PostApiProjects200
+        switch response {
+        case let .ok(ok):
+            created = try ok.body.json
+        case .unprocessableContent:
+            throw ControlError(message: "Could not save this project — the hub answered 422. Try again.")
+        case let .undocumented(statusCode, _):
+            throw ControlError(message: "Could not save this project — the hub answered \(statusCode). Try again.")
+        }
+        fleet.projects = try await api.projects.list().ok.body.json
+        return created
+    }
+
+    public func deleteProject(id: String) async throws {
+        let api = try self.api
+        let response = try await api.projects.delete(.init(path: .init(id: id)))
+        switch response {
+        case .ok:
+            break
+        case let .undocumented(statusCode, _):
+            throw ControlError(message: "Could not forget this project — the hub answered \(statusCode). Try again.")
+        }
+        fleet.projects = try await api.projects.list().ok.body.json
+    }
+
+    public func removeMachine(id: String) async throws {
+        let api = try self.api
+        let response = try await api.machines.remove(.init(path: .init(machineId: id)))
+        let statusCode: Int
+        let body: HTTPBody?
+        switch response {
+        case .ok:
+            fleet.machines = try await api.machines.list().ok.body.json
+            return
+        case let .notFound(notFound):
+            statusCode = 404
+            body = try notFound.body.plainText
+        case let .conflict(conflict):
+            statusCode = 409
+            body = try conflict.body.plainText
+        case let .undocumented(code, payload):
+            statusCode = code
+            body = payload.body
+        }
+        let message: String
+        if let body {
+            message = try await String(collecting: body, upTo: 64_000)
+        } else {
+            message = ""
+        }
+        throw ControlError(message: message.isEmpty
+            ? "The hub answered \(statusCode), so the machine was not removed. Try again."
+            : message)
     }
 
     /// Marks sessions and runs (`run:<id>`) seen on the hub: `look`, the owner
