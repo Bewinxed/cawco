@@ -139,6 +139,13 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         installGrip()
     }
 
+    /// The watcher's first read ran before there was a view: the workspace kept
+    /// from the last run is placed once the shell knows its width.
+    override func viewIsAppearing(_ animated: Bool) {
+        super.viewIsAppearing(animated)
+        followWorkspace()
+    }
+
     static func clamp(_ width: Double) -> Double { min(railMax, max(railMin, width.rounded())) }
 
     private var compact: Bool { traitCollection.horizontalSizeClass == .compact }
@@ -246,6 +253,9 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         } else if workspace.openIds.isEmpty {
             if detail.shown != nil { detail.show(nil) }
             landIfEmpty()
+        } else if detail.shown !== workspaceController {
+            // Tabs kept from the last run: a wide screen shows them, never an empty detail.
+            showWorkspace(animated: false)
         }
     }
 
@@ -369,12 +379,40 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         dialogPresenter.present(palette, animated: true)
     }
 
-    @objc private func jumpKey() { openJump(.key) }
+    // MARK: Keys (Shell.svelte `shortcut`): none of them while the reader is typing.
+
+    @objc private func jumpKey() {
+        guard !UIResponder.isTyping else { return }
+        openJump(.key)
+    }
+
+    @objc private func assistantKey() {
+        guard !UIResponder.isTyping else { return }
+        toggleAssistant()
+    }
+
+    /// Splits the focused group, the conversation in front going into the new
+    /// half (`mod+\` right, `mod+shift+\` below), as VS Code binds it.
+    @objc private func splitRightKey() { splitKey(.right) }
+    @objc private func splitDownKey() { splitKey(.bottom) }
+
+    private func splitKey(_ edge: Workspace.Edge) {
+        // Only where the conversations show (`onSession`).
+        let showing = compact ? compactNav.topViewController === workspaceController : detail.shown === workspaceController
+        guard !UIResponder.isTyping, showing else { return }
+        guard let here = workspace.activeSessionId, workspace.openIds.count >= 2 else { return }
+        workspace.split(workspace.focusedLeaf, edge, here)
+    }
 
     override var keyCommands: [UIKeyCommand]? {
-        let jump = UIKeyCommand(title: "Jump to…", action: #selector(jumpKey), input: "k", modifierFlags: .command)
-        jump.wantsPriorityOverSystemBehavior = true
-        return [jump]
+        let commands = [
+            UIKeyCommand(title: "Jump to…", action: #selector(jumpKey), input: "k", modifierFlags: .command),
+            UIKeyCommand(title: "Assistant", action: #selector(assistantKey), input: "j", modifierFlags: .command),
+            UIKeyCommand(title: "Split Right", action: #selector(splitRightKey), input: "\\", modifierFlags: .command),
+            UIKeyCommand(title: "Split Down", action: #selector(splitDownKey), input: "\\", modifierFlags: [.command, .shift]),
+        ]
+        for command in commands { command.wantsPriorityOverSystemBehavior = true }
+        return commands
     }
 
     /// MachinesButton's popover, hung from the button's end.
@@ -603,5 +641,20 @@ final class FleetDetailController: ObservedViewController {
             old.removeFromParent()
         }
         fade.startAnimation()
+    }
+}
+
+extension UIResponder {
+    private nonisolated(unsafe) static weak var found: UIResponder?
+
+    /// typing.ts `isTyping`: a text field or text view has the keyboard.
+    static var isTyping: Bool {
+        found = nil
+        UIApplication.shared.sendAction(#selector(UIResponder.reportFirstResponder), to: nil, from: nil, for: nil)
+        return found is UITextField || found is UITextView
+    }
+
+    @objc private func reportFirstResponder() {
+        UIResponder.found = self
     }
 }
