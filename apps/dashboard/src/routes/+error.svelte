@@ -1,12 +1,12 @@
 <script lang="ts">
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { EmptyState } from "#lib/components/ui/empty/index.js";
+  import { IconMapPoint, IconWarningTriangle } from "#lib/icons.js";
   /**
    * Any route that fails, or any path nothing answers, lands here inside the
    * shell: the rail stays, and one action goes back to the sessions.
    */
   import { page } from "$app/state";
-  import { Button } from "#lib/components/ui/button/index.js";
-  import { EmptyState } from "#lib/components/ui/empty/index.js";
-  import { IconMapPoint, IconWarningTriangle } from "#lib/icons.js";
 
   const missing = $derived(page.status === 404);
 </script>

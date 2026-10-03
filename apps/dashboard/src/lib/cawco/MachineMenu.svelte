@@ -31,7 +31,6 @@
   /** Right-click on a machine's heading — what you can do to the box, not to a session. */
   import { machineLabel, UPDATE_CAWCO, type UpdateReport } from "@cawco/core";
   import type { Snippet } from "svelte";
-  import { goto } from "$app/navigation";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as ContextMenu from "#lib/components/ui/context-menu/index.js";
   import { UPDATE_TIMEOUT_MS } from "#lib/config.js";
@@ -43,6 +42,7 @@
     IconRefresh,
     IconTrash,
   } from "#lib/icons.js";
+  import { goto } from "$app/navigation";
   import {
     cawco,
     loadCatalog,

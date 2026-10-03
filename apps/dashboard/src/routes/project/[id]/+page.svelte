@@ -7,7 +7,6 @@
    */
   import { flushSync, tick, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
-  import { goto } from "$app/navigation";
   import type { InstanceRow, ProjectRow } from "#lib/cawco/client.svelte.js";
   import {
     cawco,
@@ -52,6 +51,7 @@
   import * as Tabs from "#lib/components/ui/tabs/index.js";
   import { Textarea } from "#lib/components/ui/textarea/index.js";
   import { IconChat, IconDocument } from "#lib/icons.js";
+  import { goto } from "$app/navigation";
   import type { PageData } from "./$types";
 
   let { data }: { data: PageData } = $props();
@@ -476,7 +476,7 @@
     // Back to the spoke the project was opened from; the project's row folds
     // out of the sidebar as its list drops it, and the dead page is not left
     // behind in the history.
-    await goto(route.spoke, { replaceState: true });
+    await goto(route.spoke, { replace: true });
   }
 </script>
 

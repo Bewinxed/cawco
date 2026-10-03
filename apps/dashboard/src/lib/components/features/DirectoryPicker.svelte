@@ -1,7 +1,11 @@
 <script lang="ts">
   import type { FsEntry, NeutralSessionInfo } from "@cawco/core";
   import { cawco, machineFs } from "#lib/cawco/client.svelte.js";
-  import { dur, easeDrawer, motionOk } from "#lib/cawco/motion/curves.svelte.js";
+  import {
+    dur,
+    easeDrawer,
+    motionOk,
+  } from "#lib/cawco/motion/curves.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for importing a component group
   import * as Collapsible from "#lib/components/ui/collapsible/index.js";

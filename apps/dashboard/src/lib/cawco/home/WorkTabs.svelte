@@ -43,11 +43,15 @@
    */
   import { flushSync, untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
-  import { page } from "$app/state";
-  import { TabItem, Tabs, TabsList } from "#lib/components/ui/fluid-tabs/index.js";
+  import {
+    TabItem,
+    Tabs,
+    TabsList,
+  } from "#lib/components/ui/fluid-tabs/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import { IconArchive } from "#lib/icons.js";
+  import { page } from "$app/state";
   import StructureOn from "~icons/solar/structure-bold";
   import Structure from "~icons/solar/structure-bold-duotone";
   import { cawco, type InstanceRow, isFailed } from "../client.svelte";

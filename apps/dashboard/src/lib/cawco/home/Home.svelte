@@ -13,11 +13,11 @@
    */
   import { untrack } from "svelte";
   import { TextMorph } from "torph/svelte";
-  import { goto } from "$app/navigation";
-  import { page } from "$app/state";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { IconPlus } from "#lib/icons.js";
+  import { goto } from "$app/navigation";
+  import { page } from "$app/state";
   import Attention from "~icons/solar/hand-shake-bold-duotone";
   import { crossIn, crossOut, morphMs } from "../motion/curves.svelte";
   import { reflow } from "../motion/rows.svelte";
@@ -90,11 +90,11 @@
         cwd: page.url.searchParams.get("cwd") ?? undefined,
       };
       spawnOpen = true;
-      const url = new URL(page.url);
+      const url = new URL(page.url.href);
       url.searchParams.delete("spawn");
       url.searchParams.delete("cwd");
       // biome-ignore lint/complexity/noVoid: the dialog is already open; the URL cleanup is a courtesy
-      void goto(url, { replaceState: true });
+      void goto(url, { replace: true });
     });
   });
 

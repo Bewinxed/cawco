@@ -62,7 +62,6 @@ import {
   runDoing,
 } from "@cawco/core";
 import { toast } from "svelte-sonner";
-import { goto } from "$app/navigation";
 import {
   CONTROL_TIMEOUT_MS,
   DISCARD_TIMEOUT_MS,
@@ -73,6 +72,7 @@ import {
   WS_RECONNECT_MAX_DELAY,
 } from "#lib/config.js";
 import type { SubagentState } from "#lib/utils/flow-types.js";
+import { goto } from "$app/navigation";
 import type { Activity } from "./activity";
 import { activityOf, runningSubagents } from "./activity";
 import { checkDeployToast } from "./deploy-toast";

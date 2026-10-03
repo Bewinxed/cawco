@@ -3,12 +3,16 @@
   "version": "0.0.1",
   "private": true,
   "type": "module",
+  "imports": {
+    "#lib": "./src/lib/index.js",
+    "#lib/*": "./src/lib/*"
+  },
   "scripts": {
     "build": "vite build && bun scripts/publish-build.ts",
     "dev": "vite dev",
     "preview": "vite preview",
     "tokens": "bun scripts/build-tokens.ts && biome format --write src/lib/tokens/tokens.css ../apple/Packages/CawCoKit/Sources/CawCoDesign/Resources",
-    "typecheck": "svelte-kit sync && bun --bun svelte-fast-check --incremental"
+    "typecheck": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json"
   },
   "overrides": {
     "vite": "^8.3.1"
@@ -61,16 +65,11 @@
     "style-dictionary": "^5",
     "svelte": "5.57.1",
     "svelte-check": "^4.7.5",
-    "svelte-fast-check": "^0.4.5",
     "svelte-sonner": "^1.2.1",
     "tailwindcss": "^4.3.3",
     "typescript": "npm:@typescript/typescript6@^6.0.2",
     "unplugin-icons": "^23.0.1",
     "vaul-svelte": "^1.0.0-next.7",
-    "vite": "^8.3.1"
-  },
-  "imports": {
-    "#lib": "./src/lib/index.js",
-    "#lib/*": "./src/lib/*"
+    "vite": "^8.3.2"
   }
 }

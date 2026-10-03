@@ -5,17 +5,20 @@
    * beside each entry are the rows the section shows.
    */
   import { onMount } from "svelte";
-  import { page } from "$app/state";
   import ConfigRail from "#lib/cawco/config/ConfigRail.svelte";
   import {
     LAST_KEY,
     SECTIONS,
     type SectionSlug,
   } from "#lib/cawco/config/sections.js";
-  import { ConfigStore, provideConfig } from "#lib/cawco/config/store.svelte.js";
+  import {
+    ConfigStore,
+    provideConfig,
+  } from "#lib/cawco/config/store.svelte.js";
   import { pageIn, pageOut } from "#lib/cawco/motion/route.svelte.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Tooltip from "#lib/components/ui/tooltip/index.js";
+  import { page } from "$app/state";
 
   let { children } = $props();
 

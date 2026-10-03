@@ -11,8 +11,6 @@
   } from "@cawco/core";
   import { HARNESSES, ruleProblem, ruleSentence } from "@cawco/core";
   import { onMount, tick, untrack } from "svelte";
-  import { goto } from "$app/navigation";
-  import { page } from "$app/state";
   import {
     appear,
     crossIn,
@@ -34,6 +32,8 @@
     IconPlain,
     IconSparkles,
   } from "#lib/icons.js";
+  import { goto } from "$app/navigation";
+  import { page } from "$app/state";
   import { cawco } from "../../client.svelte";
   import { confirm } from "../../confirm.svelte";
   import RuleActivity from "../../RuleActivity.svelte";

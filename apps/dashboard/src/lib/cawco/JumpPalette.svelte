@@ -9,7 +9,6 @@
 <script lang="ts">
   import { Command as CommandPrimitive } from "bits-ui";
   import { scale } from "svelte/transition";
-  import { goto } from "$app/navigation";
   import {
     crossOut,
     dur,
@@ -33,6 +32,7 @@
     IconSearch,
     IconUser,
   } from "#lib/icons.js";
+  import { goto } from "$app/navigation";
   import { ACTIVITY_LABEL } from "./activity";
   import { cawco } from "./client.svelte";
   import JumpMatch from "./JumpMatch.svelte";

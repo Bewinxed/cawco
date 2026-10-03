@@ -6,7 +6,6 @@
    * the context-menu key still reaches this menu from the keyboard.
    */
   import type { Snippet } from "svelte";
-  import { goto } from "$app/navigation";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as AlertDialog from "#lib/components/ui/alert-dialog/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -19,6 +18,7 @@
     IconPenLine,
     IconTrash,
   } from "#lib/icons.js";
+  import { goto } from "$app/navigation";
   import {
     cawco,
     deleteTranscript,

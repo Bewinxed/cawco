@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { page } from "$app/state";
   import WorkflowEditor from "#lib/components/features/workflows/WorkflowEditor.svelte";
+  import { page } from "$app/state";
   import "#lib/components/features/workflows/workflows.css";
 </script>
 <svelte:head><title>Workflow editor · CawCo</title></svelte:head>

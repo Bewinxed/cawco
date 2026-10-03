@@ -3,7 +3,11 @@
   import { getContext, untrack } from "svelte";
   import { SvelteSet } from "svelte/reactivity";
   import { toast } from "svelte-sonner";
-  import { cawco, openPreview, revealPreview } from "#lib/cawco/client.svelte.js";
+  import {
+    cawco,
+    openPreview,
+    revealPreview,
+  } from "#lib/cawco/client.svelte.js";
   import { fleetMcpServers } from "#lib/cawco/fleet-mcp.svelte.js";
   import { mcpServerHost } from "#lib/cawco/mcp.js";
   import { dur, easeOut, motionOk } from "#lib/cawco/motion/curves.svelte.js";
@@ -23,9 +27,9 @@
   import PendingContent, {
     whileIdle,
   } from "#lib/components/ui/button/pending-content.svelte";
+  import CollapsibleLazy from "#lib/components/ui/collapsible/collapsible-lazy.svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Collapsible from "#lib/components/ui/collapsible/index.js";
-  import CollapsibleLazy from "#lib/components/ui/collapsible/collapsible-lazy.svelte";
   import { IconChevronRight, IconWindow } from "#lib/icons.js";
   /**
    * A run of tool calls as rail-led rows — never a nested card. The rail is a

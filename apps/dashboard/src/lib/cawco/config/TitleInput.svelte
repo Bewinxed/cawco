@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { land } from "#lib/cawco/motion/share.svelte.js";
   /**
    * The name of the thing being edited, typed where its title reads. It is
    * the same object as the row's name in the section list: drilling in, the
@@ -6,7 +7,6 @@
    * (motion/share.svelte.ts, keyed on the editor's path).
    */
   import { page } from "$app/state";
-  import { land } from "#lib/cawco/motion/share.svelte.js";
 
   let {
     value = $bindable(""),

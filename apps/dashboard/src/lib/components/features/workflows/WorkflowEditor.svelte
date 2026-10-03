@@ -9,16 +9,16 @@
   import { onMount } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import { TextMorph } from "torph/svelte";
-  import { beforeNavigate, goto } from "$app/navigation";
-  import { page } from "$app/state";
   import { cawco } from "#lib/cawco/client.svelte.js";
   import { loadDelegateTypes, message } from "#lib/cawco/delegate-types.js";
   import { newId } from "#lib/cawco/id.js";
   import { crossIn, dur, morphMs } from "#lib/cawco/motion/curves.svelte.js";
   import { reflow } from "#lib/cawco/motion/rows.svelte.js";
   import { runHref } from "#lib/cawco/workflow-runs.js";
-  import { refreshWorkflows, workflowState } from "#lib/cawco/workflow-state.svelte.js";
-
+  import {
+    refreshWorkflows,
+    workflowState,
+  } from "#lib/cawco/workflow-state.svelte.js";
   import {
     loadWorkflow,
     saveWorkflow,
@@ -38,6 +38,8 @@
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component group
   import * as Tabs from "#lib/components/ui/tabs/index.js";
+  import { beforeNavigate, goto } from "$app/navigation";
+  import { page } from "$app/state";
   import { paneSlide, towards } from "./pane-slide";
   import WorkflowCanvas from "./WorkflowCanvas.svelte";
   import WorkflowInspector from "./WorkflowInspector.svelte";
@@ -77,7 +79,9 @@
    * precision the match never held, the palette folded once, never came
    * back, and never said it had folded.
    */
-  const railSize = $derived(Number.parseFloat((48 / panelWidth * 100).toFixed(10)));
+  const railSize = $derived(
+    Number.parseFloat(((48 / panelWidth) * 100).toFixed(10))
+  );
 
   let launch = $state(false);
   /** The button the launch dialog grows from. */
@@ -227,7 +231,9 @@
     return () => clearTimeout(timer);
   });
   beforeNavigate((navigation) => {
-    if (navigation.shallow) return;
+    if (navigation.shallow) {
+      return;
+    }
 
     if (!dirty) {
       return;
@@ -372,8 +378,8 @@
   }
   function add(kind: WorkflowNode["kind"], preset?: DelegateType) {
     let next = newNode(kind, {
-      x: 80 + graph.nodes.length % 3 * 340,
-      y: 120 + Math.floor(graph.nodes.length / 3) * 320
+      x: 80 + (graph.nodes.length % 3) * 340,
+      y: 120 + Math.floor(graph.nodes.length / 3) * 320,
     });
     if (preset && next.kind === "step") {
       next = {
@@ -505,20 +511,20 @@
 {/snippet}
 {#snippet inspector()}
   <WorkflowInspector
-    description={description}
-    edge={edge}
+    {description}
+    {edge}
     editBody={(key) => {
       bodyPath = [...bodyPath, key];
       selected = undefined;
       inspectorOpen = false;
     }}
-    graph={graph}
-    node={node}
+    {graph}
+    {node}
     onchange={commit}
     ondescription={(value) => { description = value; }}
     onselect={select}
-    problems={problems}
-    types={types}
+    {problems}
+    {types}
     workflowId={id}
     workflows={workflowState.workflows}
   />
@@ -537,13 +543,13 @@
     <WorkflowCanvas
       canRedo={future.length > 0}
       canUndo={history.length > 0}
-      graph={graph}
+      {graph}
       onchange={commit}
       onselect={select}
-      problems={problems}
-      redo={redo}
+      {problems}
+      {redo}
       selection={selected}
-      undo={undo}
+      {undo}
     />
     {#if graph.nodes.length === 1 && graph.nodes[0].kind === 'start'}
       <p class="hint">
@@ -561,7 +567,7 @@
           aria-label="Workflow name"
           disabled={!workflow}
           bind:value={name}
-        />
+        >
       </div>
       <div class="wf-row">
         <button
@@ -657,13 +663,13 @@
         <div class="pane" in:paneSlide={{ dir }} out:paneSlide={{ dir }}>
           {#if tab === 'program'}
             <WorkflowProgram
-              live={live}
+              {live}
               onchange={(value) => {
                 program = value;
               }}
-              origin={origin}
-              problems={problems}
-              program={program}
+              {origin}
+              {problems}
+              {program}
             />
           {:else if tab === 'editor'}
             {#if narrow.current}
@@ -757,7 +763,7 @@
     onclose={() => {
       launch = false;
     }}
-    workflow={workflow}
+    {workflow}
   />
 {/if}
 {#if narrow.current}

@@ -13,7 +13,7 @@ let asked = false;
 async function load() {
   const response = await fetch("/api/fleet");
   if (response.ok) {
-    const snapshot = await response.json() as FleetSnapshot;
+    const snapshot = (await response.json()) as FleetSnapshot;
     servers = snapshot.config.mcp;
   }
 }

@@ -91,7 +91,9 @@ async function read(viewId: string): Promise<void> {
   const row = cawco.instanceIndex.byId.get(viewId);
   const machineId = session?.machineId || row?.machineId;
   const sessionId = session?.sessionId || row?.sessionId;
-  const harness = (session?.harness ?? row?.harness as HarnessKind | null | undefined ?? "claude") as HarnessKind;
+  const harness = (session?.harness ??
+    (row?.harness as HarnessKind | null | undefined) ??
+    "claude") as HarnessKind;
   const cwd = session?.cwd || row?.cwd;
   if (!(machineId && sessionId)) {
     return;
@@ -105,12 +107,12 @@ async function read(viewId: string): Promise<void> {
 
   const work = fetchLedger(viewId, machineId, sessionId, harness, cwd).finally(
     () => {
-    running.delete(viewId);
-    // An edit that landed mid-read was answered by a listing taken before it,
-    // so the ledger this just published is already one revision behind.
-    if (stale.has(viewId)) {
-      refreshTasks(viewId);
-    }
+      running.delete(viewId);
+      // An edit that landed mid-read was answered by a listing taken before it,
+      // so the ledger this just published is already one revision behind.
+      if (stale.has(viewId)) {
+        refreshTasks(viewId);
+      }
     }
   );
   running.set(viewId, work);
@@ -175,14 +177,14 @@ async function fetchLedger(
   );
   const parsed = await Promise.all(
     files.map(async (file) => {
-    try {
+      try {
         return parseTask(
           await machineFs<string>(machineId, "read", `${dir}/${file.name}`)
         );
-    } catch {
-      // One unreadable or half-written file is not a reason to lose the plan.
-      return null;
-    }
+      } catch {
+        // One unreadable or half-written file is not a reason to lose the plan.
+        return null;
+      }
     })
   );
 
@@ -235,9 +237,13 @@ function readHomeCache(): Record<string, string> {
     return {};
   }
   try {
-    const stored = JSON.parse(localStorage.getItem(HOME_KEY) ?? "{}") as unknown;
+    const stored = JSON.parse(
+      localStorage.getItem(HOME_KEY) ?? "{}"
+    ) as unknown;
 
-    return stored && typeof stored === "object" ? stored as Record<string, string> : {};
+    return stored && typeof stored === "object"
+      ? (stored as Record<string, string>)
+      : {};
   } catch {
     return {};
   }
@@ -346,5 +352,9 @@ export function blockerOf(
     return null;
   }
 
-  return task.blockedBy.find((id) => tasks.some((other) => other.id === id && other.status !== "completed")) ?? null;
+  return (
+    task.blockedBy.find((id) =>
+      tasks.some((other) => other.id === id && other.status !== "completed")
+    ) ?? null
+  );
 }

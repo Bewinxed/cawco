@@ -19,7 +19,6 @@
   import type { Attachment } from "svelte/attachments";
   import { SvelteSet } from "svelte/reactivity";
   import { TextMorph } from "torph/svelte";
-  import { page } from "$app/state";
   import { Button } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
@@ -38,6 +37,7 @@
     IconWorkflow,
   } from "#lib/icons.js";
   import { formatAgeShort, formatDistanceToNow } from "#lib/utils/time.js";
+  import { page } from "$app/state";
   import type { Activity } from "./activity";
   import {
     cawco,

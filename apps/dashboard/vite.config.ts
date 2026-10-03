@@ -1,9 +1,8 @@
 import { execFileSync } from "node:child_process";
-import adapter from "@sveltejs/adapter-node";
-import { vitePreprocess } from "@sveltejs/vite-plugin-svelte";
 import http from "node:http";
-import path from "node:path";
+import adapter from "@sveltejs/adapter-node";
 import { sveltekit } from "@sveltejs/kit/vite";
+import { vitePreprocess } from "@sveltejs/vite-plugin-svelte";
 import tailwindcss from "@tailwindcss/vite";
 import Icons from "unplugin-icons/vite";
 import { defineConfig, type Plugin } from "vite";
@@ -40,9 +39,10 @@ function previewMatch(req: http.IncomingMessage): {
           viaReferer: true,
         };
       }
-    } catch {}
+    } catch {
+      // malformed referer
+    }
   }
-  // malformed referer
   return null;
 }
 
@@ -199,11 +199,6 @@ export default defineConfig({
       preprocess: vitePreprocess(),
       compilerOptions: { experimental: { async: true } },
       adapter: adapter({ out: ".build-next" }),
-      alias: {
-        $lib: "./src/lib",
-        "$lib/*": "./src/lib/*",
-        "@/*": "./src/lib/*"
-      },
       experimental: { remoteFunctions: true },
       /* The commit this build was made from. The build serves it as
          `_app/version.json` and bakes it into the page, and `updated.check()`
@@ -211,10 +206,12 @@ export default defineConfig({
          dashboard now serving it (deploy-toast.ts). It must be deterministic,
          or two builds of one commit would each tell open tabs to reload. */
       version: {
-        name: execFileSync("git", ["rev-parse", "--short", "HEAD"], { encoding: "utf8" }).trim()
-      }
+        name: execFileSync("git", ["rev-parse", "--short", "HEAD"], {
+          encoding: "utf8",
+        }).trim(),
+      },
     }),
-    Icons({ compiler: "svelte" })
+    Icons({ compiler: "svelte" }),
   ],
   server: {
     port: 3000,
@@ -244,11 +241,6 @@ export default defineConfig({
     cssTarget: ["chrome131", "edge131", "firefox146", "safari18", "ios18"],
     assetsInlineLimit: (file) => INLINE_FACES.test(file) || undefined,
   },
-  resolve: {
-    alias: {
-      $lib: path.resolve("./src/lib"),
-    },
-  },
   optimizeDeps: {
     exclude: ["@xyflow/svelte"],
   },
@@ -264,6 +256,11 @@ export default defineConfig({
     // refuses a directory import (ERR_UNSUPPORTED_DIR_IMPORT) where vite's
     // resolver follows it. Bundled, the server never resolves them at all.
     noExternal: [
+      "tw-animate-css",
+      "shadcn-svelte",
+      "@fontsource-variable/figtree",
+      "@fontsource-variable/jetbrains-mono",
+      "@fontsource/fredoka",
       "@xyflow/svelte",
       "virtua",
       "@hugeicons/svelte",

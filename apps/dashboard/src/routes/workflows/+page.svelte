@@ -1,7 +1,6 @@
 <script lang="ts">
   import type { Workflow } from "@cawco/core";
   import { onMount } from "svelte";
-  import { goto } from "$app/navigation";
   import { cawco } from "#lib/cawco/client.svelte.js";
   import { message } from "#lib/cawco/delegate-types.js";
   import { crossIn, crossOut } from "#lib/cawco/motion/curves.svelte.js";
@@ -22,6 +21,7 @@
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { IconWorkflow } from "#lib/icons.js";
   import { formatDistanceToNow } from "#lib/utils/time.js";
+  import { goto } from "$app/navigation";
   import "#lib/components/features/workflows/workflows.css";
 
   let busy = $state(false);

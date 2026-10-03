@@ -1,7 +1,6 @@
 <script lang="ts">
   import type { DelegateType, Workflow } from "@cawco/core";
   import { onMount } from "svelte";
-  import { goto } from "$app/navigation";
   import { cawco } from "#lib/cawco/client.svelte.js";
   import { loadDelegateTypes, message } from "#lib/cawco/delegate-types.js";
   import { dur, ease, motionOk } from "#lib/cawco/motion/curves.svelte.js";
@@ -13,6 +12,7 @@
   } from "#lib/components/ui/button/pending-content.svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component group
   import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import { goto } from "$app/navigation";
 
   let {
     workflow,

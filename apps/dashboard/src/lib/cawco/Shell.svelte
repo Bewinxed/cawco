@@ -10,9 +10,6 @@
   import { onMount, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import { TextMorph } from "torph/svelte";
-  import { browser } from '$app/env';
-  import { onNavigate } from "$app/navigation";
-  import { page } from "$app/state";
   import {
     crossOut,
     dur,
@@ -39,6 +36,9 @@
     IconSidebar,
   } from "#lib/icons.js";
   import { isTyping } from "#lib/utils/typing.js";
+  import { browser } from "$app/env";
+  import { onNavigate } from "$app/navigation";
+  import { page } from "$app/state";
   import AddMachineDialog from "./AddMachineDialog.svelte";
   import AssistantOrb from "./assistant/AssistantOrb.svelte";
   import AssistantPanel from "./assistant/AssistantPanel.svelte";
@@ -256,7 +256,9 @@
   // the navigation it started swaps the page, in the same frame, rather than
   // after the new page has arrived.
   onNavigate(({ shallow }) => {
-    if (shallow) return;
+    if (shallow) {
+      return;
+    }
 
     railOpen = false;
   });
@@ -402,7 +404,9 @@
     );
   }
   const narrowQuery = new MediaQuery(NARROW_QUERY);
-  const narrow = $derived(browser ? narrowQuery.current : page.data.narrow as boolean);
+  const narrow = $derived(
+    browser ? narrowQuery.current : (page.data.narrow as boolean)
+  );
 
   $effect(() => {
     // The Cookie Store API is async and unsupported in Safari; this write must
@@ -614,8 +618,8 @@
   <div class="shell" style="--sidebar-width: var(--rail-w, {railWidth}px)">
     <aside class="rail hidden min-[900px]:flex">
       <Sidebar
-        assistantOpen={assistantOpen}
-        narrow={narrow}
+        {assistantOpen}
+        {narrow}
         onassistant={() => {
         assistantOpen = !assistantOpen;
       }}
@@ -643,8 +647,8 @@
           <Sheet.Title>Navigation</Sheet.Title>
         </Sheet.Header>
         <Sidebar
-          assistantOpen={assistantOpen}
-          narrow={narrow}
+          {assistantOpen}
+          {narrow}
           onassistant={() => {
           railOpen = false;
           assistantOpen = true;

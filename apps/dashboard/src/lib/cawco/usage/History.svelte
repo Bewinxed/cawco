@@ -8,7 +8,11 @@
    */
   import type { UsageSummary } from "@cawco/core";
   import { Button } from "#lib/components/ui/button/index.js";
-  import { TabItem, Tabs, TabsList } from "#lib/components/ui/fluid-tabs/index.js";
+  import {
+    TabItem,
+    Tabs,
+    TabsList,
+  } from "#lib/components/ui/fluid-tabs/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Tooltip from "#lib/components/ui/tooltip/index.js";

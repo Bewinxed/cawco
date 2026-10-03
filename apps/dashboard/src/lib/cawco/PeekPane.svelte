@@ -24,7 +24,6 @@
    * read between them, not two.
    */
   import { untrack } from "svelte";
-  import { goto } from "$app/navigation";
   import { Button } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as ContextMenu from "#lib/components/ui/context-menu/index.js";
@@ -37,6 +36,7 @@
     IconTick,
   } from "#lib/icons.js";
   import { smoothText } from "#lib/utils/smooth-text.svelte.js";
+  import { goto } from "$app/navigation";
   import {
     ACTIVITY_LABEL,
     SLEEPING_LABEL,

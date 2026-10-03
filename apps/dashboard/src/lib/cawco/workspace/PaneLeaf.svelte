@@ -18,8 +18,6 @@
    */
   import { untrack } from "svelte";
   import type { TransitionConfig } from "svelte/transition";
-  import { browser } from '$app/env';
-  import { page } from "$app/state";
   import {
     dur,
     ease,
@@ -28,6 +26,8 @@
   } from "#lib/cawco/motion/curves.svelte.js";
   import { land } from "#lib/cawco/motion/share.svelte.js";
   import WorkflowRunView from "#lib/components/features/workflows/WorkflowRunView.svelte";
+  import { browser } from "$app/env";
+  import { page } from "$app/state";
   import SessionPane from "../SessionPane.svelte";
   import Composer from "../transcript/Composer.svelte";
   import { runIdOf } from "../workflow-runs";
@@ -38,11 +38,14 @@
   import PaneTabs from "./PaneTabs.svelte";
   import { contextOf, type LeafNode, workspace } from "./workspace.svelte";
 
-  let { leaf, swipeable = false, hosted = false
+  let {
+    leaf,
+    swipeable = false,
+    hosted = false,
 
-  /** Only the phone's single group takes the swipe. */
-  /** The top bar is drawing this group's tabs; the group draws none of its own. */
-   }: { leaf: LeafNode; swipeable?: boolean; hosted?: boolean } = $props();
+    /** Only the phone's single group takes the swipe. */
+    /** The top bar is drawing this group's tabs; the group draws none of its own. */
+  }: { leaf: LeafNode; swipeable?: boolean; hosted?: boolean } = $props();
 
   const swipe = createSwipe(() => leaf.id);
 
@@ -92,7 +95,9 @@
 
   // Seeded with the showing tab so the server and the first client render
   // agree; later tabs are added by the effects below.
-  let mounted = $state<string[]>(untrack(() => leaf.active ? [leaf.active] : []));
+  let mounted = $state<string[]>(
+    untrack(() => (leaf.active ? [leaf.active] : []))
+  );
 
   $effect.pre(() => {
     const id = viewId;
@@ -218,7 +223,7 @@
         done: new Promise((resolve) => {
           landed = resolve;
         }),
-        ms: () => settle ? swipe.settleMs : SWITCH_MS
+        ms: () => (settle ? swipe.settleMs : SWITCH_MS),
       };
       if (settle) {
         swipe.prepare(from, id);
@@ -319,7 +324,7 @@
   <span aria-hidden="true" class="rail"></span>
 
   {#if !hosted}
-    <PaneTabs leaf={leaf} travel={swipe.travel} />
+    <PaneTabs {leaf} travel={swipe.travel} />
   {/if}
 
   <!-- Where a dropped conversation would go, shown as the shape it would
@@ -397,7 +402,7 @@
         delegatesOf={bound.delegatesOf}
         draft={bound.draft}
         held={swipe.moving}
-        landing={landing}
+        {landing}
         leading={bound.leading}
         mentions={bound.mentions}
         oninterruptsend={bound.oninterruptsend}
@@ -410,7 +415,7 @@
         sendError={bound.sendError}
         sending={bound.sending}
         suggest={bound.suggest}
-        switchDir={switchDir}
+        {switchDir}
       />
     </div>
   {/if}

@@ -17,7 +17,6 @@
    */
   import { onMount, type Snippet, untrack } from "svelte";
   import { fade } from "svelte/transition";
-  import { page } from "$app/state";
   import {
     CURVE,
     dur,
@@ -29,6 +28,7 @@
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { IconMore, IconTrash } from "#lib/icons.js";
+  import { page } from "$app/state";
   import { cawco } from "../client.svelte";
   import { type Cards, rememberCard } from "./cards";
   import EditorFooter from "./EditorFooter.svelte";

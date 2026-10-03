@@ -6,7 +6,6 @@
    * only somewhere work happens, and there is nothing to pin or to forget.
    */
   import type { Snippet } from "svelte";
-  import { goto } from "$app/navigation";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as AlertDialog from "#lib/components/ui/alert-dialog/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -22,6 +21,7 @@
     IconPlus,
     IconTrash,
   } from "#lib/icons.js";
+  import { goto } from "$app/navigation";
   import { deleteProject, type ProjectRow } from "./client.svelte";
   import { folderPrefs } from "./folder-prefs.svelte";
   import { HUES } from "./identity";

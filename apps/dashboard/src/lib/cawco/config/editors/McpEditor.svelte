@@ -2,8 +2,6 @@
   import type { FleetMcpConfig, FleetMcpServer } from "@cawco/core";
   import { untrack } from "svelte";
   import { toast } from "svelte-sonner";
-  import { goto } from "$app/navigation";
-  import { page } from "$app/state";
   import {
     appear,
     crossIn,
@@ -14,6 +12,8 @@
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { IconKey, IconPlay } from "#lib/icons.js";
+  import { goto } from "$app/navigation";
+  import { page } from "$app/state";
   import { confirm } from "../../confirm.svelte";
   import {
     isRemoteMcp,

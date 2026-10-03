@@ -16,7 +16,11 @@
   import { Button } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Dialog from "#lib/components/ui/dialog/index.js";
-  import { TabItem, Tabs, TabsList } from "#lib/components/ui/fluid-tabs/index.js";
+  import {
+    TabItem,
+    Tabs,
+    TabsList,
+  } from "#lib/components/ui/fluid-tabs/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { Label } from "#lib/components/ui/label/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention

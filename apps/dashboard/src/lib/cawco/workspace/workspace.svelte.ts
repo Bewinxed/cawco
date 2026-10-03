@@ -139,7 +139,13 @@ function validate(node: unknown): node is PaneNode {
     return typeof n.id === "string" && Array.isArray(n.tabs);
   }
   if (n.t === "b") {
-    return typeof n.id === "string" && (n.dir === "h" || n.dir === "v") && Array.isArray(n.kids) && n.kids.length > 0 && n.kids.every(validate);
+    return (
+      typeof n.id === "string" &&
+      (n.dir === "h" || n.dir === "v") &&
+      Array.isArray(n.kids) &&
+      n.kids.length > 0 &&
+      n.kids.every(validate)
+    );
   }
   return false;
 }
@@ -241,7 +247,9 @@ function leafById(id: string): LeafNode | null {
 }
 
 function leafHolding(sessionId: string): LeafNode | null {
-  return leavesOf(held.root).find((leaf) => leaf.tabs.includes(sessionId)) ?? null;
+  return (
+    leavesOf(held.root).find((leaf) => leaf.tabs.includes(sessionId)) ?? null
+  );
 }
 
 /** The focused leaf, or the first one — `focusedLeaf` can name a closed leaf. */

@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
+  import { IconChevronRight, IconSearch } from "#lib/icons.js";
   /**
    * Everything else that can be opened — idle and sleeping sessions, and the
    * transcripts stored on the machines — behind one disclosure, with search.
@@ -6,9 +9,6 @@
    * Projects, so the projects come straight after what is live.
    */
   import { page } from "$app/state";
-  import { Button } from "#lib/components/ui/button/index.js";
-  import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
-  import { IconChevronRight, IconSearch } from "#lib/icons.js";
   import { holdWhileInside } from "../motion/held-order.svelte";
   import { workspace } from "../workspace/workspace.svelte";
   import HomeRow, { ROW_PILL } from "./HomeRow.svelte";

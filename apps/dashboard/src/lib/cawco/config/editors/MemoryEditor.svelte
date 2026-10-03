@@ -2,7 +2,6 @@
   import { machineLabel } from "@cawco/core";
   import { untrack } from "svelte";
   import { toast } from "svelte-sonner";
-  import { goto } from "$app/navigation";
   import { crossIn, crossOut } from "#lib/cawco/motion/curves.svelte.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
@@ -18,6 +17,7 @@
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import { IconDocument, IconHistory, IconLaptop } from "#lib/icons.js";
   import { formatDistanceToNow } from "#lib/utils/time.js";
+  import { goto } from "$app/navigation";
   import { cawco, type Machine } from "../../client.svelte";
   import { confirm } from "../../confirm.svelte";
   import {

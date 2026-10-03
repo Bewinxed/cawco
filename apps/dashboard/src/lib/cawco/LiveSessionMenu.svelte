@@ -11,7 +11,6 @@
    */
   import type { HarnessKind } from "@cawco/core";
   import type { Snippet } from "svelte";
-  import { goto } from "$app/navigation";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as ContextMenu from "#lib/components/ui/context-menu/index.js";
   import {
@@ -25,6 +24,7 @@
     IconStop,
     IconTrash,
   } from "#lib/icons.js";
+  import { goto } from "$app/navigation";
   import {
     cawco,
     deleteTranscript,

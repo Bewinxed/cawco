@@ -57,8 +57,10 @@ function read(): RailLayout {
     return {
       pins: (stored.pins ?? []).filter(isPin),
       machines: (stored.machines ?? []).filter((id) => typeof id === "string"),
-      sort: SORTS.includes(stored.sort ?? "") ? stored.sort as RailSort : "recent",
-      delegates: stored.delegates === true
+      sort: SORTS.includes(stored.sort ?? "")
+        ? (stored.sort as RailSort)
+        : "recent",
+      delegates: stored.delegates === true,
     };
   } catch {
     return { pins: [], machines: [], sort: "recent", delegates: false };

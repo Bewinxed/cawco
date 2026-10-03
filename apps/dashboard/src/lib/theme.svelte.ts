@@ -1,5 +1,5 @@
-import { browser } from "$app/env";
 import { motionOk } from "#lib/cawco/motion/curves.svelte.js";
+import { browser } from "$app/env";
 
 type Theme = "light" | "dark" | "system";
 type Scheme = "light" | "dark";

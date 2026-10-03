@@ -10,8 +10,6 @@
   } from "@cawco/core";
   import { untrack } from "svelte";
   import { toast } from "svelte-sonner";
-  import { goto } from "$app/navigation";
-  import { page } from "$app/state";
   import {
     appear,
     crossIn,
@@ -39,6 +37,8 @@
     IconPlay,
     IconTuning,
   } from "#lib/icons.js";
+  import { goto } from "$app/navigation";
+  import { page } from "$app/state";
   import { cawco, type Machine } from "../../client.svelte";
   import { confirm } from "../../confirm.svelte";
   import { adoptHook, peekHook, pushHook } from "../../fleet";

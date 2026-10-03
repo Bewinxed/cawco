@@ -1,14 +1,14 @@
 <script lang="ts">
   import { EFFORT_LEVELS } from "@cawco/core";
   import { untrack } from "svelte";
-  import { goto } from "$app/navigation";
-  import { page } from "$app/state";
   import { appear } from "#lib/cawco/motion/curves.svelte.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Alert from "#lib/components/ui/alert/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { Textarea } from "#lib/components/ui/textarea/index.js";
   import { IconCpu, IconDocument, IconKey } from "#lib/icons.js";
+  import { goto } from "$app/navigation";
+  import { page } from "$app/state";
   import { confirm } from "../../confirm.svelte";
   import {
     blankDelegateType,

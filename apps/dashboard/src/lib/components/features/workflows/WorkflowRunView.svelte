@@ -1,12 +1,4 @@
 <script lang="ts">
-  /**
-   * A workflow run's tab: what a session's tab is for a session. The run's
-   * name, where it stands, when it started and what it was given; its steps
-   * hung under it on the nesting rails (RunSteps), each opening its result
-   * and its own session's tab; the question it waits on, and its log.
-   * There is no graph here: a graph is for editing (/workflows/[id]).
-   */
-  import { goto } from "$app/navigation";
   import { cawco } from "#lib/cawco/client.svelte.js";
   import { confirm } from "#lib/cawco/confirm.svelte.js";
   import { message } from "#lib/cawco/delegate-types.js";
@@ -30,6 +22,14 @@
     whileIdle,
   } from "#lib/components/ui/button/pending-content.svelte";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
+  /**
+   * A workflow run's tab: what a session's tab is for a session. The run's
+   * name, where it stands, when it started and what it was given; its steps
+   * hung under it on the nesting rails (RunSteps), each opening its result
+   * and its own session's tab; the question it waits on, and its log.
+   * There is no graph here: a graph is for editing (/workflows/[id]).
+   */
+  import { goto } from "$app/navigation";
   import { followTail } from "./follow-tail";
   import { journalCheckpoints, journalLog } from "./journal-graph";
   import { duration } from "./workflow-ui";

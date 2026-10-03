@@ -18,7 +18,6 @@
   import type { Attachment } from "svelte/attachments";
   import { MediaQuery } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
-  import { page } from "$app/state";
   import {
     dur,
     ease,
@@ -37,6 +36,7 @@
     type TabsTravel,
   } from "#lib/components/ui/fluid-tabs/index.js";
   import { IconArrowRight, IconChevronDown, IconClose } from "#lib/icons.js";
+  import { page } from "$app/state";
   import {
     ACTIVITY_LABEL,
     type Activity,

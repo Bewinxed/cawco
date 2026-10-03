@@ -16,11 +16,11 @@
    */
   import type { ClaudeLimits } from "@cawco/core";
   import { MediaQuery } from "svelte/reactivity";
-  import { page } from "$app/state";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Drawer from "#lib/components/ui/drawer/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Popover from "#lib/components/ui/popover/index.js";
+  import { page } from "$app/state";
   import Failed from "~icons/solar/close-circle-bold-duotone";
   import Attention from "~icons/solar/hand-shake-bold-duotone";
   import { cawco } from "./client.svelte";

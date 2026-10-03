@@ -5,11 +5,11 @@ export default defineConfig({
   registries: ["@ieedan/shadcn-svelte-extras"],
   // configure were stuff goes here
   paths: {
-    ui: "$lib/components/ui",
-    block: "$lib/components",
-    hook: "$lib/hooks",
-    action: "$lib/actions",
-    util: "$lib/utils",
-    lib: "$lib",
+    ui: "src/lib/components/ui",
+    block: "src/lib/components",
+    hook: "src/lib/hooks",
+    action: "src/lib/actions",
+    util: "src/lib/utils",
+    lib: "src/lib",
   },
 });

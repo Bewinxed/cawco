@@ -12,14 +12,20 @@
   import { Dialog as DialogPrimitive } from "bits-ui";
   import { tick, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
-  import { goto } from "$app/navigation";
-  import { Dialog, DialogPortal, DialogTitle } from "#lib/components/ui/dialog/index.js";
+  import {
+    Dialog,
+    DialogPortal,
+    DialogTitle,
+  } from "#lib/components/ui/dialog/index.js";
   import {
     Drawer,
     DrawerContent,
     DrawerTitle,
   } from "#lib/components/ui/drawer/index.js";
-  import { machineHue, machineIcon } from "#lib/components/ui/machine-row/index.js";
+  import {
+    machineHue,
+    machineIcon,
+  } from "#lib/components/ui/machine-row/index.js";
   import { SectionHeader } from "#lib/components/ui/section-header/index.js";
   /**
    * The New Session modal. This file owns the logic — open-reset boundary,
@@ -28,6 +34,7 @@
    */
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import { IconClose as X } from "#lib/icons.js";
+  import { goto } from "$app/navigation";
   import Bolt from "~icons/solar/bolt-bold-duotone";
   import Book from "~icons/solar/book-2-bold-duotone";
   import Chat from "~icons/solar/chat-round-line-bold-duotone";

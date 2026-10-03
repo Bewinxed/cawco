@@ -4,7 +4,6 @@
   import type { Snippet } from "svelte";
   import { onMount } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
-  import { onNavigate } from "$app/navigation";
   import { ensureConnected } from "#lib/cawco/client.svelte.js";
   import { GROUPS } from "#lib/cawco/config/sections.js";
   import { PREFETCHES as CAW_PREFETCHES } from "#lib/cawco/home/Caw.svelte";
@@ -17,6 +16,7 @@
   import { Toaster } from "#lib/components/ui/sonner/index.js";
   import { NARROW_QUERY } from "#lib/hooks/is-mobile.svelte.js";
   import { enableLongPressMenus } from "#lib/utils/longpress.js";
+  import { onNavigate } from "$app/navigation";
   import type { LayoutServerData } from "./$types";
 
   let { children, data }: { children: Snippet; data: LayoutServerData } =
@@ -40,9 +40,9 @@
   );
   const toastOffset = $derived(
     composerLift > 0
-    ? {
+      ? {
           bottom: `calc(var(--space-4) + env(safe-area-inset-bottom) + ${composerLift}px + var(--space-3))`,
-    }
+        }
       : undefined
   );
 
@@ -70,7 +70,9 @@
   // instant: the workspace store shows a pane and writes the URL with
   // `pushState`, which runs no navigation at all.
   onNavigate((navigation) => {
-    if (navigation.shallow) return;
+    if (navigation.shallow) {
+      return;
+    }
 
     if (!(navigation.from && navigation.to)) {
       return;
@@ -94,7 +96,7 @@
   <!-- Caw's runtime and his waiting file go to the HTTP cache at idle
        priority, so a wait that outlasts its grace shows him without fetching. -->
   {#each CAW_PREFETCHES as href (href)}
-    <link crossorigin="anonymous" href={href} rel="prefetch" />
+    <link crossorigin="anonymous" {href} rel="prefetch">
   {/each}
 </svelte:head>
 
