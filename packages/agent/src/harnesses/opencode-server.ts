@@ -2,14 +2,11 @@ import { createHash } from "node:crypto";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { type ProcSpec, sessiondEndpoint } from "@cawco/core/sessiond";
+import { OPENCODE_SERVER_PROC_ID } from "../proc-id";
 import type { SessiondClient } from "../sessiond-client";
 import { readJson, writeJson } from "./fleet-common";
 
-export const OPENCODE_SERVER_PROC_ID = "opencode-server";
 export const SERVER_CUTOVER_TIMEOUT_MS = 60_000;
-export const isOpencodeServerProc = (id: string): boolean =>
-  id === OPENCODE_SERVER_PROC_ID ||
-  id.startsWith(`${OPENCODE_SERVER_PROC_ID}-`);
 
 export interface ServerIdentity {
   epoch: string;

@@ -1,5 +1,6 @@
 /** The process keeper's namespace. Infrastructure procs are never sessions. */
 export const OPENCODE_SERVER_PROC_ID = "opencode-server";
+export const SESSION_PROC_KINDS = ["claude", "pi"] as const;
 
 export type ProcId =
   | { kind: "claude" | "pi"; instanceId: string }

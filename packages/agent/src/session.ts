@@ -63,7 +63,7 @@ import { generateImage } from "./image-generation";
 import { isMachineAgent } from "./machine-agent";
 import { prepareFleetMcp } from "./mcp-launcher";
 import { startPreview, stopPreview, stopPreviews } from "./preview";
-import { parseProcId } from "./proc-id";
+import { parseProcId, SESSION_PROC_KINDS } from "./proc-id";
 import { acknowledgeSessionCredential } from "./session-identity";
 import { procEpoch } from "./sessiond-client";
 import { installTool, probeTools } from "./tools";
@@ -1178,8 +1178,8 @@ export class SessionSupervisor {
     { instanceId: string; cwd: string; sessionId: null }[]
   > {
     const welcomes = await Promise.all(
-      ["claude", "pi"].map(async (kind) => {
-        const adapter = this.#adapter(kind as HarnessKind) as Harness &
+      SESSION_PROC_KINDS.map(async (kind) => {
+        const adapter = this.#adapter(kind) as Harness &
           Partial<SessiondAdoption>;
         return await adapter.custodyCandidates?.();
       })
@@ -1232,8 +1232,8 @@ export class SessionSupervisor {
   ): Promise<string[]> {
     return (
       await Promise.all(
-        ["claude", "pi"].map((kind) =>
-          this.#reattachHarness(kind as HarnessKind, rows, ingested)
+        SESSION_PROC_KINDS.map((kind) =>
+          this.#reattachHarness(kind, rows, ingested)
         )
       )
     ).flat();

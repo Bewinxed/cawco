@@ -30,7 +30,6 @@ import { convergeDeniedTools } from "./denied-tools";
 import { deployRoot, latestDeploy } from "./deploy";
 import { rediscoverHub, toWsUrl } from "./discovery";
 import { harnesses } from "./harnesses";
-import { isOpencodeServerProc } from "./harnesses/opencode-server";
 import { cache as transcriptCache } from "./harnesses/transcript-cache";
 import { machineId } from "./machine-id";
 import {
@@ -39,6 +38,7 @@ import {
   startMcpGateway,
 } from "./mcp-oauth";
 import { servingPreviews } from "./preview";
+import { parseProcId, SESSION_PROC_KINDS } from "./proc-id";
 import { TranscriptSearchService } from "./search";
 import { resumableSessions, SessionSupervisor } from "./session";
 import { SessiondClient } from "./sessiond-client";
@@ -417,7 +417,7 @@ const closed = (socket: WebSocket, url: string) =>
 /**
  * A hub restore this daemon could take custody of instead of re-spawning.
  *
- * `adopt` is claude's alone (see `session.ts`'s `reattach`), and a spawn that
+ * Claude and pi adopt sessiond-held processes (see `session.ts`'s `reattach`); a spawn that
  * has to clone a repository or cut a worktree first is not a session that
  * already exists to be adopted — both go straight to the supervisor.
  */
@@ -429,7 +429,8 @@ export const adoptable = (
   payload.instanceId.length > 0 &&
   typeof payload.cwd === "string" &&
   payload.cwd.length > 0 &&
-  (payload.harness === undefined || payload.harness === "claude") &&
+  (payload.harness === undefined ||
+    SESSION_PROC_KINDS.some((kind) => kind === payload.harness)) &&
   payload.bootstrap === undefined &&
   payload.scratch === undefined;
 
@@ -457,10 +458,15 @@ const readSessions = async () => {
       try {
         const held = client.procs.filter((proc) => proc.alive);
         return {
-          instances: held
-            .filter((proc) => !isOpencodeServerProc(proc.procId))
-            .map((proc) => proc.procId),
-          opencode: held.some((proc) => isOpencodeServerProc(proc.procId)),
+          instances: held.flatMap((proc) => {
+            const id = parseProcId(proc.procId);
+            return id.kind === "claude" || id.kind === "pi"
+              ? [id.instanceId]
+              : [];
+          }),
+          opencode: held.some(
+            (proc) => parseProcId(proc.procId).kind === "opencode-server"
+          ),
         };
       } finally {
         client.close();

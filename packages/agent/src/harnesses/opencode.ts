@@ -96,6 +96,7 @@ import { workspacesDir } from "../boundary";
 import { delegationHubUrl, harnessMcpUrl } from "../delegation";
 import type { Harness, HarnessContext, HarnessSession } from "../harness";
 import { isMachineAgent } from "../machine-agent";
+import { OPENCODE_SERVER_PROC_ID } from "../proc-id";
 import { ensureSessiond, SessiondClient } from "../sessiond-client";
 import { resolveBin } from "../tools";
 import {
@@ -106,11 +107,7 @@ import {
   writeJson,
 } from "./fleet-common";
 import { OpencodeActivity } from "./opencode-activity";
-import {
-  OPENCODE_SERVER_PROC_ID,
-  OpencodeServerOwner,
-  type ServerIdentity,
-} from "./opencode-server";
+import { OpencodeServerOwner, type ServerIdentity } from "./opencode-server";
 
 function withImageAttachments(
   output: string,

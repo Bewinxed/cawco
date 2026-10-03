@@ -43,6 +43,7 @@ import type { WorkspaceRef } from "@cawco/core";
 import { sessionIdentityDir } from "@cawco/core/paths";
 import { type ProcSpec, sessiondEndpoint } from "@cawco/core/sessiond";
 import { cloneInPlace } from "./clone";
+import { procIdFor } from "./proc-id";
 import { ensureSessiond, SessiondClient } from "./sessiond-client";
 
 /** A running boundary, as a harness uses it. */
@@ -112,8 +113,6 @@ const copySshIncludes = async (id: string): Promise<string> => {
   );
   return copy;
 };
-
-const procIdOf = (id: string): string => `boundary-${id}`;
 
 const WHITESPACE = /\s+/;
 
@@ -231,7 +230,7 @@ const running = async (
   held: Held
 ): Promise<boolean> => {
   const proc = (await client.list()).procs.find(
-    (candidate) => candidate.procId === procIdOf(id)
+    (candidate) => candidate.procId === procIdFor("boundary", id)
   );
   if (!proc?.alive) {
     return false;
@@ -297,7 +296,7 @@ const ensure = async (ref: WorkspaceRef): Promise<Boundary> => {
       );
     }
     // Only the idle runner remains; retaining the harness does not retain a shell with old read access.
-    await client.signal(procIdOf(ref.id), "SIGKILL");
+    await client.signal(procIdFor("boundary", ref.id), "SIGKILL");
   }
   return start(client, ref);
 };
@@ -613,7 +612,7 @@ const start = async (
       mkdir(path, { recursive: true })
     )
   );
-  const procId = procIdOf(ref.id);
+  const procId = procIdFor("boundary", ref.id);
   // One this machine can no longer vouch for (its record is gone or names
   // another process) is replaced, never joined.
   if (await holding(client, procId)) {
@@ -723,7 +722,7 @@ export const closeBoundary = async (ref: WorkspaceRef): Promise<void> => {
       await Bun.sleep(20);
     }
   }
-  const procId = procIdOf(ref.id);
+  const procId = procIdFor("boundary", ref.id);
   if (await holding(client, procId)) {
     await client.signal(procId, "SIGKILL");
   }
