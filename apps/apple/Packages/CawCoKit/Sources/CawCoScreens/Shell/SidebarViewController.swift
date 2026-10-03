@@ -38,6 +38,8 @@ final class SidebarViewController: ObservedViewController {
     private let column = UIStackView()
     private let headerRow = UIStackView()
     private let assistantButton = HeadAction(.assistant, label: "Assistant", tint: Palette.coral11)
+    /// The rail's Assistant control: where the desk's pane grows from.
+    var assistantSource: UIView { assistantButton }
     private let startButton = HeadAction(.plus, label: "Start session", tint: Palette.inkMuted)
     private let fleetRow = RailRow(height: nil, leading: 10, trailing: 10, gap: 10)
     private let workflowsRow = RailRow(height: nil, leading: 10, trailing: 10, gap: 10)

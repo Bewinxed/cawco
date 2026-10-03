@@ -311,10 +311,68 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     }
 
     func toggleAssistant() {
-        assistantOpen.toggle()
         railSheet?.dismiss(animated: true)
+        if assistantOpen { closeAssistant() } else { openAssistant() }
+    }
+
+    private var assistantPane: AssistantPane?
+    private weak var assistantSheet: UIViewController?
+    /// AssistantPanel.svelte's `(max-width: 899px)`: a drawer there, a pane wider.
+    private var assistantDrawer: Bool { view.bounds.width < 900 }
+
+    /// Where the assistant comes from: the rail's row on a desk, the bar's orb on a phone.
+    private var assistantOrigin: CGPoint? {
+        let source: UIView = assistantDrawer ? (compact ? (compactNav.topViewController === workspaceController ? sessionCluster : compactCluster) : mainCluster).assistant : rail.assistantSource
+        guard source.window != nil else { return nil }
+        return source.convert(CGPoint(x: source.bounds.midX, y: source.bounds.midY), to: view)
+    }
+
+    private func openAssistant() {
+        assistantOpen = true
+        let panel = AssistantPanelView(hub: hub, focused: { [weak self] in self?.workspace.activeSessionId }, closable: !assistantDrawer)
+        panel.onClose = { [weak self] in self?.closeAssistant() }
+        panel.onOpenSession = { [weak self] id in
+            self?.closeAssistant()
+            self?.openSession(id)
+        }
+        if assistantDrawer {
+            let holder = AssistantHolder(panel: panel) { [weak self] in
+                // Swiped or tapped away.
+                guard let self, assistantOpen, assistantSheet == nil || assistantSheet?.isBeingDismissed == true else { return }
+                assistantOpen = false
+                refreshBars()
+                rail.requestRefresh()
+            }
+            let sheet = HouseSheetController(holder, style: .card, scroller: panel.scroller)
+            assistantSheet = sheet
+            dialogPresenter.present(sheet, animated: true)
+        } else {
+            let pane = AssistantPane(panel: panel)
+            pane.install(in: view)
+            pane.appear(from: assistantOrigin)
+            assistantPane = pane
+        }
         refreshBars()
         rail.requestRefresh()
+    }
+
+    private func closeAssistant() {
+        assistantOpen = false
+        if let pane = assistantPane {
+            assistantPane = nil
+            pane.disappear(into: assistantOrigin) { pane.removeFromSuperview() }
+        }
+        if let sheet = assistantSheet {
+            assistantSheet = nil
+            sheet.dismiss(animated: true)
+        }
+        refreshBars()
+        rail.requestRefresh()
+    }
+
+    @objc private func escapeKey() {
+        guard assistantPane != nil else { return }
+        closeAssistant()
     }
 
     func startSession(machineId _: String?, cwd _: String?, projectId _: String?) {
@@ -411,8 +469,10 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
             UIKeyCommand(title: "Split Right", action: #selector(splitRightKey), input: "\\", modifierFlags: .command),
             UIKeyCommand(title: "Split Down", action: #selector(splitDownKey), input: "\\", modifierFlags: [.command, .shift]),
         ]
-        for command in commands { command.wantsPriorityOverSystemBehavior = true }
-        return commands
+        // Escape closes the desk's pane wherever focus is.
+        let all = assistantPane == nil ? commands : commands + [UIKeyCommand(input: UIKeyCommand.inputEscape, modifierFlags: [], action: #selector(escapeKey))]
+        for command in all { command.wantsPriorityOverSystemBehavior = true }
+        return all
     }
 
     /// MachinesButton's popover, hung from the button's end.
