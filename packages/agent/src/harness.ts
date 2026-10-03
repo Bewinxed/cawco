@@ -123,6 +123,9 @@ export interface Harness {
   abortSession?(sessionKey: string, dir: string): Promise<boolean>;
   /** What `register` reports as this harness's auth, cached from {@link detect}. */
   auth: AuthState;
+  /** Authoritative server activity, when the runtime owns turns outside this daemon. */
+  // biome-ignore lint/style/useConsistentMethodSignatures: matches the other adapter methods
+  busyInstances?(): Promise<string[]>;
   readonly capabilities: HarnessCapabilities;
   // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
   deleteSession(sessionKey: string, dir?: string): Promise<void>;

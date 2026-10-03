@@ -9137,6 +9137,7 @@ export const createServer = ({
               for (const orphan of revivable) {
                 restore(ws, orphan.row, heldRows.has(orphan.row.id));
               }
+              const restoredIds = new Set(revivable.map(({ row }) => row.id));
               const named = new Set(
                 db
                   .continuationRows()
@@ -9157,6 +9158,7 @@ export const createServer = ({
                 for (const row of db.listInstances()) {
                   if (
                     row.machineId === message.machineId &&
+                    !restoredIds.has(row.id) &&
                     !row.workflowStepId &&
                     row.kind !== "summariser" &&
                     row.harness === "opencode" &&

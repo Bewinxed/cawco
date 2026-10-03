@@ -77,6 +77,7 @@ export class OpencodeServerOwner {
   readonly #sessiond: () => Promise<SessiondClient>;
   readonly #attach: Attach;
   readonly #mayManage: () => Promise<boolean>;
+  readonly #idle: (identity: ServerIdentity) => Promise<boolean>;
   #record: ServerRecord | null = null;
   #transition: Promise<ServerIdentity> | null = null;
   #candidateProcId: string | null = null;
@@ -87,11 +88,13 @@ export class OpencodeServerOwner {
   constructor(
     sessiond: () => Promise<SessiondClient>,
     attach: Attach,
-    mayManage: () => Promise<boolean>
+    mayManage: () => Promise<boolean>,
+    idle: (identity: ServerIdentity) => Promise<boolean>
   ) {
     this.#sessiond = sessiond;
     this.#attach = attach;
     this.#mayManage = mayManage;
+    this.#idle = idle;
   }
 
   get active(): ServerIdentity | null {
@@ -312,12 +315,24 @@ export class OpencodeServerOwner {
     }
   }
 
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: custody, process identity and grace-period checks must guard the same retirement
   async #retire(identity: ServerIdentity): Promise<void> {
     if (this.active?.procId === identity.procId) {
       throw new Error("Refusing to retire the active OpenCode generation.");
     }
     const client = await this.#sessiond();
     if (await this.#matches(identity)) {
+      if (!(await this.#idle(identity))) {
+        throw new Error(
+          "OpenCode retirement deferred: generation activity is busy or unknown."
+        );
+      }
+      if (
+        this.active?.procId === identity.procId ||
+        !(await this.#matches(identity))
+      ) {
+        return;
+      }
       console.info(
         `[opencode] retire ${identity.procId}/${identity.pid} start=${identity.startedAt}: SIGTERM`
       );

@@ -600,8 +600,15 @@ export class SessionSupervisor {
       // biome-ignore lint/performance/noAwaitInLoops: a hold taken while the others settled is waited for too
       await Promise.all(this.#holds);
     }
+    const opencode = (await this.#adapter("opencode").busyInstances?.()) ?? [];
     const instances = [
-      ...new Set([...this.#busy, ...this.#imageRequests.values()]),
+      ...new Set([
+        ...[...this.#busy].filter(
+          (id) => this.#sessions.get(id)?.harness !== "opencode"
+        ),
+        ...opencode,
+        ...this.#imageRequests.values(),
+      ]),
     ];
     return { busy: instances.length, instances };
   }
@@ -897,8 +904,36 @@ export class SessionSupervisor {
     }
   }
 
+  #reuseRecovery(payload: SpawnPayload): boolean {
+    const { instanceId, requestId: ack } = payload;
+    // Recovery delivery and the register ack may name the same attachment.
+    // This is shared by Claude adoption, pi resume and OpenCode reattach.
+    if (
+      (payload.reattachOnly || payload.resume) &&
+      this.#sessions.has(instanceId)
+    ) {
+      if (ack) {
+        this.sink({
+          kind: "control_result",
+          instanceId,
+          requestId: ack,
+          ok: true,
+        });
+      }
+      return true;
+    }
+    return false;
+  }
+
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: shared spawn transaction rechecks recovery after asynchronous adoption and workdir preparation
   async #spawn(payload: SpawnPayload): Promise<void> {
     const { instanceId, cwd, harness: kind, scratch, requestId: ack } = payload;
+    if (payload.reattachOnly || payload.resume) {
+      await this.#adopting.get(instanceId);
+      if (this.#reuseRecovery(payload)) {
+        return;
+      }
+    }
     const adapter = this.#adapter(kind);
     try {
       let workdir = await this.#workdir(payload);
@@ -936,6 +971,9 @@ export class SessionSupervisor {
       // process under the same id, settling the old one first.
       const running = this.#sessions.get(instanceId);
       if (running) {
+        if (this.#reuseRecovery(payload)) {
+          return;
+        }
         this.#sessions.delete(instanceId);
         this.#forgetPulse(instanceId);
         await running.stop();

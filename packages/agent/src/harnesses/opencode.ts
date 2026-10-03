@@ -105,9 +105,11 @@ import {
   syncSkillFiles,
   writeJson,
 } from "./fleet-common";
+import { OpencodeActivity } from "./opencode-activity";
 import {
   OPENCODE_SERVER_PROC_ID,
   OpencodeServerOwner,
+  type ServerIdentity,
 } from "./opencode-server";
 
 function withImageAttachments(
@@ -1240,15 +1242,6 @@ export class OpencodeSession implements HarnessSession {
   attached?: () => void;
   readonly harness = "opencode" as const;
   sessionId: string | null;
-  /**
-   * Whether this session is mid-turn or awaiting an answer — the harness's own
-   * knowledge, not the server's (the server may have gone away already). Used by
-   * the config convergence gate so a reload never interrupts active work.
-   */
-  get active(): boolean {
-    // biome-ignore lint/suspicious/noUnnecessaryConditions: #busy is reassigned elsewhere in the class; biome's per-method inference doesn't see that
-    return this.#busy || this.#turnOpen || this.#questions.size > 0;
-  }
   readonly #ctx: HarnessContext;
   #client: OpencodeClient;
   readonly #directory: string;
@@ -1342,6 +1335,7 @@ export class OpencodeSession implements HarnessSession {
    * harness so sessions can queue dispatches without a back-reference.
    */
   readonly #isConfigGateHeld: () => boolean;
+  readonly #readActivity: () => Promise<boolean>;
   readonly #workflowStepId?: string;
   readonly #canDelegate?: boolean;
 
@@ -1356,6 +1350,7 @@ export class OpencodeSession implements HarnessSession {
     registerChild: (childId: string, callID: string) => void,
     onRelease: () => void,
     isConfigGateHeld: () => boolean,
+    readActivity: () => Promise<boolean>,
     effort?: EffortLevel,
     workflowStepId?: string,
     canDelegate?: boolean
@@ -1371,6 +1366,7 @@ export class OpencodeSession implements HarnessSession {
     this.#registerChild = registerChild;
     this.#onRelease = onRelease;
     this.#isConfigGateHeld = isConfigGateHeld;
+    this.#readActivity = readActivity;
     this.#workflowStepId = workflowStepId;
     this.#canDelegate = canDelegate;
   }
@@ -2302,24 +2298,13 @@ export class OpencodeSession implements HarnessSession {
     }
     const revision = this.#turnRevision;
     try {
-      const result = await reached(
-        this.#client.session.status(
-          { directory: this.#directory },
-          {
-            signal: AbortSignal.any([
-              this.#lifetime.signal,
-              AbortSignal.timeout(RECOVERY_TIMEOUT_MS),
-            ]),
-          }
-        )
-      );
+      const running = await this.#readActivity();
       if (!this.#snapshotCurrent(revision)) {
         return;
       }
-      const status = result.data?.[this.sessionId];
       const reattachedBusy = this.#reattachedBusy;
       this.#reattachedBusy = false;
-      if (!status || (status.type !== "busy" && status.type !== "retry")) {
+      if (!running) {
         // Idle on the server, yet the hub is still owed this turn's end: it
         // ended while nothing here was subscribed.
         if (this.#turnOpen) {
@@ -2344,7 +2329,7 @@ export class OpencodeSession implements HarnessSession {
       if (!this.#snapshotCurrent(revision)) {
         return;
       }
-      this.#applyStatus(status);
+      this.#applyStatus({ type: "busy" });
       this.#noteServerActivity();
       this.#ctx.frame({
         type: "system",
@@ -3212,12 +3197,13 @@ export class OpencodeHarness implements Harness {
     () => this.sessiond(),
     async (sessiond, procId, spec, signal) =>
       (await attachOpencodeServer({ sessiond, procId, spec, signal })).url,
-    isMachineAgent
+    isMachineAgent,
+    (identity) => this.#generationIdle(identity)
   );
   #verifiedProcId: string | null = null;
   #opening = 0;
   #mutatingMcp = 0;
-  readonly #incumbentDirectories = new Set<string>();
+  readonly #activities = new Map<string, OpencodeActivity>();
   #deferredRevision: string | null = null;
   // Keyed by instanceId, not opencode's own session id: a resume reuses the
   // same sessionKey (opencode.ts:spawn), so multiple live instances can share
@@ -3437,104 +3423,81 @@ export class OpencodeHarness implements Harness {
     void this.#attemptConfigApply();
   }
 
-  /**
-   * Whether anything would be cut off by stopping the server: a session this
-   * harness owns mid-turn, a recovery reading or reattaching a session (or
-   * queued to), or a session the server itself reports busy.
-   *
-   * The server's answer is asked per directory. opencode keeps session status
-   * per instance (`session/status.ts`: `InstanceState.make(...)`), and an
-   * instance is a directory, so a query with no directory answers only for the
-   * server's own cwd. Every directory this harness subscribes to or holds a
-   * session in is asked, plus the server's cwd for sessions other clients
-   * started there.
-   */
-  async #inventoryDirectories(
-    client: OpencodeClient,
-    dirs: Set<string>
-  ): Promise<void> {
-    let cursor: number | undefined;
-    do {
-      // biome-ignore lint/performance/noAwaitInLoops: the next cursor comes from the preceding storage-global page
-      const listed = await reached(
-        client.experimental.session.list(
-          { limit: 200, ...(cursor === undefined ? {} : { cursor }) },
-          { signal: AbortSignal.timeout(5000) }
-        )
-      );
-      if (listed.error || !listed.data) {
-        throw new Error(
-          `Incumbent session inventory failed: ${errorText(listed.error)}`
-        );
-      }
-      for (const session of listed.data) {
-        if (session.directory) {
-          dirs.add(session.directory);
-          this.#incumbentDirectories.add(session.directory);
-        }
-      }
-      const nextText = listed.response?.headers.get("x-next-cursor");
-      const next = nextText ? Number(nextText) : undefined;
-      if (next !== undefined && (!Number.isFinite(next) || next === cursor)) {
-        throw new Error("Incumbent session inventory cursor did not advance.");
-      }
-      cursor = next;
-    } while (cursor !== undefined);
+  #activity(identity: ServerIdentity): OpencodeActivity {
+    const key = `${identity.epoch}/${identity.procId}/${identity.startedAt}`;
+    let activity = this.#activities.get(key);
+    if (!activity) {
+      activity = new OpencodeActivity(key);
+      this.#activities.set(key, activity);
+    }
+    return activity;
   }
 
-  async #isOpencodeBusy(): Promise<boolean> {
-    if (
+  #operationsPending(): boolean {
+    return (
       this.#opening > 0 ||
       this.#mutatingMcp > 0 ||
       this.#recovering > 0 ||
       this.#recoveryWaiters.length > 0
-    ) {
+    );
+  }
+
+  /** No local turn maps participate in the server's idle decision. */
+  async busyInstances(): Promise<string[]> {
+    const identity = this.#serverOwner.active;
+    const client = this.#client;
+    if (!identity) {
+      return [];
+    }
+    const activity = this.#activity(identity);
+    if (!client) {
+      return [...activity.snapshot().instances, "opencode:activity-unknown"];
+    }
+    const snapshot = await activity.sample(client);
+    const operations = this.#operationsPending()
+      ? ["opencode:pending-operations"]
+      : [];
+    return [...snapshot.instances, ...operations];
+  }
+
+  async #sessionBusy(sessionId: string, directory: string): Promise<boolean> {
+    const identity = this.#serverOwner.active;
+    const client = this.#client;
+    if (!(identity && client)) {
       return true;
     }
-    const dirs = new Set<string>([
-      ...this.#pumps.keys(),
-      ...this.#incumbentDirectories,
-    ]);
-    for (const session of this.#sessions.values()) {
-      if (session.active) {
-        return true;
-      }
-      dirs.add(session.directory);
-    }
-    const client = this.#client;
-    if (!client) {
+    return (
+      (await this.#activity(identity).sessionState(
+        client,
+        sessionId,
+        directory
+      )) !== "idle"
+    );
+  }
+
+  /** Two complete reads of this exact generation, with a real sampling gap. */
+  async #generationIdle(identity: ServerIdentity): Promise<boolean> {
+    if (this.#operationsPending()) {
       return false;
     }
-    try {
-      // Inventory is storage-global, unlike session.status's per-directory
-      // state. A refused/unattached recovery must never hide a running turn.
-      await this.#inventoryDirectories(client, dirs);
-      const answers = await Promise.all(
-        [undefined, ...dirs].map((directory) =>
-          client.session.status(directory ? { directory } : {}, {
-            signal: AbortSignal.timeout(5000),
-          })
-        )
-      );
-      return (
-        this.#opening > 0 ||
-        this.#mutatingMcp > 0 ||
-        this.#recovering > 0 ||
-        this.#recoveryWaiters.length > 0 ||
-        [...this.#sessions.values()].some((session) => session.active) ||
-        answers.some(
-          (status) =>
-            status.error ||
-            !status.data ||
-            Object.values(status.data as Record<string, { type: string }>).some(
-              (state) => state.type === "busy" || state.type === "retry"
-            )
-        )
-      );
-    } catch {
-      // A server that cannot say whether it is busy is not stopped.
-      return true;
+    const activity = this.#activity(identity);
+    const client = createOpencodeClient({
+      baseUrl: identity.url,
+      fetch: Object.assign(fetchOpencode, { preconnect: fetch.preconnect }),
+    });
+    const first = await activity.sample(client, true);
+    if (!first.known || first.instances.length || this.#operationsPending()) {
+      return false;
     }
+    await Bun.sleep(2000);
+    const second = await activity.sample(client, true);
+    return (
+      second.known &&
+      second.instances.length === 0 &&
+      second.generation === first.generation &&
+      second.sampledAt >= first.sampledAt + 2000 &&
+      !this.#operationsPending()
+    );
   }
 
   /**
@@ -3567,6 +3530,7 @@ export class OpencodeHarness implements Harness {
     );
   }
 
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one cutover transaction keeps idle evidence, candidate verification and publication together
   async #attemptConfigApply(): Promise<void> {
     if (
       this.#applyGate ||
@@ -3596,7 +3560,8 @@ export class OpencodeHarness implements Harness {
         this.#configError = "malformed config — will not stop working server";
         return;
       }
-      if (await this.#isOpencodeBusy()) {
+      const incumbent = this.#serverOwner.active;
+      if (!(incumbent && (await this.#generationIdle(incumbent)))) {
         this.#configState = "pending";
         this.#configError = null;
         this.#noteDeferred();
@@ -3668,6 +3633,13 @@ export class OpencodeHarness implements Harness {
             throw new Error("Candidate reads another global config root.");
           }
           await this.#verifyApply(candidate, targetHash, targetVersion, signal);
+          const incumbent = this.#serverOwner.active;
+          if (!(incumbent && (await this.#generationIdle(incumbent)))) {
+            this.#noteDeferred();
+            throw new Error(
+              "Incumbent activity changed before candidate publication."
+            );
+          }
         },
         (identity) => {
           this.#stopPumps();
@@ -3959,6 +3931,14 @@ export class OpencodeHarness implements Harness {
     this.#client = client;
     for (const session of this.#sessions.values()) {
       session.rebindClient(client);
+      const identity = this.#serverOwner.active;
+      if (identity && session.sessionId) {
+        this.#activity(identity).bind(
+          session.sessionId,
+          session.instanceId,
+          session.directory
+        );
+      }
     }
     return client;
   }
@@ -4212,6 +4192,17 @@ export class OpencodeHarness implements Harness {
             continue;
           }
           const sid = this.#eventSession(event);
+          const identity = this.#serverOwner.active;
+          if (
+            sid &&
+            identity &&
+            (event.type === "message.updated" ||
+              event.type === "message.part.updated" ||
+              (event.type === "session.status" &&
+                event.properties.status.type !== "idle"))
+          ) {
+            this.#activity(identity).observeBusy(sid);
+          }
           const session = sid ? this.#sessionForSid(sid) : undefined;
           if (session) {
             session.handle(event);
@@ -4385,7 +4376,6 @@ export class OpencodeHarness implements Harness {
     spec: SpawnPayload,
     ctx: HarnessContext
   ): Promise<HarnessSession | undefined> {
-    this.#incumbentDirectories.add(ctx.cwd);
     // A config apply in progress is about to stop the server this reads.
     // Waited out before taking a recovery slot, not inside one: a held slot
     // counts as busy, and the apply waits for busy to clear before it stops
@@ -4430,17 +4420,19 @@ export class OpencodeHarness implements Harness {
         // busy from that moment, not from the reconcile that follows its
         // subscription (`watchResumedTurn`), which a busy question after an
         // agent restart did not wait for.
-        const status = await server.session.status(
-          { directory: ctx.cwd },
-          { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
-        );
-        if (status.error) {
-          throw new Error(
-            `Could not read OpenCode session status in ${ctx.cwd}`
-          );
+        const identity = this.#serverOwner.active;
+        if (!identity) {
+          throw new Error("OpenCode recovery has no generation identity.");
         }
-        const state = status.data?.[spec.resume.sessionKey]?.type;
-        const running = state === "busy" || state === "retry";
+        const activity = this.#activity(identity);
+        activity.bind(spec.resume.sessionKey, ctx.instanceId, ctx.cwd);
+        const running = await this.#sessionBusy(
+          spec.resume.sessionKey,
+          ctx.cwd
+        );
+        if (running) {
+          activity.observeBusy(spec.resume.sessionKey);
+        }
         if (spec.reattachOnly === "busy" || spec.reattachOnly === "inspect") {
           if (!running) {
             return;
@@ -4619,6 +4611,7 @@ export class OpencodeHarness implements Harness {
         }
       },
       () => this.#applyGate !== null,
+      () => this.#sessionBusy(sessionId, ctx.cwd),
       spec.effort,
       spec.workflowStepId,
       spec.canDelegate
@@ -4635,6 +4628,10 @@ export class OpencodeHarness implements Harness {
         session.rebindClient(this.#client);
       }
       this.#sessions.set(ctx.instanceId, session);
+      const identity = this.#serverOwner.active;
+      if (identity) {
+        this.#activity(identity).bind(sessionId, ctx.instanceId, ctx.cwd);
+      }
       ctx.session(sessionId);
       // The init frame the dashboard reads the model / cwd / commands off.
       ctx.frame({
