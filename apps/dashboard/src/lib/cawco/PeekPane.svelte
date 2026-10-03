@@ -459,8 +459,9 @@
             {message.content}
           </p>
         {:else if message.type === 'result.error'}
+          <!-- A failed turn's last words are the agent's too: flat. -->
           <p class="line-clamp-3 text-body break-words text-error">
-            {message.content}
+            {plainMarkdown(message.content)}
           </p>
         {:else}
           <!-- The agent's words read flat: its markdown, without the syntax. -->
