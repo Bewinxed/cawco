@@ -124,16 +124,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         Logger(subsystem: "dev.cawco.app", category: "Scene").info("window scene connected")
         let window = UIWindow(windowScene: scene)
         window.tintColor = Palette.inkStrong
-        var selectedSession = sessionId
-        #if DEBUG
-        // Proof runs enter the same scene route as an Open in New Window action.
-        // No mock data, alternate connection or renderer participates.
-        selectedSession = selectedSession ?? ProcessInfo.processInfo.environment["CAWCO_PROOF_SESSION"]
-        if let appearance = ProcessInfo.processInfo.environment["CAWCO_PROOF_APPEARANCE"] {
-            window.overrideUserInterfaceStyle = appearance == "dark" ? .dark : .light
-        }
-        #endif
-        window.rootViewController = RootViewController(sessionId: selectedSession)
+        window.rootViewController = RootViewController(sessionId: sessionId)
         window.makeKeyAndVisible()
         self.window = window
     }
