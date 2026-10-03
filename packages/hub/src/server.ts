@@ -524,7 +524,8 @@ const peekSessionSettings = (
     message?: Record<string, unknown>;
   };
   if (body.kind === "control_result") {
-    return body.ok ? body.result : undefined;
+    const mode = body.ok ? body.result?.permissionMode : undefined;
+    return typeof mode === "string" ? { permissionMode: mode } : undefined;
   }
   const frame = body.message;
   if (frame?.type !== "system") {
