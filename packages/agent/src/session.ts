@@ -37,6 +37,7 @@ import {
   CONTROL_GIT_CHANGES,
   CONTROL_QUERIES,
   CONTROL_RUN_COMMAND,
+  CONTROL_SET_PERMISSION_MODE,
   FLEET_STATUS,
   FLEET_SYNC,
   GENERATE_IMAGE,
@@ -1755,7 +1756,12 @@ export class SessionSupervisor {
         instanceId,
         requestId,
         ok: true,
-        result,
+        // The mode is acknowledged only after the harness applied it. The hub
+        // persists this receipt for both socket controls and REST changes.
+        result:
+          method === CONTROL_SET_PERMISSION_MODE
+            ? { permissionMode: args[0] }
+            : result,
       });
     } catch (error) {
       this.sink({

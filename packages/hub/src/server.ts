@@ -78,6 +78,7 @@ import {
   CONTROL_MODEL_CATALOG,
   CONTROL_RUN_COMMAND,
   CONTROL_SEARCH_TRANSCRIPTS,
+  CONTROL_SET_PERMISSION_MODE,
   CONTROL_WORKSPACE_BOUNDARY,
   contextFitRefusal,
   delegateAskText,
@@ -510,6 +511,32 @@ const peek = (payload: unknown, key: string): string | undefined => {
   }
   const value = (payload as Record<string, unknown>)[key];
   return typeof value === "string" ? value : undefined;
+};
+
+/** Settings reported by the harness, including a live mode change's receipt. */
+const peekSessionSettings = (
+  payload: unknown
+): { model?: unknown; permissionMode?: unknown } | undefined => {
+  const body = payload as {
+    kind?: string;
+    ok?: boolean;
+    result?: { permissionMode?: unknown };
+    message?: Record<string, unknown>;
+  };
+  if (body.kind === "control_result") {
+    return body.ok ? body.result : undefined;
+  }
+  const frame = body.message;
+  if (frame?.type !== "system") {
+    return undefined;
+  }
+  if (frame.subtype === "init") {
+    return { model: frame.model, permissionMode: frame.permissionMode };
+  }
+  if (frame.subtype === "model_fallback") {
+    return { model: frame.fallback_model };
+  }
+  return undefined;
 };
 
 /** The last path segment — how the rail names a session. */
@@ -2796,8 +2823,9 @@ export const createServer = ({
 
   /**
    * The session's own word on its settings, written on its row: every `init`
-   * names its model and permission mode, and a `model_fallback` the model
-   * that answers instead of the one asked for. True when the row moved. A
+   * names its model and permission mode, a `model_fallback` the model
+   * that answers instead of the one asked for, and a successful mode control
+   * the mode the harness just applied. True when the row moved. A
    * mode the session's harness does not have is not recorded (`settleMode`'s
    * rule).
    */
@@ -2805,16 +2833,11 @@ export const createServer = ({
     instanceId: string,
     payload: unknown
   ): boolean => {
-    const frame = (payload as { message?: Record<string, unknown> }).message;
-    if (frame?.type !== "system") {
+    const settings = peekSessionSettings(payload);
+    if (!settings) {
       return false;
     }
-    const model =
-      frame.subtype === "model_fallback" ? frame.fallback_model : frame.model;
-    const mode = frame.subtype === "init" ? frame.permissionMode : undefined;
-    if (!(frame.subtype === "init" || frame.subtype === "model_fallback")) {
-      return false;
-    }
+    const { model, permissionMode: mode } = settings;
     const [row] = db.getInstancesByIds([instanceId]);
     if (!row) {
       return false;
@@ -3098,7 +3121,8 @@ export const createServer = ({
     method: string,
     args: unknown[],
     timeoutMs: number,
-    harness?: HarnessKind
+    harness?: HarnessKind,
+    instanceId?: string
   ): Promise<ControlResult | "offline" | "timeout"> => {
     const agent = registry.agent(machineId);
     if (!agent) {
@@ -3111,6 +3135,7 @@ export const createServer = ({
       method,
       args,
       ...(harness && { harness }),
+      ...(instanceId && { instanceId }),
     };
     return new Promise((resolve) => {
       const timer = setTimeout(() => {
@@ -3128,9 +3153,48 @@ export const createServer = ({
       agent.send({
         verb: "control",
         machineId,
+        ...(instanceId && { instanceId }),
         payload,
       } satisfies Envelope<ControlPayload>);
     });
+  };
+
+  /** A PATCH changes the live harness first; its receipt files the stored mode. */
+  const applyPermissionMode = async (
+    row: InstanceRow,
+    mode: string
+  ): Promise<{ code: 400 | 500 | 503 | 504; error: string } | undefined> => {
+    const unfit = sessionModeRefusal(row.id, mode);
+    if (unfit) {
+      return { code: 400, error: unfit };
+    }
+    const answer = await callAgent(
+      row.machineId,
+      CONTROL_SET_PERMISSION_MODE,
+      [mode],
+      BUSY_TIMEOUT_MS,
+      undefined,
+      row.id
+    );
+    if (answer === "offline") {
+      return { code: 503, error: "Machine is not connected" };
+    }
+    if (answer === "timeout") {
+      return { code: 504, error: "Machine did not apply the permission mode" };
+    }
+    if (!answer.ok) {
+      return {
+        code: 500,
+        error: answer.error ?? "Permission mode was refused",
+      };
+    }
+    if (peek(answer.result, "permissionMode") !== mode) {
+      return {
+        code: 500,
+        error: "Harness did not acknowledge the permission mode",
+      };
+    }
+    return undefined;
   };
 
   /**
@@ -7187,7 +7251,8 @@ export const createServer = ({
             title: t.Optional(t.String()),
           }),
         },
-        ({ params, body, status }) => {
+        // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: validates one multi-field patch, applies its live mode, and only then changes metadata
+        async ({ params, body, status }) => {
           const { kind, permissionMode, model } = body;
           const title = body.title?.trim();
           if (body.title !== undefined && !title) {
@@ -7201,13 +7266,15 @@ export const createServer = ({
           ) {
             return status(400, "name a field to change");
           }
-          // A recorded mode is one the session's harness has (`settleMode`'s
-          // rule): one without modes takes none.
-          const unfit = permissionMode
-            ? sessionModeRefusal(params.id, permissionMode)
-            : undefined;
-          if (unfit) {
-            return status(400, unfit);
+          const [current] = db.getInstancesByIds([params.id]);
+          if (!current) {
+            return status(404, `no session ${params.id}`);
+          }
+          if (permissionMode !== undefined) {
+            const refused = await applyPermissionMode(current, permissionMode);
+            if (refused) {
+              return status(refused.code, refused.error);
+            }
           }
           const named = title
             ? db.nameInstance(params.id, title, "owner")?.row
@@ -7217,11 +7284,9 @@ export const createServer = ({
           }
           // A rename alone is not the session moving: its age stays.
           const row =
-            kind === undefined &&
-            permissionMode === undefined &&
-            model === undefined
-              ? named
-              : db.patchInstance(params.id, { kind, permissionMode, model });
+            kind === undefined && model === undefined
+              ? (named ?? db.getInstancesByIds([params.id])[0])
+              : db.patchInstance(params.id, { kind, model });
           if (!row) {
             return status(404, `no session ${params.id}`);
           }
@@ -9534,9 +9599,15 @@ export const createServer = ({
                   }
                   publishInstances(message.machineId);
                 }
-                if (noteSessionSettings(message.instanceId, message.payload)) {
-                  publishInstances(message.machineId);
-                }
+              }
+              // Applied settings are filed before a control reply is consumed
+              // by REST or turned into a dashboard acknowledgement.
+              if (
+                (kind === "frame" || kind === "control_result") &&
+                message.instanceId &&
+                noteSessionSettings(message.instanceId, message.payload)
+              ) {
+                publishInstances(message.machineId);
               }
               // The harness's word on its sends becomes their records, and goes
               // no further: every screen hears it as the records' `send` frames.
