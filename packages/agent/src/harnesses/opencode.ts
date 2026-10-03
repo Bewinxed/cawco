@@ -1332,8 +1332,9 @@ export class OpencodeSession implements HarnessSession {
    * Returns true when the harness's config gate is held. Injected by the
    * harness so sessions can queue dispatches without a back-reference.
    */
-  readonly #isConfigGateHeld: () => boolean;
+  readonly #isConfigGateHeld: (urgent?: boolean) => boolean;
   readonly #readActivity: () => Promise<boolean>;
+  readonly #prepareDispatch: () => Promise<void>;
   readonly #workflowStepId?: string;
   readonly #canDelegate?: boolean;
 
@@ -1347,8 +1348,9 @@ export class OpencodeSession implements HarnessSession {
     permissionMode: string | undefined,
     registerChild: (childId: string, callID: string) => void,
     onRelease: () => void,
-    isConfigGateHeld: () => boolean,
+    isConfigGateHeld: (urgent?: boolean) => boolean,
     readActivity: () => Promise<boolean>,
+    prepareDispatch: () => Promise<void>,
     effort?: EffortLevel,
     workflowStepId?: string,
     canDelegate?: boolean
@@ -1365,6 +1367,7 @@ export class OpencodeSession implements HarnessSession {
     this.#onRelease = onRelease;
     this.#isConfigGateHeld = isConfigGateHeld;
     this.#readActivity = readActivity;
+    this.#prepareDispatch = prepareDispatch;
     this.#workflowStepId = workflowStepId;
     this.#canDelegate = canDelegate;
   }
@@ -1397,6 +1400,14 @@ export class OpencodeSession implements HarnessSession {
    */
   rebindClient(client: OpencodeClient): void {
     this.#client = client;
+    this.#commandNames = null;
+    this.#providersCache = undefined;
+  }
+
+  /** Dispatch custody, not an independent server-idle heuristic. */
+  get turnInFlight(): boolean {
+    // biome-ignore lint/suspicious/noUnnecessaryConditions: server events and dispatch methods update these fields outside this getter
+    return this.#busy || this.#turnOpen;
   }
 
   /** Routes one opencode event into neutral frames for this session. */
@@ -2593,6 +2604,7 @@ export class OpencodeSession implements HarnessSession {
     }
   }
 
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: message ordering and explicit urgent interruption share the same generation dispatch gate
   send(
     message: SentMessage,
     extras: {
@@ -2658,17 +2670,26 @@ export class OpencodeSession implements HarnessSession {
       session_id: this.sessionId ?? undefined,
     });
 
-    // Config convergence gate: queue everything while a reload is in progress.
-    // Active turns are allowed to finish (events still route), but no NEW work
-    // may start — the server is being stopped and restarted. A send that
-    // arrives while the held ones are still going in waits behind them.
-    if (this.#isConfigGateHeld() || this.#draining || this.#queue.length > 0) {
+    // Publication briefly holds new work. After publication, a retained turn
+    // keeps running while its ordinary next sends await idle handoff.
+    const retiredUrgent =
+      urgent && this.#isConfigGateHeld() && !this.#isConfigGateHeld(true);
+    if (
+      this.#isConfigGateHeld(urgent) ||
+      this.#draining ||
+      (!retiredUrgent && this.#queue.length > 0)
+    ) {
       this.#queue.push({ parts, ...(model ? { model } : {}), messageID, uuid });
       this.#drainQueue();
       return;
     }
 
     if (urgent) {
+      // Explicit interrupts retain their original target; the replacement
+      // prompt hands off before ordinary retained sends are drained.
+      if (retiredUrgent) {
+        this.#draining = messageID;
+      }
       // biome-ignore lint/complexity/noVoid: fire-and-forget: send() itself is not awaited by its callers
       void this.#client.session
         .abort({
@@ -2712,6 +2733,23 @@ export class OpencodeSession implements HarnessSession {
     uuid: string,
     model?: { providerID?: string; modelID?: string }
   ): void {
+    // biome-ignore lint/complexity/noVoid: send() remains synchronous while dispatch custody is prepared
+    void this.#dispatchPrompt(parts, messageID, uuid, model);
+  }
+
+  async #dispatchPrompt(
+    parts: unknown[],
+    messageID: string,
+    uuid: string,
+    model?: { providerID?: string; modelID?: string }
+  ): Promise<void> {
+    try {
+      await this.#prepareDispatch();
+    } catch (error) {
+      this.#ctx.rejected(uuid, error);
+      this.#drained(messageID);
+      return;
+    }
     this.#turnOpen = true;
     this.#turnPrompt = messageID;
     this.#noteServerActivity();
@@ -2778,9 +2816,8 @@ export class OpencodeSession implements HarnessSession {
    * it was named — so each is read as itself.
    */
   #drainQueue(): void {
-    // Do not start new work while the config gate is held — the server is
-    // mid-dispose. The queue stays intact; configGateLifted() will call us
-    // again once the gate drops.
+    // Do not dispatch during publication or while this session still awaits
+    // idle handoff. configGateLifted() resumes the intact queue after rebinding.
     //
     // One at a time: opencode lists a session's messages in the order it
     // writes them, and `promptAsync` answers before the message is written
@@ -2849,6 +2886,12 @@ export class OpencodeSession implements HarnessSession {
     const names = await this.#commandNamesOf();
     if (!names.has(name)) {
       this.#prompt(parts, messageID, uuid, model);
+      return;
+    }
+    try {
+      await this.#prepareDispatch();
+    } catch (error) {
+      this.#ctx.rejected(uuid, error);
       return;
     }
     this.#turnOpen = true;
@@ -3202,6 +3245,10 @@ export class OpencodeHarness implements Harness {
   #opening = 0;
   #mutatingMcp = 0;
   readonly #activities = new Map<string, OpencodeActivity>();
+  readonly #generationClients = new Map<string, OpencodeClient>();
+  readonly #sessionOwners = new Map<string, ServerIdentity>();
+  readonly #migrations = new Map<string, Promise<void>>();
+  #handoffTimer: ReturnType<typeof setTimeout> | null = null;
   #deferredRevision: string | null = null;
   // Keyed by instanceId, not opencode's own session id: a resume reuses the
   // same sessionKey (opencode.ts:spawn), so multiple live instances can share
@@ -3212,7 +3259,7 @@ export class OpencodeHarness implements Harness {
   readonly #sessions = new Map<string, OpencodeSession>();
   readonly #children = new Map<
     string,
-    { parent: OpencodeSession; callID: string }
+    { parent: OpencodeSession; callID: string; identity: ServerIdentity }
   >();
   #disposed = false;
   /**
@@ -3256,7 +3303,7 @@ export class OpencodeHarness implements Harness {
   #configState: "idle" | "pending" | "applying" | "applied" | "error" = "idle";
   #configError: string | null = null;
   #configWatchTimer: ReturnType<typeof setInterval> | null = null;
-  #checkingIdle = false;
+  #checkingPublication = false;
   #retryConfigAt = 0;
   /** Whether this agent keeps the server converged; see {@link #readsThisConfig}. */
   #converging = false;
@@ -3434,10 +3481,219 @@ export class OpencodeHarness implements Harness {
     return activity;
   }
 
+  #clientForGeneration(identity: ServerIdentity): OpencodeClient {
+    let client = this.#generationClients.get(identity.procId);
+    if (!client) {
+      client = createOpencodeClient({
+        baseUrl: identity.url,
+        fetch: Object.assign(fetchOpencode, { preconnect: fetch.preconnect }),
+      });
+      this.#generationClients.set(identity.procId, client);
+    }
+    return client;
+  }
+
+  #pumpKey(directory: string, identity: ServerIdentity): string {
+    return `${identity.procId}\n${directory}`;
+  }
+
+  #migrate(session: OpencodeSession): Promise<void> {
+    const target = this.#serverOwner.active;
+    const old = this.#sessionOwners.get(session.instanceId);
+    const { sessionId } = session;
+    if (!(target && old && sessionId) || target.procId === old.procId) {
+      return Promise.resolve();
+    }
+    const prior = this.#migrations.get(session.instanceId);
+    if (prior) {
+      return prior;
+    }
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one handoff transaction verifies old custody, target provenance and attachment stability
+    const migrating = (async () => {
+      const oldClient = this.#clientForGeneration(old);
+      if (
+        (await this.#activity(old).sessionState(
+          oldClient,
+          sessionId,
+          session.directory
+        )) !== "idle"
+      ) {
+        throw new Error("OpenCode turn remains in its incumbent generation.");
+      }
+      if (
+        [...this.#children].some(
+          ([id, child]) =>
+            child.parent === session &&
+            child.identity.procId === old.procId &&
+            this.#activity(old).state(id) !== "idle"
+        )
+      ) {
+        throw new Error(
+          "OpenCode child turn remains in its incumbent generation."
+        );
+      }
+      if (session.turnInFlight) {
+        await this.#reconcile(session);
+      }
+      if (session.turnInFlight) {
+        throw new Error(
+          "OpenCode dispatch custody is still pending in the incumbent."
+        );
+      }
+      const client = this.#clientForGeneration(target);
+      const histories = await Promise.all(
+        [oldClient, client].map((reader) =>
+          reader.session.messages(
+            { sessionID: sessionId, directory: session.directory, limit: 1 },
+            { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
+          )
+        )
+      );
+      if (histories.some((history) => history.error || !history.data)) {
+        throw new Error(
+          "OpenCode shared turn history is unreadable during handoff."
+        );
+      }
+      const settled = histories.map((history) => {
+        const info = history.data?.at(-1)?.info;
+        return info
+          ? JSON.stringify({
+              id: info.id,
+              role: info.role,
+              created: info.time.created,
+              ...(info.role === "assistant"
+                ? {
+                    completed: info.time.completed,
+                    finish: info.finish,
+                    error: Boolean(info.error),
+                  }
+                : {}),
+            })
+          : "empty";
+      });
+      if (settled[0] !== settled[1]) {
+        throw new Error(
+          "OpenCode candidate has not observed the incumbent's settled turn history."
+        );
+      }
+      const config = await client.config.get(
+        { directory: session.directory },
+        { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
+      );
+      if (
+        config.error ||
+        !config.data ||
+        !containsJson(cawcoMcp(), config.data.mcp?.cawco)
+      ) {
+        throw new Error(
+          "OpenCode idle migration config does not prove the correct CawCo hub."
+        );
+      }
+      if (
+        (await this.#activity(old).sessionState(
+          oldClient,
+          sessionId,
+          session.directory
+        )) !== "idle"
+      ) {
+        throw new Error("OpenCode incumbent resumed during idle migration.");
+      }
+      if (
+        this.#sessions.get(session.instanceId) !== session ||
+        this.#sessionOwners.get(session.instanceId)?.procId !== old.procId
+      ) {
+        throw new Error("OpenCode attachment changed during idle migration.");
+      }
+      if (this.#serverOwner.active?.procId !== target.procId) {
+        throw new Error(
+          "OpenCode active generation changed during idle migration."
+        );
+      }
+      this.#activity(old).unbind(sessionId, session.instanceId);
+      for (const [id, child] of this.#children) {
+        if (child.parent === session && child.identity.procId === old.procId) {
+          this.#activity(old).unbind(id, session.instanceId);
+        }
+      }
+      this.#sessionOwners.set(session.instanceId, target);
+      this.#activity(target).bind(
+        sessionId,
+        session.instanceId,
+        session.directory
+      );
+      session.rebindClient(client);
+      console.info(
+        `[opencode] handoff ${session.instanceId}: ${old.procId}/${old.pid} → ${target.procId}/${target.pid}`
+      );
+      await this.#ensurePump(session.directory, target);
+      if (this.#sessions.get(session.instanceId) !== session) {
+        throw new Error("OpenCode attachment ended during idle migration.");
+      }
+    })().finally(() => this.#migrations.delete(session.instanceId));
+    this.#migrations.set(session.instanceId, migrating);
+    return migrating;
+  }
+
+  async #prepareDispatch(session: OpencodeSession): Promise<void> {
+    if (this.#applyGate) {
+      await this.#applyGate.promise;
+    }
+    await this.#migrate(session);
+    if (this.#sessions.get(session.instanceId) !== session) {
+      throw new Error("OpenCode dispatch attachment has ended.");
+    }
+    const identity = this.#sessionOwners.get(session.instanceId);
+    if (!(identity && session.sessionId)) {
+      throw new Error("OpenCode dispatch has no generation custody.");
+    }
+    this.#activity(identity).observeBusy(session.sessionId);
+  }
+
+  async #handoffIdle(): Promise<void> {
+    const { active } = this.#serverOwner;
+    if (!active || this.#disposed) {
+      return;
+    }
+    const idle = [...this.#sessions.values()].filter((session) => {
+      const owner = this.#sessionOwners.get(session.instanceId);
+      return (
+        owner &&
+        owner.procId !== active.procId &&
+        session.sessionId &&
+        this.#activity(owner).state(session.sessionId) === "idle"
+      );
+    });
+    await Promise.all(
+      idle.map(async (session) => {
+        try {
+          await this.#migrate(session);
+          session.configGateLifted();
+        } catch (error) {
+          console.warn(
+            `[opencode] handoff ${session.instanceId} deferred: ${errorText(error)}`
+          );
+        }
+      })
+    );
+    this.#serverOwner.maintain();
+    if (
+      [...this.#sessionOwners.values()].some(
+        (owner) => owner.procId !== active.procId
+      ) &&
+      !this.#handoffTimer
+    ) {
+      this.#handoffTimer = setTimeout(() => {
+        this.#handoffTimer = null;
+        this.#handoffIdle().catch(console.warn);
+      }, 2000);
+    }
+  }
+
   #operationsPending(): boolean {
     return (
       this.#opening > 0 ||
       this.#mutatingMcp > 0 ||
+      this.#migrations.size > 0 ||
       this.#recovering > 0 ||
       this.#recoveryWaiters.length > 0
     );
@@ -3455,16 +3711,26 @@ export class OpencodeHarness implements Harness {
     if (!client) {
       return [...activity.snapshot().instances, "opencode:activity-unknown"];
     }
-    const snapshot = activity.report(client);
+    const snapshots = this.#serverOwner.generations.map((generation) =>
+      this.#activity(generation).report(this.#clientForGeneration(generation))
+    );
     const operations = this.#operationsPending()
       ? ["opencode:pending-operations"]
       : [];
-    return [...snapshot.instances, ...operations];
+    return [
+      ...new Set([
+        ...snapshots.flatMap((snapshot) => snapshot.instances),
+        ...operations,
+      ]),
+    ];
   }
 
-  async #sessionBusy(sessionId: string, directory: string): Promise<boolean> {
-    const identity = this.#serverOwner.active;
-    const client = this.#client;
+  async #sessionBusy(
+    sessionId: string,
+    directory: string,
+    identity: ServerIdentity | undefined
+  ): Promise<boolean> {
+    const client = identity ? this.#clientForGeneration(identity) : null;
     if (!(identity && client)) {
       return true;
     }
@@ -3493,6 +3759,20 @@ export class OpencodeHarness implements Harness {
     }
     await Bun.sleep(2000);
     const second = await activity.sample(client, true);
+    if (
+      second.known &&
+      second.instances.length === 0 &&
+      this.#serverOwner.active?.procId !== identity.procId
+    ) {
+      await this.#handoffIdle();
+      if (
+        [...this.#sessionOwners.values()].some(
+          (owner) => owner.procId === identity.procId
+        )
+      ) {
+        return false;
+      }
+    }
     return (
       second.known &&
       second.instances.length === 0 &&
@@ -3503,9 +3783,9 @@ export class OpencodeHarness implements Harness {
   }
 
   /**
-   * At an idle moment, ask the serialized owner for a candidate-first cutover.
-   * Verification precedes publication; retained sessions and pumps move to the
-   * verified generation before the owner retires the captured predecessor.
+   * Prepare and publish a verified candidate while incumbent turns keep running.
+   * New turns use the active generation. Existing turns retain their client and
+   * pump until idle handoff, and only then may the owner retire their generation.
    *
    * Global config (~/.config/opencode/opencode.json) is only read at
    * server startup — `instance.dispose()` re-reads project config but
@@ -3532,11 +3812,10 @@ export class OpencodeHarness implements Harness {
     );
   }
 
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one cutover transaction keeps idle evidence, candidate verification and publication together
   async #attemptConfigApply(): Promise<void> {
     if (
       this.#applyGate ||
-      this.#checkingIdle ||
+      this.#checkingPublication ||
       Date.now() < this.#retryConfigAt
     ) {
       return;
@@ -3552,9 +3831,8 @@ export class OpencodeHarness implements Harness {
       return;
     }
 
-    // Pending convergence never holds dispatch or custody. Probe idle once and
-    // retry on the next watcher tick; a busy server keeps serving new work.
-    this.#checkingIdle = true;
+    // A pending revision does not wait for the machine's turns to become idle.
+    this.#checkingPublication = true;
     try {
       const preCheck = await readJson<Record<string, unknown>>(OPENCODE_CONFIG);
       if (!preCheck) {
@@ -3563,7 +3841,7 @@ export class OpencodeHarness implements Harness {
         return;
       }
       const incumbent = this.#serverOwner.active;
-      if (!(incumbent && (await this.#generationIdle(incumbent)))) {
+      if (!incumbent) {
         this.#configState = "pending";
         this.#configError = null;
         this.#noteDeferred();
@@ -3571,7 +3849,7 @@ export class OpencodeHarness implements Harness {
       }
       this.#deferredRevision = null;
     } finally {
-      this.#checkingIdle = false;
+      this.#checkingPublication = false;
     }
 
     let gateResolve!: () => void;
@@ -3612,11 +3890,6 @@ export class OpencodeHarness implements Harness {
 
       // Keep the incumbent and its event streams working until a verified
       // candidate is ready. The owner alone launches, publishes and retires.
-      const dirs = new Set<string>(this.#pumps.keys());
-      for (const session of this.#sessions.values()) {
-        dirs.add(session.directory);
-      }
-
       const config = await this.#launchConfig();
       await this.#serverOwner.replace(
         {
@@ -3635,26 +3908,17 @@ export class OpencodeHarness implements Harness {
             throw new Error("Candidate reads another global config root.");
           }
           await this.#verifyApply(candidate, targetHash, targetVersion, signal);
-          const incumbent = this.#serverOwner.active;
-          if (!(incumbent && (await this.#generationIdle(incumbent)))) {
-            this.#noteDeferred();
-            throw new Error(
-              "Incumbent activity changed before candidate publication."
-            );
-          }
         },
         (identity) => {
-          this.#stopPumps();
           const client = this.#adopt(identity.url);
           this.#ready = Promise.resolve(client);
           this.#verifiedProcId = identity.procId;
           this.#appliedHash = targetHash;
           this.#appliedVersion = targetVersion;
           this.#configError = null;
-          for (const dir of dirs) {
-            // biome-ignore lint/complexity/noVoid: readiness and snapshots do not block the generation switch
-            void this.#ensurePump(dir).catch(console.warn);
-          }
+          // The incumbent's clients and pumps remain owned until its turns end.
+          // biome-ignore lint/complexity/noVoid: publication does not wait for busy incumbent sessions to migrate
+          void this.#handoffIdle().catch(console.warn);
         }
       );
 
@@ -3889,8 +4153,8 @@ export class OpencodeHarness implements Harness {
 
   /**
    * Makes the server at `url` the one this adapter talks to: one client for
-   * it, cached, with every retained session moved onto it — a server that
-   * replaced a restarted or dead one serves the same stored sessions. Every
+   * it, cached. Live predecessor sessions keep their own clients; only handles
+   * whose generation has disappeared are rebound for crash recovery. Every
    * request the SDK makes goes through the client's fetch, the event
    * subscriptions included.
    *
@@ -3927,15 +4191,30 @@ export class OpencodeHarness implements Harness {
       fetch: Object.assign(dropWhenGone, { preconnect: fetch.preconnect }),
     });
     this.#client = client;
+    const { active } = this.#serverOwner;
+    if (active) {
+      this.#generationClients.set(active.procId, client);
+    }
     for (const session of this.#sessions.values()) {
+      const old = this.#sessionOwners.get(session.instanceId);
+      if (
+        old &&
+        this.#serverOwner.generations.some(
+          (generation) => generation.procId === old.procId
+        )
+      ) {
+        continue;
+      }
       session.rebindClient(client);
       const identity = this.#serverOwner.active;
       if (identity && session.sessionId) {
+        this.#sessionOwners.set(session.instanceId, identity);
         this.#activity(identity).bind(
           session.sessionId,
           session.instanceId,
           session.directory
         );
+        this.#ensurePump(session.directory, identity).catch(console.warn);
       }
     }
     return client;
@@ -4109,19 +4388,22 @@ export class OpencodeHarness implements Harness {
   #bridgePlugin: string | undefined;
 
   /** Starts the directory-scoped subscription for a directory, once per unique cwd. */
-  #ensurePump(directory: string): Promise<void> {
+  #ensurePump(directory: string, identity: ServerIdentity): Promise<void> {
     // biome-ignore lint/suspicious/noUnnecessaryConditions: #disposed is set true by dispose(), a different method biome's per-method inference doesn't see
     if (this.#disposed) {
       return Promise.reject(new Error("OpenCode adapter disposed"));
     }
-    if (!this.#pumps.has(directory)) {
+    const key = this.#pumpKey(directory, identity);
+    if (!this.#pumps.has(key)) {
       const owner = new AbortController();
-      this.#pumps.set(directory, owner);
+      this.#pumps.set(key, owner);
       // biome-ignore lint/complexity/noVoid: the pump owns reconnection; callers await only readiness
-      void this.#pumpDirectory(directory, owner.signal).catch(console.warn);
+      void this.#pumpDirectory(directory, identity, owner.signal).catch(
+        console.warn
+      );
     }
     // biome-ignore lint/style/noNonNullAssertion: pumpDirectory installs readiness before its first await
-    return this.#pumpReady.get(directory)!;
+    return this.#pumpReady.get(key)!;
   }
 
   /** Ends every directory's subscription loop; none reconnects. */
@@ -4135,11 +4417,23 @@ export class OpencodeHarness implements Harness {
   }
 
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: routes every subscribed event to its owning session or child; not refactored in this pass
-  async #pumpDirectory(directory: string, stopped: AbortSignal): Promise<void> {
+  async #pumpDirectory(
+    directory: string,
+    identity: ServerIdentity,
+    stopped: AbortSignal
+  ): Promise<void> {
+    const key = this.#pumpKey(directory, identity);
     let delay = 1000;
     while (!stopped.aborted) {
+      if (
+        !this.#serverOwner.generations.some(
+          (generation) => generation.procId === identity.procId
+        )
+      ) {
+        break;
+      }
       const ready = Promise.withResolvers<void>();
-      this.#pumpReady.set(directory, ready.promise);
+      this.#pumpReady.set(key, ready.promise);
       // biome-ignore lint/complexity/noVoid: a reconnect need not have a caller waiting for readiness
       void ready.promise.catch(() => undefined);
       // One connection: its deadline drops it for a reconnect, the owner's
@@ -4151,12 +4445,13 @@ export class OpencodeHarness implements Harness {
       );
       let connected = false;
       try {
-        // Each connection is made on the adapter's current client. A server
-        // that died fails this subscription's fetch, the client's fetch drops
-        // it (see #connect), and the next attempt's #ensure attaches — and
-        // if need be respawns — the server that replaces it.
-        // biome-ignore lint/performance/noAwaitInLoops: reconnects the SSE stream after a drop; must retry sequentially with backoff
-        const client = await this.#ensure();
+        // Every stream remains on its captured generation through publication.
+        // Only the active generation's connection may ask ensure to recover.
+        const client =
+          identity.procId === this.#serverOwner.active?.procId && !this.#client
+            ? // biome-ignore lint/performance/noAwaitInLoops: recover a dropped active connection before reconnecting its stream
+              await this.#ensure()
+            : this.#clientForGeneration(identity);
         const { stream } = await client.event.subscribe(
           { directory },
           {
@@ -4176,9 +4471,13 @@ export class OpencodeHarness implements Harness {
             ready.resolve();
             // Every session already attached here gets its snapshot now; one
             // that attaches while this holds takes its own (see `attached`).
-            this.#pumpConnected.add(directory);
+            this.#pumpConnected.add(key);
             for (const session of this.#sessions.values()) {
-              if (session.directory === directory) {
+              if (
+                session.directory === directory &&
+                this.#sessionOwners.get(session.instanceId)?.procId ===
+                  identity.procId
+              ) {
                 // biome-ignore lint/complexity/noVoid: snapshots must not block consumption of live gate events
                 void this.#reconcile(session);
               }
@@ -4186,11 +4485,10 @@ export class OpencodeHarness implements Harness {
           }
           delay = 1000;
           if (event.type === "session.created") {
-            this.#routeChildCreated(event);
+            this.#routeChildCreated(event, identity);
             continue;
           }
           const sid = this.#eventSession(event);
-          const identity = this.#serverOwner.active;
           if (
             sid &&
             identity &&
@@ -4210,12 +4508,15 @@ export class OpencodeHarness implements Harness {
           ) {
             this.#activity(identity).observeBusy(sid);
           }
-          const session = sid ? this.#sessionForSid(sid) : undefined;
+          const session = sid ? this.#sessionForSid(sid, identity) : undefined;
           if (session) {
             session.handle(event);
+            if (event.type === "session.idle") {
+              this.#handoffIdle().catch(console.warn);
+            }
           } else if (sid) {
             const child = this.#children.get(sid);
-            if (child) {
+            if (child && child.identity.procId === identity.procId) {
               child.parent.handleChild(event, child.callID);
             }
           }
@@ -4226,7 +4527,7 @@ export class OpencodeHarness implements Harness {
         // A stopped loop's flag was cleared with it, and the directory may
         // already be a newer loop's.
         if (connected && !stopped.aborted) {
-          this.#pumpConnected.delete(directory);
+          this.#pumpConnected.delete(key);
         }
         clearTimeout(deadline);
         connection.abort();
@@ -4240,10 +4541,13 @@ export class OpencodeHarness implements Harness {
       await Bun.sleep(delay);
       delay = Math.min(delay * 2, 30_000);
     }
+    this.#pumps.delete(key);
+    this.#pumpReady.delete(key);
+    this.#pumpConnected.delete(key);
   }
 
   /** A child session was created; hand its info to the named parent for binding. */
-  #routeChildCreated(event: Event): void {
+  #routeChildCreated(event: Event, identity: ServerIdentity): void {
     const props = event.properties as unknown as {
       sessionID?: string;
       info?: { id?: string; parentID?: string; agent?: string; title?: string };
@@ -4253,7 +4557,7 @@ export class OpencodeHarness implements Harness {
     if (!(childId && parentId)) {
       return;
     }
-    const parent = this.#sessionForSid(parentId);
+    const parent = this.#sessionForSid(parentId, identity);
     if (parent) {
       parent.handleChildCreated(childId, props.info?.agent, props.info?.title);
     }
@@ -4277,10 +4581,16 @@ export class OpencodeHarness implements Harness {
    * last match is the newest — on the theory that a live event is more likely
    * meant for whichever instance most recently took that session over.
    */
-  #sessionForSid(sid: string): OpencodeSession | undefined {
+  #sessionForSid(
+    sid: string,
+    identity: ServerIdentity
+  ): OpencodeSession | undefined {
     let found: OpencodeSession | undefined;
     for (const session of this.#sessions.values()) {
-      if (session.sessionId === sid) {
+      if (
+        session.sessionId === sid &&
+        this.#sessionOwners.get(session.instanceId)?.procId === identity.procId
+      ) {
         found = session;
       }
     }
@@ -4382,13 +4692,9 @@ export class OpencodeHarness implements Harness {
   async reattach(
     spec: SpawnPayload,
     ctx: HarnessContext
-  ): Promise<HarnessSession | undefined> {
-    // A config apply in progress is about to stop the server this reads.
-    // Waited out before taking a recovery slot, not inside one: a held slot
-    // counts as busy, and the apply waits for busy to clear before it stops
-    // the server — waiting inside would hold both sides for its whole timeout.
-    // Rechecked after each wake, because another apply may have started, and
-    // nothing awaits between the last check and the slot being taken.
+  ): Promise<OpencodeSession | undefined> {
+    // Wait out publication before resolving custody across active and retained
+    // generations. Recovery slots then prevent retirement during the lookup.
     while (this.#applyGate) {
       // biome-ignore lint/performance/noAwaitInLoops: each apply must finish before the next check
       await this.#applyGate.promise;
@@ -4396,22 +4702,60 @@ export class OpencodeHarness implements Harness {
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: custody check, inspection-only policy and cancellation belong to one recovery transaction
     return this.#withRecovery(async () => {
       try {
-        const client = await SessiondClient.connect(
-          process.env.CAWCO_SESSIOND_ENDPOINT ?? sessiondEndpoint()
-        );
-        const held = client.procs.some(
-          (proc) =>
-            proc.procId === this.#serverOwner.active?.procId && proc.alive
-        );
-        client.close();
-        // Register reads the catalog first, which connects the adapter. Do not
-        // call #ensure here: custody disappearing must never start a new server.
-        const server = this.#client;
-        if (!(held && spec.resume && server)) {
+        const { resume } = spec;
+        if (!resume) {
           return;
         }
+        const generations = await this.#serverOwner.liveGenerations();
+        if (!generations.length) {
+          return;
+        }
+        // Storage is shared, but each live generation owns its own runners.
+        // Resolve the actual owner before opening the stored session at all.
+        const states = await Promise.all(
+          generations.map(async (generation) => {
+            const server = this.#clientForGeneration(generation);
+            const state = await this.#activity(generation).sessionState(
+              server,
+              resume.sessionKey,
+              ctx.cwd
+            );
+            return {
+              identity: generation,
+              state,
+              running: state === "busy",
+            };
+          })
+        );
+        const busy = states.filter((state) => state.running);
+        if (busy.length > 1) {
+          throw new Error(
+            "OpenCode session is running in multiple generations."
+          );
+        }
+        if (
+          busy.length === 0 &&
+          states.some((state) => state.state === "unknown")
+        ) {
+          throw new Error(
+            "OpenCode idle recovery cannot determine custody across retained generations."
+          );
+        }
+        const chosen =
+          busy[0] ??
+          states.find(
+            (state) =>
+              state.identity.procId === this.#serverOwner.active?.procId
+          );
+        if (!chosen) {
+          throw new Error(
+            "OpenCode has no live active generation for idle recovery."
+          );
+        }
+        const { identity, running } = chosen;
+        const server = this.#clientForGeneration(identity);
         const session = await server.session.get(
-          { sessionID: spec.resume.sessionKey, directory: ctx.cwd },
+          { sessionID: resume.sessionKey, directory: ctx.cwd },
           { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
         );
         if (session.response?.status === 404) {
@@ -4419,7 +4763,7 @@ export class OpencodeHarness implements Harness {
         }
         if (session.error || !session.data) {
           throw new Error(
-            `Could not reattach OpenCode session ${spec.resume.sessionKey}`
+            `Could not reattach OpenCode session ${resume.sessionKey}`
           );
         }
         // Whether this session's turn is still running is the server's word,
@@ -4427,18 +4771,10 @@ export class OpencodeHarness implements Harness {
         // busy from that moment, not from the reconcile that follows its
         // subscription (`watchResumedTurn`), which a busy question after an
         // agent restart did not wait for.
-        const identity = this.#serverOwner.active;
-        if (!identity) {
-          throw new Error("OpenCode recovery has no generation identity.");
-        }
         const activity = this.#activity(identity);
-        activity.bind(spec.resume.sessionKey, ctx.instanceId, ctx.cwd);
-        const running = await this.#sessionBusy(
-          spec.resume.sessionKey,
-          ctx.cwd
-        );
+        activity.bind(resume.sessionKey, ctx.instanceId, ctx.cwd);
         if (running) {
-          activity.observeBusy(spec.resume.sessionKey);
+          activity.observeBusy(resume.sessionKey);
         }
         if (spec.reattachOnly === "busy" || spec.reattachOnly === "inspect") {
           if (!running) {
@@ -4468,11 +4804,12 @@ export class OpencodeHarness implements Harness {
           client: server,
           session: session.data as Session,
           running,
+          identity,
         });
         if (running) {
           opened.reattachedMidTurn();
           console.info(
-            `[opencode] recovery ${ctx.instanceId}: reattached running turn ${spec.resume.sessionKey} on ${this.#serverOwner.active?.procId}/${this.#serverOwner.active?.pid}`
+            `[opencode] recovery ${ctx.instanceId}: reattached running turn ${resume.sessionKey} on ${identity.procId}/${identity.pid}`
           );
         }
         return opened;
@@ -4494,18 +4831,43 @@ export class OpencodeHarness implements Harness {
       });
     }
     this.#opening += 1;
-    return this.#open(spec, ctx).finally(() => {
+    return this.#spawnResolved(spec, ctx).finally(() => {
       this.#opening -= 1;
     });
+  }
+
+  async #spawnResolved(
+    spec: SpawnPayload,
+    ctx: HarnessContext
+  ): Promise<OpencodeSession> {
+    if (spec.resume && !spec.resume.fork) {
+      const recovered = await this.reattach(spec, ctx);
+      if (recovered) {
+        return recovered;
+      }
+    }
+    return this.#open(spec, ctx);
   }
 
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: creates/resumes/forks a session across three branches, then wires the session up; not refactored in this pass
   async #open(
     spec: SpawnPayload,
     ctx: HarnessContext,
-    existing?: { client: OpencodeClient; session: Session; running: boolean }
+    existing?: {
+      client: OpencodeClient;
+      session: Session;
+      running: boolean;
+      identity: ServerIdentity;
+    }
   ): Promise<OpencodeSession> {
     const client = existing ? existing.client : await this.#ensure();
+    const identity = existing?.identity ?? this.#serverOwner.active;
+    if (!identity) {
+      throw new Error("OpenCode open has no generation custody.");
+    }
+    if (existing?.running && spec.resume?.atMessage && !spec.resume.fork) {
+      throw new Error("OpenCode cannot rewind a running incumbent turn.");
+    }
     // cbd4c3a0 required the correct hub and caller identity, not readiness of
     // every remote server. Config provenance is fast; MCP health is asynchronous.
     if (!existing?.running) {
@@ -4573,20 +4935,6 @@ export class OpencodeHarness implements Harness {
         );
       }
       sessionId = spec.resume.sessionKey;
-      if (spec.resume.atMessage) {
-        assertOpencodeKey(spec.resume.sessionKey, "revert");
-        const reverted = await client.session.revert(
-          {
-            sessionID: spec.resume.sessionKey,
-            directory: ctx.cwd,
-            messageID: spec.resume.atMessage,
-          },
-          { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
-        );
-        if (reverted.error) {
-          throw new Error("opencode could not rewind to that message");
-        }
-      }
     } else {
       const created = await client.session.create(
         { directory: ctx.cwd },
@@ -4596,6 +4944,22 @@ export class OpencodeHarness implements Harness {
         throw new Error("opencode could not create the session");
       }
       sessionId = (created.data as Session).id;
+    }
+    if (spec.resume?.atMessage && !spec.resume.fork) {
+      assertOpencodeKey(sessionId, "revert");
+      const reverted = await client.session.revert(
+        {
+          sessionID: sessionId,
+          directory: ctx.cwd,
+          messageID: spec.resume.atMessage,
+        },
+        { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
+      );
+      if (reverted.error) {
+        throw new Error(
+          `opencode could not rewind to that message: ${errorText(reverted.error)}`
+        );
+      }
     }
 
     let session!: OpencodeSession;
@@ -4607,37 +4971,65 @@ export class OpencodeHarness implements Harness {
       ctx.cwd,
       spec.model,
       spec.permissionMode,
-      (childId, callID) =>
-        this.#children.set(childId, { parent: session, callID }),
+      (childId, callID) => {
+        const owner = this.#sessionOwners.get(ctx.instanceId) ?? identity;
+        this.#activity(owner).bind(childId, ctx.instanceId, ctx.cwd);
+        this.#children.set(childId, {
+          parent: session,
+          callID,
+          identity: owner,
+        });
+      },
       () => {
-        this.#sessions.delete(ctx.instanceId);
+        if (this.#sessions.get(ctx.instanceId) === session) {
+          this.#sessions.delete(ctx.instanceId);
+          const owner = this.#sessionOwners.get(ctx.instanceId);
+          if (owner) {
+            this.#activity(owner).unbind(sessionId, ctx.instanceId);
+          }
+          this.#sessionOwners.delete(ctx.instanceId);
+        }
         for (const [childId, entry] of this.#children) {
           if (entry.parent === session) {
+            this.#activity(entry.identity).unbind(childId, ctx.instanceId);
             this.#children.delete(childId);
           }
         }
       },
-      () => this.#applyGate !== null,
-      () => this.#sessionBusy(sessionId, ctx.cwd),
+      (urgent) =>
+        this.#applyGate !== null ||
+        (!urgent &&
+          this.#sessionOwners.get(ctx.instanceId)?.procId !==
+            this.#serverOwner.active?.procId),
+      () =>
+        this.#sessionBusy(
+          sessionId,
+          ctx.cwd,
+          this.#sessionOwners.get(ctx.instanceId)
+        ),
+      () => this.#prepareDispatch(session),
       spec.effort,
       spec.workflowStepId,
       spec.canDelegate
     );
+    this.#sessionOwners.set(ctx.instanceId, identity);
     // A session an earlier agent left mid-turn: the hub still waits on that
     // turn's end, which the reconcile after its subscription comes up pays.
     if (spec.resume && !spec.resume.fork && (await turnWasOpen(sessionId))) {
       session.inheritOpenTurn();
     }
     session.attached = () => {
-      // Publishing a handle may follow a generation switch; use the owner's
-      // current client rather than the one captured when creation began.
-      if (this.#client) {
-        session.rebindClient(this.#client);
+      // Publishing a handle retains its captured generation, even if a newer
+      // active generation was published while this attachment was prepared.
+      const owner = this.#sessionOwners.get(ctx.instanceId);
+      if (!owner) {
+        throw new Error("OpenCode attachment has no generation custody.");
       }
+      session.rebindClient(this.#clientForGeneration(owner));
       this.#sessions.set(ctx.instanceId, session);
-      const identity = this.#serverOwner.active;
-      if (identity) {
-        this.#activity(identity).bind(sessionId, ctx.instanceId, ctx.cwd);
+      this.#activity(owner).bind(sessionId, ctx.instanceId, ctx.cwd);
+      if (owner.procId !== this.#serverOwner.active?.procId) {
+        this.#handoffIdle().catch(console.warn);
       }
       ctx.session(sessionId);
       // The init frame the dashboard reads the model / cwd / commands off.
@@ -4678,10 +5070,10 @@ export class OpencodeHarness implements Harness {
       // subscription is already up reconciles here. Both checks run without
       // an await between them and the connection's, so exactly one fires.
       // biome-ignore lint/complexity/noVoid: attached handles remain operable while the subscription starts
-      void this.#ensurePump(ctx.cwd).catch((error: unknown) =>
+      void this.#ensurePump(ctx.cwd, owner).catch((error: unknown) =>
         console.warn(String(error))
       );
-      if (this.#pumpConnected.has(ctx.cwd)) {
+      if (this.#pumpConnected.has(this.#pumpKey(ctx.cwd, owner))) {
         // biome-ignore lint/complexity/noVoid: attached handles remain operable while reconciliation runs
         void this.#reconcile(session);
       }
@@ -4981,6 +5373,10 @@ export class OpencodeHarness implements Harness {
     this.#disposed = true;
     this.#converging = false;
     this.#stopConfigWatcher();
+    if (this.#handoffTimer) {
+      clearTimeout(this.#handoffTimer);
+    }
+    this.#handoffTimer = null;
     this.#stopPumps();
     // The socket, not the child: a closed sessiond connection is re-dialled by
     // `sessiond()` and the held server never notices.
