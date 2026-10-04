@@ -382,28 +382,27 @@
 
   /* The ring, for a session that needs you or has failed: 1.5px, 1px clear
      of the tile, on the tile's own curve (its radius grown by the ring's
-     offset), drawn first so it stands behind the deck. A filled box with its
-     middle masked out.
-     Both lengths are whole device pixels (--dpx, device-pixel.ts). The
-     browser draws the tile and the ring each on the pixel grid, edge by
+     offset), drawn first so it stands behind the deck, whose cards cover it
+     where they hang under the tile.
+     It is the shadow of a box that stands the gap out from the tile, spread
+     by the ring's weight: the box is placed by layout, the weight is only
+     painted. Both lengths are whole device pixels (--dpx, device-pixel.ts).
+     The browser draws the tile and the ring each on the pixel grid, edge by
      edge: a ring 2.5px out on a 1x screen was drawn 3px out on one side and
-     2px on the other, off the tile's centre and against its far edges. A
-     whole number of device pixels out lands every edge the same distance
-     from the tile's. */
+     2px on the other, off the tile's centre and against its far edges. And
+     as a filled box with its middle masked out, where a half pixel is not a
+     place layout can put an edge, the box and its hole each took the next
+     whole pixel: the ring stood half a pixel down and right of the tile, a
+     weight too thick, against the tile at its top and left. */
   .session-mark[data-rim]::before {
     --rim-gap: max(var(--dpx, 1px), round(1px, var(--dpx, 1px)));
     --rim-ring: max(var(--dpx, 1px), round(1.5px, var(--dpx, 1px)));
-    --rim-out: calc(var(--rim-gap) + var(--rim-ring));
     position: absolute;
-    inset: calc(-1 * var(--rim-out));
-    padding: var(--rim-ring);
-    border-radius: calc(var(--radius-xs) + var(--rim-out));
-    background: var(--rim);
-    mask:
-      linear-gradient(#000 0 0) content-box exclude,
-      linear-gradient(#000 0 0);
+    inset: calc(-1 * var(--rim-gap));
+    border-radius: calc(var(--radius-xs) + var(--rim-gap));
+    box-shadow: 0 0 0 var(--rim-ring) var(--rim);
     pointer-events: none;
-    transition: background-color var(--dur-fade) var(--ease-out);
+    transition: box-shadow var(--dur-fade) var(--ease-out);
   }
   .session-mark[data-rim]::before {
     content: "";
