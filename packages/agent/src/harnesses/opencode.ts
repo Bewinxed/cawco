@@ -3093,14 +3093,31 @@ export class OpencodeSession implements HarnessSession {
           })
         );
       }
-      case CONTROL_MCP_RECONNECT:
-        await reached(
+      case CONTROL_MCP_RECONNECT: {
+        const name = args[0] as string;
+        const connected = await reached(
           this.#client.mcp.connect({
-            name: args[0] as string,
+            name,
             directory: this.#directory,
           })
         );
+        if (connected.error) {
+          throw new Error(errorText(connected.error));
+        }
+        const snapshot = await reached(
+          this.#client.mcp.status({ directory: this.#directory })
+        );
+        if (snapshot.error) {
+          throw new Error(errorText(snapshot.error));
+        }
+        const status = snapshot.data?.[name];
+        if (status?.status !== "connected") {
+          throw new Error(
+            `MCP ${name} is not connected (${status?.status ?? "missing"}).`
+          );
+        }
         return undefined;
+      }
       case CONTROL_MCP_TOGGLE: {
         const name = args[0] as string;
         const enabled = args[1] as boolean;
@@ -3273,6 +3290,27 @@ export class OpencodeHarness implements Harness {
   readonly kind = "opencode" as const;
   readonly capabilities = OPENCODE_CAPABILITIES;
   auth: import("@cawco/core").AuthState = "authenticated";
+
+  /** OpenCode holds one MCP client per server generation and directory. */
+  async reconnectCawco(): Promise<void> {
+    const clients = new Map<string, OpencodeSession>();
+    for (const session of this.#sessions.values()) {
+      const owner = this.#sessionOwners.get(session.instanceId);
+      clients.set(`${owner?.procId}\0${session.directory}`, session);
+    }
+    await Promise.all(
+      [...clients.values()].map(async (session) => {
+        try {
+          await session.control(CONTROL_MCP_RECONNECT, ["cawco"]);
+          console.info(`[opencode] CawCo MCP reconnected ${session.directory}`);
+        } catch (error) {
+          console.warn(
+            `[opencode] CawCo MCP reconnect failed ${session.directory}: ${error}`
+          );
+        }
+      })
+    );
+  }
 
   #client: OpencodeClient | null = null;
   #sessiond: Promise<SessiondClient> | undefined;

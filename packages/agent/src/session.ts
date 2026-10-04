@@ -36,6 +36,7 @@ import {
   alreadyIngested,
   CAWCO_SCRATCH_TAG,
   CONTROL_GIT_CHANGES,
+  CONTROL_MCP_RECONNECT,
   CONTROL_QUERIES,
   CONTROL_RUN_COMMAND,
   CONTROL_SET_PERMISSION_MODE,
@@ -56,7 +57,7 @@ import {
 import { Effect } from "effect";
 import { type Boundary, boundaryFor } from "./boundary";
 import { fetchDefaultBranch } from "./clone";
-import { harnessMcpUrl } from "./delegation";
+import { harnessMcpUrl, MCP_SERVER_NAME } from "./delegation";
 import { DEPLOY_BRANCH } from "./deploy";
 import { expandHome, runFs } from "./fs";
 import type { Harness, HarnessContext, HarnessSession } from "./harness";
@@ -522,6 +523,35 @@ export class SessionSupervisor {
     for (const body of this.#openAsks.values()) {
       this.sink(body);
     }
+  }
+
+  /** Every live Claude client and each harness-owned shared MCP client, mid-turn too. */
+  async reconnectCawco(): Promise<void> {
+    await Promise.all([
+      ...[...this.#sessions].flatMap(([instanceId, session]) =>
+        session.harness === "claude"
+          ? [
+              session.control(CONTROL_MCP_RECONNECT, [MCP_SERVER_NAME]).then(
+                () =>
+                  console.info(`[agent] CawCo MCP reconnected ${instanceId}`),
+                (error: unknown) =>
+                  warn(`CawCo MCP reconnect failed ${instanceId}: ${error}`)
+              ),
+            ]
+          : []
+      ),
+      ...harnesses().flatMap((adapter) =>
+        adapter.reconnectCawco
+          ? [
+              adapter
+                .reconnectCawco()
+                .catch((error: unknown) =>
+                  warn(`CawCo MCP reconnect failed ${adapter.kind}: ${error}`)
+                ),
+            ]
+          : []
+      ),
+    ]);
   }
 
   /** Settles once the envelope has been handled, success or failure alike. */

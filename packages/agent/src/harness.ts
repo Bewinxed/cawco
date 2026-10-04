@@ -169,6 +169,9 @@ export interface Harness {
     spec: SpawnPayload,
     ctx: HarnessContext
   ): Promise<HarnessSession | undefined>;
+  /** Reconnect shared CawCo MCP clients after the hub returns. */
+  // biome-ignore lint/style/useConsistentMethodSignatures: matches the other adapter methods
+  reconnectCawco?(): Promise<void>;
   // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
   renameSession(sessionKey: string, title: string, dir?: string): Promise<void>;
   /** Lifecycle guards read the supervisor's one machine recovery barrier. */
