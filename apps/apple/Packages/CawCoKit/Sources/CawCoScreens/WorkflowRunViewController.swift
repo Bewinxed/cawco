@@ -5,7 +5,7 @@ import UIKit
 
 /// A workflow run's tab (WorkflowRunView.svelte): what a session's tab is for
 /// a session. Its name with its status, when it started and how long it has
-/// run, what it was given, Cancel or Re-run and Edit workflow; its steps hung
+/// run, what it was given, Cancel or Re-run; its steps hung
 /// under it on the nesting rails (RunSteps.svelte), each folding open its
 /// result and opening its own session or run; the question it waits on; and
 /// its log. Cancel asks first, in the house confirm.
@@ -256,13 +256,7 @@ final class WorkflowRunViewController: ObservedViewController, UIGestureRecogniz
             primary.isEnabled = (detail.acting == nil || detail.acting == "rerun") && live
             PromptCardView.setPending(primary, detail.acting == "rerun", label: "Re-running…")
         }
-        let edit = KitButton.make("Edit workflow", variant: .outline, height: .sm) { [weak self] in
-            guard let address = self?.hub.address else { return }
-            var url = address.appendingPathComponent("workflows/\(model.workflowId)")
-            url.append(queryItems: [URLQueryItem(name: "tab", value: "program")])
-            UIApplication.shared.open(url)
-        }
-        let actions = UIStackView(arrangedSubviews: [primary, edit, UIView()])
+        let actions = UIStackView(arrangedSubviews: [primary, UIView()])
         actions.spacing = Space.space2
         head.addArrangedSubview(actions)
         head.setCustomSpacing(Space.space2 + Space.space1, after: head.arrangedSubviews[head.arrangedSubviews.count - 2])
