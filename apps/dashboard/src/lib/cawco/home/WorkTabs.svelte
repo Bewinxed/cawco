@@ -611,6 +611,16 @@
     const at = plan?.leave.get(key);
     return at === undefined ? "" : `animation:${swap.leaveAnim(at)}`;
   };
+  /**
+   * A leaving row's exit, for the nesting line that joins it to its parent.
+   * The line is the list item's pseudo-elements, which the row's own
+   * animation does not reach: left alone, the rows went and their lines
+   * stood over the incoming list until the leaving layer was taken down.
+   */
+  const leaveLine = (key: string): string => {
+    const at = plan?.leave.get(key);
+    return at === undefined ? "" : `--leave:${swap.leaveAnim(at)}`;
+  };
 
   /** A working row's line: its project, then what it is doing now. */
   function workingLine(row: InstanceRow): string {
@@ -742,7 +752,9 @@
   {@const kids = lines.filter(
     (other) => other.row && shapeOf(other.tab, other.key)?.parent === line.key
   )}
-  <li class="node">
+  <!-- The row's nesting line is this item's own (app.css .kit-nest): it
+       leaves on the row's exit, in the row's frames (`--leave`). -->
+  <li class="node" style={leaveLine(line.key)}>
     <div class="line" style={leaveAnim(line.key)}>
       {@render sessionRow(line.row as InstanceRow, line.tab, line.machineId)}
     </div>
@@ -1090,7 +1102,7 @@
   .waiting {
     display: flex;
     flex-direction: column;
-    gap: var(--space-row);
+    gap: var(--tree-gap);
   }
   /* A tab with nothing in it: its line on the rows' own text column, and
      under it, on Working, the one thing to do next. */
@@ -1133,12 +1145,13 @@
     position: relative;
   }
   /* A machine's trees, and each parent's rows under it: lists of rows,
-     --space-row apart. */
+     --tree-gap apart, the gap every tree in the app keeps (app.css; the
+     rail's projects list reads the same one). */
   .tree,
   .branch {
     display: flex;
     flex-direction: column;
-    gap: var(--space-row);
+    gap: var(--tree-gap);
     margin: 0;
     padding: 0;
     list-style: none;
@@ -1149,9 +1162,13 @@
      the row's pill), placed as the sidebar's are (motion/branch `nestFrom`),
      so a tree nests alike in both. */
   .branch {
-    --nest-gap: var(--space-row);
-    padding-block-start: var(--space-row);
+    padding-block-start: var(--tree-gap);
     padding-inline-start: var(--nest-pad);
+  }
+  /* A leaving row's line goes out on the row's own exit (`leaveLine`). */
+  .leaving .node::before,
+  .leaving .node::after {
+    animation: var(--leave, none);
   }
   .node,
   .line {
@@ -1204,7 +1221,7 @@
     top: 100%;
   }
   .rows:has([data-key]) > .leaving:not(.layer) {
-    top: calc(100% + var(--space-row));
+    top: calc(100% + var(--tree-gap));
   }
   .machine {
     display: flex;

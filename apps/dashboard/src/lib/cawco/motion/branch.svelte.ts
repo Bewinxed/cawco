@@ -735,7 +735,17 @@ function clipAt(stretch: Stretch, s: number): string {
       below = 0;
     }
   }
-  return `inset(0px ${px(Math.max(0, right))} ${px(Math.max(0, below))} 0px)`;
+  return `inset(0px ${px(onGrid(Math.max(0, right)))} ${px(onGrid(Math.max(0, below)))} 0px)`;
+}
+
+/**
+ * A length on the device's pixel grid. A line's cut lands between pixels
+ * otherwise, and its last pixel is drawn at part of the ink while the head
+ * passes: a line of two colours until the draw ends.
+ */
+function onGrid(length: number): number {
+  const ratio = window.devicePixelRatio || 1;
+  return Math.round(length * ratio) / ratio;
 }
 
 /**

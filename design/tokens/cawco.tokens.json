@@ -1199,11 +1199,11 @@
     },
     "nest-ink": {
       "$type": "color",
-      "$value": "color-mix(in oklch, {color.neutral-8} 45%, {color.neutral-9})",
-      "$description": "The nesting lines' ink (.kit-nest, WorkflowRail): one neutral, at least 3:1 against the sidebar in both themes (between steps 8 and 9 in light, step 9 in dark).",
+      "$value": "color-mix(in oklch, {color.neutral-8} 85%, {color.neutral-9})",
+      "$description": "The nesting lines' ink (.kit-nest, WorkflowRail): one opaque neutral, about 2.3:1 to 2.5:1 against the sidebar and the phone home in both themes (a little past step 8 in light, between steps 7 and 8 in dark). A step lighter than the 3:1 it stood at, which read as heavy; never a faint hairline, and never an alpha, so two strokes that cross are the colour of one.",
       "$extensions": {
         "dev.cawco": {
-          "dark": "{color.neutral-9}"
+          "dark": "color-mix(in oklch, {color.neutral-7} 50%, {color.neutral-8})"
         }
       }
     },

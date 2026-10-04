@@ -32,6 +32,7 @@
   import {
     IconAssistant,
     IconBox,
+    IconChevronRight,
     IconPlus,
     IconSettings,
     IconSort,
@@ -138,18 +139,21 @@
   /**
    * A session under its project: the name has the least room in the rail,
    * so the gaps between its four parts (mark, name, age, delegate count) are
-   * the tight ones, wide enough that the mark's rim (SessionMark, 2.5px out)
-   * clears the name; a delegate's nesting arm ends at its mark
-   * (`--nest-reach`, measured: this row's left inset).
+   * the tight ones, wide enough that the mark's rim (SessionMark, up to 3px
+   * out) clears the name; its nesting arm ends at its mark (`--nest-reach`,
+   * measured: this row's left inset).
    */
   const SUB_ROW = "h-[28px] gap-1.5 pl-1.5 pr-2";
   /** How a tree's rows open and fold (motion/branch): off each row's mark. */
   const TREE: BranchOptions = { glyph: ".session-mark" };
-  /** A project's sessions open off the project's own mark. */
-  const PROJECT_TREE: BranchOptions = {
-    glyph: ".session-mark",
-    parent: ".project-mark",
-  };
+  /**
+   * What stands in a row's lead slot under a project: a session's mark, or
+   * the glyph of a row that is not a session ("N older", "No sessions").
+   * The rail's arm ends there.
+   */
+  const LEAD = ".session-mark, .row-lead";
+  /** A project's rows hang off the project's own mark. */
+  const PROJECT_TREE: BranchOptions = { glyph: LEAD, parent: ".project-mark" };
   /** The height the loading rows stand at: a list row's. */
   const LIST_ROW_H = "h-[30px]";
   /** `Sidebar.Group`'s own `p-2` plus `Sidebar.Content`'s `gap-2` stacked to
@@ -773,7 +777,7 @@
            folds back into it the same way (motion/branch). reflow never
            copies or uncovers what is inside (`data-flip-anchor`). -->
       <ul
-        class="kit-nest flex min-w-0 flex-col gap-(--nest-gap) pt-1 pl-(--nest-pad)"
+        class="kit-nest flex min-w-0 flex-col gap-(--tree-gap) pt-(--tree-gap) pl-(--nest-pad)"
         data-flip-anchor
         in:branch={TREE}
         out:branch={TREE}
@@ -1060,71 +1064,85 @@
                   </Sidebar.MenuButton>
                 </FolderMenu>
 
-                <!-- Its sessions open under it the way a session's delegates
-                     do (motion/branch), with no rail: lines only join what
-                     one session started to it. -->
+                <!-- Its sessions hang under it the way a session's delegates
+                     hang under theirs: on a rail that leaves the project's
+                     mark, each row joined to it by its own arm, opening and
+                     folding with the same motion (motion/branch). Every
+                     level of the tree steps in by the rail's own measure
+                     (app.css .kit-nest), so a session under a project and a
+                     delegate under a session are set in alike. -->
                 {#if expanded}
-                  <div
+                  {@const lists = splitOf(project)}
+                  <ul
+                    class="kit-nest flex min-w-0 flex-col gap-(--tree-gap) pt-(--tree-gap) pl-(--nest-pad)"
                     data-flip-anchor
+                    data-sidebar="menu-sub"
+                    data-slot="sidebar-menu-sub"
                     in:branch={PROJECT_TREE}
                     out:branch={PROJECT_TREE}
+                    {@attach nestFrom(".project-mark", LEAD)}
                   >
-                    <!-- The project's own sessions: a plain list with no
-                         rail, so set in only a step, just inside the
-                         project's row. -->
-                    <Sidebar.MenuSub class="pl-(--space-4)">
-                      {@const lists = splitOf(project)}
-                      {#each branches(
-                        lists.recent,
-                        `rail:${project.id}:recent`
-                      ) as node (node.row.id)}
-                        {@render subRow(node)}
-                      {/each}
-                      {#if lists.older.length > 0}
-                        {@const olderVisible = olderShown(project, lists.older)}
-                        <Sidebar.MenuSubItem data-flip>
-                          <Sidebar.MenuSubButton
-                            aria-expanded={olderVisible}
-                            class="{SUB_ROW} text-muted-foreground"
-                            data-branch-item
-                            onclick={() => toggleOlder(project.id)}
+                    {#each branches(
+                      lists.recent,
+                      `rail:${project.id}:recent`
+                    ) as node (node.row.id)}
+                      {@render subRow(node)}
+                    {/each}
+                    {#if lists.older.length > 0}
+                      {@const olderVisible = olderShown(project, lists.older)}
+                      <Sidebar.MenuSubItem data-flip>
+                        <Sidebar.MenuSubButton
+                          aria-expanded={olderVisible}
+                          class="{SUB_ROW} text-muted-foreground"
+                          data-branch-item
+                          onclick={() => toggleOlder(project.id)}
+                        >
+                          <!-- A disclosure for more rows: its chevron in
+                                 the lead slot the marks stand in, where the
+                                 rail's arm ends, turning as the rows open. -->
+                          <span class="{SLOT} row-lead older-chev"
+                            ><IconChevronRight class="size-3" /></span
                           >
-                            <span class="num">{lists.older.length} older</span>
-                          </Sidebar.MenuSubButton>
-                        </Sidebar.MenuSubItem>
-                        {#if olderVisible}
-                          <!-- Older sessions scroll in a box of their own,
+                          <span class="num">{lists.older.length} older</span>
+                        </Sidebar.MenuSubButton>
+                      </Sidebar.MenuSubItem>
+                      {#if olderVisible}
+                        <!-- Older sessions scroll in a box of their own,
                                six rows at most, so opening them never pushes
-                               the projects below or the footer. -->
-                          <li class="older-wrap" data-flip>
-                            <ul class="older" {@attach scrollEdges}>
-                              {#each branches(
-                                lists.older,
-                                `rail:${project.id}:older`
-                              ) as node (node.row.id)}
-                                {@render subRow(node)}
-                              {/each}
-                            </ul>
-                          </li>
-                        {/if}
-                      {:else if lists.recent.length === 0}
-                        <Sidebar.MenuSubItem data-flip>
-                          <Sidebar.MenuSubButton
-                            class="{SUB_ROW} text-muted-foreground"
-                            data-branch-item
-                            onclick={() =>
-                              newSession({
-                                projectId: project.id,
-                                machineId: project.machineId,
-                                cwd: project.cwd,
-                              })}
-                          >
-                            No sessions — start one
-                          </Sidebar.MenuSubButton>
-                        </Sidebar.MenuSubItem>
+                               the projects below or the footer. The box is
+                               off the rail: the rail ends at the row that
+                               opens it. -->
+                        <li class="older-wrap" data-flip>
+                          <ul class="older" {@attach scrollEdges}>
+                            {#each branches(
+                              lists.older,
+                              `rail:${project.id}:older`
+                            ) as node (node.row.id)}
+                              {@render subRow(node)}
+                            {/each}
+                          </ul>
+                        </li>
                       {/if}
-                    </Sidebar.MenuSub>
-                  </div>
+                    {:else if lists.recent.length === 0}
+                      <Sidebar.MenuSubItem data-flip>
+                        <Sidebar.MenuSubButton
+                          class="{SUB_ROW} text-muted-foreground"
+                          data-branch-item
+                          onclick={() =>
+                            newSession({
+                              projectId: project.id,
+                              machineId: project.machineId,
+                              cwd: project.cwd,
+                            })}
+                        >
+                          <span class="{SLOT} row-lead"
+                            ><IconPlus class="size-3" /></span
+                          >
+                          No sessions — start one
+                        </Sidebar.MenuSubButton>
+                      </Sidebar.MenuSubItem>
+                    {/if}
+                  </ul>
                 {/if}
               </li>
             {/each}
@@ -1148,10 +1166,13 @@
       <Sidebar.Menu aria-label="User" class="min-w-0 flex-1">
         <Sidebar.MenuItem>
           <Sidebar.MenuButton class={NAV_ROW}>
-            <span
-              aria-hidden="true"
-              class="{SLOT} rounded-full bg-selected-bg text-meta text-selected-ink"
-              >bw</span
+            <!-- No picture of the reader yet: Caw stands in. -->
+            <img
+              alt=""
+              class="brand-icon avatar"
+              height="18"
+              src={cawcoIcon}
+              width="18"
             >
             <span class="min-w-0 flex-1 truncate text-foreground"
               >bewinxed</span
@@ -1213,6 +1234,10 @@
     outline: 1px solid var(--image-outline);
     outline-offset: -1px;
   }
+  /* The same picture as the reader's placeholder: a round one. */
+  .brand-icon.avatar {
+    border-radius: var(--radius-pill);
+  }
   /* The header's corner actions: icon buttons on the nav row's height. */
   .head-action {
     display: inline-grid;
@@ -1245,6 +1270,25 @@
      scrolling in place. The edges fade only while there is more past them. */
   .older-wrap {
     list-style: none;
+  }
+  /* The older box is off the rail (it scrolls on its own): it draws no line,
+     and the row that opens it is where the rail ends. */
+  .older-wrap::before,
+  .older-wrap::after,
+  :global(.kit-nest > li:has(+ .older-wrap))::after {
+    content: none;
+  }
+  /* The disclosure's chevron turns as its rows open. */
+  .older-chev {
+    color: var(--ink-muted);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .older-chev {
+      transition: rotate var(--dur-control) var(--ease-out);
+    }
+  }
+  :global([aria-expanded="true"]) > .older-chev {
+    rotate: 90deg;
   }
   .older {
     --fade: var(--space-4);

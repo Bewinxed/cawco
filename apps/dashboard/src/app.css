@@ -169,6 +169,13 @@
     /* The seam's inset (.kit-seam, and the transcript's user-message
        hairline): the text column's own padding. */
     --seam-inset: var(--space-3);
+    /* The gap between the rows of a tree, and between a parent and its
+       first child: one value for every tree (the rail's projects, sessions
+       and delegates; the home's Working and Finished). */
+    --tree-gap: var(--space-1);
+    /* How far each level of a tree is set in from the one above it, mark to
+       mark: the same in every tree, whatever inset its rows keep. */
+    --tree-step: calc(var(--space-1) + var(--space-2) + var(--space-3));
 
     @media (width <= 900px) {
       --seam-inset: var(--space-2);
@@ -433,9 +440,10 @@
      joins it with an elbow that curves (--radius-sm) from the rail into an
      arm ending at the child's glyph, and the last child's elbow ends the
      rail. No arrowhead: the curve is the joint. One primitive for every
-     nested list (session → delegates, delegate → its own, run → steps),
-     and only where something really hangs under something: a project's own
-     sessions are a plain list. A child with children of its own holds its
+     nested list (a project → its sessions, session → delegates, delegate →
+     its own, run → steps), each level stepping in by the same
+     --nest-pad and its rows --tree-gap apart, so every tree in the app has
+     one indent and one rhythm. A child with children of its own holds its
      own `.kit-nest` list inside its item, so every parent has one rail of
      its own, and the rail on to the next sibling runs straight past the
      open subtree. The lines are drawn by the children themselves, so as
@@ -460,12 +468,29 @@
        built on it (`--nest-pad`) drops a whole declaration and then lands a
        frame later with no change to the DOM. */
     --nest-x: 0px;
-    --nest-in: var(--space-2);
     --nest-reach: 0px;
+    /* The rail to a child row's left edge: what is left of one --tree-step
+       (mark to mark) after the half mark the rail stands under and the
+       row's own inset. Fixed at one length, a list whose rows are set in
+       further stepped in further: 27px in the home, 22px in the rail. */
+    --nest-half: calc(var(--mark-size, 18px) / 2);
+    --nest-in: calc(var(--tree-step) - var(--nest-half) - var(--nest-reach));
     --nest-glyph-y: var(--space-4);
-    --nest-gap: var(--space-1);
+    --nest-gap: var(--tree-gap);
     --nest-lead: 0px;
     --nest-pad: calc(var(--nest-x) + var(--nest-in));
+    /* The line's weight, and every length a piece of it is placed or sized
+       by, in whole device pixels (--dpx, device-pixel.ts). Set half a pixel
+       off its glyph's centre and half a pixel over in width and height, a
+       piece was drawn crisp at rest, where the browser snaps its box, and
+       soft while its clip ran: across two pixel columns at half the ink,
+       until the draw ended. On the grid, it is the same line in every
+       frame. */
+    --nest-line: max(var(--dpx, 1px), round(1px, var(--dpx, 1px)));
+    --nest-left: round(
+      calc(var(--nest-x) - var(--nest-pad) - var(--nest-line) / 2),
+      var(--dpx, 1px)
+    );
     position: relative;
   }
   .kit-nest > li {
@@ -477,7 +502,7 @@
     position: absolute;
     z-index: 1;
     /* Centred on the glyph: the 1px line half a pixel each side of it. */
-    left: calc(var(--nest-x) - var(--nest-pad) - 0.5px);
+    left: var(--nest-left);
     pointer-events: none;
     border-color: var(--nest-ink);
     border-style: solid;
@@ -487,15 +512,24 @@
      along the arm to the child's glyph. */
   .kit-nest > li::before {
     top: calc(-1 * var(--nest-gap));
-    width: calc(var(--nest-in) + var(--nest-reach) + 0.5px);
-    height: calc(var(--nest-glyph-y) + var(--nest-gap) + 0.5px);
-    border-left-width: 1px;
-    border-bottom-width: 1px;
+    width: round(
+      calc(var(--nest-in) + var(--nest-reach) + var(--nest-line) / 2),
+      var(--dpx, 1px)
+    );
+    height: round(
+      calc(var(--nest-glyph-y) + var(--nest-gap) + var(--nest-line) / 2),
+      var(--dpx, 1px)
+    );
+    border-left-width: var(--nest-line);
+    border-bottom-width: var(--nest-line);
     border-bottom-left-radius: var(--radius-sm);
   }
   .kit-nest > li:first-child::before {
     top: calc(-1 * var(--nest-lead));
-    height: calc(var(--nest-glyph-y) + var(--nest-lead) + 0.5px);
+    height: round(
+      calc(var(--nest-glyph-y) + var(--nest-lead) + var(--nest-line) / 2),
+      var(--dpx, 1px)
+    );
   }
   /* The rail on past this child (and anything open under it) to the next
      one; the last child has none. */
@@ -504,7 +538,7 @@
        on past the joint instead of breaking at the curve. */
     top: calc(var(--nest-glyph-y) - var(--radius-sm));
     bottom: 0;
-    border-left-width: 1px;
+    border-left-width: var(--nest-line);
   }
   .kit-nest > li:last-child::after {
     content: none;
