@@ -1377,8 +1377,12 @@
       color: var(--ink-strong);
     }
   }
+  /* The body is as tall as what it holds and gives way when the card is
+     capped. A zero flex basis counts for nothing in WebKit's fit-content
+     height: on an iPhone in landscape the card came out 139px tall around a
+     body of padding alone, the prompt out of reach. */
   .body {
-    flex: 1;
+    flex: 0 1 auto;
     min-height: 0;
     overflow: auto;
     background: var(--surface-raised);

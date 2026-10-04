@@ -1,6 +1,7 @@
 <script lang="ts">
   import { tick, untrack } from "svelte";
-  import { Drawer } from "vaul-svelte";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
+  import * as Drawer from "#lib/components/ui/drawer/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Popover from "#lib/components/ui/popover/index.js";
   import { IconWindow } from "#lib/icons.js";
@@ -162,18 +163,24 @@
 {/snippet}
 
 {#if phone}
-  <Drawer.Root dismissible={false} modal={false} noBodyStyles bind:open>
-    <Drawer.Portal>
-      <Drawer.Content
-        class="selection-popover selection-note-sheet"
-        onCloseAutoFocus={(event) => event.preventDefault()}
-        onOpenAutoFocus={focusNote}
-        trapFocus={false}
-      >
-        <Drawer.Title class="sr-only">Note</Drawer.Title>
-        {@render content()}
-      </Drawer.Content>
-    </Drawer.Portal>
+  <!-- The kit drawer keeps the sheet in the visible viewport, so the note
+       field and Done stay above a keyboard. -->
+  <Drawer.Root
+    dismissible={false}
+    modal={false}
+    noBodyStyles
+    shouldScaleBackground={false}
+    bind:open
+  >
+    <Drawer.Content
+      class="selection-popover selection-note-sheet"
+      onCloseAutoFocus={(event) => event.preventDefault()}
+      onOpenAutoFocus={focusNote}
+      trapFocus={false}
+    >
+      <Drawer.Title class="sr-only">Note</Drawer.Title>
+      {@render content()}
+    </Drawer.Content>
   </Drawer.Root>
 {:else}
   <!-- The kit's floating surface: it grows out of the chip it is anchored
@@ -212,21 +219,22 @@
     font-size: var(--text-body);
     font-weight: var(--weight-body);
   }
-  /* The phone's note sheet is not a floating surface: it draws its own. */
+  /* The phone's note sheet is not a floating surface: it draws its own, in
+     place of the kit content's inset card and its grab bar (the sheet is put
+     away with Done, never dragged). Where it rests is the kit's. */
   :global(.selection-note-sheet) {
     background: var(--surface-raised);
     border: 1px solid var(--border-hairline);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-drawer);
-  }
-  :global(.selection-note-sheet) {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
     width: 100%;
     max-width: none;
+    margin: 0;
     padding-bottom: calc(var(--space-3) + env(safe-area-inset-bottom));
+  }
+  :global(.selection-note-sheet::before),
+  :global(.selection-note-sheet > div:first-child) {
+    display: none;
   }
   .name {
     font-size: var(--text-label);
