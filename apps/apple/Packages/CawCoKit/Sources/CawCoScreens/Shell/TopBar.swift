@@ -34,11 +34,12 @@ enum TopBar {
 
     /// Puts the burger (compact only), the crumb and the cluster on `item`.
     static func install(on item: UINavigationItem, crumb: CrumbView, cluster: TopBarCluster, burger: UIView?) {
-        // The bar's own inset is the system's 16pt; the web's burger stands at 18
-        // (`space7` less its own −`space2`), and so does a desk's crumb.
+        // The web's burger stands 18pt in (`space7` less its own −`space2`) and
+        // a desk's crumb at `space7`; the bar's own inset differs by device, so
+        // the lead measures it.
         let inset = UIView()
-        inset.widthAnchor.constraint(equalToConstant: 2).isActive = true
-        let lead = UIStackView(arrangedSubviews: [inset, burger, crumb].compactMap(\.self))
+        let lead = BarLead(inset: inset, target: burger == nil ? Space.space7 : 18)
+        for part in [inset, burger, crumb].compactMap(\.self) { lead.addArrangedSubview(part) }
         lead.axis = .horizontal
         lead.alignment = .center
         lead.spacing = Space.space2
@@ -60,6 +61,46 @@ enum TopBar {
         if #available(iOS 26.0, macCatalyst 26.0, *) {
             item.hidesSharedBackground = true
         }
+    }
+}
+
+extension UIView {
+    /// The navigation bar this view stands in.
+    var hostingBar: UINavigationBar? {
+        var view = superview
+        while let next = view {
+            if let bar = next as? UINavigationBar { return bar }
+            view = next.superview
+        }
+        return nil
+    }
+}
+
+/// The bar's leading group: an inset wide enough that what follows it starts
+/// `target` points inside the bar's safe leading edge, whatever margin the
+/// system gives the item.
+private final class BarLead: UIStackView {
+    private let width: NSLayoutConstraint
+    private let target: Double
+
+    init(inset: UIView, target: Double) {
+        self.target = target
+        width = inset.widthAnchor.constraint(equalToConstant: 2)
+        super.init(frame: .zero)
+        width.isActive = true
+    }
+
+    @available(*, unavailable)
+    required init(coder _: NSCoder) {
+        fatalError("BarLead is built in code")
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        guard let bar = hostingBar else { return }
+        let own = convert(bounds, to: bar).minX - bar.safeAreaInsets.left
+        let next = max(0, target - own)
+        if abs(width.constant - next) > 0.25 { width.constant = next }
     }
 }
 
@@ -356,10 +397,11 @@ final class TopBarCluster: UIView {
         stack.alignment = .center
         stack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)
+        // The web's right inset is `space6` (21); the bar's own differs by device and is measured.
+        end = stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -(Space.space6 - 16))
         NSLayoutConstraint.activate([
             stack.leadingAnchor.constraint(equalTo: leadingAnchor),
-            // The web's right inset is `space6` (21); the bar's own is 16.
-            stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -(Space.space6 - 16)),
+            end,
             stack.topAnchor.constraint(equalTo: topAnchor),
             stack.bottomAnchor.constraint(equalTo: bottomAnchor),
             heightAnchor.constraint(equalToConstant: 44),
@@ -462,6 +504,16 @@ final class TopBarCluster: UIView {
     override func didMoveToWindow() {
         super.didMoveToWindow()
         arrange()
+    }
+
+    private var end: NSLayoutConstraint!
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        guard let bar = hostingBar else { return }
+        let own = bar.bounds.width - bar.safeAreaInsets.right - convert(bounds, to: bar).maxX
+        let next = -max(0, Space.space6 - own)
+        if abs(end.constant - next) > 0.25 { end.constant = next }
     }
 
     /// The hub's word on the bar: what waits on the operator, which machines are up.
