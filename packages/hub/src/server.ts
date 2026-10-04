@@ -5883,6 +5883,52 @@ export const createServer = (
    * past them.
    */
   const streams = createStreamHub({
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: validates ownership and settles the send once against the harness's atomic withdrawal receipt, including concurrent recalls
+    withdrawSend: async (machineId, instanceId, sendId) => {
+      const row = db.sendRecord(sendId);
+      const [instance] = db.getInstancesByIds([instanceId]);
+      if (
+        !row ||
+        row.instanceId !== instanceId ||
+        instance?.machineId !== machineId
+      ) {
+        throw new Error("That send does not belong to this session.");
+      }
+      if (row.state === "cancelled") {
+        return "withdrawn";
+      }
+      if (row.state !== "pending") {
+        return "started";
+      }
+      const reply = await callAgent(
+        machineId,
+        "withdrawSend",
+        [sendId],
+        READ_TIMEOUT_MS,
+        undefined,
+        instanceId
+      );
+      if (typeof reply === "string") {
+        throw new Error(`Withdrawal ${reply}.`);
+      }
+      if (!reply.ok) {
+        throw new Error(reply.error ?? "Withdrawal failed.");
+      }
+      const now = db.sendRecord(sendId);
+      if (now?.state === "cancelled") {
+        return "withdrawn";
+      }
+      if (reply.result === "withdrawn") {
+        if (now?.state === "pending") {
+          changeSend(now, { state: "cancelled" });
+        }
+        return "withdrawn";
+      }
+      if (now?.state === "pending") {
+        readSend(now, true);
+      }
+      return "started";
+    },
     isMachineConnected: (machineId) => registry.agent(machineId) !== undefined,
     relaySend,
     relayControl: (envelope, dashboard) =>

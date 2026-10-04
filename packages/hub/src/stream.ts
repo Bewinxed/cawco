@@ -67,7 +67,9 @@ const SWEEP_INTERVAL_MS = 60_000;
 const RING_IDLE_MS = 15 * 60_000;
 
 /** The control method each command kind is allowed to become — and only that one. */
-const CONTROL_METHOD: Readonly<Record<Exclude<CommandKind, "send">, string>> = {
+const CONTROL_METHOD: Readonly<
+  Record<Exclude<CommandKind, "send" | "send.withdraw">, string>
+> = {
   "permission.answer": RESOLVE_PERMISSION,
   interrupt: CONTROL_INTERRUPT,
   "set-model": CONTROL_SET_MODEL,
@@ -75,7 +77,11 @@ const CONTROL_METHOD: Readonly<Record<Exclude<CommandKind, "send">, string>> = {
   "set-effort": CONTROL_SET_EFFORT,
 };
 
-const COMMAND_KINDS = new Set<string>(["send", ...Object.keys(CONTROL_METHOD)]);
+const COMMAND_KINDS = new Set<string>([
+  "send",
+  "send.withdraw",
+  ...Object.keys(CONTROL_METHOD),
+]);
 
 /**
  * The `control_result` shape a settled command reads: exactly the frame the
@@ -104,6 +110,11 @@ export interface StreamPorts {
    * makes its record failed, and the record's frame says so.
    */
   readonly relaySend: (envelope: Envelope<SendPayload>) => void;
+  readonly withdrawSend: (
+    machineId: string,
+    sessionId: string,
+    sendId: string
+  ) => Promise<"withdrawn" | "started">;
 }
 
 export interface StreamHubShape {
@@ -441,6 +452,30 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
         commandId,
         stage: "accepted",
       });
+      return;
+    }
+
+    if (kind === "send.withdraw") {
+      if (!nonEmpty(payload.sendId)) {
+        fail(socket, commandId, "A withdrawal names no send.");
+        return;
+      }
+      ackTo(socket, { type: "command.ack", commandId, stage: "accepted" });
+      ports.withdrawSend(machineId, sessionId, payload.sendId).then(
+        (outcome) =>
+          ackTo(socket, {
+            type: "command.ack",
+            commandId,
+            stage: "applied",
+            outcome,
+          }),
+        (error: unknown) =>
+          fail(
+            socket,
+            commandId,
+            error instanceof Error ? error.message : String(error)
+          )
+      );
       return;
     }
 

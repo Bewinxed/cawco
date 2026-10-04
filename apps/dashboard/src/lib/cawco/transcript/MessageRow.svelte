@@ -12,10 +12,13 @@
   } from "#lib/components/ui/button/pending-content.svelte";
   import {
     canResend,
+    canWithdraw,
+    latestCommandFor,
     restoreDraft,
     retryFailed,
     retryOf,
     retrySend,
+    withdrawQueued,
   } from "../client.svelte";
   /** Dispatches one stand-alone transcript message to its renderer by type. */
   import type { Message } from "../types";
@@ -123,7 +126,16 @@
       (message.state === "failed" || canResend(message.id))
   );
   /** Edit hands the whole payload back to the composer, which only the outbox holds. */
-  const editable = $derived(unreached && !!message.id && canResend(message.id));
+  const editable = $derived(
+    (unreached && !!message.id && canResend(message.id)) || canWithdraw(message)
+  );
+  let withdrawing = $state(false);
+  const withdrawal = $derived(
+    latestCommandFor(message.instanceId, "send.withdraw")
+  );
+  const withdrawalPending = $derived(
+    withdrawal?.stage === "submitted" || withdrawal?.stage === "accepted"
+  );
   const whoNote = $derived.by(() => {
     if (ghost) {
       return "sending…";
@@ -169,7 +181,7 @@
     retried && (message.state === "failed" ? retry?.stage !== "failed" : ghost)
   );
   /** Something to say under the words: the failure, or the retry for it. */
-  const open = $derived(failed || retrying);
+  const open = $derived(failed || retrying || editable);
   /**
    * What the reason line reads: the failure as it stands, or the line the
    * retry went out under — kept while the retry is out and while the fold
@@ -200,7 +212,16 @@
       });
     }
   }
-  function edit(): void {
+  async function edit(): Promise<void> {
+    if (waiting) {
+      withdrawing = true;
+      try {
+        await withdrawQueued(message);
+      } finally {
+        withdrawing = false;
+      }
+      return;
+    }
     if (message.id) {
       restoreDraft(message.id);
     }
@@ -332,29 +353,33 @@
              close over; a row that never failed renders none of it. -->
         <div class="failure" data-opens inert={!open} class:open>
           <div class="failure-inner">
-            {#if failed || retried}
-              <p class="reason">{line}</p>
-              {#if recoverable || retried}
+            {#if failed || retried || editable}
+              {#if failed || retried}
+                <p class="reason">{line}</p>
+              {/if}
+              {#if recoverable || retried || editable}
                 <div class="actions">
-                  <button
-                    aria-busy={retrying || undefined}
-                    aria-disabled={retrying || undefined}
-                    class="pressable action"
-                    onclick={whileIdle(() => retrying, tryAgain)}
-                    type="button"
-                  >
-                    <!-- A retry that went through keeps its word as it folds away. -->
-                    <PendingContent
-                      {failed}
-                      label="Try again"
-                      pending={retrying || (retried && !failed)}
-                      pendingLabel="Sending…"
-                    />
-                  </button>
+                  {#if failed || retried}
+                    <button
+                      aria-busy={retrying || undefined}
+                      aria-disabled={retrying || undefined}
+                      class="pressable action"
+                      onclick={whileIdle(() => retrying, tryAgain)}
+                      type="button"
+                    >
+                      <!-- A retry that went through keeps its word as it folds away. -->
+                      <PendingContent
+                        {failed}
+                        label="Try again"
+                        pending={retrying || (retried && !failed)}
+                        pendingLabel="Sending…"
+                      />
+                    </button>
+                  {/if}
                   {#if editable || (retried && heldEdit)}
                     <button
                       class="pressable action"
-                      disabled={retrying}
+                      disabled={retrying || withdrawing || withdrawalPending}
                       onclick={edit}
                       type="button"
                     >

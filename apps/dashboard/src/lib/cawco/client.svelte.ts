@@ -953,10 +953,18 @@ function pull(list: Message[], id: string): Message | undefined {
 function take(
   target: SessionState,
   block: TranscriptBlock,
-  into: "blocks" | "queued"
+  into: "blocks" | "queued" | "removed"
 ): Message {
   const fresh = block as Message;
   const mine = pull(target.local, block.id);
+  if (into === "removed") {
+    return (
+      pull(target.queued, block.id) ??
+      pull(target.blocks, block.id) ??
+      mine ??
+      fresh
+    );
+  }
   const waiting =
     into === "blocks"
       ? pull(target.queued, block.id)
@@ -2336,6 +2344,7 @@ const streamHost: StreamHost = {
 
 /** What to say about a failed command, in the operator's terms, never the wire's. */
 const FAILURE_LEAD: Record<CommandKind, string> = {
+  "send.withdraw": "Couldn't take back that message.",
   send: "Couldn't send that message.",
   "permission.answer": "Couldn't send that answer.",
   interrupt: "Couldn't stop the turn.",
@@ -2492,6 +2501,7 @@ export interface CommandIntents {
   "permission.answer": { requestId: string; result: PermissionResult };
   /** `replaces`: the failed send this one retries, which the hub then retires. */
   send: { text: string; extras?: SendExtras; replaces?: string };
+  "send.withdraw": { sendId: string; text: string; extras: SendExtras };
   "set-effort": { effort: EffortLevel };
   "set-model": { model: string };
   "set-permission-mode": { mode: PermissionMode };
@@ -2507,7 +2517,7 @@ function wirePayload<K extends CommandKind>(
   instanceId: string,
   commandId: string,
   intent: CommandIntents[K]
-): SendPayload | ControlPayload {
+): SendPayload | ControlPayload | { sendId: string } {
   const controlPayload = (method: string, args: unknown[]): ControlPayload => ({
     instanceId,
     requestId: commandId,
@@ -2515,6 +2525,8 @@ function wirePayload<K extends CommandKind>(
     args,
   });
   switch (kind) {
+    case "send.withdraw":
+      return { sendId: (intent as CommandIntents["send.withdraw"]).sendId };
     case "send": {
       const { text, extras, replaces } = intent as CommandIntents["send"];
       // The command's id is the message's: one identity from the press on. A
@@ -2690,6 +2702,7 @@ export function submitCommand<K extends CommandKind>(
  * word when their `control_result` comes back.
  */
 const SETTLES_AT: Record<CommandKind, SettleStage> = {
+  "send.withdraw": "applied",
   send: "accepted",
   "permission.answer": "applied",
   interrupt: "applied",
@@ -2951,17 +2964,59 @@ export function restoreDraft(commandId: string): void {
   sendOutbox.delete(commandId);
   outboxVersion += 1;
   dropSendEcho(entry.instanceId, commandId);
+  restoreComposer(entry.instanceId, entry.text, entry.extras);
+}
+
+function restoreComposer(
+  instanceId: string,
+  text: string,
+  extras: SendExtras
+): void {
   // Exactly one slot is ever waiting. A slot holds the whole payload — base64
   // image data included — and it is only ever emptied by the pane that mounts
   // to consume it, so an "Edit" pressed on a session the reader then closes
   // would otherwise pin those bytes for the life of the tab. Keeping only the
   // newest bounds it at one without needing anyone to come back and collect.
   for (const held of Object.keys(restoreSlots)) {
-    if (held !== entry.instanceId) {
+    if (held !== instanceId) {
       delete restoreSlots[held];
     }
   }
-  restoreSlots[entry.instanceId] = { text: entry.text, extras: entry.extras };
+  restoreSlots[instanceId] = { text, extras };
+}
+
+/** Only Claude's CLI supports individually recalling a pending send. */
+export function canWithdraw(message: Message): boolean {
+  return (
+    message.state === "pending" &&
+    session(message.instanceId).harness === "claude"
+  );
+}
+
+export async function withdrawQueued(message: Message): Promise<void> {
+  if (!(message.id && canWithdraw(message))) {
+    return;
+  }
+  const images = await Promise.all(
+    (message.metadata?.images ?? []).flatMap(({ src, mediaType }) =>
+      src ? [imageBytes(src, mediaType)] : []
+    )
+  );
+  submitCommand(
+    message.instanceId,
+    session(message.instanceId).machineId,
+    "send.withdraw",
+    {
+      sendId: message.id,
+      text: message.content,
+      extras: {
+        attachments: message.metadata?.attachments?.map(
+          ({ name, content }) => ({ kind: "text" as const, name, content })
+        ),
+        images,
+      },
+    }
+  );
 }
 
 /**
@@ -3036,6 +3091,27 @@ function streamEffectsFor<K extends CommandKind>(
 ): StreamEffects | undefined {
   const target = session(instanceId);
   switch (kind) {
+    case "send.withdraw": {
+      const { sendId, text, extras } =
+        intent as CommandIntents["send.withdraw"];
+      return {
+        settled: (stage) => {
+          if (
+            stage === "applied" &&
+            commandRecord(commandId)?.outcome === "withdrawn"
+          ) {
+            const block = target.messages.find(
+              (message) => message.id === sendId
+            );
+            if (block) {
+              take(target, block as TranscriptBlock, "removed");
+              place(target);
+            }
+            restoreComposer(instanceId, text, extras);
+          }
+        },
+      };
+    }
     case "send": {
       const { text, extras, replaces } = intent as CommandIntents["send"];
       // The row is keyed by the id of the command it IS, which is the whole

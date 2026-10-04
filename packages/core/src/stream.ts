@@ -92,6 +92,7 @@ export interface StreamDelta {
 /** The operations a command envelope can carry — 1:1 with existing relay ops. */
 export type CommandKind =
   | "send"
+  | "send.withdraw"
   | "permission.answer"
   | "interrupt"
   | "set-model"
@@ -123,6 +124,7 @@ export interface CommandEnvelope {
  */
 export interface CommandAck {
   commandId: string;
+  outcome?: "withdrawn" | "started";
   reason?: string;
   stage: "accepted" | "applied" | "failed";
   type: "command.ack";

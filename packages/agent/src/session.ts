@@ -2260,7 +2260,11 @@ export class SessionSupervisor {
       this.#settleAsk(instanceId, args[0] as string);
       return undefined;
     }
-    return await this.#session(instanceId).control(method, args);
+    const session = this.#session(instanceId);
+    if (method === "withdrawSend" && session.harness !== "claude") {
+      return "started";
+    }
+    return await session.control(method, args);
   }
 
   #session(instanceId: string): HarnessSession {

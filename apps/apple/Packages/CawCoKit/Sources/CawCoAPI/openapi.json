@@ -8589,6 +8589,7 @@
           "state": {
             "description": "A send's row: where its record stands.",
             "enum": [
+              "cancelled",
               "failed",
               "pending",
               "read"
@@ -16050,6 +16051,7 @@
       "SendState": {
         "description": "Where a send stands, as the hub alone decides it: waiting for the harness\n(`pending`), taken up by it (`read`), never going to be (`failed`, with\nwhy), or sent again as another send (`replaced`).",
         "enum": [
+          "cancelled",
           "failed",
           "pending",
           "read",
@@ -16104,6 +16106,13 @@
         "type": "object",
         "properties": {
           "commandId": {
+            "type": "string"
+          },
+          "outcome": {
+            "enum": [
+              "started",
+              "withdrawn"
+            ],
             "type": "string"
           },
           "reason": {
@@ -16191,6 +16200,7 @@
           "interrupt",
           "permission.answer",
           "send",
+          "send.withdraw",
           "set-effort",
           "set-model",
           "set-permission-mode"

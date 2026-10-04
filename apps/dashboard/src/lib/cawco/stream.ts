@@ -110,6 +110,7 @@ export interface CommandRecord {
   /** The stream-dialect local half still owed an outcome; see {@link StreamEffects}. */
   effects?: StreamEffects;
   kind: CommandKind;
+  outcome?: CommandAck["outcome"];
   reason?: string;
   sessionId: string;
   /** Copied from the submission: the stage this kind is finished at. See {@link SettleStage}. */
@@ -841,6 +842,9 @@ export function noteCommandAck(
   const record = state.commands[ack.commandId];
   if (!record) {
     return false;
+  }
+  if (ack.stage === "applied") {
+    record.outcome = ack.outcome;
   }
   return advanceStage(record, ack.stage, now, ack.reason, host);
 }

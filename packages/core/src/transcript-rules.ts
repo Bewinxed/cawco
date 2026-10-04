@@ -1607,6 +1607,7 @@ const STATE_ORDER: Record<SendRecord["state"], number> = {
   read: 1,
   failed: 2,
   replaced: 3,
+  cancelled: 3,
 };
 
 /** Whether `record` says something `held` has not heard yet. */

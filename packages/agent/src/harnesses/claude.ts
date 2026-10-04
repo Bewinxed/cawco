@@ -50,6 +50,7 @@ import {
   CLAUDE_CONVERSATION_GONE,
   CONTROL_SET_EFFORT,
   CONTROL_SET_MODEL,
+  CONTROL_WITHDRAW_SEND,
   EFFORT_READ,
   INSPECT_CONFIG,
   INSTALL_SESSION_CREDENTIAL,
@@ -493,6 +494,15 @@ export class InputStream implements AsyncIterable<SDKUserMessage> {
     this.#waiting = null;
   }
 
+  withdraw(uuid: string): boolean {
+    const at = this.#queue.findIndex((message) => message.uuid === uuid);
+    if (at < 0) {
+      return false;
+    }
+    this.#queue.splice(at, 1);
+    return true;
+  }
+
   [Symbol.asyncIterator](): AsyncIterator<SDKUserMessage> {
     return {
       next: () => {
@@ -520,6 +530,7 @@ const runsTurn = (message: SDKMessage): boolean =>
 /** Whether a turn is in flight, and a way to wait for the one that is. */
 class Turn {
   busy = false;
+  running = false;
   #ended = Promise.withResolvers<void>();
 
   start(): void {
@@ -528,6 +539,7 @@ class Turn {
 
   end(): void {
     this.busy = false;
+    this.running = false;
     this.#ended.resolve();
     this.#ended = Promise.withResolvers<void>();
   }
@@ -579,6 +591,10 @@ class ClaudeSession implements HarnessSession {
   /** The supplied header is ACKable only when this handle launched the child. */
   readonly #launchCredential: string | undefined;
   readonly #input: InputStream;
+  readonly #delivery = new Map<
+    string,
+    ReturnType<typeof Promise.withResolvers<void>>
+  >();
   readonly #turn: Turn;
   readonly #pump: Promise<void>;
   readonly #ctx: HarnessContext;
@@ -874,13 +890,25 @@ class ClaudeSession implements HarnessSession {
   ): Promise<void> {
     try {
       for await (const message of handle) {
+        if ((message as { type: string }).type === "command_lifecycle") {
+          const lifecycle = message as unknown as CommandLifecycle;
+          const uuid = lifecycle.command_uuid;
+          if (lifecycle.state === "started") {
+            turn.running = true;
+          }
+          this.#delivery.get(uuid)?.resolve();
+          this.#delivery.delete(uuid);
+        }
         // A turn the CLI starts on its own — a background task's notification,
         // a message it held from the last turn — is a turn all the same: the
         // frames are the evidence, and a send into it waits like any other.
-        // biome-ignore lint/suspicious/noUnnecessaryConditions: Turn.busy is mutated by Turn.start()/.end() elsewhere; the checker doesn't see that cross-class mutation
-        if (!turn.busy && runsTurn(message)) {
-          turn.start();
-          ctx.busy(true);
+        if (runsTurn(message)) {
+          turn.running = true;
+          // biome-ignore lint/suspicious/noUnnecessaryConditions: Turn.busy is mutated by Turn.start()/.end() elsewhere; the checker doesn't see that cross-class mutation
+          if (!turn.busy) {
+            turn.start();
+            ctx.busy(true);
+          }
         }
         // Free account-wide limit data: Claude Code read these off its own
         // response headers, so they are fresher than anything the polled
@@ -983,6 +1011,10 @@ class ClaudeSession implements HarnessSession {
           : error
       );
     } finally {
+      for (const delivery of this.#delivery.values()) {
+        delivery.resolve();
+      }
+      this.#delivery.clear();
       ctx.closed?.();
     }
   }
@@ -1072,6 +1104,7 @@ class ClaudeSession implements HarnessSession {
    * from here, and busy as it was before the agent went away.
    */
   adoptTurn(): void {
+    this.#turn.running = true;
     this.#turn.start();
     this.#ctx.busy(true);
   }
@@ -1094,6 +1127,7 @@ class ClaudeSession implements HarnessSession {
       extras.attachments,
       extras.images
     );
+    this.#delivery.set(message.uuid, Promise.withResolvers<void>());
 
     // A mid-turn injection: the model reads it at the next tool boundary without
     // losing work. The CLI queues it and says `started` when it is read, as it
@@ -1106,6 +1140,8 @@ class ClaudeSession implements HarnessSession {
       })();
       // biome-ignore lint/complexity/noVoid: fire-and-forget by intent; the rejection is handled by the .catch() right here
       void this.#handle.streamInput(stream).catch((error: unknown) => {
+        this.#delivery.get(message.uuid)?.resolve();
+        this.#delivery.delete(message.uuid);
         this.#ctx.rejected(message.uuid, error);
       });
       return;
@@ -1117,6 +1153,12 @@ class ClaudeSession implements HarnessSession {
   }
 
   async control(method: string, args: unknown[]): Promise<unknown> {
+    if (method === CONTROL_WITHDRAW_SEND) {
+      if (typeof args[0] !== "string" || !args[0]) {
+        throw new Error("A withdrawal names no send.");
+      }
+      return await this.#withdraw(args[0]);
+    }
     if (method === INSTALL_SESSION_CREDENTIAL) {
       const [credential, mode] = args;
       if (typeof credential !== "string" || !credential) {
@@ -1154,6 +1196,38 @@ class ClaudeSession implements HarnessSession {
       await this.#readEffort();
     }
     return answer;
+  }
+
+  async #withdraw(uuid: string): Promise<"withdrawn" | "started"> {
+    if (this.#input.withdraw(uuid)) {
+      this.#delivery.get(uuid)?.resolve();
+      this.#delivery.delete(uuid);
+      // biome-ignore lint/suspicious/noUnnecessaryConditions: the pump and adoption set running for a turn in flight; the checker only sees its initial value here
+      if (!this.#turn.running && this.#delivery.size === 0) {
+        this.#turn.end();
+        this.#ctx.busy(false);
+      }
+      return "withdrawn";
+    }
+    // A control write can overtake the SDK's async input iterator. Wait for
+    // the CLI's receipt of this send before asking it to cancel; no send is
+    // delayed or held here. The CLI's cancellation still decides the race.
+    await this.#delivery.get(uuid)?.promise;
+    // https://raw.githubusercontent.com/anthropics/claude-agent-sdk-typescript/main/CHANGELOG.md
+    // 0.2.76: cancel_async_message drops a queued user message by UUID.
+    // Query has no public typed method (0.3.289); use its own correlated
+    // control request path. The CLI removes atomically with its dequeue.
+    const reply = await (
+      this.#handle as unknown as {
+        request: (request: {
+          subtype: "cancel_async_message";
+          message_uuid: string;
+        }) => Promise<
+          { response?: { cancelled?: boolean } } | null | undefined
+        >;
+      }
+    ).request({ subtype: "cancel_async_message", message_uuid: uuid });
+    return reply?.response?.cancelled === true ? "withdrawn" : "started";
   }
 
   async #connectedCawcoSnapshot(): Promise<McpServerStatus[]> {

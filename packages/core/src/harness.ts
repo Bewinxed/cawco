@@ -576,7 +576,12 @@ export type SendMode = "turn" | "note" | "urgent";
  * (`pending`), taken up by it (`read`), never going to be (`failed`, with
  * why), or sent again as another send (`replaced`).
  */
-export type SendState = "pending" | "read" | "failed" | "replaced";
+export type SendState =
+  | "pending"
+  | "read"
+  | "failed"
+  | "replaced"
+  | "cancelled";
 
 /**
  * THE ONE RECORD OF A SEND. The hub writes it when it accepts the send and is
@@ -903,6 +908,7 @@ export const CAPABILITIES_NONE: HarnessCapabilities = {
  * surfaces. The dashboard calls these by name, never the harness's own words.
  */
 export const CONTROL_INTERRUPT = "interrupt";
+export const CONTROL_WITHDRAW_SEND = "withdrawSend";
 export const CONTROL_SET_PERMISSION_MODE = "setPermissionMode";
 export const CONTROL_SET_MODEL = "setModel";
 /**
