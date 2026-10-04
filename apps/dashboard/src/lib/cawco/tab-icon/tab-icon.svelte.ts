@@ -1,136 +1,133 @@
 /**
- * The tab's icon says what the fleet is doing, since it is what the operator
- * sees of CawCo while another tab is in front (favicon.now/guides/
+ * The tab's icon says whether the operator is needed, since it is what they
+ * see of CawCo while another tab is in front (favicon.now/guides/
  * animated-favicon: "Short-lived progress, recording, or urgent-state
- * indicators can be useful when the tab is backgrounded"):
+ * indicators can be useful when the tab is backgrounded"). It is Caw's head
+ * on a rounded tile, and it moves only for what the operator has to look at
+ * (owner: "it shouldn't animate if there's nothing the USER has to pay
+ * attention to"):
  *
- * - something needs the operator (the home's Needs you): Caw's needs-you
- *   loops on a vermilion tile;
- * - else something is working: his working loops on a butter tile;
- * - else the icon the page was served with, and nothing runs: no clock, no
- *   canvas, no Rive ("always restore the canonical favicon", same guide).
+ * - something needs the operator (the home's Needs you): his pleading head
+ *   bobs on a vermilion tile, the one state that moves;
+ * - else something is working: his head, awake, still on butter;
+ * - else his head asleep, still on butter: the icon the page is served with.
  *
- * Under Reduced Motion each state is one drawing, his status's still on the
- * same tile, and no clock runs either.
+ * A still is a picture drawn ahead by `bun run tab-icon`, so showing one
+ * runs nothing: no clock, no canvas, no Rive ("always restore the canonical
+ * favicon", same guide). Under Reduced Motion every state is its still.
  *
- * Caw is drawn 12 times a second, the pace his loops are held at (on twos),
- * so no drawing of his is skipped and none is made twice ("Keep frames and
- * updates infrequent", same guide).
+ * Moving, Caw is drawn 12 times a second, the pace his loops are held at (on
+ * twos), so no drawing of his is skipped and none is made twice ("Keep
+ * frames and updates infrequent", same guide), and each beat shows the
+ * drawing the time gone by asks for, so he keeps his pace however late a
+ * beat lands (css-tricks.com/the-making-of-an-animated-favicon: "detect how
+ * much time has actually passed between each frame").
  */
 import { untrack } from "svelte";
+import needsYouStill from "#lib/assets/brand/tab-icon-needs-you.png";
+import sleepingStill from "#lib/assets/brand/tab-icon-sleeping.png";
+import workingStill from "#lib/assets/brand/tab-icon-working.png";
 import { fileBytes, riveRuntime } from "../home/Caw.svelte";
 import { home } from "../home/home-state.svelte";
 import { motionOk } from "../motion/curves.svelte";
+import { NEEDS_YOU } from "./shots";
 import { openTile, type Tile } from "./tile";
 
 /** The bitmap's side: the 16 px a tab draws, up to a 4x screen. */
 const SIDE = 64;
-/** Between two drawings, in ms: Caw's loops are held on twos of 24. */
-const BEAT = 1000 / 12;
+/** Drawings a second: Caw's loops are held on twos of 24. */
+const PACE = 12;
+/** The drawings in the needs-you bob. */
+const BEATS = (NEEDS_YOU.to - NEEDS_YOU.from) / 2;
 
-/** What the fleet is doing, as the icon tells it; `null` is nothing at all. */
-type Doing = "needs-you" | "working" | null;
+/** What the fleet is doing, as the icon tells it. */
+type Doing = "needs-you" | "working" | "sleeping";
 
-/** The token each state's tile is filled with. */
-const TILE = { "needs-you": "--vermilion", working: "--spark" } as const;
+/** Each state's still. */
+const STILL: Record<Doing, string> = {
+  "needs-you": needsYouStill,
+  working: workingStill,
+  sleeping: sleepingStill,
+};
+
+/** The icon every page is served with: nothing going on. */
+export const RESTING_TAB_ICON = sleepingStill;
 
 function doing(): Doing {
   if (home.needs.length > 0) {
     return "needs-you";
   }
-  return home.working.length > 0 ? "working" : null;
+  return home.working.length > 0 ? "working" : "sleeping";
 }
 
 /** An attachment for the page's `<link rel="icon">`. */
 export function tabIcon(link: HTMLLinkElement) {
-  const resting = link.href;
   let asked = 0;
-  let shown: { tile: Tile; clock?: Worker } | undefined;
+  let moving: { tile: Tile; clock: Worker } | undefined;
 
   // The home's lists move often; the icon hears only a change of state.
   const status = $derived(doing());
 
-  function drop() {
-    shown?.clock?.terminate();
-    shown?.tile.close();
-    shown = undefined;
-  }
-
-  /** Draws `tile` on every beat of a worker's clock, by the time gone by. */
-  function play(tile: Tile, first: string): Worker {
-    let drawn = first;
-    let last = performance.now();
-    const clock = new Worker(new URL("./ticker.ts", import.meta.url), {
-      type: "module",
-    });
-    clock.addEventListener("message", () => {
-      const now = performance.now();
-      // Beats that queued behind a busy page are one drawing, not a burst.
-      if (now - last < BEAT / 2) {
-        return;
-      }
-      const url = tile.draw((now - last) / 1000);
-      last = now;
-      if (url !== drawn) {
-        drawn = url;
-        link.href = url;
-      }
-    });
-    clock.postMessage(BEAT);
-    return clock;
-  }
-
-  /** Puts a state on the icon; what is shown stays until the new one is drawn. */
-  async function show(next: Exclude<Doing, null>, moving: boolean) {
+  /** Shows a state's still, and with it stops whatever was moving. */
+  function still(state: Doing) {
     asked += 1;
+    moving?.clock.terminate();
+    moving?.tile.close();
+    moving = undefined;
+    link.href = STILL[state];
+  }
+
+  /** Bobs his head on a worker's clock; his still stands until he is drawn. */
+  async function plead() {
+    still("needs-you");
     const mine = asked;
     const tokens = getComputedStyle(document.documentElement);
     const [{ RuntimeLoader }, bytes] = await Promise.all([
       riveRuntime(),
-      fileBytes(next),
+      fileBytes("needs-you"),
     ]);
     const tile = await openTile(await RuntimeLoader.awaitInstance(), {
       bytes,
-      colour: tokens.getPropertyValue(TILE[next]).trim(),
+      colour: tokens.getPropertyValue(`--${NEEDS_YOU.tile}`).trim(),
       radius: Number.parseFloat(tokens.getPropertyValue("--tab-icon-r")),
+      shot: NEEDS_YOU,
       side: SIDE,
-      still: !moving,
     });
     if (mine !== asked) {
       tile.close();
       return;
     }
-    drop();
-    const first = tile.draw(0);
-    link.href = first;
-    shown = { tile, clock: moving ? play(tile, first) : undefined };
-    if (next === "working") {
-      // An ask is the likeliest change from here; its file waits in memory.
-      fileBytes("needs-you").catch(() => {
-        // Fetched again when something needs the operator.
-      });
-    }
-  }
-
-  function rest() {
-    asked += 1;
-    drop();
-    link.href = resting;
+    const began = performance.now();
+    let beat = -1;
+    const clock = new Worker(new URL("./ticker.ts", import.meta.url), {
+      type: "module",
+    });
+    clock.addEventListener("message", () => {
+      const now =
+        Math.floor(((performance.now() - began) / 1000) * PACE) % BEATS;
+      // Beats that queued behind a busy page are one drawing, not a burst.
+      if (now === beat) {
+        return;
+      }
+      beat = now;
+      link.href = tile.draw(NEEDS_YOU.from + beat * 2);
+    });
+    clock.postMessage(1000 / PACE);
+    moving = { tile, clock };
   }
 
   $effect(() => {
-    const next = status;
-    if (!next) {
-      untrack(rest);
+    const state = status;
+    if (state === "needs-you" && motionOk.current) {
+      untrack(() => {
+        plead().catch((error: unknown) => {
+          console.error("[cawco] the tab icon did not move:", error);
+        });
+      });
       return;
     }
-    const moving = motionOk.current;
-    untrack(() => {
-      show(next, moving).catch((error: unknown) => {
-        console.error("[cawco] the tab icon was not drawn:", error);
-      });
-    });
+    untrack(() => still(state));
   });
 
-  return rest;
+  return () => still("sleeping");
 }

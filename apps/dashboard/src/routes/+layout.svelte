@@ -4,7 +4,6 @@
   import type { Snippet } from "svelte";
   import { onMount } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
-  import cawcoTabIcon from "#lib/assets/brand/cawco-tab-icon.png";
   import { ensureConnected } from "#lib/cawco/client.svelte.js";
   import { GROUPS } from "#lib/cawco/config/sections.js";
   import { trackDevicePixel } from "#lib/cawco/device-pixel.js";
@@ -13,7 +12,10 @@
   import { leaving, plan, route } from "#lib/cawco/motion/route.svelte.js";
   import { departAll } from "#lib/cawco/motion/share.svelte.js";
   import Shell from "#lib/cawco/Shell.svelte";
-  import { tabIcon } from "#lib/cawco/tab-icon/tab-icon.svelte.js";
+  import {
+    RESTING_TAB_ICON,
+    tabIcon,
+  } from "#lib/cawco/tab-icon/tab-icon.svelte.js";
   import { tallestComposer } from "#lib/cawco/transcript/composer-presence.svelte.js";
   import { workspace } from "#lib/cawco/workspace/workspace.svelte.js";
   import { Toaster } from "#lib/components/ui/sonner/index.js";
@@ -56,7 +58,8 @@
   // Effects flush only once the whole tree has hydrated, so every handler is
   // attached before the taps app.html held are replayed.
   onMount(() => window.releaseHeldTaps());
-  // A hidden tab runs no loop on its page; its icon, still seen, keeps Caw's.
+  // A hidden tab runs no loop on its page; its icon, still seen, keeps Caw's
+  // plea while something needs the operator.
   onMount(restWhenHidden);
   // Hairlines drawn outside a box stand on whole device pixels.
   onMount(trackDevicePixel);
@@ -99,10 +102,9 @@
 
 <svelte:head>
   <!-- The tab's icon, in the server-rendered head so the browser never asks
-       for /favicon.ico: Caw asleep on his tile, drawn from his file by
-       `bun run tab-icon`. It is what the icon rests on; while the fleet works
-       or needs the operator, `tabIcon` draws him over it. -->
-  <link href={cawcoTabIcon} rel="icon" type="image/png" {@attach tabIcon}>
+       for /favicon.ico: Caw's head asleep on his tile, what the icon shows
+       while nothing is going on. `tabIcon` changes it with the fleet. -->
+  <link href={RESTING_TAB_ICON} rel="icon" type="image/png" {@attach tabIcon}>
   <!-- Caw's runtime and his waiting file go to the HTTP cache at idle
        priority, so a wait that outlasts its grace shows him without fetching. -->
   {#each CAW_PREFETCHES as href (href)}

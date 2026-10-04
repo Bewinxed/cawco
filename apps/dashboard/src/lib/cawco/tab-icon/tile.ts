@@ -1,17 +1,17 @@
 /**
- * One Caw on the tab icon's tile: a rounded square of one colour with
- * transparent corners, and Caw drawn over it by Rive from his status's file.
- * Nothing here draws him: the file's `CawStates` machine plays his loops and
- * its `Caw` view model holds him still (assets/mascot/README.md).
+ * Caw's head on the tab icon's tile: a rounded square of one colour with
+ * transparent corners, and Caw drawn over it by Rive from his status's file,
+ * seen through a shot's head box (shots.ts). Nothing here draws him: the
+ * file's own animation for the loop is applied at the frame asked for, the
+ * way assets/mascot/scripts/prove-viewmodel.mjs renders each loop.
  *
  * The technique is a canvas read back as a PNG for the icon's href
  * (css-tricks.com/the-making-of-an-animated-favicon: "once the drawing is
  * done in the canvas, it's quickly translated to a PNG image to be assigned
- * as the favicon"). Each drawing is asked for with the time since the last
- * one, so Caw keeps his own pace however rarely he is drawn (same page:
- * "detect how much time has actually passed between each frame").
+ * as the favicon").
  */
 import type { RuntimeLoader } from "@rive-app/canvas";
+import { FPS, HEAD, type Shot } from "./shots";
 
 /** Rive's low-level runtime, the one the dashboard's `Rive` instances run on. */
 export type RiveRuntime = Awaited<
@@ -20,48 +20,45 @@ export type RiveRuntime = Awaited<
 
 /** The files' 592 px artboard and the 512 px still box in it, at (43, 40). */
 const ARTBOARD = 592;
-const BOX = { x: 43, y: 40, side: 512 };
+const BOX = { x: 43, y: 40 };
 
 /** The side a tab draws its icon at, in CSS px: what `tab-icon-r` is given at. */
 export const TAB_ICON = 16;
 
 export interface TileSpec {
-  /** His status file's bytes. */
+  /** The shot's status file's bytes. */
   bytes: ArrayBuffer;
   /** The tile's fill, any CSS colour. */
   colour: string;
   /** The corner radius at `TAB_ICON` px; it scales with `side`. */
   radius: number;
+  shot: Shot;
   /** The bitmap's side in px. */
   side: number;
-  /** Held on his status's still, as Reduced Motion asks. */
-  still: boolean;
 }
 
 export interface Tile {
   close: () => void;
-  /** Moves Caw on by `seconds` and returns the tile as a PNG data URL. */
-  draw: (seconds: number) => string;
+  /** The tile with Caw at `frame` of the shot's loop, as a PNG data URL. */
+  draw: (frame: number) => string;
 }
 
 export async function openTile(
   rive: RiveRuntime,
   spec: TileSpec
 ): Promise<Tile> {
-  const { side } = spec;
+  const { shot, side } = spec;
   const file = await rive.load(new Uint8Array(spec.bytes));
   const artboard = file.artboardByName("Caw");
-  const machine = new rive.StateMachineInstance(
-    artboard.stateMachineByName("CawStates"),
-    artboard
-  );
-  const caw = file.defaultArtboardViewModel(artboard).defaultInstance();
+  const animation = (name: string) =>
+    new rive.LinearAnimationInstance(artboard.animationByName(name), artboard);
   // The tile is his ground in both schemes, so he is never the night Caw.
-  caw.boolean("dark").value = false;
-  caw.boolean("reducedMotion").value = spec.still;
-  machine.bindViewModelInstance(caw);
-  artboard.bindViewModelInstance(caw);
-  machine.advanceAndApply(0);
+  for (const name of ["scheme_light", "motion_full"]) {
+    const layer = animation(name);
+    layer.apply(1);
+    layer.delete();
+  }
+  const loop = shot.animation ? animation(shot.animation) : undefined;
 
   // Rive draws him alone on his own canvas; the tile takes him from it.
   const ink = document.createElement("canvas");
@@ -76,19 +73,26 @@ export async function openTile(
     throw new Error("The tab icon has no 2D canvas");
   }
 
-  // His still box fills the tile; his acting past it is cut by the tile's edge.
-  const scale = side / BOX.side;
+  // His head box fills the tile; the rest of him is cut by the tile's edge.
+  const scale = side / HEAD;
+  const left = BOX.x + shot.at.x - HEAD / 2;
+  const top = BOX.y + shot.at.y - HEAD / 2;
   const frame = {
-    minX: -BOX.x * scale,
-    minY: -BOX.y * scale,
-    maxX: (ARTBOARD - BOX.x) * scale,
-    maxY: (ARTBOARD - BOX.y) * scale,
+    minX: -left * scale,
+    minY: -top * scale,
+    maxX: (ARTBOARD - left) * scale,
+    maxY: (ARTBOARD - top) * scale,
   };
   const corner = (spec.radius / TAB_ICON) * side;
 
   return {
-    draw(seconds) {
-      machine.advanceAndApply(seconds);
+    draw(at) {
+      if (loop) {
+        // Mid-way through the frame, clear of the key on its start.
+        loop.time = (at + 0.5) / FPS;
+        loop.apply(1);
+      }
+      artboard.advance(0);
       renderer.clear();
       renderer.save();
       renderer.align(
@@ -115,8 +119,7 @@ export async function openTile(
     },
     close() {
       renderer.delete();
-      machine.delete();
-      caw.delete();
+      loop?.delete();
       artboard.delete();
       file.unref();
     },

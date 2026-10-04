@@ -1,42 +1,45 @@
 /**
  * Draws the tab icon's art from Caw's status files, with the dashboard's own
- * tile (src/lib/cawco/tab-icon/tile.ts) on Rive's runtime in headless
+ * tile and shots (src/lib/cawco/tab-icon/) on Rive's runtime in headless
  * Chromium, so what it writes is what a tab shows:
  *
- * - src/lib/assets/brand/cawco-tab-icon.png, the icon every page is served
- *   with and rests on while nothing is going on: the sleeping Caw on butter;
+ * - src/lib/assets/brand/tab-icon-<state>.png, each state's still: what the
+ *   icon shows whenever it is not moving, and `sleeping` the one every page
+ *   is served with;
  * - .context/favicon/<state>-<side>.png at the repository's root, one strip
- *   per state at 32 and 64 px, two seconds of each loop a drawing at a time,
- *   for looking at.
+ *   per state at 32 and 64 px (the needs-you bob a drawing at a time, the
+ *   stills alone), for looking at.
  *
- * Run it again whenever Caw's files or the tile's tokens change:
+ * Run it again whenever Caw's files, the shots or the tile's tokens change:
  *
  *   bun run tab-icon
  */
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { chromium } from "playwright-core";
+import {
+  NEEDS_YOU,
+  type Shot,
+  SLEEPING,
+  WORKING,
+} from "../src/lib/cawco/tab-icon/shots";
 
 const here = (path: string) => join(import.meta.dir, "..", path);
 const RIVE = here("node_modules/@rive-app/canvas/");
 const CAW = here("src/lib/assets/caw/");
-const ICON = here("src/lib/assets/brand/cawco-tab-icon.png");
+const STILLS = here("src/lib/assets/brand/");
 const STRIPS = here("../../.context/favicon/");
 
-/** What Caw shows when nothing is going on (assets/mascot/README.md, Contract). */
-const RESTING = "sleeping";
 /** The side the dashboard draws the icon at (tab-icon.svelte.ts `SIDE`). */
 const SIDE = 64;
-/** Drawings in a strip: two seconds at the 12 a second the tab is drawn at. */
-const DRAWINGS = 24;
 
 interface Job {
   colour: string;
-  drawings: number;
+  /** The frames to draw, side by side. */
+  frames: number[];
   radius: number;
+  shot: Shot;
   side: number;
-  status: string;
-  still: boolean;
 }
 
 /** A token's value, wherever its group is. */
@@ -125,18 +128,20 @@ async function strip(job: Job): Promise<Buffer> {
     RuntimeLoader.setWasmFallbackUrl(null);
     const { openTile }: typeof import("../src/lib/cawco/tab-icon/tile") =
       await import("/tile.js" as string);
-    const bytes = await (await fetch(`/${asked.status}.riv`)).arrayBuffer();
+    const bytes = await (
+      await fetch(`/${asked.shot.status}.riv`)
+    ).arrayBuffer();
     const tile = await openTile(await RuntimeLoader.awaitInstance(), {
       ...asked,
       bytes,
     });
     const sheet = document.createElement("canvas");
-    sheet.width = asked.side * asked.drawings;
+    sheet.width = asked.side * asked.frames.length;
     sheet.height = asked.side;
     const context = sheet.getContext("2d");
-    const drawings = Array.from({ length: asked.drawings }, (_, i) => {
+    const drawings = asked.frames.map((frame) => {
       const drawing = new Image();
-      drawing.src = tile.draw(i === 0 ? 0 : 1 / 12);
+      drawing.src = tile.draw(frame);
       return drawing;
     });
     tile.close();
@@ -150,37 +155,29 @@ async function strip(job: Job): Promise<Buffer> {
 }
 
 const radius = Number.parseFloat(token("tab-icon-r"));
-const butter = token("spark");
+const bob = Array.from(
+  { length: (NEEDS_YOU.to - NEEDS_YOU.from) / 2 },
+  (_, beat) => NEEDS_YOU.from + beat * 2
+);
 const states = [
-  { name: "working", status: "working", colour: butter, still: false },
-  {
-    name: "needs-you",
-    status: "needs-you",
-    colour: token("vermilion"),
-    still: false,
-  },
-  { name: "sleeping", status: RESTING, colour: butter, still: true },
+  { shot: NEEDS_YOU, moving: bob },
+  { shot: WORKING, moving: [WORKING.frame] },
+  { shot: SLEEPING, moving: [SLEEPING.frame] },
 ];
 
-const art = [
-  ...states.flatMap((state) =>
-    [32, SIDE].map((side) => ({
-      file: join(STRIPS, `${state.name}-${side}.png`),
-      job: { ...state, radius, side, drawings: state.still ? 1 : DRAWINGS },
-    }))
-  ),
-  {
-    file: ICON,
-    job: {
-      status: RESTING,
-      colour: butter,
-      still: true,
-      radius,
-      side: SIDE,
-      drawings: 1,
+const art = states.flatMap(({ shot, moving }) => {
+  const job = { shot, colour: token(shot.tile), radius };
+  return [
+    {
+      file: join(STILLS, `tab-icon-${shot.status}.png`),
+      job: { ...job, side: SIDE, frames: [shot.frame] },
     },
-  },
-];
+    ...[32, SIDE].map((side) => ({
+      file: join(STRIPS, `${shot.status}-${side}.png`),
+      job: { ...job, side, frames: moving },
+    })),
+  ];
+});
 await Promise.all(
   art.map(async ({ file, job }) => {
     mkdirSync(dirname(file), { recursive: true });
