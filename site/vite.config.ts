@@ -35,6 +35,8 @@ const pageMarkup: Plugin = {
 };
 
 export default defineConfig({
+  // Relative URLs, so the same build works at cawco.dev's root and under a preview path.
+  base: './',
   plugins: [pageMarkup],
   build: { outDir: 'dist', emptyOutDir: true, assetsInlineLimit: 0 },
 });
