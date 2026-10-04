@@ -10,7 +10,6 @@
   import ProviderLogo from "#lib/components/features/ProviderLogo.svelte";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import { SectionHeader } from "#lib/components/ui/section-header/index.js";
-  import OpenAiMark from "~icons/logos/openai-icon";
   import Clear from "~icons/solar/close-square-bold-duotone";
   import Code from "~icons/solar/code-square-bold-duotone";
   import Cpu from "~icons/solar/cpu-bolt-bold-duotone";
@@ -210,7 +209,7 @@
           tab: (typeof railItems)[number]
         )}
           {#if tab.id === "codex"}
-            <OpenAiMark aria-hidden="true" class="codex-mark" />
+            <ProviderLogo class="codex-mark" provider="openai" size={16} />
           {:else}
             <HarnessLogo harness={tab.id as HarnessKind} />
           {/if}

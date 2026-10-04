@@ -7,8 +7,8 @@
   import type { FsEntry } from "@cawco/core";
   import { CURVE, dur } from "#lib/cawco/motion/curves.svelte.js";
   import { folds } from "#lib/cawco/motion/fold.svelte.js";
+  import ProviderLogo from "#lib/components/features/ProviderLogo.svelte";
   import { SectionHeader } from "#lib/components/ui/section-header/index.js";
-  import GitHub from "~icons/logos/github-icon";
   import Up from "~icons/solar/alt-arrow-up-linear";
   import Left from "~icons/solar/arrow-left-linear";
   import Right from "~icons/solar/arrow-right-linear";
@@ -178,7 +178,11 @@
         {#if value === "dir"}
           <Folder style="color:var(--hue-amber-500)" />
         {:else}
-          <GitHub style={`opacity:${on ? 1 : 0.6}`} />
+          <ProviderLogo
+            provider="github"
+            size={null}
+            style={`opacity:${on ? 1 : 0.6}`}
+          />
         {/if}
       {/snippet}
     </Segmented>
@@ -309,7 +313,7 @@
       >
         <div class="field">
           <div class="row repo-row">
-            <GitHub class="lead gh" />
+            <ProviderLogo class="lead gh" provider="github" size={null} />
             <input
               aria-label="Repository"
               autocapitalize="off"
@@ -380,7 +384,6 @@
   }
   .row :global(svg.gh) {
     opacity: 0.8;
-    color: var(--ink-strong);
   }
   input {
     flex: 1;

@@ -5,7 +5,7 @@
    * The popover is the same Location form the dialog used to show as its own
    * section, so browsing, override and clone behave exactly as they did.
    */
-  import GitHub from "~icons/logos/github-icon";
+  import ProviderLogo from "#lib/components/features/ProviderLogo.svelte";
   import Down from "~icons/solar/alt-arrow-down-linear";
   import FolderOpen from "~icons/solar/folder-open-bold-duotone";
   import LocationSection from "./LocationSection.svelte";
@@ -76,7 +76,7 @@
 >
   {#snippet trigger()}
     {#if mode === "repo"}
-      <GitHub />
+      <ProviderLogo provider="github" size={null} />
     {:else}
       <FolderOpen style="color:var(--hue-amber-500)" />
     {/if}

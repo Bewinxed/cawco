@@ -1,10 +1,13 @@
 <script lang="ts">
   /**
-   * The lab's mark for a model, as a passive glyph next to its name — in a
-   * delegate's header or a picker row. The logos are brand-coloured (that is
-   * the point of them), so a caller never tints them: it may only place them.
-   * A model nobody here has a logo for renders nothing, and the caller keeps
-   * whatever it had been showing instead.
+   * A provider's mark, as a passive glyph: the lab behind a model (next to its
+   * name in a delegate's header or a picker row), or a provider named outright
+   * (GitHub on the clone controls, OpenAI on the Codex tab). A caller never
+   * tints a mark: it may only place it. Multi-colour marks keep their brand
+   * colours. A mark drawn in one ink (see `INK`) ships as fixed black, which
+   * vanishes on the dark theme, so it is filled with `--ink-strong` instead and
+   * follows the theme. A model nobody here has a logo for renders nothing, and
+   * the caller keeps whatever it had been showing instead.
    */
   import type { Component } from "svelte";
   import { providerOf } from "#lib/cawco/models.svelte.js";
@@ -21,6 +24,7 @@
    * square sibling from `thesvg-color` is used instead.
    */
   import IconClaude from "~icons/logos/claude-icon";
+  import IconGithub from "~icons/logos/github-icon";
   import IconGrok from "~icons/logos/grok-icon";
   import IconMistral from "~icons/logos/mistral-ai-icon";
   import IconMoonshot from "~icons/logos/moonshot-ai-icon";
@@ -48,21 +52,37 @@
     mistral: IconMistral,
     minimax: IconMinimax,
     nvidia: IconNvidia,
+    github: IconGithub,
   };
 
+  /* The marks drawn in a single ink. Upstream they carry a fixed dark fill
+     (`github-icon` is #161614) or none at all, which paints black. */
+  const INK = new Set(["openai", "xai", "moonshot", "github"]);
+
   let {
-    model,
+    model = "",
+    provider,
     size = 16,
     class: className = "",
+    style = "",
   }: {
     /** The model id as known on the wire; the provider is read off its name. */
-    model: string;
-    /** Edge of the square the mark sits in, in px. Every mark here is square. */
-    size?: number;
+    model?: string;
+    /** The provider named outright, for a mark that stands for no model. */
+    provider?: string;
+    /** Edge of the square the mark sits in, in px. Every mark here is square.
+        `null` leaves the size to the caller's own CSS. */
+    size?: number | null;
     class?: string;
+    style?: string;
   } = $props();
 
-  const Logo = $derived(LOGOS[providerOf(model) ?? ""]);
+  const key = $derived(provider ?? providerOf(model) ?? "");
+  const Logo = $derived(LOGOS[key]);
+  const sized = $derived(size === null ? {} : { width: size, height: size });
+  const box = $derived(
+    size === null ? "" : `width:${size}px;height:${size}px;`
+  );
 
   // A `Record` lookup returns the component or `undefined`; that is the signal
   // the caller's own glyph should keep standing. So the whole body is guarded.
@@ -79,9 +99,18 @@
     instead. The attributes stay for the intrinsic size before CSS applies.
   -->
   <Logo
-    class={className}
-    height={size}
-    style="width:{size}px;height:{size}px"
-    width={size}
+    aria-hidden="true"
+    class={INK.has(key) ? `${className} provider-ink` : className}
+    style={`${box}${style}`}
+    {...sized}
   />
 {/if}
+
+<style>
+  /* The descendants too: `github-icon` sets its fill on the path, and a
+     presentation attribute loses to any rule that matches. */
+  :global(svg.provider-ink),
+  :global(svg.provider-ink *) {
+    fill: var(--ink-strong);
+  }
+</style>
