@@ -816,9 +816,25 @@ if (role === "sessiond") {
     assert.equal(await alive("attach-retry"), true);
     assert.equal(await alive("conversation-gone"), true);
     assert.equal(await alive("refused-mode"), true);
+    const agentFields = new Set<string>([
+      "auth",
+      "browserAvailable",
+      "build",
+      "custody",
+      "deploy",
+      "fleet",
+      "harnesses",
+      "hostname",
+      "lastSeenAt",
+      "machineId",
+      "os",
+      "restarted",
+      "status",
+      "tools",
+    ] satisfies (keyof import("../packages/core/src").AgentRow)[]);
     assert.ok(
-      !(await api("/api/agents")).some(
-        (entry: object) => "unownedProcesses" in entry
+      (await api("/api/agents")).every((entry: object) =>
+        Object.keys(entry).every((field) => agentFields.has(field))
       )
     );
     assert.ok(
