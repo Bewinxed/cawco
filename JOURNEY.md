@@ -713,12 +713,6 @@ Two scales, one token language. The plan reserves compact for the transcript and
 
 ---
 
-## Marketing spine
-
-cawco.dev serves the landing and pricing pages from `site/`, introducing the free self-hosted fleet and the forthcoming paid native app to visitors without invented testimonials, usage figures, or undecided pricing claims.
-
----
-
 ## Assistant
 
 *Phase 9a (Discover) decided whether the fleet assistant panel has a job this product needs, applying a kill test to every proposed and shipped capability. Phase 9b designs the panel **only** around the surviving job below; DW-9b keeps the measured visual shell (380×899, inset 24/40, scrim `rgba(0,0,0,.06)`, suggestion pitch 44, radius 16, header 47 — `mocks/v3-assistant.html`) as law regardless of what the rows say.*

@@ -1,30 +1,33 @@
-# Deploy the public site
+# Deploying cawco.dev
 
-From the repository root, install the site's dependencies and authenticate Wrangler:
+`site/` builds into `site/dist`, and the Cloudflare worker `cawco-site` serves
+that folder on `cawco.dev/*` (see `wrangler.jsonc`).
+
+## What gets served
+
+- `/install.sh` is the first-machine installer. The build generates it from
+  `packages/core/src/install-script.ts`, so it is always the script the hub
+  itself would hand out. `public/_headers` serves it as plain text and tells
+  caches to revalidate every time.
+- `/version.txt` is the short commit the deploy was built from.
+
+## Deploy
 
 ```sh
 cd site
 npm install
-npx wrangler@latest login
 node scripts/deploy.mjs
 ```
 
-Commit and land the site on `origin/main` before deploying. The script rejects
-tracked working-tree changes, fetches `origin/main`, and requires `HEAD` to be
-reachable from that branch. It runs `npm run build` from `site/`, writes
-`git rev-parse --short=8 HEAD` plus a newline to `dist/version.txt`, then runs
-`npx wrangler@latest deploy`. Build, Git, and Wrangler failures stop deployment.
-Wrangler logs go to `/tmp/cawco-site-wrangler-*/wrangler.log`; metrics are disabled.
+The script refuses to run unless the tracked tree is clean and `HEAD` is
+already on `origin/main`. It then runs `npm run build`, writes
+`dist/version.txt` and calls `wrangler deploy`. Wrangler needs a Cloudflare
+login on the machine (`npx wrangler login`) or `CLOUDFLARE_API_TOKEN` in the
+environment.
 
-- Worker: `cawco-site`.
-- Account: `7119532fe266e2a0493f558807a85bab`.
-- Route: `cawco.dev/*` in zone `cawco.dev`, using the existing proxied apex record.
-- Assets: `site/dist/`; `/pricing` serves `pricing/index.html` with
-  `html_handling: "drop-trailing-slash"`.
-- Version: `https://cawco.dev/version.txt` identifies the deployed commit.
-- This is a Worker Route, not a Custom Domain. Deployment does not change DNS
-  or configure `www`.
+## Check it
 
-Cloudflare's [HTML handling documentation](https://developers.cloudflare.com/workers/static-assets/routing/advanced/html-handling/)
-defines `assets.html_handling` and confirms `/folder` serves `/dist/folder/index.html`
-with `drop-trailing-slash`.
+```sh
+curl -sI https://cawco.dev/install.sh | head -1   # HTTP/2 200
+curl -s https://cawco.dev/version.txt             # the commit you deployed
+```

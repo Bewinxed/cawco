@@ -84,7 +84,7 @@ Away from a desk, the operator uses a Telegram bridge to receive permission prom
 
 ## Evidence on Hand
 
-Working product with 9 route surfaces (fleet board, session detail, project detail, tools, rules, rule detail, hooks, hook detail, usage, delegates), functional fleet sync, Telegram bridge, three harness adapters shipping. cawco.dev serves the landing and pricing pages from `site/`; there are no external testimonials — the product is installed and used by its own operator.
+Working product with 9 route surfaces (fleet board, session detail, project detail, tools, rules, rule detail, hooks, hook detail, usage, delegates), functional fleet sync, Telegram bridge, three harness adapters shipping. cawco.dev serves the first-machine installer (`install.sh`) from `site/`; there are no external testimonials — the product is installed and used by its own operator.
 
 ## Product Principles
 

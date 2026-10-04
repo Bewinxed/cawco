@@ -4,22 +4,9 @@
   "type": "module",
   "scripts": {
     "build": "node scripts/build.mjs",
-    "dev": "node scripts/serve.mjs",
-    "lint": "biome lint src scripts",
-    "typecheck": "tsc --noEmit",
     "deploy": "node scripts/deploy.mjs"
   },
-  "dependencies": {
-    "@fontsource-variable/figtree": "5.3.0",
-    "@fontsource/fredoka": "5.3.0",
-    "@iconify-json/solar": "1.2.13",
-    "@rive-app/canvas": "2.44.0",
-    "daisyui": "^5.0.0"
-  },
   "devDependencies": {
-    "@biomejs/biome": "^2.0.0",
-    "esbuild": "0.28.2",
-    "sharp": "0.35.5",
-    "typescript": "^5.9.0"
+    "esbuild": "^0.25.10"
   }
 }

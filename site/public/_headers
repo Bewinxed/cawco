@@ -1,11 +1,3 @@
-# Keep the authored HTML intact; do not inject Cloudflare's analytics beacon.
-# https://developers.cloudflare.com/web-analytics/get-started/
-/
-  Cache-Control: public, max-age=0, must-revalidate, no-transform
-/pricing
-  Cache-Control: public, max-age=0, must-revalidate, no-transform
-/pricing/
-  Cache-Control: public, max-age=0, must-revalidate, no-transform
 /install.sh
   Content-Type: text/plain; charset=utf-8
   Cache-Control: public, max-age=0, must-revalidate, no-transform
