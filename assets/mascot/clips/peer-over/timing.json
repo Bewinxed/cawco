@@ -1,0 +1,78 @@
+{
+  "take": "tk_2qYXzUiMEaVOjz39EyiTr",
+  "frames": 22,
+  "fps": 24,
+  "drawings": [
+    {
+      "start": 0,
+      "length": 4,
+      "drawing": 0
+    },
+    {
+      "start": 4,
+      "length": 2,
+      "drawing": 1
+    },
+    {
+      "start": 6,
+      "length": 2,
+      "drawing": 2
+    },
+    {
+      "start": 8,
+      "length": 2,
+      "drawing": 3
+    },
+    {
+      "start": 10,
+      "length": 2,
+      "drawing": 4
+    },
+    {
+      "start": 12,
+      "length": 2,
+      "drawing": 5
+    },
+    {
+      "start": 14,
+      "length": 2,
+      "drawing": 6
+    },
+    {
+      "start": 16,
+      "length": 2,
+      "drawing": 7
+    },
+    {
+      "start": 18,
+      "length": 2,
+      "drawing": 8
+    },
+    {
+      "start": 20,
+      "length": 2,
+      "drawing": 9
+    }
+  ],
+  "placement": {
+    "scale": 0.5,
+    "x": 0.0,
+    "y": 0.0
+  },
+  "probe": {
+    "ledgeLine": 0.5684,
+    "inkPx": [
+      2975, 24892, 87624, 120627, 169424, 163610, 135116, 124452, 128353, 128185
+    ],
+    "topRow": [536, 437, 318, 252, 146, 154, 175, 207, 203, 218],
+    "lowestRow": [583, 583, 583, 583, 583, 583, 663, 663, 663, 663],
+    "belowLinePx": [0, 0, 0, 0, 0, 0, 15546, 15549, 15637, 15627],
+    "outsideSafe": [],
+    "landingIou": 0.9922,
+    "gates": {
+      "safeArea": true,
+      "onTwos": true,
+      "landing": true
+    }
+  }
+}

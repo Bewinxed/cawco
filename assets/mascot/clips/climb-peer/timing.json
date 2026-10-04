@@ -1,0 +1,167 @@
+{
+  "take": "tk_3Oa4lstVE7cAxDR5de17O",
+  "frames": 40,
+  "fps": 24,
+  "drawings": [
+    {
+      "start": 0,
+      "length": 4,
+      "drawing": 0
+    },
+    {
+      "start": 4,
+      "length": 2,
+      "drawing": 1
+    },
+    {
+      "start": 6,
+      "length": 2,
+      "drawing": 2
+    },
+    {
+      "start": 8,
+      "length": 2,
+      "drawing": 3
+    },
+    {
+      "start": 10,
+      "length": 2,
+      "drawing": 4
+    },
+    {
+      "start": 12,
+      "length": 2,
+      "drawing": 5
+    },
+    {
+      "start": 14,
+      "length": 2,
+      "drawing": 6
+    },
+    {
+      "start": 16,
+      "length": 2,
+      "drawing": 7
+    },
+    {
+      "start": 18,
+      "length": 2,
+      "drawing": 8
+    },
+    {
+      "start": 20,
+      "length": 2,
+      "drawing": 9
+    },
+    {
+      "start": 22,
+      "length": 2,
+      "drawing": 10
+    },
+    {
+      "start": 24,
+      "length": 2,
+      "drawing": 11
+    },
+    {
+      "start": 26,
+      "length": 2,
+      "drawing": 12
+    },
+    {
+      "start": 28,
+      "length": 2,
+      "drawing": 13
+    },
+    {
+      "start": 30,
+      "length": 2,
+      "drawing": 14
+    },
+    {
+      "start": 32,
+      "length": 2,
+      "drawing": 15
+    },
+    {
+      "start": 34,
+      "length": 2,
+      "drawing": 16
+    },
+    {
+      "start": 36,
+      "length": 2,
+      "drawing": 17
+    },
+    {
+      "start": 38,
+      "length": 2,
+      "drawing": 18
+    }
+  ],
+  "placement": {
+    "scale": 0.5,
+    "x": 0.0,
+    "y": 0.0
+  },
+  "probe": {
+    "ledgeLine": 0.5684,
+    "inkPx": [
+      0, 8470, 41310, 76489, 91310, 72511, 91311, 105206, 89550, 88489, 99581,
+      115462, 123335, 127464, 128365, 129449, 132046, 132465, 132511
+    ],
+    "topRow": [
+      null,
+      489,
+      387,
+      346,
+      302,
+      311,
+      312,
+      314,
+      318,
+      320,
+      285,
+      204,
+      174,
+      162,
+      163,
+      167,
+      168,
+      176,
+      185
+    ],
+    "lowestRow": [
+      null,
+      581,
+      583,
+      583,
+      585,
+      611,
+      661,
+      663,
+      663,
+      663,
+      663,
+      663,
+      663,
+      663,
+      663,
+      663,
+      663,
+      663,
+      663
+    ],
+    "belowLinePx": [
+      0, 0, 0, 0, 16, 1560, 8004, 7898, 7918, 13725, 15896, 15900, 15896, 15904,
+      15900, 15888, 15896, 15900, 15875
+    ],
+    "outsideSafe": [],
+    "landingIou": 0.9908,
+    "gates": {
+      "safeArea": true,
+      "onTwos": true,
+      "landing": true
+    }
+  }
+}

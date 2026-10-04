@@ -143,6 +143,17 @@ them (the editor cannot import `.riv` files). From `assets/mascot/scripts` (`bun
   still traced from a picture keeps the take's whole-pixel placement: `trace.py`'s finer fit
   sizes a take by its traced outline's extent, and one tuft tip traced 1.75 units high drew
   those landings 0.5% small.
+- `uv run trace_ledge.py <clip> <take>` traces a ledge clip into `assets/mascot/clips/<clip>/`:
+  Caw coming up from behind a ledge and peering over it, for a page that puts its own ledge
+  under him (the landing page; `site/scripts/import-caw.mjs` copies a clip folder). No app
+  plays these, no status file holds them and `clips/takes.json` does not list them; each
+  folder's `timing.json` names its take. Today: `climb-peer` (40 frames) and `peer-over` (22).
+  The take is shot with the ledge as a flat blue block, an ink he does not carry, which the
+  tracer keys out to paper, so the drawings hold only Caw: above the line everything of him
+  that shows, below it only the wing tips that hang in front of the ledge. The take's frame is
+  the 512 box itself, and the line sits at 56.8% of its height (`probe.ledgeLine`). Gates: the
+  same safe area (only the ledge hides him, never the frame), on twos, and the landing's
+  silhouette at 0.9 IoU or more with the clip's end picture, `stills/ledge-<clip>.png`.
 - `uv run trace_still.py <status>` traces a resting status's picture
   (`stills/light-<status>.png`) into `loops/<status>/body-00.svg`, for a status that was never
   a loop (`compacted`). Same tracer, the status's own inks, at the takes' 1.6 px a unit.
