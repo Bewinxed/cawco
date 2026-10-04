@@ -143,8 +143,15 @@ final class AssistantPanelView: UIView {
         return row
     }
 
+    /// A heading's and a status's type: label size and weight. The desk's
+    /// pane stands on the page's own leading (1.45, an 18.84pt line); the
+    /// drawer's on the label's (16.9pt).
+    private var labelRole: TypeRole {
+        closable ? TypeScale.typeBody.with(points: TypeScale.typeLabel.points).withWeight(TypeScale.weightStrong) : TypeScale.typeLabel
+    }
+
     private func section(_ title: String, _ parts: [UIView]) -> UIStackView {
-        let heading = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong, tracking: TypeScale.trackCaps)
+        let heading = KitLabel(labelRole, ink: Palette.inkStrong, tracking: TypeScale.trackCaps)
         heading.text = title.uppercased()
         heading.accessibilityLabel = title
         heading.accessibilityTraits = .header
@@ -170,7 +177,7 @@ final class AssistantPanelView: UIView {
         row.spacing = Space.space2
         row.alignment = .center
         if let text {
-            let label = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong)
+            let label = KitLabel(labelRole, ink: Palette.inkStrong)
             label.text = text
             label.tabular = true
             row.addArrangedSubview(label)
@@ -269,11 +276,12 @@ final class AssistantPanelView: UIView {
             return
         }
         autopilotSection.isHidden = false
-        let heading = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong, tracking: TypeScale.trackCaps)
+        let heading = KitLabel(labelRole, ink: Palette.inkStrong, tracking: TypeScale.trackCaps)
         heading.text = "AUTOPILOT"
         heading.accessibilityLabel = "Autopilot"
         autopilotSection.addArrangedSubview(heading)
-        let hint = { (text: String) in self.note(text, role: TypeScale.typeMeta) }
+        // `.sect-hint`: meta size on the body's leading.
+        let hint = { (text: String) in self.note(text, role: TypeScale.typeBody.with(points: TypeScale.typeMeta.points)) }
         if let autopilot = row.autopilot, autopilot.enabled {
             autopilotSection.addArrangedSubview(statusLine("Enabled", on: true))
             if !autopilot.prompt.isEmpty { autopilotSection.addArrangedSubview(note(autopilot.prompt, lines: 2)) }
@@ -470,12 +478,14 @@ final class AssistantPane: UIView {
         fatalError("AssistantPane is built in code")
     }
 
-    func install(in host: UIView) {
+    /// `top: 40px` under a 60px top bar is 20 above the bar's seam: the pane
+    /// keeps that overlap with the bar it stands under, whatever the bar's height.
+    func install(in host: UIView, under bar: UIView) {
         host.addSubview(self)
         let tall = heightAnchor.constraint(equalToConstant: 899)
         tall.priority = .defaultHigh
         NSLayoutConstraint.activate([
-            topAnchor.constraint(equalTo: host.safeAreaLayoutGuide.topAnchor, constant: 40),
+            topAnchor.constraint(equalTo: bar.bottomAnchor, constant: -20),
             trailingAnchor.constraint(equalTo: host.trailingAnchor, constant: -24),
             widthAnchor.constraint(equalToConstant: 380),
             tall,

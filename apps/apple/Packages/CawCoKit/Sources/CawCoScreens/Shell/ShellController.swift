@@ -392,7 +392,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
             dialogPresenter.present(sheet, animated: true)
         } else {
             let pane = AssistantPane(panel: panel)
-            pane.install(in: view)
+            pane.install(in: view, under: mainNav.navigationBar)
             pane.appear(from: assistantOrigin)
             assistantPane = pane
         }
