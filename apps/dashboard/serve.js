@@ -26,9 +26,11 @@
  * Preview routing: `/preview/<id>/…` is forwarded to the hub's preview
  * listener. Requests whose path does NOT start with `/preview/<id>/` but whose
  * `Referer` does (root-absolute fetches from inside the iframe — `/assets/x.js`,
- * `/@vite/client`, `/src/App.svelte?t=…`) are also forwarded. A Referer-routed
- * request that is a navigation (`Sec-Fetch-Mode: navigate`) gets a 302 back
- * under the prefix so the iframe URL stays correct.
+ * `/@vite/client`, `/src/App.svelte?t=…`) belong to the preview too. A Referer
+ * names the preview for one hop only: a module served at its root-absolute URL
+ * sends that URL as the Referer of its own imports, and the prefix is gone. So
+ * a Referer-routed GET or HEAD gets a 302 back under the prefix, and every URL
+ * the iframe holds carries it; any other method is forwarded where it stands.
  */
 import { createReadStream, existsSync, readFileSync, statSync } from "node:fs";
 import http from "node:http";
@@ -91,12 +93,10 @@ function previewMatch(req) {
 }
 
 function proxyPreviewHttp(req, res, info) {
-  // A Referer-routed navigation gets a 302 back under the prefix.
-  if (
-    info.viaReferer &&
-    (req.headers["sec-fetch-mode"] === "navigate" ||
-      req.headers["sec-fetch-dest"] === "document")
-  ) {
+  // A Referer-routed read gets a 302 back under the prefix, so the URL the
+  // browser holds for it carries the prefix and so does the Referer of
+  // whatever it loads in turn.
+  if (info.viaReferer && (req.method === "GET" || req.method === "HEAD")) {
     const prefix = `/preview/${encodeURIComponent(info.id)}`;
     res.writeHead(302, { location: `${prefix}${req.url}` });
     res.end();
