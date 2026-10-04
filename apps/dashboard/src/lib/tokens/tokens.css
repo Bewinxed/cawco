@@ -663,10 +663,16 @@
     --tx-preview-min: 80px;
     --tx-preview-thumb-w: 90px;
     --tx-preview-thumb-h: 64px;
-    /* A session mark's status dot, centred on the tile's top-right corner (SessionMark). */
+    /* A tree mark's status dot, centred on the tile's top-right corner (TreeMark). */
     --status-dot-size: 6px;
     /* How much of the tile is cut away round its status dot, so the dot reads on any tile hue. */
     --status-dot-cut: 1.5px;
+    /* A compact session row's height: one line, in a tree in the rail (SessionRow). */
+    --row-compact-h: 28px;
+    /* A compact session row's gap between its mark, its name and its age, and its leading inset: tight, where the name has the least room, and wide enough that the mark's status dot clears the name. */
+    --row-compact-gap: 6px;
+    /* A compact session row's trailing inset: where every row in the rail ends. */
+    --row-compact-pad-end: 8px;
     /* A message not yet said in the conversation (sending, queued). */
     --ghost-presence: 0.7;
     --material-saturate: 1.6;

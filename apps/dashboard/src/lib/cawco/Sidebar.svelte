@@ -68,10 +68,7 @@
   import ProjectMark from "./ProjectMark.svelte";
   import { type RailSort, rail } from "./rail.svelte";
   import SessionHover from "./SessionHover.svelte";
-  import SessionMark, {
-    STATUS_WORD,
-    sessionStatus,
-  } from "./SessionMark.svelte";
+  import SessionRow, { ROW_PILL } from "./SessionRow.svelte";
   import { newSession } from "./spawn/new-session.svelte";
   import TreeMark from "./TreeMark.svelte";
   import { rooted, tree } from "./tree";
@@ -147,13 +144,12 @@
    *  counts at the trailing edge stand in one column down the rail. */
   const LIST_ROW = "h-[30px] gap-2.5 pl-2.5 pr-2 py-0";
   /**
-   * A session under its project: the name has the least room in the rail,
-   * so the gaps between its four parts (mark, name, age, delegate count) are
-   * the tight ones, wide enough that the mark's status dot (SessionMark, 3px
-   * out of the tile) clears the name; its nesting arm ends at its mark (`--nest-reach`,
-   * measured: this row's left inset).
+   * A row under a project that is no session ("N older", "No sessions"):
+   * the compact session row's own measures (SessionRow), so its lead and its
+   * words stand on the sessions' axes.
    */
-  const SUB_ROW = "h-[28px] gap-1.5 pl-1.5 pr-2";
+  const SUB_ROW =
+    "h-(--row-compact-h) gap-(--row-compact-gap) pl-(--row-compact-gap) pr-(--row-compact-pad-end)";
   /** How a tree's rows open and fold (motion/branch): off each row's mark. */
   const TREE: BranchOptions = { glyph: ".tree-mark" };
   /**
@@ -215,7 +211,12 @@
    */
   /** Every clickable row in the rail: menu rows, session rows, "Show N more". */
   const ROWS = "[data-rail-row]";
-  const PILL = { rows: ROWS, selected: '[data-active="true"]', ghost: false };
+  /** The selected row: a menu row's own flag, or the open session's row. */
+  const PILL = {
+    rows: ROWS,
+    selected: `[data-active="true"], ${ROW_PILL.selected}`,
+    ghost: false,
+  };
   /**
    * The lead column, 18px, on EVERY row in the rail — nav, machines, projects,
    * sessions, the brand icon and the footer avatar alike. What sits in it
@@ -792,7 +793,6 @@
   node: Branch
 )}
   {@const row = node.row}
-  {@const state = sessionStatus(row)}
   {@const unfolded = node.count > 0 && openTrees.has(row.id, "rail")}
   <!-- The row's box (`data-flip="box"`): when its delegates open, it takes
        their room at once and its edge travels down to it, the rows under
@@ -804,29 +804,26 @@
     data-sidebar="menu-sub-item"
     data-slot="sidebar-menu-sub-item"
   >
-    <Sidebar.MenuSubButton
-      class={SUB_ROW}
-      data-branch-item
-      data-hover-session={row.id}
-      data-share="session:{row.id}"
+    <!-- The one session row (SessionRow), on one line; its mark says how
+         many delegates it has and opens them. -->
+    <SessionRow
+      active={activeSession === row.id}
+      compact
+      fold={node.count > 0
+        ? {
+            count: node.count,
+            open: unfolded,
+            ontoggle: () => openTrees.toggle(row.id, "rail"),
+          }
+        : null}
+      hint={ageHint(row)}
       href={rowHref(row.id)}
-      isActive={activeSession === row.id}
-    >
-      <!-- Its mark says how many delegates it has and opens them. -->
-      <SessionMark
-        count={node.count}
-        id={row.id}
-        ontoggle={() => openTrees.toggle(row.id, "rail")}
-        open={unfolded}
-        place={row.cwd || row.machineId}
-        status={state}
-      />
-      <span class="min-w-0 flex-1 truncate"
-        ><span class="sr-only">{STATUS_WORD[state]}: </span>
-        {sessionName(row)}</span
-      >
-      {@render age(row)}
-    </Sidebar.MenuSubButton>
+      instance={row}
+      machineId={row.machineId}
+      peek={false}
+      title={sessionName(row)}
+      trail={ageOf(row)}
+    />
     {#if unfolded}
       <!-- Its delegates, on a rail of their own that grows from this row's
            mark; each swipes out along its arm as the rail reaches it, and
@@ -845,19 +842,6 @@
       </ul>
     {/if}
   </li>
-{/snippet}
-
-{#snippet age(
-  row: InstanceRow
-)}
-  <!-- When it last moved: at the row's trailing edge, or just before its
-       count where it has one, so the counts stand in one column at the
-       edge. -->
-  <span
-    class="num kit-age-col text-meta text-muted-foreground"
-    title={ageHint(row)}
-    >{ageOf(row)}</span
-  >
 {/snippet}
 
 <div

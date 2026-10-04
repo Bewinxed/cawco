@@ -2344,12 +2344,27 @@
     "status-dot-size": {
       "$type": "dimension",
       "$value": "6px",
-      "$description": "A session mark's status dot, centred on the tile's top-right corner (SessionMark)."
+      "$description": "A tree mark's status dot, centred on the tile's top-right corner (TreeMark)."
     },
     "status-dot-cut": {
       "$type": "dimension",
       "$value": "1.5px",
       "$description": "How much of the tile is cut away round its status dot, so the dot reads on any tile hue."
+    },
+    "row-compact-h": {
+      "$type": "dimension",
+      "$value": "28px",
+      "$description": "A compact session row's height: one line, in a tree in the rail (SessionRow)."
+    },
+    "row-compact-gap": {
+      "$type": "dimension",
+      "$value": "6px",
+      "$description": "A compact session row's gap between its mark, its name and its age, and its leading inset: tight, where the name has the least room, and wide enough that the mark's status dot clears the name."
+    },
+    "row-compact-pad-end": {
+      "$type": "dimension",
+      "$value": "8px",
+      "$description": "A compact session row's trailing inset: where every row in the rail ends."
     }
   },
   "effect": {

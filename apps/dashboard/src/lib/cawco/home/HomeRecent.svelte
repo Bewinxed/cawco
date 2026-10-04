@@ -2,6 +2,7 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import { IconChevronRight, IconSearch } from "#lib/icons.js";
+  import { formatAgeShort } from "#lib/utils/time.js";
   /**
    * Everything else that can be opened — idle and sleeping sessions, and the
    * transcripts stored on the machines — behind one disclosure, with search.
@@ -10,9 +11,9 @@
    */
   import { page } from "$app/state";
   import { holdWhileInside } from "../motion/held-order.svelte";
+  import SessionRow, { ROW_PILL } from "../SessionRow.svelte";
   import { workspace } from "../workspace/workspace.svelte";
-  import HomeRow, { ROW_PILL } from "./HomeRow.svelte";
-  import { clock, home, span } from "./home-state.svelte";
+  import { clock, home } from "./home-state.svelte";
 
   let { inset = false }: { inset?: boolean } = $props();
 
@@ -85,7 +86,7 @@
           >
         </label>
         {#each recentMatches.slice(0, recentListed) as item (item.key)}
-          <HomeRow
+          <SessionRow
             active={current !== null &&
               (current === item.instance?.id ||
                 current === item.info?.sessionId)}
@@ -96,7 +97,7 @@
             machineId={item.machineId}
             {stale}
             title={item.title}
-            trail={item.at ? span(clock.now - item.at) : ""}
+            trail={item.at ? formatAgeShort(item.at, clock.now) : ""}
           />
         {:else}
           <p class="none">No session matches “{search}”.</p>

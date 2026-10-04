@@ -21,7 +21,9 @@
    *   area is the switch, and the rest of the row still does what the row
    *   does (a session row opens the session). With `rowToggles` the row is
    *   the switch (a project's row, the "N older" row, each a button): the
-   *   mark draws the same morph and takes no press of its own.
+   *   mark draws the same morph and takes no press of its own. A count that
+   *   is the parent's own status (`countIsStatus`: a project's running
+   *   sessions) stays on the tile while its rows are out.
    * - Working: the tile echoes. A copy of it grows from under the tile and
    *   fades, each working row in its list a beat after the one above
    *   (motion/echo `echoBeat`, on the list). With reduced motion, a still
@@ -42,6 +44,7 @@
     open = false,
     ontoggle,
     rowToggles = false,
+    countIsStatus = false,
     fill,
     status,
     noun = "delegate",
@@ -55,6 +58,13 @@
     ontoggle?: () => void;
     /** The row itself is the switch: the mark only draws the morph. */
     rowToggles?: boolean;
+    /**
+     * The count says something about the parent (a project's running
+     * sessions), not how many rows are listed under it: it stays on the
+     * tile while the rows are out, and the chevron shows only under a
+     * pointer.
+     */
+    countIsStatus?: boolean;
     /** The tile's colour; without one the face stands bare, in muted ink. */
     fill?: string;
     status?: MarkStatus;
@@ -95,6 +105,7 @@
   data-dot={dot}
   data-has={has || undefined}
   data-open={(parent && open) || undefined}
+  data-status-count={countIsStatus ? "" : undefined}
   data-switch={(has && ontoggle) || rowToggles ? "" : undefined}
   style:--fill={fill}
   style:--n={Math.min(count, 3)}
@@ -364,15 +375,19 @@
       rotate: var(--swap-turn);
     }
   }
-  .tree-mark[data-open] {
+  /* Open, the chevron points down at the rows. It stands in the face's
+     place, unless the count is a status of the parent's own
+     (`countIsStatus`): then the count stays and only a pointer brings the
+     chevron. */
+  .tree-mark[data-open] .chev :global(svg) {
+    --swap-turn: 90deg;
+  }
+  .tree-mark[data-open]:not([data-status-count]) {
     & .rest {
       --swap-away: 1;
     }
     & .chev {
       --swap-away: 0;
-    }
-    & .chev :global(svg) {
-      --swap-turn: 90deg;
     }
   }
   @media (hover: hover) and (pointer: fine) {

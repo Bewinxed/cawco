@@ -58,6 +58,7 @@
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import { IconArchive, IconPlus } from "#lib/icons.js";
+  import { formatAgeShort } from "#lib/utils/time.js";
   import { page } from "$app/state";
   import StructureOn from "~icons/solar/structure-bold";
   import Structure from "~icons/solar/structure-bold-duotone";
@@ -82,9 +83,9 @@
   import OsMark from "../OsMark.svelte";
   import { openTrees } from "../open-trees.svelte";
   import { rail } from "../rail.svelte";
+  import SessionRow, { ROW_PILL } from "../SessionRow.svelte";
   import { collapse, rooted, type TreeLine, tree } from "../tree";
   import { workspace } from "../workspace/workspace.svelte";
-  import HomeRow, { ROW_PILL } from "./HomeRow.svelte";
   import {
     archive,
     byMachine,
@@ -649,7 +650,7 @@
       const since = cawco.turnSince(row.id);
       return since ? span(clock.now - since) : "";
     }
-    return span(clock.now - lastAt(row));
+    return formatAgeShort(lastAt(row), clock.now);
   }
 </script>
 
@@ -685,7 +686,7 @@
   {@const context = shapeOf(tab, row.id)?.context ?? false}
   <!-- A context line is the parent of delegates listed here, not one of
        the tab's own: its state and name, quietly, and nothing else. -->
-  <HomeRow
+  <SessionRow
     active={current === row.id}
     {context}
     done={tab === "finished"}

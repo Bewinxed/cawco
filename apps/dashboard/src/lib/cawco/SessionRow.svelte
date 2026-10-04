@@ -12,43 +12,52 @@
 
 <script lang="ts">
   /**
-   * One session in a home group. It leads with the session's mark, the same
-   * tile the rail draws for it, its echo or dot saying what it is doing
-   * (SessionMark); the status word is read out with the title, so colour is
-   * never the only signal. Under the title, the project and what it is doing
-   * now; at the end, one column: the age and, under it, the count of the
-   * rows under the session, both at the row's trailing edge so they line up
-   * down the list. Where it runs is said
-   * once by the machine header above it, never per row; only a flat list
-   * (Recent) names the machine.
+   * One session, as every list that names sessions draws it: the rail's
+   * project tree (a project's sessions, their delegates, its older ones),
+   * the home's Working and Finished, Recent, and the drawer, which is the
+   * home. It leads with the session's mark (SessionMark, a TreeMark), its
+   * echo or dot saying what it is doing; the status word is read out with
+   * the title, so colour is never the only signal. A list owns its
+   * container, its order and how its rows nest; it owns nothing inside a
+   * row.
+   *
+   * Two sizes of one row. In a home list it stands on two lines: the title,
+   * and under it the project and what it is doing now; at the end the age,
+   * on the title's line. Under a project in the rail it is `compact`: one
+   * line, where the name has the least room, its age in a column as wide as
+   * the longest ("59m") so the ages line up down the tree.
    *
    * The row is the session menu's trigger (right-click, long-press, the menu
-   * key), as every session row in the app is; a pointer can drag it onto a
-   * pane's edge to split, or into a group's tabs. On a wide screen a click
-   * opens it in the focused pane.
+   * key); a pointer can drag it onto a pane's edge to split, or into a
+   * group's tabs. A click opens it in the focused pane, and the press tints
+   * it (`.press-tint`).
    *
-   * A parent folds the rows under it (`fold`): their count, under the age
-   * at the row's trailing edge, is what opens and folds them
-   * (motion/branch). A finished row
-   * can be archived (`onarchive`): a pointer has a button left of Peek, a
-   * finger swipes the row away, and both have it in the menu.
+   * A parent folds the rows under it (`fold`): its mark says their count
+   * and is the switch (motion/branch). Peek (`peek`) rises at the row's end
+   * for a live session. A finished row can be archived (`onarchive`): a
+   * pointer has a button left of Peek, a finger swipes the row away, and
+   * both have it in the menu.
+   *
+   * At rest nothing here is a stacking context (no transform, filter or
+   * opacity on the link): a parent's mark stands over the rows folding
+   * under it only while that holds (app.css, by the group under the row).
    */
   import type { NeutralSessionInfo } from "@cawco/core";
   import type { Attachment } from "svelte/attachments";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import { IconArchive, IconMaximize } from "#lib/icons.js";
   import { cn } from "#lib/utils.js";
-  import type { InstanceRow } from "../client.svelte";
-  import LiveSessionMenu from "../LiveSessionMenu.svelte";
+  import type { InstanceRow } from "./client.svelte";
+  import { openPeek } from "./home/peek.svelte";
+  import { swipeToArchive } from "./home/swipe-archive";
+  import LiveSessionMenu from "./LiveSessionMenu.svelte";
   import SessionMark, {
     STATUS_WORD,
     sessionStatus,
-  } from "../SessionMark.svelte";
-  import StoredSessionMenu from "../StoredSessionMenu.svelte";
-  import { runIdOf } from "../workflow-runs";
-  import { dragSession } from "../workspace/dnd.svelte";
-  import { openPeek } from "./peek.svelte";
-  import { swipeToArchive } from "./swipe-archive";
+  } from "./SessionMark.svelte";
+  import StoredSessionMenu from "./StoredSessionMenu.svelte";
+  import { runIdOf } from "./workflow-runs";
+  import { dragSession } from "./workspace/dnd.svelte";
 
   let {
     instance = null,
@@ -57,11 +66,14 @@
     title,
     line = "",
     trail = "",
+    hint,
     href,
     active = false,
     stale = false,
     done = false,
     context = false,
+    compact = false,
+    peek = true,
     fold = null,
     onarchive,
   }: {
@@ -73,6 +85,8 @@
     line?: string;
     /** The time at the row's end. */
     trail?: string;
+    /** The time in a sentence, for the pointer that rests on it. */
+    hint?: string;
     href: string;
     /** It is the conversation in front. */
     active?: boolean;
@@ -85,6 +99,10 @@
      * they hang off it. Its title reads in muted ink.
      */
     context?: boolean;
+    /** One line, for a tree in the rail: no meta line, the age in a column. */
+    compact?: boolean;
+    /** A live session offers Peek at the row's end. */
+    peek?: boolean;
     /** The rows under it, when it is a parent (tree.ts). */
     fold?: {
       count: number;
@@ -99,7 +117,7 @@
   /** The row is a workflow run (workflow-runs.ts), not a session. */
   const run = $derived(instance ? runIdOf(instance.id) !== null : false);
   const status = $derived(sessionStatus(instance, done));
-  /** Where it runs, for its mark's hue: the same seed the rail uses. */
+  /** Where it runs, for its mark's hue: the same seed in every list. */
   const place = $derived(
     instance?.cwd || info?.cwd || instance?.machineId || machineId
   );
@@ -126,10 +144,11 @@
 )}
   <div
     class="item"
-    data-active={active || undefined}
     data-archivable={onarchive ? true : undefined}
     data-branch-item
+    data-compact={compact || undefined}
     data-context={context || undefined}
+    data-current={active || undefined}
     data-flip
     data-stale={stale || undefined}
     {@attach onarchive ? swipeToArchive(onarchive) : undefined}
@@ -174,18 +193,22 @@
         {place}
         {status}
       />
-      <!-- Two lines of words (the title, then what it is doing), and at the
-           row's end the age, on the title's line, flush with the row's
-           trailing edge. -->
+      <!-- The words (the title and, on two lines, what it is doing under
+           it), and at the row's end the age, on the title's line, flush
+           with the row's trailing edge. -->
       <span class="words">
         <span class="cell title"
           ><span class="sr-only">{STATUS_WORD[status]}: </span>{title}</span
         >
-        <span class="cell line">{line}</span>
+        {#if !compact}
+          <span class="cell line">{line}</span>
+        {/if}
       </span>
       <span class="end" {@attach trailWidth}>
-        <span class="cell num trail">{trail}</span>
-        <span class="cell"></span>
+        <span class="cell num trail" title={hint}>{trail}</span>
+        {#if !compact}
+          <span class="cell"></span>
+        {/if}
       </span>
     </a>
     {#if onarchive}
@@ -205,10 +228,11 @@
         {/snippet}
       </Tip>
     {/if}
-    {#if instance && !run}
+    {#if peek && instance && !run}
       {@const live = instance}
-      <!-- Glance → peek → dive: the tail of this one, without leaving home.
-           A workflow run has no tail of its own: its card is its steps. -->
+      <!-- Glance → peek → dive: the tail of this one, without leaving the
+           list. A workflow run has no tail of its own: its card is its
+           steps. -->
       <Tip label="Peek">
         {#snippet children(
           tip
@@ -274,6 +298,20 @@
       min-height: 44px;
     }
   }
+  /* One line, in a tree in the rail: the gaps between its three parts
+     (mark, name, age) are the tight ones, wide enough that the mark's
+     status dot (3px out of the tile) clears the name. Its mark's switch
+     reaches as far under it as the row leaves room. */
+  .item[data-compact] .row {
+    gap: var(--row-compact-gap);
+    min-height: var(--row-compact-h);
+    --mark-hit-max: calc(
+      (var(--row-compact-h) - var(--mark-size, 18px)) /
+      2 +
+      var(--tree-gap)
+    );
+    padding: 0 var(--row-compact-pad-end) 0 var(--row-compact-gap);
+  }
   /* Hover and selection are the list's (highlight: the rail's one ghost,
      the list's own pill), so a row never paints a second one under them. */
   /* The peek sits at the row's end. A fine pointer finds it on hover or
@@ -315,7 +353,7 @@
       background: var(--surface-hover);
       opacity: 0;
     }
-    .item[data-active] .peek {
+    .item[data-current] .peek {
       background: var(--selected-bg);
     }
     .item:hover .peek,
@@ -428,15 +466,26 @@
     font-variant-numeric: tabular-nums;
     color: var(--ink-muted);
   }
-  .item[data-active] {
+  /* In a tree the ages stand in one column, as wide as the longest
+     ("59m"), right aligned, the row's own gap from the name. */
+  .item[data-compact] {
+    & .end {
+      margin-inline-start: 0;
+    }
+    & .trail {
+      justify-content: flex-end;
+      inline-size: 3ch;
+    }
+  }
+  .item[data-current] {
     color: var(--selected-ink);
   }
-  .item[data-active] .line,
-  .item[data-active] .trail,
-  .item[data-active] .peek {
+  .item[data-current] .line,
+  .item[data-current] .trail,
+  .item[data-current] .peek {
     color: var(--selected-ink);
   }
-  .item[data-context]:not([data-active]) .title {
+  .item[data-context]:not([data-current]) .title {
     color: var(--ink-muted);
   }
   .item[data-stale] {

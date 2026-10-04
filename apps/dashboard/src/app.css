@@ -645,17 +645,6 @@
     --nest-cut-b: 9999px;
   }
 
-  /* A session row's time, at the row's trailing edge: every row ends at the
-     same right edge whatever its indent, so the times stand in one column.
-     Right aligned, as wide as its longest word ("59m"). */
-  .kit-age-col {
-    flex: none;
-    inline-size: 3ch;
-    text-align: end;
-    white-space: nowrap;
-    font-variant-numeric: tabular-nums;
-  }
-
   /* A list section's header (the home's Needs you, Recent): its label at
      the start, its count pushed to the end in tabular figures, and a
      neutral hairline under it marking where the section begins. */
