@@ -17,7 +17,7 @@
    * than in a text pill or a dot of its own.
    */
   import type { Attachment } from "svelte/attachments";
-  import { SvelteSet } from "svelte/reactivity";
+  import { SvelteMap, SvelteSet } from "svelte/reactivity";
   import { TextMorph } from "torph/svelte";
   import cawcoIcon from "#lib/assets/brand/cawco-icon.png";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -27,6 +27,7 @@
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Sidebar from "#lib/components/ui/sidebar/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
+  import { Spinner } from "#lib/components/ui/spinner/index.js";
   import ThemeSwitcher from "#lib/components/ui/ThemeSwitcher.svelte";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import {
@@ -154,6 +155,8 @@
   const LEAD = ".session-mark, .row-lead";
   /** A project's rows hang off the project's own mark. */
   const PROJECT_TREE: BranchOptions = { glyph: LEAD, parent: ".project-mark" };
+  /** A project's older rows, opening under the row that lists them. */
+  const OLDER_TREE: BranchOptions = { glyph: LEAD, parent: ".older-lead" };
   /** The height the loading rows stand at: a list row's. */
   const LIST_ROW_H = "h-[30px]";
   /** `Sidebar.Group`'s own `p-2` plus `Sidebar.Content`'s `gap-2` stacked to
@@ -487,13 +490,70 @@
 
   /** Projects whose older list is open; in memory, so a reload shuts them. */
   const olderOpen = new SvelteSet<string>();
+  /** Projects whose older rows are asked for and not yet drawn. */
+  const olderPending = new SvelteSet<string>();
+  /** How many of an open project's older trees are drawn so far. */
+  const olderDrawn = new SvelteMap<string, number>();
+  /** The frame each project's older rows are next drawn on. */
+  const olderFrames = new Map<string, number>();
+  /** Older trees drawn a frame once the box's first rows stand. */
+  const OLDER_STEP = 24;
+
+  /**
+   * Opens a project's older rows, or folds them. The press shows at once: the
+   * row is busy and its chevron gives way to the spinner in the frame of the
+   * press, and the rows are drawn on the frame after that one is painted, so
+   * the press never waits on them. Only what the box shows is drawn then (a
+   * project with 275 older rows drew every one in the press's own task); the
+   * rest follow once the box has opened (`fillOlder`). A press while it is
+   * busy or open takes it back, whatever was under way.
+   */
   function toggleOlder(id: string) {
-    if (olderOpen.has(id)) {
+    cancelAnimationFrame(olderFrames.get(id) ?? 0);
+    olderFrames.delete(id);
+    if (olderOpen.has(id) || olderPending.has(id)) {
       olderOpen.delete(id);
-    } else {
-      olderOpen.add(id);
+      olderPending.delete(id);
+      olderDrawn.delete(id);
+      return;
     }
+    olderPending.add(id);
+    const later = (run: () => void) =>
+      olderFrames.set(id, requestAnimationFrame(run));
+    // The first frame paints the busy row; the rows are drawn on the next.
+    later(() =>
+      later(() => {
+        olderFrames.delete(id);
+        olderDrawn.set(id, OLDER_ROWS);
+        olderOpen.add(id);
+        olderPending.delete(id);
+      })
+    );
   }
+  /**
+   * The rest of an open box's rows, a frame at a time under its fold, from
+   * the moment its opening ends: drawn while it opened, they were measured
+   * into its line, which then ran the length of every row and landed seconds
+   * late.
+   */
+  function fillOlder(id: string, total: number) {
+    const drawn = olderDrawn.get(id);
+    if (drawn === undefined || drawn >= total) {
+      return;
+    }
+    olderFrames.set(
+      id,
+      requestAnimationFrame(() => {
+        olderDrawn.set(id, drawn + OLDER_STEP);
+        fillOlder(id, total);
+      })
+    );
+  }
+  $effect(() => () => {
+    for (const frame of olderFrames.values()) {
+      cancelAnimationFrame(frame);
+    }
+  });
   /** Open by hand, or because the conversation in front is one of them. */
   const olderShown = (project: ProjectRow, older: InstanceRow[]): boolean =>
     olderOpen.has(project.id) ||
@@ -524,9 +584,14 @@
     mark();
     const sizes = new ResizeObserver(mark);
     sizes.observe(node);
+    // Rows that arrive after the box opened (`fillOlder`) leave its own size
+    // as it was: only its content grew.
+    const rows = new MutationObserver(mark);
+    rows.observe(node, { childList: true });
     node.addEventListener("scroll", mark, { passive: true });
     return () => {
       sizes.disconnect();
+      rows.disconnect();
       node.removeEventListener("scroll", mark);
     };
   };
@@ -1090,39 +1155,79 @@
                     {/each}
                     {#if lists.older.length > 0}
                       {@const olderVisible = olderShown(project, lists.older)}
-                      <Sidebar.MenuSubItem data-flip>
+                      {@const olderBusy = olderPending.has(project.id)}
+                      {@const olderLabel = `${lists.older.length} older`}
+                      <!-- The row's box (`data-flip="box"`): its older rows
+                             open in it, so it takes their room at once and
+                             the projects under it slide with its edge
+                             (motion/rows), as a session's delegates do. -->
+                      <Sidebar.MenuSubItem data-flip="box">
                         <Sidebar.MenuSubButton
-                          aria-expanded={olderVisible}
                           class="{SUB_ROW} text-muted-foreground"
                           data-branch-item
-                          onclick={() => toggleOlder(project.id)}
                         >
-                          <!-- A disclosure for more rows: its chevron in
-                                 the lead slot the marks stand in, where the
-                                 rail's arm ends, turning as the rows open. -->
-                          <span class="{SLOT} row-lead older-chev"
-                            ><IconChevronRight class="size-3" /></span
-                          >
-                          <span class="num">{lists.older.length} older</span>
+                          {#snippet child({
+                            props,
+                          })}
+                            <!-- A disclosure, so a button. Busy from the
+                                   press until its rows are drawn: the chevron
+                                   in the lead slot (where the rail's arm
+                                   ends) gives way to the kit's spinner, as a
+                                   pending Button's icon does. -->
+                            <button
+                              {...props}
+                              aria-busy={olderBusy || undefined}
+                              aria-expanded={olderVisible}
+                              onclick={() => toggleOlder(project.id)}
+                              type="button"
+                            >
+                              <span
+                                class="{SLOT} row-lead older-lead icon-swap kit-slot"
+                              >
+                                <span
+                                  class="older-chev"
+                                  data-active={!olderBusy}
+                                  ><IconChevronRight class="size-3" /></span
+                                >
+                                <span data-active={olderBusy}
+                                  ><Spinner
+                                    aria-label="Reading older sessions"
+                                    class="size-3"
+                                  /></span
+                                >
+                              </span>
+                              <span class="num">{olderLabel}</span>
+                            </button>
+                          {/snippet}
                         </Sidebar.MenuSubButton>
-                      </Sidebar.MenuSubItem>
-                      {#if olderVisible}
-                        <!-- Older sessions scroll in a box of their own,
-                               six rows at most, so opening them never pushes
-                               the projects below or the footer. The box is
-                               off the rail: the rail ends at the row that
-                               opens it. -->
-                        <li class="older-wrap" data-flip>
-                          <ul class="older" {@attach scrollEdges}>
-                            {#each branches(
-                              lists.older,
-                              `rail:${project.id}:older`
-                            ) as node (node.row.id)}
+                        {#if olderVisible}
+                          {@const olderTrees = branches(
+                            lists.older,
+                            `rail:${project.id}:older`
+                          ).slice(0, olderDrawn.get(project.id))}
+                          <!-- Older sessions scroll in a box of their own,
+                                 six rows at most, so opening them never
+                                 pushes the projects below far or the footer.
+                                 It opens and folds as every tree in the rail
+                                 does (motion/branch), and draws no line: the
+                                 rail ends at the row that opens it. reflow
+                                 never copies or uncovers what is inside
+                                 (`data-flip-anchor`). -->
+                          <ul
+                            class="older"
+                            data-flip-anchor
+                            onintroend={() =>
+                              fillOlder(project.id, lists.older.length)}
+                            in:branch={OLDER_TREE}
+                            out:branch={OLDER_TREE}
+                            {@attach scrollEdges}
+                          >
+                            {#each olderTrees as node (node.row.id)}
                               {@render subRow(node)}
                             {/each}
                           </ul>
-                        </li>
-                      {/if}
+                        {/if}
+                      </Sidebar.MenuSubItem>
                     {:else if lists.recent.length === 0}
                       <Sidebar.MenuSubItem data-flip>
                         <Sidebar.MenuSubButton
@@ -1268,35 +1373,30 @@
   }
   /* A project's older sessions: six sub-rows (28px, 2px apart) at most,
      scrolling in place. The edges fade only while there is more past them. */
-  .older-wrap {
-    list-style: none;
-  }
-  /* The older box is off the rail (it scrolls on its own): it draws no line,
-     and the row that opens it is where the rail ends. */
-  .older-wrap::before,
-  .older-wrap::after,
-  :global(.kit-nest > li:has(+ .older-wrap))::after {
-    content: none;
-  }
-  /* The disclosure's chevron turns as its rows open. */
-  .older-chev {
+  /* The disclosure's lead: its chevron, which turns as its rows open, and the
+     spinner it gives way to while they are read (the kit's icon swap, at a
+     control's pace). */
+  .older-lead {
+    --icon-swap-dur: var(--dur-control);
     color: var(--ink-muted);
   }
   @media (prefers-reduced-motion: no-preference) {
-    .older-chev {
+    .older-chev :global(svg) {
       transition: rotate var(--dur-control) var(--ease-out);
     }
   }
-  :global([aria-expanded="true"]) > .older-chev {
+  :global([aria-expanded="true"]) .older-chev :global(svg) {
     rotate: 90deg;
   }
+  /* The box is off the rail (it scrolls on its own): its rows draw no line,
+     and the row that opens it, the project's last, is where the rail ends. */
   .older {
     --fade: var(--space-4);
     display: flex;
     flex-direction: column;
     gap: 2px;
     max-block-size: calc(6 * 28px + 5 * 2px);
-    margin: 0;
+    margin: var(--tree-gap) 0 0;
     padding: 0;
     overflow-y: auto;
     overscroll-behavior: contain;
