@@ -9472,6 +9472,10 @@
                   "permission_request"
                 ]
               },
+              "processGeneration": {
+                "description": "The launch that raised this request; daemon replays retain it verbatim.",
+                "type": "string"
+              },
               "instanceId": {
                 "type": "string"
               },
@@ -9533,6 +9537,16 @@
                 "type": "string"
               },
               "requestId": {
+                "type": "string"
+              },
+              "processGeneration": {
+                "type": "string"
+              },
+              "outcome": {
+                "enum": [
+                  "answered",
+                  "cancelled"
+                ],
                 "type": "string"
               }
             },
@@ -9928,6 +9942,10 @@
           "persistSession": {
             "description": "`false` asks the harness never to store this session's transcript.",
             "type": "boolean"
+          },
+          "processGeneration": {
+            "description": "Hub-owned launch identity, retained when reattaching a surviving process.",
+            "type": "string"
           },
           "projectId": {
             "description": "The project this session was started from, when it was started from one.",

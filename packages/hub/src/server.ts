@@ -162,7 +162,12 @@ import { probe } from "./llm";
 import { MeaningJudge } from "./meaning";
 import { externalizeImages, mediaContentType, mediaFilePath } from "./media";
 import type { PendingShape } from "./pending";
-import { answerWorkflow, onWorkflowAnswer } from "./pending";
+import {
+  answerPermission,
+  answerWorkflow,
+  onPermissionAnswer,
+  onWorkflowAnswer,
+} from "./pending";
 import { resolveMarketplacePlugins } from "./plugins";
 import { previewFrame, previewTargets } from "./preview";
 import { type HubSocket, type RegistryShape, toDashboard } from "./registry";
@@ -1529,10 +1534,19 @@ export const createServer = (
   // parent session or a workflow; a harness settling it itself; a timeout; its
   // process ending). Without it every other client kept a card nobody could
   // answer until it reconnected.
-  pending.onSettled((parked) => {
+  const answeringPermissions = new Map<
+    string,
+    { outcome?: "answered" | "cancelled" }
+  >();
+  pending.onSettled((parked, outcome) => {
     if (!(parked.requestId && parked.instanceId)) {
       return;
     }
+    const answering = answeringPermissions.get(parked.requestId);
+    if (answering) {
+      answering.outcome = outcome;
+    }
+    telegram?.onSettled(parked.requestId);
     registry.broadcast({
       verb: "frames",
       machineId: parked.machineId,
@@ -1542,6 +1556,7 @@ export const createServer = (
         kind: "permission_settled",
         instanceId: parked.instanceId,
         requestId: parked.requestId,
+        outcome,
       },
     });
   });
@@ -1553,6 +1568,12 @@ export const createServer = (
   // they always were — `sleeping`. Idempotent, so this is a boot step and not a
   // migration script somebody has to remember to run.
   const swept = db.sweepBootStatuses(RESTART_RESUMABLE);
+  for (const parked of pending.list()) {
+    const [row] = db.getInstancesByIds([parked.instanceId ?? ""]);
+    if (!(row && ["running", "starting", "unknown"].includes(row.status))) {
+      pending.forget(parked.instanceId ?? "");
+    }
+  }
   if (swept.toUnknown || swept.toSleeping) {
     console.log(
       `[hub] boot sweep: ${swept.toUnknown} session(s) → unknown, ${swept.toSleeping} legacy restart error(s) → sleeping`
@@ -1809,12 +1830,9 @@ export const createServer = (
     why: string,
     outlived = false
   ): void => {
-    for (const parked of pending.list()) {
-      if (parked.instanceId === instanceId && parked.requestId) {
-        telegram?.onSettled(parked.requestId);
-      }
+    if (!outlived) {
+      pending.forget(instanceId);
     }
-    pending.forget(instanceId);
     // Nor is it doing anything any more: a pulse outliving its process is the
     // same stale-liveness lie in memory instead of in a column.
     pulses.delete(instanceId);
@@ -1832,6 +1850,21 @@ export const createServer = (
     // The supervisor's turn buffers for a dead session are waste.
     supervisor.forget(instanceId);
     usageCounter.forget(instanceId);
+  };
+
+  // The hub's persisted spawn identity changes on every relaunch, but not on
+  // a socket reconnect or a turn's init. A request belongs to that launch.
+  const processGeneration = (
+    row: ReturnType<DbShape["getInstancesByIds"]>[number]
+  ): string => JSON.stringify([row.id, row.spawnedAt]);
+  const ownsPermission = (parked: Envelope): boolean => {
+    const [row] = db.getInstancesByIds([parked.instanceId ?? ""]);
+    return !!(
+      row &&
+      row.machineId === parked.machineId &&
+      ["running", "starting", "unknown"].includes(row.status) &&
+      peek(parked.payload, "processGeneration") === processGeneration(row)
+    );
   };
 
   /**
@@ -2735,7 +2768,11 @@ export const createServer = (
     knownRow?: InstanceRow
   ): SpawnPayload => {
     const { sessionCredential: _callerCredential, ...asked } = payload;
-    const row = knownRow ?? db.getInstancesByIds([payload.instanceId])[0];
+    const [stored] = db.getInstancesByIds([payload.instanceId]);
+    if (!stored) {
+      throw new Error("A spawn has no recorded process generation.");
+    }
+    const row = knownRow ?? stored;
     const workspace = row ? workItems.workspaceOf(row) : undefined;
     const harness = payload.harness ?? row?.harness ?? "claude";
     // Custody restores retain the process's live token; the hub deliberately
@@ -2749,6 +2786,7 @@ export const createServer = (
         : undefined;
     return {
       ...asked,
+      processGeneration: processGeneration(stored),
       ...(workspace ? { workspace } : {}),
       ...(sessionCredential ? { sessionCredential } : {}),
     };
@@ -2915,12 +2953,6 @@ export const createServer = (
       return;
     }
     const revive = settled.payload;
-    agent.send({
-      verb: "spawn",
-      machineId,
-      instanceId,
-      payload: bounded(revive),
-    });
     // A relaunch replaces the process; what the old one had parked is over.
     forgetPending(instanceId, UNREAD.restarted);
     db.openInstance({
@@ -2932,6 +2964,12 @@ export const createServer = (
       kind: row.kind ?? undefined,
       permissionMode: settled.permissionMode,
       model: row.model ?? undefined,
+    });
+    agent.send({
+      verb: "spawn",
+      machineId,
+      instanceId,
+      payload: bounded(revive),
     });
     publishInstances(machineId);
   };
@@ -3602,12 +3640,7 @@ export const createServer = (
       throw new WorkItemRefusal(400, settled.refusal);
     }
     const { payload } = settled;
-    agent.send({
-      verb: "spawn",
-      machineId,
-      instanceId: payload.instanceId,
-      payload: bounded(payload),
-    } satisfies Envelope<SpawnPayload>);
+    forgetPending(payload.instanceId, UNREAD.restarted);
     db.openInstance({
       id: payload.instanceId,
       machineId,
@@ -3625,6 +3658,12 @@ export const createServer = (
       ...peekParent(payload),
       ...(workItemId ? { workItemId } : {}),
     });
+    agent.send({
+      verb: "spawn",
+      machineId,
+      instanceId: payload.instanceId,
+      payload: bounded(payload),
+    } satisfies Envelope<SpawnPayload>);
     if (!peekResume(payload)) {
       awaitingFirstTurn.add(payload.instanceId);
     }
@@ -3720,6 +3759,7 @@ export const createServer = (
     }
     const { payload } = settled;
     const requestId = crypto.randomUUID();
+    forgetPending(payload.instanceId, UNREAD.restarted);
     db.openInstance({
       id: payload.instanceId,
       machineId,
@@ -3741,7 +3781,7 @@ export const createServer = (
           verb: "spawn",
           machineId,
           instanceId: payload.instanceId,
-          payload: { ...payload, requestId },
+          payload: { ...bounded(payload), requestId },
         } satisfies Envelope<SpawnPayload>)
     );
     if (reply === "timeout") {
@@ -3828,6 +3868,7 @@ export const createServer = (
   const retireSummariser = (machineId: string, instanceId: string): void => {
     endStopped(machineId, instanceId);
     db.stopInstance(instanceId);
+    forgetPending(instanceId, UNREAD.stopped);
     publishInstances(machineId);
   };
 
@@ -4596,19 +4637,20 @@ export const createServer = (
         return;
       }
       db.failInstance(row.id, settled.refusal);
+      forgetPending(row.id, settled.refusal);
       console.warn(`[hub] not restoring ${row.id}: ${settled.refusal}`);
       return;
     }
     const { payload } = settled;
-    agent.send({
-      verb: "spawn",
-      machineId: row.machineId,
-      instanceId: row.id,
-      payload: bounded(payload, row),
-    });
     // A probe of a previously lost handle is not a spawn. Leave its history
     // alone until the daemon confirms the server still has a turn in flight.
     if (reattachOnly) {
+      agent.send({
+        verb: "spawn",
+        machineId: row.machineId,
+        instanceId: row.id,
+        payload: bounded(payload, row),
+      });
       return;
     }
     db.openInstance({
@@ -4622,6 +4664,12 @@ export const createServer = (
       permissionMode: settled.permissionMode,
       model: row.model ?? undefined,
       canDelegate: row.canDelegate ?? undefined,
+    });
+    agent.send({
+      verb: "spawn",
+      machineId: row.machineId,
+      instanceId: row.id,
+      payload: bounded(payload, row),
     });
   };
 
@@ -5043,9 +5091,7 @@ export const createServer = (
       behavior === "deny" ? "denied" : "answered"
     );
   };
-  // The Telegram bridge answers straight down the agent socket, past every
-  // recording site above — so it files its answers through this instead.
-  telegram?.setAnswerRecorder(recordDelegateAnswer);
+  // Telegram's replies use the same recorded send path as every other device.
   telegram?.setSender((envelope) => deliverSend(envelope).state !== "failed");
 
   const awaitingInstall = (machineId: string, toolId: string): boolean => {
@@ -5679,37 +5725,108 @@ export const createServer = (
    * would report the same outcome twice in two dialects.
    */
   /**
-   * Whether a dashboard's answer was a workflow question's, which settles it
-   * here. A question that refuses the answer stays open, and the card is told
-   * why.
+   * One answer transaction for dashboards, Telegram and parent tools. The
+   * machine's receipt and the ledger's settlement must both precede success.
    */
-  const answeredWorkflow = (
-    message: Envelope<ControlPayload>,
-    dashboard: HubSocket
-  ): boolean => {
-    const answer = peekAnswer(message.payload);
-    if (!answer) {
-      return false;
+  const answerPendingPermission = async (
+    instanceId: string,
+    requestId: string,
+    result: PermissionResult
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one transaction validates ownership, workflow answers, delivery receipts and concurrent process death before reporting success.
+  ): Promise<void> => {
+    const parked = pending.get(requestId);
+    if (!parked || parked.instanceId !== instanceId) {
+      throw new Error("That request is no longer pending.");
     }
+    if (answeringPermissions.has(requestId)) {
+      throw new Error("That request is already being answered.");
+    }
+    const receipt: { outcome?: "answered" | "cancelled" } = {};
+    answeringPermissions.set(requestId, receipt);
     try {
-      return answerWorkflow(
-        pending,
-        answer.requestId,
-        answer.result as import("@cawco/core").PermissionResult
+      if (answerWorkflow(pending, requestId, result)) {
+        if (receipt.outcome !== "answered") {
+          throw new Error("That request is no longer pending.");
+        }
+        return;
+      }
+      if (!ownsPermission(parked)) {
+        pending.resolve(requestId, "cancelled");
+        throw new Error("That request is no longer pending.");
+      }
+      const delivered = await callAgent(
+        parked.machineId,
+        RESOLVE_PERMISSION,
+        [requestId, result],
+        READ_TIMEOUT_MS,
+        undefined,
+        instanceId
       );
-    } catch (error) {
-      dashboard.send(
-        failure(message, error instanceof Error ? error.message : String(error))
-      );
-      return true;
+      if (delivered === "offline" || delivered === "timeout") {
+        throw new Error(`Permission answer ${delivered}.`);
+      }
+      if (!delivered.ok) {
+        throw new Error(delivered.error ?? "The session refused the answer.");
+      }
+      if (receipt.outcome === "cancelled" || !ownsPermission(parked)) {
+        pending.resolve(requestId, "cancelled");
+        throw new Error("That request is no longer pending.");
+      }
+      pending.resolve(requestId);
+      if (receipt.outcome !== "answered") {
+        throw new Error("That request is no longer pending.");
+      }
+      recordDelegateAnswer(parked.machineId, instanceId, requestId, result);
+    } finally {
+      answeringPermissions.delete(requestId);
     }
   };
+  onPermissionAnswer(pending, answerPendingPermission);
+
+  const relayPermissionAnswer = (
+    message: Envelope<ControlPayload>,
+    dashboard: HubSocket,
+    legacy: boolean
+  ): boolean => {
+    const answer = peekAnswer(message.payload);
+    if (message.payload.method !== RESOLVE_PERMISSION) {
+      return false;
+    }
+    // The correlation id belongs to the control; args[0] belongs to the ask.
+    // A receipt is sent only after delivery AND the pending ledger settlement.
+    answerPermission(
+      pending,
+      message.instanceId ?? message.payload.instanceId ?? "",
+      answer?.requestId ?? "",
+      answer?.result as PermissionResult
+    ).then(
+      () =>
+        reply({ kind: "control_result", requestId: correlationId, ok: true }),
+      (error: unknown) =>
+        reply({
+          kind: "control_result",
+          requestId: correlationId,
+          ok: false,
+          error: error instanceof Error ? error.message : String(error),
+        })
+    );
+    const correlationId = message.requestId ?? message.payload.requestId;
+    const reply = (frame: ControlResult): void => {
+      if (legacy) {
+        toDashboard(dashboard, { ...message, verb: "frames", payload: frame });
+      } else {
+        streams.settleCommand(correlationId, frame);
+      }
+    };
+    return true;
+  };
+
   const relayControl = (
     message: Envelope<ControlPayload>,
     dashboard: HubSocket,
     remember = true
   ): boolean => {
-    if (answeredWorkflow(message, dashboard)) {
+    if (relayPermissionAnswer(message, dashboard, remember)) {
       return true;
     }
     if (!(forward(message, dashboard) && message.requestId)) {
@@ -5717,19 +5834,6 @@ export const createServer = (
     }
     if (remember) {
       registry.rememberRequester(message.requestId, dashboard);
-    }
-    telegram?.onSettled(message.requestId);
-    pending.resolve(message.requestId);
-    // A reader answering an ask that escalated to them: the parent died
-    // holding it, but it is still that delegate's ask and its record.
-    const answered = peekAnswer(message.payload);
-    if (answered && message.instanceId) {
-      recordDelegateAnswer(
-        message.machineId,
-        message.instanceId,
-        answered.requestId,
-        answered.result
-      );
     }
     const deleted = peekTranscriptDelete(message.payload);
     if (deleted) {
@@ -6123,7 +6227,9 @@ export const createServer = (
         throw new Error("Workflow question has no request id.");
       }
       const existed = pending.get(envelope.requestId);
-      pending.remember(envelope.requestId, envelope);
+      if (!pending.remember(envelope.requestId, envelope)) {
+        return;
+      }
       registry.broadcast(envelope);
       if (
         !existed &&
@@ -6134,7 +6240,6 @@ export const createServer = (
     },
     settle: (id) => {
       pending.resolve(id);
-      telegram?.onSettled(id);
     },
     broadcast: (frame) =>
       registry.broadcast({
@@ -6297,6 +6402,7 @@ export const createServer = (
           payload: { instanceId: row.id, from: requester.id },
         });
         closePreview(row.id).catch(console.error);
+        forgetPending(row.id, UNREAD.stopped);
         noteInterrupt(row.id);
         workItems.cancelled(row);
         return;
@@ -6308,14 +6414,13 @@ export const createServer = (
       if (retired) {
         throw new WorkItemRefusal(409, retired);
       }
-      const { requestId } = control;
       const result = control.args?.[1] as PermissionResult;
-      if (
-        control.method === RESOLVE_PERMISSION &&
-        requestId &&
-        pending.get(requestId) &&
-        answerWorkflow(pending, requestId, result)
-      ) {
+      if (control.method === RESOLVE_PERMISSION) {
+        const answer = peekAnswer(control);
+        if (!answer) {
+          throw new Error("A permission answer names no request.");
+        }
+        await answerPermission(pending, row.id, answer.requestId, result);
         return;
       }
       const agent = registry.agent(row.machineId);
@@ -6332,10 +6437,6 @@ export const createServer = (
       });
       if (control.method === CONTROL_INTERRUPT) {
         noteInterrupt(row.id);
-      } else {
-        telegram?.onSettled(requestId);
-        pending.resolve(requestId);
-        recordDelegateAnswer(row.machineId, row.id, requestId, result);
       }
     },
   });
@@ -6347,6 +6448,7 @@ export const createServer = (
    */
   const forgetInstances = (ids: readonly string[]): void => {
     for (const id of ids) {
+      forgetPending(id, UNREAD.ended);
       anchors.delete(id);
       unanswered.delete(id);
       pulses.delete(id);
@@ -9071,7 +9173,14 @@ export const createServer = (
       // process in it and deletes the clone. Refused while an item runs there.
       .post("/api/workspaces/:id/archive", async ({ params, status }) => {
         try {
-          return await workItems.archive(params.id);
+          const workspace = await workItems.archive(params.id);
+          for (const item of db.workItemsIn(workspace.id)) {
+            db.stopInstance(item.instanceId);
+            forgetPending(item.instanceId, UNREAD.ended);
+            escalateRoutedAsks(item.instanceId);
+          }
+          publishInstances(workspace.machineId);
+          return workspace;
         } catch (error) {
           const message =
             error instanceof Error ? error.message : String(error);
@@ -9263,6 +9372,22 @@ export const createServer = (
                   decideCustody(orphan.row.id);
                 }
                 escalateRoutedAsks(orphan.row.id);
+              }
+              // Catalog reconciliation can also retire an already failed row,
+              // and stopped rows are deliberately outside the orphan list.
+              for (const parked of pending.list()) {
+                const [owner] = db.getInstancesByIds([parked.instanceId ?? ""]);
+                if (
+                  parked.machineId === message.machineId &&
+                  !(
+                    owner &&
+                    ["running", "starting", "unknown"].includes(owner.status)
+                  ) &&
+                  !heldIds.has(parked.instanceId ?? "") &&
+                  !(custody.opencode && owner?.harness === "opencode")
+                ) {
+                  pending.resolve(parked.requestId ?? "", "cancelled");
+                }
               }
               // Sessions that ran on while this hub was away: a read that
               // happened meanwhile was framed to nobody, and the transcript
@@ -9557,6 +9682,14 @@ export const createServer = (
                 break;
               }
               if (kind === "stopped" && message.instanceId) {
+                const [process] = db.getInstancesByIds([message.instanceId]);
+                if (
+                  !process ||
+                  peek(message.payload, "processGeneration") !==
+                    processGeneration(process)
+                ) {
+                  break;
+                }
                 turnWaiters
                   .get(message.instanceId)
                   ?.reject(
@@ -9580,16 +9713,22 @@ export const createServer = (
                 }
                 // What it was sent and had not read did not go, unless it wrote
                 // some of it down as it stopped.
-                inCustody.delete(message.instanceId);
-                settlePending(message.instanceId, UNREAD.stopped, "fail");
-                pulses.delete(message.instanceId);
-                touched.delete(message.instanceId);
+                forgetPending(message.instanceId, UNREAD.stopped);
                 escalateRoutedAsks(message.instanceId);
                 publishInstances(message.machineId);
                 break;
               }
               if (kind === "recovery_unavailable" && message.instanceId) {
+                const [process] = db.getInstancesByIds([message.instanceId]);
+                if (
+                  !process ||
+                  peek(message.payload, "processGeneration") !==
+                    processGeneration(process)
+                ) {
+                  break;
+                }
                 db.settleUnavailableRecovery(message.instanceId);
+                forgetPending(message.instanceId, UNREAD.ended);
                 publishInstances(message.machineId);
                 break;
               }
@@ -9744,12 +9883,36 @@ export const createServer = (
                 observeTurn(message.instanceId, frame);
               }
               if (message.requestId && kind === "permission_request") {
+                const [owner] = db.getInstancesByIds([
+                  message.instanceId ?? "",
+                ]);
+                if (
+                  !owner ||
+                  owner.machineId !== message.machineId ||
+                  !["running", "starting", "unknown"].includes(owner.status)
+                ) {
+                  // Replayed old-process asks after boot reconciliation are
+                  // cancelled at admission, through the same settlement path.
+                  pending.remember(message.requestId, message);
+                  pending.resolve(message.requestId, "cancelled");
+                  break;
+                }
+                if (
+                  peek(message.payload, "processGeneration") !==
+                  processGeneration(owner)
+                ) {
+                  pending.remember(message.requestId, message);
+                  pending.resolve(message.requestId, "cancelled");
+                  break;
+                }
                 // A replayed ask (the daemon re-announces unresolved asks after
                 // every register) refreshes the parked copy without a second
                 // Telegram message or a second routing decision.
                 const alreadyParked =
                   pending.get(message.requestId) !== undefined;
-                pending.remember(message.requestId, message);
+                if (!pending.remember(message.requestId, message)) {
+                  break;
+                }
                 if (alreadyParked) {
                   break;
                 }
@@ -9817,9 +9980,22 @@ export const createServer = (
               if (kind === "permission_settled") {
                 // Most of these echo an answer the hub relayed and has already
                 // settled; only one still parked is news to Telegram.
-                if (message.requestId && pending.get(message.requestId)) {
-                  telegram?.onSettled(message.requestId);
-                  pending.resolve(message.requestId);
+                const parked = message.requestId
+                  ? pending.get(message.requestId)
+                  : undefined;
+                if (
+                  message.requestId &&
+                  parked?.instanceId === message.instanceId &&
+                  parked?.machineId === message.machineId &&
+                  peek(parked.payload, "processGeneration") ===
+                    peek(message.payload, "processGeneration")
+                ) {
+                  pending.resolve(
+                    message.requestId,
+                    peek(message.payload, "outcome") === "cancelled"
+                      ? "cancelled"
+                      : "answered"
+                  );
                 }
                 break;
               }
@@ -10056,6 +10232,14 @@ export const createServer = (
                 message.instanceId &&
                 peek(message.payload, "verb") === "spawn"
               ) {
+                const [process] = db.getInstancesByIds([message.instanceId]);
+                if (
+                  !process ||
+                  peek(message.payload, "processGeneration") !==
+                    processGeneration(process)
+                ) {
+                  break;
+                }
                 const reason =
                   peek(message.payload, "message") ?? "the session failed";
                 turnWaiters.get(message.instanceId)?.reject(new Error(reason));
@@ -10365,11 +10549,7 @@ export const createServer = (
                 toDashboard(ws, failure(message, settled.refusal));
                 break;
               }
-              const relaunch = {
-                ...message,
-                payload: bounded(settled.payload),
-              };
-              if (forward(relaunch, ws) && message.instanceId) {
+              if (registry.agent(message.machineId) && message.instanceId) {
                 // A relaunch replaces the process — questions the old one had
                 // open are settled by its teardown and must not replay.
                 forgetPending(message.instanceId, UNREAD.restarted);
@@ -10393,11 +10573,20 @@ export const createServer = (
                   model: peek(message.payload, "model"),
                   ...peekParent(message.payload),
                 });
+                forward({ ...message, payload: bounded(settled.payload) }, ws);
                 // A conversation that starts here: its first turn is its name.
                 if (!peekResume(message.payload)) {
                   awaitingFirstTurn.add(message.instanceId);
                 }
                 publishInstances(message.machineId);
+              } else {
+                toDashboard(
+                  ws,
+                  failure(
+                    message,
+                    `machine ${message.machineId} is not connected`
+                  )
+                );
               }
               break;
             }
@@ -10424,6 +10613,7 @@ export const createServer = (
                   }
                 }
                 db.stopInstance(message.instanceId);
+                forgetPending(message.instanceId, UNREAD.stopped);
                 publishInstances(message.machineId);
               } else if (forward(message, ws) && message.requestId) {
                 registry.rememberRequester(message.requestId, ws);

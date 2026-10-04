@@ -120,6 +120,7 @@ interface Claimed {
     cwd: string;
     sessionId?: string | null;
     sessionCredential?: string;
+    processGeneration?: string;
   };
   /** Whether its turn was running when its ring was read. */
   running: boolean;
@@ -156,7 +157,7 @@ export interface SessiondAwareContext extends HarnessContext {
  */
 export type FrameSink = (
   frame: Exclude<FramePayload, { kind: "instances" | "instances_delta" }> &
-    Partial<FrameProvenance>
+    Partial<FrameProvenance> & { processGeneration?: string }
 ) => void;
 
 const warn = (message: string): void => {
@@ -420,6 +421,7 @@ export class SessionSupervisor {
     this.#adapter("opencode").setCustodyReadiness?.(() => this.custodyReady);
   }
   readonly #sessions = new Map<string, HarnessSession>();
+  readonly #generations = new Map<string, string>();
   readonly #failures = new Map<string, string>();
   /** Reattaches in flight, by instance id: see {@link reattach}. */
   readonly #adopting = new Map<string, Promise<void>>();
@@ -969,6 +971,7 @@ export class SessionSupervisor {
       this.sink({
         kind: "recovery_unavailable",
         instanceId: payload.instanceId,
+        processGeneration: payload.processGeneration,
         reason,
       });
     }
@@ -1078,6 +1081,7 @@ export class SessionSupervisor {
         workdir,
         adapter,
         holder,
+        payload.processGeneration,
         boundary,
         payload.sessionCredential
       );
@@ -1143,7 +1147,7 @@ export class SessionSupervisor {
           error: message,
         });
       }
-      this.#fail(instanceId, error);
+      this.#fail(instanceId, error, payload.processGeneration);
     }
   }
 
@@ -1159,9 +1163,14 @@ export class SessionSupervisor {
     workdir: string,
     adapter: Harness,
     holder: { session: HarnessSession | null },
+    processGeneration: string | undefined,
     boundary?: Boundary,
     sessionCredential?: string
   ): SessiondAwareContext {
+    if (!processGeneration) {
+      throw new Error("The hub did not supply this process's generation.");
+    }
+    this.#generations.set(instanceId, processGeneration);
     return {
       instanceId,
       cwd: workdir,
@@ -1214,6 +1223,7 @@ export class SessionSupervisor {
           instanceId,
           harness: adapter.kind,
           ...request,
+          processGeneration,
         };
         this.#openAsks.set(request.requestId, body);
         this.sink(body);
@@ -1229,14 +1239,18 @@ export class SessionSupervisor {
       },
       session: (sessionId) =>
         this.#noteQuestSession(instanceId, sessionId, adapter.kind),
-      failed: (error) => this.#fail(instanceId, error),
+      failed: (error) => this.#fail(instanceId, error, processGeneration),
       rejected: (uuid, error) => this.#reject(instanceId, uuid, error),
       emit: (envelope) => this.emit(envelope),
       closed: () => {
         // A dead process is never going to answer anything it asked.
         for (const [requestId, body] of this.#openAsks) {
-          if ("instanceId" in body && body.instanceId === instanceId) {
-            this.#openAsks.delete(requestId);
+          if (
+            "instanceId" in body &&
+            body.instanceId === instanceId &&
+            body.processGeneration === processGeneration
+          ) {
+            this.#settleAsk(instanceId, requestId, "cancelled");
           }
         }
         if (
@@ -1415,7 +1429,11 @@ export class SessionSupervisor {
             signal?.throwIfAborted();
             entry.failed = true;
             failed.add(entry.row.instanceId);
-            this.#sessionRecoveryFailed(entry.row.instanceId, problem);
+            this.#sessionRecoveryFailed(
+              entry.row.instanceId,
+              problem,
+              entry.row.processGeneration
+            );
           }
           signal?.throwIfAborted();
           if (entry.running) {
@@ -1439,7 +1457,11 @@ export class SessionSupervisor {
           adopted.push(entry.row.instanceId);
         } catch (problem) {
           failed.add(entry.row.instanceId);
-          this.#sessionRecoveryFailed(entry.row.instanceId, problem);
+          this.#sessionRecoveryFailed(
+            entry.row.instanceId,
+            problem,
+            entry.row.processGeneration
+          );
           entry.settle();
         }
       }
@@ -1474,7 +1496,11 @@ export class SessionSupervisor {
     return adopted;
   }
 
-  #sessionRecoveryFailed(instanceId: string, problem: unknown): void {
+  #sessionRecoveryFailed(
+    instanceId: string,
+    problem: unknown,
+    processGeneration?: string
+  ): void {
     const message =
       problem instanceof Error ? problem.message : String(problem);
     this.sink({
@@ -1482,8 +1508,14 @@ export class SessionSupervisor {
       instanceId,
       verb: "register",
       message: `Session custody recovery failed: ${message}`,
+      processGeneration,
     });
-    this.sink({ kind: "recovery_unavailable", instanceId, reason: message });
+    this.sink({
+      kind: "recovery_unavailable",
+      instanceId,
+      reason: message,
+      processGeneration,
+    });
   }
 
   /**
@@ -1531,6 +1563,7 @@ export class SessionSupervisor {
       row.cwd,
       claude,
       holder,
+      row.processGeneration,
       undefined,
       row.sessionCredential
     );
@@ -1628,12 +1661,13 @@ export class SessionSupervisor {
   }
 
   /** A session that never started, or stopped without being asked to. */
-  #fail(instanceId: string, error: unknown): void {
+  #fail(instanceId: string, error: unknown, processGeneration?: string): void {
     const message = error instanceof Error ? error.message : String(error);
     this.#failures.set(instanceId, message);
     this.sink({
       kind: "error",
       instanceId,
+      processGeneration,
       verb: "spawn",
       message,
     });
@@ -1688,6 +1722,7 @@ export class SessionSupervisor {
   }
 
   async #stop({ instanceId, discard, requestId }: StopPayload): Promise<void> {
+    const processGeneration = this.#generations.get(instanceId);
     try {
       const session = this.#sessions.get(instanceId);
       if (session) {
@@ -1717,11 +1752,21 @@ export class SessionSupervisor {
         }
       }
       this.#resumable.delete(instanceId);
-      this.sink({ kind: "stopped", instanceId, discard: false });
+      this.sink({
+        kind: "stopped",
+        instanceId,
+        discard: false,
+        processGeneration,
+      });
       if (discard) {
         await this.#removeWorktree(instanceId);
         await this.#removeQuestSession(instanceId);
-        this.sink({ kind: "stopped", instanceId, discard: true });
+        this.sink({
+          kind: "stopped",
+          instanceId,
+          discard: true,
+          processGeneration,
+        });
       }
       if (requestId) {
         this.sink({ kind: "control_result", instanceId, requestId, ok: true });
@@ -2256,7 +2301,11 @@ export class SessionSupervisor {
     return session;
   }
 
-  #settleAsk(instanceId: string, requestId: string): void {
+  #settleAsk(
+    instanceId: string,
+    requestId: string,
+    outcome: "answered" | "cancelled" = "answered"
+  ): void {
     const ask = this.#openAsks.get(requestId);
     if (!(ask && "instanceId" in ask) || ask.instanceId !== instanceId) {
       return;
@@ -2264,7 +2313,13 @@ export class SessionSupervisor {
     this.#openAsks.delete(requestId);
     // The hub parks every ask until it hears it is over; an ask the harness
     // settled itself would otherwise stay on every board.
-    this.sink({ kind: "permission_settled", instanceId, requestId });
+    this.sink({
+      kind: "permission_settled",
+      instanceId,
+      requestId,
+      processGeneration: ask.processGeneration,
+      outcome,
+    });
     const left = (this.#pulseBlocked.get(instanceId) ?? 1) - 1;
     if (left === 0) {
       this.#pulseBlocked.delete(instanceId);

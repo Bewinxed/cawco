@@ -155,6 +155,8 @@ export interface SpawnPayload {
   permissionMode?: import("./harness").PermissionMode;
   /** `false` asks the harness never to store this session's transcript. */
   persistSession?: boolean;
+  /** Hub-owned launch identity, retained when reattaching a surviving process. */
+  processGeneration?: string;
   /** The project this session was started from, when it was started from one. */
   projectId?: string;
   /** Existing custody only: `busy` recovers active turns; `inspect` only reports them. */
@@ -864,6 +866,8 @@ export type FramePayload =
     }
   | {
       kind: "permission_request";
+      /** The launch that raised this request; daemon replays retain it verbatim. */
+      processGeneration?: string;
       instanceId: string;
       harness: import("./harness").HarnessKind;
       requestId: string;
@@ -897,6 +901,8 @@ export type FramePayload =
       kind: "permission_settled";
       instanceId: string;
       requestId: string;
+      processGeneration?: string;
+      outcome?: "answered" | "cancelled";
     }
   | {
       /**

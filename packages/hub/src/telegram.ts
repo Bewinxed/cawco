@@ -1,6 +1,5 @@
 import { hostname } from "node:os";
 import type {
-  ControlPayload,
   Envelope,
   FramePayload,
   PermissionResult,
@@ -8,15 +7,10 @@ import type {
   UserAnswers,
   UserQuestion,
 } from "@cawco/core";
-import {
-  ASK_USER_QUESTION,
-  CAWCO_ENV,
-  RESOLVE_PERMISSION,
-  readEnv,
-} from "@cawco/core";
+import { ASK_USER_QUESTION, CAWCO_ENV, readEnv } from "@cawco/core";
 import type { DbShape } from "./db";
 import type { PendingShape } from "./pending";
-import { answerWorkflow } from "./pending";
+import { answerPermission } from "./pending";
 import type { RegistryShape } from "./registry";
 import type { Intake, TelegramMedia } from "./telegram-media";
 import { carriesMedia, createMediaIntake } from "./telegram-media";
@@ -38,28 +32,14 @@ export interface TelegramBridge {
   /** A session's own words to the owner — no ask, no buttons, no answer. */
   readonly onUserMessage: (envelope: Envelope) => void;
   /**
-   * The server's delegate-answer recorder, registered after construction: the
-   * bridge sends its `resolvePermission` straight down the agent socket, so an
-   * escalated delegate ask answered from Telegram would otherwise settle
-   * without a `delegate_events` answer row.
-   */
-  readonly setAnswerRecorder: (
-    record: (
-      machineId: string,
-      instanceId: string,
-      requestId: string,
-      result: PermissionResult
-    ) => void
-  ) => void;
-  /**
    * The server's machine-image reader, registered after construction like
-   * {@link setAnswerRecorder}: a `send_to_user` attachment is a path on the
+   * {@link setSender}: a `send_to_user` attachment is a path on the
    * session's machine, and only the server holds the tunnel that reads it.
    */
   readonly setImageReader: (read: ImageReader) => void;
   /**
    * The server's one send path, registered after construction like
-   * {@link setAnswerRecorder}: a reply typed here is a message sent to the
+   * {@link setImageReader}: a reply typed here is a message sent to the
    * session like any other — recorded, streamed, and the reader's hand on the
    * session to the supervisor — and only the server does those. True when the
    * machine took it.
@@ -489,25 +469,6 @@ export const createTelegramBridge = ({
     return `${mark} ${parts.join(" · ")}`;
   };
 
-  /** The one place a hub-originated envelope reaches the machine that owns it. */
-  const toAgent = (envelope: Envelope): boolean => {
-    const agent = registry.agent(envelope.machineId);
-    if (!agent) {
-      return false;
-    }
-    agent.send(envelope);
-    return true;
-  };
-
-  /** Set by the server once its recorder exists; called on every resolve. */
-  let recordAnswer:
-    | ((
-        machineId: string,
-        instanceId: string,
-        requestId: string,
-        result: PermissionResult
-      ) => void)
-    | undefined;
   /** Set by the server: the one path a message takes into a session. */
   let sendMessage: ((envelope: Envelope<SendPayload>) => boolean) | undefined;
 
@@ -516,43 +477,20 @@ export const createTelegramBridge = ({
    * its machine is offline, and the reason when a workflow question refused
    * the answer (it then stays open to be answered again).
    */
-  const resolve = (
+  const resolve = async (
     envelope: Envelope,
     requestId: string,
     result: PermissionResult
-  ): boolean | Error => {
+  ): Promise<boolean | Error> => {
     const request = envelope.payload as PermissionRequest;
+    settledHere.add(requestId);
     try {
-      if (answerWorkflow(pending, requestId, result)) {
-        settledHere.add(requestId);
-        return true;
-      }
+      await answerPermission(pending, request.instanceId, requestId, result);
+      return true;
     } catch (error) {
+      settledHere.delete(requestId);
       return error instanceof Error ? error : new Error(String(error));
     }
-    const payload: ControlPayload = {
-      instanceId: request.instanceId,
-      requestId,
-      method: RESOLVE_PERMISSION,
-      args: [requestId, result],
-    };
-    const reached = toAgent({
-      verb: "control",
-      machineId: envelope.machineId,
-      instanceId: request.instanceId,
-      requestId,
-      payload,
-    });
-    if (!reached) {
-      return false;
-    }
-    // The control went straight down the agent socket, past the server's own
-    // recording sites — file the answer here or a Telegram-settled delegate
-    // ask stays `pending` forever.
-    recordAnswer?.(envelope.machineId, request.instanceId, requestId, result);
-    settledHere.add(requestId);
-    pending.resolve(requestId);
-    return true;
   };
 
   /** The owner typing here is the human the SDK gates on, so the turn says so. */
@@ -752,13 +690,13 @@ export const createTelegramBridge = ({
     // callback is acknowledged, and a resolve is slower than a map read.
     await call("answerCallbackQuery", {
       callback_query_id: query.id,
-      ...(envelope ? {} : { text: "Already answered elsewhere" }),
+      ...(envelope ? {} : { text: "That request is no longer pending" }),
     });
     if (!requestId) {
       return;
     }
     if (!envelope) {
-      await close(requestId, "☑️ Answered in the dashboard");
+      await close(requestId, "☑️ That request is no longer pending");
       return;
     }
 
@@ -794,7 +732,7 @@ export const createTelegramBridge = ({
       return;
     }
 
-    const settled = resolve(envelope, requestId, result);
+    const settled = await resolve(envelope, requestId, result);
     if (settled instanceof Error) {
       await send(`⚠️ ${esc(settled.message)}`);
       return;
@@ -863,7 +801,7 @@ export const createTelegramBridge = ({
         : // The reader's own words, which is what a denial is for: the model is
           // told why, not merely that it was refused.
           { behavior: "deny", message: text };
-      const settled = resolve(open, entry.requestId, result);
+      const settled = await resolve(open, entry.requestId, result);
       if (settled instanceof Error) {
         await send(`${heard}⚠️ ${esc(settled.message)}`);
         return;
@@ -960,9 +898,6 @@ export const createTelegramBridge = ({
     onSupervisor,
     onUserMessage,
     start,
-    setAnswerRecorder(record) {
-      recordAnswer = record;
-    },
     setImageReader(read) {
       readImage = read;
     },

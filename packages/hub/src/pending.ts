@@ -16,9 +16,14 @@ export interface PendingShape {
    * leaves, by `resolve` or `forget`, whichever path settled it. Set once by
    * the server, which tells every dashboard.
    */
-  readonly onSettled: (listener: (envelope: Envelope) => void) => void;
-  readonly remember: (requestId: string, envelope: Envelope) => void;
-  readonly resolve: (requestId: string) => void;
+  readonly onSettled: (
+    listener: (envelope: Envelope, outcome: "answered" | "cancelled") => void
+  ) => void;
+  readonly remember: (requestId: string, envelope: Envelope) => boolean;
+  readonly resolve: (
+    requestId: string,
+    outcome?: "answered" | "cancelled"
+  ) => boolean;
 }
 
 export class Pending extends Context.Service<Pending, PendingShape>()(
@@ -44,6 +49,30 @@ export const answerWorkflow = (
   result: PermissionResult
 ): boolean => workflowAnswers.get(pending)?.(id, result) ?? false;
 
+type AnswerHandler = (
+  instanceId: string,
+  requestId: string,
+  result: PermissionResult
+) => Promise<void>;
+const permissionAnswers = new WeakMap<PendingShape, AnswerHandler>();
+export const onPermissionAnswer = (
+  pending: PendingShape,
+  handler: AnswerHandler
+) => permissionAnswers.set(pending, handler);
+/** Every device waits for the same delivered-and-settled receipt. */
+export const answerPermission = (
+  pending: PendingShape,
+  instanceId: string,
+  requestId: string,
+  result: PermissionResult
+): Promise<void> => {
+  const handler = permissionAnswers.get(pending);
+  if (!handler) {
+    return Promise.reject(new Error("Permission answering is not ready."));
+  }
+  return handler(instanceId, requestId, result);
+};
+
 /** The payload field the hub stamps; see `raisedAt` on `permission_request`. */
 const raisedAtOf = (envelope: Envelope | undefined): number | undefined => {
   const at = (envelope?.payload as { raisedAt?: unknown } | undefined)
@@ -53,7 +82,24 @@ const raisedAtOf = (envelope: Envelope | undefined): number | undefined => {
 
 const make = (): PendingShape => {
   const requests = new Map<string, Envelope>();
-  let settled: ((envelope: Envelope) => void) | undefined;
+  // A daemon replay must not resurrect a request that already left this ledger.
+  const settledIds = new Set<string>();
+  let settled:
+    | ((envelope: Envelope, outcome: "answered" | "cancelled") => void)
+    | undefined;
+  const resolve: PendingShape["resolve"] = (
+    requestId,
+    outcome = "answered"
+  ) => {
+    const envelope = requests.get(requestId);
+    if (!envelope) {
+      return false;
+    }
+    requests.delete(requestId);
+    settledIds.add(requestId);
+    settled?.(envelope, outcome);
+    return true;
+  };
 
   return {
     onSettled: (listener) => {
@@ -66,23 +112,20 @@ const make = (): PendingShape => {
      * every device shows is the same wait.
      */
     remember: (requestId, envelope) => {
+      if (settledIds.has(requestId)) {
+        return false;
+      }
       const payload = envelope.payload as Record<string, unknown>;
       payload.raisedAt = raisedAtOf(requests.get(requestId)) ?? Date.now();
       requests.set(requestId, envelope);
+      return true;
     },
     get: (requestId) => requests.get(requestId),
-    resolve: (requestId) => {
-      const envelope = requests.get(requestId);
-      if (envelope) {
-        requests.delete(requestId);
-        settled?.(envelope);
-      }
-    },
+    resolve,
     forget: (instanceId) => {
       for (const [requestId, envelope] of requests) {
         if (envelope.instanceId === instanceId) {
-          requests.delete(requestId);
-          settled?.(envelope);
+          resolve(requestId, "cancelled");
         }
       }
     },

@@ -452,10 +452,12 @@ export const custodyRow = (
   cwd: string;
   sessionId: string | null;
   sessionCredential?: string;
+  processGeneration?: string;
 } => ({
   instanceId: payload.instanceId,
   cwd: payload.cwd,
   sessionId: payload.resume?.sessionKey ?? null,
+  processGeneration: payload.processGeneration,
   ...(payload.sessionCredential
     ? { sessionCredential: payload.sessionCredential }
     : {}),
