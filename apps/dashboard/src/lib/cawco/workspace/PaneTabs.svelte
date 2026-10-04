@@ -797,7 +797,6 @@
         class="kit-pop session-details-popover"
         collisionPadding={12}
         customAnchor={detailAnchor}
-        data-morph={morphing ? "" : undefined}
         onCloseAutoFocus={(event) => {
           event.preventDefault();
           if (restoreFocus) {
@@ -831,22 +830,35 @@
         sideOffset={6}
         trapFocus={pinned}
       >
-        <div
-          class="details-morph"
-          style:height={detailsHeight ? `${detailsHeight}px` : undefined}
-        >
-          <div class="details-measure" bind:offsetHeight={detailsHeight}>
-            {#if detailTab}
-              <SessionDetails
-                dir={detailDir}
-                href={detailTab.href}
-                onclose={closeDetails}
-                sessionId={detailTab.id}
-                title={detailTab.label}
-              />
-            {/if}
+        {#snippet child({
+          props,
+          wrapperProps,
+        })}
+          <div {...wrapperProps}>
+            <!-- The morph mark changes as the surface retargets. It is set
+                 here, on the element: as a prop of Popover.Content the change
+                 re-mounts bits-ui's focus scope, which runs its close
+                 auto-focus on a surface that is still open. -->
+            <div {...props} data-morph={morphing ? "" : undefined}>
+              <div
+                class="details-morph"
+                style:height={detailsHeight ? `${detailsHeight}px` : undefined}
+              >
+                <div class="details-measure" bind:offsetHeight={detailsHeight}>
+                  {#if detailTab}
+                    <SessionDetails
+                      dir={detailDir}
+                      href={detailTab.href}
+                      onclose={closeDetails}
+                      sessionId={detailTab.id}
+                      title={detailTab.label}
+                    />
+                  {/if}
+                </div>
+              </div>
+            </div>
           </div>
-        </div>
+        {/snippet}
       </Popover.Content>
     </Popover.Portal>
   </Popover.Root>

@@ -83,7 +83,6 @@
         class="ns-theme ns-pop"
         collisionPadding={8}
         customAnchor={shown.trigger}
-        data-morph={morphing ? "" : undefined}
         onCloseAutoFocus={(event) => {
           event.preventDefault();
           if (shown?.onclosefocus?.()) {
@@ -123,13 +122,15 @@
         })}
           <div {...wrapperProps}>
             <!-- The label names what the trigger holds, so it changes as the
-                 reader types or picks inside the surface. It is set here, on
-                 the element: as a prop of Popover.Content it re-mounts
-                 bits-ui's focus scope on every change, and focus leaves the
-                 field for the trigger. -->
+                 reader types or picks inside the surface, and the morph mark
+                 changes as the surface retargets. Both are set here, on the
+                 element: as props of Popover.Content each change re-mounts
+                 bits-ui's focus scope, and focus leaves the field for the
+                 trigger. -->
             <div
               {...props}
               aria-label={shown?.label}
+              data-morph={morphing ? "" : undefined}
               id={`${shown?.id}-popover`}
               role="presentation"
               {@attach shown?.rows
