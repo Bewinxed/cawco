@@ -2,7 +2,7 @@
 # Builds the CawCo app on the Mac for an iPhone simulator, then for the Mac
 # (Mac Catalyst), and
 # proves each build starts and stays up for 8 s. A launch-time abort fails it.
-# Run from the repo root: bash apps/apple/scripts/build-both.sh [ios|macos]
+# Run from the repo root: bash apps/apple/scripts/build-both.sh [ios|macos] [--compile-only]
 # With no argument it builds both and prints BUILT iOS, LAUNCHED iOS,
 # BUILT macOS, LAUNCHED macOS, BUILT iOS 18.5, LAUNCHED iOS 18.5.
 # `ios` proves both iOS runtimes; `macos` proves only macOS.
@@ -25,6 +25,8 @@ REMOTE=build/cawco-apple/$BUILD/apps/apple
 
 [[ -f apps/apple/project.yml ]] || { echo "run from the repo root" >&2; exit 2; }
 PLATFORM=${1:-both}
+COMPILE_ONLY=${2:-}
+[[ -z $COMPILE_ONLY || $COMPILE_ONLY == --compile-only ]] || { echo "usage: build-both.sh [ios|macos|both] [--compile-only]" >&2; exit 2; }
 case $PLATFORM in
   ios | macos | both) ;;
   *) echo "usage: build-both.sh [ios|macos]" >&2; exit 2 ;;
@@ -77,9 +79,9 @@ mkdir -p "$ROOT/$BUILD/apps/apple"
 echo READY
 # The same SSH process keeps the lock while the caller rsyncs, then executes
 # the build script sent on stdin. EOF on a failed sync releases the lock.
-bash --norc -s -- "build/cawco-apple/$BUILD/apps/apple" "$PLATFORM" "$BUILD"
+bash --norc -s -- "build/cawco-apple/$BUILD/apps/apple" "$PLATFORM" "$BUILD" "$COMPILE_ONLY"
 EOF
-printf -v COMMAND 'PLATFORM=%q bash --norc -c %q --' "$PLATFORM" "$PREPARE"
+printf -v COMMAND 'PLATFORM=%q COMPILE_ONLY=%q bash --norc -c %q --' "$PLATFORM" "$COMPILE_ONLY" "$PREPARE"
 for argument in "$BUILD" "${LIVE[@]}"; do printf -v COMMAND '%s %q' "$COMMAND" "$argument"; done
 coproc MAC_BUILD { "${SSH[@]}" "$COMMAND"; }
 MAC_PID=$MAC_BUILD_PID
@@ -106,6 +108,7 @@ set -euo pipefail
 cd "$HOME/$1"
 PLATFORM=$2
 BUILD=$3
+COMPILE_ONLY=$4
 DD="$HOME/build/cawco-apple/$BUILD/DerivedData"
 LOGS="$HOME/build/cawco-apple/$BUILD/logs"
 mkdir -p "$LOGS"
@@ -167,6 +170,7 @@ print(best[1], best[2], best[3])
   UDID=$(xcrun simctl create "CawCo build $BUILD $LABEL" "$TYPE" "$RUNTIME")
   echo "iOS simulator: $NAME $UDID"
   build "platform=iOS Simulator,id=$UDID" "$LABEL"
+  if [[ $COMPILE_ONLY == --compile-only ]]; then end_ios; return; fi
 
   xcrun simctl boot "$UDID"
   xcrun simctl bootstatus "$UDID" -b >/dev/null
@@ -199,6 +203,7 @@ print(best[1], best[2], best[3])
 # directly, so its PID and stderr are ours.
 macos() {
   build "platform=macOS,variant=Mac Catalyst" macOS
+  if [[ $COMPILE_ONLY == --compile-only ]]; then return; fi
   LOG="$LOGS/launch-macOS.log"
   "$DD/Build/Products/Debug-maccatalyst/CawCo.app/Contents/MacOS/CawCo" >"$LOG" 2>&1 &
   PID=$!

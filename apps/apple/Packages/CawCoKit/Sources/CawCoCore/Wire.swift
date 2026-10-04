@@ -142,54 +142,54 @@ enum Inbound {
 }
 
 /// A session's parked ask as the hub sends it (`permission_request`).
-typealias AskFrame = Components.Schemas.FramePayload.Value8Payload
+typealias AskFrame = Components.Schemas.PermissionRequestFrame
 
-/// A `FramePayload` by what it is. The generated `anyOf` holds one non-nil
-/// variant; each case checks its own variant's `kind`, so a reordered
-/// document fails to compile rather than routing a frame to the wrong case.
+/// A `FramePayload` by its named kind. Generated cases use the existing `kind`
+/// discriminator, so inserting or reordering another frame cannot rename one.
 enum Frame {
-    case instances(Components.Schemas.FramePayload.Value6Payload, hubBuild: Components.Schemas.BuildInfo?)
-    case instancesDelta(Components.Schemas.FramePayload.Value7Payload, hubBuild: Components.Schemas.BuildInfo?)
+    case instances(Components.Schemas.InstancesFrame, hubBuild: Components.Schemas.BuildInfo?)
+    case instancesDelta(Components.Schemas.InstancesDeltaFrame, hubBuild: Components.Schemas.BuildInfo?)
     /// A session's ask, and where the hub routed it (`parent`: its delegate's parent answers).
     case permissionRequest(AskFrame, routedTo: String?)
     /// An ask is over, whoever settled it.
-    case permissionSettled(Components.Schemas.FramePayload.Value9Payload)
+    case permissionSettled(Components.Schemas.PermissionSettledFrame)
     /// A workflow run's question: answered in its run, never parked as a session's ask.
     case runQuestion(runId: String, raisedAt: Double?)
-    case usage(Components.Schemas.FramePayload.Value10Payload)
-    case controlResult(Components.Schemas.FramePayload.Value14Payload)
+    case usage(Components.Schemas.UsageFrame)
+    case controlResult(Components.Schemas.ControlResultFrame)
     case error(requestId: String?, message: String)
-    case pulse(Components.Schemas.FramePayload.Value17Payload)
+    case pulse(Components.Schemas.PulseFrame)
     case supervisorEvent(Components.Schemas.SupervisorEvent)
     case workflow(Components.Schemas.WorkflowFrame)
     case ignored
 
     fileprivate init(_ payload: Components.Schemas.FramePayload, _ peek: Inbound.PayloadRoute) {
-        if let frame = payload.value6, frame.kind == .instances {
+        switch payload {
+        case .instances(let frame):
             self = .instances(frame, hubBuild: peek.hubBuild)
-        } else if let frame = payload.value7, frame.kind == .instancesDelta {
+        case .instancesDelta(let frame):
             self = .instancesDelta(frame, hubBuild: peek.hubBuild)
-        } else if let frame = payload.value8, frame.kind == .permissionRequest {
+        case .permissionRequest(let frame):
             if let runId = peek.workflowRunId {
                 self = .runQuestion(runId: runId, raisedAt: frame.raisedAt)
             } else {
                 self = .permissionRequest(frame, routedTo: peek.routedTo)
             }
-        } else if let frame = payload.value9, frame.kind == .permissionSettled {
+        case .permissionSettled(let frame):
             self = .permissionSettled(frame)
-        } else if let frame = payload.value10, frame.kind == .usage {
+        case .usage(let frame):
             self = .usage(frame)
-        } else if let frame = payload.value14, frame.kind == .controlResult {
+        case .controlResult(let frame):
             self = .controlResult(frame)
-        } else if let frame = payload.value15, frame.kind == .error {
+        case .error(let frame):
             self = .error(requestId: frame.requestId, message: frame.message)
-        } else if let frame = payload.value17, frame.kind == .pulse {
+        case .pulse(let frame):
             self = .pulse(frame)
-        } else if let frame = payload.value20, frame.kind == .supervisorEvent {
+        case .supervisorEvent(let frame):
             self = .supervisorEvent(frame.event)
-        } else if let frame = payload.value22 {
+        case .workflow(let frame):
             self = .workflow(frame)
-        } else {
+        default:
             self = .ignored
         }
     }

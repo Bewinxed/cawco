@@ -1471,7 +1471,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/postApiInstancesByIdPreview200"
+                  "$ref": "#/components/schemas/PreviewFrame"
                 }
               }
             }
@@ -6953,68 +6953,6 @@
           "$ref": "#/components/schemas/ContinuationJob"
         }
       },
-      "postApiInstancesByIdPreview200": {
-        "type": "object",
-        "properties": {
-          "kind": {
-            "type": "string",
-            "enum": [
-              "preview"
-            ]
-          },
-          "instanceId": {
-            "type": "string"
-          },
-          "state": {
-            "enum": [
-              "closed",
-              "open"
-            ],
-            "type": "string"
-          },
-          "path": {
-            "description": "The path on the dashboard's own origin, e.g. `/preview/<id>/`.",
-            "type": "string"
-          },
-          "revision": {
-            "description": "Identifies one successful open, including a rebuild of the same source.",
-            "type": "string"
-          },
-          "source": {
-            "anyOf": [
-              {
-                "type": "object",
-                "properties": {
-                  "port": {
-                    "type": "number"
-                  }
-                },
-                "required": [
-                  "port"
-                ]
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "dir": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "dir"
-                ]
-              }
-            ]
-          }
-        },
-        "required": [
-          "instanceId",
-          "kind",
-          "path",
-          "revision",
-          "state"
-        ]
-      },
       "deleteApiInstancesByIdPreview200": {
         "type": "object",
         "properties": {
@@ -9616,772 +9554,101 @@
       },
       "FramePayload": {
         "description": "`frames`: everything a session produces, flowing agent→hub→dashboard. The\n`frame` kind is a neutral message; `raw` on it carries the harness's own\nevent verbatim.",
-        "anyOf": [
+        "oneOf": [
           {
-            "type": "object",
-            "properties": {
-              "kind": {
-                "type": "string",
-                "enum": [
-                  "fleet_mcp"
-                ]
-              },
-              "servers": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/components/schemas/FleetMcpServer"
-                }
-              }
-            },
-            "required": [
-              "kind",
-              "servers"
-            ]
+            "$ref": "#/components/schemas/FleetMcpFrame"
           },
           {
-            "type": "object",
-            "properties": {
-              "kind": {
-                "type": "string",
-                "enum": [
-                  "preview"
-                ]
-              },
-              "instanceId": {
-                "type": "string"
-              },
-              "state": {
-                "enum": [
-                  "closed",
-                  "open"
-                ],
-                "type": "string"
-              },
-              "path": {
-                "description": "The path on the dashboard's own origin, e.g. `/preview/<id>/`.",
-                "type": "string"
-              },
-              "revision": {
-                "description": "Identifies one successful open, including a rebuild of the same source.",
-                "type": "string"
-              },
-              "source": {
-                "anyOf": [
-                  {
-                    "type": "object",
-                    "properties": {
-                      "port": {
-                        "type": "number"
-                      }
-                    },
-                    "required": [
-                      "port"
-                    ]
-                  },
-                  {
-                    "type": "object",
-                    "properties": {
-                      "dir": {
-                        "type": "string"
-                      }
-                    },
-                    "required": [
-                      "dir"
-                    ]
-                  }
-                ]
-              }
-            },
-            "required": [
-              "instanceId",
-              "kind",
-              "path",
-              "revision",
-              "state"
-            ]
+            "$ref": "#/components/schemas/PreviewFrame"
           },
           {
-            "type": "object",
-            "properties": {
-              "kind": {
-                "type": "string",
-                "enum": [
-                  "frame"
-                ]
-              },
-              "keepAlive": {
-                "const": true,
-                "type": "boolean"
-              },
-              "instanceId": {
-                "type": "string"
-              },
-              "harness": {
-                "$ref": "#/components/schemas/HarnessKind"
-              },
-              "message": {
-                "$ref": "#/components/schemas/NeutralMessage"
-              }
-            },
-            "required": [
-              "harness",
-              "instanceId",
-              "kind",
-              "message"
-            ]
+            "$ref": "#/components/schemas/MessageFrame"
           },
           {
-            "type": "object",
-            "properties": {
-              "kind": {
-                "description": "Hub-originated: a send's record, as it stands after its latest change\n— accepted, read, failed or replaced. Sequenced into the session's\nstream at the moment of the change, which is where a read send's row\nsits.",
-                "type": "string",
-                "enum": [
-                  "send"
-                ]
-              },
-              "keepAlive": {
-                "const": true,
-                "type": "boolean"
-              },
-              "instanceId": {
-                "type": "string"
-              },
-              "record": {
-                "$ref": "#/components/schemas/SendRecord"
-              }
-            },
-            "required": [
-              "instanceId",
-              "kind",
-              "record"
-            ]
+            "$ref": "#/components/schemas/SendFrame"
           },
           {
-            "type": "object",
-            "properties": {
-              "kind": {
-                "description": "Daemon-originated: one send did not go — the harness refused it, or\nthere was nothing to hand it to — with the words that say why. The\nhub fails that send's record; the session, if any, goes on.",
-                "type": "string",
-                "enum": [
-                  "rejected"
-                ]
-              },
-              "instanceId": {
-                "type": "string"
-              },
-              "uuid": {
-                "type": "string"
-              },
-              "error": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "error",
-              "instanceId",
-              "kind",
-              "uuid"
-            ]
+            "$ref": "#/components/schemas/RejectedFrame"
           },
           {
-            "type": "object",
-            "properties": {
-              "kind": {
-                "description": "Hub-originated: every session it still lists, pushed whenever one of the\nrows moves.",
-                "type": "string",
-                "enum": [
-                  "instances"
-                ]
-              },
-              "instances": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/components/schemas/InstanceRow"
-                }
-              },
-              "agents": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/components/schemas/AgentRow"
-                }
-              },
-              "previews": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "kind": {
-                      "type": "string",
-                      "enum": [
-                        "preview"
-                      ]
-                    },
-                    "instanceId": {
-                      "type": "string"
-                    },
-                    "state": {
-                      "enum": [
-                        "closed",
-                        "open"
-                      ],
-                      "type": "string"
-                    },
-                    "path": {
-                      "description": "The path on the dashboard's own origin, e.g. `/preview/<id>/`.",
-                      "type": "string"
-                    },
-                    "revision": {
-                      "description": "Identifies one successful open, including a rebuild of the same source.",
-                      "type": "string"
-                    },
-                    "source": {
-                      "anyOf": [
-                        {
-                          "type": "object",
-                          "properties": {
-                            "port": {
-                              "type": "number"
-                            }
-                          },
-                          "required": [
-                            "port"
-                          ]
-                        },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "dir": {
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "dir"
-                          ]
-                        }
-                      ]
-                    }
-                  },
-                  "required": [
-                    "instanceId",
-                    "kind",
-                    "path",
-                    "revision",
-                    "state"
-                  ]
-                }
-              }
-            },
-            "required": [
-              "agents",
-              "instances",
-              "kind"
-            ]
+            "$ref": "#/components/schemas/InstancesFrame"
           },
           {
-            "type": "object",
-            "properties": {
-              "kind": {
-                "description": "Hub-originated: what moved since the last publish. A dashboard gets\nthe whole board once, as `instances`, when it connects; after that\nonly the rows that changed ride along — the board is hundreds of rows\nand a publish usually moves one. Everything else in the frame is the\nsame small snapshot the `instances` frame carries.",
-                "type": "string",
-                "enum": [
-                  "instances_delta"
-                ]
-              },
-              "upserts": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/components/schemas/InstanceRow"
-                }
-              },
-              "removed": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              },
-              "agents": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/components/schemas/AgentRow"
-                }
-              },
-              "previews": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "kind": {
-                      "type": "string",
-                      "enum": [
-                        "preview"
-                      ]
-                    },
-                    "instanceId": {
-                      "type": "string"
-                    },
-                    "state": {
-                      "enum": [
-                        "closed",
-                        "open"
-                      ],
-                      "type": "string"
-                    },
-                    "path": {
-                      "description": "The path on the dashboard's own origin, e.g. `/preview/<id>/`.",
-                      "type": "string"
-                    },
-                    "revision": {
-                      "description": "Identifies one successful open, including a rebuild of the same source.",
-                      "type": "string"
-                    },
-                    "source": {
-                      "anyOf": [
-                        {
-                          "type": "object",
-                          "properties": {
-                            "port": {
-                              "type": "number"
-                            }
-                          },
-                          "required": [
-                            "port"
-                          ]
-                        },
-                        {
-                          "type": "object",
-                          "properties": {
-                            "dir": {
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "dir"
-                          ]
-                        }
-                      ]
-                    }
-                  },
-                  "required": [
-                    "instanceId",
-                    "kind",
-                    "path",
-                    "revision",
-                    "state"
-                  ]
-                }
-              }
-            },
-            "required": [
-              "agents",
-              "kind",
-              "removed",
-              "upserts"
-            ]
+            "$ref": "#/components/schemas/InstancesDeltaFrame"
           },
           {
-            "type": "object",
-            "properties": {
-              "kind": {
-                "type": "string",
-                "enum": [
-                  "permission_request"
-                ]
-              },
-              "processGeneration": {
-                "description": "The launch that raised this request; daemon replays retain it verbatim.",
-                "type": "string"
-              },
-              "instanceId": {
-                "type": "string"
-              },
-              "harness": {
-                "$ref": "#/components/schemas/HarnessKind"
-              },
-              "requestId": {
-                "type": "string"
-              },
-              "toolName": {
-                "type": "string"
-              },
-              "input": {
-                "type": "object"
-              },
-              "suggestions": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/components/schemas/PermissionUpdate"
-                }
-              },
-              "requestKind": {
-                "description": "`tool` for a permission, `question` for an AskUserQuestion-shaped prompt.",
-                "enum": [
-                  "question",
-                  "tool"
-                ],
-                "type": "string"
-              },
-              "raisedAt": {
-                "description": "When the hub first parked this ask, ms epoch. Stamped by the hub\n(`Pending.remember`) and kept across the daemon's replays, so every\ndashboard orders and ages an ask by the same moment. Absent only on\nthe daemon → hub leg, before the hub has seen it.",
-                "type": "number"
-              },
-              "toolUseId": {
-                "description": "The tool call the ask gates, as its transcript message names it\n(`toolCallId`): while the ask is parked, that call's row is the card.",
-                "type": "string"
-              }
-            },
-            "required": [
-              "harness",
-              "input",
-              "instanceId",
-              "kind",
-              "requestId",
-              "toolName"
-            ]
+            "$ref": "#/components/schemas/PermissionRequestFrame"
           },
           {
-            "type": "object",
-            "properties": {
-              "kind": {
-                "description": "An ask is over, whoever settled it. Daemon → hub when the harness\nsettled it itself (answered in its own UI, or cancelled by an\ninterrupt); hub → every dashboard each time a parked ask leaves the\nhub's pending list — answered from any device, Telegram, a parent\nsession or a workflow, timed out, or dropped with its process — so no\nclient keeps a card nobody can answer.",
-                "type": "string",
-                "enum": [
-                  "permission_settled"
-                ]
-              },
-              "instanceId": {
-                "type": "string"
-              },
-              "requestId": {
-                "type": "string"
-              },
-              "processGeneration": {
-                "type": "string"
-              },
-              "outcome": {
-                "enum": [
-                  "answered",
-                  "cancelled"
-                ],
-                "type": "string"
-              }
-            },
-            "required": [
-              "instanceId",
-              "kind",
-              "requestId"
-            ]
+            "$ref": "#/components/schemas/PermissionSettledFrame"
           },
           {
-            "type": "object",
-            "properties": {
-              "kind": {
-                "description": "Hub-originated: every machine's latest limit reading and the fleet's\nspend, pushed on each agent usage report (USAGE-SPEC.md §6.4), which\nis when spend lands. Small by design — the heavy aggregates are\npulled over REST.",
-                "type": "string",
-                "enum": [
-                  "usage"
-                ]
-              },
-              "limits": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/components/schemas/UsageLimitsReading"
-                }
-              },
-              "spend": {
-                "$ref": "#/components/schemas/UsageSpend"
-              }
-            },
-            "required": [
-              "kind",
-              "limits",
-              "spend"
-            ]
+            "$ref": "#/components/schemas/UsageFrame"
           },
           {
-            "type": "object",
-            "properties": {
-              "kind": {
-                "description": "Authoritative daemon confirmation, never merely delivery of a stop request.",
-                "type": "string",
-                "enum": [
-                  "stopped"
-                ]
-              },
-              "instanceId": {
-                "type": "string"
-              },
-              "discard": {
-                "type": "boolean"
-              }
-            },
-            "required": [
-              "discard",
-              "instanceId",
-              "kind"
-            ]
+            "$ref": "#/components/schemas/StoppedFrame"
           },
           {
-            "type": "object",
-            "properties": {
-              "kind": {
-                "description": "The machine stopped the processes of a session that was at rest: no\ndecision of anyone's, and nothing lost. The row is `sleeping` from\nhere, and its next message starts it again from its conversation.",
-                "type": "string",
-                "enum": [
-                  "asleep"
-                ]
-              },
-              "instanceId": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "instanceId",
-              "kind"
-            ]
+            "$ref": "#/components/schemas/AsleepFrame"
           },
           {
-            "type": "object",
-            "properties": {
-              "kind": {
-                "description": "Recovery found no live handle; stored conversations remain resumable.",
-                "type": "string",
-                "enum": [
-                  "recovery_unavailable"
-                ]
-              },
-              "instanceId": {
-                "type": "string"
-              },
-              "reason": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "instanceId",
-              "kind",
-              "reason"
-            ]
+            "$ref": "#/components/schemas/RecoveryUnavailableFrame"
           },
           {
-            "type": "object",
-            "properties": {
-              "kind": {
-                "description": "No `instanceId` when the call it answers was machine-scoped.",
-                "type": "string",
-                "enum": [
-                  "control_result"
-                ]
-              },
-              "instanceId": {
-                "type": "string"
-              },
-              "requestId": {
-                "type": "string"
-              },
-              "ok": {
-                "type": "boolean"
-              },
-              "result": {},
-              "error": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "kind",
-              "ok",
-              "requestId"
-            ]
+            "$ref": "#/components/schemas/ControlResultFrame"
           },
           {
-            "type": "object",
-            "properties": {
-              "kind": {
-                "description": "Hub-originated routing failures (e.g. target machine offline).",
-                "type": "string",
-                "enum": [
-                  "error"
-                ]
-              },
-              "instanceId": {
-                "type": "string"
-              },
-              "requestId": {
-                "type": "string"
-              },
-              "verb": {
-                "description": "The whole agent↔hub↔dashboard protocol. Adding a verb is a design decision.",
-                "enum": [
-                  "control",
-                  "frames",
-                  "fs",
-                  "heartbeat",
-                  "register",
-                  "send",
-                  "spawn",
-                  "stop",
-                  "usage"
-                ],
-                "type": "string"
-              },
-              "message": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "kind",
-              "message"
-            ]
+            "$ref": "#/components/schemas/ErrorFrame"
           },
           {
-            "type": "object",
-            "properties": {
-              "kind": {
-                "description": "Daemon-originated: a session pushing text straight to the owner's\nTelegram, with no ask to settle and nothing to answer. The hub hands it\nto the bridge; the owner replying to it reaches the session, as with\nany bridged message.",
-                "type": "string",
-                "enum": [
-                  "user_message"
-                ]
-              },
-              "instanceId": {
-                "type": "string"
-              },
-              "text": {
-                "type": "string"
-              },
-              "attachments": {
-                "description": "Absolute paths of images on the session's machine to send alongside.",
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              }
-            },
-            "required": [
-              "instanceId",
-              "kind",
-              "text"
-            ]
+            "$ref": "#/components/schemas/UserMessageFrame"
           },
           {
-            "type": "object",
-            "properties": {
-              "kind": {
-                "description": "Daemon-originated: one instance's coarse now-state, throttled to ~1/sec.\nBroadcast — every dashboard wants the rail's word on every session, not\nonly the ones it has open.",
-                "type": "string",
-                "enum": [
-                  "pulse"
-                ]
-              },
-              "instanceId": {
-                "type": "string"
-              },
-              "pulse": {
-                "$ref": "#/components/schemas/SessionPulse"
-              }
-            },
-            "required": [
-              "instanceId",
-              "kind",
-              "pulse"
-            ]
+            "$ref": "#/components/schemas/PulseFrame"
           },
           {
-            "type": "object",
-            "properties": {
-              "kind": {
-                "description": "Hub-originated: a work item as it stands after its latest change —\nstarted, running, finished, dismissed. `instanceId` is its parent's.",
-                "type": "string",
-                "enum": [
-                  "work_item"
-                ]
-              },
-              "instanceId": {
-                "type": "string"
-              },
-              "item": {
-                "$ref": "#/components/schemas/WorkItemSummary"
-              }
-            },
-            "required": [
-              "instanceId",
-              "item",
-              "kind"
-            ]
+            "$ref": "#/components/schemas/WorkItemFrame"
           },
           {
-            "type": "object",
-            "properties": {
-              "kind": {
-                "description": "Hub-originated: a line of delegate traffic the moment it is recorded.\n`instanceId` is the delegate's.",
-                "type": "string",
-                "enum": [
-                  "delegate_event"
-                ]
-              },
-              "instanceId": {
-                "type": "string"
-              },
-              "event": {
-                "$ref": "#/components/schemas/DelegateEvent"
-              }
-            },
-            "required": [
-              "event",
-              "instanceId",
-              "kind"
-            ]
+            "$ref": "#/components/schemas/DelegateEventFrame"
           },
           {
-            "type": "object",
-            "properties": {
-              "kind": {
-                "description": "Hub-originated: a supervisor verdict the moment it is logged.",
-                "type": "string",
-                "enum": [
-                  "supervisor_event"
-                ]
-              },
-              "instanceId": {
-                "type": "string"
-              },
-              "event": {
-                "$ref": "#/components/schemas/SupervisorEvent"
-              }
-            },
-            "required": [
-              "event",
-              "instanceId",
-              "kind"
-            ]
+            "$ref": "#/components/schemas/SupervisorEventFrame"
           },
           {
-            "type": "object",
-            "properties": {
-              "kind": {
-                "description": "Hub-originated, never stored: the supervisor began evaluating.",
-                "type": "string",
-                "enum": [
-                  "supervisor_status"
-                ]
-              },
-              "instanceId": {
-                "type": "string"
-              },
-              "status": {
-                "$ref": "#/components/schemas/SupervisorStatusSignal"
-              }
-            },
-            "required": [
-              "instanceId",
-              "kind",
-              "status"
-            ]
+            "$ref": "#/components/schemas/SupervisorStatusFrame"
           },
           {
             "$ref": "#/components/schemas/WorkflowFrame"
           }
-        ]
+        ],
+        "discriminator": {
+          "propertyName": "kind",
+          "mapping": {
+            "fleet_mcp": "#/components/schemas/FleetMcpFrame",
+            "preview": "#/components/schemas/PreviewFrame",
+            "frame": "#/components/schemas/MessageFrame",
+            "send": "#/components/schemas/SendFrame",
+            "rejected": "#/components/schemas/RejectedFrame",
+            "instances": "#/components/schemas/InstancesFrame",
+            "instances_delta": "#/components/schemas/InstancesDeltaFrame",
+            "permission_request": "#/components/schemas/PermissionRequestFrame",
+            "permission_settled": "#/components/schemas/PermissionSettledFrame",
+            "usage": "#/components/schemas/UsageFrame",
+            "stopped": "#/components/schemas/StoppedFrame",
+            "asleep": "#/components/schemas/AsleepFrame",
+            "recovery_unavailable": "#/components/schemas/RecoveryUnavailableFrame",
+            "control_result": "#/components/schemas/ControlResultFrame",
+            "error": "#/components/schemas/ErrorFrame",
+            "user_message": "#/components/schemas/UserMessageFrame",
+            "pulse": "#/components/schemas/PulseFrame",
+            "work_item": "#/components/schemas/WorkItemFrame",
+            "delegate_event": "#/components/schemas/DelegateEventFrame",
+            "supervisor_event": "#/components/schemas/SupervisorEventFrame",
+            "supervisor_status": "#/components/schemas/SupervisorStatusFrame",
+            "workflow": "#/components/schemas/WorkflowFrame"
+          }
+        }
       },
       "SpawnPayload": {
         "description": "`spawn`: start a session on a harness. `harness` chooses the adapter (absent\nmeans `claude`, for every caller written before harnesses existed); `options`\nrides through to that adapter verbatim — only the callbacks the agent must own\nitself (`canUseTool`/permission hooks, abort) are filled in on arrival, since\nfunctions do not survive the wire. `resume` is the harness-neutral way to\nre-open or fork a stored session; `persistSession: false` asks for a session\nthat is never stored (a side quest's transcript).",
@@ -13157,6 +12424,68 @@
           "sourceInstanceId",
           "stage",
           "targetInstanceId"
+        ]
+      },
+      "PreviewFrame": {
+        "type": "object",
+        "properties": {
+          "instanceId": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "preview"
+            ]
+          },
+          "path": {
+            "description": "The path on the dashboard's own origin, e.g. `/preview/<id>/`.",
+            "type": "string"
+          },
+          "revision": {
+            "description": "Identifies one successful open, including a rebuild of the same source.",
+            "type": "string"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "port": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "port"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "dir": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "dir"
+                ]
+              }
+            ]
+          },
+          "state": {
+            "enum": [
+              "closed",
+              "open"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "instanceId",
+          "kind",
+          "path",
+          "revision",
+          "state"
         ]
       },
       "SessionTooling": {
@@ -16187,66 +15516,7 @@
         "description": "What a session's stream carries: the changes each frame made to its\ntranscript, as the hub built them (`transcript-types.ts`), and its preview's\nstate. Raw frames never reach a dashboard; the hub folds them.",
         "anyOf": [
           {
-            "type": "object",
-            "properties": {
-              "kind": {
-                "type": "string",
-                "enum": [
-                  "preview"
-                ]
-              },
-              "instanceId": {
-                "type": "string"
-              },
-              "state": {
-                "enum": [
-                  "closed",
-                  "open"
-                ],
-                "type": "string"
-              },
-              "path": {
-                "description": "The path on the dashboard's own origin, e.g. `/preview/<id>/`.",
-                "type": "string"
-              },
-              "revision": {
-                "description": "Identifies one successful open, including a rebuild of the same source.",
-                "type": "string"
-              },
-              "source": {
-                "anyOf": [
-                  {
-                    "type": "object",
-                    "properties": {
-                      "port": {
-                        "type": "number"
-                      }
-                    },
-                    "required": [
-                      "port"
-                    ]
-                  },
-                  {
-                    "type": "object",
-                    "properties": {
-                      "dir": {
-                        "type": "string"
-                      }
-                    },
-                    "required": [
-                      "dir"
-                    ]
-                  }
-                ]
-              }
-            },
-            "required": [
-              "instanceId",
-              "kind",
-              "path",
-              "revision",
-              "state"
-            ]
+            "$ref": "#/components/schemas/PreviewFrame"
           },
           {
             "$ref": "#/components/schemas/TranscriptStreamFrame"
@@ -16254,34 +15524,7 @@
           {
             "allOf": [
               {
-                "type": "object",
-                "properties": {
-                  "kind": {
-                    "type": "string",
-                    "enum": [
-                      "frame"
-                    ]
-                  },
-                  "keepAlive": {
-                    "const": true,
-                    "type": "boolean"
-                  },
-                  "instanceId": {
-                    "type": "string"
-                  },
-                  "harness": {
-                    "$ref": "#/components/schemas/HarnessKind"
-                  },
-                  "message": {
-                    "$ref": "#/components/schemas/NeutralMessage"
-                  }
-                },
-                "required": [
-                  "harness",
-                  "instanceId",
-                  "kind",
-                  "message"
-                ]
+                "$ref": "#/components/schemas/MessageFrame"
               },
               {
                 "type": "object",
@@ -16302,31 +15545,7 @@
           {
             "allOf": [
               {
-                "type": "object",
-                "properties": {
-                  "kind": {
-                    "description": "Hub-originated: a send's record, as it stands after its latest change\n— accepted, read, failed or replaced. Sequenced into the session's\nstream at the moment of the change, which is where a read send's row\nsits.",
-                    "type": "string",
-                    "enum": [
-                      "send"
-                    ]
-                  },
-                  "keepAlive": {
-                    "const": true,
-                    "type": "boolean"
-                  },
-                  "instanceId": {
-                    "type": "string"
-                  },
-                  "record": {
-                    "$ref": "#/components/schemas/SendRecord"
-                  }
-                },
-                "required": [
-                  "instanceId",
-                  "kind",
-                  "record"
-                ]
+                "$ref": "#/components/schemas/SendFrame"
               },
               {
                 "type": "object",
@@ -16718,6 +15937,36 @@
           "replaced"
         ],
         "type": "string"
+      },
+      "MessageFrame": {
+        "type": "object",
+        "properties": {
+          "harness": {
+            "$ref": "#/components/schemas/HarnessKind"
+          },
+          "instanceId": {
+            "type": "string"
+          },
+          "keepAlive": {
+            "const": true,
+            "type": "boolean"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "frame"
+            ]
+          },
+          "message": {
+            "$ref": "#/components/schemas/NeutralMessage"
+          }
+        },
+        "required": [
+          "harness",
+          "instanceId",
+          "kind",
+          "message"
+        ]
       },
       "NeutralAssistantMessage": {
         "type": "object",
@@ -17378,6 +16627,33 @@
           "type"
         ]
       },
+      "SendFrame": {
+        "type": "object",
+        "properties": {
+          "instanceId": {
+            "type": "string"
+          },
+          "keepAlive": {
+            "const": true,
+            "type": "boolean"
+          },
+          "kind": {
+            "description": "Hub-originated: a send's record, as it stands after its latest change.",
+            "type": "string",
+            "enum": [
+              "send"
+            ]
+          },
+          "record": {
+            "$ref": "#/components/schemas/SendRecord"
+          }
+        },
+        "required": [
+          "instanceId",
+          "kind",
+          "record"
+        ]
+      },
       "StreamReset": {
         "description": "Hub → client when the gap is unrecoverable (older than the ring holds):\nan honest refusal, never a partial replay. The client reads the newest\ntranscript page again and resumes from the `seq` it carries.",
         "type": "object",
@@ -17528,6 +16804,89 @@
       },
       "T_1": {
         "type": "object"
+      },
+      "FleetMcpFrame": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "fleet_mcp"
+            ]
+          },
+          "servers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FleetMcpServer"
+            }
+          }
+        },
+        "required": [
+          "kind",
+          "servers"
+        ]
+      },
+      "RejectedFrame": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "instanceId": {
+            "type": "string"
+          },
+          "kind": {
+            "description": "Daemon-originated: one send did not go; its record fails and the session goes on.",
+            "type": "string",
+            "enum": [
+              "rejected"
+            ]
+          },
+          "uuid": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "error",
+          "instanceId",
+          "kind",
+          "uuid"
+        ]
+      },
+      "InstancesFrame": {
+        "type": "object",
+        "properties": {
+          "agents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentRow"
+            }
+          },
+          "instances": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InstanceRow"
+            }
+          },
+          "kind": {
+            "description": "Hub-originated: every session it still lists, pushed whenever a row moves.",
+            "type": "string",
+            "enum": [
+              "instances"
+            ]
+          },
+          "previews": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PreviewFrame"
+            }
+          }
+        },
+        "required": [
+          "agents",
+          "instances",
+          "kind"
+        ]
       },
       "InstanceRow": {
         "type": "object",
@@ -17775,6 +17134,108 @@
         ],
         "type": "string"
       },
+      "InstancesDeltaFrame": {
+        "type": "object",
+        "properties": {
+          "agents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentRow"
+            }
+          },
+          "kind": {
+            "description": "Hub-originated: changes since the last publish, with the same small board metadata.",
+            "type": "string",
+            "enum": [
+              "instances_delta"
+            ]
+          },
+          "previews": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PreviewFrame"
+            }
+          },
+          "removed": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "upserts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InstanceRow"
+            }
+          }
+        },
+        "required": [
+          "agents",
+          "kind",
+          "removed",
+          "upserts"
+        ]
+      },
+      "PermissionRequestFrame": {
+        "type": "object",
+        "properties": {
+          "harness": {
+            "$ref": "#/components/schemas/HarnessKind"
+          },
+          "input": {
+            "type": "object"
+          },
+          "instanceId": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "permission_request"
+            ]
+          },
+          "processGeneration": {
+            "description": "The launch that raised this request; daemon replays retain it verbatim.",
+            "type": "string"
+          },
+          "raisedAt": {
+            "description": "When the hub first parked this ask, ms epoch. Absent only on the daemon-to-hub leg.",
+            "type": "number"
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "requestKind": {
+            "description": "`tool` for a permission, `question` for an AskUserQuestion-shaped prompt.",
+            "enum": [
+              "question",
+              "tool"
+            ],
+            "type": "string"
+          },
+          "suggestions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PermissionUpdate"
+            }
+          },
+          "toolName": {
+            "type": "string"
+          },
+          "toolUseId": {
+            "description": "The tool call the ask gates, as its transcript message names it.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "harness",
+          "input",
+          "instanceId",
+          "kind",
+          "requestId",
+          "toolName"
+        ]
+      },
       "PermissionUpdate": {
         "description": "A permission the SDK suggests persisting, so \"always allow\" has something to write.",
         "anyOf": [
@@ -17885,6 +17346,65 @@
         ],
         "type": "string"
       },
+      "PermissionSettledFrame": {
+        "type": "object",
+        "properties": {
+          "instanceId": {
+            "type": "string"
+          },
+          "kind": {
+            "description": "An ask is over, whoever settled it; every client removes its parked card.",
+            "type": "string",
+            "enum": [
+              "permission_settled"
+            ]
+          },
+          "outcome": {
+            "enum": [
+              "answered",
+              "cancelled"
+            ],
+            "type": "string"
+          },
+          "processGeneration": {
+            "type": "string"
+          },
+          "requestId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "instanceId",
+          "kind",
+          "requestId"
+        ]
+      },
+      "UsageFrame": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "description": "Hub-originated: every machine's latest limits and the fleet's spend.",
+            "type": "string",
+            "enum": [
+              "usage"
+            ]
+          },
+          "limits": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UsageLimitsReading"
+            }
+          },
+          "spend": {
+            "$ref": "#/components/schemas/UsageSpend"
+          }
+        },
+        "required": [
+          "kind",
+          "limits",
+          "spend"
+        ]
+      },
       "UsageLimitsReading": {
         "description": "One machine's latest limit reading, as the hub stores it (`usage_limits`)\nand broadcasts it in a `kind: 'usage'` frame. `fetchedAt` is a `Date` inside\nthe hub and the ISO string it serialises to on the wire.",
         "type": "object",
@@ -17917,6 +17437,194 @@
           "fetchedAt",
           "machineId",
           "payload"
+        ]
+      },
+      "StoppedFrame": {
+        "type": "object",
+        "properties": {
+          "discard": {
+            "type": "boolean"
+          },
+          "instanceId": {
+            "type": "string"
+          },
+          "kind": {
+            "description": "Authoritative daemon confirmation, never merely delivery of a stop request.",
+            "type": "string",
+            "enum": [
+              "stopped"
+            ]
+          }
+        },
+        "required": [
+          "discard",
+          "instanceId",
+          "kind"
+        ]
+      },
+      "AsleepFrame": {
+        "type": "object",
+        "properties": {
+          "instanceId": {
+            "type": "string"
+          },
+          "kind": {
+            "description": "The daemon stopped an at-rest session's processes; its next message wakes it.",
+            "type": "string",
+            "enum": [
+              "asleep"
+            ]
+          }
+        },
+        "required": [
+          "instanceId",
+          "kind"
+        ]
+      },
+      "RecoveryUnavailableFrame": {
+        "type": "object",
+        "properties": {
+          "instanceId": {
+            "type": "string"
+          },
+          "kind": {
+            "description": "Recovery found no live handle; stored conversations remain resumable.",
+            "type": "string",
+            "enum": [
+              "recovery_unavailable"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "instanceId",
+          "kind",
+          "reason"
+        ]
+      },
+      "ControlResultFrame": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "instanceId": {
+            "type": "string"
+          },
+          "kind": {
+            "description": "No `instanceId` when the call it answers was machine-scoped.",
+            "type": "string",
+            "enum": [
+              "control_result"
+            ]
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "result": {}
+        },
+        "required": [
+          "kind",
+          "ok",
+          "requestId"
+        ]
+      },
+      "ErrorFrame": {
+        "type": "object",
+        "properties": {
+          "instanceId": {
+            "type": "string"
+          },
+          "kind": {
+            "description": "Hub-originated routing failures (e.g. target machine offline).",
+            "type": "string",
+            "enum": [
+              "error"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "verb": {
+            "description": "The whole agent↔hub↔dashboard protocol. Adding a verb is a design decision.",
+            "enum": [
+              "control",
+              "frames",
+              "fs",
+              "heartbeat",
+              "register",
+              "send",
+              "spawn",
+              "stop",
+              "usage"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "message"
+        ]
+      },
+      "UserMessageFrame": {
+        "type": "object",
+        "properties": {
+          "attachments": {
+            "description": "Absolute paths of images on the session's machine to send alongside.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "instanceId": {
+            "type": "string"
+          },
+          "kind": {
+            "description": "Daemon-originated: a session pushing text straight to the owner's Telegram.",
+            "type": "string",
+            "enum": [
+              "user_message"
+            ]
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "instanceId",
+          "kind",
+          "text"
+        ]
+      },
+      "PulseFrame": {
+        "type": "object",
+        "properties": {
+          "instanceId": {
+            "type": "string"
+          },
+          "kind": {
+            "description": "Daemon-originated: a session's coarse now-state, throttled to about once per second.",
+            "type": "string",
+            "enum": [
+              "pulse"
+            ]
+          },
+          "pulse": {
+            "$ref": "#/components/schemas/SessionPulse"
+          }
+        },
+        "required": [
+          "instanceId",
+          "kind",
+          "pulse"
         ]
       },
       "SessionPulse": {
@@ -17972,6 +17680,98 @@
           "busy",
           "instanceId",
           "runningSubagents"
+        ]
+      },
+      "WorkItemFrame": {
+        "type": "object",
+        "properties": {
+          "instanceId": {
+            "type": "string"
+          },
+          "item": {
+            "$ref": "#/components/schemas/WorkItemSummary"
+          },
+          "kind": {
+            "description": "Hub-originated: a delegate work item's state; `instanceId` is its parent's.",
+            "type": "string",
+            "enum": [
+              "work_item"
+            ]
+          }
+        },
+        "required": [
+          "instanceId",
+          "item",
+          "kind"
+        ]
+      },
+      "DelegateEventFrame": {
+        "type": "object",
+        "properties": {
+          "event": {
+            "$ref": "#/components/schemas/DelegateEvent"
+          },
+          "instanceId": {
+            "type": "string"
+          },
+          "kind": {
+            "description": "Hub-originated: delegate traffic; `instanceId` is the delegate's.",
+            "type": "string",
+            "enum": [
+              "delegate_event"
+            ]
+          }
+        },
+        "required": [
+          "event",
+          "instanceId",
+          "kind"
+        ]
+      },
+      "SupervisorEventFrame": {
+        "type": "object",
+        "properties": {
+          "event": {
+            "$ref": "#/components/schemas/SupervisorEvent"
+          },
+          "instanceId": {
+            "type": "string"
+          },
+          "kind": {
+            "description": "Hub-originated: a supervisor verdict the moment it is logged.",
+            "type": "string",
+            "enum": [
+              "supervisor_event"
+            ]
+          }
+        },
+        "required": [
+          "event",
+          "instanceId",
+          "kind"
+        ]
+      },
+      "SupervisorStatusFrame": {
+        "type": "object",
+        "properties": {
+          "instanceId": {
+            "type": "string"
+          },
+          "kind": {
+            "description": "Hub-originated, never stored: the supervisor began evaluating.",
+            "type": "string",
+            "enum": [
+              "supervisor_status"
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/SupervisorStatusSignal"
+          }
+        },
+        "required": [
+          "instanceId",
+          "kind",
+          "status"
         ]
       },
       "SupervisorStatusSignal": {

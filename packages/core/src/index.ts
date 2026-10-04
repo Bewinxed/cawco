@@ -11,6 +11,7 @@ export * from "./continuation";
 export * from "./delegate-types";
 // Fleet MCP + skills desired state, sync reports, and the `/` menu (NEW.md §11).
 export * from "./fleet";
+export * from "./frames";
 // The harness-neutral spine (2026-08 rework). CawCo owns these types; the
 // harness adapters (claude, opencode, pi) translate their native events into
 // them, the hub peeks them, the dashboard folds them. See harness.ts for the
@@ -867,213 +868,27 @@ export const RESTART_LOST =
  * event verbatim.
  */
 export type FramePayload =
-  | { kind: "fleet_mcp"; servers: import("./fleet").FleetMcpServer[] }
-  | {
-      kind: "preview";
-      instanceId: string;
-      state: "open" | "closed";
-      /** The path on the dashboard's own origin, e.g. `/preview/<id>/`. */
-      path: string;
-      /** Identifies one successful open, including a rebuild of the same source. */
-      revision: string;
-      source?: PreviewSource;
-    }
-  | {
-      kind: "frame";
-      keepAlive?: true;
-      instanceId: string;
-      harness: import("./harness").HarnessKind;
-      message: import("./harness").NeutralMessage;
-    }
-  | {
-      /**
-       * Hub-originated: a send's record, as it stands after its latest change
-       * — accepted, read, failed or replaced. Sequenced into the session's
-       * stream at the moment of the change, which is where a read send's row
-       * sits.
-       */
-      kind: "send";
-      keepAlive?: true;
-      instanceId: string;
-      record: import("./harness").SendRecord;
-    }
-  | {
-      /**
-       * Daemon-originated: one send did not go — the harness refused it, or
-       * there was nothing to hand it to — with the words that say why. The
-       * hub fails that send's record; the session, if any, goes on.
-       */
-      kind: "rejected";
-      instanceId: string;
-      uuid: string;
-      error: string;
-    }
-  | {
-      /**
-       * Hub-originated: every session it still lists, pushed whenever one of the
-       * rows moves.
-       */
-      kind: "instances";
-      instances: InstanceRow[];
-      agents: AgentRow[];
-      previews?: Extract<FramePayload, { kind: "preview" }>[];
-    }
-  | {
-      /**
-       * Hub-originated: what moved since the last publish. A dashboard gets
-       * the whole board once, as `instances`, when it connects; after that
-       * only the rows that changed ride along — the board is hundreds of rows
-       * and a publish usually moves one. Everything else in the frame is the
-       * same small snapshot the `instances` frame carries.
-       */
-      kind: "instances_delta";
-      upserts: InstanceRow[];
-      removed: string[];
-      agents: AgentRow[];
-      previews?: Extract<FramePayload, { kind: "preview" }>[];
-    }
-  | {
-      kind: "permission_request";
-      /** The launch that raised this request; daemon replays retain it verbatim. */
-      processGeneration?: string;
-      instanceId: string;
-      harness: import("./harness").HarnessKind;
-      requestId: string;
-      toolName: string;
-      input: Record<string, unknown>;
-      suggestions?: import("./harness").PermissionUpdate[];
-      /** `tool` for a permission, `question` for an AskUserQuestion-shaped prompt. */
-      requestKind?: "tool" | "question";
-      /**
-       * When the hub first parked this ask, ms epoch. Stamped by the hub
-       * (`Pending.remember`) and kept across the daemon's replays, so every
-       * dashboard orders and ages an ask by the same moment. Absent only on
-       * the daemon → hub leg, before the hub has seen it.
-       */
-      raisedAt?: number;
-      /**
-       * The tool call the ask gates, as its transcript message names it
-       * (`toolCallId`): while the ask is parked, that call's row is the card.
-       */
-      toolUseId?: string;
-    }
-  | {
-      /**
-       * An ask is over, whoever settled it. Daemon → hub when the harness
-       * settled it itself (answered in its own UI, or cancelled by an
-       * interrupt); hub → every dashboard each time a parked ask leaves the
-       * hub's pending list — answered from any device, Telegram, a parent
-       * session or a workflow, timed out, or dropped with its process — so no
-       * client keeps a card nobody can answer.
-       */
-      kind: "permission_settled";
-      instanceId: string;
-      requestId: string;
-      processGeneration?: string;
-      outcome?: "answered" | "cancelled";
-    }
-  | {
-      /**
-       * Hub-originated: every machine's latest limit reading and the fleet's
-       * spend, pushed on each agent usage report (USAGE-SPEC.md §6.4), which
-       * is when spend lands. Small by design — the heavy aggregates are
-       * pulled over REST.
-       */
-      kind: "usage";
-      limits: import("./usage").UsageLimitsReading[];
-      spend: import("./usage").UsageSpend;
-    }
-  | {
-      /** Authoritative daemon confirmation, never merely delivery of a stop request. */
-      kind: "stopped";
-      instanceId: string;
-      discard: boolean;
-    }
-  | {
-      /**
-       * The machine stopped the processes of a session that was at rest: no
-       * decision of anyone's, and nothing lost. The row is `sleeping` from
-       * here, and its next message starts it again from its conversation.
-       */
-      kind: "asleep";
-      instanceId: string;
-    }
-  | {
-      /** Recovery found no live handle; stored conversations remain resumable. */
-      kind: "recovery_unavailable";
-      instanceId: string;
-      reason: string;
-    }
-  | {
-      /** No `instanceId` when the call it answers was machine-scoped. */
-      kind: "control_result";
-      instanceId?: string;
-      requestId: string;
-      ok: boolean;
-      result?: unknown;
-      error?: string;
-    }
-  | {
-      /** Hub-originated routing failures (e.g. target machine offline). */
-      kind: "error";
-      instanceId?: string;
-      requestId?: string;
-      verb?: Verb;
-      message: string;
-    }
-  | {
-      /**
-       * Daemon-originated: a session pushing text straight to the owner's
-       * Telegram, with no ask to settle and nothing to answer. The hub hands it
-       * to the bridge; the owner replying to it reaches the session, as with
-       * any bridged message.
-       */
-      kind: "user_message";
-      instanceId: string;
-      text: string;
-      /** Absolute paths of images on the session's machine to send alongside. */
-      attachments?: string[];
-    }
-  | {
-      /**
-       * Daemon-originated: one instance's coarse now-state, throttled to ~1/sec.
-       * Broadcast — every dashboard wants the rail's word on every session, not
-       * only the ones it has open.
-       */
-      kind: "pulse";
-      instanceId: string;
-      pulse: SessionPulse;
-    }
-  | {
-      /**
-       * Hub-originated: a work item as it stands after its latest change —
-       * started, running, finished, dismissed. `instanceId` is its parent's.
-       */
-      kind: "work_item";
-      instanceId: string;
-      item: WorkItemSummary;
-    }
-  | {
-      /**
-       * Hub-originated: a line of delegate traffic the moment it is recorded.
-       * `instanceId` is the delegate's.
-       */
-      kind: "delegate_event";
-      instanceId: string;
-      event: DelegateEvent;
-    }
-  | {
-      /** Hub-originated: a supervisor verdict the moment it is logged. */
-      kind: "supervisor_event";
-      instanceId: string;
-      event: SupervisorEvent;
-    }
-  | {
-      /** Hub-originated, never stored: the supervisor began evaluating. */
-      kind: "supervisor_status";
-      instanceId: string;
-      status: SupervisorStatusSignal;
-    }
+  | import("./frames").FleetMcpFrame
+  | import("./frames").PreviewFrame
+  | import("./frames").MessageFrame
+  | import("./frames").SendFrame
+  | import("./frames").RejectedFrame
+  | import("./frames").InstancesFrame
+  | import("./frames").InstancesDeltaFrame
+  | import("./frames").PermissionRequestFrame
+  | import("./frames").PermissionSettledFrame
+  | import("./frames").UsageFrame
+  | import("./frames").StoppedFrame
+  | import("./frames").AsleepFrame
+  | import("./frames").RecoveryUnavailableFrame
+  | import("./frames").ControlResultFrame
+  | import("./frames").ErrorFrame
+  | import("./frames").UserMessageFrame
+  | import("./frames").PulseFrame
+  | import("./frames").WorkItemFrame
+  | import("./frames").DelegateEventFrame
+  | import("./frames").SupervisorEventFrame
+  | import("./frames").SupervisorStatusFrame
   /** Hub-originated workflow run transition (§7.2). */
   | import("./workflow").WorkflowFrame;
 

@@ -222,6 +222,43 @@ const { definitions = {} } = generator.getSchemaForSymbols([
 ]) as { definitions?: Record<string, Schema> };
 console.warn = warn;
 
+// Frame kinds are mutually exclusive already: required literal `kind` values.
+// Emit the existing discriminant with named references, so Swift names cases
+// from components instead of positions. This changes schemas, never JSON bytes.
+const framePayload = definitions.FramePayload;
+const frameMembers = framePayload.anyOf as Schema[] | undefined;
+if (!frameMembers) {
+  throw new Error("FramePayload must be a union of named frame schemas");
+}
+const mapping: Record<string, string> = {};
+for (const member of frameMembers) {
+  const ref = member.$ref;
+  if (typeof ref !== "string" || !ref.startsWith("#/definitions/")) {
+    throw new Error("Each FramePayload member must be a named component");
+  }
+  const name = decodeURIComponent(ref.slice("#/definitions/".length));
+  const shape = definitions[name];
+  const kind = (shape?.properties as Record<string, Schema> | undefined)?.kind;
+  const values = kind?.enum as unknown[] | undefined;
+  if (
+    values?.length !== 1 ||
+    typeof values[0] !== "string" ||
+    !(shape.required as string[] | undefined)?.includes("kind")
+  ) {
+    throw new Error(`${name} must require one literal frame kind`);
+  }
+  if (Object.hasOwn(mapping, values[0])) {
+    throw new Error(`Frame kind ${values[0]} has more than one schema`);
+  }
+  mapping[values[0]] = `#/components/schemas/${name}`;
+}
+const { anyOf: _frameUnion, ...frameMetadata } = framePayload;
+definitions.FramePayload = {
+  ...frameMetadata,
+  oneOf: frameMembers,
+  discriminator: { propertyName: "kind", mapping },
+};
+
 const DEFINITION = "#/definitions/";
 const COMPONENT = "#/components/schemas/";
 const RESPONSE = `${DEFINITION}Response`;
