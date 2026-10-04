@@ -47,9 +47,23 @@ enum RailModel {
             projectsAt["\(project.machineId)\u{0}\(project.cwd)", default: []].append(project.id)
         }
         let ids = Set(fleet.projects.map(\.id))
+        /// The session a row's work belongs to: itself, or for a delegate the
+        /// session at the top of the chain that started it.
+        func owner(_ row: InstanceRow) -> InstanceRow {
+            var seen: Set<String> = [row.id]
+            var at = row
+            while let up = at.parentInstanceId.flatMap({ fleet.byId[$0] }), !seen.contains(up.id) {
+                seen.insert(up.id)
+                at = up
+            }
+            return at
+        }
         /// The projects a row belongs to: the one its `projectId` names, and
-        /// every project on its machine whose folder is its folder or holds it.
-        func projectsOf(_ row: InstanceRow) -> Set<String> {
+        /// every project on its machine whose folder is its folder or holds
+        /// it. A delegate belongs to its parent session's projects, whatever
+        /// machine and path it runs on itself.
+        func projectsOf(_ delegate: InstanceRow) -> Set<String> {
+            let row = owner(delegate)
             var found = Set<String>()
             if let id = row.projectId, ids.contains(id) { found.insert(id) }
             let cwd = row.cwd

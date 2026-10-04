@@ -382,15 +382,7 @@ final class DelegateTrayView: UIView {
         let views = keys.compactMap { chipViews[$0] }
         let moreWidth = moreChip == nil ? 0 : 52.0
         let room = bounds.width - (moreChip == nil ? 0 : moreWidth + Self.gap) - Double(max(0, views.count - 1)) * Self.gap
-        var widths = views.map { min(Self.chipCeiling, max(Self.chipFloor, ceil($0.naturalWidth))) }
-        var over = widths.reduce(0, +) - room
-        while over > 0.5 {
-            let loose = widths.indices.filter { widths[$0] > Self.chipFloor }
-            guard !loose.isEmpty else { break }
-            let cut = over / Double(loose.count)
-            for index in loose { widths[index] = max(Self.chipFloor, widths[index] - cut) }
-            over = widths.reduce(0, +) - room
-        }
+        let widths = Self.flex(views.map(\.naturalWidth), room: room)
         var x = 0.0
         let moved = { [self] in
             for (view, width) in zip(views, widths) {
@@ -425,6 +417,43 @@ final class DelegateTrayView: UIView {
             case .fly: land(view, chip.item.instanceId)
             }
         }
+    }
+
+    /// The chips' widths as the row's flexbox resolves them (`flex: 0 1 auto`,
+    /// `min-inline-size: 120px`, `max-inline-size: 224px`): each at its
+    /// content's width when the row has room, and when it has not, each
+    /// giving up room in proportion to its content's width, one that reaches
+    /// its floor or ceiling held there while the rest share what is left.
+    static func flex(_ bases: [Double], room: Double) -> [Double] {
+        var widths = bases
+        var frozen = Array(repeating: false, count: bases.count)
+        // Nothing grows: a chip whose content fits keeps it, within its bounds.
+        if bases.reduce(0, +) <= room {
+            return bases.map { min(chipCeiling, max(chipFloor, $0)) }
+        }
+        while true {
+            let loose = bases.indices.filter { !frozen[$0] }
+            guard !loose.isEmpty else { break }
+            let held = bases.indices.filter { frozen[$0] }.reduce(0.0) { $0 + widths[$1] }
+            let free = room - held - loose.reduce(0.0) { $0 + bases[$1] }
+            let weight = loose.reduce(0.0) { $0 + bases[$1] }
+            for index in loose {
+                widths[index] = bases[index] + (weight > 0 ? free * bases[index] / weight : 0)
+            }
+            // CSS flexbox, "fix min/max violations": with no net violation every
+            // chip is settled; otherwise the ones clamped the way the total is
+            // off are held, and the rest share again.
+            let clamped = widths.map { min(chipCeiling, max(chipFloor, $0)) }
+            let drift = loose.reduce(0.0) { $0 + clamped[$1] - widths[$1] }
+            for index in loose {
+                let moved = clamped[index] - widths[index]
+                if abs(drift) < 0.01 || (drift > 0 && moved > 0) || (drift < 0 && moved < 0) {
+                    widths[index] = clamped[index]
+                    frozen[index] = true
+                }
+            }
+        }
+        return widths
     }
 
     /// The mark flew in from its card; the chip's surface and words come in after it.
@@ -619,7 +648,8 @@ final class DelegateTrayView: UIView {
         let item = chip.item
         let mark = SessionMarkView(tile: 17)
         mark.configure(id: item.instanceId, place: item.instanceId, status: .idle)
-        let title = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong)
+        // `.ptitle` restates the size and weight only: its line is the body's (1.45).
+        let title = KitLabel(TypeScale.typeLabel.with(leading: TypeScale.typeBody.leading), ink: Palette.inkStrong)
         title.text = item.title
         title.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         title.setContentHuggingPriority(.defaultLow, for: .horizontal)
@@ -637,7 +667,17 @@ final class DelegateTrayView: UIView {
             self?.close()
             self?.onOpen(item.instanceId)
         }, for: .primaryActionTriggered)
-        let head = UIStackView(arrangedSubviews: [mark, title, glyph, elapsed, jump])
+        // `.jump { margin-block: -5px }`: its 26pt box reaches past the head's line and adds nothing to its height.
+        let jumpRoom = UIView()
+        jump.translatesAutoresizingMaskIntoConstraints = false
+        jumpRoom.addSubview(jump)
+        NSLayoutConstraint.activate([
+            jumpRoom.widthAnchor.constraint(equalToConstant: 26),
+            jumpRoom.heightAnchor.constraint(equalToConstant: 16),
+            jump.centerXAnchor.constraint(equalTo: jumpRoom.centerXAnchor),
+            jump.centerYAnchor.constraint(equalTo: jumpRoom.centerYAnchor),
+        ])
+        let head = UIStackView(arrangedSubviews: [mark, title, glyph, elapsed, jumpRoom])
         head.spacing = Space.space2
         head.alignment = .center
         let tail = DelegateTailView(hub: hub, instanceId: item.instanceId)
