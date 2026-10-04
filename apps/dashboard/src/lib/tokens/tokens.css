@@ -616,6 +616,10 @@
     --tx-line: 26px;
     /* tx-line under a coarse pointer. */
     --tx-line-touch: var(--c-btn-h-lg);
+    /* Caw's head before the word on a compaction's divider (CompactionDivider.svelte `.caw`). */
+    --tx-compact-caw: 18px;
+    /* The box a compaction divider's wave is drawn in (CompactionDivider.svelte `.wave`): its line runs along the middle, 1.5px either side. */
+    --tx-compact-wave: 6px;
     /* A code well's padding (OutputBlock). */
     --tx-code-pad-block: 10px;
     --tx-code-pad-inline: 12px;

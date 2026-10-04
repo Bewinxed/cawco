@@ -52,7 +52,7 @@ let package = Package(
             resources: [.process("Resources")],
             swiftSettings: concurrency
         ),
-        .target(name: "CawCoTranscript", dependencies: ["CawCoDesign", "CawCoCore",
+        .target(name: "CawCoTranscript", dependencies: ["CawCoDesign", "CawCoCore", "CawCoMascot",
             .product(name: "Markdown", package: "swift-markdown"),
             .product(name: "Highlightr", package: "Highlightr")],
             swiftSettings: concurrency + [.defaultIsolation(MainActor.self)]),

@@ -76,6 +76,7 @@ const SOLAR_ICONS = [
   "chat-square-bold-duotone", // IconChat
   "file-text-bold-duotone", // IconDocument
   "copy-bold-duotone", // IconCopy
+  "alt-arrow-right-bold-duotone", // CompactionDivider.svelte's chevron
   // The session screen's chrome.
   "arrow-up-linear", // IconArrowUp: the "needs you" pill
   "alt-arrow-down-linear", // IconChevronDown

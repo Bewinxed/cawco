@@ -139,7 +139,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         let thinking = registration(ThinkingView.self), system = registration(SystemLineView.self), peer = registration(PeerView.self)
         let question = registration(QuestionCardView.self), subagent = registration(SubagentView.self)
         let delegate = registration(DelegateView.self), run = registration(RunView.self), live = registration(LiveToolView.self)
-        let notice = registration(NoticeView.self)
+        let notice = registration(NoticeView.self), compaction = registration(CompactionDividerView.self)
         dataSource = UICollectionViewDiffableDataSource(collectionView: collection) { [weak self] view, index, id in
             guard let kind = self?.items[id]?.kind else { return view.dequeueConfiguredReusableCell(using: notice, for: index, item: id) }
             switch kind {
@@ -153,6 +153,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             case .subagent: return view.dequeueConfiguredReusableCell(using: subagent, for: index, item: id)
             case .delegate: return view.dequeueConfiguredReusableCell(using: delegate, for: index, item: id)
             case .run: return view.dequeueConfiguredReusableCell(using: run, for: index, item: id)
+            case .compaction: return view.dequeueConfiguredReusableCell(using: compaction, for: index, item: id)
             case .livetool: return view.dequeueConfiguredReusableCell(using: live, for: index, item: id)
             case .notice, .empty: return view.dequeueConfiguredReusableCell(using: notice, for: index, item: id)
             }
@@ -559,6 +560,8 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             content.transform = .identity
         }
         animator.startAnimation(afterDelay: delay)
+        // A compaction's wave draws in, and Caw comes in, on the same clock.
+        if !reduced { (cell as? HostCell<CompactionDividerView>)?.row.arrive(after: delay) }
     }
 
     public func collectionView(_: UICollectionView, didEndDisplaying cell: UICollectionViewCell, forItemAt _: IndexPath) {
@@ -572,6 +575,9 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     private func toggle(_ key: String, from view: UIView) {
         guard let row = view as? Disclosing else { return }
         if open.contains(key) { open.remove(key) } else { open.insert(key) }
+        // A disclosure the reader opens holds its header where they pressed it and
+        // opens downward: the transcript lets go of the tail (Transcript `onrevealstart`).
+        if !row.disclosed { following = false }
         let cell = sequence(first: view as UIView, next: { $0.superview }).first { $0 is UICollectionViewCell } as? UICollectionViewCell
         animate(row, open: !row.disclosed, in: cell)
         dirty = true
@@ -594,6 +600,18 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         let animator = Motion.easeOut.animator(open ? Motion.durReveal : Motion.durExit, animations: change)
         animator.addCompletion { _ in done() }
         animator.startAnimation()
+    }
+
+    /// A compaction divider's 44pt reach under a finger runs past its own row
+    /// into the margin above the next (`.touch-hit`): a touch there that
+    /// lands on no row's content is the divider's.
+    override public func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        guard let hit = super.hitTest(point, with: event) else { return nil }
+        guard hit === collection || hit is UICollectionViewCell || hit.superview is UICollectionViewCell else { return hit }
+        for case let cell as HostCell<CompactionDividerView> in collection.visibleCells {
+            if let control = cell.row.control, cell.row.reach(in: self).contains(point) { return control }
+        }
+        return hit
     }
 
     // MARK: Following and position

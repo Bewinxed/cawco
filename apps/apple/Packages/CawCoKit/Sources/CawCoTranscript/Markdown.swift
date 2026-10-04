@@ -40,6 +40,10 @@ struct MarkdownBlock {
     /// Its margins as its container's CSS leaves them; a neighbour's collapse into them.
     var top: Double = 0
     var bottom: Double = 0
+    /// Raw HTML, which the web leaves as a bare text node: not an element,
+    /// so the sibling rules that space elements (`* + *`, `:first-child`,
+    /// `h2 + *`) neither count it nor reach it.
+    var bare = false
 
     static func text(_ text: NSAttributedString) -> MarkdownBlock { MarkdownBlock(kind: .text(text)) }
     static func code(language: String?, text: String) -> MarkdownBlock { MarkdownBlock(kind: .code(language: language, text: text)) }
@@ -124,6 +128,8 @@ enum MarkdownRender {
     static func blocks(_ source: String, style: ProseStyle = .body) -> [MarkdownBlock] {
         var out: [MarkdownBlock] = []
         var previous: Markup?
+        /// The element before this one: the sibling rules look past bare text.
+        var element: Markup?
         // The web's markdown keeps quotes and dashes as typed: no smart punctuation.
         for node in Document(parsing: source, options: [.disableSmartOpts]).children {
             // Raw HTML blocks in a row are bare text nodes side by side: they run
@@ -132,15 +138,20 @@ enum MarkdownRender {
                case let .text(more) = block(node, style: style).kind {
                 let joined = NSMutableAttributedString(attributedString: before)
                 joined.append(more)
-                out[out.count - 1] = MarkdownBlock(kind: .text(joined), top: last.top, bottom: last.bottom)
+                out[out.count - 1] = MarkdownBlock(kind: .text(joined), top: last.top, bottom: last.bottom, bare: true)
                 previous = node
                 continue
             }
             var each = block(node, style: style)
             if style.wraps { each = wrapped(each, node) }
-            (each.top, each.bottom) = margins(node, after: previous, style: style)
+            (each.top, each.bottom) = margins(node, after: element, style: style)
+            each.bare = node is HTMLBlock
+            // The first element is `:first-child` whatever bare text stands before
+            // it, and no `* + *` reaches it: it starts flush under that text.
+            if !each.bare, element == nil, previous != nil { each.top = 0 }
             out.append(each)
             previous = node
+            if !each.bare { element = node }
         }
         return out
     }

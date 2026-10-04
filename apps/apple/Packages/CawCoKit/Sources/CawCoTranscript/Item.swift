@@ -24,6 +24,7 @@ struct Item {
         case subagent(Branch, spawn: Block)
         case delegate(Block)
         case run(Block, runId: String?)
+        case compaction(Compaction)
         case livetool(name: String, glance: String)
         case notice(String)
         /// The read said the conversation is empty (EmptyState).

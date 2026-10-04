@@ -123,6 +123,20 @@ class ProseView: UITextView, NSTextLayoutManagerDelegate {
     @available(*, unavailable)
     required init?(coder _: NSCoder) { fatalError("built in code") }
 
+    /// The text's own height, as CSS keeps a block's: a text view rounds its
+    /// height up to a whole point, which over a run of blocks puts each a
+    /// fraction lower than the web's (a 16.2pt line took 17).
+    override var intrinsicContentSize: CGSize {
+        let size = super.intrinsicContentSize
+        guard size.height != UIView.noIntrinsicMetric, textStorage.length > 0, let manager = textLayoutManager else { return size }
+        manager.ensureLayout(for: manager.documentRange)
+        let used = manager.usageBoundsForTextContainer.height + textContainerInset.top + textContainerInset.bottom
+        // Only the round-up is taken off: where the two disagree by a point or
+        // more, the container has not been laid out at this width yet.
+        let over = size.height - used
+        return over > 0 && over < 1 ? CGSize(width: size.width, height: used) : size
+    }
+
     nonisolated func textLayoutManager(_: NSTextLayoutManager, textLayoutFragmentFor location: any NSTextLocation,
                                        in textElement: NSTextElement) -> NSTextLayoutFragment {
         ProseFragment(textElement: textElement, range: textElement.elementRange)

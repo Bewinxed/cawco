@@ -19,6 +19,7 @@ enum RowFactory {
         case .subagent: SubagentView(env: env)
         case .delegate: DelegateView(env: env)
         case .run: RunView(env: env)
+        case .compaction: CompactionDividerView(env: env)
         case .livetool: LiveToolView(env: env)
         case .notice, .empty: NoticeView(env: env)
         }
@@ -36,6 +37,7 @@ enum RowFactory {
         case .subagent: view is SubagentView
         case .delegate: view is DelegateView
         case .run: view is RunView
+        case .compaction: view is CompactionDividerView
         case .livetool: view is LiveToolView
         case .notice, .empty: view is NoticeView
         }

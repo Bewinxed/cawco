@@ -1,4 +1,5 @@
 import CawCoDesign
+import CawCoMascot
 import Foundation
 
 /// Rows into the items the list draws (Transcript.svelte's row dispatch):
@@ -29,7 +30,7 @@ struct Builder {
         switch row {
         case let .single(_, block, _): !noRail.contains(block.type)
         case .tools, .harness, .subagent, .delegate, .run: true
-        case .question, .queued: false
+        case .question, .queued, .compaction: false
         }
     }
 
@@ -61,10 +62,18 @@ struct Builder {
                 items.append(Item(id: key, top: gap, kind: .run(block, runId: runId), print: Self.print(block) + (runId ?? "")))
             case let .harness(key, note):
                 items.append(Item(id: key, top: gap, kind: .harness(note, key: key), print: note.title + note.status + note.body))
+            case let .compaction(key, compaction):
+                // A read holds a compaction: Caw's file is read now, while his row is
+                // still being laid out (compaction-mark.ts `warmCompactionMark`).
+                if !Self.warmed { Self.warmed = true; CawMark.warm(.compacted) }
+                items.append(Item(id: key, top: gap, kind: .compaction(compaction),
+                                  print: "\(compaction.brief ?? "\u{0}")|\(compaction.facts)"))
             }
         }
         return (items, rail)
     }
+
+    private static var warmed = false
 
     static func print(_ block: Block) -> String { String(decoding: block.signature, as: UTF8.self) }
 
@@ -99,6 +108,9 @@ struct Builder {
     func pieces(id: String, sources: [Source], grouped: Bool, date: Date?, streaming: Bool) -> [Item] {
         var out: [Item] = []
         var above: MarkdownBlock?
+        /// Whether an element stands above yet: the turn's first element starts
+        /// flush under any raw HTML before it (`:first-child` looks past bare text).
+        var element = false
         for (i, piece) in sources.enumerated() {
             let tail = streaming && i == sources.count - 1
             let blocks = tail ? MarkdownRender.blocks(PartialSyntax.hide(piece.text)) : cache.blocks(piece.text)
@@ -107,6 +119,8 @@ struct Builder {
             let float = out.isEmpty && grouped ? (streaming ? nil : Item.clock(date)) : nil
             var top = out.isEmpty ? (grouped ? Space.space2 : Space.space4) : above.map { MarkdownRender.gap(after: $0, before: first) } ?? Space.space3
             if piece.joinsAbove, !out.isEmpty { top = 0 }
+            if !out.isEmpty, !element, !first.bare { top = above?.bottom ?? 0 }
+            if blocks.contains(where: { !$0.bare }) { element = true }
             out.append(Item(id: "\(id):\(i)", top: top,
                             kind: .piece(.init(blocks: blocks, header: header, float: float, streaming: tail,
                                                joinsAbove: piece.joinsAbove, joinsBelow: piece.joinsBelow)),

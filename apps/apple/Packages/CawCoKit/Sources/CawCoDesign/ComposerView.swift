@@ -833,7 +833,7 @@ final class SwapGlyph: UIView {
             }
             let image = glyph.image.resized(to: Size.iconMd)
             sharp.image = image
-            soft.image = Self.blurred(image)
+            soft.image = image.blurredGlyph()
         case .spinner:
             spinner.frame = bounds
             spinner.tintColor = tint
@@ -877,26 +877,6 @@ final class SwapGlyph: UIView {
         }
         leave.addCompletion { _ in self.removeFromSuperview() }
         leave.startAnimation()
-    }
-
-    /// The glyph under a 4pt blur, drawn once: the far end of the swap.
-    private static func blurred(_ image: UIImage) -> UIImage? {
-        let scale = UITraitCollection.current.displayScale
-        let size = CGSize(width: image.size.width + 16, height: image.size.height + 16)
-        let padded = UIGraphicsImageRenderer(size: size).image { _ in
-            image.withTintColor(.black).draw(at: CGPoint(x: 8, y: 8))
-        }
-        guard let input = CIImage(image: padded) else { return nil }
-        let filter = CIFilter.gaussianBlur()
-        filter.inputImage = input
-        filter.radius = Float(4 * scale)
-        guard let output = filter.outputImage?.cropped(to: input.extent),
-              let cg = CIContext().createCGImage(output, from: input.extent)
-        else { return nil }
-        let soft = UIImage(cgImage: cg, scale: padded.scale, orientation: .up).withRenderingMode(.alwaysTemplate)
-        return UIGraphicsImageRenderer(size: image.size).image { _ in
-            soft.draw(in: CGRect(x: -8, y: -8, width: size.width, height: size.height))
-        }.withRenderingMode(.alwaysTemplate)
     }
 }
 

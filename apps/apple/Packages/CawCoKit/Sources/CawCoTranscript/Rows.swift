@@ -14,12 +14,30 @@ enum Row {
     case run(key: String, block: Block, runId: String?)
     case harness(key: String, note: HarnessNote)
     case queued(key: String, block: Block, grouped: Bool)
+    case compaction(key: String, compaction: Compaction)
 
     var key: String {
         switch self {
         case let .single(key, _, _), let .tools(key, _), let .question(key, _), let .subagent(key, _, _),
-             let .delegate(key, _), let .run(key, _, _), let .harness(key, _), let .queued(key, _, _): key
+             let .delegate(key, _), let .run(key, _, _), let .harness(key, _), let .queued(key, _, _),
+             let .compaction(key, _): key
         }
+    }
+}
+
+/// A compaction (rows.ts `compaction`): the boundary the harness reported and
+/// the summary it wrote, one row. The brief is nil until the summary arrives.
+struct Compaction: Equatable {
+    let key: String
+    let brief: String?
+    let preTokens: Int?
+    let trigger: String?
+
+    /// "Automatic · 182k tokens before": only the facts the harness reported.
+    var facts: String {
+        [trigger.map { $0 == "manual" ? "Manual" : "Automatic" },
+         preTokens.flatMap { $0 == 0 ? nil : "\(Int((Double($0) / 1000).rounded()))k tokens before" }]
+            .compactMap(\.self).joined(separator: " · ")
     }
 }
 
@@ -111,6 +129,7 @@ enum Fold {
     static func voice(of row: Row) -> Voice {
         switch row {
         case let .single(_, block, _), let .queued(_, block, _): voice(of: block)
+        case .compaction: .note
         default: .acts
         }
     }
@@ -140,6 +159,28 @@ enum Fold {
     private static func noticeRun(_ block: Block) -> String? {
         guard block.type == "user.peer", block.meta["workflowEvent"] != nil else { return nil }
         return block.content.firstMatch(of: runId).map { String($0.output) }
+    }
+
+    /// The summary a compaction wrote (`COMPACT_SUMMARY_KIND`): its brief.
+    static func isCompactSummary(_ block: Block) -> Bool {
+        block.type == "ui.system_note" && block.string("noteKind") == "Session continued"
+    }
+
+    /// rows.ts `compactionAt`: the compaction that begins at `blocks[i]` and
+    /// how many blocks it is — a boundary with the summary right after it, a
+    /// boundary whose summary has not arrived, or a summary read back alone.
+    static func compaction(_ blocks: [Block], at i: Int) -> (row: Row, span: Int)? {
+        let boundary = blocks[i].type == "system.compact_boundary" ? blocks[i] : nil
+        let summary = boundary == nil ? blocks[i] : (i + 1 < blocks.count ? blocks[i + 1] : nil)
+        let brief = summary.flatMap { isCompactSummary($0) ? $0 : nil }
+        guard let first = boundary ?? brief else { return nil }
+        let key = "c:\(first.id)"
+        let tokens = (boundary?.meta["preTokens"] as? NSNumber)?.intValue
+        // A summary stored with no words in it (a compaction cut short) is no brief: nothing to open.
+        let words = brief.flatMap { $0.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0.content }
+        return (.compaction(key: key, compaction: Compaction(key: key, brief: words, preTokens: tokens,
+                                                              trigger: boundary?.string("trigger"))),
+                boundary != nil && brief != nil ? 2 : 1)
     }
 
     enum Receipt { case fold, anchor(String) }
@@ -176,6 +217,7 @@ enum Fold {
             let block = blocks[i]
             let receipt = receiptAt(block, i)
             if case .fold = receipt { i += 1; continue }
+            if let compaction = compaction(blocks, at: i) { rows.append(compaction.row); i += compaction.span; continue }
             if case let .anchor(run) = receipt {
                 rows.append(.run(key: "r:\(block.id)", block: block, runId: run)); i += 1; continue
             }

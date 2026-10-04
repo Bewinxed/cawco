@@ -2210,6 +2210,16 @@
       "$value": "{size.c-btn-h-lg}",
       "$description": "tx-line under a coarse pointer."
     },
+    "tx-compact-caw": {
+      "$type": "dimension",
+      "$value": "18px",
+      "$description": "Caw's head before the word on a compaction's divider (CompactionDivider.svelte `.caw`)."
+    },
+    "tx-compact-wave": {
+      "$type": "dimension",
+      "$value": "6px",
+      "$description": "The box a compaction divider's wave is drawn in (CompactionDivider.svelte `.wave`): its line runs along the middle, 1.5px either side."
+    },
     "tx-code-pad-block": {
       "$type": "dimension",
       "$value": "10px",

@@ -1,4 +1,6 @@
 import CawCoCore
+import CoreImage
+import CoreImage.CIFilterBuiltins
 import UIKit
 
 // The web dashboard's kit, recipe by recipe (apps/dashboard/src/lib/components/ui
@@ -219,6 +221,28 @@ extension UIImage {
         return UIGraphicsImageRenderer(size: size).image { _ in
             draw(in: CGRect(origin: .zero, size: size))
         }.withRenderingMode(renderingMode)
+    }
+
+    /// A template glyph under a 4pt blur, drawn once at its own size: the far
+    /// end of a glyph that comes in clearing its blur (`icon-swap`, a
+    /// compaction's chevron), crossfaded with the sharp one.
+    public func blurredGlyph() -> UIImage? {
+        let scale = UITraitCollection.current.displayScale
+        let padded = CGSize(width: size.width + 16, height: size.height + 16)
+        let drawn = UIGraphicsImageRenderer(size: padded).image { _ in
+            withTintColor(.black).draw(at: CGPoint(x: 8, y: 8))
+        }
+        guard let input = CIImage(image: drawn) else { return nil }
+        let filter = CIFilter.gaussianBlur()
+        filter.inputImage = input
+        filter.radius = Float(4 * scale)
+        guard let output = filter.outputImage?.cropped(to: input.extent),
+              let cg = CIContext().createCGImage(output, from: input.extent)
+        else { return nil }
+        let soft = UIImage(cgImage: cg, scale: drawn.scale, orientation: .up).withRenderingMode(.alwaysTemplate)
+        return UIGraphicsImageRenderer(size: size).image { _ in
+            soft.draw(in: CGRect(x: -8, y: -8, width: padded.width, height: padded.height))
+        }.withRenderingMode(.alwaysTemplate)
     }
 }
 
