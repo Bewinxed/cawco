@@ -373,13 +373,37 @@ export function highlight(options: HighlightOptions) {
         Math.min(rect.right - inX, Math.max(rect.left + inX, x)),
         Math.min(rect.bottom - inY, Math.max(rect.top + inY, y))
       );
-      return seen !== null && row.contains(seen);
+      return seen !== null && rowOf(seen) === row;
+    };
+    /**
+     * The row an element belongs to: the row it is in, or the one row of
+     * the nearest box around it that holds any. A control that stands beside
+     * its row in the row's own box (a session row's Peek) is that row's;
+     * the box of a parent and the rows under it is nobody's.
+     */
+    const rowOf = (element: Element): HTMLElement | null => {
+      const inside = element.closest<HTMLElement>(rows);
+      if (inside) {
+        return inside;
+      }
+      for (
+        let at: Element | null = element;
+        at && at !== container;
+        at = at.parentElement
+      ) {
+        const held = at.querySelectorAll<HTMLElement>(rows);
+        if (held.length > 0) {
+          return held.length === 1 ? held[0] : null;
+        }
+      }
+      return null;
     };
 
     /**
      * The row a point on screen is on. What is drawn under the point says
      * so first: a row whose anything is under it (its mark, a control that
-     * hangs outside its box) is that row, whatever boxes lie there. Measured
+     * hangs outside its box or stands beside it, `rowOf`) is that row,
+     * whatever boxes lie there. Measured
      * by boxes alone, a pointer on the rail's footer was on the session row
      * scrolled out of sight behind it, nearer by its centre. A row a slide
      * is still carrying is not counted this way: the ghost is aimed at where
@@ -403,7 +427,7 @@ export function highlight(options: HighlightOptions) {
       under: Element,
       shares: Map<HTMLElement, { x: number; y: number }>
     ) => {
-      const on = under.closest<HTMLElement>(rows);
+      const on = rowOf(under);
       if (!(on && isRow(on))) {
         return null;
       }

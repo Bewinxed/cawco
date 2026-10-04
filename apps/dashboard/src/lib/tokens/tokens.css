@@ -133,6 +133,8 @@
     /* A filled control a step over surface-fill: its hover, and its on state (a parent's child count when its children are open). */
     --surface-fill-strong: light-dark(var(--neutral-6), var(--neutral-7));
     --surface-hover: light-dark(var(--neutral-2), var(--neutral-4));
+    /* The hover ghost under a list's row (highlight), and what rises over a hovered row. By day one step past surface-hover, which is the field's own step: on the rail a ghost in it did not show. */
+    --surface-ghost: light-dark(var(--neutral-3), var(--neutral-4));
     /* The reader's well edge: darker than the well by day, the ink at 8% at night. */
     --well-edge: light-dark(
       var(--neutral-5),

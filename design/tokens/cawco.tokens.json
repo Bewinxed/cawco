@@ -787,6 +787,16 @@
         }
       }
     },
+    "surface-ghost": {
+      "$type": "color",
+      "$value": "{color.neutral-3}",
+      "$description": "The hover ghost under a list's row (highlight), and what rises over a hovered row. By day one step past surface-hover, which is the field's own step: on the rail a ghost in it did not show.",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "{color.neutral-4}"
+        }
+      }
+    },
     "well-edge": {
       "$type": "color",
       "$value": "{color.neutral-5}",

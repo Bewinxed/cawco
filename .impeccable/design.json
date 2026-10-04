@@ -1142,6 +1142,23 @@
           "#f1eee9"
         ]
       },
+      "surface-ghost": {
+        "role": "neutral",
+        "displayName": "Surface Ghost",
+        "canonical": "light-dark(oklch(0.944 0.01 84), oklch(0.282 0.007 70))",
+        "hex": "#f0ece5",
+        "hexDark": "#2c2926",
+        "tonalRamp": [
+          "#0d0b07",
+          "#272521",
+          "#44423e",
+          "#63615d",
+          "#85827d",
+          "#a7a5a0",
+          "#ccc9c4",
+          "#f1eee9"
+        ]
+      },
       "code-bg": {
         "role": "neutral",
         "displayName": "Code Bg",
