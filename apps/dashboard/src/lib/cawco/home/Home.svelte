@@ -179,12 +179,7 @@
       </section>
     {/if}
 
-    <WorkTabs
-      onstart={start}
-      {stale}
-      waiting={!home.ready}
-      bind:relayingrelaying
-    />
+    <WorkTabs onstart={start} {stale} waiting={!home.ready} bind:relaying />
 
     {#if firstRun}
       <!-- Caw only on a fleet with nothing in it yet, or while a machine
