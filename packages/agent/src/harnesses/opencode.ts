@@ -3061,6 +3061,14 @@ export class OpencodeSession implements HarnessSession {
       this.#ctx.rejected(uuid, error);
       return;
     }
+    // opencode stores no user message for a compaction, so nothing else would
+    // tell the hub this send was taken up; without it the row stays queued.
+    this.#ctx.frame({
+      type: "system",
+      subtype: MESSAGES_READ,
+      read: [uuid],
+      session_id: this.sessionId ?? undefined,
+    });
     const { providerID, modelID } = splitModel(this.#model);
     const res = await this.#client.session.summarize({
       // biome-ignore lint/style/noNonNullAssertion: invariant: sessionId is set once in the constructor and never nulled; the interface types it nullable for other harnesses
