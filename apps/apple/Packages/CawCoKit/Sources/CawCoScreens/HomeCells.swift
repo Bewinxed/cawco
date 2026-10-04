@@ -158,6 +158,8 @@ final class NeedsCardCell: HomeCell {
     private let peek = RowActionButton(.maximize)
     /// Peek's room in the head: its 28pt less the 8pt it reaches into the card's padding.
     private let peekRoom = UIView()
+    private var headBox: UIView!
+    private var headTall: NSLayoutConstraint!
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -181,7 +183,23 @@ final class NeedsCardCell: HomeCell {
         actions.addArrangedSubview(open)
         actions.spacing = Space.space8
         actions.distribution = .equalSpacing
-        let column = UIStackView(arrangedSubviews: [head, place, ask, actions, stage])
+        // The head's line is as tall as what stands on it: Peek's 28pt less the
+        // 4pt it gives back above and below (`margin: -4px`), where it is shown.
+        let headBox = UIView()
+        head.translatesAutoresizingMaskIntoConstraints = false
+        headBox.addSubview(head)
+        headTall = headBox.heightAnchor.constraint(greaterThanOrEqualToConstant: RowActionButton.side - 8)
+        let hugs = headBox.bottomAnchor.constraint(equalTo: head.bottomAnchor)
+        hugs.priority = .defaultHigh
+        NSLayoutConstraint.activate([
+            head.topAnchor.constraint(equalTo: headBox.topAnchor),
+            head.leadingAnchor.constraint(equalTo: headBox.leadingAnchor),
+            head.trailingAnchor.constraint(equalTo: headBox.trailingAnchor),
+            headBox.bottomAnchor.constraint(greaterThanOrEqualTo: head.bottomAnchor),
+            hugs,
+        ])
+        self.headBox = headBox
+        let column = UIStackView(arrangedSubviews: [headBox, place, ask, actions, stage])
         column.axis = .vertical
         column.spacing = Space.space1
         column.setCustomSpacing(Space.space1 * 2, after: ask)
@@ -197,7 +215,7 @@ final class NeedsCardCell: HomeCell {
             peekRoom.widthAnchor.constraint(equalToConstant: RowActionButton.side - Space.space2),
             peekRoom.heightAnchor.constraint(equalToConstant: 1),
             peek.trailingAnchor.constraint(equalTo: peekRoom.trailingAnchor, constant: Space.space2),
-            peek.centerYAnchor.constraint(equalTo: waited.centerYAnchor),
+            peek.centerYAnchor.constraint(equalTo: headBox.centerYAnchor),
         ])
         pin(tile)
     }
@@ -209,6 +227,7 @@ final class NeedsCardCell: HomeCell {
         let peeks = if case .ask = item.kind { true } else { false }
         peek.isHidden = !peeks
         peekRoom.isHidden = !peeks
+        headTall.isActive = peeks
         peek.accessibilityLabel = "Peek \(item.title)"
         switch item.kind {
         case let .ask(parked):
