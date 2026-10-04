@@ -42,6 +42,7 @@
   import {
     ACTIVITY_LABEL,
     SLEEPING_LABEL,
+    STOPPED_LABEL,
     UNKNOWN_HINT,
     UNKNOWN_LABEL,
   } from "./activity";
@@ -125,6 +126,9 @@
   const stateLabel = $derived.by(() => {
     if (failed) {
       return "Failed";
+    }
+    if (row?.status === "stopped") {
+      return STOPPED_LABEL;
     }
     if (sleeping) {
       return SLEEPING_LABEL;

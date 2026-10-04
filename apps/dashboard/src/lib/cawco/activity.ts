@@ -58,6 +58,12 @@ export const ACTIVITY_LABEL: Record<Activity, string> = {
 export const SLEEPING_LABEL = "Sleeping";
 
 /**
+ * A session the operator (or a policy) ended on purpose (`stopped`): not a
+ * failure, and not asleep. A row says it where it says its status word.
+ */
+export const STOPPED_LABEL = "Stopped";
+
+/**
  * The sixth word, for a session whose process exited badly (`isFailed`). A row
  * carries it as its mark's dot (SessionMark), the word as its accessible name
  * and tooltip.

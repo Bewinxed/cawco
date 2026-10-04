@@ -1,17 +1,29 @@
 <script lang="ts" module>
+  import { STOPPED_LABEL } from "./activity";
   import { cawco, type InstanceRow, isFailed, isStale } from "./client.svelte";
   import TreeMark, { type MarkStatus as TreeStatus } from "./TreeMark.svelte";
 
   /** What a session is doing, as its mark says it. */
   export type MarkStatus = TreeStatus;
-  /** Its word, for the row's accessible name: colour is never the only signal. */
-  export const STATUS_WORD: Record<MarkStatus, string> = {
+  const STATUS_WORD: Record<MarkStatus, string> = {
     live: "Working",
     attn: "Needs you",
     done: "Finished",
     fail: "Failed",
     idle: "Idle",
   };
+
+  /**
+   * A session's status word, for its row's accessible name: colour is never
+   * the only signal. A session the operator stopped says so; its mark is an
+   * ended session's (no dot, no echo), so the word is where it differs.
+   */
+  export function statusWord(
+    instance: InstanceRow | null | undefined,
+    status: MarkStatus
+  ): string {
+    return instance?.status === "stopped" ? STOPPED_LABEL : STATUS_WORD[status];
+  }
 
   /**
    * A session's status, one rule for every row that draws its mark. `done`:
@@ -52,7 +64,7 @@
    * A session's mark: the tree mark (TreeMark) with the session's sprite as
    * its face, on its project's hue. The same tile in every list that names
    * a session; its deck, count, switch, echo and status dot are the tree
-   * mark's, and the row says the status in its name (`STATUS_WORD`).
+   * mark's, and the row says the status in its name (`statusWord`).
    */
   import { markHue, sessionSprite } from "./mark";
 

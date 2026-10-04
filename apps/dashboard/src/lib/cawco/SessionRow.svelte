@@ -51,10 +51,7 @@
   import { openPeek } from "./home/peek.svelte";
   import { swipeToArchive } from "./home/swipe-archive";
   import LiveSessionMenu from "./LiveSessionMenu.svelte";
-  import SessionMark, {
-    STATUS_WORD,
-    sessionStatus,
-  } from "./SessionMark.svelte";
+  import SessionMark, { sessionStatus, statusWord } from "./SessionMark.svelte";
   import StoredSessionMenu from "./StoredSessionMenu.svelte";
   import { runIdOf } from "./workflow-runs";
   import { dragSession } from "./workspace/dnd.svelte";
@@ -198,7 +195,8 @@
            with the row's trailing edge. -->
       <span class="words">
         <span class="cell title"
-          ><span class="sr-only">{STATUS_WORD[status]}: </span>{title}</span
+          ><span class="sr-only">{statusWord(instance, status)}: </span>
+          {title}</span
         >
         {#if !compact}
           <span class="cell line">{line}</span>

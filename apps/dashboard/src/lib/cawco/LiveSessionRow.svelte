@@ -41,10 +41,7 @@
   import LiveSessionMenu from "./LiveSessionMenu.svelte";
   import { conversationHref, sessionTitle } from "./links";
   import { CURVE, crossIn, dur } from "./motion/curves.svelte";
-  import SessionMark, {
-    STATUS_WORD,
-    sessionStatus,
-  } from "./SessionMark.svelte";
+  import SessionMark, { sessionStatus, statusWord } from "./SessionMark.svelte";
   import TaskRing from "./TaskRing.svelte";
   import { taskProgress, tasksOf } from "./tasks.svelte";
   import { dragSession } from "./workspace/dnd.svelte";
@@ -201,7 +198,8 @@
            than it was because the state pill that used to sit at the end of
            this row is gone. -->
         <span class="min-w-0 max-w-xl truncate text-label"
-          ><span class="sr-only">{STATUS_WORD[status]}: </span>{title}</span
+          ><span class="sr-only">{statusWord(instance, status)}: </span>
+          {title}</span
         >
         <!-- A quest is named beside its title rather than glyphed in front of it:
            the lead slot belongs to state, and the titles keep their column. -->

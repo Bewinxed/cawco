@@ -187,15 +187,20 @@ const isLive = (row: InstanceRow): boolean =>
 
 /**
  * A session that stays on the board until the operator discards it: live work,
- * a real failure to look at, a nap to wake from, or a row the hub simply
- * cannot currently ask about — `unknown` is never dropped just because its
- * machine went quiet, the same way it is never rendered as though nothing
- * were wrong (see {@link isStale}).
+ * a real failure to look at, a nap to wake from, one the operator stopped, or
+ * a row the hub simply cannot currently ask about — `unknown` is never dropped
+ * just because its machine went quiet, the same way it is never rendered as
+ * though nothing were wrong (see {@link isStale}). Only `discarded` is off
+ * the board. `stopped` was left out here by omission, not by rule: a session
+ * stopped from its row's menu then stood in no list at all, its menu and its
+ * transcript out of reach. It has ended, so it is listed as ended sessions
+ * are (Finished until seen, Recent, its project's tree).
  */
 const isListed = (row: InstanceRow): boolean =>
   isLive(row) ||
   row.status === "error" ||
   row.status === "sleeping" ||
+  row.status === "stopped" ||
   row.status === "unknown";
 
 /**
