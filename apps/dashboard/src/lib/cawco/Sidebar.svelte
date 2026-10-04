@@ -71,7 +71,7 @@
   import SessionRow, { ROW_PILL } from "./SessionRow.svelte";
   import { newSession } from "./spawn/new-session.svelte";
   import TreeMark from "./TreeMark.svelte";
-  import { rooted, tree } from "./tree";
+  import { rooted, topsIn, tree } from "./tree";
   import UsageMeter from "./UsageMeter.svelte";
   import { workflowState } from "./workflow-state.svelte";
   import { workspace } from "./workspace/workspace.svelte";
@@ -313,8 +313,20 @@
    * Delegates switch off, a delegate whose parent the project does not list
    * is left out (tree.ts `rooted`): "Not running" is where those pile up by
    * the hundred.
+   *
+   * A row lists in the projects of the session at the top of its chain of
+   * parents (tree.ts `topsIn`, over every row the rail knows), whatever
+   * machine and folder it runs on itself. Placed by its own, a delegate
+   * started on another machine has that machine's id and a worktree path
+   * there: no project on its parent's machine claimed it, so it stood apart
+   * from its parent or in no list, and the switch then dropped it for want
+   * of a parent in its list. A row with no parent the rail knows is its own
+   * top, and lists by its own project, machine and folder.
    */
   const listed = $derived.by(() => {
+    const topOf = topsIn(
+      new Map([...running, ...notRunning].map((row) => [row.id, row]))
+    );
     const lists = new Map<
       string,
       { live: InstanceRow[]; resting: InstanceRow[] }
@@ -330,7 +342,7 @@
     const liveIds = new Set<string>();
     for (const row of running) {
       liveIds.add(row.id);
-      for (const id of projectsOf(row)) {
+      for (const id of projectsOf(topOf(row))) {
         listOf(id).live.push(row);
       }
     }
@@ -340,7 +352,7 @@
       if (liveIds.has(row.id)) {
         continue;
       }
-      for (const id of projectsOf(row)) {
+      for (const id of projectsOf(topOf(row))) {
         listOf(id).resting.push(row);
       }
     }
@@ -448,22 +460,7 @@
     // recent session folds under it rather than standing alone among the
     // older ones.
     const all = [...live, ...resting];
-    const byId = new Map(all.map((row) => [row.id, row]));
-    const topOf = (row: InstanceRow): InstanceRow => {
-      const seen = new Set([row.id]);
-      let at = row;
-      for (
-        let up = at.parentInstanceId
-          ? byId.get(at.parentInstanceId)
-          : undefined;
-        up && !seen.has(up.id);
-        up = at.parentInstanceId ? byId.get(at.parentInstanceId) : undefined
-      ) {
-        seen.add(up.id);
-        at = up;
-      }
-      return at;
-    };
+    const topOf = topsIn(new Map(all.map((row) => [row.id, row])));
     // A project with only a few sessions lists them all: the list is topped
     // up to the older box's six rows from the newest older trees, and a fold
     // that would hide one row lists it instead, at the same height.

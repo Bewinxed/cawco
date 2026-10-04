@@ -108,6 +108,30 @@ function fillDescendants<T extends TreeRow>(lines: TreeLine<T>[]): void {
   }
 }
 
+/**
+ * The row at the top of each row's chain of parents, among the rows `byId`
+ * holds: the session a delegate's work comes down from. A row with no
+ * parent, or whose parent `byId` does not hold, is its own top; a chain that
+ * loops stops where it would repeat. The one walker for every caller that
+ * places a row by its tree (the tree itself, a project's recent and older
+ * split, which projects a row lists in).
+ */
+export function topsIn<T extends TreeRow>(byId: Map<string, T>): (row: T) => T {
+  return (row) => {
+    const seen = new Set<string>([row.id]);
+    let at = row;
+    for (
+      let up = at.parentInstanceId ? byId.get(at.parentInstanceId) : undefined;
+      up && !seen.has(up.id);
+      up = at.parentInstanceId ? byId.get(at.parentInstanceId) : undefined
+    ) {
+      seen.add(up.id);
+      at = up;
+    }
+    return at;
+  };
+}
+
 /** `rows` in tree order. */
 export function tree<T extends TreeRow>(
   rows: T[],
@@ -120,15 +144,7 @@ export function tree<T extends TreeRow>(
     const parent = row.parentInstanceId;
     return parent && parent !== row.id && byId.has(parent) ? parent : null;
   };
-  const topOf = (row: T): T => {
-    const seen = new Set<string>([row.id]);
-    let at = row;
-    for (let up = parentOf(at); up && !seen.has(up); up = parentOf(at)) {
-      seen.add(up);
-      at = byId.get(up) as T;
-    }
-    return at;
-  };
+  const topOf = topsIn(byId);
 
   const children = new Map<string, T[]>();
   /** Each top-level row, and where in `members` its tree is anchored. */

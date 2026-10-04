@@ -121,6 +121,7 @@ import { warmCompactionMark } from "./transcript/compaction-mark";
 import { errorMessage, localUserMessage } from "./transcript/local";
 import { routedToParent } from "./transcript/present";
 import { holdsCompaction } from "./transcript/rows";
+import { topsIn } from "./tree";
 import type { DelegateAskEvent, Message } from "./types";
 import {
   onBoard,
@@ -5172,14 +5173,23 @@ export const cawco = {
   project: (id: string): ProjectRow | null =>
     state.projects.find((project) => project.id === id) ?? null,
   /** Sessions a project owns: started from it, or running in its checkout.
-   *  Failed ones stay listed here too — same board rule as the sidebar. */
-  liveIn: (project: ProjectRow): InstanceRow[] =>
-    instances.filter(
-      (row) =>
-        isListed(row) &&
-        (row.projectId === project.id ||
-          (row.machineId === project.machineId && under(project.cwd, row.cwd)))
-    ),
+   *  Failed ones stay listed here too — same board rule as the sidebar. A
+   *  delegate is the project's when the session at the top of its chain of
+   *  parents is (tree.ts `topsIn`), whatever machine and folder it runs on
+   *  itself: the rail's rule (Sidebar `listed`). */
+  liveIn: (project: ProjectRow): InstanceRow[] => {
+    const topOf = topsIn(instanceIndex.byId);
+    return instances.filter((row) => {
+      if (!isListed(row)) {
+        return false;
+      }
+      const top = topOf(row);
+      return (
+        top.projectId === project.id ||
+        (top.machineId === project.machineId && under(project.cwd, top.cwd))
+      );
+    });
+  },
   /** Stored sessions the SDK recorded somewhere inside the project's checkout. */
   storedIn: (project: ProjectRow): NeutralSessionInfo[] =>
     (catalog[project.machineId] ?? []).filter(
