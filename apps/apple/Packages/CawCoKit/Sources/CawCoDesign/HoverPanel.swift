@@ -184,7 +184,7 @@ public final class HoverPanel: UIView {
     /// border), and the panel round it, no taller than its room.
     private func lay() {
         guard let body, let host = superview else { return }
-        let cap = min(440, place.span ?? host.bounds.width) - 2
+        let cap = min(Size.hoverPanelMax, place.span ?? host.bounds.width) - 2
         let fit = body.systemLayoutSizeFitting(CGSize(width: cap - Self.pad * 2, height: UIView.layoutFittingCompressedSize.height),
                                                withHorizontalFittingPriority: .fittingSizeLevel, verticalFittingPriority: .fittingSizeLevel)
         let width = min(cap - Self.pad * 2, ceil(fit.width))
@@ -196,7 +196,8 @@ public final class HoverPanel: UIView {
         let size = CGSize(width: inner.width + 2, height: inner.height + 2)
         let origin: CGPoint = switch side {
         case .right:
-            CGPoint(x: place.x, y: place.y)
+            // Level with its row, and never past the host's foot.
+            CGPoint(x: place.x, y: max(8, min(place.y, host.bounds.height - size.height - 8)))
         case .above:
             CGPoint(x: max(0, min(place.x, (place.span ?? host.bounds.width) - size.width)), y: place.y - Self.gap - size.height)
         }

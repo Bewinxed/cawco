@@ -1,14 +1,7 @@
 import CawCoCore
 import CawCoDesign
+import CawCoTranscript
 import UIKit
-
-/// The row a session's tail ends on in its card: the question it is waiting
-/// on, or why it failed.
-struct SessionHoverNote: Equatable {
-    enum Kind { case ask, fail }
-    let kind: Kind
-    let text: String
-}
 
 /// The rail's session card (SessionHover.svelte): resting the pointer on a
 /// session row (Working, Finished, a project's sessions) opens the house
@@ -33,9 +26,6 @@ final class SessionHover: NSObject {
     /// The session whose tail is being followed, and the ones let go, each kept 2s more.
     private var watched: String?
     private var releases: [String: Task<Void, Never>] = [:]
-
-    /// A session's live tail, ending on `note`: the transcript's own view, when the app has one.
-    var tail: ((_ instanceId: String, _ note: SessionHoverNote?) -> UIView)?
 
     private static let openAfter = 0.35
     private static let closeAfter = 0.3
@@ -200,13 +190,17 @@ final class SessionHover: NSObject {
         return row?.status == .stopped ? .done : .idle
     }
 
-    private func note(_ id: String, _ tone: Tone) -> SessionHoverNote? {
+    /// The row the tail ends on: the question waiting, or the failure.
+    private func note(_ id: String, _ tone: Tone) -> TailNote? {
         switch tone {
         case .needs:
-            return hub.needs.parked[id]?.first.map { SessionHoverNote(kind: .ask, text: Self.detail($0)) }
+            return hub.needs.parked[id]?.first.map {
+                let text = Self.detail($0)
+                return TailNote(key: "ask:\(text)", kind: .ask, text: text)
+            }
         case .failed:
             let why = hub.fleet.byId[id]?.lastError
-            return SessionHoverNote(kind: .fail, text: why.flatMap { $0.isEmpty ? nil : $0 } ?? "It failed without saying why.")
+            return TailNote(key: "fail", kind: .fail, text: why.flatMap { $0.isEmpty ? nil : $0 } ?? "It failed without saying why.")
         default:
             return nil
         }
@@ -242,9 +236,16 @@ final class SessionHover: NSObject {
         head.spacing = Space.space2
         head.alignment = .center
         head.widthAnchor.constraint(greaterThanOrEqualToConstant: 240).isActive = true
-        let column = UIStackView(arrangedSubviews: [head])
+        let column = CardColumn(arrangedSubviews: [head])
         column.axis = .vertical
         column.spacing = Space.space2
+        // The tail grows as its lines arrive: the panel follows it.
+        column.onLayout = { [weak self] in self?.panel.contentChanged() }
+        let tail = { [hub] (instanceId: String, note: TailNote?) -> UIView in
+            let view = DelegateTailView(hub: hub, instanceId: instanceId)
+            view.note = note
+            return view
+        }
         if let runId = BoardRun.runId(of: id) {
             // A run's card: its steps under it, then the live tail of the one running.
             if let run = hub.workflowRuns.details[runId]?.run {
@@ -253,15 +254,30 @@ final class SessionHover: NSObject {
                 steps.configure(RunModel(run, name: title.text ?? "Workflow"), going: true, live: false, interactive: false) { _ in }
                 column.addArrangedSubview(steps)
             }
-            if let step = tailId(of: id), let tail {
+            if let step = tailId(of: id) {
                 column.addArrangedSubview(tail(step, nil))
-            } else if tone == .failed, let tail {
+            } else if tone == .failed {
                 column.addArrangedSubview(tail("", note(id, tone)))
             }
-        } else if let tail {
+        } else {
             column.addArrangedSubview(tail(id, note(id, tone)))
         }
         return column
+    }
+
+    /// The card's column: it says when what it holds changed size.
+    private final class CardColumn: UIStackView {
+        var onLayout: () -> Void = {}
+        private var fitted = CGSize.zero
+
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            let fit = systemLayoutSizeFitting(UIView.layoutFittingCompressedSize)
+            guard fit != fitted else { return }
+            let first = fitted == .zero
+            fitted = fit
+            if !first { DispatchQueue.main.async { [weak self] in self?.onLayout() } }
+        }
     }
 
     /// What it is doing, as a 16pt glyph in its status's ink; working, the live dot.
