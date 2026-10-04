@@ -169,13 +169,15 @@ export function createDelegationMcp(options: {
     authorization?: string
   ): Promise<CallToolResult> => {
     try {
+      // Routing context belongs to the bridge, not to a tool's input schema.
+      const { __cawco: _context, ...input } = args;
       // Fleet-wide tools: no actor needed — they call the hub API directly.
       if (name === "list_delegate_types" || adminNames.has(name)) {
         const entry = describe().find((tool) => tool.name === name);
         if (!entry) {
           throw new Error(`Unknown tool ${name}`);
         }
-        return (await entry.handler(args)) as CallToolResult;
+        return (await entry.handler(input)) as CallToolResult;
       }
       const actor = actorOf(binding, args, authorization);
       const emitted: Envelope[] = [];
@@ -194,7 +196,7 @@ export function createDelegationMcp(options: {
       if (!entry) {
         throw new Error(`Tool ${name} is unavailable to this session`);
       }
-      const result = (await entry.handler(args)) as CallToolResult;
+      const result = (await entry.handler(input)) as CallToolResult;
       for (const envelope of emitted) {
         // biome-ignore lint/performance/noAwaitInLoops: spawn must finish before its first send is relayed
         await options.forward(envelope, actor);
