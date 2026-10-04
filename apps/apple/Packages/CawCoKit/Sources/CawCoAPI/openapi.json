@@ -6976,6 +6976,10 @@
             "description": "The path on the dashboard's own origin, e.g. `/preview/<id>/`.",
             "type": "string"
           },
+          "revision": {
+            "description": "Identifies one successful open, including a rebuild of the same source.",
+            "type": "string"
+          },
           "source": {
             "anyOf": [
               {
@@ -7007,6 +7011,7 @@
           "instanceId",
           "kind",
           "path",
+          "revision",
           "state"
         ]
       },
@@ -9656,6 +9661,10 @@
                 "description": "The path on the dashboard's own origin, e.g. `/preview/<id>/`.",
                 "type": "string"
               },
+              "revision": {
+                "description": "Identifies one successful open, including a rebuild of the same source.",
+                "type": "string"
+              },
               "source": {
                 "anyOf": [
                   {
@@ -9687,6 +9696,7 @@
               "instanceId",
               "kind",
               "path",
+              "revision",
               "state"
             ]
           },
@@ -9821,6 +9831,10 @@
                       "description": "The path on the dashboard's own origin, e.g. `/preview/<id>/`.",
                       "type": "string"
                     },
+                    "revision": {
+                      "description": "Identifies one successful open, including a rebuild of the same source.",
+                      "type": "string"
+                    },
                     "source": {
                       "anyOf": [
                         {
@@ -9852,6 +9866,7 @@
                     "instanceId",
                     "kind",
                     "path",
+                    "revision",
                     "state"
                   ]
                 }
@@ -9916,6 +9931,10 @@
                       "description": "The path on the dashboard's own origin, e.g. `/preview/<id>/`.",
                       "type": "string"
                     },
+                    "revision": {
+                      "description": "Identifies one successful open, including a rebuild of the same source.",
+                      "type": "string"
+                    },
                     "source": {
                       "anyOf": [
                         {
@@ -9947,6 +9966,7 @@
                     "instanceId",
                     "kind",
                     "path",
+                    "revision",
                     "state"
                   ]
                 }
@@ -16189,6 +16209,10 @@
                 "description": "The path on the dashboard's own origin, e.g. `/preview/<id>/`.",
                 "type": "string"
               },
+              "revision": {
+                "description": "Identifies one successful open, including a rebuild of the same source.",
+                "type": "string"
+              },
               "source": {
                 "anyOf": [
                   {
@@ -16220,6 +16244,7 @@
               "instanceId",
               "kind",
               "path",
+              "revision",
               "state"
             ]
           },

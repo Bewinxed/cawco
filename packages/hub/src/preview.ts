@@ -22,6 +22,7 @@ export const previewTargets = new Map<
   {
     machineId: string;
     source: PreviewSource;
+    revision: string;
     upstream?: { address: string; port: number };
   }
 >();
@@ -29,7 +30,8 @@ export const previewTargets = new Map<
 export function previewFrame(
   instanceId: string,
   state: "open" | "closed",
-  source?: PreviewSource
+  source: PreviewSource,
+  revision: string
 ): Extract<FramePayload, { kind: "preview" }> {
   return {
     kind: "preview",
@@ -37,6 +39,7 @@ export function previewFrame(
     state,
     path: `/preview/${encodeURIComponent(instanceId)}/`,
     source,
+    revision,
   };
 }
 

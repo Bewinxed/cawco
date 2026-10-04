@@ -36,6 +36,7 @@
   let iframe = $state<HTMLIFrameElement>();
   let selecting = $state(false);
   let connected = $state(false);
+  let loaded = $state(false);
   let captured = false;
   let reload = $state(0);
   /**
@@ -49,7 +50,6 @@
   let well = $state<HTMLDivElement>();
   const preview = $derived(cawco.previews[instanceId]);
   const source = $derived(preview?.source);
-  const identity = $derived(JSON.stringify(source));
   /** The base preview URL (always under /preview/<id>/). */
   const previewBase = $derived(
     cawco.previews[instanceId]
@@ -66,24 +66,20 @@
         : "Preview") ||
       "Preview"
   );
-  const frameKey = $derived(`${identity}:${preview?.opened}:${reload}`);
-  /**
-   * The frame on screen while the next one loads. A reload or a new URL
-   * mounts the next frame over it, unpainted; once that one connects it
-   * fades in over --dur-control and this one goes. Until then the old page
-   * stays readable instead of the well going blank.
-   */
+  const frameKey = $derived(`${preview?.revision}:${reload}`);
+  // The old paint bridges navigation only until the replacement finishes loading.
   let standing = $state<string | null>(null);
   const frames = $derived(
     standing === null || standing === frameKey
       ? [frameKey]
       : [standing, frameKey]
   );
-  /** The next frame has faded in over the one it replaces. */
-  function landed(event: TransitionEvent) {
-    if (event.propertyName === "opacity" && connected) {
-      standing = frameKey;
+  function arrived(key: string) {
+    if (key !== frameKey) {
+      return;
     }
+    loaded = true;
+    standing = key;
   }
   /**
    * Try again after a frame failure: reload the frame. Pending until the
@@ -101,6 +97,7 @@
   $effect(() => {
     if (frameKey) {
       connected = false;
+      loaded = false;
       captured = false;
     }
   });
@@ -387,15 +384,16 @@
       <iframe
         allow="clipboard-write"
         inert={!current}
+        onerror={() => arrived(key)}
         onload={() => {
+          arrived(key);
           if (key === frameKey) {
             announce();
           }
         }}
-        ontransitionend={landed}
         src={url}
         title="Preview"
-        class:ready={!current || connected}
+        class:ready={!current || loaded}
         {@attach (node) => {
           if (key === frameKey) {
             iframe = node;
@@ -406,7 +404,7 @@
     <div
       aria-hidden="true"
       class="cover"
-      class:ready={connected || standing !== null}
+      class:ready={loaded || standing !== null}
     >
       <span
         class="kit-skeleton block h-[11px] w-[42%] rounded-[var(--radius-xs)]"
@@ -546,7 +544,7 @@
     outline-color: var(--accent);
     cursor: crosshair;
   }
-  /* Frames stack: the next one loads over the one on screen. */
+  /* The replacement's load releases the old paint independently of the overlay. */
   iframe {
     position: absolute;
     inset: 0;

@@ -545,12 +545,6 @@ const state = $state({
       title?: string;
       path?: string;
       thumbnail?: string;
-      /**
-       * Counts "open" frames. Each one is a listener the hub just started —
-       * after a daemon restart, the same source on a new port — so the pane
-       * keys its frame on it and loads again.
-       */
-      opened?: number;
     }
   >,
   previewRequests: {} as Record<string, number>,
@@ -2047,14 +2041,15 @@ function handleFrame(frame: FramePayload): void {
   }
   if (frame.kind === "preview") {
     const previous = state.previews[frame.instanceId];
-    const sameSource =
-      JSON.stringify(previous?.source) === JSON.stringify(frame.source);
+    const sameRevision = previous?.revision === frame.revision;
     state.previews[frame.instanceId] = {
-      ...(sameSource ? previous : {}),
+      ...(sameRevision ? previous : {}),
       ...frame,
-      opened: (previous?.opened ?? 0) + (frame.state === "open" ? 1 : 0),
     };
-    if (frame.state === "open" && (previous?.state !== "open" || !sameSource)) {
+    if (
+      frame.state === "open" &&
+      (previous?.state !== "open" || !sameRevision)
+    ) {
       revealPreview(frame.instanceId);
     }
     return;
@@ -2070,14 +2065,7 @@ function handleFrame(frame: FramePayload): void {
         }
       }
       for (const preview of frame.previews) {
-        if (state.previews[preview.instanceId]?.state === "open") {
-          state.previews[preview.instanceId] = {
-            ...state.previews[preview.instanceId],
-            ...preview,
-          };
-        } else {
-          handleFrame(preview);
-        }
+        handleFrame(preview);
       }
     }
     // The machines ride along so a daemon registering — the moment its auth

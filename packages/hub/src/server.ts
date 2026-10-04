@@ -3435,9 +3435,10 @@ export const createServer = (
   const publishPreview = (
     instanceId: string,
     state: "open" | "closed",
-    source?: PreviewSource
+    source: PreviewSource,
+    revision: string
   ) => {
-    const frame = previewFrame(instanceId, state, source);
+    const frame = previewFrame(instanceId, state, source, revision);
     streams.sequence(instanceId, frame);
     return frame;
   };
@@ -3458,7 +3459,7 @@ export const createServer = (
       return closed;
     }
     previewTargets.delete(instanceId);
-    publishPreview(instanceId, "closed", target.source);
+    publishPreview(instanceId, "closed", target.source, target.revision);
     const answer = await callAgent(
       target.machineId,
       PREVIEW_STOP,
@@ -3532,12 +3533,17 @@ export const createServer = (
     if (!address) {
       return { ok: false, code: 503, error: "Machine is not connected" };
     }
+    const revision = crypto.randomUUID();
     previewTargets.set(instanceId, {
       machineId,
       source,
+      revision,
       upstream: { address, port: (answer.result as { port: number }).port },
     });
-    return { ok: true, frame: publishPreview(instanceId, "open", source) };
+    return {
+      ok: true,
+      frame: publishPreview(instanceId, "open", source, revision),
+    };
   };
 
   /**
@@ -3593,7 +3599,7 @@ export const createServer = (
             `[hub] preview for ${instanceId} did not restart: ${started.error}`
           );
           previewTargets.delete(instanceId);
-          publishPreview(instanceId, "closed", target.source);
+          publishPreview(instanceId, "closed", target.source, target.revision);
         })
         .catch(console.error);
     }
@@ -3610,12 +3616,14 @@ export const createServer = (
         ).catch(console.error);
         continue;
       }
+      const revision = crypto.randomUUID();
       previewTargets.set(listener.instanceId, {
         machineId,
         source: listener.source,
+        revision,
         upstream: { address, port: listener.port },
       });
-      publishPreview(listener.instanceId, "open", listener.source);
+      publishPreview(listener.instanceId, "open", listener.source, revision);
     }
   };
 
@@ -5037,7 +5045,7 @@ export const createServer = (
   const boardExtras = () => ({
     agents: withPresence(db.listAgents()),
     previews: [...previewTargets].map(([id, target]) =>
-      previewFrame(id, "open", target.source)
+      previewFrame(id, "open", target.source, target.revision)
     ),
     handoffs: Object.fromEntries(handoffs),
     // Carried on every publish, so a dashboard follows a continuation it
@@ -11139,6 +11147,7 @@ export const createServer = (
               previewTargets.set(instanceId, {
                 machineId,
                 source: target.source,
+                revision: target.revision,
               });
             }
           }

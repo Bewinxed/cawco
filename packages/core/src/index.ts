@@ -874,6 +874,8 @@ export type FramePayload =
       state: "open" | "closed";
       /** The path on the dashboard's own origin, e.g. `/preview/<id>/`. */
       path: string;
+      /** Identifies one successful open, including a rebuild of the same source. */
+      revision: string;
       source?: PreviewSource;
     }
   | {
