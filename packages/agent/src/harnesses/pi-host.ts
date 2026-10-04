@@ -1,6 +1,6 @@
 /** NDJSON host, spawned exclusively by sessiond. Agent disconnects do not end it. */
 import { createInterface } from "node:readline";
-import { INSTALL_SESSION_CREDENTIAL } from "@cawco/core";
+import { INSTALL_SESSION_CREDENTIAL, MESSAGES_READ } from "@cawco/core";
 import type { HarnessContext, HarnessSession } from "../harness";
 import { startPiHost } from "./pi-runtime";
 import type { PiHostCommand, PiHostEvent, PiHostState } from "./pi-sessiond";
@@ -26,7 +26,13 @@ function start(
     instanceId: command.spec.instanceId,
     cwd: command.spec.cwd,
     ...(command.boundary ? { boundary: command.boundary } : {}),
-    frame: (message) => output({ type: "frame", message }),
+    frame: (message) => {
+      if (message.type === "system" && message.subtype === MESSAGES_READ) {
+        const read = new Set(message.read);
+        state.held = state.held.filter((held) => !read.has(held));
+      }
+      output({ type: "frame", message });
+    },
     busy: (active) => {
       if (state.busy !== active) {
         state.busy = active;
@@ -115,6 +121,7 @@ createInterface({ input: process.stdin })
       if ("id" in command) {
         output({ type: "reply", id: command.id, error: message });
       } else if (command.type === "send") {
+        state.held = state.held.filter((held) => held !== command.message.uuid);
         output({
           type: "rejected",
           uuid: command.message.uuid,
