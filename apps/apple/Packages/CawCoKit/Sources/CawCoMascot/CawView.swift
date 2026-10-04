@@ -193,6 +193,9 @@ public final class CawView: UIView {
         }
         fade = animator
         animator.startAnimation()
+        // Committed now, so the render server runs his fade while the main thread builds whatever
+        // arrives: a home list's first layout held him on screen 280 ms past his leave.
+        CATransaction.flush()
     }
 
     private func cancelLoading() {
@@ -388,9 +391,10 @@ public final class CawWaiting: UIViewController {
             grace?.cancel()
             grace = nil
             graceOver = false
-            showContent()
-            // He fades out over the content and is taken away when he has gone.
+            // He starts fading before the content is built, fades out over it, and is taken away
+            // when he has gone.
             caw?.present = false
+            showContent()
             return
         }
         hideContent()
