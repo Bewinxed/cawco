@@ -7069,7 +7069,22 @@
       "getApiInstances200": {
         "type": "array",
         "items": {
-          "$ref": "#/components/schemas/BoardInstanceRow"
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/BoardInstanceRow"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "runningDelegates": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "runningDelegates"
+              ]
+            }
+          ]
         }
       },
       "postApiInstancesTitles200": {
@@ -16837,6 +16852,10 @@
               "null",
               "string"
             ]
+          },
+          "runningDelegates": {
+            "description": "Hub-derived count of live delegated work items, including descendants and checks.",
+            "type": "number"
           },
           "seenAt": {
             "description": "When the owner last looked at it (its tab in front, after it ended) or\narchived it off Finished, on any device. Null on one never seen.",

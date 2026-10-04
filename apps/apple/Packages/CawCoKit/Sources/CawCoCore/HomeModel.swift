@@ -101,8 +101,11 @@ public final class HomeModel {
         if let run = fleet.run(id) {
             return run.activity
         }
-        if needsStore.blocked(id) {
+        if needsStore.blocked(id) || fleet.pulses[id]?.activity == .blocked {
             return .blocked
+        }
+        if let count = fleet.byId[id]?.runningDelegates, count > 0 {
+            return .working
         }
         switch fleet.pulses[id]?.activity {
         case .working: return .working

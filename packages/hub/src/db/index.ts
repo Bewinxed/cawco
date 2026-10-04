@@ -762,6 +762,7 @@ export interface DbShape {
   readonly ruleStatesFor: (ruleId: string) => RuleState[];
   /** Per-rule totals for the list, aggregated in SQL rather than per row. */
   readonly ruleStats: () => RuleStats[];
+  readonly runningDelegateCounts: () => Map<string, number>;
   /** One send's record, by its uuid. */
   readonly sendRecord: (uuid: string) => SentMessageRow | undefined;
   /**
@@ -3096,6 +3097,31 @@ const make = (path: string): DbShape => {
         .where(eq(workItems.workspaceId, workspaceId))
         .orderBy(desc(workItems.createdAt))
         .all(),
+    runningDelegateCounts: () => {
+      const parents = new Map(
+        db
+          .select({ id: instances.id, parent: instances.parentInstanceId })
+          .from(instances)
+          .all()
+          .map((row) => [row.id, row.parent])
+      );
+      const live = db
+        .select({ parent: workItems.parentInstanceId })
+        .from(workItems)
+        .where(inArray(workItems.state, ["starting", "running"]))
+        .all();
+      const counts = new Map<string, number>();
+      for (const item of live) {
+        const visited = new Set<string>();
+        let parent: string | null | undefined = item.parent;
+        while (parent && !visited.has(parent)) {
+          visited.add(parent);
+          counts.set(parent, (counts.get(parent) ?? 0) + 1);
+          parent = parents.get(parent);
+        }
+      }
+      return counts;
+    },
     liveWorkItemsOf: (parentInstanceId) =>
       db
         .select()

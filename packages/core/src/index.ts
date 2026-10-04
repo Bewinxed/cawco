@@ -619,6 +619,8 @@ export interface InstanceRow {
   permissionMode?: string | null;
   /** Set when the session was started from a project page. */
   projectId?: string | null;
+  /** Hub-derived count of live delegated work items, including descendants and checks. */
+  runningDelegates?: number;
   /**
    * When the owner last looked at it (its tab in front, after it ended) or
    * archived it off Finished, on any device. Null on one never seen.

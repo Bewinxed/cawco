@@ -5167,13 +5167,22 @@ export const cawco = {
     if (target && target.pending.length > 0) {
       return "blocked";
     }
+    const pulse = state.pulses[instanceId];
+    if (
+      pulse?.activity === "blocked" &&
+      !(target && isSubscribed(instanceId))
+    ) {
+      return "blocked";
+    }
+    if ((instanceIndex.byId.get(instanceId)?.runningDelegates ?? 0) > 0) {
+      return "working";
+    }
     // An open session's frames are live and authoritative; anything else falls
     // back to the daemon's pulse — the only word on a session this browser has
     // not subscribed to, whose frame-fed state is frozen at the tab that closed.
     if (target && isSubscribed(instanceId)) {
       return activityOf(target);
     }
-    const pulse = state.pulses[instanceId];
     if (pulse) {
       return pulse.activity;
     }

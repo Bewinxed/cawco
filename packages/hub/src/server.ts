@@ -1584,6 +1584,7 @@ export const createServer = ({
    */
   const archiveView = (): ArchiveView => {
     const rows = db.listInstances();
+    const delegates = db.runningDelegateCounts();
     const runs = db.listWorkflowRuns();
     const children = new Map<string, string[]>();
     const under = (parent: string | null, child: string) => {
@@ -1614,7 +1615,7 @@ export const createServer = ({
           const run = runById.get(id.slice("run:".length));
           return run ? runDoing(run.status) : "idle";
         }
-        return starting.has(id)
+        return starting.has(id) || (delegates.get(id) ?? 0) > 0
           ? "working"
           : (pulses.get(id)?.activity ?? "idle");
       },
@@ -4738,9 +4739,18 @@ export const createServer = ({
    * instead: `GET /api/instances/:id/tooling` when a view opens, and the live
    * `init` frame after that.
    */
+  const withDelegates = <Row extends { id: string }>(rows: Row[]) => {
+    const counts = db.runningDelegateCounts();
+    return rows.map((row) => ({
+      ...row,
+      runningDelegates: counts.get(row.id) ?? 0,
+    }));
+  };
   const boardRows = () =>
-    withSessionPresence(
-      db.listBoardInstances().filter((row) => row.kind !== "summariser")
+    withDelegates(
+      withSessionPresence(
+        db.listBoardInstances().filter((row) => row.kind !== "summariser")
+      )
     );
 
   /**
@@ -6028,6 +6038,7 @@ export const createServer = ({
     // on any of them.
     publish: (item) => {
       const [parent] = db.getInstancesByIds([item.parentInstanceId]);
+      publishInstances(parent?.machineId ?? "");
       registry.broadcast({
         verb: "frames",
         machineId: parent?.machineId ?? "",
