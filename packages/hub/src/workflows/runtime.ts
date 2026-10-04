@@ -611,14 +611,12 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
     serial,
     spawn: deps.spawn,
     stopSession: (run, instanceId) => {
-      if (deps.online(run.machineId)) {
-        deps.emit({
-          verb: "stop",
-          machineId: run.machineId,
-          instanceId,
-          payload: { instanceId },
-        });
-      }
+      deps.emit({
+        verb: "stop",
+        machineId: run.machineId,
+        instanceId,
+        payload: { instanceId },
+      });
     },
     supervisorLive,
     write,
@@ -1502,6 +1500,7 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
       if (result.behavior === "deny") {
         serial(step.runId, () => {
           const run = runOf(step.runId);
+          // The run's mutable status is read after asynchronous permission settlement.
           if (active(run)) {
             finish(run, "cancelled");
             interrupt(run.id);

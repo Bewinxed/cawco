@@ -119,6 +119,13 @@ export interface UsageFrame {
 
 export interface StoppedFrame {
   discard: boolean;
+  /** Positive server-session receipt; absent receipts cannot confirm OpenCode. */
+  ended?: {
+    harness: HarnessKind;
+    sessionId?: string;
+    resourcesClosed: true;
+    reason?: string;
+  };
   instanceId: string;
   /** Authoritative daemon confirmation, never merely delivery of a stop request. */
   kind: "stopped";
@@ -148,12 +155,21 @@ export interface ControlResultFrame {
 }
 
 export interface ErrorFrame {
+  /** Internal end-reconciliation evidence; never relayed to a client. */
+  endReason?: string;
   instanceId?: string;
   /** Hub-originated routing failures (e.g. target machine offline). */
   kind: "error";
   message: string;
   requestId?: string;
   verb?: Verb;
+}
+
+export interface SessionAddressFrame {
+  instanceId: string;
+  kind: "session_address";
+  processGeneration: string;
+  sessionId: string;
 }
 
 export interface UserMessageFrame {

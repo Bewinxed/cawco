@@ -182,6 +182,8 @@ export interface WorkItemDeps {
   readonly db: DbShape;
   /** The agent's live turn state, including a long tool call with no output. */
   readonly inTurn: (row: InstanceRow) => boolean;
+  /** Store stop intent and wait for the machine's positive end confirmation. */
+  readonly end: (instanceId: string) => Promise<void>;
   /** Tells every dashboard an item moved: its parent's delegate tray follows it. */
   readonly publish: (item: WorkItemSummary) => void;
   /** Hands a report to the parent of the item's session. */
@@ -481,6 +483,7 @@ export const createWorkItems = ({
   call,
   command,
   db,
+  end,
   publish,
   report,
   inTurn,
@@ -1690,6 +1693,9 @@ export const createWorkItems = ({
           `Workspace ${workspace.id} has a live work item: ${live.title} (${live.id}) is ${live.state}. Stop it before archiving the workspace.`
         );
       }
+      await Promise.all(
+        db.workItemsIn(workspace.id).map((item) => end(item.instanceId))
+      );
       await call(workspace.machineId, CONTROL_WORKSPACE_ARCHIVE, [
         refOf(workspace),
       ]);

@@ -8,7 +8,6 @@ import type {
   HarnessReport,
   HeartbeatAckPayload,
   HeartbeatPayload,
-  RegisterAckPayload,
   SessionCustody,
   SpawnPayload,
 } from "@cawco/core";
@@ -22,7 +21,6 @@ import {
   CONTROL_WORKSPACE_CREATE,
   CONTROL_WORKSPACE_MIGRATE,
   OPEN_MCP_AUTHORIZATION,
-  STOP_UNOWNED_PROCESSES,
 } from "@cawco/core";
 import { sessiondEndpoint } from "@cawco/core/sessiond";
 import { fetchClaudeLimits } from "@cawco/core/usage/limits";
@@ -135,6 +133,7 @@ export interface RegisterPayload extends MachineIdentity {
    * so a hub that predates this field still reads the ids.
    */
   resumableAt?: Record<string, number>;
+  sessionAddresses: import("@cawco/core").SessionAddress[];
 }
 
 export class ConnectionLost extends Data.TaggedError("ConnectionLost")<{
@@ -474,6 +473,7 @@ export const custodyRow = (
  * holding, and what each harness could resume.
  */
 const readCustody = async (): Promise<SessionCustody> => {
+  const readStartedAt = Date.now();
   try {
     const client = await SessiondClient.connect(
       process.env.CAWCO_SESSIOND_ENDPOINT ?? sessiondEndpoint()
@@ -482,6 +482,7 @@ const readCustody = async (): Promise<SessionCustody> => {
       const held = client.procs.filter((proc) => proc.alive);
       return {
         state: "available",
+        readStartedAt,
         instances: held.flatMap((proc) => {
           const id = parseProcId(proc.procId);
           return id.kind === "claude" || id.kind === "pi"
@@ -559,7 +560,9 @@ const attach = (
     const reading = sessions();
     const socket = yield* connection(url);
     process.env[CAWCO_ENV.hubUrl] = url;
-    const { custody, catalog } = yield* Effect.promise(() => reading);
+    const { catalog } = yield* Effect.promise(() => reading);
+    // Catalog reads may be cached across reconnects; process absence may not.
+    const custody = yield* Effect.promise(readCustody);
     const build = yield* Effect.promise(() => buildInfo());
     // Consumed, not just read: true only the first register after THIS
     // process came up because a deploy restarted it onto `build.commit`, and
@@ -576,7 +579,8 @@ const attach = (
       first = false
     ): RegisterPayload => ({
       ...identity,
-      instances: supervisor.instanceIds,
+      sessionAddresses: supervisor.sessionAddresses,
+      instances: supervisor.custodyInstanceIds,
       previews: servingPreviews(),
       custody: snapshot.custody,
       ...(snapshot.catalog
@@ -800,6 +804,7 @@ const attach = (
     // see one to answer. The register is already on the wire above and the
     // socket preserves that order, so the hub still reads the register first.
     supervisor.replayOpenAsks();
+    supervisor.replaySessionAddresses();
     /**
      * CUSTODY OFF THE REGISTER ACK (design §7, step 4).
      *
@@ -843,53 +848,13 @@ const attach = (
      * back. Busy answers wait for them as they wait for claude's.
      */
     const reattaching: Promise<void>[] = [];
-    let hubRowIds: string[] = [];
-    const reportUnowned = async (signal?: AbortSignal): Promise<void> => {
-      const freshCustody = await readCustody();
-      const unownedProcesses =
-        freshCustody.state === "unavailable"
-          ? null
-          : await supervisor.listUnowned(hubRowIds).catch((error: unknown) => {
-              Effect.runFork(
-                Effect.logWarning(
-                  `unowned session listing unavailable: ${String(error)}`
-                )
-              );
-              return null;
-            });
-      signal?.throwIfAborted();
-      if (socket.readyState !== WebSocket.OPEN) {
-        throw new Error(
-          "The hub connection was lost before the fresh custody report could be sent."
-        );
-      }
-      send(socket, {
-        verb: "heartbeat",
-        machineId: identity.machineId,
-        payload: {
-          at: Date.now(),
-          instances: supervisor.instanceIds,
-          custody: freshCustody,
-          unownedProcesses,
-        } satisfies HeartbeatPayload,
-      });
-      if (unownedProcesses) {
-        Effect.runFork(
-          Effect.logInfo(
-            `left ${unownedProcesses.length} session process(es) no hub row names`
-          )
-        );
-      }
-    };
-    supervisor.registerDaemonFunction(STOP_UNOWNED_PROCESSES, async (ids) => {
-      const results = await supervisor.stopUnownedProcesses(ids as string[]);
-      await reportUnowned();
-      return { results };
-    });
+    supervisor.registerDaemonFunction("sessionCustody", async () => ({
+      custody: await readCustody(),
+      attached: supervisor.custodyInstanceIds,
+    }));
 
     const takeCustody = (ackPayload: unknown, spawns: Envelope[]): void => {
       clearTimeout(registrationDeadline);
-      hubRowIds = (ackPayload as RegisterAckPayload).rowIds;
       const named = spawns.map((envelope) =>
         custodyRow(envelope.payload as SpawnPayload)
       );
@@ -919,7 +884,17 @@ const attach = (
             .splice(0)
             .map((envelope) => supervisor.dispatch(envelope))
         );
-        await reportUnowned(signal);
+        const freshCustody = await readCustody();
+        signal.throwIfAborted();
+        send(socket, {
+          verb: "heartbeat",
+          machineId: identity.machineId,
+          payload: {
+            at: Date.now(),
+            instances: supervisor.custodyInstanceIds,
+            custody: freshCustody,
+          } satisfies HeartbeatPayload,
+        });
         return attached;
       };
       const custodyRecovered = (epoch: number, adopted: string[]) => {
@@ -1030,7 +1005,7 @@ const attach = (
 
     yield* Effect.forkScoped(
       Effect.repeat(
-        Effect.sync(() =>
+        Effect.promise(async () =>
           send(socket, {
             verb: "heartbeat",
             machineId: identity.machineId,
@@ -1041,7 +1016,9 @@ const attach = (
             // next one. Omitted entirely until a watcher has ticked.
             payload: {
               at: Date.now(),
-              instances: supervisor.instanceIds,
+              sessionAddresses: supervisor.sessionAddresses,
+              instances: supervisor.custodyInstanceIds,
+              custody: await readCustody(),
               ...(changedPiAuth() ? { harnesses: reportedHarnesses } : {}),
               ...(latestDeploy() ? { deploy: latestDeploy() } : {}),
             } satisfies HeartbeatPayload,

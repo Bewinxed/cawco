@@ -247,6 +247,15 @@ export const projects = sqliteTable("projects", {
 
 /** A running or resumable `query()`. Messages live in SDK session storage, not here. */
 export const instances = sqliteTable("instances", {
+  addressProtocol: integer("address_protocol", { mode: "boolean" })
+    .notNull()
+    .default(false),
+  endReason: text("end_reason"),
+  /** The hub's decision, independent of process presence and attachment. */
+  endIntent: text("end_intent").$type<
+    "stop" | "discard" | "delete" | "delete-transcript"
+  >(),
+  endConfirmedAt: timestamp("end_confirmed_at"),
   keepAliveEnabled: integer("keep_alive", { mode: "boolean" })
     .notNull()
     .default(false),

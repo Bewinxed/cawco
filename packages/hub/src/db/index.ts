@@ -25,6 +25,7 @@ import type {
   RuleState,
   RuleStats,
   SessionEffort,
+  SessionEndIntent,
   SessionTooling,
   SkillFile,
   SupervisorEvent,
@@ -110,6 +111,12 @@ import {
 
 /** Ids looked up per statement (bound twice), well under SQLite's variable limit. */
 const SENDS_FOR_BATCH = 500;
+const END_PRIORITY: Record<SessionEndIntent, number> = {
+  stop: 0,
+  discard: 1,
+  delete: 2,
+  "delete-transcript": 3,
+};
 
 /**
  * Defined only in the published package's bundle (scripts/build-release.mjs),
@@ -126,7 +133,11 @@ const MIGRATIONS_DIR = Bun.fileURLToPath(
 );
 
 export type InstanceKind = (typeof instances.$inferSelect)["kind"];
-export type BoardInstanceRow = Omit<typeof instances.$inferSelect, "tooling">;
+export type PublicInstanceRow = Omit<
+  typeof instances.$inferSelect,
+  "endIntent" | "endConfirmedAt" | "addressProtocol" | "endReason"
+>;
+export type BoardInstanceRow = Omit<PublicInstanceRow, "tooling">;
 export type ContinuationRow = typeof continuations.$inferSelect;
 export type WorkflowRow = typeof workflows.$inferSelect;
 export type WorkflowRunRow = typeof workflowRuns.$inferSelect;
@@ -251,6 +262,8 @@ export interface DbShape {
   readonly clearFleetMemory: () => void;
   /** Forget the OpenRouter key. */
   readonly clearOpenRouterConnection: () => void;
+  /** A receipt for the current row's decision; deletes are finalized here. */
+  readonly confirmInstanceEnd: (id: string, reason?: string) => void;
   readonly continuationRow: (id: string) => ContinuationRow | undefined;
   /** Every continuation job, oldest first. */
   readonly continuationRows: () => ContinuationRow[];
@@ -272,10 +285,9 @@ export interface DbShape {
   readonly deleteFleetAgent: (name: string) => void;
   readonly deleteFleetHook: (id: string) => void;
   readonly deleteFleetMemoryDoc: (path: string) => void;
-  /** Deletes one session row and everything keyed to it — the same delete Remove machine runs per session. */
-  readonly deleteInstance: (id: string) => void;
   /**
-   * Forgets a machine: its row, the projects and session rows that name it,
+   * Forgets a machine's entry and projects; hidden session ownership remains
+   * until its stored delete decisions are confirmed by that machine.
    * and its current limit reading. Spend and limit history stay, because they
    * happened. Answers how many of each went, for the confirm's receipt.
    */
@@ -294,11 +306,16 @@ export interface DbShape {
   readonly deleteWorkflow: (id: string) => void;
   /** A kept supervisor notice that has now been sent. */
   readonly deleteWorkflowNotice: (id: number) => void;
-  /** A side quest thrown away: stopped, and gone from every live listing. */
-  readonly discardInstance: (id: string) => void;
+  /** Persist the decision before its reconciler may send anything. */
+  readonly endInstance: (
+    id: string,
+    intent: SessionEndIntent
+  ) => typeof instances.$inferSelect | undefined;
   readonly expirePendingSessionIdentities: (machineId: string) => void;
   /** The agent reported the session dead: what killed it, kept for late readers. */
   readonly failInstance: (id: string, error: string) => void;
+  /** Transcript deletion follows confirmed process exit, never precedes it. */
+  readonly finishTranscriptDelete: (id: string) => void;
   readonly finishWorkspaceCreate: (id: string) => void;
   /** The whole desired fleet state (NEW.md §11) — what a machine is sent to converge on. */
   /**
@@ -329,9 +346,7 @@ export interface DbShape {
    * those were thrown away on purpose. Raw, so a caller can tell a given title
    * from a derived one.
    */
-  readonly getInstancesByIds: (
-    ids: string[]
-  ) => (typeof instances.$inferSelect)[];
+  readonly getInstancesByIds: (ids: string[]) => PublicInstanceRow[];
   readonly getMcpOauth: (
     name: string
   ) => typeof fleetMcpOauth.$inferSelect | undefined;
@@ -369,7 +384,7 @@ export interface DbShape {
   /** Look up a single non-discarded instance by its harness sessionId. */
   readonly instanceBySessionId: (
     sessionId: string
-  ) => typeof instances.$inferSelect | undefined;
+  ) => PublicInstanceRow | undefined;
   /** Known prompt writes invalidate every Claude cache on the owning machine. */
   readonly invalidateClaudeCaches: (
     machineId: string,
@@ -411,7 +426,7 @@ export interface DbShape {
    * are never mixed, because the panel asks about one document at a time.
    */
   readonly listFleetMemoryHistory: (path?: string) => MemoryVersion[];
-  readonly listInstances: () => (typeof instances.$inferSelect)[];
+  readonly listInstances: () => PublicInstanceRow[];
   /**
    * Every plugin row without its files, `error` and all. What the DASHBOARD
    * reads: {@link fleetConfig} answers the machines and deliberately carries
@@ -493,8 +508,8 @@ export interface DbShape {
     title: string,
     by: "owner" | "agent"
   ) =>
-    | { named: true; row: typeof instances.$inferSelect }
-    | { named: false; row: typeof instances.$inferSelect }
+    | { named: true; row: PublicInstanceRow }
+    | { named: false; row: PublicInstanceRow }
     | undefined;
   /** Records the window a claude turn reported for its model. */
   readonly noteClaudeContextWindow: (
@@ -508,6 +523,7 @@ export interface DbShape {
    * only re-publishes when something actually moved.
    */
   readonly noteDerivedTitle: (id: string, derivedTitle: string) => boolean;
+  readonly noteEndReason: (id: string, reason: string) => void;
   /**
    * The effort the session's agent read back from its harness (`EFFORT_READ`).
    * Returns whether the row moved, so a reading repeated at every turn's end
@@ -538,6 +554,7 @@ export interface DbShape {
     repeat: boolean
   ) => RuleState;
   readonly openInstance: (instance: {
+    addressProtocol?: boolean;
     id: string;
     machineId: string;
     cwd: string;
@@ -576,7 +593,7 @@ export interface DbShape {
       workItemId?: string;
       parentInstanceId?: string;
     }
-  ) => typeof instances.$inferSelect | undefined;
+  ) => PublicInstanceRow | undefined;
   readonly putCredential: (id: string, blob: Record<string, unknown>) => void;
   /** Upsert of one definition's file; the hash and the size are read off it. */
   readonly putFleetAgent: (agent: {
@@ -802,6 +819,10 @@ export interface DbShape {
     error: string | null,
     rejectPending?: boolean
   ) => void;
+  /** Unfiltered ownership, including hidden deletes and discarded rows. */
+  readonly sessionOwnership: (
+    machineId?: string
+  ) => (typeof instances.$inferSelect)[];
   readonly setAgentBrowser: (machineId: string, available: boolean) => void;
   /** A machine's own account of what it came to, from the sync it just answered. */
   readonly setAgentFleet: (machineId: string, report: FleetSyncReport) => void;
@@ -874,7 +895,6 @@ export interface DbShape {
    */
   readonly sleepInstance: (id: string) => boolean;
   readonly stageSessionIdentity: (instanceId: string, hash: string) => void;
-  readonly stopInstance: (id: string) => void;
   /**
    * The one-time reclassification a taxonomy change needs when the column is
    * plain text and there is no SQL migration to hang it on. Idempotent by
@@ -926,9 +946,7 @@ export interface DbShape {
    * catalog, and the only rows worth spending a catalog read on. Empty is the
    * steady state, which is what makes that read free to offer.
    */
-  readonly unnamedSessions: (
-    machineId: string
-  ) => (typeof instances.$inferSelect)[];
+  readonly unnamedSessions: (machineId: string) => PublicInstanceRow[];
   /** Enabled plugins with no resolved files and no recorded failure — what a resolve is for. */
   readonly unresolvedPlugins: () => string[];
   /** Moves one job; the row as it now is, or undefined when it is gone. */
@@ -1193,10 +1211,18 @@ export const hashHookMaterial = (hook: {
 const make = (path: string): DbShape => {
   mkdirSync(dirname(path), { recursive: true });
   const db = drizzle(path);
-  const { tooling: _tooling, ...boardColumns } = getTableColumns(instances);
+  const {
+    addressProtocol: _addressProtocol,
+    endReason: _endReason,
+    endIntent: _endIntent,
+    endConfirmedAt: _endConfirmedAt,
+    ...publicColumns
+  } = getTableColumns(instances);
+  const { tooling: _tooling, ...boardColumns } = publicColumns;
   const listedInstances = () =>
     and(
       ne(instances.status, "discarded"),
+      or(isNull(instances.endIntent), eq(instances.endIntent, "stop")),
       or(
         inArray(instances.status, ["running", "sleeping"]),
         gt(instances.updatedAt, new Date(Date.now() - STALE_AFTER_MS))
@@ -1519,6 +1545,99 @@ const make = (path: string): DbShape => {
         )
         .run();
     },
+    sessionOwnership: (machineId) =>
+      db
+        .select()
+        .from(instances)
+        .where(
+          machineId === undefined
+            ? undefined
+            : eq(instances.machineId, machineId)
+        )
+        .all(),
+    endInstance: (id, intent) =>
+      db.transaction(
+        // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: precedence and never-started confirmation share the persist-first transaction
+        (tx) => {
+          const row = tx
+            .select()
+            .from(instances)
+            .where(eq(instances.id, id))
+            .get();
+          if (!row) {
+            return;
+          }
+          const next =
+            row.endIntent && END_PRIORITY[row.endIntent] > END_PRIORITY[intent]
+              ? row.endIntent
+              : intent;
+          const neverStarted =
+            row.harness === "opencode" && row.addressProtocol && !row.sessionId;
+          const ended = tx
+            .update(instances)
+            .set({
+              endIntent: next,
+              endConfirmedAt:
+                row.endIntent === next ? row.endConfirmedAt : null,
+              endReason: neverStarted ? "never started" : row.endReason,
+              ...(neverStarted ? { endConfirmedAt: new Date() } : {}),
+              status: row.status === "discarded" ? "discarded" : "stopped",
+              updatedAt: new Date(),
+            })
+            .where(eq(instances.id, id))
+            .returning()
+            .get();
+          if (neverStarted && next === "delete") {
+            dropInstances(tx, [id]);
+          }
+          return ended;
+        }
+      ),
+    noteEndReason: (id, reason) => {
+      db.update(instances)
+        .set({ endReason: reason })
+        .where(
+          and(
+            eq(instances.id, id),
+            isNotNull(instances.endIntent),
+            isNull(instances.endConfirmedAt)
+          )
+        )
+        .run();
+    },
+    confirmInstanceEnd: (id, reason) =>
+      db.transaction((tx) => {
+        const row = tx
+          .select()
+          .from(instances)
+          .where(eq(instances.id, id))
+          .get();
+        if (!row?.endIntent) {
+          return;
+        }
+        tx.update(instances)
+          .set({
+            endConfirmedAt: new Date(),
+            ...(reason ? { endReason: reason } : {}),
+            status: row.endIntent === "discard" ? "discarded" : "stopped",
+          })
+          .where(eq(instances.id, id))
+          .run();
+        if (row.endIntent === "delete") {
+          dropInstances(tx, [id]);
+        }
+      }),
+    finishTranscriptDelete: (id) =>
+      db.transaction((tx) => {
+        const row = tx
+          .select()
+          .from(instances)
+          .where(eq(instances.id, id))
+          .get();
+        if (row?.endIntent === "delete-transcript" && row.endConfirmedAt) {
+          dropInstances(tx, [id]);
+        }
+      }),
     updateKeepAlive: (id, patch) => {
       db.update(instances)
         .set({
@@ -1842,6 +1961,7 @@ const make = (path: string): DbShape => {
       db.update(agents).set({ status: "offline" }).run();
     },
     openInstance: ({
+      addressProtocol = false,
       id,
       machineId,
       cwd,
@@ -1861,6 +1981,21 @@ const make = (path: string): DbShape => {
       // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: opens (or reuses) the one live row for a conversation across every optional field a spawn can carry — see the "one conversation, one live row" invariant below.
     }) => {
       const now = new Date();
+      const existing = db
+        .select()
+        .from(instances)
+        .where(eq(instances.id, id))
+        .get();
+      if (existing && existing.machineId !== machineId) {
+        throw new Error(
+          `Instance ${id} belongs to machine ${existing.machineId}, not ${machineId}.`
+        );
+      }
+      if (existing?.endIntent && existing.endIntent !== "stop") {
+        throw new Error(
+          `Instance ${id} is being deleted and cannot be reopened.`
+        );
+      }
 
       // Same refusal as noteInstanceSession below: a spawn whose resume key is
       // the instance id itself carries confusion, not identity. Treat it as
@@ -1891,6 +2026,7 @@ const make = (path: string): DbShape => {
       }
       db.insert(instances)
         .values({
+          addressProtocol,
           id,
           machineId,
           cwd,
@@ -1938,6 +2074,10 @@ const make = (path: string): DbShape => {
             // daemon reconnect instant.
             status: "starting",
             spawnedAt: now,
+            endIntent: null,
+            endConfirmedAt: null,
+            endReason: null,
+            addressProtocol,
             lastError: null,
             ...(cleanSessionId ? { sessionId: cleanSessionId } : {}),
             ...(harness ? { harness } : {}),
@@ -1956,6 +2096,20 @@ const make = (path: string): DbShape => {
         .run();
     },
     nameInstance: (id, title, by) => {
+      const visible = db
+        .select({ id: instances.id })
+        .from(instances)
+        .where(
+          and(
+            eq(instances.id, id),
+            ne(instances.status, "discarded"),
+            or(isNull(instances.endIntent), eq(instances.endIntent, "stop"))
+          )
+        )
+        .get();
+      if (!visible) {
+        return;
+      }
       // `updatedAt` deliberately untouched, as with `noteDerivedTitle`:
       // naming a row is not the session moving.
       const [named] = db
@@ -1972,12 +2126,21 @@ const make = (path: string): DbShape => {
                 )
               )
         )
-        .returning()
+        .returning(publicColumns)
         .all();
       if (named) {
         return { named: true, row: named };
       }
-      const row = db.select().from(instances).where(eq(instances.id, id)).get();
+      const row = db
+        .select(publicColumns)
+        .from(instances)
+        .where(
+          and(
+            eq(instances.id, id),
+            or(isNull(instances.endIntent), eq(instances.endIntent, "stop"))
+          )
+        )
+        .get();
       return row ? { named: false, row } : undefined;
     },
     noteDerivedTitle: (id, derivedTitle) => {
@@ -1999,12 +2162,6 @@ const make = (path: string): DbShape => {
         .returning({ id: instances.id })
         .all();
       return written.length > 0;
-    },
-    stopInstance: (id) => {
-      db.update(instances)
-        .set({ status: "stopped", updatedAt: new Date() })
-        .where(eq(instances.id, id))
-        .run();
     },
     // `updatedAt` untouched, as wherever the hub files a process as gone: the
     // session did nothing, and that column says when it last did.
@@ -2032,13 +2189,13 @@ const make = (path: string): DbShape => {
       // fail long after the session did, and it is not coming back as a row.
       db.update(instances)
         .set({ status: "error", lastError: error, updatedAt: new Date() })
-        .where(and(eq(instances.id, id), ne(instances.status, "discarded")))
-        .run();
-    },
-    discardInstance: (id) => {
-      db.update(instances)
-        .set({ status: "discarded", updatedAt: new Date() })
-        .where(eq(instances.id, id))
+        .where(
+          and(
+            eq(instances.id, id),
+            ne(instances.status, "discarded"),
+            isNull(instances.endIntent)
+          )
+        )
         .run();
     },
     patchInstance: (id, patch) =>
@@ -2046,7 +2203,7 @@ const make = (path: string): DbShape => {
         .update(instances)
         .set({ ...patch, updatedAt: new Date() })
         .where(eq(instances.id, id))
-        .returning()
+        .returning(publicColumns)
         .get(),
     markSeen: (instanceIds, runIds, at) => ({
       instances:
@@ -3053,7 +3210,7 @@ const make = (path: string): DbShape => {
     // listed at the price of every age in the rail reading the same.
     listInstances: () =>
       db
-        .select()
+        .select(publicColumns)
         .from(instances)
         .where(listedInstances())
         .all()
@@ -3070,28 +3227,33 @@ const make = (path: string): DbShape => {
         return [];
       }
       return db
-        .select()
+        .select(publicColumns)
         .from(instances)
         .where(
-          and(inArray(instances.id, ids), ne(instances.status, "discarded"))
+          and(
+            inArray(instances.id, ids),
+            ne(instances.status, "discarded"),
+            or(isNull(instances.endIntent), eq(instances.endIntent, "stop"))
+          )
         )
         .all();
     },
     instanceBySessionId: (sessionId) =>
       db
-        .select()
+        .select(publicColumns)
         .from(instances)
         .where(
           and(
             eq(instances.sessionId, sessionId),
-            ne(instances.status, "discarded")
+            ne(instances.status, "discarded"),
+            or(isNull(instances.endIntent), eq(instances.endIntent, "stop"))
           )
         )
         .limit(1)
         .all()[0],
     unnamedSessions: (machineId) =>
       db
-        .select()
+        .select(publicColumns)
         .from(instances)
         .where(
           and(
@@ -3099,7 +3261,8 @@ const make = (path: string): DbShape => {
             ne(instances.status, "discarded"),
             isNull(instances.title),
             isNull(instances.derivedTitle),
-            isNotNull(instances.sessionId)
+            isNotNull(instances.sessionId),
+            or(isNull(instances.endIntent), eq(instances.endIntent, "stop"))
           )
         )
         .all(),
@@ -3118,7 +3281,7 @@ const make = (path: string): DbShape => {
           .where(eq(instances.machineId, machineId))
           .all()
           .map((row) => row.id);
-        dropInstances(tx, ids);
+        // Ownership remains until each machine confirms the stored delete.
         const projectCount = tx
           .delete(projects)
           .where(eq(projects.machineId, machineId))
@@ -3129,10 +3292,6 @@ const make = (path: string): DbShape => {
           .run();
         tx.delete(agents).where(eq(agents.machineId, machineId)).run();
         return { instanceIds: ids, projects: projectCount };
-      }),
-    deleteInstance: (id) =>
-      db.transaction((tx) => {
-        dropInstances(tx, [id]);
       }),
     deleteProject: (id) => {
       // The sessions started from it outlive it; they just stop being its.

@@ -1967,106 +1967,6 @@
         }
       }
     },
-    "/api/agents/{machineId}/unowned-processes/stop": {
-      "post": {
-        "parameters": [
-          {
-            "name": "machineId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "instanceIds": {
-                    "minItems": 1,
-                    "type": "array",
-                    "items": {
-                      "minLength": 1,
-                      "type": "string"
-                    }
-                  }
-                },
-                "required": [
-                  "instanceIds"
-                ]
-              }
-            }
-          }
-        },
-        "operationId": "postApiAgentsByMachineIdUnownedProcessesStop",
-        "responses": {
-          "200": {
-            "description": "postApiAgentsByMachineIdUnownedProcessesStop 200",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/postApiAgentsByMachineIdUnownedProcessesStop200"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "postApiAgentsByMachineIdUnownedProcessesStop 404",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/postApiAgentsByMachineIdUnownedProcessesStop404"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "postApiAgentsByMachineIdUnownedProcessesStop 409",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/postApiAgentsByMachineIdUnownedProcessesStop409"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "postApiAgentsByMachineIdUnownedProcessesStop 422",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ValidationErrorResponse"
-                }
-              }
-            }
-          },
-          "502": {
-            "description": "postApiAgentsByMachineIdUnownedProcessesStop 502",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/postApiAgentsByMachineIdUnownedProcessesStop502"
-                }
-              }
-            }
-          },
-          "504": {
-            "description": "postApiAgentsByMachineIdUnownedProcessesStop 504",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/postApiAgentsByMachineIdUnownedProcessesStop504"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/agents/{machineId}/update": {
       "post": {
         "parameters": [
@@ -7232,92 +7132,6 @@
           "instances"
         ]
       },
-      "postApiAgentsByMachineIdUnownedProcessesStop200": {
-        "type": "object",
-        "properties": {
-          "results": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/UnownedProcessStopResult"
-            }
-          }
-        },
-        "required": [
-          "results"
-        ]
-      },
-      "postApiAgentsByMachineIdUnownedProcessesStop404": {
-        "type": "object",
-        "properties": {
-          "error": {
-            "type": "string",
-            "pattern": "^machine .* is not connected$"
-          }
-        },
-        "required": [
-          "error"
-        ]
-      },
-      "postApiAgentsByMachineIdUnownedProcessesStop409": {
-        "anyOf": [
-          {
-            "type": "object",
-            "properties": {
-              "error": {
-                "type": "string",
-                "enum": [
-                  "The machine could not read sessiond. No processes were stopped."
-                ]
-              }
-            },
-            "required": [
-              "error"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "error": {
-                "type": "string",
-                "pattern": "^These processes are not listed as unowned on this machine: .*\\. No processes were stopped\\.$"
-              },
-              "instanceIds": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              }
-            },
-            "required": [
-              "error",
-              "instanceIds"
-            ]
-          }
-        ]
-      },
-      "postApiAgentsByMachineIdUnownedProcessesStop502": {
-        "type": "object",
-        "properties": {
-          "error": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "error"
-        ]
-      },
-      "postApiAgentsByMachineIdUnownedProcessesStop504": {
-        "type": "object",
-        "properties": {
-          "error": {
-            "type": "string",
-            "pattern": "^machine .* did not answer; completion is unknown$"
-          }
-        },
-        "required": [
-          "error"
-        ]
-      },
       "getApiInstances200": {
         "type": "array",
         "items": {
@@ -9608,6 +9422,9 @@
             "$ref": "#/components/schemas/ErrorFrame"
           },
           {
+            "$ref": "#/components/schemas/SessionAddressFrame"
+          },
+          {
             "$ref": "#/components/schemas/UserMessageFrame"
           },
           {
@@ -9648,6 +9465,7 @@
             "recovery_unavailable": "#/components/schemas/RecoveryUnavailableFrame",
             "control_result": "#/components/schemas/ControlResultFrame",
             "error": "#/components/schemas/ErrorFrame",
+            "session_address": "#/components/schemas/SessionAddressFrame",
             "user_message": "#/components/schemas/UserMessageFrame",
             "pulse": "#/components/schemas/PulseFrame",
             "work_item": "#/components/schemas/WorkItemFrame",
@@ -9855,12 +9673,31 @@
         "description": "`stop`: interrupt and close a live session.",
         "type": "object",
         "properties": {
+          "claimedSessionIds": {
+            "description": "Addresses claimed by other rows; only unclaimed server runners make a legacy read ambiguous.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "cwd": {
+            "type": "string"
+          },
           "discard": {
             "description": "Explicitly abort unadopted custody too, then tear down side-quest resources.",
             "type": "boolean"
           },
           "from": {
             "description": "The instance a fleet-originated stop claims as its caller; the hub honours the call only when the target is that instance's own delegate.",
+            "type": "string"
+          },
+          "harness": {
+            "description": "Row-owned coordinates for ending server custody without adoption.",
+            "enum": [
+              "claude",
+              "opencode",
+              "pi"
+            ],
             "type": "string"
           },
           "instanceId": {
@@ -9872,6 +9709,9 @@
           },
           "requestId": {
             "description": "Correlates the `control_result` frame confirming stop/discard or its failure.",
+            "type": "string"
+          },
+          "sessionId": {
             "type": "string"
           }
         },
@@ -11837,6 +11677,9 @@
                   },
                   "opencode": {
                     "type": "boolean"
+                  },
+                  "readStartedAt": {
+                    "type": "number"
                   }
                 },
                 "required": [
@@ -11916,13 +11759,6 @@
           "tools": {
             "type": "object",
             "description": "Last-known workflow-tool status by tool id (NEW.md §10)."
-          },
-          "unownedProcesses": {
-            "description": "Unattached children reported after custody; null means not yet readable.",
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/UnownedSessionProcess"
-            }
           }
         },
         "required": [
@@ -12332,44 +12168,6 @@
         ],
         "type": "string"
       },
-      "UnownedSessionProcess": {
-        "type": "object",
-        "properties": {
-          "cwd": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "harness": {
-            "enum": [
-              "claude",
-              "pi"
-            ],
-            "type": "string"
-          },
-          "instanceId": {
-            "type": "string"
-          },
-          "pid": {
-            "type": "number"
-          },
-          "turnRunning": {
-            "description": "null when retained output has no readable turn marker.",
-            "type": [
-              "null",
-              "boolean"
-            ]
-          }
-        },
-        "required": [
-          "cwd",
-          "harness",
-          "instanceId",
-          "pid",
-          "turnRunning"
-        ]
-      },
       "GeneratedImage": {
         "type": "object",
         "properties": {
@@ -12625,51 +12423,6 @@
           "on",
           "sent",
           "state"
-        ]
-      },
-      "UnownedProcessStopResult": {
-        "description": "Machine-reported outcome for one owner-named unowned process.",
-        "anyOf": [
-          {
-            "type": "object",
-            "properties": {
-              "instanceId": {
-                "type": "string"
-              },
-              "status": {
-                "type": "string",
-                "enum": [
-                  "stopped"
-                ]
-              }
-            },
-            "required": [
-              "instanceId",
-              "status"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "instanceId": {
-                "type": "string"
-              },
-              "status": {
-                "type": "string",
-                "enum": [
-                  "failed"
-                ]
-              },
-              "error": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "error",
-              "instanceId",
-              "status"
-            ]
-          }
         ]
       },
       "ConfigInspection": {
@@ -17531,6 +17284,31 @@
           "discard": {
             "type": "boolean"
           },
+          "ended": {
+            "description": "Positive server-session receipt; absent receipts cannot confirm OpenCode.",
+            "type": "object",
+            "properties": {
+              "harness": {
+                "$ref": "#/components/schemas/HarnessKind"
+              },
+              "sessionId": {
+                "type": "string"
+              },
+              "resourcesClosed": {
+                "type": "boolean",
+                "enum": [
+                  true
+                ]
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "harness",
+              "resourcesClosed"
+            ]
+          },
           "instanceId": {
             "type": "string"
           },
@@ -17623,6 +17401,10 @@
       "ErrorFrame": {
         "type": "object",
         "properties": {
+          "endReason": {
+            "description": "Internal end-reconciliation evidence; never relayed to a client.",
+            "type": "string"
+          },
           "instanceId": {
             "type": "string"
           },
@@ -17658,6 +17440,32 @@
         "required": [
           "kind",
           "message"
+        ]
+      },
+      "SessionAddressFrame": {
+        "type": "object",
+        "properties": {
+          "instanceId": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "session_address"
+            ]
+          },
+          "processGeneration": {
+            "type": "string"
+          },
+          "sessionId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "instanceId",
+          "kind",
+          "processGeneration",
+          "sessionId"
         ]
       },
       "UserMessageFrame": {

@@ -1,0 +1,236 @@
+/** Stored decisions own lifetime; connection-local work is only delivery. */
+import type {
+  InstanceRow,
+  SessionCustody,
+  SessionEndIntent,
+  StopPayload,
+} from "@cawco/core";
+import type { DbShape } from "./db";
+
+interface Snapshot {
+  attached: string[];
+  custody: SessionCustody;
+}
+
+export const createSessionLifecycle = (ports: {
+  db: DbShape;
+  send: (machineId: string, payload: StopPayload) => boolean;
+  restore: (row: InstanceRow) => void;
+  deleteTranscript: (row: InstanceRow) => Promise<boolean>;
+  changed: (machineId: string, removed?: string) => void;
+  refresh: (machineId: string) => void;
+}) => {
+  const snapshots = new Map<string, Snapshot>();
+  const attaching = new Map<string, { at: number; attempts: number }>();
+  const deleting = new Set<string>();
+  const issued = new Map<string, { generation: string; at: number }>();
+  const delivering = new Map<string, string>();
+  const generation = (row: ReturnType<DbShape["sessionOwnership"]>[number]) =>
+    JSON.stringify([row.id, row.spawnedAt]);
+
+  const finishTranscript = (
+    row: ReturnType<DbShape["sessionOwnership"]>[number]
+  ) => {
+    if (deleting.has(row.id)) {
+      return;
+    }
+    deleting.add(row.id);
+    ports
+      .deleteTranscript(row)
+      .then((done) => {
+        const current = ports.db
+          .sessionOwnership(row.machineId)
+          .find((owner) => owner.id === row.id);
+        if (
+          done &&
+          current?.endIntent === "delete-transcript" &&
+          current.endConfirmedAt &&
+          generation(current) === generation(row)
+        ) {
+          ports.db.finishTranscriptDelete(row.id);
+          ports.changed(row.machineId, row.id);
+        }
+      })
+      .catch(() => undefined)
+      .finally(() => deleting.delete(row.id));
+  };
+
+  const reconcile = (
+    machineId: string,
+    fresh?: Snapshot,
+    confirmAbsent = true
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: total keep/end decision table reads current durable rows on every run, with positive custody required for absence
+  ): void => {
+    if (fresh) {
+      snapshots.set(machineId, fresh);
+    }
+    const snapshot = snapshots.get(machineId);
+    if (snapshot?.custody.state !== "available") {
+      return;
+    }
+    const held = new Set(snapshot.custody.instances);
+    const attached = new Set(snapshot.attached);
+    for (const row of ports.db.sessionOwnership(machineId)) {
+      if (row.endIntent) {
+        attaching.delete(row.id);
+        const sent = issued.get(row.id);
+        const postStopRead =
+          sent?.generation === generation(row) &&
+          snapshot.custody.readStartedAt !== undefined &&
+          snapshot.custody.readStartedAt > sent.at;
+        if (row.endConfirmedAt) {
+          if (row.endIntent === "delete-transcript") {
+            finishTranscript(row);
+          }
+          continue;
+        }
+        // Only a new machine reading can prove absence, never a cached one.
+        if (
+          fresh &&
+          confirmAbsent &&
+          postStopRead &&
+          row.harness !== "opencode" &&
+          !held.has(row.id) &&
+          !attached.has(row.id) &&
+          (row.endIntent !== "discard" || row.status === "discarded")
+        ) {
+          ports.db.confirmInstanceEnd(row.id);
+          issued.delete(row.id);
+          ports.changed(
+            machineId,
+            row.endIntent === "delete" ? row.id : undefined
+          );
+          if (row.endIntent === "delete-transcript") {
+            finishTranscript(row);
+          }
+          continue;
+        }
+        if (delivering.get(row.id) === generation(row)) {
+          continue;
+        }
+        const sentAt = Date.now();
+        const delivered = ports.send(machineId, {
+          instanceId: row.id,
+          processGeneration: generation(row),
+          ...(row.harness
+            ? { harness: row.harness as StopPayload["harness"] }
+            : {}),
+          ...(row.sessionId ? { sessionId: row.sessionId } : {}),
+          cwd: row.cwd,
+          ...(row.harness === "opencode" && !row.sessionId
+            ? {
+                claimedSessionIds: ports.db
+                  .sessionOwnership(machineId)
+                  .flatMap((owner) =>
+                    owner.harness === "opencode" && owner.sessionId
+                      ? [owner.sessionId]
+                      : []
+                  ),
+              }
+            : {}),
+          discard: row.endIntent === "discard" && row.status !== "discarded",
+        });
+        if (delivered && sent?.generation !== generation(row)) {
+          issued.set(row.id, { generation: generation(row), at: sentAt });
+        }
+        if (delivered) {
+          delivering.set(row.id, generation(row));
+        }
+        continue;
+      }
+      issued.delete(row.id);
+      delivering.delete(row.id);
+      if (attached.has(row.id)) {
+        attaching.delete(row.id);
+      } else if (held.has(row.id)) {
+        const prior = attaching.get(row.id);
+        if (!prior || Date.now() >= prior.at) {
+          const attempts = (prior?.attempts ?? 0) + 1;
+          attaching.set(row.id, {
+            attempts,
+            at:
+              Date.now() +
+              Math.min(30_000, 1000 * 2 ** Math.min(attempts - 1, 5)),
+          });
+          ports.restore(row);
+        }
+      }
+    }
+  };
+
+  const endSession = (instanceId: string, intent: SessionEndIntent): void => {
+    const row = ports.db.endInstance(instanceId, intent);
+    if (row) {
+      ports.changed(
+        row.machineId,
+        row.endIntent === "delete" && row.endConfirmedAt ? row.id : undefined
+      );
+      reconcile(row.machineId);
+      ports.refresh(row.machineId);
+    }
+  };
+
+  const confirm = (
+    machineId: string,
+    id: string,
+    payload: {
+      discard?: boolean;
+      processGeneration?: string;
+      ended?: {
+        harness: string;
+        sessionId?: string;
+        resourcesClosed: boolean;
+        reason?: string;
+      };
+    }
+  ): boolean => {
+    const row = ports.db
+      .sessionOwnership(machineId)
+      .find((owner) => owner.id === id);
+    if (
+      !(row?.endIntent && payload.ended?.resourcesClosed) ||
+      payload.ended.harness !== (row.harness ?? "claude") ||
+      payload.processGeneration !== generation(row) ||
+      (row.endIntent === "discard" &&
+        row.status !== "discarded" &&
+        !payload.discard)
+    ) {
+      return false;
+    }
+    if (
+      row.harness === "opencode" &&
+      !(
+        payload.ended?.harness === "opencode" &&
+        (payload.ended.sessionId === row.sessionId ||
+          (!row.sessionId &&
+            payload.ended.reason?.startsWith(
+              `no unclaimed runner in ${row.cwd} at `
+            ))) &&
+        payload.ended.resourcesClosed
+      )
+    ) {
+      return false;
+    }
+    ports.db.confirmInstanceEnd(id, payload.ended.reason);
+    issued.delete(id);
+    delivering.delete(id);
+    ports.changed(machineId, row.endIntent === "delete" ? id : undefined);
+    if (row.endIntent === "delete-transcript") {
+      finishTranscript(row);
+    }
+    return true;
+  };
+
+  return {
+    endSession,
+    reconcile,
+    confirm,
+    deliveryFailed: (id: string) => delivering.delete(id),
+    disconnect: (machineId: string) => {
+      snapshots.delete(machineId);
+      for (const row of ports.db.sessionOwnership(machineId)) {
+        delivering.delete(row.id);
+      }
+    },
+  };
+};

@@ -47,8 +47,10 @@ import type {
   SendPayload,
   SendRecord,
   SentMessage,
+  SessionAddress,
   SessionCredentialInstall,
   SessionCustody,
+  SessionEndIntent,
   SessionMessage,
   SessionPulse,
   SessionTooling,
@@ -59,8 +61,6 @@ import type {
   ToolState,
   ToolStatus,
   TranscriptWhere,
-  UnownedProcessStopResult,
-  UnownedSessionProcess,
   UpdateReport,
   UsageBucket,
   UsageLimitsResponse,
@@ -129,7 +129,6 @@ import {
   reportMarker,
   ruleProblem,
   runDoing,
-  STOP_UNOWNED_PROCESSES,
   SUMMARISER_OUTPUT_RESERVE_TOKENS,
   SUMMARY_CAP_TOKENS,
   TARGET_HEADROOM_TOKENS,
@@ -194,6 +193,7 @@ import { previewFrame, previewTargets } from "./preview";
 import { type HubSocket, type RegistryShape, toDashboard } from "./registry";
 import { RuleEngine } from "./rules";
 import { createSessionIdentities } from "./session-identity";
+import { createSessionLifecycle } from "./session-lifecycle";
 import { hashFiles, resolveSkill } from "./skills";
 import { createStreamHub } from "./stream";
 import { suggest } from "./suggest";
@@ -506,12 +506,11 @@ const ack = (envelope: Envelope): Envelope<{ ok: true }> => ({
  */
 const registerAck = (
   envelope: Envelope,
-  ingested: Record<string, IngestMark>,
-  rowIds: string[]
+  ingested: Record<string, IngestMark>
 ): Envelope<RegisterAckPayload> => ({
   verb: envelope.verb,
   machineId: envelope.machineId,
-  payload: { ok: true, ingested, rowIds },
+  payload: { ok: true, ingested },
 });
 
 /** Sent back as a frame, the only verb a dashboard renders. */
@@ -850,6 +849,9 @@ const peekCustody = (payload: unknown): SessionCustody => {
     state: "available",
     instances: peekInstances(value),
     opencode: (value as { opencode?: unknown } | null)?.opencode === true,
+    ...(typeof (value as { readStartedAt?: unknown }).readStartedAt === "number"
+      ? { readStartedAt: (value as { readStartedAt: number }).readStartedAt }
+      : {}),
   };
 };
 
@@ -1672,8 +1674,59 @@ export const createServer = (
     { machineId: string; since: number; reason: string }
   >();
   const machineCustody = new Map<string, SessionCustody>();
-  const unownedProcesses = new Map<string, UnownedSessionProcess[] | null>();
-  const heldProcesses = new Map<string, Set<string>>();
+  const addressProtocolMachines = new Set<string>();
+  const addressClaims = (payload: unknown): SessionAddress[] | undefined => {
+    const value = (payload as { sessionAddresses?: unknown } | null)
+      ?.sessionAddresses;
+    return Array.isArray(value)
+      ? value.filter(
+          (claim): claim is SessionAddress =>
+            !!claim &&
+            typeof claim.instanceId === "string" &&
+            typeof claim.sessionId === "string"
+        )
+      : undefined;
+  };
+  const recordSessionAddress = (
+    agent: HubSocket,
+    machineId: string,
+    claim: SessionAddress
+  ): void => {
+    const row = db
+      .sessionOwnership(machineId)
+      .find((owner) => owner.id === claim.instanceId);
+    const acknowledged =
+      row &&
+      (!claim.processGeneration ||
+        claim.processGeneration === processGeneration(row)) &&
+      row.harness === "opencode" &&
+      !row.endConfirmedAt &&
+      !(row.endIntent && row.addressProtocol && !row.sessionId);
+    if (acknowledged) {
+      db.noteInstanceSession(row.id, claim.sessionId, undefined, "opencode");
+      if (
+        db.sessionOwnership(machineId).find((owner) => owner.id === row.id)
+          ?.sessionId !== claim.sessionId
+      ) {
+        return;
+      }
+    }
+    agent.send({
+      verb: "control",
+      machineId,
+      instanceId: claim.instanceId,
+      payload: {
+        instanceId: claim.instanceId,
+        requestId: crypto.randomUUID(),
+        method: "acknowledgeSessionAddress",
+        args: [
+          claim.sessionId,
+          claim.processGeneration ?? (row ? processGeneration(row) : ""),
+          !!acknowledged && !row?.endIntent,
+        ],
+      },
+    });
+  };
 
   /**
    * When each session's activity was last written down, so the column that says
@@ -1774,7 +1827,7 @@ export const createServer = (
     if (row?.lastError === CLAUDE_CONVERSATION_GONE) {
       return CLAUDE_CONVERSATION_GONE;
     }
-    return row ? workItems.refusal(row, origin) : undefined;
+    return row ? workItems.refusal(row, origin) : "This session is gone.";
   };
   /**
    * A session's standing instructions reach it through the one send path,
@@ -2759,6 +2812,7 @@ export const createServer = (
     entry.sends = found.map((send) => send.uuid);
     return found.map((each) => {
       let send = each;
+      // Historical sends may predate stored bodies.
       if (!send.body && found.length === 1) {
         send =
           db.updateSend(send.uuid, {
@@ -3021,6 +3075,7 @@ export const createServer = (
     }
     db.openInstance({
       id: instanceId,
+      addressProtocol: addressProtocolMachines.has(machineId),
       machineId,
       cwd: row.cwd,
       sessionId: row.sessionId,
@@ -3328,10 +3383,6 @@ export const createServer = (
    * machine says the transcript is gone, the rows that named it go too —
    * otherwise a sleeping row points at a conversation that no longer exists.
    */
-  const pendingTranscriptDeletes = new Map<
-    string,
-    { machineId: string; sessionId: string }
-  >();
   /**
    * Fleet syncs somebody is waiting on, by `requestId` → the machine running
    * one: what tells a `control_result` that it is carrying a machine's own
@@ -3682,6 +3733,18 @@ export const createServer = (
    */
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: resolves a session's location from the cache, the stored row, or a live ask across every machine and harness in one place; splitting it would scatter the fallback order this depends on.
   const locateSession = async (id: string): Promise<SessionLocation | null> => {
+    if (
+      db
+        .sessionOwnership()
+        .some(
+          (owner) =>
+            (owner.id === id || owner.sessionId === id) &&
+            owner.endIntent &&
+            owner.endIntent !== "stop"
+        )
+    ) {
+      return null;
+    }
     const known = locations.get(id);
     if (known !== undefined) {
       return known;
@@ -3692,6 +3755,7 @@ export const createServer = (
       // The row is the single authority for its session: a row that never
       // reported a key holds nothing locatable, and no machine is asked under
       // a guessed one. Not cached, so the key it reports later is found.
+      // Rows are written before their harness address is known.
       if (!row.sessionId) {
         return null;
       }
@@ -3843,6 +3907,7 @@ export const createServer = (
     forgetPending(payload.instanceId, UNREAD.restarted);
     db.openInstance({
       id: payload.instanceId,
+      addressProtocol: addressProtocolMachines.has(machineId),
       machineId,
       cwd: payload.cwd,
       sessionId: peekResume(payload),
@@ -3962,6 +4027,7 @@ export const createServer = (
     forgetPending(payload.instanceId, UNREAD.restarted);
     db.openInstance({
       id: payload.instanceId,
+      addressProtocol: addressProtocolMachines.has(machineId),
       machineId,
       cwd: payload.cwd,
       harness: payload.harness,
@@ -4029,46 +4095,95 @@ export const createServer = (
     } satisfies Envelope<SendPayload>);
   };
 
-  const stopFromHub = (machineId: string, instanceId: string): void => {
-    const [row] = db.getInstancesByIds([instanceId]);
-    registry.agent(machineId)?.send({
-      verb: "stop",
-      machineId,
-      instanceId,
-      payload: {
-        instanceId,
-        ...(row ? { processGeneration: processGeneration(row) } : {}),
-      },
+  const refreshingCustody = new Set<string>();
+  const lifecycle = createSessionLifecycle({
+    db,
+    send: (machineId, payload) => {
+      const agent = registry.agent(machineId);
+      if (!agent) {
+        return false;
+      }
+      agent.send({
+        verb: "stop",
+        machineId,
+        instanceId: payload.instanceId,
+        payload,
+      });
+      return true;
+    },
+    restore: (row) => {
+      const agent = registry.agent(row.machineId);
+      if (agent) {
+        restore(agent, row, true);
+      }
+    },
+    changed: (machineId, removed) => {
+      if (removed) {
+        forgetInstances([removed]);
+      }
+      publishInstances(machineId);
+    },
+    deleteTranscript: async (row) => {
+      if (!row.sessionId) {
+        return true;
+      }
+      const result = await callAgent(
+        row.machineId,
+        "deleteSession",
+        [row.sessionId, row.cwd],
+        READ_TIMEOUT_MS,
+        row.harness as HarnessKind | undefined
+      );
+      return typeof result !== "string" && result.ok;
+    },
+    refresh: (machineId) => {
+      if (refreshingCustody.has(machineId) || !registry.agent(machineId)) {
+        return;
+      }
+      refreshingCustody.add(machineId);
+      callAgent(machineId, "sessionCustody", [], READ_TIMEOUT_MS)
+        .then((answer) => {
+          if (typeof answer !== "string" && answer.ok && answer.result) {
+            const snapshot = answer.result as {
+              custody: SessionCustody;
+              attached: string[];
+            };
+            lifecycle.reconcile(machineId, snapshot);
+          }
+        })
+        .finally(() => refreshingCustody.delete(machineId));
+    },
+  });
+  const endSession = (instanceId: string, intent: SessionEndIntent): void => {
+    const row = db.sessionOwnership().find((owner) => owner.id === instanceId);
+    lifecycle.endSession(instanceId, intent);
+    if (row) {
+      workItems.cancelled(row);
+      forgetPending(instanceId, UNREAD.stopped);
+      closePreview(instanceId).catch(console.error);
+    }
+  };
+  const waitForEnd = (instanceId: string): Promise<void> =>
+    new Promise((resolve, reject) => {
+      const deadline = Date.now() + SPAWN_START_TIMEOUT_MS;
+      const observe = () => {
+        const row = db
+          .sessionOwnership()
+          .find((owner) => owner.id === instanceId);
+        if (!row || row.endConfirmedAt) {
+          resolve();
+        } else if (Date.now() >= deadline) {
+          reject(
+            new Error(
+              "The end decision is stored and still awaiting its machine."
+            )
+          );
+        } else {
+          setTimeout(observe, 100).unref();
+        }
+      };
+      observe();
     });
-  };
-
-  /**
-   * Stops in flight to the machine now connected, by instance: sent once, and
-   * forgotten when the machine answers `stopped`, when the session is spawned
-   * again, or when the machine registers anew (a stop in flight to the agent
-   * that went away died with it).
-   */
-  const ending = new Map<string, string>();
-
-  /**
-   * Ends the process behind a row filed `stopped`. The row is the decision;
-   * this carries it to the machine, once per connection: a stop waits for the
-   * turn it cuts, and the beats that still list the session meanwhile must not
-   * send another (a second stop finds nothing, and says so as an error).
-   */
-  const endStopped = (machineId: string, instanceId: string): void => {
-    if (ending.has(instanceId) || !registry.agent(machineId)) {
-      return;
-    }
-    ending.set(instanceId, machineId);
-    stopFromHub(machineId, instanceId);
-  };
-
-  const endHeldRow = (machineId: string, instanceId: string): void => {
-    if (heldProcesses.get(machineId)?.has(instanceId)) {
-      endStopped(machineId, instanceId);
-    }
-  };
 
   /**
    * A summariser the continuation is done with: stopped on its machine, and
@@ -4076,8 +4191,7 @@ export const createServer = (
    * restarted agent had already lost would otherwise sit `sleeping` forever.
    */
   const retireSummariser = (machineId: string, instanceId: string): void => {
-    endStopped(machineId, instanceId);
-    db.stopInstance(instanceId);
+    endSession(instanceId, "stop");
     forgetPending(instanceId, UNREAD.stopped);
     publishInstances(machineId);
   };
@@ -4826,7 +4940,11 @@ export const createServer = (
     reattachOnly: SpawnPayload["reattachOnly"] = false
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: builds the restore payload from the stored row in one place
   ): void => {
-    if (row.lastError === CLAUDE_CONVERSATION_GONE) {
+    if (
+      db.sessionOwnership(row.machineId).find((owner) => owner.id === row.id)
+        ?.endIntent ||
+      (!reattachOnly && row.lastError === CLAUDE_CONVERSATION_GONE)
+    ) {
       return;
     }
     const asked: SpawnPayload = {
@@ -4852,6 +4970,16 @@ export const createServer = (
       // delegate the `delegate` tool back.
       ...(row.canDelegate === false ? { canDelegate: false } : {}),
     };
+    // Held custody is already configured; launch-mode and transcript refusals cannot skip it.
+    if (reattachOnly) {
+      agent.send({
+        verb: "spawn",
+        machineId: row.machineId,
+        instanceId: row.id,
+        payload: bounded(asked, row),
+      });
+      return;
+    }
     const settled = settleMode(row.machineId, asked, row.permissionMode);
     if ("refusal" in settled) {
       // Custody also inspects failed OpenCode handles. A recorded refusal
@@ -4865,19 +4993,9 @@ export const createServer = (
       return;
     }
     const { payload } = settled;
-    // A probe of a previously lost handle is not a spawn. Leave its history
-    // alone until the daemon confirms the server still has a turn in flight.
-    if (reattachOnly) {
-      agent.send({
-        verb: "spawn",
-        machineId: row.machineId,
-        instanceId: row.id,
-        payload: bounded(payload, row),
-      });
-      return;
-    }
     db.openInstance({
       id: row.id,
+      addressProtocol: addressProtocolMachines.has(row.machineId),
       machineId: row.machineId,
       cwd: row.cwd,
       sessionId: row.sessionId ?? undefined,
@@ -4931,10 +5049,19 @@ export const createServer = (
       // very next broadcast — for this machine or any other — finds nothing
       // here and says nothing about it. See `restarts` above.
       const justRestarted = restarts.delete(row.machineId);
+      const custody = machineCustody.get(row.machineId);
+      const visibleCustody =
+        custody?.state === "available"
+          ? {
+              ...custody,
+              instances: db
+                .getInstancesByIds(custody.instances)
+                .map((owner) => owner.id),
+            }
+          : custody;
       return {
         ...row,
-        custody: machineCustody.get(row.machineId),
-        unownedProcesses: unownedProcesses.get(row.machineId),
+        custody: visibleCustody,
         status: registry.agent(row.machineId) ? "online" : "offline",
         // Additive and live, like `status` above: present only for a machine that
         // has actually reported one on this connection.
@@ -6088,6 +6215,7 @@ export const createServer = (
     message: Envelope<ControlPayload>,
     dashboard: HubSocket,
     remember = true
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: transcript deletion shares the control receipt path but records intent before machine delivery
   ): boolean => {
     // The hub owns skill reloads: an unchanged catalog must retain the CLI's
     // sent-skills record, including when an older dashboard asks to reload it.
@@ -6109,18 +6237,38 @@ export const createServer = (
     if (relayPermissionAnswer(message, dashboard, remember)) {
       return true;
     }
+    const deleted = peekTranscriptDelete(message.payload);
+    if (deleted && registry.agent(message.machineId)) {
+      const rows = db
+        .sessionOwnership(message.machineId)
+        .filter((row) => row.sessionId === deleted);
+      if (rows.length > 0) {
+        for (const row of rows) {
+          endSession(row.id, "delete-transcript");
+        }
+        const requestId = message.requestId ?? message.payload.requestId;
+        const frame: ControlResult = {
+          kind: "control_result",
+          requestId,
+          ok: true,
+        };
+        if (remember) {
+          toDashboard(dashboard, {
+            ...message,
+            verb: "frames",
+            payload: frame,
+          });
+        } else {
+          streams.settleCommand(requestId, frame);
+        }
+        return true;
+      }
+    }
     if (!(forward(message, dashboard) && message.requestId)) {
       return false;
     }
     if (remember) {
       registry.rememberRequester(message.requestId, dashboard);
-    }
-    const deleted = peekTranscriptDelete(message.payload);
-    if (deleted) {
-      pendingTranscriptDeletes.set(message.requestId, {
-        machineId: message.machineId,
-        sessionId: deleted,
-      });
     }
     // A per-cell install or retry, clicked rather than swept: the chip
     // turns on every dashboard, not only the one that clicked it.
@@ -6483,6 +6631,10 @@ export const createServer = (
 
   const workItems = createWorkItems({
     db,
+    end: async (instanceId) => {
+      endSession(instanceId, "stop");
+      await waitForEnd(instanceId);
+    },
     command: runOnMachine,
     inTurn: (row) => row.status === "running" && !!pulses.get(row.id)?.busy,
     report: (row, body, failed, notice) => {
@@ -6527,6 +6679,12 @@ export const createServer = (
       return answer.result;
     },
   });
+  // A hub crash after intent persistence cannot leave its work item reading live.
+  for (const row of db.sessionOwnership()) {
+    if (row.endIntent) {
+      workItems.cancelled(row);
+    }
+  }
   const workflowRuntime = createWorkflowRuntime({
     custodyPending: (machineId, instanceId) =>
       machineCustody.get(machineId)?.state !== "available" ||
@@ -6536,6 +6694,10 @@ export const createServer = (
     dbPath: DB_PATH,
     online: (machineId) => !!registry.agent(machineId),
     emit: (envelope) => {
+      if (envelope.verb === "stop" && envelope.instanceId) {
+        endSession(envelope.instanceId, "stop");
+        return;
+      }
       const agent = registry.agent(envelope.machineId);
       if (!agent) {
         throw new Error(`Machine ${envelope.machineId} is not connected.`);
@@ -6549,37 +6711,25 @@ export const createServer = (
     spawn: spawnSession,
     halt: (machineId, instanceId) =>
       new Promise<void>((resolve, reject) => {
-        const agent = registry.agent(machineId);
-        if (!agent) {
-          reject(new Error(`Machine ${machineId} is not connected.`));
-          return;
-        }
-        const requestId = crypto.randomUUID();
-        const timer = setTimeout(() => {
-          waiting.delete(requestId);
-          waitingMachines.delete(requestId);
-          reject(new Error("Timed out stopping workflow attempt."));
-        }, 30_000);
-        waitingMachines.set(requestId, machineId);
-        waiting.set(requestId, (frame) => {
-          clearTimeout(timer);
-          waiting.delete(requestId);
-          waitingMachines.delete(requestId);
-          if (frame.ok) {
+        endSession(instanceId, "stop");
+        const deadline = Date.now() + 30_000;
+        const observe = () => {
+          const row = db
+            .sessionOwnership(machineId)
+            .find((owner) => owner.id === instanceId);
+          if (!row || row.endConfirmedAt) {
             resolve();
-          } else {
+          } else if (Date.now() >= deadline) {
             reject(
-              new Error(frame.error ?? "Could not stop workflow attempt.")
+              new Error(
+                "Workflow stop is recorded and still awaiting its machine."
+              )
             );
+          } else {
+            setTimeout(observe, 100).unref();
           }
-        });
-        agent.send({
-          verb: "stop",
-          machineId,
-          instanceId,
-          requestId,
-          payload: { instanceId, requestId },
-        });
+        };
+        observe();
       }),
     command: runOnMachine,
     park: (envelope) => {
@@ -6747,22 +6897,7 @@ export const createServer = (
         );
       }
       if (envelope.verb === "stop") {
-        const agent = registry.agent(row.machineId);
-        if (!agent) {
-          throw new WorkItemRefusal(
-            404,
-            `machine ${row.machineId} is not connected`
-          );
-        }
-        agent.send({
-          ...envelope,
-          machineId: row.machineId,
-          payload: {
-            instanceId: row.id,
-            from: requester.id,
-            processGeneration: processGeneration(row),
-          },
-        });
+        endSession(row.id, "stop");
         closePreview(row.id).catch(console.error);
         forgetPending(row.id, UNREAD.stopped);
         noteInterrupt(row.id);
@@ -7439,6 +7574,9 @@ export const createServer = (
             `${row.hostname} is online. Stop its agent first, then remove it.`
           );
         }
+        for (const owner of db.sessionOwnership(params.machineId)) {
+          endSession(owner.id, "delete");
+        }
         const gone = db.deleteMachine(params.machineId);
         forgetInstances(gone.instanceIds);
         // The frame that carries the machine list: every dashboard drops the
@@ -7485,18 +7623,7 @@ export const createServer = (
             );
           }
         }
-        if (
-          row.status === "running" ||
-          row.status === "starting" ||
-          heldSessions.has(row.id)
-        ) {
-          return status(
-            409,
-            "This session is still running. Stop it first, then remove it."
-          );
-        }
-        endHeldRow(row.machineId, row.id);
-        db.deleteInstance(row.id);
+        endSession(row.id, "delete");
         forgetInstances([row.id]);
         publishInstances(row.machineId);
         return { ok: true };
@@ -7519,59 +7646,6 @@ export const createServer = (
         }
         return answer.result as { busy: number; instances: string[] };
       })
-      .post(
-        "/api/agents/:machineId/unowned-processes/stop",
-        {
-          body: t.Object({
-            instanceIds: t.Array(t.String({ minLength: 1 }), { minItems: 1 }),
-          }),
-        },
-        async ({ params, body, status }) => {
-          const custody = machineCustody.get(params.machineId);
-          const listed = unownedProcesses.get(params.machineId);
-          if (custody?.state === "unavailable" || listed === null) {
-            return status(409, {
-              error:
-                "The machine could not read sessiond. No processes were stopped.",
-            });
-          }
-          const instanceIds = [...new Set(body.instanceIds)];
-          const allowed = new Set(
-            (listed ?? []).map((proc) => proc.instanceId)
-          );
-          const notListed = instanceIds.filter((id) => !allowed.has(id));
-          if (notListed.length > 0) {
-            return status(409, {
-              error: `These processes are not listed as unowned on this machine: ${notListed.join(", ")}. No processes were stopped.`,
-              instanceIds: notListed,
-            });
-          }
-          const answer = await callAgent(
-            params.machineId,
-            STOP_UNOWNED_PROCESSES,
-            [instanceIds],
-            READ_TIMEOUT_MS * 2
-          );
-          if (answer === "offline") {
-            return status(404, {
-              error: `machine ${params.machineId} is not connected`,
-            });
-          }
-          if (answer === "timeout") {
-            return status(504, {
-              error: `machine ${params.machineId} did not answer; completion is unknown`,
-            });
-          }
-          if (!answer.ok) {
-            return status(502, {
-              error:
-                answer.error ??
-                "The machine did not confirm the process stops.",
-            });
-          }
-          return answer.result as { results: UnownedProcessStopResult[] };
-        }
-      )
       // And the update itself: the machine pulls, installs, rebuilds and restarts
       // what it serves, then says what it actually did.
       .post(
@@ -9798,7 +9872,6 @@ export const createServer = (
         try {
           const workspace = await workItems.archive(params.id);
           for (const item of db.workItemsIn(workspace.id)) {
-            db.stopInstance(item.instanceId);
             forgetPending(item.instanceId, UNREAD.ended);
             escalateRoutedAsks(item.instanceId);
           }
@@ -9888,18 +9961,20 @@ export const createServer = (
 
           switch (message.verb) {
             case "register": {
+              const claims = addressClaims(message.payload);
+              if (claims) {
+                addressProtocolMachines.add(message.machineId);
+                for (const claim of claims) {
+                  recordSessionAddress(ws, message.machineId, claim);
+                }
+              } else {
+                addressProtocolMachines.delete(message.machineId);
+              }
               // A pending hash without its agent's ACK is not a backed live install.
               db.expirePendingSessionIdentities(message.machineId);
               for (const [id, held] of heldSessions) {
                 if (held.machineId === message.machineId) {
                   heldSessions.delete(id);
-                }
-              }
-              // A stop in flight to the agent that went away died with it; the
-              // beats of this one end whatever it still carries for them.
-              for (const [id, machineId] of ending) {
-                if (machineId === message.machineId) {
-                  ending.delete(id);
                 }
               }
               registry.registerAgent(message.machineId, ws, ws.remoteAddress);
@@ -9973,11 +10048,9 @@ export const createServer = (
                 );
               const custody = peekCustody(message.payload);
               machineCustody.set(message.machineId, custody);
-              unownedProcesses.set(message.machineId, null);
               const heldIds = new Set(
                 custody.state === "available" ? custody.instances : []
               );
-              heldProcesses.set(message.machineId, heldIds);
               const heldOpencode =
                 custody.state === "available" && custody.opencode;
               // Whose process outlived the agent: a child sessiond kept alive,
@@ -10065,10 +10138,12 @@ export const createServer = (
               const justSettled = new Set(settled.map(({ row }) => row.id));
               const listedLive = new Set(peekInstances(message.payload));
               const filedAway = db
-                .getInstancesByIds([...heldIds])
+                .sessionOwnership(message.machineId)
                 .filter(
                   (row) =>
+                    heldIds.has(row.id) &&
                     row.machineId === message.machineId &&
+                    !row.endIntent &&
                     !justSettled.has(row.id) &&
                     !listedLive.has(row.id) &&
                     (row.status === "sleeping" || row.status === "error")
@@ -10095,7 +10170,9 @@ export const createServer = (
               const revivable = [
                 ...held,
                 ...fresh.filter(({ row }) => !row.workflowStepId),
-              ].filter(({ row }) => row.kind !== "summariser");
+              ].filter(
+                ({ row }) => !row.endIntent && row.kind !== "summariser"
+              );
               let restoreBatch = 0;
               for (const orphan of revivable) {
                 restore(ws, orphan.row, heldRows.has(orphan.row.id));
@@ -10113,14 +10190,18 @@ export const createServer = (
                   .map((job) => job.summariserInstanceId)
               );
               const toEnd = db
-                .getInstancesByIds(
-                  reattachable([...heldIds], peekInstances(message.payload))
+                .sessionOwnership(message.machineId)
+                .filter((row) =>
+                  reattachable(
+                    [...heldIds],
+                    peekInstances(message.payload)
+                  ).includes(row.id)
                 )
                 .filter(
                   (row) =>
                     row.machineId === message.machineId &&
-                    (row.status === "stopped" ||
-                      (row.kind === "summariser" && !named.has(row.id)))
+                    row.kind === "summariser" &&
+                    !named.has(row.id)
                 );
               // Rows still live at disconnect (now settled above) retain custody.
               // A previously sleeping row only recovers within the fresh-spawn
@@ -10176,19 +10257,18 @@ export const createServer = (
                 peekInstances(message.payload),
                 revivable.map((orphan) => orphan.row.id)
               );
-              ws.send(
-                registerAck(
-                  message,
-                  streams.ingestedFor(reattaching),
-                  db
-                    .listInstances()
-                    .filter((row) => row.machineId === message.machineId)
-                    .map((row) => row.id)
-                )
-              );
+              ws.send(registerAck(message, streams.ingestedFor(reattaching)));
               for (const row of toEnd) {
-                endStopped(message.machineId, row.id);
+                endSession(row.id, "stop");
               }
+              lifecycle.reconcile(
+                message.machineId,
+                {
+                  custody,
+                  attached: peekInstances(message.payload),
+                },
+                false
+              );
               // Behind the restores and the ack, so the agent reads each send
               // after the spawn it waits on.
               releaseAwaiting(message.machineId);
@@ -10209,45 +10289,23 @@ export const createServer = (
               break;
             }
             case "heartbeat": {
+              for (const claim of addressClaims(message.payload) ?? []) {
+                recordSessionAddress(ws, message.machineId, claim);
+              }
               db.touchAgent(message.machineId);
               // biome-ignore lint/complexity/noVoid: a recovered machine can now answer an idle receipt for an overdue schedule
               void keepAliveScheduler.wake();
               if ((message.payload as HeartbeatPayload).custody !== undefined) {
                 const custody = peekCustody(message.payload);
                 machineCustody.set(message.machineId, custody);
-                if (custody.state === "available") {
-                  heldProcesses.set(
-                    message.machineId,
-                    new Set(custody.instances)
-                  );
-                }
+                lifecycle.reconcile(message.machineId, {
+                  custody,
+                  attached: peekInstances(message.payload),
+                });
               }
-              const report = (message.payload as HeartbeatPayload)
-                .unownedProcesses;
-              if (report === null || Array.isArray(report)) {
-                const valid =
-                  report === null
-                    ? null
-                    : report.filter(
-                        (proc) =>
-                          proc &&
-                          typeof proc.instanceId === "string" &&
-                          (proc.harness === "claude" ||
-                            proc.harness === "pi") &&
-                          (proc.cwd === null || typeof proc.cwd === "string") &&
-                          Number.isInteger(proc.pid) &&
-                          proc.pid > 0 &&
-                          (proc.turnRunning === null ||
-                            typeof proc.turnRunning === "boolean")
-                      );
-                unownedProcesses.set(message.machineId, valid);
-                for (const proc of valid ?? []) {
-                  heldProcesses.get(message.machineId)?.add(proc.instanceId);
-                }
-              }
-              for (const id of peekInstances(message.payload)) {
-                heldProcesses.get(message.machineId)?.add(id);
-              }
+              // Payload fields outside the declared heartbeat (including old listing reports)
+              // are ignored; fresh reads and stored row intent alone drive lifetime.
+              lifecycle.reconcile(message.machineId);
               // The beat is the truth (contract C4). Every 15s the machine says
               // what it is carrying, and the hub's column is made to agree with
               // it: listed ids become `running`, and rows claiming a process the
@@ -10287,16 +10345,6 @@ export const createServer = (
               // the decision; this ends the process behind it. Not a respawn,
               // and sent once per connection, so no beat repeats it.
               const beatIds = peekInstances(message.payload);
-              if (beatIds.length > 0) {
-                for (const row of db.getInstancesByIds(beatIds)) {
-                  if (
-                    row.status === "stopped" &&
-                    row.machineId === message.machineId
-                  ) {
-                    endStopped(message.machineId, row.id);
-                  }
-                }
-              }
               // An outlived session whose sends could not be decided because
               // the machine did not answer the read is asked again.
               for (const [instanceId, held] of inCustody) {
@@ -10405,6 +10453,60 @@ export const createServer = (
                 // Cache bookkeeping is neither a turn nor fleet attention.
                 break;
               }
+              if (kind === "session_address" && message.instanceId) {
+                recordSessionAddress(ws, message.machineId, {
+                  instanceId: message.instanceId,
+                  sessionId: peek(message.payload, "sessionId") ?? "",
+                  processGeneration: peek(message.payload, "processGeneration"),
+                });
+                break;
+              }
+              const ownedSession = message.instanceId
+                ? db
+                    .sessionOwnership(message.machineId)
+                    .find((row) => row.id === message.instanceId)
+                : undefined;
+              if (message.instanceId && !ownedSession) {
+                break;
+              }
+              if (
+                ownedSession?.endIntent &&
+                (kind === "frame" ||
+                  kind === "pulse" ||
+                  kind === "permission_request" ||
+                  kind === "rejected")
+              ) {
+                break;
+              }
+              // Reconciliation keeps failed end delivery pending; it is not a session failure.
+              if (
+                kind === "error" &&
+                peek(message.payload, "verb") === "stop" &&
+                message.instanceId
+              ) {
+                lifecycle.deliveryFailed(message.instanceId);
+              }
+              if (
+                kind === "error" &&
+                peek(message.payload, "verb") === "stop" &&
+                ownedSession?.endIntent &&
+                peek(message.payload, "processGeneration") ===
+                  processGeneration(ownedSession)
+              ) {
+                const reason = peek(message.payload, "endReason");
+                if (reason) {
+                  db.noteEndReason(ownedSession.id, reason);
+                }
+              }
+              if (
+                kind === "error" &&
+                peek(message.payload, "verb") === "stop" &&
+                db
+                  .sessionOwnership(message.machineId)
+                  .some((row) => row.id === message.instanceId && row.endIntent)
+              ) {
+                break;
+              }
               // A continuation's summariser: an internal worker only its
               // continuation talks to (see `summarisers`).
               const internal =
@@ -10423,25 +10525,17 @@ export const createServer = (
                 break;
               }
               if (kind === "stopped" && message.instanceId) {
-                const [process] = db.getInstancesByIds([message.instanceId]);
+                const ended = db
+                  .sessionOwnership(message.machineId)
+                  .find((row) => row.id === message.instanceId);
                 if (
-                  process &&
-                  peek(message.payload, "processGeneration") !==
-                    processGeneration(process)
+                  !lifecycle.confirm(
+                    message.machineId,
+                    message.instanceId,
+                    message.payload as Parameters<typeof lifecycle.confirm>[2]
+                  )
                 ) {
                   break;
-                }
-                heldProcesses
-                  .get(message.machineId)
-                  ?.delete(message.instanceId);
-                const listed = unownedProcesses.get(message.machineId);
-                if (listed) {
-                  unownedProcesses.set(
-                    message.machineId,
-                    listed.filter(
-                      (proc) => proc.instanceId !== message.instanceId
-                    )
-                  );
                 }
                 turnWaiters
                   .get(message.instanceId)
@@ -10451,18 +10545,11 @@ export const createServer = (
                     )
                   );
                 heldSessions.delete(message.instanceId);
-                ending.delete(message.instanceId);
                 closePreview(message.instanceId).catch(console.error);
                 // Stopped by anyone while its work was live: the work is over.
                 // Read before the row is filed away, which a discard hides.
-                const [ended] = db.getInstancesByIds([message.instanceId]);
                 if (ended) {
                   workItems.cancelled(ended);
-                }
-                if (peekDiscard(message.payload)) {
-                  db.discardInstance(message.instanceId);
-                } else {
-                  db.stopInstance(message.instanceId);
                 }
                 // What it was sent and had not read did not go, unless it wrote
                 // some of it down as it stopped.
@@ -11133,32 +11220,6 @@ export const createServer = (
               // A transcript delete answering: once the machine says it is gone,
               // every row that named it goes with it, through the one
               // per-session delete, and every dashboard sees it leave.
-              const transcript = message.requestId
-                ? pendingTranscriptDeletes.get(message.requestId)
-                : undefined;
-              if (
-                transcript &&
-                kind === "control_result" &&
-                message.requestId
-              ) {
-                pendingTranscriptDeletes.delete(message.requestId);
-                if ((message.payload as { ok?: unknown }).ok === true) {
-                  const ids = db
-                    .listInstances()
-                    .filter(
-                      (row) =>
-                        row.machineId === transcript.machineId &&
-                        row.sessionId === transcript.sessionId
-                    )
-                    .map((row) => row.id);
-                  for (const id of ids) {
-                    endHeldRow(transcript.machineId, id);
-                    db.deleteInstance(id);
-                  }
-                  forgetInstances(ids);
-                  publishInstances(transcript.machineId);
-                }
-              }
               // A sync answering, whoever asked for it: the machine's own account
               // of what it now has is the hub's to keep, and the reply still goes
               // wherever it was going.
@@ -11332,11 +11393,6 @@ export const createServer = (
               pendingInstalls.delete(requestId);
             }
           }
-          for (const [requestId, deleting] of pendingTranscriptDeletes) {
-            if (deleting.machineId === machineId) {
-              pendingTranscriptDeletes.delete(requestId);
-            }
-          }
           for (const [requestId, syncing] of pendingFleet) {
             if (syncing === machineId) {
               pendingFleet.delete(requestId);
@@ -11347,8 +11403,8 @@ export const createServer = (
           // about; keeping it would be the stale-column defect in a Map.
           deploys.delete(machineId);
           machineCustody.delete(machineId);
-          unownedProcesses.delete(machineId);
-          heldProcesses.delete(machineId);
+          addressProtocolMachines.delete(machineId);
+          lifecycle.disconnect(machineId);
           // An unconsumed restart event belonged to the connection that just
           // ended; the next one to hold this machineId did not just restart.
           restarts.delete(machineId);
@@ -11435,9 +11491,11 @@ export const createServer = (
                   message.payload
                 );
                 // Brought back by the operator: nothing of the stop is left to carry.
-                ending.delete(message.instanceId);
                 db.openInstance({
                   id: message.instanceId,
+                  addressProtocol: addressProtocolMachines.has(
+                    message.machineId
+                  ),
                   machineId: message.machineId,
                   cwd: peek(message.payload, "cwd") ?? "",
                   sessionId: peekResume(message.payload),
@@ -11479,20 +11537,23 @@ export const createServer = (
               // heartbeat case). Only a send brings it back (`ensureAlive`).
               // A discard waits for the teardown's answer as before: its
               // caller is told either way.
-              if (message.instanceId && !peekDiscard(message.payload)) {
-                const agent = registry.agent(message.machineId);
-                if (agent) {
-                  ending.set(message.instanceId, message.machineId);
-                  agent.send(message);
-                  if (message.requestId) {
-                    registry.rememberRequester(message.requestId, ws);
-                  }
+              if (message.instanceId) {
+                const requestId =
+                  message.requestId ?? peek(message.payload, "requestId");
+                endSession(
+                  message.instanceId,
+                  peekDiscard(message.payload) ? "discard" : "stop"
+                );
+                if (requestId) {
+                  toDashboard(ws, {
+                    ...message,
+                    verb: "frames",
+                    requestId,
+                    payload: { kind: "control_result", requestId, ok: true },
+                  });
                 }
-                db.stopInstance(message.instanceId);
                 forgetPending(message.instanceId, UNREAD.stopped);
                 publishInstances(message.machineId);
-              } else if (forward(message, ws) && message.requestId) {
-                registry.rememberRequester(message.requestId, ws);
               }
               // A stop cuts the turn it lands in, as an interrupt does.
               if (message.instanceId) {

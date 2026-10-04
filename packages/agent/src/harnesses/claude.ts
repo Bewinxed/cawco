@@ -1856,6 +1856,23 @@ export class ClaudeHarness implements Harness {
     );
   }
 
+  async reattach(
+    spec: SpawnPayload,
+    ctx: HarnessContext
+  ): Promise<HarnessSession | undefined> {
+    const proc = (await this.custodyCandidates()).procs.find(
+      (child) => child.procId === ctx.instanceId && child.alive
+    );
+    if (!proc) {
+      return undefined;
+    }
+    return this.adopt(ctx.instanceId, ctx, {
+      head: proc.head,
+      sessionId: spec.resume?.sessionKey ?? null,
+      turnRunning: await this.turnRunning(ctx.instanceId, proc.head),
+    });
+  }
+
   /**
    * WHETHER A CHILD THAT OUTLIVED THE AGENT IS MID-TURN, as its own ring says
    * up to `head` ({@link ChildActivity}). Asked of every surviving child at

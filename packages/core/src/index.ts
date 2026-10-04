@@ -298,14 +298,14 @@ export interface HeartbeatPayload {
    */
   harnesses?: HarnessReport[];
   instances: string[];
+  /** Exact server-session addresses; an empty array also declares the acknowledgement contract. */
+  sessionAddresses?: SessionAddress[];
   /**
    * What the machine has of the tool catalog (NEW.md §10), so the hub can send
    * an install for whatever its policy requires and this machine lacks. Rides
    * the same beat as `harnesses`, for the same reason.
    */
   tools?: ToolStatus[];
-  /** After register custody: unattached sessiond children; null means the read failed. */
-  unownedProcesses?: UnownedSessionProcess[] | null;
 }
 
 /**
@@ -322,15 +322,21 @@ export interface HeartbeatAckPayload {
 
 /** `stop`: interrupt and close a live session. */
 export interface StopPayload {
+  /** Addresses claimed by other rows; only unclaimed server runners make a legacy read ambiguous. */
+  claimedSessionIds?: string[];
+  cwd?: string;
   /** Explicitly abort unadopted custody too, then tear down side-quest resources. */
   discard?: boolean;
   /** The instance a fleet-originated stop claims as its caller; the hub honours the call only when the target is that instance's own delegate. */
   from?: string;
+  /** Row-owned coordinates for ending server custody without adoption. */
+  harness?: import("./harness").HarnessKind;
   instanceId: string;
   /** The row's launch identity, including a held process not yet attached. */
   processGeneration?: string;
   /** Correlates the `control_result` frame confirming stop/discard or its failure. */
   requestId?: string;
+  sessionId?: string;
 }
 
 /**
@@ -444,29 +450,28 @@ export interface AgentRow {
    * Last-known workflow-tool status by tool id (NEW.md §10).
    */
   tools?: Record<string, ToolStatus>;
-  /** Unattached children reported after custody; null means not yet readable. */
-  unownedProcesses?: UnownedSessionProcess[] | null;
 }
 
 export type SessionCustody =
-  | { state: "available"; instances: string[]; opencode: boolean }
+  | {
+      state: "available";
+      instances: string[];
+      opencode: boolean;
+      readStartedAt?: number;
+    }
   | { state: "unavailable"; error: string };
 
-export interface UnownedSessionProcess {
-  cwd: string | null;
-  harness: "claude" | "pi";
+export interface SessionAddress {
   instanceId: string;
-  pid: number;
-  /** null when retained output has no readable turn marker. */
-  turnRunning: boolean | null;
+  processGeneration?: string;
+  sessionId: string;
 }
 
-/** Machine-reported outcome for one owner-named unowned process. */
-export type UnownedProcessStopResult =
-  | { instanceId: string; status: "stopped" }
-  | { instanceId: string; status: "failed"; error: string };
-
-export const STOP_UNOWNED_PROCESSES = "stopUnownedProcesses";
+export type SessionEndIntent =
+  | "stop"
+  | "discard"
+  | "delete"
+  | "delete-transcript";
 
 /** mDNS and router suffixes: they say "same network", which the fleet already implies. */
 const LOCAL_SUFFIXES = [".local", ".lan", ".home"];
@@ -887,6 +892,7 @@ export type FramePayload =
   | import("./frames").RecoveryUnavailableFrame
   | import("./frames").ControlResultFrame
   | import("./frames").ErrorFrame
+  | import("./frames").SessionAddressFrame
   | import("./frames").UserMessageFrame
   | import("./frames").PulseFrame
   | import("./frames").WorkItemFrame

@@ -164,13 +164,19 @@ instance, which is disposed when its last attached session leaves.
 sessiond is what makes "everything it runs" true: each child leads its own process group, a
 signal reaches the child's whole tree, and what a child leaves behind when it exits is swept.
 
-Across a restart, the hub names held rows in its restores, including a row a dying hub filed
-`sleeping`. After custody the daemon reports every session process it could not attach, with
-its instance id, harness, cwd, pid and turn state; a process still carried by an agent whose hub
-lost its row is reported too. The hub keeps that list on the machine's `/api/agents` response.
-Absence never authorises a stop. A held process ends on a stopped row's word, an explicit stop,
-the owner's row deletion, or retirement of a summariser no unsettled continuation names. A
-failed sessiond read is explicitly unavailable, not an empty custody list.
+The hub stores each session's end intent before delivery. Reconciliation on register and
+heartbeat repeats that decision until the machine confirms exit and any requested teardown.
+Delete intent hides the row immediately but retains ownership until confirmation; transcript
+deletion follows confirmed exit and is resumed after a hub restart. A wake clears the intent
+in the same write that reopens the row. Kept held sessions are reattached, with failed attaches
+retried without stopping them or changing intent. A process whose id has no row in this hub
+is left untouched and is never listed as unowned. Unavailable custody is not empty custody.
+OpenCode confirms the end of a session's turn and resources without killing its shared server;
+that server and workspace boundaries remain infrastructure, outside session ownership.
+OpenCode skills and turns wait for the hub to store and acknowledge the server-minted session
+address. An unacknowledged new session has never run work; ending it records "never started".
+Legacy missing addresses are supplied by exact retained handles. A complete post-stop directory
+reading can confirm no unclaimed runners; ambiguous or incomplete readings never stop anything.
 
 ## Who writes what
 

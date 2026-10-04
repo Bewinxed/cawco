@@ -100,7 +100,7 @@ import { delegationHubUrl, harnessMcpUrl } from "../delegation";
 import type { Harness, HarnessContext, HarnessSession } from "../harness";
 import { HarnessRecoveryRefused } from "../harness";
 import { isMachineAgent } from "../machine-agent";
-import { OPENCODE_SERVER_PROC_ID } from "../proc-id";
+import { OPENCODE_SERVER_PROC_ID, parseProcId } from "../proc-id";
 import { ensureSessiond, SessiondClient } from "../sessiond-client";
 import { resolveBin } from "../tools";
 import {
@@ -3436,6 +3436,10 @@ export class OpencodeHarness implements Harness {
   readonly #activities = new Map<string, OpencodeActivity>();
   readonly #generationClients = new Map<string, OpencodeClient>();
   readonly #sessionOwners = new Map<string, ServerIdentity>();
+  readonly #pendingSessionAddresses = new Map<
+    string,
+    import("@cawco/core").SessionAddress
+  >();
   readonly #migrations = new Map<string, Promise<void>>();
   readonly #pendingRecoveries = new Map<
     string,
@@ -5005,6 +5009,133 @@ export class OpencodeHarness implements Harness {
     return true;
   }
 
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: runner idle and last-directory-owner confirmation must remain one ordered transaction
+  async endSession(sessionKey: string, dir: string): Promise<void> {
+    const generations = await this.#serverOwner.liveGenerations();
+    for (const identity of generations) {
+      const client = this.#clientForGeneration(identity);
+      const scope = { directory: dir };
+      const options = { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) };
+      // biome-ignore lint/performance/noAwaitInLoops: each generation owns distinct runners
+      const before = await reached(client.session.status(scope, options));
+      if (before.error || !before.data) {
+        throw new Error(`Could not read OpenCode custody for ${sessionKey}`);
+      }
+      if (
+        before.data[sessionKey]?.type &&
+        before.data[sessionKey]?.type !== "idle"
+      ) {
+        // Abort only this session on its captured generation.
+        const aborted = await reached(
+          client.session.abort({ ...scope, sessionID: sessionKey }, options)
+        );
+        if (aborted.error || aborted.data !== true) {
+          throw new Error(`Could not end OpenCode turn ${sessionKey}`);
+        }
+      }
+      // Positive idle receipt precedes resource release.
+      const after = await reached(client.session.status(scope, options));
+      if (
+        after.error ||
+        !after.data ||
+        (after.data[sessionKey] && after.data[sessionKey]?.type !== "idle")
+      ) {
+        throw new Error(`OpenCode turn ${sessionKey} has not ended`);
+      }
+      for (const session of this.#sessions.values()) {
+        if (session.sessionId === sessionKey) {
+          // biome-ignore lint/performance/noAwaitInLoops: release each handle of exactly this conversation
+          await session.dispose();
+        }
+      }
+      // Shared directory resources belong to the remaining sessions; dispose only the last owner.
+      if (
+        !(
+          Object.entries(after.data).some(
+            ([id, state]) => id !== sessionKey && state.type !== "idle"
+          ) ||
+          [...this.#sessions.values()].some(
+            (session) => session.directory === dir
+          )
+        )
+      ) {
+        const key = this.#pumpKey(dir, identity);
+        this.#pumps.get(key)?.abort();
+        this.#pumps.delete(key);
+        this.#pumpReady.delete(key);
+        this.#pumpConnected.delete(key);
+        // Directory exit is part of this positive end receipt.
+        const released = await reached(client.instance.dispose(scope, options));
+        if (released.error) {
+          throw new Error(`OpenCode directory resources did not close: ${dir}`);
+        }
+      }
+    }
+  }
+
+  sessionAddresses(): import("@cawco/core").SessionAddress[] {
+    const addresses = new Map(this.#pendingSessionAddresses);
+    for (const [instanceId, session] of this.#sessions) {
+      if (session.sessionId) {
+        addresses.set(instanceId, { instanceId, sessionId: session.sessionId });
+      }
+    }
+    return [...addresses.values()];
+  }
+
+  async unclaimedRunners(
+    directory: string,
+    claimed: readonly string[]
+  ): Promise<{ count: number; readStartedAt: number }> {
+    const readStartedAt = Date.now();
+    if (this.#operationsPending()) {
+      throw new Error(
+        "OpenCode runner reading is incomplete while ownership operations are pending."
+      );
+    }
+    const generations = await this.#serverOwner.liveGenerations();
+    const held = await (await this.sessiond()).list();
+    if (
+      held.procs.some(
+        (proc) =>
+          proc.alive &&
+          parseProcId(proc.procId).kind === "opencode-server" &&
+          !generations.some((generation) => generation.procId === proc.procId)
+      )
+    ) {
+      throw new Error(
+        "OpenCode runner reading is incomplete: a held generation has no recorded address."
+      );
+    }
+    const known = new Set(claimed);
+    const unclaimed = new Set<string>();
+    const readings = await Promise.all(
+      generations.map(async (identity) => {
+        const result = await reached(
+          this.#clientForGeneration(identity).session.status(
+            { directory },
+            { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
+          )
+        );
+        if (result.error || !result.data || !result.response?.ok) {
+          throw new Error("OpenCode runner reading is incomplete.");
+        }
+        return result.data;
+      })
+    );
+    for (const reading of readings) {
+      for (const [id, state] of Object.entries(reading)) {
+        if (state.type !== "idle" && !known.has(id)) {
+          unclaimed.add(id);
+        }
+      }
+    }
+    if (this.#operationsPending()) {
+      throw new Error("OpenCode ownership changed during its runner reading.");
+    }
+    return { count: unclaimed.size, readStartedAt };
+  }
+
   /** A register may recover every held session, but must never spawn new work. */
   reattach(
     spec: SpawnPayload,
@@ -5312,6 +5443,20 @@ export class OpencodeHarness implements Harness {
         throw new Error("opencode could not create the session");
       }
       sessionId = (created.data as Session).id;
+    }
+    if (!ctx.recordSessionAddress) {
+      throw new Error(
+        "OpenCode work requires the hub's session-address acknowledgement."
+      );
+    }
+    this.#pendingSessionAddresses.set(ctx.instanceId, {
+      instanceId: ctx.instanceId,
+      sessionId,
+    });
+    try {
+      await ctx.recordSessionAddress(sessionId);
+    } finally {
+      this.#pendingSessionAddresses.delete(ctx.instanceId);
     }
     if (spec.resume?.atMessage && !spec.resume.fork) {
       assertOpencodeKey(sessionId, "revert");

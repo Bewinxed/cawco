@@ -1,8 +1,5 @@
 /** Passive custody inspection: never starts or asks a harness, model or provider. */
-import type { UnownedSessionProcess } from "@cawco/core";
-import { sessiondEndpoint } from "@cawco/core/sessiond";
-import { parseProcId } from "./proc-id";
-import { SessiondClient } from "./sessiond-client";
+import type { SessiondClient } from "./sessiond-client";
 
 export interface RingLine {
   active?: unknown;
@@ -73,10 +70,6 @@ export class ChildActivity {
   get turnRunning(): boolean {
     return this.#running === true;
   }
-
-  get turnState(): boolean | null {
-    return this.#running ?? null;
-  }
 }
 
 type ProcLineListener = Parameters<SessiondClient["subscribe"]>[1];
@@ -119,69 +112,4 @@ export const readRing = (
     };
     client.subscribe(procId, listener, afterSeq);
   });
-};
-
-/** One independent sessiond connection keeps passive reads off the adopted sessions' listeners. */
-export const readHeldProcesses = async (
-  include: (instanceId: string) => boolean
-): Promise<UnownedSessionProcess[]> => {
-  const client = await SessiondClient.connect(
-    process.env.CAWCO_SESSIOND_ENDPOINT ?? sessiondEndpoint()
-  );
-  try {
-    return await Promise.all(
-      client.procs.flatMap((proc) => {
-        const id = parseProcId(proc.procId);
-        if (!proc.alive || (id.kind !== "claude" && id.kind !== "pi")) {
-          return [];
-        }
-        if (!include(id.instanceId)) {
-          return [];
-        }
-        const harness = id.kind;
-        return [
-          (async (): Promise<UnownedSessionProcess> => {
-            const activity = new ChildActivity(harness);
-            let timer: ReturnType<typeof setTimeout> | undefined;
-            const read = readRing(
-              client,
-              proc.procId,
-              0,
-              proc.head,
-              (event) => {
-                let line: RingLine | undefined;
-                try {
-                  line = JSON.parse(event.data) as RingLine;
-                } catch {
-                  // Child bytes need not be protocol JSON. They cannot assert turn state.
-                  return;
-                }
-                activity.read(line);
-              }
-            ).then(() => activity.turnState);
-            try {
-              // An unreadable ring field is unknown; the already-listed process remains visible.
-              const turnRunning = await Promise.race([
-                read,
-                new Promise<null>((done) => {
-                  timer = setTimeout(() => done(null), 2000);
-                }),
-              ]);
-              return {
-                instanceId: id.instanceId,
-                harness,
-                cwd: proc.cwd ?? null,
-                pid: proc.pid,
-                turnRunning,
-              };
-            } finally {
-              clearTimeout(timer);
-            }
-          })(),
-        ];
-      })
-    );
-  } finally {
-    client.close();
-  }
 };

@@ -183,8 +183,6 @@ export interface RegisterAckPayload {
    */
   ingested?: Record<string, IngestMark>;
   ok: true;
-  /** Rows this hub has on the registering machine, independent of attachment. */
-  rowIds: string[];
 }
 
 const record = (value: unknown): Record<string, unknown> | undefined =>

@@ -8,7 +8,7 @@
  */
 
 import { mkdir, stat } from "node:fs/promises";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import type {
   AgentBusyReport,
   ControlPayload,
@@ -27,11 +27,10 @@ import type {
   RepoInfo,
   ReposResult,
   SendPayload,
+  SessionAddress,
   SessionPulse,
   SpawnPayload,
   StopPayload,
-  UnownedProcessStopResult,
-  UnownedSessionProcess,
 } from "@cawco/core";
 import {
   AGENT_BUSY,
@@ -78,7 +77,6 @@ import { parseProcId, SESSION_PROC_KINDS } from "./proc-id";
 import { type PromptWriteNotice, withPromptWrites } from "./prompt-writes";
 import { acknowledgeSessionCredential } from "./session-identity";
 import { endProc, procEpoch, SessiondClient } from "./sessiond-client";
-import { readHeldProcesses } from "./sessiond-custody";
 import { installTool, probeTools } from "./tools";
 import { type UpdateOptions, updateCheckout } from "./update";
 
@@ -473,6 +471,19 @@ export class SessionSupervisor {
    */
   readonly #asleep = new Map<string, SendPayload[]>();
   readonly #generations = new Map<string, string>();
+  readonly #addressWaiting = new Map<
+    string,
+    {
+      sessionId: string;
+      generation: string;
+      ack: ReturnType<typeof Promise.withResolvers<void>>;
+    }
+  >();
+  readonly #addressAcknowledged = new Map<
+    string,
+    { sessionId: string; generation: string }
+  >();
+  readonly #addressCancelled = new Set<string>();
   readonly #failures = new Map<string, string>();
   /** Reattaches in flight, by instance id: see {@link reattach}. */
   readonly #adopting = new Map<string, Promise<void>>();
@@ -598,11 +609,35 @@ export class SessionSupervisor {
   }
 
   /** Settles once the envelope has been handled, success or failure alike. */
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: address ACK bypasses the queue waiting on that same ACK
   dispatch(envelope: Envelope): Promise<void> {
     const control =
       envelope.verb === "control"
         ? (envelope.payload as ControlPayload)
         : undefined;
+    if (control?.method === "acknowledgeSessionAddress") {
+      const id = envelope.instanceId ?? control.instanceId ?? "";
+      const pending = this.#addressWaiting.get(id);
+      if (
+        pending &&
+        pending.sessionId === control.args?.[0] &&
+        pending.generation === control.args?.[1]
+      ) {
+        if (control.args?.[2] === true) {
+          this.#addressAcknowledged.set(id, {
+            sessionId: pending.sessionId,
+            generation: pending.generation,
+          });
+          pending.ack.resolve();
+        } else {
+          this.#addressCancelled.add(id);
+          pending.ack.reject(
+            new Error("The session ended before its address was acknowledged.")
+          );
+        }
+      }
+      return Promise.resolve();
+    }
     const imageRequest =
       control?.method === GENERATE_IMAGE ? control.requestId : undefined;
     // A slow image request must not block machine busy probes or other
@@ -676,6 +711,57 @@ export class SessionSupervisor {
   /** The sessions running right now — what `register` reconciles the hub against. */
   get instanceIds(): string[] {
     return [...this.#sessions.keys()];
+  }
+
+  get sessionAddresses(): SessionAddress[] {
+    const addresses = new Map<string, SessionAddress>();
+    for (const [instanceId, session] of this.#sessions) {
+      if (session.harness === "opencode" && session.sessionId) {
+        addresses.set(instanceId, {
+          instanceId,
+          sessionId: session.sessionId,
+          processGeneration: this.#generations.get(instanceId),
+        });
+      }
+    }
+    for (const [instanceId, pending] of this.#addressWaiting) {
+      addresses.set(instanceId, {
+        instanceId,
+        sessionId: pending.sessionId,
+        processGeneration: pending.generation,
+      });
+    }
+    for (const address of this.#adapter("opencode").sessionAddresses?.() ??
+      []) {
+      addresses.set(address.instanceId, {
+        ...address,
+        processGeneration: this.#generations.get(address.instanceId),
+      });
+    }
+    return [...addresses.values()];
+  }
+
+  replaySessionAddresses(): void {
+    for (const address of this.sessionAddresses) {
+      if (address.processGeneration) {
+        this.sink({
+          kind: "session_address",
+          ...address,
+          processGeneration: address.processGeneration,
+        });
+      }
+    }
+  }
+
+  /** Custody includes in-flight session operations so a late spawn cannot become ownerless. */
+  get custodyInstanceIds(): string[] {
+    return [
+      ...new Set([
+        ...this.#sessions.keys(),
+        ...this.#adopting.keys(),
+        ...[...this.#queues.keys()].filter((key) => key && !key.includes(":")),
+      ]),
+    ];
   }
 
   get custodyReady(): boolean {
@@ -1308,7 +1394,9 @@ export class SessionSupervisor {
     }
     const adapter = this.#adapter(kind);
     try {
-      let workdir = await this.#workdir(payload);
+      let workdir = payload.reattachOnly
+        ? expandHome(payload.cwd)
+        : await this.#workdir(payload);
       if (workdir === undefined) {
         this.#recoveryUnavailable(
           payload,
@@ -1391,7 +1479,8 @@ export class SessionSupervisor {
         holder,
         payload.processGeneration,
         boundary,
-        payload.sessionCredential
+        payload.sessionCredential,
+        !!payload.reattachOnly
       );
 
       if (payload.resume) {
@@ -1454,6 +1543,9 @@ export class SessionSupervisor {
         });
       }
     } catch (error) {
+      if (payload.reattachOnly || this.#addressCancelled.delete(instanceId)) {
+        return;
+      }
       const message = error instanceof Error ? error.message : String(error);
       // The journal too: the row's `error` and the control result both leave
       // this process, and a diagnosis on the machine itself was once blind to
@@ -1504,13 +1596,47 @@ export class SessionSupervisor {
     holder: { session: HarnessSession | null },
     processGeneration: string | undefined,
     boundary?: Boundary,
-    sessionCredential?: string
+    sessionCredential?: string,
+    recovery = false
   ): SessiondAwareContext {
     if (!processGeneration) {
       throw new Error("The hub did not supply this process's generation.");
     }
     this.#generations.set(instanceId, processGeneration);
     return {
+      recordSessionAddress: (sessionId) => {
+        const known = this.#addressAcknowledged.get(instanceId);
+        if (
+          known?.sessionId === sessionId &&
+          known.generation === processGeneration
+        ) {
+          return Promise.resolve();
+        }
+        const previous = this.#addressWaiting.get(instanceId);
+        if (
+          previous?.sessionId === sessionId &&
+          previous.generation === processGeneration
+        ) {
+          return previous.ack.promise;
+        }
+        const pending = {
+          sessionId,
+          generation: processGeneration,
+          ack: Promise.withResolvers<void>(),
+        };
+        this.#addressWaiting.set(instanceId, pending);
+        this.sink({
+          kind: "session_address",
+          instanceId,
+          sessionId,
+          processGeneration,
+        });
+        return pending.ack.promise.finally(() => {
+          if (this.#addressWaiting.get(instanceId) === pending) {
+            this.#addressWaiting.delete(instanceId);
+          }
+        });
+      },
       instanceId,
       cwd: workdir,
       ...(boundary ? { boundary } : {}),
@@ -1604,7 +1730,10 @@ export class SessionSupervisor {
       },
       session: (sessionId) =>
         this.#noteQuestSession(instanceId, sessionId, adapter.kind),
-      failed: (error) => this.#fail(instanceId, error, processGeneration),
+      failed: (error) =>
+        recovery
+          ? this.#failures.set(instanceId, String(error))
+          : this.#fail(instanceId, error, processGeneration),
       rejected: (uuid, error) => this.#reject(instanceId, uuid, error),
       emit: (envelope) => this.emit(envelope),
       closed: () => {
@@ -1669,21 +1798,6 @@ export class SessionSupervisor {
       this.#cacheCold.delete(instanceId);
     }
     this.#realPromptEpoch.delete(instanceId);
-  }
-
-  /** Lists surviving children custody did not attach; absence never authorises a stop. */
-  async listUnowned(
-    rowIds: readonly string[]
-  ): Promise<UnownedSessionProcess[]> {
-    const named = new Set(rowIds);
-    return await readHeldProcesses(
-      (instanceId) =>
-        !(
-          (this.#sessions.has(instanceId) && named.has(instanceId)) ||
-          this.#adopting.has(instanceId) ||
-          this.#queues.has(instanceId)
-        )
-    );
   }
 
   /**
@@ -1883,23 +1997,10 @@ export class SessionSupervisor {
   #sessionRecoveryFailed(
     instanceId: string,
     problem: unknown,
-    processGeneration?: string
+    _processGeneration?: string
   ): void {
-    const message =
-      problem instanceof Error ? problem.message : String(problem);
-    this.sink({
-      kind: "error",
-      instanceId,
-      verb: "register",
-      message: `Session custody recovery failed: ${message}`,
-      processGeneration,
-    });
-    this.sink({
-      kind: "recovery_unavailable",
-      instanceId,
-      reason: message,
-      processGeneration,
-    });
+    // The hub retries kept custody from fresh readings; failure is not an end decision.
+    this.#failures.set(instanceId, String(problem));
   }
 
   /**
@@ -1949,7 +2050,8 @@ export class SessionSupervisor {
       holder,
       row.processGeneration,
       undefined,
-      row.sessionCredential
+      row.sessionCredential,
+      true
     );
     const session = await claude.adopt(row.instanceId, ctx, {
       ...(cursor === undefined ? {} : { afterSeq: cursor }),
@@ -2180,44 +2282,19 @@ export class SessionSupervisor {
     }
   }
 
-  /** Only the explicit machine control calls this; every child follows #stop's held path. */
-  async stopUnownedProcesses(
-    instanceIds: readonly string[]
-  ): Promise<UnownedProcessStopResult[]> {
-    return await Promise.all(
-      [...new Set(instanceIds)].map(
-        async (instanceId): Promise<UnownedProcessStopResult> => {
-          try {
-            if (!(await this.#endHeld(instanceId))) {
-              throw new Error(
-                `Nothing stopped for ${instanceId}: sessiond holds no live process for it`
-              );
-            }
-            this.#sessions.delete(instanceId);
-            this.#forgetPulse(instanceId);
-            this.#resumable.delete(instanceId);
-            return { instanceId, status: "stopped" };
-          } catch (error) {
-            return {
-              instanceId,
-              status: "failed",
-              error: error instanceof Error ? error.message : String(error),
-            };
-          }
-        }
-      )
-    );
-  }
-
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one stop settles carried, sessiond-held and discarded custody with the same receipt
   async #stop({
     instanceId,
     discard,
     requestId,
     processGeneration: namedGeneration,
+    harness,
+    sessionId,
+    cwd,
+    claimedSessionIds = [],
   }: StopPayload): Promise<void> {
     const processGeneration =
-      this.#generations.get(instanceId) ?? namedGeneration;
+      namedGeneration ?? this.#generations.get(instanceId);
     // A stop is a decision about the session: nothing waits for its wake now.
     const crossed = this.#asleep.get(instanceId) ?? [];
     this.#asleep.delete(instanceId);
@@ -2226,7 +2303,54 @@ export class SessionSupervisor {
     }
     try {
       const session = this.#sessions.get(instanceId);
-      if (session) {
+      const kind = harness ?? session?.harness;
+      let ended: Extract<FramePayload, { kind: "stopped" }>["ended"];
+      if (kind === "opencode") {
+        const key = sessionId ?? session?.sessionId;
+        const directory = cwd ?? this.#resumable.get(instanceId)?.cwd;
+        const adapter = this.#adapter("opencode");
+        if (!(directory && adapter.endSession)) {
+          throw new Error(
+            "OpenCode end requires the row's conversation and directory."
+          );
+        }
+        if (key) {
+          await adapter.endSession(key, directory);
+          ended = {
+            harness: "opencode",
+            sessionId: key,
+            resourcesClosed: true,
+          };
+        } else {
+          if (!adapter.unclaimedRunners) {
+            throw new Error(
+              "OpenCode cannot supply a complete runner reading."
+            );
+          }
+          const reading = await adapter.unclaimedRunners(
+            directory,
+            claimedSessionIds
+          );
+          if (reading.count > 0) {
+            this.sink({
+              kind: "error",
+              verb: "stop",
+              instanceId,
+              processGeneration,
+              message: "End intent is waiting for unclaimed server runners.",
+              endReason: `waiting: ${reading.count} unclaimed runner(s) in ${directory}`,
+            });
+            return;
+          }
+          ended = {
+            harness: "opencode",
+            resourcesClosed: true,
+            reason: `no unclaimed runner in ${directory} at ${new Date(reading.readStartedAt).toISOString()}`,
+          };
+        }
+        this.#sessions.delete(instanceId);
+        this.#forgetPulse(instanceId);
+      } else if (session) {
         this.#forgetPulse(instanceId);
         // Carried, and listed on every beat, until the stop is over: a stop
         // waits for the turn it interrupts, and a beat that no longer listed
@@ -2234,43 +2358,30 @@ export class SessionSupervisor {
         // holding failed "ended" before this said "stopped".
         await session.stop();
         this.#sessions.delete(instanceId);
-      } else {
-        const endedHeld = await this.#endHeld(instanceId);
-        const target = this.#resumable.get(instanceId);
-        // A discard of an instance this machine holds nothing for — a spawn
-        // that never produced a session — has nothing to stop: the row is
-        // thrown away, or it could never leave the board.
-        const aborted =
-          endedHeld ||
-          (discard &&
-            (!target ||
-              (await target.adapter.abortSession?.(
-                target.sessionKey,
-                target.cwd
-              ))));
-        if (!aborted) {
-          throw new Error(
-            `Nothing stopped for ${instanceId}: no live session or abortable server turn${discard ? "" : "; held turns require explicit discard"}`
-          );
-        }
+      }
+      if (kind !== "opencode") {
+        await this.#endHeld(instanceId);
+        ended = { harness: kind ?? "claude", resourcesClosed: true };
       }
       this.#resumable.delete(instanceId);
+      if (discard) {
+        await this.#removeWorktree(instanceId, cwd);
+        if (!this.#quests.has(instanceId) && sessionId && cwd) {
+          this.#quests.set(instanceId, {
+            dir: cwd,
+            sessionId,
+            harness: harness ?? "claude",
+          });
+        }
+        await this.#removeQuestSession(instanceId);
+      }
       this.sink({
         kind: "stopped",
         instanceId,
-        discard: false,
+        discard: discard === true,
         processGeneration,
+        ...(ended ? { ended } : {}),
       });
-      if (discard) {
-        await this.#removeWorktree(instanceId);
-        await this.#removeQuestSession(instanceId);
-        this.sink({
-          kind: "stopped",
-          instanceId,
-          discard: true,
-          processGeneration,
-        });
-      }
       if (requestId) {
         this.sink({ kind: "control_result", instanceId, requestId, ok: true });
       }
@@ -2390,8 +2501,25 @@ export class SessionSupervisor {
     return dir;
   }
 
-  async #removeWorktree(instanceId: string): Promise<void> {
-    const worktree = this.#worktrees.get(instanceId);
+  async #removeWorktree(instanceId: string, cwd?: string): Promise<void> {
+    let worktree = this.#worktrees.get(instanceId);
+    if (!worktree && cwd && (await isDirectory(cwd))) {
+      const git =
+        await Bun.$`git -C ${cwd} rev-parse --path-format=absolute --show-toplevel --git-common-dir`
+          .quiet()
+          .nothrow();
+      if (git.exitCode === 0) {
+        const [path, common] = git.text().trim().split("\n");
+        if (
+          path &&
+          common &&
+          basename(common) === ".git" &&
+          (await stat(join(path, ".git")).catch(() => undefined))?.isFile()
+        ) {
+          worktree = { path, root: dirname(common), dir: cwd };
+        }
+      }
+    }
     if (!worktree) {
       return;
     }
@@ -2412,11 +2540,14 @@ export class SessionSupervisor {
   /** Discarding a side quest throws its transcript away too. */
   async #removeQuestSession(instanceId: string): Promise<void> {
     const quest = this.#quests.get(instanceId);
-    this.#quests.delete(instanceId);
     if (!quest?.sessionId) {
       return;
     }
-    await harnessOf(quest.harness)?.deleteSession(quest.sessionId, quest.dir);
+    const adapter = harnessOf(quest.harness);
+    if (await adapter?.getSessionInfo(quest.sessionId, quest.dir)) {
+      await adapter?.deleteSession(quest.sessionId, quest.dir);
+    }
+    this.#quests.delete(instanceId);
   }
 
   async #fs(payload: FsPayload): Promise<void> {
