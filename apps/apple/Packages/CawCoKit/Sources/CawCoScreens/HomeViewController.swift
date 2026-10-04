@@ -550,8 +550,15 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
         spendWords = home.spendWords
         usageStrip = home.usage
         snapshot.appendSections([.top])
-        // The phone has no rail: the rail's usage strip stands here, always (owner pick i).
-        snapshot.appendItems([.status, .usage], toSection: .top)
+        if variant == .page {
+            // The phone has no rail: the rail's usage strip stands here, always (owner pick i).
+            snapshot.appendItems([.status, .usage], toSection: .top)
+        } else if !(live && ready) {
+            // In the rail the strip is the rail's own, in its footer, and the
+            // status line is drawn only until the hub is live and read
+            // (Home.svelte `bare`): then the block takes no room.
+            snapshot.appendItems([.status], toSection: .top)
+        }
         if ready, live, !needList.isEmpty {
             snapshot.appendItems([.headline], toSection: .top)
         }
