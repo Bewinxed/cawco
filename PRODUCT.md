@@ -39,7 +39,7 @@ Away from a desk, the operator uses a Telegram bridge to receive permission prom
 - Session transcript: real-time streaming conversation view with tool calls, subagent branches, and delegate sessions
 - Remote session control: spawn, steer (send messages), interrupt, and stop sessions from the dashboard or Telegram
 - Permission approval: answer permission gates inline or via Telegram
-- Standing rules: persistent rules that auto-approve/deny permission patterns, with live testers
+- Rules: standing instructions the hub enforces on every session; a rule fires on a phrase, pattern or meaning in what a session says or thinks, or at the end of every turn, and answers with a fixed reply or the supervisor's judgement; each can be scoped to an agent, model, project or machine
 - Hooks: lifecycle hooks with English-sentence previews and matchers
 - Fleet config sync: push MCP servers, skills, plugins, memory, and hooks to all machines; hub resolves sources once and ships bytes
 - Usage tracking: per-harness spend with daily charts and breakdown tables

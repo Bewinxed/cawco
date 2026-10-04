@@ -12,10 +12,14 @@
     <meta property="og:title" content="Caw&amp;Co: one board for every coding agent you run" />
     <meta
       property="og:description"
-      content="A self-hosted control plane for Claude Code, OpenCode and pi. Free and open source."
+      content="Caw&amp;Co is a self-hosted control plane for Claude Code, OpenCode and pi. One browser board shows every machine, project and session, and you answer the ones that are waiting."
     />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://cawco.dev/" />
+    <meta property="og:image" content="https://cawco.dev/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
     <link rel="icon" type="image/png" href="/favicon.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link
@@ -64,9 +68,11 @@
                 <span class="copy-icons" aria-hidden="true">
                   <span class="ic-copy"><i data-icon="copy"></i></span>
                   <span class="ic-done"><i data-icon="check-circle"></i></span>
+                  <span class="ic-fail"><i data-icon="close-circle"></i></span>
                 </span>
                 <span data-copy-label>Copy</span>
               </button>
+              <p class="cmd-alert" aria-hidden="true">Copying is blocked here. Select the command instead.</p>
             </div>
             <p class="install-note">
               It's free and open source, and it runs on macOS and on Linux with systemd.
@@ -392,9 +398,11 @@
                 <span class="copy-icons" aria-hidden="true">
                   <span class="ic-copy"><i data-icon="copy"></i></span>
                   <span class="ic-done"><i data-icon="check-circle"></i></span>
+                  <span class="ic-fail"><i data-icon="close-circle"></i></span>
                 </span>
                 <span data-copy-label>Copy</span>
               </button>
+              <p class="cmd-alert" aria-hidden="true">Copying is blocked here. Select the command instead.</p>
             </div>
             <a class="card-link" href="https://github.com/Bewinxed/cawco">github.com/Bewinxed/cawco</a>
           </article>

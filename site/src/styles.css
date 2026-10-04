@@ -262,10 +262,11 @@ h1 {
 }
 
 .cmd {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 10px;
-  max-width: 580px;
+  max-width: 620px;
   padding: 8px 8px 8px 18px;
   border-radius: 16px;
   background: var(--ink);
@@ -312,20 +313,58 @@ h1 {
 }
 
 .ic-done,
-.copy.is-copied .ic-copy {
+.ic-fail,
+.cmd[data-state] .ic-copy {
   opacity: 0;
   transform: scale(0.8);
   filter: blur(3px);
 }
 
-.copy.is-copied .ic-done {
+.cmd[data-state="copied"] .ic-done,
+.cmd[data-state="blocked"] .ic-fail {
   opacity: 1;
   transform: none;
   filter: none;
 }
 
+/* Shown only when the browser refuses the copy: it says so, next to the command. */
+.cmd-alert {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 3;
+  max-width: 100%;
+  padding: 9px 12px;
+  border: 2px solid var(--ink);
+  border-radius: 10px;
+  background: var(--ivory);
+  color: var(--ink);
+  font-size: 0.92rem;
+  font-weight: 750;
+  line-height: 1.3;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-4px) scale(0.98);
+  transform-origin: 100% 0;
+  transition:
+    opacity 140ms ease,
+    transform 140ms var(--ease-out),
+    visibility 0s 140ms;
+  pointer-events: none;
+}
+
+.cmd[data-state="blocked"] .cmd-alert {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  transition:
+    opacity 180ms ease,
+    transform 180ms var(--ease-out),
+    visibility 0s;
+}
+
 .install-note {
-  max-width: 580px;
+  max-width: 620px;
   margin-top: 12px;
   color: var(--soft-on-butter);
   font-size: 0.95rem;
@@ -1421,12 +1460,16 @@ mark {
   }
 }
 
-@media (max-width: 520px) {
+@media (max-width: 720px) {
   .cmd {
     flex-direction: column;
     align-items: stretch;
     gap: 12px;
     padding: 16px 14px 14px;
+  }
+
+  .cmd-alert {
+    left: 0;
   }
 
   /* Where one line will not fit, the command breaks before the pipe. */
@@ -1602,6 +1645,12 @@ mark {
   .tg-check,
   .percher,
   .percher.is-on {
+    transition: none;
+  }
+
+  .cmd-alert,
+  .cmd[data-state="blocked"] .cmd-alert {
+    transform: none;
     transition: none;
   }
 

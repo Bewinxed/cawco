@@ -43,3 +43,17 @@ export const MASCOTS = {
 } satisfies Record<string, Mascot>;
 
 export type MascotSlot = keyof typeof MASCOTS;
+
+/**
+ * The picture link previews show (`og:image`). It is one generated image: the
+ * butter ground, the wordmark, the page's headline and Caw in the hero pose,
+ * drawn by the image generator from the hero pose and a capture of the page.
+ * Its lettering is the generator's match to the page's type, not the Nunito
+ * file. It lives in `public/`, so it is served at `/og.png` unhashed.
+ */
+export const SHARE_IMAGE = {
+  file: 'public/og.png',
+  origin: 'generated',
+  width: 1200,
+  height: 630,
+} as const satisfies { file: string; origin: MascotOrigin; width: number; height: number };

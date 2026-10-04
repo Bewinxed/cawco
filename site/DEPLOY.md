@@ -11,6 +11,8 @@ that folder on `cawco.dev/*` (see `wrangler.jsonc`).
   `packages/core/src/install-script.ts`, so it is always the script the hub
   itself would hand out. `public/_headers` serves it as plain text and tells
   caches to revalidate every time.
+- `/og.png` is the picture link previews show. The page's `og:image` tag names
+  it by its full `https://cawco.dev/og.png` address.
 - `/version.txt` is the short commit the deploy was built from.
 
 ## Work on it

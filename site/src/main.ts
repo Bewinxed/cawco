@@ -11,22 +11,47 @@ gsap.matchMedia().add('(prefers-reduced-motion: no-preference)', () => {
   return () => stage.setMotion(false);
 });
 
+/** What a copy button says in each outcome, and how long it says it. */
+const OUTCOMES = {
+  copied: { label: 'Copied', status: 'Install command copied.', hold: 2000 },
+  // Held longer: this one asks the visitor to do something, so it needs reading.
+  blocked: {
+    label: 'Not copied',
+    status: 'Copying is blocked here. Select the command instead.',
+    hold: 6000,
+  },
+} as const;
+
 const status = one(document, '[data-status]');
 
 for (const button of all<HTMLButtonElement>(document, '[data-copy]')) {
+  const box = button.closest<HTMLElement>('.cmd');
+  if (!box) throw new Error('A copy button sits outside a command box.');
   const label = one(button, '[data-copy-label]');
   let reset = 0;
-  button.addEventListener('click', async () => {
-    const command = one(button.parentElement ?? document, '[data-cmd]').textContent.trim();
-    await navigator.clipboard.writeText(command);
-    button.classList.add('is-copied');
-    label.textContent = 'Copied';
-    status.textContent = 'Install command copied.';
+
+  const show = (outcome: keyof typeof OUTCOMES) => {
+    const { label: text, status: line, hold } = OUTCOMES[outcome];
+    box.dataset.state = outcome;
+    label.textContent = text;
+    status.textContent = line;
     window.clearTimeout(reset);
     reset = window.setTimeout(() => {
-      button.classList.remove('is-copied');
+      delete box.dataset.state;
       label.textContent = 'Copy';
       status.textContent = '';
-    }, 2000);
+    }, hold);
+  };
+
+  button.addEventListener('click', async () => {
+    const command = one(box, '[data-cmd]').textContent.trim();
+    try {
+      // Throws where the Clipboard API is absent, rejects where it is refused.
+      await navigator.clipboard.writeText(command);
+    } catch {
+      show('blocked');
+      return;
+    }
+    show('copied');
   });
 }
