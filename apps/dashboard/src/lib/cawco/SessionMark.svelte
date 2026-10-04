@@ -141,13 +141,14 @@
     <span aria-hidden="true" class="echo tile" data-echo>{@render face()}</span>
   {/if}
   {#if has}
-    <span aria-hidden="true" class="deck">
+    <span aria-hidden="true" class="deck" data-deck={Math.min(count, 3)}>
       {#each [1, 2, 3] as i (i)}
         <span class="card" style:--i={i}></span>
       {/each}
     </span>
   {/if}
   <span aria-hidden="true" class="face tile">{@render face()}</span>
+  <span aria-hidden="true" class="skin" data-ride-skin></span>
   {#if has && ontoggle}
     <!-- biome-ignore lint/a11y/useSemanticElements: it sits inside the row's link, and a <button> cannot nest in an <a>. -->
     <span
@@ -173,7 +174,9 @@
   .session-mark {
     --size: var(--mark-size, 18px);
     position: relative;
-    z-index: 2;
+    /* A step up while its rows are out: their marks start and end their
+       ride under it (app.css, motion/branch). */
+    z-index: var(--mark-level, 2);
     display: inline-block;
     flex: none;
     inline-size: var(--size);
@@ -217,14 +220,17 @@
     transform-style: preserve-3d;
     pointer-events: none;
   }
-  .card {
-    --p: max(0, calc(var(--n) - var(--i) + 1));
+  .card,
+  .skin {
     position: absolute;
     inset: 0;
     overflow: hidden;
     border-radius: var(--radius-xs);
     background-color: var(--fill);
     background-image: var(--mark-overlay);
+  }
+  .card {
+    --p: max(0, calc(var(--n) - var(--i) + 1));
     opacity: clamp(0, calc(var(--n) - var(--i) + 1), 1);
     transform: translateZ(
       calc(
@@ -233,7 +239,18 @@
         (1 / (1 - var(--deck-shrink) * var(--p)) - 1)
       )
     );
-
+  }
+  /* The skin: a delegate's tile wears its parent's card (--p its place,
+     --pfill the parent's colour) as it leaves the deck, and sheds it on its
+     way to its row (motion/branch). Unseen at rest. */
+  .skin {
+    --p: 1;
+    background-color: var(--pfill, var(--fill));
+    opacity: 0;
+    pointer-events: none;
+  }
+  .card,
+  .skin {
     /* Darker with depth. */
     &::after {
       content: "";

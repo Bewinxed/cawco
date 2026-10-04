@@ -3,7 +3,7 @@
  * same in every list that nests rows (the rail's projects, sessions and
  * delegates at every depth, the home's Working and Finished, a run step's
  * result). One primitive, read off one moving point: the head of the line
- * that leaves the parent's glyph.
+ * that leaves the parent's glyph, measured from the glyph's centre.
  *
  * The line. Each child's line (app.css .kit-nest) runs from the parent's
  * glyph down the rail, round the corner of its elbow and out along its arm
@@ -16,6 +16,22 @@
  * arm on its child's own swipe, the line stalled at every corner and
  * restarted at another speed.
  *
+ * The glyphs ride the line. A child's glyph is on the tip of its own line
+ * for the whole trip: its centre is the point `min(head, arrive)` along the
+ * path its line draws, from the parent's glyph's centre down the rail,
+ * round its elbow and out along its arm, on to its own place (`rideOf`).
+ * Its place is a function of the head alone, sampled into keyframes as the
+ * line's cuts are (`rideFrames`), `translate`, `scale` and `opacity` only.
+ * It starts under the parent's glyph, which stands over it (app.css). Where
+ * the parent stands on a deck (SessionMark `[data-deck]`), the first
+ * children are its cards: each starts as its card, the parent's colour at
+ * its card's size and place, and comes to its own colour and size on the
+ * way (its `[data-ride-skin]` fades off it); the deck itself is away from
+ * the frame the line sets off to the frame a fold's group unmounts. The
+ * rest start at the parent's glyph and fade in over --ride-fade. A glyph
+ * flew in from its row's left edge once the head had reached it, on a clock
+ * of its own: it met the line, it did not arrive on it.
+ *
  * Opening. The line leads. Its head glides at one steady speed (curves
  * `glide`: easing in over its first few px and out over its last), so the
  * children are reached at even times: --dur-stagger apart, or closer
@@ -27,18 +43,17 @@
  * asks of the batch (`atTravel`), so the head, which starts above the room's
  * top, is never below its edge. On the rows' in-out curve, the room set the
  * pace and the head rode it: the children were reached 22ms, then 134ms
- * apart. The moment the head reaches a child's glyph, the glyph flies in
- * from the row's left edge as it fades in, and its title wipes in left to
- * right, both on --ease-out over --dur-rail. No row ever moves vertically:
- * each stands at its place inside the growing box, so nothing is drawn
- * above the parent row's bottom edge or over another row.
+ * apart. The moment the head reaches a child's place, its glyph has landed
+ * and its title wipes in left to right, on --ease-out over --dur-rail. No
+ * row ever moves: each stands at its place inside the growing box, and only
+ * its glyph is drawn on its way there.
  *
  * Folding. Quicker than opening, and under way in the next frame, from the
  * click's own time (motion/rows `now`): the room closes over --dur-exit, the
  * rows under it sliding up with its edge (the batch's "close" pace), while
  * the line runs back the way it came at one steady pace (`RUN_BACK`),
- * ahead of the edge. As the head leaves a child's glyph, its title wipes out
- * right to left, then its glyph flies out to the left as it fades; then the
+ * ahead of the edge. As the head leaves a child's place, its title wipes out
+ * right to left and its glyph rides the line back to the parent; then the
  * group unmounts. The room used to wait for the lowest child to swipe out
  * before it started, and then took an opening's whole time to close.
  *
@@ -77,7 +92,7 @@ import {
   glide,
   glideSpeed,
   motionOk,
-  popRise,
+  numberOf,
 } from "./curves.svelte";
 import { atTravel, beforeReflow, heldToTravel } from "./rows.svelte";
 
@@ -121,6 +136,24 @@ function layoutBox(element: HTMLElement): Box {
 }
 
 const px = (value: number) => `${value.toFixed(2)}px`;
+
+/**
+ * A glyph's centre in the viewport where it is laid out: where it is drawn,
+ * less its own ride (a glyph on its way along its line is drawn off its
+ * place, and scaled about that centre).
+ */
+function restOf(glyph: HTMLElement): { x: number; y: number } {
+  const box = glyph.getBoundingClientRect();
+  const ridden = getComputedStyle(glyph).translate;
+  const [dx = 0, dy = 0] =
+    ridden === "none"
+      ? []
+      : ridden.split(" ").map((length) => Number.parseFloat(length));
+  return {
+    x: box.left + box.width / 2 - dx,
+    y: box.top + box.height / 2 - dy,
+  };
+}
 
 /** The parent row's own element around a group, and its glyph. */
 function parentGlyph(group: HTMLElement, selector: string) {
@@ -186,8 +219,9 @@ function nestOf(
     return null;
   }
   // Across in layout (a glyph caught mid-flight is drawn off its place);
-  // down in drawn boxes read against each other, to the subpixel (nothing
-  // here moves vertically on its own transform; see `railsOf`).
+  // down in drawn boxes read against each other, to the subpixel, a glyph's
+  // less its own ride (`restOf`; nothing else here moves vertically on its
+  // own transform; see `railsOf`).
   const mark = layoutBox(parent);
   const first =
     node.getBoundingClientRect().top +
@@ -195,14 +229,13 @@ function nestOf(
     Number.parseFloat(getComputedStyle(node).paddingTop);
   const vars: Record<string, string> = {
     "--nest-x": px(mark.left + mark.width / 2 - layoutBox(node).left),
-    "--nest-lead": px(first - parent.getBoundingClientRect().bottom),
+    "--nest-lead": px(first - (restOf(parent).y + parent.offsetHeight / 2)),
   };
   const row = node.querySelector<HTMLElement>(":scope > li");
   const own = row?.querySelector<HTMLElement>(child);
   if (row && own) {
-    const tile = own.getBoundingClientRect();
     vars["--nest-glyph-y"] = px(
-      tile.top + tile.height / 2 - row.getBoundingClientRect().top
+      restOf(own).y - row.getBoundingClientRect().top
     );
     vars["--nest-reach"] = px(layoutBox(own).left - layoutBox(row).left);
   }
@@ -354,16 +387,43 @@ function endOf(stretch: Stretch): number {
   return stretch.from + down + arc + stretch.width - corner;
 }
 
+/**
+ * A glyph's way along its line: from the centre of its parent's glyph, down
+ * the rail, round its elbow and out along its arm to its own place.
+ */
+interface Ride {
+  /** Its offset from its place, `d` along its way. */
+  at: (d: number) => [x: number, y: number];
+  /** How far along the whole line its way starts: at its parent's glyph. */
+  base: number;
+  /** Its place in its parent's deck (1 nearest), or 0: it is no card. */
+  card: number;
+  /** Its parent's colour, for the card it starts as. */
+  fill: string;
+  /** How far along its way it starts: a card, at its place in the deck. */
+  lead: number;
+  /** Its way's whole length. */
+  length: number;
+  /** The list it is a row of: its siblings share its way down the rail. */
+  list: Element;
+  /** What it wears as a card (its `[data-ride-skin]`). */
+  skin: HTMLElement | null;
+  /** How far along its way it leaves the rail its siblings ride down. */
+  turn: number;
+}
+
 interface Item {
-  /** How far along the line its glyph is: its arm's end, or straight down. */
+  /** How far along the line its glyph is: at its place, or straight down. */
   arrive: number;
   bottom: number;
-  /** How far its glyph flies in from: the row's own left edge. */
-  dx: number;
+  /** Its glyph's centre in the viewport, where it is laid out. */
+  centre: { x: number; y: number } | null;
   el: HTMLElement;
   icon: HTMLElement | null;
   /** Where its title starts, from the row's left edge: past its glyph. */
   reveal: number;
+  /** Its glyph's way to its place; none without a glyph. */
+  ride: Ride | null;
   /** In the group's frame. */
   top: number;
   width: number;
@@ -388,18 +448,29 @@ interface Shape {
   trunk: number;
 }
 
-/** A list's line: how far down the group it leaves its parent's glyph, and how far along the whole line that is. */
+/**
+ * A list's line: how far down the group its parent's glyph's centre is,
+ * where it starts, and how far along the whole line that is; and the deck
+ * the parent stands on, whose cards its first children start as.
+ */
 interface Line {
   at: number;
   base: number;
+  /** How many cards the parent's deck shows. */
+  cards: number;
+  /** The parent's colour. */
+  fill: string;
+  /** How far under the parent's centre each card's centre is, a place. */
+  step: number;
 }
 
 /**
  * The stretches of line a list item draws, in the group's frame. The fold's
  * heights are read to the subpixel: drawn boxes, against the group's own.
- * Nothing in or around a group moves vertically on its own transform while
- * it is measured (a glyph flies only sideways, and a slide that carries the
- * parent's box carries the group with it), so the differences are layout's,
+ * Nothing in or around a group but a glyph moves on its own transform while
+ * it is measured (a glyph on its way is read less its ride, `restOf`, and a
+ * slide that carries the parent's box carries the group with it), so the
+ * differences are layout's,
  * without the rounding offsets carry; a head a pixel off a glyph is a frame
  * late at the slow end of the curve.
  */
@@ -441,11 +512,8 @@ function itemOf(
   const icon = el.querySelector<HTMLElement>(glyph);
   const box = el.getBoundingClientRect();
   const top = box.top - frame.top;
-  let y = top;
-  if (icon) {
-    const tile = icon.getBoundingClientRect();
-    y = tile.top + tile.height / 2 - frame.top;
-  }
+  const centre = icon ? restOf(icon) : null;
+  const y = centre ? centre.y - frame.top : top;
   // Across, in layout: a glyph caught mid-flight is drawn off its place.
   const row = layoutBox(el);
   const tile = icon ? layoutBox(icon) : null;
@@ -453,66 +521,182 @@ function itemOf(
   return {
     el,
     icon,
+    centre,
+    ride: null,
     arrive: line.base + (y - line.at),
     top,
     bottom: top + box.height,
     width: row.width,
-    dx: tile && inset > 0.5 ? inset : popRise(),
     reveal: tile ? inset + tile.width : 0,
   };
 }
 
+/**
+ * A glyph's way to its place, `centre` in the viewport: along its list
+ * item's elbow, the path its line draws (`cutAt` cuts the same one), and on
+ * from its arm's end to its own centre; with no elbow, straight down from
+ * its parent's glyph. `place` is which child of its parent it is (1 first):
+ * the first few are the parent's cards, and start where their card is.
+ */
+function rideOf(
+  item: Item,
+  centre: { x: number; y: number },
+  elbow: Stretch | undefined,
+  line: Line,
+  frame: DOMRect,
+  place: number,
+  list: Element
+): Ride {
+  const card = place <= line.cards ? place : 0;
+  const ride = {
+    base: line.base,
+    card,
+    fill: line.fill,
+    lead: card * line.step,
+    list,
+    skin: item.icon?.querySelector<HTMLElement>("[data-ride-skin]") ?? null,
+  };
+  if (!elbow) {
+    const from = frame.top + line.at;
+    const length = Math.max(0, centre.y - from);
+    return {
+      ...ride,
+      length,
+      turn: length,
+      at: (d) => [0, from + clamp(d, 0, length) - centre.y],
+    };
+  }
+  // The elbow, on the stroke's centre: down the rail to where it turns,
+  // round the corner, out along the arm at the glyph's own height.
+  const { corner, centre: radius, arc } = cornerOf(elbow);
+  const before = elbow.from - line.base;
+  const turn = centre.y - radius;
+  const down = turn - elbow.y;
+  const rail = elbow.x + (corner - radius);
+  const arm = elbow.x + corner;
+  const length = before + down + arc + Math.max(0, centre.x - arm);
+  return {
+    ...ride,
+    length,
+    turn: before + down,
+    at: (d) => {
+      const along = clamp(d, 0, length) - before;
+      if (along <= down) {
+        return [rail - centre.x, elbow.y + along - centre.y];
+      }
+      if (along <= down + arc) {
+        const turned = radius > 0 ? (along - down) / radius : Math.PI / 2;
+        return [
+          arm - radius * Math.cos(turned) - centre.x,
+          turn + radius * Math.sin(turned) - centre.y,
+        ];
+      }
+      return [arm + (along - down - arc) - centre.x, 0];
+    },
+  };
+}
+
+/**
+ * A line from a parent's glyph, `selector` in `host`: from its centre, with
+ * the deck it stands on (SessionMark `[data-deck]`: how many cards, each a
+ * place further under the centre, a tile shrunk about the deck's vanishing
+ * point). With no glyph there, from `fallback` down the group.
+ */
+function lineFrom(
+  frame: DOMRect,
+  host: Element | null | undefined,
+  selector: string,
+  base: number,
+  fallback: number
+): Line {
+  const mark = host?.querySelector<HTMLElement>(selector);
+  if (!mark) {
+    return { at: fallback, base, cards: 0, fill: "", step: 0 };
+  }
+  const deck = mark.querySelector<HTMLElement>("[data-deck]");
+  return {
+    at: restOf(mark).y - frame.top,
+    base,
+    cards: Number(deck?.dataset.deck ?? 0),
+    fill: deck ? getComputedStyle(mark).getPropertyValue("--fill") : "",
+    step:
+      (numberOf("--deck-shrink") * mark.offsetHeight) / 2 +
+      numberOf("--deck-step"),
+  };
+}
+
+/** The nested list in a group that a list item is a row of, if it is one. */
+function nestOfItem(
+  group: HTMLElement,
+  li: HTMLLIElement | null
+): HTMLElement | null {
+  const list = li?.parentElement;
+  return list && group.contains(li) && list.classList.contains("kit-nest")
+    ? list
+    : null;
+}
+
 function measure(group: HTMLElement, options: BranchOptions): Shape {
   const frame = group.getBoundingClientRect();
-  const footOf = (host: Element | null | undefined, selector: string) => {
-    const mark = host?.querySelector<HTMLElement>(selector);
-    return mark ? mark.getBoundingClientRect().bottom - frame.top : null;
-  };
-  const start =
-    footOf(
-      group.parentElement?.closest("li, [data-nest-host]"),
-      options.parent ?? options.glyph
-    ) ?? 0;
   // Each list's line. The group's own leaves the parent's glyph; a list
   // open under a child leaves that child's glyph, as far along the whole
-  // line as the child's arm ends.
-  const lines = new Map<Element, Line>([[group, { at: start, base: 0 }]]);
+  // line as the child is.
+  const own = lineFrom(
+    frame,
+    group.parentElement?.closest("li, [data-nest-host]"),
+    options.parent ?? options.glyph,
+    0,
+    0
+  );
+  const start = own.at;
+  const lines = new Map<Element, Line>([[group, own]]);
   const arrived = new Map<Element, number>();
   const lineOf = (list: Element): Line => {
     let line = lines.get(list);
     if (!line) {
       const host = list.parentElement?.closest("li, [data-nest-host]");
-      line = {
-        at: footOf(host, options.glyph) ?? start,
-        base: (host && arrived.get(host)) ?? 0,
-      };
+      line = lineFrom(
+        frame,
+        host,
+        options.glyph,
+        (host && arrived.get(host)) ?? 0,
+        start
+      );
       lines.set(list, line);
     }
     return line;
   };
+  /** Which child of its list a glyph is, 1 first. */
+  const places = new Map<Element, number>();
   const items: Item[] = [];
   const stretches: Stretch[] = [];
   let trunk = 0;
   for (const el of group.querySelectorAll<HTMLElement>("[data-branch-item]")) {
     const li = el.closest("li");
-    const list =
-      li !== null &&
-      group.contains(li) &&
-      li.parentElement?.classList.contains("kit-nest") === true
-        ? li.parentElement
-        : null;
+    const list = nestOfItem(group, li);
     const line = lineOf(list ?? group);
     const item = itemOf(el, options.glyph, frame, line);
-    if (list && li) {
-      const drawn = railsOf(li, frame, line);
-      stretches.push(...drawn);
-      const elbow = drawn.find((stretch) => stretch.pseudo === "::before");
-      if (elbow) {
-        item.arrive = endOf(elbow);
-        if (list === group) {
-          trunk = Math.max(trunk, elbow.from + cornerOf(elbow).down);
-        }
-      }
+    const drawn = list && li ? railsOf(li, frame, line) : [];
+    stretches.push(...drawn);
+    const elbow = drawn.find((stretch) => stretch.pseudo === "::before");
+    if (elbow && list === group) {
+      trunk = Math.max(trunk, elbow.from + cornerOf(elbow).down);
+    }
+    if (item.centre) {
+      const place = (places.get(list ?? group) ?? 0) + 1;
+      places.set(list ?? group, place);
+      item.ride = rideOf(
+        item,
+        item.centre,
+        elbow,
+        line,
+        frame,
+        place,
+        list ?? group
+      );
+      item.arrive = line.base + item.ride.length;
+    } else if (elbow) {
+      item.arrive = endOf(elbow);
     }
     arrived.set(li ?? el, item.arrive);
     items.push(item);
@@ -568,11 +752,11 @@ const valueAt = (seg: Seg, t: number): number =>
 
 /**
  * Where a fold stands: the room's height, how far along the line its head
- * is (0–1 of the line), and how far in each child's glyph and title are
- * (0–1), in the order of the items it was read for.
+ * is (0–1 of the line), and how far in each child's title is (0–1), in the
+ * order of the items it was read for. Every glyph is where the head puts
+ * it.
  */
 interface State {
-  glyphs: number[];
   head: number;
   room: number;
   titles: number[];
@@ -582,7 +766,6 @@ interface State {
 interface Plan {
   /** The room's foot, from the group's top. */
   edge: (t: number) => number;
-  glyphs: Seg[];
   /** How far along the line its head is. */
   head: (t: number) => number;
   /** The line's length. */
@@ -599,8 +782,9 @@ interface Plan {
  * speed (curves `glide`), as the rows under the room slide down: they keep
  * step, and the head, which leaves the parent's glyph above the room's top
  * and only ever goes down the rail as far as the last corner, is never
- * below the edge. Each child enters as the head reaches its glyph, so
- * children an even distance apart along the line enter at even times.
+ * below the edge. Each child's title enters as the head, and its glyph on
+ * it, reaches its place, so children an even distance apart along the line
+ * enter at even times.
  */
 function planOpen(shape: Shape, now: State, speed: number): Plan {
   const grow = shape.height - now.room;
@@ -611,29 +795,25 @@ function planOpen(shape: Shape, now: State, speed: number): Plan {
   const head = (t: number) => from + line.covered(t);
   const when = (s: number) => (s <= from ? 0 : line.reached(s - from));
   const rail = dur("--dur-rail");
-  const enter = (was: number[]) =>
-    shape.items.map((item, i): Seg => {
-      const v = Math.min(1, was[i] ?? 0);
-      return {
-        from: v,
-        to: 1,
-        start: when(item.arrive),
-        length: rail * (1 - v),
-      };
-    });
-  const glyphs = enter(now.glyphs);
-  const titles = enter(now.titles);
+  const titles = shape.items.map((item, i): Seg => {
+    const v = Math.min(1, now.titles[i] ?? 0);
+    return {
+      from: v,
+      to: 1,
+      start: when(item.arrive),
+      length: rail * (1 - v),
+    };
+  });
   return {
     edge,
     head,
     when,
-    glyphs,
     titles,
     length: shape.length,
     total: Math.max(
       line.duration,
       room.duration,
-      ...[...glyphs, ...titles].map((seg) => seg.start + seg.length)
+      ...titles.map((seg) => seg.start + seg.length)
     ),
   };
 }
@@ -652,10 +832,10 @@ const RUN_BACK = 0.65;
  * rows' curve; the line runs back ahead of the edge at one steady pace, so
  * children an even distance apart along it are left at even times. On --ease-out it left the last of them first
  * and fastest: a tree with a nested branch folded 7.5, 8.6, 10.3 then 15.8ms
- * apart. As the head leaves a child's glyph, its title wipes out over the
- * first half of the exit and its glyph flies out over the middle half, each
- * done by the time the room has closed: from then the group stands outside
- * its parent's box, under the rows that slid up, until it unmounts (`fold`).
+ * apart. As the head leaves a child's place, its glyph leaves on it and its
+ * title wipes out over the first half of the exit, done by the time the
+ * room has closed: from then the group stands outside its parent's box,
+ * under the rows that slid up, until it unmounts (`fold`).
  */
 function planFold(shape: Shape, now: State, exit: number): Plan {
   const edge = (t: number) => now.room * (1 - easeInOut(clamp(t / exit, 0, 1)));
@@ -667,24 +847,20 @@ function planFold(shape: Shape, now: State, exit: number): Plan {
   const when = (s: number) =>
     s >= from || from <= 0 ? 0 : home * (1 - s / from);
   const half = exit / 2;
-  const leave = (was: number[], after: number) =>
-    shape.items.map((item, i): Seg => {
-      const v = Math.max(0, was[i] ?? 0);
-      const start = Math.min(exit, when(item.arrive) + after);
-      return {
-        from: v,
-        to: 0,
-        start,
-        length: Math.min(half * v, exit - start),
-      };
-    });
-  const titles = leave(now.titles, 0);
-  const glyphs = leave(now.glyphs, exit / 4);
+  const titles = shape.items.map((item, i): Seg => {
+    const v = Math.max(0, now.titles[i] ?? 0);
+    const start = Math.min(exit, when(item.arrive));
+    return {
+      from: v,
+      to: 0,
+      start,
+      length: Math.min(half * v, exit - start),
+    };
+  });
   return {
     edge,
     head,
     when,
-    glyphs,
     titles,
     length: shape.length,
     total: exit,
@@ -693,6 +869,8 @@ function planFold(shape: Shape, now: State, exit: number): Plan {
 
 /** Keyframes half a 60Hz frame apart, linear between: finer than any frame. */
 const STEP = 1000 / 120;
+/** How many times as often a line's cut is sampled (`railFrames`): about every millisecond. */
+const FINE = 8;
 /** A frame at 60Hz: a fold's batch starts on the next one (`atTravel`). */
 const FRAME = 1000 / 60;
 /** Unclipped on that side: what a row draws outside itself shows. */
@@ -707,12 +885,55 @@ const wiped = (item: Item, v: number): Keyframe => ({
   clipPath: `inset(${OPEN} ${px((item.width - item.reveal) * (1 - v))} ${OPEN} ${OPEN})`,
 });
 
-/** A row's glyph `v` of the way in: off its place to the left, faded with it, over the line it flies along. */
-const flown = (item: Item, v: number): Keyframe => ({
-  translate: `${px(-item.dx * (1 - v))} 0px`,
-  opacity: v.toFixed(3),
-  zIndex: 2,
-});
+/**
+ * A glyph's keyframes, and its skin's: where the head puts it at each of
+ * `times`, linear between them, a run of equal frames two (as `railFrames`,
+ * and offset the same way). Its centre is `min(head, arrive)` along its way,
+ * never short of where it starts (a card, at its place in the deck). A card
+ * comes from its card's size to its own, shedding the skin, over its way; a
+ * glyph that is no card fades in over the first --ride-fade of its. Until
+ * the head has reached the glyph its way starts at (a child's own children,
+ * in a tree that opens whole), it is not drawn.
+ */
+function rideFrames(
+  plan: Plan,
+  ride: Ride,
+  times: number[]
+): { glyph: Keyframe[]; skin: Keyframe[] } {
+  const last = Math.max(1, times.length - 1);
+  const fade = numberOf("--ride-fade");
+  const shrunk = ride.card * numberOf("--deck-shrink");
+  const way = Math.max(ride.length - ride.lead, 1);
+  const samples = times.map((t) => {
+    const along = plan.head(t) - ride.base;
+    const d = clamp(along, ride.lead, ride.length);
+    const [x, y] = ride.at(d);
+    const worn = ride.card ? 1 - clamp((d - ride.lead) / way, 0, 1) : 0;
+    let seen = ride.card ? 1 : clamp(d / fade, 0, 1);
+    if (along < 0) {
+      seen = 0;
+    }
+    return {
+      translate: `${px(x)} ${px(y)}`,
+      scale: (1 - shrunk * worn).toFixed(4),
+      opacity: seen.toFixed(3),
+      worn: worn.toFixed(3),
+    };
+  });
+  const same = (a: number, b: number) =>
+    samples[a].translate === samples[b].translate &&
+    samples[a].scale === samples[b].scale &&
+    samples[a].opacity === samples[b].opacity;
+  const glyph: Keyframe[] = [];
+  const skin: Keyframe[] = [];
+  samples.forEach(({ worn, ...frame }, k) => {
+    if (k === 0 || k === last || !same(k, k - 1) || !same(k, k + 1)) {
+      glyph.push({ offset: k / last, ...frame });
+      skin.push({ offset: k / last, opacity: worn });
+    }
+  });
+  return { glyph, skin };
+}
 
 /** A stretch's two cuts (app.css `--nest-cut-r`, `--nest-cut-b`). */
 const CUT_RIGHT = "--nest-cut-r";
@@ -790,15 +1011,31 @@ function onGrid(place: number): number {
  * (evenly spaced over the plan), never its time over the plan's total: the
  * last one came to 1 and a rounding over, `animate` threw, and the throw
  * stopped the batch, every room and row after it held at its first frame.
+ *
+ * Sampled `FINE` times as often as `times`, each sample the cut at the
+ * middle of the time it is held for: a cut never moves between samples, so
+ * held from one of `times` to the next it stood up to a whole sample behind
+ * the head, 3px behind the glyph riding the line's tip as it folded. A cut
+ * only changes when its pixel does, so the keyframes are as many as before.
  */
 function railFrames(plan: Plan, stretch: Stretch, times: number[]): Keyframe[] {
-  const last = Math.max(1, times.length - 1);
-  const cuts = times.map((t) => cutAt(stretch, plan.head(t)));
+  const last = Math.max(1, (times.length - 1) * FINE);
+  const held = plan.total / last / 2;
+  const cuts = Array.from({ length: last + 1 }, (_, k) =>
+    cutAt(
+      stretch,
+      plan.head(
+        k === last
+          ? plan.total
+          : Math.min(plan.total, (plan.total * k) / last + held)
+      )
+    )
+  );
   const same = (a: number, b: number) =>
     cuts[a][0] === cuts[b][0] && cuts[a][1] === cuts[b][1];
   const frames: Keyframe[] = [];
   cuts.forEach(([right, below], k) => {
-    if (k === 0 || k === last || !same(k, k - 1) || !same(k, k + 1)) {
+    if (k === 0 || k === last || !same(k, k - 1)) {
       frames.push({
         offset: k / last,
         easing: "step-end",
@@ -842,9 +1079,9 @@ const SOON = (1000 / 60) * 2;
 const EARLY = 2;
 
 /**
- * Every piece of a plan, to build on its own elements: each row's glyph
- * flight and title wipe, each on --ease-out, and each stretch of line as
- * the frames it moves on. Each holds where it starts until it moves and
+ * Every piece of a plan, to build on its own elements: each row's title
+ * wipe on --ease-out, and its glyph's ride and each stretch of line as the
+ * frames they move on. Each holds where it starts until it moves and
  * where it ends after (`fill: "both"`): an opening lands (`fly`), a fold
  * unmounts.
  *
@@ -875,30 +1112,67 @@ function piecesOf(
     easing: CURVE.out,
     fill: "both",
   });
+  const riding: KeyframeAnimationOptions = {
+    duration: plan.total,
+    easing: "linear",
+    fill: "both",
+  };
+  /** A glyph on its way, and the card it wears on it. */
+  const ridden = ({ icon, ride }: Item): Animation[] => {
+    if (!(icon && ride)) {
+      return [];
+    }
+    const frames = rideFrames(plan, ride, times);
+    const built = [icon.animate(frames.glyph, riding)];
+    if (ride.card && ride.skin) {
+      ride.skin.style.setProperty("--p", String(ride.card));
+      ride.skin.style.setProperty("--pfill", ride.fill);
+      built.push(ride.skin.animate(frames.skin, riding));
+    }
+    return built;
+  };
+  // Down the rail the glyphs of one list that are no cards ride as one, each
+  // drawn over the last: only the one on top is seen, the last of them in
+  // view. That one is built from the start; each of the others as the head
+  // nears the place it turns off the rail, which is the first it is seen.
+  // All built on the frame a fold started, a tree of thirty-eight cost that
+  // frame forty-two animations and 11.5ms in `animate`, and the frame.
+  const faces = new Map<Element, Item>();
+  for (const item of shape.items) {
+    if (item.ride && !item.ride.card && shape.seen(item.top, item.bottom)) {
+      faces.set(item.ride.list, item);
+    }
+  }
+  /** When a glyph first moves in view of the reader. */
+  const sets = (item: Item, ride: Ride): number => {
+    if (!opening) {
+      return plan.when(item.arrive);
+    }
+    const whole = ride.card > 0 || faces.get(ride.list) === item;
+    return plan.when(ride.base + (whole ? 0 : ride.turn));
+  };
   const pieces: Piece[] = [];
   shape.items.forEach((item, i) => {
-    const glyph = plan.glyphs[i];
     const title = plan.titles[i];
-    if (opening && glyph.from >= 1 && title.from >= 1) {
+    const { ride } = item;
+    // Opening, already there: its glyph landed and its title in.
+    const landed = !ride || plan.head(0) - ride.base >= ride.length;
+    if (opening && landed && title.from >= 1) {
       return;
     }
+    // Its glyph sets off as the head leaves its parent's glyph (opening) or
+    // its own place (folding); its title moves as the head is at its place.
+    const moves = ride ? sets(item, ride) : Number.POSITIVE_INFINITY;
     pieces.push({
       top: item.top,
       bottom: item.bottom,
-      start: rests ? Math.min(glyph.start, title.start) : 0,
+      start: rests ? Math.min(moves, title.start) : 0,
       build: () => [
         item.el.animate(
           [wiped(item, title.from), wiped(item, title.to)],
           timing(title)
         ),
-        ...(item.icon
-          ? [
-              item.icon.animate(
-                [flown(item, glyph.from), flown(item, glyph.to)],
-                timing(glyph)
-              ),
-            ]
-          : []),
+        ...ridden(item),
       ],
     });
   });
@@ -1038,7 +1312,6 @@ function stopFlight(
   const resting: State = {
     room: rest.room,
     head: rest.value,
-    glyphs: items.map(() => rest.value),
     titles: items.map(() => rest.value),
   };
   if (!flight) {
@@ -1068,7 +1341,6 @@ function stopFlight(
       now: {
         room: flight.rest.room,
         head: flight.rest.head,
-        glyphs: byElement(flight.items, flight.rest.glyphs, items),
         titles: byElement(flight.items, flight.rest.titles, items),
       },
     };
@@ -1078,19 +1350,16 @@ function stopFlight(
     return { held, now: resting };
   }
   const at = Math.max(0, t);
-  const read = (segs: Seg[]) =>
-    byElement(
-      flight.items,
-      segs.map((seg) => valueAt(seg, at)),
-      items
-    );
   return {
     held,
     now: {
       room: plan.edge(at),
       head: plan.length > 0 ? plan.head(at) / plan.length : 0,
-      glyphs: read(plan.glyphs),
-      titles: read(plan.titles),
+      titles: byElement(
+        flight.items,
+        plan.titles.map((seg) => valueAt(seg, at)),
+        items
+      ),
     },
   };
 }
@@ -1141,6 +1410,13 @@ const HELD = "data-branch-hold";
  * a stretch has no clip at all.
  */
 const DRAWN = "data-branch-draw";
+/**
+ * A group just mounted whose line has not set off yet: its parent's deck
+ * still stands (app.css). The deck goes on the frame the glyphs that were
+ * its cards are first drawn, a task and two frames after the mount; gone
+ * from the mount, the parent stood bare for those frames.
+ */
+const WAITS = "data-branch-wait";
 
 /** A state read for `from`, for the rows a shape has measured. */
 const stateFor = (shape: Shape, from: HTMLElement[], now: State): State => {
@@ -1148,7 +1424,6 @@ const stateFor = (shape: Shape, from: HTMLElement[], now: State): State => {
   return {
     room: now.room,
     head: now.head,
-    glyphs: byElement(from, now.glyphs, to),
     titles: byElement(from, now.titles, to),
   };
 };
@@ -1192,6 +1467,7 @@ function open(group: HTMLElement, options: BranchOptions): TransitionConfig {
     return { duration: dur("--dur-pop") };
   }
   group.setAttribute(DRAWN, "");
+  group.toggleAttribute(WAITS, !turning);
   // Measured on the batch's frame, where every row and rail is placed, and
   // planned from where every piece is held. Its pace is asked for now, from
   // the room it takes and the glyphs in it (curves `glideSpeed`):
@@ -1255,6 +1531,7 @@ function open(group: HTMLElement, options: BranchOptions): TransitionConfig {
     flight.items = shape.items.map((item) => item.el);
     flight.plan = plan;
     flight.start = at;
+    group.removeAttribute(WAITS);
     // Just mounted, every piece is hidden under the hold until it is built;
     // the hold goes on the frame the fold lands, with the pieces, each then
     // at rest where it ends.
@@ -1281,6 +1558,7 @@ function fold(group: HTMLElement, options: BranchOptions): TransitionConfig {
     room: group.offsetHeight,
     value: 1,
   });
+  group.removeAttribute(WAITS);
   if (!motionOk.current) {
     // Still: they fade where they stand, then the room closes at once.
     for (const animation of held) {
@@ -1311,7 +1589,6 @@ function fold(group: HTMLElement, options: BranchOptions): TransitionConfig {
   // From rest, a piece not yet built stands where it starts.
   const rests =
     state.head >= 1 &&
-    state.glyphs.every((v) => v >= 1) &&
     state.titles.every((v) => v >= 1) &&
     Math.abs(state.room - shape.height) < 0.5;
   const flight: Flight = {

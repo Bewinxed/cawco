@@ -574,15 +574,27 @@
     clip-path: inset(-9999px var(--nest-cut-r) var(--nest-cut-b) -9999px);
   }
   /* A session's deck (SessionMark) is the rows folded under it. While they
-     are out, from the frame their group mounts to the frame it unmounts,
-     the deck is away: the children's icons left from it and come back to
-     it (motion/branch). Scoped to the row that owns the group and stopped
-     at the group, so a child's own deck inside it is its own affair. */
-  @scope (:is(li, [data-nest-host]):has(> [data-flip-anchor])) to (
-    [data-flip-anchor]
-  ) {
+     are out, from the frame their line sets off (a group just mounted
+     waits a moment for it, `data-branch-wait`) to the frame their group
+     unmounts, the deck is away: the children's icons left from it and come
+     back to it (motion/branch). And the parent's mark stands over those
+     icons, which start and end their ride under it. Scoped to the row that
+     owns the group and stopped at the group, so a child's own mark and
+     deck inside it are its own affair. */
+  @scope (
+    :is(li, [data-nest-host]):has(> [data-flip-anchor]:not([data-branch-wait]))
+  ) to ([data-flip-anchor]) {
     .session-mark .deck {
       visibility: hidden;
+    }
+    /* The session mark reads its own level from this (its style is the
+       component's, which outranks this layer). */
+    .session-mark {
+      --mark-level: 3;
+    }
+    .project-mark {
+      position: relative;
+      z-index: 3;
     }
   }
   /* An icon on its way along its line takes no press: in flight it passes
