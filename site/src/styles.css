@@ -47,6 +47,9 @@
   --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
 
   --gutter: clamp(16px, 4vw, 40px);
+
+  /* The box Caw's ledge clips are drawn in: the same on the stage and the price cards. */
+  --ledge-caw: clamp(120px, 72px + 10vw, 220px);
 }
 
 *,
@@ -468,13 +471,12 @@ h1 {
   position: absolute;
   z-index: 3;
   bottom: 100%;
-  width: var(--caw-size);
-  margin-bottom: calc(var(--caw-size) * (291 / 512 - 1));
+  width: var(--ledge-caw);
+  margin-bottom: calc(var(--ledge-caw) * (291 / 512 - 1));
   pointer-events: none;
 }
 
 .perch {
-  --caw-size: clamp(120px, 72px + 10vw, 220px);
   right: clamp(14px, 6%, 80px);
 }
 
@@ -1507,7 +1509,6 @@ mark {
 
 .scene-delegates {
   display: grid;
-  grid-template-rows: auto auto auto;
   align-content: center;
   justify-items: center;
   gap: 8%;
@@ -1586,11 +1587,12 @@ mark {
   margin-left: 0.2em;
 }
 
+/* The delegates stand in rows of two under the session, as wide as it is. */
 .kids {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 3%;
-  width: 100%;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.6em 1em;
+  width: min(100%, 31em);
 }
 
 .kid {
@@ -1612,11 +1614,6 @@ mark {
   color: var(--app-raised);
   font-size: 0.82em;
   font-weight: 600;
-}
-
-/* The session one delegate started on another machine sits under that delegate. */
-.grandkid {
-  width: 31.3%;
 }
 
 .n-state {
@@ -1783,8 +1780,16 @@ mark {
 
 /* Cost */
 
+.cost {
+  --caw-right: clamp(12px, 4%, 48px);
+}
+
+/*
+ * The title keeps clear of Caw. The widest drawing of his climb starts 74 of
+ * 512 units into his box, and the words stop 24px short of that.
+ */
 .cost .section-title {
-  max-width: calc(100% - clamp(110px, 16vw, 190px));
+  max-width: calc(100% - var(--caw-right) - var(--ledge-caw) * (512 - 74) / 512 - 24px);
   margin-bottom: clamp(14px, 2vw, 22px);
 }
 
@@ -1797,8 +1802,7 @@ mark {
 
 /* Caw climbs up to the cards' top edge and peers over it, as he does on the stage's. */
 .cost-caw {
-  --caw-size: clamp(110px, 12vw, 164px);
-  right: clamp(12px, 4%, 48px);
+  right: var(--caw-right);
 }
 
 .card {
@@ -2125,14 +2129,6 @@ mark {
 
   .node {
     padding: 0.55em 0.6em;
-  }
-
-  .kids {
-    gap: 2.5%;
-  }
-
-  .grandkid {
-    width: 46%;
   }
 
   .scene-sync {

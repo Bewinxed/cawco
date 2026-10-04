@@ -1,3 +1,9 @@
 /install.sh
   Content-Type: text/plain; charset=utf-8
   Cache-Control: public, max-age=0, must-revalidate, no-transform
+
+# Vite names everything in assets/ after its contents, so a name never changes
+# what it holds. Without this the browser asks again on every visit, and Chrome
+# then reports the preloaded font as unused.
+/assets/*
+  Cache-Control: public, max-age=31556952, immutable

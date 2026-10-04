@@ -371,38 +371,38 @@
               <div class="scene scene-delegates" aria-hidden="true">
                 <svg class="links" data-links aria-hidden="true"></svg>
                 <div class="node parent" data-node="parent">
-                  <span class="mark mark-deck" data-rim="live" style="--fill: var(--mark-2)"><b>3</b></span>
+                  <span class="mark mark-deck" data-rim="live" style="--fill: var(--mark-2)"><b>4</b></span>
                   <span class="n-main">
                     <b>Ship the 1.4 release</b>
-                    <span class="swap n-sub"><span data-a>orchestrator, working</span><span class="tally" data-b>3 delegates reported</span></span>
+                    <span class="swap n-sub"><span data-a>orchestrator, working</span><span class="tally" data-b>4 delegates reported</span></span>
                   </span>
                   <span class="n-on"><svg class="hg" aria-hidden="true"><use href="#hg-claude" /></svg>opus<i data-device="cloud"></i></span>
                 </div>
                 <div class="kids">
-                  <div class="node kid" data-node="research" data-from="parent">
+                  <div class="node kid" data-kid="research">
                     <span class="kid-type">research</span>
                     <b>Read the changelog sources</b>
                     <span class="n-on"><svg class="hg" aria-hidden="true"><use href="#hg-pi" /></svg>pi<i data-device="cloud"></i></span>
                     <span class="swap n-state"><span class="st st-live" data-a>working</span><span class="st st-done" data-b>done</span></span>
                   </div>
-                  <div class="node kid" data-node="build" data-from="parent">
+                  <div class="node kid" data-kid="build">
                     <span class="kid-type">build</span>
                     <b>Build and smoke test</b>
                     <span class="n-on"><svg class="hg" aria-hidden="true"><use href="#hg-opencode" /></svg>deepseek<i data-device="cloud"></i></span>
                     <span class="swap n-state"><span class="st st-live" data-a>working</span><span class="st st-done" data-b>done</span></span>
                   </div>
-                  <div class="node kid" data-node="review" data-from="parent">
+                  <div class="node kid" data-kid="review">
                     <span class="kid-type">review</span>
                     <b>Review the diff</b>
                     <span class="n-on"><svg class="hg" aria-hidden="true"><use href="#hg-claude" /></svg>sonnet<i data-device="cloud"></i></span>
                     <span class="swap n-state"><span class="st st-live" data-a>working</span><span class="st st-done" data-b>done</span></span>
                   </div>
-                </div>
-                <div class="node kid grandkid" data-node="simulator" data-from="build">
-                  <span class="kid-type">started on the laptop</span>
-                  <b>Run it on the simulator</b>
-                  <span class="n-on"><svg class="hg" aria-hidden="true"><use href="#hg-claude" /></svg>sonnet<i data-device="laptop"></i></span>
-                  <span class="swap n-state"><span class="st st-live" data-a>working</span><span class="st st-done" data-b>done</span></span>
+                  <div class="node kid" data-kid="simulator">
+                    <span class="kid-type">runs on the laptop</span>
+                    <b>Run it on the simulator</b>
+                    <span class="n-on"><svg class="hg" aria-hidden="true"><use href="#hg-claude" /></svg>sonnet<i data-device="laptop"></i></span>
+                    <span class="swap n-state"><span class="st st-live" data-a>working</span><span class="st st-done" data-b>done</span></span>
+                  </div>
                 </div>
               </div>
             </div>

@@ -176,27 +176,41 @@ function rules(root: HTMLElement): Timeline {
 
 const SVG = 'http://www.w3.org/2000/svg';
 
-/** Draws one curve from each session down to each one it started, with a dot to ride it. */
+/**
+ * Draws one line from the session to each of its delegates, with a dot to ride
+ * it. The delegates stand in rows of two, so every line runs down the gap
+ * between the two columns as far as the delegate's row and turns in above it.
+ */
 export function drawLinks(root: HTMLElement): void {
   const canvas = one<SVGSVGElement>(root, '[data-links]');
   const box = root.getBoundingClientRect();
+  const above = one(root, '[data-node="parent"]').getBoundingClientRect();
+  const from = { x: above.left + above.width / 2 - box.left, y: above.bottom - box.top };
+  const kids = all(root, '[data-kid]').map((node) => ({
+    name: node.dataset.kid,
+    rect: node.getBoundingClientRect(),
+  }));
 
   canvas.setAttribute('viewBox', `0 0 ${box.width} ${box.height}`);
   canvas.replaceChildren(
-    ...all(root, '[data-from]').flatMap((node) => {
-      const above = one(root, `[data-node="${node.dataset.from}"]`).getBoundingClientRect();
-      const below = node.getBoundingClientRect();
-      const from = { x: above.left + above.width / 2 - box.left, y: above.bottom - box.top };
-      const to = { x: below.left + below.width / 2 - box.left, y: below.top - box.top };
-      const bend = (from.y + to.y) / 2;
+    ...kids.flatMap(({ name, rect }) => {
+      const to = { x: rect.left + rect.width / 2 - box.left, y: rect.top - box.top };
+      // Where the line leaves the gap between the columns: under the row above this one.
+      const turn = Math.max(
+        from.y,
+        ...kids
+          .filter((other) => other.rect.bottom <= rect.top)
+          .map((other) => other.rect.bottom - box.top),
+      );
+      const bend = (turn + to.y) / 2;
       const path = document.createElementNS(SVG, 'path');
-      path.dataset.link = node.dataset.node;
+      path.dataset.link = name;
       path.setAttribute(
         'd',
-        `M${from.x} ${from.y} C${from.x} ${bend} ${to.x} ${bend} ${to.x} ${to.y}`,
+        `M${from.x} ${from.y} V${turn} C${from.x} ${bend} ${to.x} ${bend} ${to.x} ${to.y}`,
       );
       const dot = document.createElementNS(SVG, 'circle');
-      dot.dataset.dot = node.dataset.node;
+      dot.dataset.dot = name;
       dot.setAttribute('r', '4');
       return [path, dot];
     }),
@@ -204,31 +218,29 @@ export function drawLinks(root: HTMLElement): void {
 }
 
 /**
- * The orchestrator hands work out first: a dot leaves it along each line, and a
- * delegate appears where the dot lands. One delegate starts a session of its
- * own on another machine. Then each finishes and its result rides back up.
+ * The orchestrator hands work out: a dot leaves it along each line, and a
+ * delegate appears where the dot lands. One of them runs on another machine.
+ * Then each finishes and its result rides back up.
  */
 function delegates(root: HTMLElement): Timeline {
   drawLinks(root);
   const parent = one(root, '[data-node="parent"]');
-  const started = all(root, '[data-from]');
-  const link = (node: HTMLElement) => ({
+  const nodes = all(root, '[data-kid]');
+  const kids = nodes.map((node) => ({
     node,
-    path: one<SVGPathElement>(root, `[data-link="${node.dataset.node}"]`),
-    dot: one<SVGCircleElement>(root, `[data-dot="${node.dataset.node}"]`),
-  });
-  const kids = started.filter((node) => node.dataset.from === 'parent').map(link);
-  const further = started.filter((node) => node.dataset.from !== 'parent').map(link);
+    path: one<SVGPathElement>(root, `[data-link="${node.dataset.kid}"]`),
+    dot: one<SVGCircleElement>(root, `[data-dot="${node.dataset.kid}"]`),
+  }));
 
   showFirst(parent);
-  for (const node of started) showFirst(node);
-  gsap.set(started, { opacity: 0, y: 10, scale: 0.96 });
+  for (const node of nodes) showFirst(node);
+  gsap.set(nodes, { opacity: 0, y: 10, scale: 0.96 });
   gsap.set(all(root, '[data-link]'), { drawSVG: '0%' });
 
   const timeline = gsap.timeline({ defaults: { ease: OUT } });
   /** A moment `seconds` after a label, as the timeline writes it. */
   const after = (label: string, seconds: number): string => `${label}+=${seconds.toFixed(2)}`;
-  type Leg = ReturnType<typeof link>;
+  type Leg = (typeof kids)[number];
   const ride = ({ path, dot }: Leg, label: string, start: number, way: 'out' | 'back'): void => {
     timeline
       .set(dot, { opacity: 1 }, after(label, start))
@@ -250,7 +262,7 @@ function delegates(root: HTMLElement): Timeline {
       )
       .set(dot, { opacity: 0 }, after(label, start + 0.5));
   };
-  /** The work goes out along a line, and the session it starts appears where it lands. */
+  /** The work goes out along a line, and the delegate appears where it lands. */
   const send = (to: Leg, label: string, start: number): void => {
     timeline.to(to.path, { drawSVG: '100%', duration: 0.5, ease: TRAVEL }, after(label, start));
     ride(to, label, start, 'out');
@@ -260,7 +272,7 @@ function delegates(root: HTMLElement): Timeline {
       after(label, start + 0.42),
     );
   };
-  /** The session finishes, and its result goes back up the same line. */
+  /** The delegate finishes, and its result goes back up the same line. */
   const report = (from: Leg, label: string, start: number): void => {
     crossOver(timeline, from.node, after(label, start));
     ride(from, label, start + 0.1, 'back');
@@ -270,17 +282,9 @@ function delegates(root: HTMLElement): Timeline {
   kids.forEach((kid, index) => {
     send(kid, 'out', index * 0.2);
   });
-  timeline.addLabel('further', '+=0.25');
-  further.forEach((node, index) => {
-    send(node, 'further', index * 0.2);
-  });
-  timeline.addLabel('back', '+=0.9');
-  further.forEach((node, index) => {
-    report(node, 'back', index * 0.3);
-  });
-  timeline.addLabel('reports', '+=0.25');
+  timeline.addLabel('reports', '+=0.9');
   kids.forEach((kid, index) => {
-    report(kid, 'reports', index * 0.4);
+    report(kid, 'reports', index * 0.35);
   });
   timeline.addLabel('wrap', '+=0.2');
   crossOver(timeline, parent, 'wrap');

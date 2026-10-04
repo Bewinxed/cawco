@@ -9,6 +9,8 @@ that folder on `cawco.dev/*` (see `wrangler.jsonc`).
   files (Nunito for the page, Figtree for the product scenes), the app icon and
   the App Store badge. Vite builds it from `index.html` and `src/`. Icons, the
   machine drawings and Caw are written into `index.html` at build time.
+  The files in `assets/` are named after their contents, and `public/_headers`
+  lets browsers keep them for a year.
 - `/install.sh` is the first-machine installer. The build generates it from
   `packages/core/src/install-script.ts`, so it is always the script the hub
   itself would hand out. `public/_headers` serves it as plain text and tells
