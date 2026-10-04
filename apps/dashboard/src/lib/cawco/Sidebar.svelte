@@ -1174,8 +1174,12 @@
                               onclick={() => toggleOlder(project.id)}
                               type="button"
                             >
+                              <!-- The slot's 18px box as the icon swap's
+                                     grid (not `SLOT`, a flex row, which set
+                                     the glyph and the spinner side by side
+                                     and pushed the glyph off the axis). -->
                               <span
-                                class="{SLOT} row-lead older-lead icon-swap"
+                                class="row-lead older-lead icon-swap size-[18px] shrink-0"
                               >
                                 <span data-active={!olderBusy}
                                   ><IconHistory class={SLOT_GLYPH} /></span
