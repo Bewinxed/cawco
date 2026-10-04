@@ -1189,10 +1189,14 @@
                                   data-active={!olderBusy}
                                   ><IconChevronRight class="size-3" /></span
                                 >
-                                <span data-active={olderBusy}
+                                <!-- Out of the button's name: `aria-busy`
+                                       says it, and a status in here was read
+                                       into the name at rest ("Reading older
+                                       sessions 275 older"). -->
+                                <span aria-hidden="true" data-active={olderBusy}
                                   ><Spinner
-                                    aria-label="Reading older sessions"
                                     class="size-3"
+                                    role="presentation"
                                   /></span
                                 >
                               </span>

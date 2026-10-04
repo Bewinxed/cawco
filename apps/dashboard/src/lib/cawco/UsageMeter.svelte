@@ -171,9 +171,10 @@
     if (served && !served.ok) {
       return `Limits unreadable: ${served.detail} (${served.status}) · reload to read them again`;
     }
-    return cawco.usageLimitsRead || served
-      ? "Sign in to see limits"
-      : "Reading limits…";
+    // Until the socket's first frame only Claude's reading is known (the one
+    // the page was served with): with none, opencode may still have one, so
+    // nothing is claimed absent yet.
+    return cawco.usageLimitsRead ? "Sign in to see limits" : "Reading limits…";
   });
 
   /** The hub's word for a key or login the provider turned away. */
