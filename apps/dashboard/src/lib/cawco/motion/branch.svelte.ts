@@ -1428,7 +1428,36 @@ const stateFor = (shape: Shape, from: HTMLElement[], now: State): State => {
   };
 };
 
+/**
+ * Whether a group is in a list that is not rendered: the wide screen's rail
+ * under a narrow one's layout stays mounted (`display: none`) while the
+ * drawer shows another, and a tree opened in the drawer opens in both. A
+ * group with no layout has nothing to measure and nothing to show: it is
+ * open, or gone, at once. Measured anyway, its line had no length, its plan
+ * no duration (NaN), and `animate` threw on it: "Type error" on an iPhone,
+ * in the batch the drawer's own tree was waiting in.
+ */
+const unrendered = (group: HTMLElement): boolean =>
+  group.parentElement?.getClientRects().length === 0;
+
+/** A group's flight dropped where it stands, and every mark of one off it. */
+function settle(group: HTMLElement): void {
+  const { held } = stopFlight(group, [], { room: 0, value: 0 });
+  for (const animation of held) {
+    animation.cancel();
+  }
+  group.removeAttribute(HELD);
+  group.removeAttribute(DRAWN);
+  group.removeAttribute(WAITS);
+}
+
 function open(group: HTMLElement, options: BranchOptions): TransitionConfig {
+  if (unrendered(group)) {
+    settle(group);
+    inFlow(group);
+    group.dataset.state = "open";
+    return { duration: 0 };
+  }
   const items = itemsOf(group);
   const turning = flights.has(group);
   const { held, now } = stopFlight(group, items, { room: 0, value: 0 });
@@ -1553,6 +1582,10 @@ function open(group: HTMLElement, options: BranchOptions): TransitionConfig {
 }
 
 function fold(group: HTMLElement, options: BranchOptions): TransitionConfig {
+  if (unrendered(group)) {
+    settle(group);
+    return { duration: 0 };
+  }
   const items = itemsOf(group);
   const { held, now } = stopFlight(group, items, {
     room: group.offsetHeight,
