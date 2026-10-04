@@ -410,12 +410,21 @@ public final class FleetStore {
     }
 
     public func storedTitle(sessionKey: String, machineId: String) -> String? {
-        catalogs[machineId]?.first(where: { $0.sessionId == sessionKey }).map(storedTitle)
+        catalogs[machineId]?.first(where: { $0.sessionId == sessionKey }).map { storedTitle($0, machineId: machineId) }
     }
 
-    /// A stored transcript's own title.
-    public func storedTitle(_ info: StoredSession) -> String {
-        Naming.sessionTitle(title: info.customTitle ?? info.summary, firstMessage: info.firstPrompt, cwd: info.cwd, id: info.sessionId)
+    /// links.ts `catalogTitle`: a stored transcript is called what its hub row
+    /// is titled, when a row for it carries a title of its own (`titleSource`);
+    /// else its own custom title or summary, then its first message. The row
+    /// is `instanceForSession`'s: the newest at that machine and folder, else
+    /// the newest that holds the session at all.
+    public func storedTitle(_ info: StoredSession, machineId: String? = nil) -> String {
+        let candidates = bySession[info.sessionId] ?? []
+        let located = machineId.map { machine in candidates.filter { $0.machineId == machine && $0.cwd == (info.cwd ?? "") } } ?? []
+        let row = (located.isEmpty ? candidates : located)
+            .sorted { $0.updatedMs != $1.updatedMs ? $0.updatedMs > $1.updatedMs : $0.id < $1.id }.first
+        let named = (row?.titleSource != nil ? row?.title : nil) ?? info.customTitle ?? info.summary
+        return Naming.sessionTitle(title: named, firstMessage: info.firstPrompt, cwd: info.cwd, id: info.sessionId)
     }
 
     /// When a session last moved: its pulse, else the hub's own update time. A run's is when it last moved.
