@@ -435,7 +435,11 @@
 
     @media (hover: hover) and (pointer: fine) {
       &:hover {
-        background: color-mix(in oklch, var(--surface-hover) 60%, transparent);
+        /* By day the hover step whole; by night the wash it has had. */
+        background: light-dark(
+          var(--surface-hover),
+          color-mix(in oklch, var(--surface-hover) 60%, transparent)
+        );
       }
     }
   }

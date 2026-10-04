@@ -1013,14 +1013,18 @@
   }
   /* The session tabs' sizes (PaneTabs): sized to their content plus --px.
      The chosen sheet stands off the rail in both themes (raised on the light
-     rail, lit on the dark one), and hovering an unchosen tab is a lighter
-     tint than choosing it. */
+     rail, lit on the dark one). Hovering an unchosen tab is the hover step
+     by day, as on the rows below it, and by night a lighter tint than
+     choosing it. */
   :global(.work-tabs[data-slot="tabs"] .ff-tabs-list) {
     --px: calc(6px - var(--tight) * 0.09);
     --text: var(--text-label);
     --item: 32px;
     --sheet: light-dark(var(--surface-raised), var(--surface-hover));
-    --tab-hover: color-mix(in oklch, var(--surface-fill) 50%, transparent);
+    --tab-hover: light-dark(
+      var(--surface-hover),
+      color-mix(in oklch, var(--surface-fill) 50%, transparent)
+    );
   }
   /* An unchosen tab draws no card of its own: on the light rail its card was
      the darker shape, and read as the chosen one. */

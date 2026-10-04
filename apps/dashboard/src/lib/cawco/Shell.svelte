@@ -1159,6 +1159,13 @@
     background: var(--surface-raised);
     box-shadow: none;
   }
+  /* This rule is unlayered and outranks the kit button's own hover (a
+     layered utility), so the cluster states its hover itself. */
+  @media (hover: hover) and (pointer: fine) {
+    .right > :global(:is(.jump, [data-slot="button"]):hover:not(:disabled)) {
+      background: var(--surface-hover);
+    }
+  }
   .right > :global([data-slot="button"]:not(.jump)) {
     width: 28px;
   }
