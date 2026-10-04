@@ -4,8 +4,9 @@
 # proves each build starts and stays up for 8 s. A launch-time abort fails it.
 # Run from the repo root: bash apps/apple/scripts/build-both.sh [ios|macos]
 # With no argument it builds both and prints BUILT iOS, LAUNCHED iOS,
-# BUILT macOS, LAUNCHED macOS; `ios` or `macos` builds only that platform and
-# prints only its two lines. Exits non-zero at the first failure.
+# BUILT macOS, LAUNCHED macOS, BUILT iOS 18.5, LAUNCHED iOS 18.5.
+# `ios` proves both iOS runtimes; `macos` proves only macOS.
+# Exits non-zero at the first failure.
 #
 # The builds run one after the other into one DerivedData: two xcodebuilds
 # sharing it lock its build.db. -skipPackagePluginValidation lets the
@@ -109,6 +110,17 @@ DD="$HOME/build/cawco-apple/$BUILD/DerivedData"
 LOGS="$HOME/build/cawco-apple/$BUILD/logs"
 mkdir -p "$LOGS"
 SETTLE=8
+UDID=
+end_ios() {
+  [[ -n $UDID ]] || return 0
+  xcrun simctl terminate "$UDID" dev.cawco.app >/dev/null 2>&1 || true
+  xcrun simctl shutdown "$UDID" >/dev/null 2>&1 || true
+  xcrun simctl delete "$UDID"
+  UDID=
+}
+trap end_ios EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM HUP
 XCODEGEN=$(command -v xcodegen || echo /opt/homebrew/bin/xcodegen)
 "$XCODEGEN" generate --quiet
 
@@ -123,10 +135,17 @@ build() { # <destination> <label>
   echo "BUILT $2"
 }
 
-# iOS: the newest "iPhone N Pro" on a runtime the deployment target allows.
+# Build for each runtime: Xcode omits Swift compatibility libraries when the
+# destination OS already supplies them. Each launch owns its simulator.
 ios() {
+  local LABEL=${1:-iOS} RUNTIME TYPE NAME LOG
+  if [[ $LABEL == 'iOS 18.5' ]]; then
+    RUNTIME=com.apple.CoreSimulator.SimRuntime.iOS-18-5
+    TYPE=com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro
+    NAME='iPhone 16 Pro (iOS 18.5)'
+  else
   MIN_IOS=$(sed -n 's/^ *iOS: "\([0-9.]*\)"$/\1/p' project.yml | head -1)
-  read -r UDID STATE NAME < <(xcrun simctl list devices available -j | python3 -c '
+  read -r RUNTIME TYPE NAME < <(xcrun simctl list devices available -j | python3 -c '
 import json, re, sys
 need = tuple(int(p) for p in sys.argv[1].split("."))
 best = None
@@ -139,44 +158,38 @@ for runtime, devices in json.load(sys.stdin)["devices"].items():
         if pro:
             key = (int(pro[1]), int(m[1]), int(m[2]))
             if best is None or key > best[0]:
-                best = (key, d["udid"], d["state"], d["name"] + " (iOS " + m[1] + "." + m[2] + ")")
+                best = (key, runtime, d["deviceTypeIdentifier"], d["name"] + " (iOS " + m[1] + "." + m[2] + ")")
 if best is None:
     sys.exit("no iPhone Pro simulator on iOS >= " + sys.argv[1])
 print(best[1], best[2], best[3])
 ' "$MIN_IOS")
-  echo "iOS simulator: $NAME $UDID"
-  build "platform=iOS Simulator,id=$UDID" iOS
-
-  BOOTED_HERE=0
-  if [[ $STATE != Booted ]]; then
-    xcrun simctl boot "$UDID"
-    BOOTED_HERE=1
   fi
-  end_ios() {
-    xcrun simctl terminate "$UDID" dev.cawco.app >/dev/null 2>&1 || true
-    if [[ $BOOTED_HERE == 1 ]]; then xcrun simctl shutdown "$UDID" || true; fi
-  }
+  UDID=$(xcrun simctl create "CawCo build $BUILD $LABEL" "$TYPE" "$RUNTIME")
+  echo "iOS simulator: $NAME $UDID"
+  build "platform=iOS Simulator,id=$UDID" "$LABEL"
+
+  xcrun simctl boot "$UDID"
   xcrun simctl bootstatus "$UDID" -b >/dev/null
   xcrun simctl install "$UDID" "$DD/Build/Products/Debug-iphonesimulator/CawCo.app"
-  LOG="$LOGS/launch-iOS.log"
+  LOG="$LOGS/launch-$LABEL.log"
   : >"$LOG"
   if ! xcrun simctl launch --terminate-running-process \
     --stdout="$LOG" --stderr="$LOG" "$UDID" dev.cawco.app >>"$LOG" 2>&1; then
     grep -E "dyld|abort|rror|Library not loaded|Reason" "$LOG" | head -20
-    echo "FAILED launch iOS"
+    echo "FAILED launch $LABEL"
     end_ios
     exit 1
   fi
   sleep "$SETTLE"
   if xcrun simctl spawn "$UDID" launchctl list |
     awk '$3 ~ /^UIKitApplication:dev\.cawco\.app/ && $1 ~ /^[0-9]+$/ { up = 1 } END { exit !up }'; then
-    echo "LAUNCHED iOS"
+    echo "LAUNCHED $LABEL"
     end_ios
   else
     grep -E "dyld|abort|Library not loaded|Reason|Fatal" "$LOG" | head -20
     find "$HOME/Library/Logs/DiagnosticReports" -name 'CawCo*.ips' -newer "$LOG" 2>/dev/null |
       head -1 | xargs -I{} grep -m3 -E '"(indicator|namespace|reasons)"' {} || true
-    echo "FAILED launch iOS"
+    echo "FAILED launch $LABEL"
     end_ios
     exit 1
   fi
@@ -205,6 +218,7 @@ macos() {
 
 if [[ $PLATFORM != macos ]]; then ios; fi
 if [[ $PLATFORM != ios ]]; then macos; fi
+if [[ $PLATFORM != macos ]]; then ios 'iOS 18.5'; fi
 EOF
 release
 trap - EXIT
