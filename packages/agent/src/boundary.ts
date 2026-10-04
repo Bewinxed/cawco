@@ -4,7 +4,8 @@
  * command sees and signals only its own workspace's processes, cannot reach
  * the user's service manager, and writes only the workspace's clone, its
  * scratch dir (its `/tmp`, on disk at `~/.cawco/workspaces/<id>/tmp`, which no
- * command inside can remove) and the package caches.
+ * command inside can remove) and the package caches. On macOS, build tools
+ * also write in the user's temp/cache folders, DerivedData and SwiftPM folders.
  * The network is the host's, so the hub and the internet stay reachable.
  *
  * Linux: one anchor per workspace — a user, pid and mount namespace whose
@@ -131,6 +132,8 @@ const cachesOf = (): string[] => [
     ? [
         join(homedir(), "Library", "Caches"),
         join(homedir(), "Library", "Developer", "Xcode", "DerivedData"),
+        join(homedir(), ".swiftpm"),
+        join(homedir(), "Library", "org.swift.swiftpm"),
       ]
     : []),
 ];
@@ -462,8 +465,17 @@ const profileOf = async (
       join(homedir(), ".cli-proxy-api"),
     ].map(secretRealpath)
   );
+  const userDirs = await Promise.all(
+    ["DARWIN_USER_TEMP_DIR", "DARWIN_USER_CACHE_DIR"].map(async (name) => {
+      const path = (await Bun.$`getconf ${name}`.quiet()).text().trim();
+      if (!path.startsWith("/")) {
+        throw new Error(`getconf ${name} did not return an absolute path`);
+      }
+      return path;
+    })
+  );
   const writable = await Promise.all(
-    [ws, ...caches].map((path) => realpath(path))
+    [ws, ...caches, ...userDirs].map((path) => realpath(path))
   );
   const sockets = await Promise.all(
     [dirname(workspacesDir()), dirname(sessiondPath())].map((path) =>
