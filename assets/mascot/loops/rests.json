@@ -10,8 +10,6 @@
   "compacted": {
     "loop": "compacted",
     "drawing": 0,
-    "inks": [
-      "cream"
-    ]
+    "inks": ["cream"]
   }
 }
