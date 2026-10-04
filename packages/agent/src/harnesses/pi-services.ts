@@ -48,6 +48,45 @@ const PI_SIDECAR = join(PI_DIR, "cawco-fleet.json");
 export const compactBoundaryId = (compaction: string): string =>
   `${compaction}:boundary`;
 
+/** A stored compaction as its boundary and its summary. */
+const compactionEntries = (
+  sessionKey: string,
+  entry: {
+    id: string;
+    summary: string;
+    timestamp: string;
+    tokensBefore: number;
+  },
+  keptFrom: string | undefined
+): SessionMessage[] => [
+  {
+    type: "system",
+    uuid: compactBoundaryId(entry.id),
+    session_id: sessionKey,
+    message: {
+      type: "system",
+      subtype: "compact_boundary",
+      uuid: compactBoundaryId(entry.id),
+      session_id: sessionKey,
+      compact_metadata: { pre_tokens: entry.tokensBefore },
+    },
+    parent_tool_use_id: null,
+    parent_agent_id: null,
+    timestamp: entry.timestamp,
+  },
+  {
+    type: "user",
+    uuid: entry.id,
+    session_id: sessionKey,
+    message: { role: "user", content: entry.summary },
+    parent_tool_use_id: null,
+    parent_agent_id: null,
+    compactSummary: true,
+    ...(keptFrom ? { keptFrom } : {}),
+    timestamp: entry.timestamp,
+  },
+];
+
 export const PI_CAPABILITIES: HarnessCapabilities = {
   interrupt: true,
   permissionModes: [],
@@ -386,21 +425,10 @@ export class PiProfile {
     }
     const manager = SessionManager.open(path, undefined, dir);
     const entries: SessionMessage[] = [];
-    const summaries = new Map<
-      string,
-      { id: string; summary: string; timestamp: string; tokensBefore: number }
-    >();
-    for (const entry of manager.getEntries()) {
-      if (entry.type === "compaction") {
-        summaries.set(entry.firstKeptEntryId, {
-          id: entry.id,
-          summary: entry.summary,
-          timestamp: entry.timestamp,
-          tokensBefore: entry.tokensBefore,
-        });
-      }
-    }
     const stored = manager.getEntries();
+    const placeOf = new Map(stored.map((entry, index) => [entry.id, index]));
+    /** The first transcript entry each stored entry made, in stored order. */
+    const made: { index: number; uuid: string }[] = [];
     const nextRole = (index: number): string | undefined => {
       for (let at = index + 1; at < stored.length; at += 1) {
         const later = stored[at];
@@ -411,39 +439,25 @@ export class PiProfile {
       return undefined;
     };
     for (const [index, entry] of stored.entries()) {
-      const compacted = summaries.get(entry.id);
-      if (compacted) {
-        // The boundary the live stream carried for it (pi-runtime), as far as
-        // pi stores it: how full the context was, not what triggered it.
-        entries.push({
-          type: "system",
-          uuid: compactBoundaryId(compacted.id),
-          session_id: sessionKey,
-          message: {
-            type: "system",
-            subtype: "compact_boundary",
-            uuid: compactBoundaryId(compacted.id),
-            session_id: sessionKey,
-            compact_metadata: { pre_tokens: compacted.tokensBefore },
-          },
-          parent_tool_use_id: null,
-          parent_agent_id: null,
-          timestamp: compacted.timestamp,
-        });
-        entries.push({
-          type: "user",
-          uuid: compacted.id,
-          session_id: sessionKey,
-          message: { role: "user", content: compacted.summary },
-          parent_tool_use_id: null,
-          parent_agent_id: null,
-          compactSummary: true,
-          timestamp: compacted.timestamp,
-        });
+      // A compaction, where it happened — where the live stream drew it
+      // (pi-runtime). Its boundary carries what pi stores of it: how full the
+      // context was, not what triggered it. What the model still holds from
+      // before it begins at the first entry it kept (`keptFrom`).
+      if (entry.type === "compaction") {
+        const kept = placeOf.get(entry.firstKeptEntryId) ?? index;
+        entries.push(
+          ...compactionEntries(
+            sessionKey,
+            entry,
+            made.find((one) => one.index >= kept)?.uuid
+          )
+        );
+        continue;
       }
       if (entry.type !== "message") {
         continue;
       }
+      const before = entries.length;
       const message = (entry as { message?: unknown }).message as
         | { role?: string; content?: unknown }
         | undefined;
@@ -485,6 +499,9 @@ export class PiProfile {
           parent_agent_id: null,
           timestamp: entry.timestamp,
         });
+      }
+      if (entries.length > before) {
+        made.push({ index, uuid: entries[before].uuid });
       }
     }
     return entries;

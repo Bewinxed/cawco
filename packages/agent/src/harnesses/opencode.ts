@@ -40,6 +40,7 @@ import type {
   NeutralAssistantBlock,
   NeutralContentBlock,
   NeutralSessionInfo,
+  NeutralSystemMessage,
   PermissionResult,
   SentMessage,
   SessionMessage,
@@ -77,6 +78,7 @@ import { type ProcSpec, sessiondEndpoint } from "@cawco/core/sessiond";
 import {
   type AssistantMessage,
   type Command,
+  type CompactionPart,
   createOpencodeClient,
   type Event,
   type FilePart,
@@ -1256,6 +1258,8 @@ export class OpencodeSession implements HarnessSession {
    * (`summary: true` on the message): their text is the brief, not an answer.
    */
   readonly #summaries = new Set<string>();
+  /** The compaction parts whose boundary has gone out: a part is updated more than once. */
+  readonly #boundaries = new Set<string>();
   readonly #costs = new Map<string, number>();
   #costBase = 0;
   readonly #pending = new Map<string, PendingMessage>();
@@ -1485,6 +1489,15 @@ export class OpencodeSession implements HarnessSession {
             // written while it was being written — the order opencode keeps.
             this.#answering = undefined;
             this.#flushMessages(this.#pending, this.#roles);
+            // The summary is in: the compaction it closes is over.
+            if (info.summary) {
+              this.#ctx.frame({
+                type: "system",
+                subtype: "status",
+                status: null,
+                session_id: this.sessionId ?? undefined,
+              });
+            }
             this.#releaseReads();
           }
         }
@@ -1549,7 +1562,12 @@ export class OpencodeSession implements HarnessSession {
         if (props.partID) {
           blockIndex(pending, props.partID);
         }
-        if (held === "thinking" && props.partID) {
+        // A compaction's summary is not an answer being written: its words
+        // are kept and nothing streams, so the transcript shows the divider
+        // its boundary drew and never an agent's row filling in.
+        if (this.#summaries.has(props.messageID ?? "")) {
+          // Nothing to show while it is written.
+        } else if (held === "thinking" && props.partID) {
           if (this.#openThinking !== props.partID) {
             this.#closeThinking();
             this.#openThinking = props.partID;
@@ -1735,6 +1753,24 @@ export class OpencodeSession implements HarnessSession {
   #part(part: Part): void {
     const role = this.#roles.get(part.messageID);
     switch (part.type) {
+      // A compaction has begun: its boundary, once, so the divider stands in
+      // the transcript from here and the summary that follows opens it.
+      case "compaction": {
+        if (this.#boundaries.has(part.id)) {
+          return;
+        }
+        this.#boundaries.add(part.id);
+        this.#ctx.frame(
+          compactBoundary(part, this.#createdOf(part.messageID).timestamp)
+        );
+        this.#ctx.frame({
+          type: "system",
+          subtype: "status",
+          status: "compacting",
+          session_id: this.sessionId ?? undefined,
+        });
+        break;
+      }
       case "text": {
         if (part.synthetic || part.ignored) {
           return;
@@ -1759,7 +1795,8 @@ export class OpencodeSession implements HarnessSession {
         // message lists it.
         const pending = this.#pendingOf(part.messageID);
         blockIndex(pending, part.id);
-        if (role !== "assistant") {
+        // A summary's reasoning is no part of its brief, live or stored.
+        if (role !== "assistant" || this.#summaries.has(part.messageID)) {
           return;
         }
         const stored = pending.parts.get(part.id);
@@ -5717,6 +5754,25 @@ function queuedMessages(rows: { info: Message }[]): {
   return { ids, ...(answering ? { answering } : {}) };
 }
 
+/**
+ * opencode's compaction part as the boundary frame, under the part's own id
+ * live and read back alike. It says whether opencode compacted on its own or
+ * was asked to; it carries no token count, so the frame carries none.
+ */
+function compactBoundary(
+  part: CompactionPart,
+  timestamp: string | undefined
+): NeutralSystemMessage {
+  return {
+    type: "system",
+    subtype: "compact_boundary",
+    uuid: part.id,
+    session_id: part.sessionID,
+    ...(timestamp ? { timestamp } : {}),
+    compact_metadata: { trigger: part.auto ? "auto" : "manual" },
+  };
+}
+
 /** opencode `{info, parts}` → the neutral transcript entries the folder reads. */
 /**
  * Exported for its own sake as well as the session's: this is the whole of what
@@ -5759,6 +5815,21 @@ export function toTranscript(
           timestamp,
           ...(unread.has(info.id) ? { queued: true as const } : {}),
         });
+      }
+      // The message a compaction opens with carries nothing but its part: the
+      // boundary the live stream drew for it.
+      for (const part of parts) {
+        if (part.type === "compaction") {
+          entries.push({
+            type: "system",
+            uuid: part.id,
+            session_id: sessionKey,
+            message: compactBoundary(part, timestamp),
+            parent_tool_use_id: null,
+            parent_agent_id: null,
+            timestamp,
+          });
+        }
       }
       continue;
     }

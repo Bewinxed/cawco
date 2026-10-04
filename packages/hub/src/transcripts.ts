@@ -44,6 +44,8 @@ export interface HistoryFault {
 }
 
 export interface TranscriptPorts {
+  /** The commit the agent on `machineId` runs, as it last registered. */
+  readonly build: (machineId: string) => string | undefined;
   /** Whether a dashboard follows the session's stream. */
   readonly followed: (instanceId: string) => boolean;
   /** The session's stream head: the seq a page is consistent with. */
@@ -72,6 +74,13 @@ export type TranscriptPayload = Extract<
 >;
 
 interface Entry {
+  /**
+   * The commit of the agent that read this transcript from its machine: what
+   * a read returns is that agent's to decide, so a transcript read by an
+   * older one is read again when its machine registers a newer
+   * (`machineRegistered`).
+   */
+  build: string | undefined;
   builder: TranscriptBuilder;
   held: TranscriptPayload[];
   /** The read in flight, while one is; frames meanwhile wait in `held`. */
@@ -83,6 +92,27 @@ interface Entry {
 export interface TranscriptsShape {
   /** A session frame or a send's record, folded in; its changes go out on the stream. */
   readonly ingest: (instanceId: string, payload: TranscriptPayload) => void;
+  /**
+   * A machine's agent has registered, running `instanceIds`. One machine
+   * read at a time:
+   *
+   * - Every transcript of that machine built through an agent on another
+   *   commit is read again and replaced. What a read returns is the agent's
+   *   to decide, and a session that ran through its agent's upgrade would
+   *   otherwise keep what the old agent read for as long as it ran — a live
+   *   transcript is never swept, and is never built twice. So is one whose
+   *   read was in flight as the agent registered: the agent that answered it
+   *   may be the one that went away.
+   * - Every session it runs that has no transcript yet gets one, so opening
+   *   it is a page off what is built, before any of them speaks.
+   *
+   * The same agent coming back on the same commit — a socket that dropped —
+   * reads nothing again.
+   */
+  readonly machineRegistered: (
+    machineId: string,
+    instanceIds: readonly string[]
+  ) => Promise<void>;
   /** An interrupt was carried to the session. */
   readonly noteInterrupt: (instanceId: string) => void;
   /** The session is being started again in place. */
@@ -99,12 +129,6 @@ export interface TranscriptsShape {
    */
   readonly reread: (instanceId: string, at?: string) => void;
   readonly stop: () => void;
-  /**
-   * Builds these sessions' transcripts now, one machine read at a time, so
-   * opening any of them is a page off what is built — the sessions a machine
-   * says it is running as it registers, before any of them speaks.
-   */
-  readonly warm: (instanceIds: readonly string[]) => Promise<void>;
 }
 
 export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
@@ -152,6 +176,7 @@ export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
         return read;
       }
       entry.where = read.where;
+      entry.build = ports.build(read.where.machineId);
       entry.builder.seed(read.entries, read.records);
       emit(instanceId, [
         ...(reset ? [{ type: "reset" } as const] : []),
@@ -185,6 +210,7 @@ export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
       return known;
     }
     const entry: Entry = {
+      build: undefined,
       builder: new TranscriptBuilder(instanceId),
       loading: null,
       held: [],
@@ -274,7 +300,20 @@ export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
       entries.get(instanceId)?.builder.noteRelaunch(),
     reread,
     stop: () => clearInterval(timer),
-    warm: async (instanceIds) => {
+    machineRegistered: async (machineId, instanceIds) => {
+      const build = ports.build(machineId);
+      for (const [instanceId, entry] of [...entries]) {
+        const inFlight = entry.loading;
+        // biome-ignore lint/performance/noAwaitInLoops: one machine read at a time, on purpose
+        await inFlight;
+        const stale =
+          entries.get(instanceId) === entry &&
+          entry.where?.machineId === machineId &&
+          (inFlight !== null || entry.build !== build);
+        if (stale && !entry.loading) {
+          await load(instanceId, entry, true);
+        }
+      }
       for (const instanceId of instanceIds) {
         if (!entries.has(instanceId)) {
           // biome-ignore lint/performance/noAwaitInLoops: one machine read at a time, on purpose — a register names every session it runs

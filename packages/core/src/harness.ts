@@ -336,8 +336,8 @@ export interface SessionMessage {
    * conversation before it into. Everything from the last such entry on is
    * what the session's model holds in context now. Claude: the record after a
    * `compact_boundary` (`isCompactSummary`); opencode: the assistant message
-   * with `summary: true`; pi: a `compaction` entry's `summary`, placed where
-   * its first kept entry begins.
+   * with `summary: true`; pi: a `compaction` entry's `summary`, where the
+   * compaction happened, with the tail it kept named by {@link keptFrom}.
    */
   compactSummary?: true;
   /**
@@ -354,6 +354,15 @@ export interface SessionMessage {
    * one send.
    */
   joined?: number;
+  /**
+   * On a compaction summary whose harness kept entries from before it in
+   * context: the uuid of the first entry it kept. pi stores its compaction
+   * where it happened and names the entry its kept tail starts at, so what
+   * the model holds is this summary, the entries from here up to it, and
+   * everything after. Absent where the summary is itself the start (Claude,
+   * opencode).
+   */
+  keptFrom?: string;
   /**
    * A `user`/`assistant` entry's stored message. A `system` entry's is the
    * frame the live stream carried for the same record — a

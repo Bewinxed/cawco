@@ -6053,6 +6053,9 @@ export const createServer = (
   /** Every session's blocks, built here once, whether or not anyone watches. */
   const transcripts = createTranscripts({
     readHistory,
+    build: (machineId) =>
+      db.listAgents().find((agent) => agent.machineId === machineId)?.build
+        ?.commit,
     sequence: (instanceId, frame) => {
       streams.sequence(instanceId, frame);
     },
@@ -9330,9 +9333,13 @@ export const createServer = (
                 peekResumableAt(message.payload)
               );
               // What this machine runs is built now, so opening any of it is
-              // a page off what is built rather than a read of its machine.
+              // a page off what is built rather than a read of its machine;
+              // what an agent on another commit read is read again.
               transcripts
-                .warm(peekInstances(message.payload))
+                .machineRegistered(
+                  message.machineId,
+                  peekInstances(message.payload)
+                )
                 .catch((error: unknown) =>
                   console.warn(
                     `[hub] building ${message.machineId}'s transcripts failed: ${error instanceof Error ? error.message : String(error)}`

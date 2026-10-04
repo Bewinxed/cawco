@@ -506,12 +506,22 @@ const ownMessages = (entries: SessionMessage[]): SessionMessage[] =>
 
 /**
  * What the session's model holds now: its last compaction summary and every
- * message after it — or everything, for a session never compacted.
+ * message after it — or everything, for a session never compacted. A harness
+ * that kept a tail from before the compaction (pi) stores the summary where
+ * the compaction happened and names where that tail begins
+ * (`SessionMessage.keptFrom`): the summary, then the tail, then what followed.
  */
 export function liveScope(entries: SessionMessage[]): SessionMessage[] {
   const own = ownMessages(entries);
   const last = own.findLastIndex((entry) => entry.compactSummary);
-  return last < 0 ? own : own.slice(last);
+  if (last < 0) {
+    return own;
+  }
+  const summary = own[last];
+  const kept = summary.keptFrom
+    ? own.findIndex((entry) => entry.uuid === summary.keptFrom)
+    : last;
+  return [summary, ...own.slice(kept, last), ...own.slice(last + 1)];
 }
 
 /**
