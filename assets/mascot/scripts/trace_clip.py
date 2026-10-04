@@ -16,7 +16,9 @@ become one two-frame empty drawing.
 
 Gates: the landing inked as its still on 98% of their pixels or more; the first drawing empty or
 carrying 5% of the still's ink at most, so he never appears at size;
-on twos; no white marks; halo 0 on every drawing; every eye intact (trace.py's cut_eyes); and the
+on twos; no white marks; halo 0 on every drawing; every eye intact (trace.py's cut_eyes); every
+ink in order (no drawing shows an ink his landing does not carry, and a status's own ink, the note,
+never shows before his eye whites have); and the
 safe area: on every drawing his ink sits inside the line 3.5% in from each edge of the tighter of
 the take's frame and the artboard the apps draw, so he is wholly visible or not there at all (EBU
 R95 and ITU-R BT.1848 give the 3.5% action-safe margin; SMPTE RP 218: "all significant action
@@ -28,6 +30,7 @@ usage (from assets/mascot/scripts):
   uv run trace_clip.py --safe [--dir <clips folder>] [clip ...]   the safe-area check alone, over
       clips already traced (every clip in the folder by default): one line per clip naming the
       drawings outside the safe line, and a non-zero exit if any named clip breaks it
+  uv run trace_clip.py --inks [--dir <clips folder>] [clip ...]   the ink-order check alone, the same way
 """
 import io
 import json
@@ -52,6 +55,7 @@ LANDING = 0.98  # share of a landing's inked pixels that carry its still's ink
 # The most ink an enter's first drawing may carry, as a share of its still's: an empty page, or
 # him far off (a take that has him in its first frame at a ninth of his size measures 0.013).
 OPENS_SMALL = 0.05
+INK_SHOWS = 300  # px of one ink at the stills' scale from which a drawing visibly carries it
 SPECK = 200  # opaque px at 512: a drawing with less is dust traced off the take's paper
 INKS = np.array([[20, 20, 20], [230, 80, 50], [244, 240, 230], [245, 200, 40]])
 WHITE = np.array([244, 240, 230])
@@ -91,18 +95,50 @@ def unsafe_drawings(folder: Path) -> list[int]:
     return out
 
 
-if sys.argv[1:2] == ["--safe"]:
-    args = sys.argv[2:]
+def out_of_order(folder: Path, own: list[str]) -> dict[str, list[int]]:
+    """The clip's drawings, counted from 1 in playing order, where an ink is out of place.
+    `foreign`: an ink his landing does not carry (under INK_SHOWS px there) shows; a take once put
+    a vermilion patch on a head that has none. `ownEarly`: a status's own ink (the note) shows
+    before his eye whites have: it is the last thing to arrive, never part of the ink he grows
+    from. Pixels are counted over the take's whole frame at the stills' scale."""
+    timing = json.loads((folder / "timing.json").read_text())
+    names = ["black", "vermilion", "white", "yellow", *own]
+    colours = np.array([T.INKS.get(n, T.EXTRA_INKS.get(n)) for n in names])
+
+    def counts(drawing: int) -> dict[str, int]:
+        text = (folder / f"body-{drawing:02d}.svg").read_text().replace('viewBox="0 0 512 512"', 'viewBox="-48 -32 608 608"')
+        p = np.asarray(Image.open(io.BytesIO(bytes(resvg_py.svg_to_bytes(svg_string=text, width=608, height=608)))).convert("RGBA")).astype(int)
+        nearest = np.abs(p[..., None, :3] - colours).sum(-1).argmin(-1)
+        return {n: int(((p[..., 3] > 127) & (nearest == k)).sum()) for k, n in enumerate(names)}
+
+    per = [counts(slot["drawing"]) for slot in timing["drawings"]]
+    carried = {n for n, px in per[-1].items() if px >= INK_SHOWS}
+    eyes_in = next((k for k, c in enumerate(per) if c["white"] >= INK_SHOWS), len(per))
+    return {
+        "foreign": [k + 1 for k, c in enumerate(per) if any(px >= INK_SHOWS and n not in carried for n, px in c.items())],
+        "ownEarly": [k + 1 for k, c in enumerate(per) if k < eyes_in and any(c[n] >= INK_SHOWS for n in own)],
+    }
+
+
+if sys.argv[1:2] in (["--safe"], ["--inks"]):
+    mode, args = sys.argv[1], sys.argv[2:]
     folder = CLIPS
     if args[:1] == ["--dir"]:
         folder, args = Path(args[1]), args[2:]
     names = args or sorted(d.name for d in folder.iterdir() if (d / "timing.json").exists())
+    own_of = json.loads((T.LOOPS / "rests.json").read_text())
     broken = False
     for clip in names:
         slots = len(json.loads((folder / clip / "timing.json").read_text())["drawings"])
-        unsafe = unsafe_drawings(folder / clip)
-        broken |= bool(unsafe)
-        print(f"{clip}: {slots} drawings, " + (f"outside the safe line: {unsafe}" if unsafe else "all inside the safe line"))
+        if mode == "--safe":
+            unsafe = unsafe_drawings(folder / clip)
+            broken |= bool(unsafe)
+            print(f"{clip}: {slots} drawings, " + (f"outside the safe line: {unsafe}" if unsafe else "all inside the safe line"))
+        else:
+            own = own_of.get(clip.removesuffix("-enter").replace("-", "_"), {}).get("inks", [])
+            order = out_of_order(folder / clip, own)
+            broken |= any(order.values())
+            print(f"{clip}: {slots} drawings, " + (f"inks out of order: {order}" if any(order.values()) else "every ink in order"))
     sys.exit(1 if broken else 0)
 
 name, take = sys.argv[1:3]
@@ -378,6 +414,8 @@ report["gates"] = gates
 # The safe area is read from the clip as written, so its timing goes down first.
 timing.update(frames=report["frames"], drawings=slots)
 (out / "timing.json").write_text(T.dump_json(timing))
+report["inksOutOfOrder"] = out_of_order(out, own_inks)
+gates["inkOrder"] = not any(report["inksOutOfOrder"].values())
 report["outsideSafe"] = unsafe_drawings(out)
 gates["safeArea"] = not report["outsideSafe"]
 timing.update(frames=report["frames"], drawings=slots, halo=halos, probe=report)
