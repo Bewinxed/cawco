@@ -90,7 +90,7 @@ struct JumpIndex {
         var titles: [String: String] = [:]
         for machine in fleet.machines {
             for (i, info) in fleet.catalog(machine.machineId).enumerated() {
-                let title = fleet.storedTitle(info)
+                let title = fleet.storedTitle(info, machineId: machine.machineId)
                 titles[info.sessionId] = title
                 let to = fleet.conversationId(sessionKey: info.sessionId, machineId: machine.machineId, cwd: info.cwd)
                 guard !destinations.contains(to) else { continue }
@@ -294,6 +294,8 @@ final class JumpPaletteController: UIViewController, UIViewControllerTransitioni
     }
 
     private static let inset = 7.0
+    /// A row's inset from the well: its 1pt edge, the list's 4 and the group's 4.
+    private static let listInset = 9.0
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -306,7 +308,8 @@ final class JumpPaletteController: UIViewController, UIViewControllerTransitioni
         frameView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(frameView)
         well.backgroundColor = Palette.surfaceRecess
-        well.layer.cornerRadius = Radius.radiusLg - Self.inset + 6
+        // `.jump-well`: `calc(var(--radius-lg) - var(--jump-inset))`.
+        well.layer.cornerRadius = Radius.radiusLg - Self.inset
         well.layer.cornerCurve = .continuous
         well.layer.borderWidth = 1
         well.clipsToBounds = true
@@ -314,7 +317,7 @@ final class JumpPaletteController: UIViewController, UIViewControllerTransitioni
         frameView.addSubview(well)
 
         // The search line: the glyph, the author chip, the field, flex siblings.
-        field.font = TypeScale.typeBody.font
+        field.font = fieldFont
         field.textColor = Palette.inkStrong
         field.autocorrectionType = .no
         field.autocapitalizationType = .none
@@ -370,10 +373,11 @@ final class JumpPaletteController: UIViewController, UIViewControllerTransitioni
             column.leadingAnchor.constraint(equalTo: well.leadingAnchor),
             column.trailingAnchor.constraint(equalTo: well.trailingAnchor),
             listHeight,
-            list.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor, constant: 4),
-            list.bottomAnchor.constraint(equalTo: scroll.contentLayoutGuide.bottomAnchor, constant: -4),
-            list.leadingAnchor.constraint(equalTo: scroll.frameLayoutGuide.leadingAnchor, constant: 4),
-            list.trailingAnchor.constraint(equalTo: scroll.frameLayoutGuide.trailingAnchor, constant: -4),
+            // `.jump-list` pads 4 and each group 4 more, inside the well's 1pt edge.
+            list.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor, constant: Self.listInset - 1),
+            list.bottomAnchor.constraint(equalTo: scroll.contentLayoutGuide.bottomAnchor, constant: -(Self.listInset - 1)),
+            list.leadingAnchor.constraint(equalTo: scroll.frameLayoutGuide.leadingAnchor, constant: Self.listInset),
+            list.trailingAnchor.constraint(equalTo: scroll.frameLayoutGuide.trailingAnchor, constant: -Self.listInset),
         ])
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (palette: JumpPaletteController, _: UITraitCollection) in palette.paint() }
         paint()
@@ -423,9 +427,15 @@ final class JumpPaletteController: UIViewController, UIViewControllerTransitioni
         return row
     }
 
+    /// `.jump-field` is body type; under a finger every field is 16pt
+    /// (app.css, `pointer: coarse`: `font-size: 16px`).
+    private var fieldFont: UIFont {
+        traitCollection.userInterfaceIdiom == .mac ? TypeScale.typeBody.font : TypeScale.typeBody.font(16)
+    }
+
     private func placeholder() {
         let text = author == nil ? "Jump to a project, machine, or session…" : "Search these messages…"
-        field.attributedPlaceholder = NSAttributedString(string: text, attributes: [.font: TypeScale.typeBody.font, .foregroundColor: Palette.inkMuted])
+        field.attributedPlaceholder = NSAttributedString(string: text, attributes: [.font: fieldFont, .foregroundColor: Palette.inkMuted])
     }
 
     /// Follows the fleet and the search while the palette is up.
@@ -680,6 +690,12 @@ final class JumpPaletteController: UIViewController, UIViewControllerTransitioni
         for (position, row) in arranged.enumerated() {
             if list.arrangedSubviews.firstIndex(of: row) != position { list.insertArrangedSubview(row, at: position) }
         }
+        // Each group pads itself 4 top and bottom, so two groups stand 8 apart.
+        let headings = Set(sections.compactMap { $0.heading == nil ? nil : $0.key })
+        for (position, row) in arranged.enumerated() {
+            let next = position + 1 < order.count ? order[position + 1] : nil
+            list.setCustomSpacing(next.map(headings.contains) == true ? 8 : 0, after: row)
+        }
         for row in arriving.compactMap({ built[$0] }) where !still { row.alpha = 0 }
         paintSelection()
         let natural = list.systemLayoutSizeFitting(CGSize(width: max(1, scroll.bounds.width - 8), height: 0), withHorizontalFittingPriority: .required, verticalFittingPriority: .fittingSizeLevel).height + 8
@@ -729,12 +745,13 @@ final class JumpPaletteController: UIViewController, UIViewControllerTransitioni
     }
 
     private static func heading(_ text: String) -> UIView {
-        let label = KitLabel(TypeScale.typeLabel.withWeight(.regular), ink: Palette.mutedForeground)
+        // The group heading: label type, muted, `padding: 6px 8px`.
+        let label = KitLabel(TypeScale.typeLabel, ink: Palette.mutedForeground)
         label.text = text
         label.accessibilityTraits = .header
         let box = UIStackView(arrangedSubviews: [label])
         box.isLayoutMarginsRelativeArrangement = true
-        box.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 10, leading: 12, bottom: 6, trailing: 12)
+        box.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 6, leading: 8, bottom: 6, trailing: 8)
         return box
     }
 
@@ -754,11 +771,18 @@ final class JumpPaletteController: UIViewController, UIViewControllerTransitioni
         nameLabel.attributedText = name
         nameLabel.lineBreakMode = .byTruncatingTail
         nameLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        // `.jump-name` is `flex: 1`: it takes the room, so every trail ends on one edge.
+        nameLabel.setContentHuggingPriority(.defaultLow - 1, for: .horizontal)
         let trailLabel = UILabel()
         trailLabel.attributedText = trail
         trailLabel.lineBreakMode = .byTruncatingTail
         trailLabel.setContentCompressionResistancePriority(.defaultLow + 1, for: .horizontal)
-        let row = UIStackView(arrangedSubviews: [GlyphView(glyph, size: 16, tint: Palette.inkMuted), nameLabel, trailLabel])
+        trailLabel.setContentHuggingPriority(.required, for: .horizontal)
+        // The command item's check slot (`cn-command-item-indicator`): 16pt at
+        // the row's end, drawn only on a checked item, its room always kept.
+        let tick = UIView()
+        tick.widthAnchor.constraint(equalToConstant: 16).isActive = true
+        let row = UIStackView(arrangedSubviews: [GlyphView(glyph, size: 16, tint: Palette.inkMuted), nameLabel, trailLabel, tick])
         row.spacing = 8
         row.alignment = .center
         trailLabel.widthAnchor.constraint(lessThanOrEqualTo: row.widthAnchor, multiplier: 0.45).isActive = true
