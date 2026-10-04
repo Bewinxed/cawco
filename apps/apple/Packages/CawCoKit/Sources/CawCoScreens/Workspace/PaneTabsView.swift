@@ -35,6 +35,10 @@ final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteraction
     var onSelect: (String) -> Void = { _ in }
     var onClose: (String) -> Void = { _ in }
     var onDetails: (String, UIView) -> Void = { _, _ in }
+    /// A pointer rests on a tab (its id and view), or left one (nil).
+    var onHover: (String?, UIView?) -> Void = { _, _ in }
+    /// A tab's context menu opened or closed.
+    var onMenu: (Bool) -> Void = { _ in }
     var menu: (String) -> UIMenu? = { _ in nil }
     /// Supplies a tab's drag; set by the group.
     var dragFor: ((String, TabView) -> UIDragItem?)?
@@ -152,6 +156,7 @@ final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteraction
             guard let self, let view else { return }
             onDetails(id, view)
         }
+        view.onHover = { [weak self, weak view] over in self?.onHover(over ? id : nil, over ? view : nil) }
         view.addInteraction(UIContextMenuInteraction(delegate: self))
         if let dragFor {
             let drag = UIDragInteraction(delegate: TabDragDelegate.shared)
@@ -335,6 +340,14 @@ final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteraction
         guard let id = (interaction.view as? TabView)?.id else { return nil }
         return UIContextMenuConfiguration(identifier: id as NSString, previewProvider: nil) { [weak self] _ in self?.menu(id) }
     }
+
+    func contextMenuInteraction(_: UIContextMenuInteraction, willDisplayMenuFor _: UIContextMenuConfiguration, animator _: (any UIContextMenuInteractionAnimating)?) {
+        onMenu(true)
+    }
+
+    func contextMenuInteraction(_: UIContextMenuInteraction, willEndFor _: UIContextMenuConfiguration, animator _: (any UIContextMenuInteractionAnimating)?) {
+        onMenu(false)
+    }
 }
 
 /// Every tab's drag goes through one delegate; the item comes from the tab.
@@ -365,6 +378,8 @@ final class TabView: UIView {
     var onSelect: () -> Void = {}
     var onClose: () -> Void = {}
     var onDetails: () -> Void = {}
+    /// A pointer came to rest on the tab, or left it.
+    var onHover: (Bool) -> Void = { _ in }
     var dragItem: () -> UIDragItem? = { nil }
 
     private let tint = CAShapeLayer()
@@ -476,8 +491,11 @@ final class TabView: UIView {
     }
 
     @objc private func hovered(_ hover: UIHoverGestureRecognizer) {
+        let was = hovering
         hovering = hover.state == .began || hover.state == .changed
         Motion.easeOut.animator(Motion.durGhost) { self.paint() }.startAnimation()
+        // The whole tab, its buttons included, times the details card.
+        if hovering != was { onHover(hovering) }
     }
 
     @objc private func held(_ press: UILongPressGestureRecognizer) {

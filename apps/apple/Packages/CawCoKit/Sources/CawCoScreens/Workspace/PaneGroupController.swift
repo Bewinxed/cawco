@@ -55,6 +55,8 @@ final class PaneGroupController: UIViewController, TabSwipeHost, UIDropInteracti
         }
     }
 
+    /// The details card its tabs host (hover, pin, glide).
+    private lazy var tabDetails = TabDetails(panes: panes, presenter: self)
     private var ownStrip: [NSLayoutConstraint] = []
     private var noStrip: NSLayoutConstraint?
 
@@ -142,10 +144,23 @@ final class PaneGroupController: UIViewController, TabSwipeHost, UIDropInteracti
             if let swipe, swipe.active, let at = activeIndex, let to = index(of: id) {
                 swipe.retarget(to == at ? 0 : (to > at ? 1 : -1))
             }
+            // An open details card goes with the tab that was clicked; otherwise it closes.
+            if let tab = strip.tabView(id) { tabDetails.click(id, tab: tab, chosen: false) }
             workspace.activate(id, in: leafId)
         }
-        strip.onClose = { [weak self] id in self?.workspace.close(id) }
-        strip.onDetails = { [weak self] id, tab in self?.panes.showDetails(id, from: self, source: tab) }
+        strip.onClose = { [weak self] id in
+            guard let self else { return }
+            if tabDetails.openId == id { tabDetails.close() }
+            workspace.close(id)
+        }
+        // The chosen tab, or its chevron: its details, pinned; again, closed.
+        strip.onDetails = { [weak self] id, tab in self?.tabDetails.click(id, tab: tab, chosen: true) }
+        strip.onHover = { [weak self] id, tab in
+            guard let self else { return }
+            if let id, let tab { tabDetails.hover(id, tab: tab) } else { tabDetails.leave() }
+        }
+        strip.onMenu = { [weak self] open in self?.tabDetails.menuOpen = open }
+        tabDetails.order = { [weak self] in self?.leaf?.tabs ?? [] }
         strip.menu = { [weak self] id in self?.menu(for: id) }
         strip.dragFor = { [weak self] id, _ in self?.dragItem(id) }
         view.addInteraction(UIDropInteraction(delegate: self))
@@ -394,7 +409,10 @@ final class PaneGroupController: UIViewController, TabSwipeHost, UIDropInteracti
     private func menu(for id: String) -> UIMenu {
         var first: [UIMenuElement] = []
         if BoardRun.runId(of: id) == nil {
-            first.append(UIAction(title: "Session details") { [weak self] _ in self?.panes.showDetails(id, from: self) })
+            first.append(UIAction(title: "Session details") { [weak self] _ in
+                guard let self else { return }
+                tabDetails.pin(id, tab: strip.tabView(id))
+            })
             if panes.continueHandler != nil {
                 first.append(UIAction(title: "Continue in new session…", image: Glyph.arrowRight.image) { [weak self] _ in self?.panes.continueInNewSession(id) })
             }
