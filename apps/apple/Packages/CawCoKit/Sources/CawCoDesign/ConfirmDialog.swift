@@ -193,9 +193,18 @@ public final class ConfirmDialog: UIViewController, UIViewControllerTransitionin
 
 /// The scrim (`kit-scrim`: `--scrim` with its blur), fading in over
 /// `durPanel` and out over `durExit`; a tap on it closes what it holds.
-public final class ScrimPresentation: UIPresentationController {
+///
+/// The blur is the token's `scrimBlur` (2pt), which no system material is:
+/// those blur by tens of points and bring a tint of their own, and at night
+/// that tint over `--scrim` hid the page altogether. So the effect view's
+/// blur is held at the fraction of the way in that gives 2pt, taking the
+/// full effect's radius as 30pt.
+public final class ScrimPresentation: UIPresentationController, UIGestureRecognizerDelegate {
     private let scrim = UIVisualEffectView(effect: nil)
     private let onTap: () -> Void
+    private var blur: UIViewPropertyAnimator?
+    private var tap: UITapGestureRecognizer?
+    private static let fullBlur = 30.0
 
     public init(presentedViewController: UIViewController, presenting: UIViewController?, onTap: @escaping () -> Void) {
         self.onTap = onTap
@@ -210,18 +219,49 @@ public final class ScrimPresentation: UIPresentationController {
         tint.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         tint.backgroundColor = Palette.scrim
         scrim.contentView.addSubview(tint)
-        scrim.effect = UIBlurEffect(style: .systemUltraThinMaterial)
+        let blur = UIViewPropertyAnimator(duration: 1, curve: .linear) { [scrim] in scrim.effect = UIBlurEffect(style: .regular) }
+        blur.pausesOnCompletion = true
+        blur.fractionComplete = Size.scrimBlur / Self.fullBlur
+        self.blur = blur
         scrim.alpha = 0
         container.insertSubview(scrim, at: 0)
-        scrim.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(tapped)))
+        // On the container, since what is presented fills it with a clear
+        // root that stands over the scrim: a tap that lands on that root, or
+        // on the scrim, is a tap outside the panel.
+        let tap = UITapGestureRecognizer(target: self, action: #selector(tapped))
+        tap.delegate = self
+        container.addGestureRecognizer(tap)
+        self.tap = tap
         Motion.easeOut.animator(Motion.durPanel) { self.scrim.alpha = 1 }.startAnimation()
+    }
+
+    override public func presentationTransitionDidEnd(_ completed: Bool) {
+        if !completed { release() }
     }
 
     override public func dismissalTransitionWillBegin() {
         Motion.easeOut.animator(Motion.durExit) { self.scrim.alpha = 0 }.startAnimation()
     }
 
+    override public func dismissalTransitionDidEnd(_ completed: Bool) {
+        if completed { release() }
+    }
+
+    /// A held animator has to be stopped before it is let go.
+    private func release() {
+        blur?.stopAnimation(true)
+        blur = nil
+        if let tap { tap.view?.removeGestureRecognizer(tap) }
+        tap = nil
+        scrim.removeFromSuperview()
+    }
+
     @objc private func tapped() { onTap() }
+
+    public func gestureRecognizer(_: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        guard let hit = touch.view else { return false }
+        return hit === presentedViewController.view || hit.isDescendant(of: scrim)
+    }
 }
 
 /// `kit-dialog-in` / `-out`: 6pt of rise and a fade.
