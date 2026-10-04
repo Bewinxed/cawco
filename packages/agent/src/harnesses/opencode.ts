@@ -5812,11 +5812,9 @@ export class OpencodeHarness implements Harness {
     for (const server of config.mcp.filter(
       (row) => row.proxied && row.enabled
     )) {
-      const directories = new Set([
-        undefined,
-        ...this.#pumps.keys(),
-        ...[...this.#sessions.values()].map((session) => session.directory),
-      ]);
+      const directories = new Set(
+        [...this.#pumps.keys()].map((key) => key.slice(key.indexOf("\n") + 1))
+      );
       for (const directory of directories) {
         // biome-ignore lint/performance/noAwaitInLoops: replace each directory's connection before reporting runtime state
         const connected = await client.mcp.add({
