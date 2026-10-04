@@ -473,7 +473,14 @@
   .grouped .well {
     padding-block-start: var(--space-2);
 
+    /* Its surface starts on the pixel row the part above leaves for its
+       edge, as the hairline does. The two parts are snapped to the pixel
+       grid each on its own, and at some offsets the part above stopped a
+       row short of this one: the row between was painted by neither, the
+       page showed through it at the well's two insets, and the hairline
+       stood on the page instead of on the well. */
     &::before {
+      inset-block-start: -1px;
       border-block-start-width: 0;
       border-start-start-radius: 0;
       border-start-end-radius: 0;
