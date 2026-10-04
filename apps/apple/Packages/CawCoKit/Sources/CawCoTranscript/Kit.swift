@@ -261,6 +261,12 @@ final class FlexLine: UIView {
         CGSize(width: UIView.noIntrinsicMetric, height: items.filter { !$0.view.isHidden }.map { size(of: $0).height }.max() ?? 0)
     }
 
+    /// The row's `max-content` width: every item shown at its own width, the gaps between.
+    var naturalWidth: Double {
+        let shown = items.filter { !$0.view.isHidden }
+        return shown.reduce(0) { $0 + size(of: $1).width } + gap * Double(max(0, shown.count - 1))
+    }
+
     /// The items changed what they hold: lay the row out again.
     func refit() {
         invalidateIntrinsicContentSize()

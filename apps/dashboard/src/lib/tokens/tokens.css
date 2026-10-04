@@ -597,6 +597,10 @@
     --tx-x-rail-narrow: 0px;
     /* The transcript's glyph cell (--w-glyph): the glyph column sits a space-3 past the rail, the text column a space-2 past the cell. */
     --tx-w-glyph: 16px;
+    /* One row of a session's live tail (DelegateTail.svelte ROW): six stand in the tail, the top one dissolving under the mask. */
+    --tail-row: 24px;
+    /* The widest the shared hover panel grows (HoverPanel.svelte .cell): its content is this less the 2px border and its space-3 padding. */
+    --hover-panel-max: 440px;
     /* A transcript rail line's least height: a tool call, a note, a branch head. */
     --tx-line: 26px;
     /* tx-line under a coarse pointer. */

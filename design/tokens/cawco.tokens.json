@@ -2159,6 +2159,16 @@
       "$value": "16px",
       "$description": "The transcript's glyph cell (--w-glyph): the glyph column sits a space-3 past the rail, the text column a space-2 past the cell."
     },
+    "tail-row": {
+      "$type": "dimension",
+      "$value": "24px",
+      "$description": "One row of a session's live tail (DelegateTail.svelte ROW): six stand in the tail, the top one dissolving under the mask."
+    },
+    "hover-panel-max": {
+      "$type": "dimension",
+      "$value": "440px",
+      "$description": "The widest the shared hover panel grows (HoverPanel.svelte .cell): its content is this less the 2px border and its space-3 padding."
+    },
     "tx-line": {
       "$type": "dimension",
       "$value": "26px",

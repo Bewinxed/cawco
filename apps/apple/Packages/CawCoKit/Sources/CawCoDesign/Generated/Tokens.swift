@@ -454,6 +454,10 @@ public enum Size {
     public static let txXRailNarrow: Double = 0
     /// The transcript's glyph cell (--w-glyph): the glyph column sits a space-3 past the rail, the text column a space-2 past the cell.
     public static let txWGlyph: Double = 16
+    /// One row of a session's live tail (DelegateTail.svelte ROW): six stand in the tail, the top one dissolving under the mask.
+    public static let tailRow: Double = 24
+    /// The widest the shared hover panel grows (HoverPanel.svelte .cell): its content is this less the 2px border and its space-3 padding.
+    public static let hoverPanelMax: Double = 440
     /// A transcript rail line's least height: a tool call, a note, a branch head.
     public static let txLine: Double = 26
     /// tx-line under a coarse pointer.
