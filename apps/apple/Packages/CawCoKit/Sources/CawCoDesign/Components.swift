@@ -138,7 +138,8 @@ public enum KitButton {
             config.imageColorTransformer = UIConfigurationColorTransformer { _ in glyphTint ?? ink(variant) }
             config.imagePadding = height.gap
         }
-        config.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: height.padding, bottom: 0, trailing: height.padding)
+        // The web button's 1px border is part of its box on every variant (transparent on some): its padding starts inside it.
+        config.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: height.padding + 1, bottom: 0, trailing: height.padding + 1)
         config.background.cornerRadius = Radius.radiusMd
         config.background.backgroundColor = background(variant, pressed: false)
         switch variant {
