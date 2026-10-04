@@ -341,12 +341,15 @@
   }
   /* A finger drawing the row left: the row and its Peek follow it, and
      "Archive" is uncovered behind them, as wide as the drag. Let go short
-     of the commit point, they slide back. Up and down stays the list's. */
+     of the commit point, they slide back. Up and down stays the list's.
+     Moved only while a finger is on it: a `translate` at rest, even of
+     nothing, made the row a stacking context, and its mark's level over
+     the rows folding under it (app.css, motion/branch) counted for nothing
+     outside the row: its delegates' icons rode back over its tile. */
   .item[data-archivable] {
     touch-action: pan-y;
   }
-  .row,
-  .peek {
+  .item[data-swiping] :is(.row, .peek) {
     translate: calc(var(--swipe, 0px) * -1) 0;
   }
   .item:not([data-swiping]) :is(.row, .peek) {

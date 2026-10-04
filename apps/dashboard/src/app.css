@@ -601,9 +601,13 @@
      waits a moment for it, `data-branch-wait`) to the frame their group
      unmounts, the deck is away: the children's icons left from it and come
      back to it (motion/branch). And the parent's mark stands over those
-     icons, which start and end their ride under it. Scoped to the row that
-     owns the group and stopped at the group, so a child's own mark and
-     deck inside it are its own affair. */
+     icons, which start and end their ride under it. That holds only while
+     nothing between the mark and the row's own element is a stacking
+     context: a row's link that is one (a `translate`, a filter, an opacity
+     at rest) keeps the mark's level inside it, and the group, drawn after
+     the link, rides over the mark. Scoped to the row that owns the group
+     and stopped at the group, so a child's own mark and deck inside it are
+     its own affair. */
   @scope (
     :is(li, [data-nest-host]):has(> [data-flip-anchor]:not([data-branch-wait]))
   ) to ([data-flip-anchor]) {
