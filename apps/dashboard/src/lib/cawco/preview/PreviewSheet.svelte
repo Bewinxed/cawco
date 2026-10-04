@@ -252,11 +252,12 @@
     margin: 0;
     padding: 0;
     outline: none;
-
-    &::before,
-    & > div:first-child {
-      display: none;
-    }
+  }
+  /* Whole selectors inside :global(): nested under it, the `div` is scoped
+     to this component and never matches the kit's own bar. */
+  :global(.preview-sheet::before),
+  :global(.preview-sheet > div:first-child) {
+    display: none;
   }
   .sheet {
     position: relative;
