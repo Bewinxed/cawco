@@ -17,6 +17,24 @@ public enum LineBox {
         max(0, (height - font.lineHeight) / 2)
     }
 
+    /// How far a line of `font`, `height` tall, reaches above and below its
+    /// baseline in WebKit: the face's ascent and descent are each taken up to
+    /// a whole pixel, and the leading left over is split either side. What
+    /// stands on a line beside the text (a mark hung by `vertical-align`, a
+    /// run of another face) is placed against this, not against the face's
+    /// own fractions.
+    ///
+    /// Measured in Mobile Safari on iOS 27.2, content box and baseline:
+    /// Figtree 12 on 16.2 is 15 and 12.594; 13 on 17.55, 17 and 13.266; 14 on
+    /// 20.3, 18 and 15.141; 16 on 20, 20 and 16; 20 on 24, 24 and 19.
+    /// JetBrains Mono 12 on 19.2 is 17 and 14.094; 13 on 17.55, 18 and 13.766.
+    public static func strut(_ font: UIFont, height: Double) -> (above: Double, below: Double) {
+        let ascent = Double(font.ascender).rounded(.up)
+        let descent = Double(-font.descender).rounded(.up)
+        let half = (height - ascent - descent) / 2
+        return (ascent + half, descent + half)
+    }
+
     /// A label's line: its paragraph and the baseline offset to set with it.
     public static func label(_ font: UIFont, height: Double) -> (paragraph: NSMutableParagraphStyle, baselineOffset: Double) {
         let paragraph = NSMutableParagraphStyle()

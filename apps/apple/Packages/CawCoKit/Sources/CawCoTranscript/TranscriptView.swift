@@ -81,6 +81,8 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     private var spoken: DelegateTrayState.News?
     /// The report the tray asked for, until the scroll to it has settled.
     private var revealing: String?
+    /// Whether the view was on screen at the last frame.
+    private var wasOnScreen = false
     private let latestButton = DockPill(glyph: .arrowDown, title: "Jump to latest")
     private let catchUp = DockPill(glyph: nil, title: "Catching up…")
     private let compacting = DockPill(glyph: nil, title: "Compacting context…", pill: true)
@@ -264,6 +266,12 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     }
 
     private static let tray = Logger(subsystem: "dev.cawco.app", category: "Tray")
+
+    /// Whether any of this view is inside its window's bounds.
+    private var onScreen: Bool {
+        guard let window else { return false }
+        return window.bounds.intersects(convert(bounds, to: nil))
+    }
 
     /// The list's view: its bounds less what the bars and the composer cover.
     private var visibleBox: CGRect { collection.bounds.inset(by: collection.adjustedContentInset) }
@@ -576,6 +584,13 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         // go of the tail, and pinning it each frame would never let it leave.
         if following, !gliding, !collection.isDragging, !collection.isDecelerating { latest() }
         let visible = collection.visibleCells
+        // A pane beside the one being read is laid out but never painted: what
+        // draws itself once (Caw on a divider) draws when the pane comes on screen.
+        let shown = onScreen
+        if shown, !wasOnScreen {
+            for cell in visible { (cell as? HostCell<CompactionDividerView>)?.row.cameOnScreen() }
+        }
+        wasOnScreen = shown
         let seen = collection.convert(visibleBox, to: nil)
         for cell in visible {
             (cell as? HostCell<PieceView>)?.row.fade(now)
@@ -589,7 +604,10 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     private func commit() {
         let interval = signposter.beginInterval("transcriptFrame")
         defer { signposter.endInterval("transcriptFrame", interval) }
-        env.watched = landed && window != nil
+        // Watched means on screen (Transcript `active`): a pane beside the one
+        // being read is in the window too, and what lands in it is simply there
+        // when the reader comes to it, not an arrival played where nothing draws.
+        env.watched = landed && onScreen
         let built = build()
         // A named state stands in the area instead of the transcript (SessionPane `namedState`).
         if let transcript {

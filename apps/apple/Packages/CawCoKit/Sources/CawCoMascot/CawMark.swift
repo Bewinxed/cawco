@@ -97,6 +97,14 @@ public final class CawMark: UIView {
         }
     }
 
+    /// Draws his rest again: for a place that has just come on screen. His
+    /// rest is drawn for a moment after it loads and then paused, and a mark
+    /// loaded where nothing is drawn (a pane beside the one being read) has
+    /// never been painted.
+    public func redraw() {
+        if let rest { draw(rest) }
+    }
+
     /// Draws his rest until its rim has settled, then pauses it.
     private func draw(_ layer: CawLayer) {
         settling?.cancel()

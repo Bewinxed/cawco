@@ -80,6 +80,9 @@ final class CompactionDividerView: UIView, RowContent, Disclosing {
         button.arrive(after: delay)
     }
 
+    /// The transcript has come on screen: Caw, loaded while it was not, is drawn now.
+    func cameOnScreen() { button.redrawCaw() }
+
     /// The button's reach under a finger (`.touch-hit`), in `view`'s space.
     func reach(in view: UIView) -> CGRect { button.convert(button.reach, to: view) }
 
@@ -195,6 +198,8 @@ final class CompactionButton: UIControl {
 
     @available(*, unavailable)
     required init?(coder _: NSCoder) { fatalError("built in code") }
+
+    func redrawCaw() { caw.redraw() }
 
     // MARK: State
 
@@ -323,21 +328,34 @@ final class CompactionButton: UIControl {
         // pixels, so none of them is drawn resampled.
         let scale = traitCollection.displayScale
         func whole(_ value: Double) -> Double { (value * scale).rounded() / scale }
+        // The centre is one CSS line of the word (`font: var(--type-meta)`), Caw
+        // and the chevron hung on it by `vertical-align: middle`, their middles
+        // half the x-height above the baseline. The line's strut (LineBox) rises
+        // further above the baseline than Caw's box does, so the line box is
+        // taller than Caw and, centred in the button, stands everything on it a
+        // little low. Mobile Safari: line box 18.59 at 5.70, Caw at 6.30, the
+        // chevron at 9.30.
+        let strut = LineBox.strut(font, height: TypeScale.typeMeta.lineHeight)
+        let middle = Double(font.xHeight) / 2
+        let above = max(strut.above, Size.txCompactCaw / 2 + middle)
+        let below = max(strut.below, Size.txCompactCaw / 2 - middle)
+        let top = (bounds.height - above - below) / 2
+        /// A place on the line, from the button's top, on a whole device pixel, in the centre's space.
+        func onLine(_ offset: Double) -> Double { whole(top + offset) - top }
         // The centre is laid out at rest; its transform is its place now.
         let transform = mid.transform
         mid.transform = .identity
         let midX = whole(arm + Space.space2)
-        mid.frame = CGRect(x: midX, y: (bounds.height - Size.txCompactCaw) / 2, width: midWidth, height: Size.txCompactCaw)
+        mid.frame = CGRect(x: midX, y: top, width: midWidth, height: above + below)
         mid.transform = transform
-        caw.frame = CGRect(x: 0, y: 0, width: cawWidth, height: Size.txCompactCaw)
-        // Caw's middle, and the chevron's, on the word's x-height (`vertical-align:
-        // middle`). The word is drawn where the layout puts it, to the fraction
-        // of a pixel across and its baseline on a whole one, in a box of whole pixels.
-        word.frame = CGRect(x: cawWidth + Size.cPillGap - 1, y: 0, width: ink.width.rounded(.up) + 2, height: Size.txCompactCaw)
-        word.origin = CGPoint(x: 1 + (arm + Space.space2 - midX), y: whole(Size.txCompactCaw / 2 + font.xHeight / 2) - font.ascender)
+        caw.frame = CGRect(x: 0, y: onLine(above - middle - Size.txCompactCaw / 2), width: cawWidth, height: Size.txCompactCaw)
+        // The word is drawn where the layout puts it, to the fraction of a pixel
+        // across and its baseline on a whole one, in a box of whole pixels.
+        word.frame = CGRect(x: cawWidth + Size.cPillGap - 1, y: 0, width: ink.width.rounded(.up) + 2, height: above + below)
+        word.origin = CGPoint(x: 1 + (arm + Space.space2 - midX), y: onLine(above) - font.ascender)
         let spot = chevron.transform
         chevron.transform = .identity
-        chevron.frame = CGRect(x: whole(cawWidth + Size.cPillGap + ink.width), y: (Size.txCompactCaw - Size.iconSm) / 2, width: Size.iconSm, height: Size.iconSm)
+        chevron.frame = CGRect(x: whole(cawWidth + Size.cPillGap + ink.width), y: onLine(above - middle - Size.iconSm / 2), width: Size.iconSm, height: Size.iconSm)
         chevron.transform = spot
         CATransaction.begin()
         CATransaction.setDisableActions(true)
