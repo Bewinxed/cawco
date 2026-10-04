@@ -10,26 +10,41 @@
     U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
-:root {
-  /* The brand board's four colours. Everything else is mixed from them. */
-  --ink: #171715;
-  --ivory: #f4f0e6;
-  --vermilion: #e65d46;
-  --butter: #f2d36b;
+/* Figtree is the product's own typeface. The scenes are set in it so they read as the app. */
+@font-face {
+  font-family: "Figtree Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 300 900;
+  src: url("../node_modules/@fontsource-variable/figtree/files/figtree-latin-wght-normal.woff2")
+    format("woff2-variations");
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
 
-  --ink-2: color-mix(in oklab, var(--ivory) 7%, var(--ink));
-  --ink-3: color-mix(in oklab, var(--ivory) 14%, var(--ink));
-  --line: color-mix(in oklab, var(--ivory) 16%, transparent);
-  --soft-on-ink: color-mix(in oklab, var(--ivory) 66%, var(--ink));
-  --soft-on-butter: color-mix(in oklab, var(--ink) 80%, var(--butter));
-  --butter-deep: color-mix(in oklab, var(--ink) 10%, var(--butter));
+:root {
+  /*
+   * Paper is the page ground. Its value is `color.paper` in
+   * design/tokens/cawco.tokens.json, and the build stops if the two differ.
+   * Ink and vermilion are the brand board's. Everything else on the page is
+   * mixed from these three. Spark yellow belongs to the wordmark, the mascot
+   * and brand art: here that is Caw's app icon and his own drawings.
+   */
+  --paper: #f4f0e6;
+  --ink: #171715;
+  --vermilion: #e65d46;
+
+  --ink-2: color-mix(in oklab, var(--paper) 7%, var(--ink));
+  --ink-3: color-mix(in oklab, var(--paper) 14%, var(--ink));
+  --soft-on-ink: color-mix(in oklab, var(--paper) 66%, var(--ink));
+  --soft-on-paper: color-mix(in oklab, var(--ink) 80%, var(--paper));
 
   --font: "Nunito Variable", ui-rounded, system-ui, sans-serif;
   --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
 
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
-  --ease-hop: cubic-bezier(0.34, 1.45, 0.64, 1);
 
   --gutter: clamp(16px, 4vw, 40px);
 }
@@ -47,7 +62,7 @@ html {
 
 body {
   margin: 0;
-  background: var(--butter);
+  background: var(--paper);
   color: var(--ink);
   font-family: var(--font);
   font-size: 1.0625rem;
@@ -88,6 +103,10 @@ code {
   display: block;
 }
 
+.defs {
+  position: absolute;
+}
+
 :focus-visible {
   outline: 3px solid var(--ink);
   outline-offset: 3px;
@@ -97,7 +116,7 @@ code {
 .stage :focus-visible,
 .card-ink :focus-visible,
 .cmd :focus-visible {
-  outline-color: var(--butter);
+  outline-color: var(--paper);
 }
 
 .wrap {
@@ -122,13 +141,53 @@ code {
   padding: 10px 14px;
   border-radius: 10px;
   background: var(--ink);
-  color: var(--ivory);
+  color: var(--paper);
   font-weight: 800;
   transform: translateY(-200%);
 }
 
 .skip:focus-visible {
   transform: none;
+}
+
+/*
+ * Caw. Every picture of him is one of the product's own drawn clips: a stack
+ * of drawings, one visible at a time. At rest a clip shows its last drawing.
+ * Where motion is welcome the build's keyframes step through the drawings in
+ * the take's own timing, and a clip marked `data-wait` holds its first drawing
+ * until its section arrives. Nothing here moves or fades him.
+ */
+
+.caw {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.caw g {
+  visibility: hidden;
+}
+
+.caw g[data-last] {
+  visibility: visible;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .caw g {
+    animation-duration: var(--caw-length);
+    animation-timing-function: step-end;
+    animation-fill-mode: both;
+    animation-delay: var(--caw-delay, 0ms);
+  }
+
+  .caw[data-wait]:not(.is-playing) g {
+    visibility: hidden;
+  }
+
+  .caw[data-wait]:not(.is-playing) g[data-first] {
+    visibility: visible;
+  }
 }
 
 /* Top bar */
@@ -161,19 +220,27 @@ code {
 .top-link {
   display: inline-flex;
   align-items: center;
+  gap: 7px;
   min-height: 44px;
   padding-inline: 6px;
   font-weight: 800;
   text-decoration: none;
 }
 
+.top-link .icon,
+.foot-nav .icon,
+.card-link .icon {
+  font-size: 1.15em;
+}
+
 .btn {
+  --btn-radius: 12px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   min-height: 44px;
   padding: 0 18px;
-  border-radius: 12px;
+  border-radius: var(--btn-radius);
   font-weight: 800;
   text-decoration: none;
   transition:
@@ -190,7 +257,20 @@ code {
 
 .btn-ink {
   background: var(--ink);
-  color: var(--ivory);
+  color: var(--paper);
+}
+
+/* Caw's app icon sits inside the button, its corners set in from the button's own. */
+.btn-app {
+  --btn-inset: 9px;
+  gap: 9px;
+  padding: 0 16px 0 var(--btn-inset);
+}
+
+.app-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: calc(var(--btn-radius) - var(--btn-inset));
 }
 
 /* Hero */
@@ -208,30 +288,11 @@ code {
 }
 
 .hero-art {
+  /* His entrance opens on an empty page, so it starts once the headline is on its way up. */
+  --caw-delay: 300ms;
   grid-area: 1 / 2;
-  position: relative;
   justify-self: center;
   width: min(100%, 400px);
-}
-
-.hero-caw {
-  width: 100%;
-}
-
-.ticks {
-  position: absolute;
-  left: 9%;
-  top: -15%;
-  width: 22%;
-  overflow: visible;
-}
-
-.ticks path {
-  fill: none;
-  stroke: var(--ink);
-  stroke-width: 9;
-  stroke-linecap: round;
-  stroke-dasharray: 40;
 }
 
 h1 {
@@ -245,7 +306,7 @@ h1 {
 .lede {
   max-width: 58ch;
   margin-top: clamp(16px, 2vw, 24px);
-  color: var(--soft-on-butter);
+  color: var(--soft-on-paper);
   font-size: clamp(1.05rem, 0.98rem + 0.4vw, 1.25rem);
   text-wrap: pretty;
 }
@@ -270,7 +331,7 @@ h1 {
   padding: 8px 8px 8px 18px;
   border-radius: 16px;
   background: var(--ink);
-  color: var(--ivory);
+  color: var(--paper);
 }
 
 .cmd code {
@@ -337,7 +398,7 @@ h1 {
   padding: 9px 12px;
   border: 2px solid var(--ink);
   border-radius: 10px;
-  background: var(--ivory);
+  background: var(--paper);
   color: var(--ink);
   font-size: 0.92rem;
   font-weight: 750;
@@ -366,7 +427,7 @@ h1 {
 .install-note {
   max-width: 620px;
   margin-top: 12px;
-  color: var(--soft-on-butter);
+  color: var(--soft-on-paper);
   font-size: 0.95rem;
   text-wrap: balance;
 }
@@ -389,40 +450,26 @@ h1 {
 .stage {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 0.5fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 0.6fr) minmax(0, 1fr);
   grid-template-rows: auto 1fr;
   column-gap: clamp(16px, 2.4vw, 32px);
   row-gap: 14px;
   padding: clamp(14px, 2.2vw, 28px);
   border-radius: clamp(20px, 2.4vw, 28px);
   background: var(--ink);
-  color: var(--ivory);
+  color: var(--paper);
 }
 
+/* Caw stands on the stage's top edge. His feet are 9% up from the bottom of his box. */
 .perch {
   position: absolute;
+  --caw-size: clamp(96px, 12.5vw, 164px);
+  --caw-delay: 500ms;
   right: clamp(14px, 6%, 80px);
-  bottom: calc(100% - 3px);
-  width: clamp(92px, 13vw, 168px);
-  aspect-ratio: 1;
-  clip-path: inset(-100% -100% 0 -100%);
+  bottom: 100%;
+  width: var(--caw-size);
+  margin-bottom: calc(var(--caw-size) * -0.075);
   pointer-events: none;
-}
-
-.percher {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  object-position: 50% 100%;
-  transform: translateY(106%);
-  transition: transform 180ms var(--ease-out);
-}
-
-.percher.is-on {
-  transform: none;
-  transition: transform 460ms var(--ease-hop) 140ms;
 }
 
 .tabs {
@@ -456,14 +503,12 @@ h1 {
 }
 
 .tab .icon {
-  color: var(--tab-icon, currentColor);
   font-size: 1.55rem;
 }
 
 .tab[aria-selected="true"] {
-  --tab-icon: var(--butter);
   background: var(--ink-3);
-  color: var(--ivory);
+  color: var(--paper);
 }
 
 .tab-bar {
@@ -502,15 +547,39 @@ h1 {
     visibility 0s;
 }
 
+/*
+ * A scene is the product, drawn as the product draws itself. These are the
+ * app's own light-theme tokens (apps/dashboard/src/lib/tokens/tokens.css), so
+ * the needs-you pill is the app's needs-you yellow and nothing else is.
+ */
 .scene-frame {
+  --app-page: oklch(96.6% 0.008 85);
+  --app-raised: oklch(99.3% 0.004 85);
+  --app-recess: oklch(94.4% 0.01 84);
+  --app-line: oklch(89% 0.013 82);
+  --app-ink: oklch(29.5% 0.01 70);
+  --app-muted: oklch(49.5% 0.014 74);
+  --app-nest: oklch(70% 0.017 78);
+  --app-faint: oklch(81% 0.016 80);
+  --app-brand: oklch(64.5% 0.175 33);
+  --attn-bg: oklch(91% 0.115 95);
+  --attn-ink: oklch(35% 0.075 88);
+  --attn-glyph: oklch(57% 0.125 78);
+  --live-glyph: oklch(50% 0.15 252);
+  --done-glyph: oklch(52% 0.14 140);
+  --mark-2: oklch(53% 0.15 47.4);
+  --mark-5: oklch(51% 0.093 186.7);
+  --mark-8: oklch(51% 0.165 349.8);
+  --app-shadow: 0 1px 2px oklch(29.5% 0.01 70 / 0.07);
+
   grid-area: 1 / 2 / 3 / 3;
   position: relative;
   overflow: hidden;
   min-height: clamp(430px, 38vw, 540px);
-  border: 1px solid var(--line);
   border-radius: clamp(14px, 1.6vw, 18px);
-  background: var(--ink-2);
-  container-type: inline-size;
+  background: var(--app-page);
+  color: var(--app-ink);
+  container-type: size;
 }
 
 .panel > .blurb {
@@ -566,11 +635,66 @@ h1 {
 }
 
 .with > dt {
-  color: var(--butter);
+  color: var(--paper);
 }
 
 .with > dd {
-  color: var(--ivory);
+  color: var(--paper);
+}
+
+/* A subagent beside a delegate, row by row. The delegate's column is the bright one. */
+.compare {
+  width: 100%;
+  margin-top: 14px;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 0.9rem;
+  line-height: 1.3;
+  text-align: left;
+}
+
+.compare th,
+.compare td {
+  padding: 5px 10px 5px 0;
+  vertical-align: top;
+  color: var(--soft-on-ink);
+  font-weight: inherit;
+  text-wrap: pretty;
+}
+
+.compare thead th {
+  padding-top: 0;
+  font-size: 0.86rem;
+  font-weight: 900;
+}
+
+.compare tbody tr {
+  border-top: 1px solid var(--ink-3);
+}
+
+.compare th[scope="row"] {
+  font-weight: 800;
+}
+
+.compare tr > :first-child {
+  width: 24%;
+}
+
+.compare tr > :nth-child(2) {
+  width: 30%;
+}
+
+.compare :is(th, td):last-child {
+  padding-right: 0;
+  color: var(--paper);
+}
+
+.compare-note {
+  margin-top: 10px;
+  color: var(--soft-on-ink);
+  font-size: 0.9rem;
+  line-height: 1.4;
+  text-wrap: pretty;
 }
 
 .autoplay {
@@ -611,31 +735,40 @@ h1 {
   display: block;
 }
 
-/* Mock product UI inside the scenes. Sized in em so a scene scales as one piece. */
+/* The scenes. Sized in em, where 1em stands for the app's 13px label, so each scales as one piece. */
 
 .scene {
   position: absolute;
   inset: 0;
   padding: 5%;
-  font-size: clamp(11px, 2.45cqi, 18px);
+  font-family: "Figtree Variable", ui-sans-serif, system-ui, sans-serif;
+  font-size: clamp(10.5px, min(2.05cqi, 2.5cqb), 15.5px);
+  font-weight: 500;
   line-height: 1.35;
 }
 
-.scene small {
-  font-size: 0.85em;
-  color: var(--soft-on-ink);
+.scene b {
+  font-weight: 600;
 }
 
-.scene b {
-  font-weight: 850;
+.scene small {
+  color: var(--app-muted);
+  font-size: 0.9em;
+}
+
+.scene code {
+  font-size: 0.9em;
 }
 
 .win,
 .node,
-.rule-card {
-  border: 1px solid var(--line);
-  border-radius: 1em;
-  background: var(--ink);
+.rule-card,
+.hitl,
+.tg {
+  border: 1px solid var(--app-line);
+  border-radius: 0.9em;
+  background: var(--app-raised);
+  box-shadow: var(--app-shadow);
 }
 
 .win {
@@ -645,125 +778,212 @@ h1 {
 .win-bar {
   display: flex;
   align-items: center;
-  gap: 0.8em;
-  padding: 0.7em 1em;
-  border-bottom: 1px solid var(--line);
+  gap: 0.6em;
+  padding: 0.55em 0.8em;
+  border-bottom: 1px solid var(--app-line);
   white-space: nowrap;
 }
 
-.dim {
-  overflow: hidden;
-  color: var(--soft-on-ink);
-  font-size: 0.9em;
-  text-overflow: ellipsis;
-}
-
-.needs {
-  margin-left: auto;
-  padding: 0.15em 0.6em;
-  border-radius: 0.5em;
-  background: var(--vermilion);
-  color: var(--ink);
-  font-size: 0.9em;
-  font-weight: 800;
-}
-
-.rows {
-  padding: 0.35em;
-  list-style: none;
-}
-
-.row {
-  display: grid;
-  grid-template-columns: 2.4em minmax(0, 1fr) auto auto;
+.bar-meta {
+  display: inline-flex;
   align-items: center;
-  gap: 0.8em;
-  padding: 0.5em 0.7em;
-  border-radius: 0.7em;
-}
-
-.group {
-  padding: 0.7em 0.9em 0.15em;
-  color: var(--soft-on-ink);
-  font-size: 0.82em;
-  font-weight: 800;
-}
-
-.row[data-flip] {
-  background: color-mix(in oklab, var(--vermilion) 18%, transparent);
-}
-
-.glyph {
-  display: grid;
-  width: 2.4em;
-  height: 2.4em;
-}
-
-.glyph img {
-  grid-area: 1 / 1;
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-}
-
-.r-main {
-  display: grid;
-  min-width: 0;
-}
-
-.r-main b {
+  gap: 0.3em;
   overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+  color: var(--app-muted);
+  font-size: 0.92em;
 }
 
-.r-agent {
-  color: var(--soft-on-ink);
-  font-size: 0.85em;
+.bar-meta .icon {
+  font-size: 1.2em;
+}
+
+/* The app's status pill. A status, never a control. */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25em;
+  height: 1.55em;
+  padding: 0 0.55em;
+  border-radius: 99em;
+  font-size: 0.92em;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.pill .icon {
+  font-size: 0.95em;
+}
+
+.pill-attn {
+  background: var(--attn-bg);
+  color: var(--attn-ink);
+}
+
+.pill-done {
+  background: color-mix(in oklab, var(--done-glyph) 14%, var(--app-raised));
+  color: var(--done-glyph);
+}
+
+.win-bar > .pill {
+  margin-left: auto;
+}
+
+.pill-swap {
+  justify-items: start;
+}
+
+/* A session's mark: its sprite on its project's hue (SessionMark.svelte). */
+.mark {
+  --rim: transparent;
+  position: relative;
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 1.38em;
+  height: 1.38em;
+  border-radius: 0.38em;
+  background: var(--fill, var(--app-ink));
+  color: oklch(99% 0 0);
+  box-shadow:
+    0 0 0 0.09em var(--app-raised),
+    0 0 0 0.19em var(--rim);
+}
+
+.mark .icon {
+  font-size: 0.86em;
+}
+
+.mark b {
+  font-size: 0.8em;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.mark[data-rim="live"] {
+  --rim: color-mix(in oklab, var(--fill, var(--app-ink)) 42%, transparent);
+}
+
+.mark[data-rim="attn"] {
+  --rim: var(--attn-glyph);
+}
+
+/* A session with delegates shows their count, on a deck of its own tile. */
+.mark-deck::before {
+  position: absolute;
+  inset: 0.24em 0.12em -0.24em;
+  z-index: -1;
+  border-radius: 0.34em;
+  background: color-mix(in oklab, var(--fill) 45%, var(--app-raised));
+  content: "";
+}
+
+/* The agent's glyph, as HarnessGlyph.svelte strokes it. */
+.hg {
+  flex: none;
+  width: 1.2em;
+  height: 1.2em;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  color: var(--app-muted);
+}
+
+/* A machine, as a line drawing (art/fleet.js). */
+.device {
+  display: block;
+  flex: none;
+  overflow: visible;
+}
+
+.device path {
+  fill: var(--app-raised);
+  stroke: var(--app-nest);
+  stroke-width: 1;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.device .sil {
+  stroke: var(--app-ink);
+}
+
+.device .lo {
+  stroke: var(--app-faint);
+}
+
+.device .nf {
+  fill: none;
+}
+
+.device .dash {
+  stroke-dasharray: 1 3;
+}
+
+.device .lamp {
+  fill: var(--app-nest);
+}
+
+.app-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35em;
+  height: 2.3em;
+  padding: 0 0.75em;
+  border: 1px solid var(--app-line);
+  border-radius: 0.6em;
+  background: var(--app-recess);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.app-btn .icon {
+  color: var(--app-muted);
+  font-size: 1.15em;
+}
+
+.app-btn-yes .icon {
+  color: var(--done-glyph);
+}
+
+.app-btn-solid {
+  border-color: var(--app-ink);
+  background: var(--app-ink);
+  color: var(--app-raised);
+}
+
+.field-k {
+  color: var(--app-muted);
+  font-size: 0.86em;
+  font-weight: 600;
 }
 
 .st {
   display: inline-flex;
   align-items: center;
   gap: 0.4em;
-  padding: 0.2em 0.6em;
-  border-radius: 0.5em;
-  font-size: 0.85em;
-  font-weight: 800;
+  font-size: 0.9em;
+  font-weight: 600;
   white-space: nowrap;
 }
 
 .st::before {
-  width: 0.55em;
-  height: 0.55em;
+  width: 0.5em;
+  height: 0.5em;
   border-radius: 50%;
   background: currentColor;
   content: "";
 }
 
-.st-working {
-  background: color-mix(in oklab, var(--butter) 15%, transparent);
-  color: var(--butter);
-}
-
-.st-needs {
-  background: var(--vermilion);
-  color: var(--ink);
-}
-
-.st-idle {
-  background: color-mix(in oklab, var(--ivory) 8%, transparent);
-  color: var(--soft-on-ink);
-}
-
-.st-idle::before {
-  background: transparent;
-  box-shadow: inset 0 0 0 0.12em currentColor;
+.st-live {
+  color: var(--live-glyph);
 }
 
 .st-done {
-  background: color-mix(in oklab, var(--ivory) 13%, transparent);
-  color: var(--ivory);
+  color: var(--done-glyph);
 }
 
 /* Two states stacked in one cell. The second is the resting one. */
@@ -780,14 +1000,132 @@ h1 {
   opacity: 0;
 }
 
-.r-main .swap {
-  justify-items: start;
+/* Scene: one board. The rail's tree, with the app's nesting lines (app.css `.kit-nest`). */
+
+.scene-board {
+  display: grid;
+  align-content: center;
 }
 
-/* Scene: one board */
+.tree,
+.nest {
+  --tree-gap: 0.26em;
+  display: grid;
+  gap: var(--tree-gap);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
 
-.scene-board .win {
-  height: 100%;
+.tree {
+  padding: 0.45em 0.5em;
+}
+
+.nest {
+  padding: var(--tree-gap) 0 0 1.62em;
+}
+
+.nest > li {
+  position: relative;
+}
+
+/* Each row's arm: down the rail from the row above, then across to this row's mark. */
+.nest > li::before {
+  position: absolute;
+  left: -0.43em;
+  top: calc(-1 * var(--tree-gap));
+  width: 0.8em;
+  height: calc(1em + var(--tree-gap));
+  border-bottom: 1px solid var(--app-nest);
+  border-left: 1px solid var(--app-nest);
+  border-bottom-left-radius: 0.6em;
+  content: "";
+}
+
+/* The rail carries on past every row but the last. */
+.nest > li:not(:last-child)::after {
+  position: absolute;
+  left: -0.43em;
+  top: 0;
+  bottom: calc(-1 * var(--tree-gap));
+  border-left: 1px solid var(--app-nest);
+  content: "";
+}
+
+.t-row {
+  display: flex;
+  align-items: center;
+  gap: 0.55em;
+  height: 2em;
+  padding: 0 0.5em;
+  border-radius: 0.6em;
+  transition: background-color 200ms ease;
+}
+
+.t-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.t-age {
+  min-width: 1.9em;
+  color: var(--app-muted);
+  font-size: 0.92em;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.t-kind,
+.t-on {
+  color: var(--app-muted);
+  font-size: 0.92em;
+}
+
+.t-on {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+}
+
+.t-on .device {
+  width: auto;
+  height: 1.75em;
+}
+
+.mark-run {
+  --fill: var(--app-ink);
+}
+
+.step {
+  display: grid;
+  place-items: center;
+  width: 1.38em;
+  height: 1.38em;
+  font-size: 1em;
+}
+
+.step .icon {
+  font-size: 1.2em;
+}
+
+.step-done {
+  color: var(--done-glyph);
+}
+
+.step-live {
+  color: var(--live-glyph);
+}
+
+/* The one row that needs you. Until it asks, it looks like the rest. */
+.scene-board:not(.is-calm) [data-flip] > .t-row {
+  background: color-mix(in oklab, var(--attn-bg) 42%, transparent);
+}
+
+.scene-board.is-calm [data-flip] .mark {
+  --rim: color-mix(in oklab, var(--fill) 42%, transparent);
 }
 
 .terms {
@@ -802,17 +1140,16 @@ h1 {
   top: var(--y);
   width: 38%;
   padding: 0.6em 0.8em 0.8em;
-  border: 1px solid var(--line);
   border-radius: 0.8em;
   background: #0c0c0b;
-  box-shadow: 0 0.6em 1.8em rgb(0 0 0 / 0.4);
+  box-shadow: 0 0.6em 1.8em rgb(0 0 0 / 0.28);
   opacity: 0;
 }
 
 .term b {
-  color: var(--soft-on-ink);
+  color: #bdb8ab;
   font-family: var(--mono);
-  font-size: 0.82em;
+  font-size: 0.86em;
   font-weight: 600;
 }
 
@@ -822,7 +1159,7 @@ h1 {
   height: 0.45em;
   margin-top: 0.55em;
   border-radius: 0.3em;
-  background: color-mix(in oklab, var(--ivory) 15%, transparent);
+  background: rgb(244 240 230 / 0.16);
 }
 
 .term span:nth-of-type(2) {
@@ -833,160 +1170,109 @@ h1 {
   width: 72%;
 }
 
-/* Scene: phone approvals */
+/* Scene: phone approvals. The native app is the same interface at phone width. */
 
 .scene-phone {
   display: grid;
-  grid-template-columns: minmax(0, 1.3fr) minmax(0, 0.8fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0.92fr);
   align-items: center;
   gap: 5%;
-  font-size: clamp(10.5px, 2.28cqi, 16.7px);
 }
 
-.scene-phone .row {
-  grid-template-columns: 2.4em minmax(0, 1fr) auto;
-  margin: 0.35em;
-}
-
-.ask {
-  display: grid;
-  gap: 0.3em;
-  margin: 0 0.9em 0.9em;
-  padding: 0.7em 0.9em;
-  border-radius: 0.8em;
-  background: var(--ink-3);
-}
-
-.ask-k {
-  color: var(--soft-on-ink);
-  font-size: 0.85em;
-  font-weight: 700;
-}
-
-.ask-tool {
-  display: flex;
-  align-items: baseline;
-  gap: 0.6em;
-}
-
-.ask-done {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35em;
-  color: var(--butter);
-  font-size: 0.9em;
-  font-weight: 800;
-  transition: opacity 200ms ease;
-}
-
+/* A plain handset: a rounded slab and nothing that belongs to one maker. */
 .handset {
   position: relative;
   justify-self: center;
   display: flex;
   flex-direction: column;
-  gap: 0.8em;
-  width: min(100%, 15.5em);
-  aspect-ratio: 9 / 16;
-  padding: 0.9em 0.8em;
-  border: 0.32em solid #33332f;
-  border-radius: 2.2em;
-  background: #0c0c0b;
+  gap: 0.7em;
+  width: min(100%, 17.5em);
+  max-height: 100%;
+  aspect-ratio: 9 / 17;
+  padding: 1.1em 0.8em 0.8em;
+  border: 0.34em solid var(--app-ink);
+  border-radius: 2.1em;
+  background: var(--app-page);
+  box-shadow: 0 0.8em 2em oklch(29.5% 0.01 70 / 0.14);
 }
 
 .hs-bar {
   display: flex;
   align-items: center;
   gap: 0.5em;
-  padding-bottom: 0.7em;
-  border-bottom: 1px solid var(--line);
+  padding-bottom: 0.6em;
+  border-bottom: 1px solid var(--app-line);
+  font-weight: 600;
 }
 
-.hs-avatar {
-  display: grid;
-  place-items: center;
-  width: 2em;
-  height: 2em;
-  overflow: hidden;
-  border-radius: 50%;
-  background: var(--ink-3);
-}
-
-.hs-avatar img {
-  width: 150%;
-  max-width: none;
-}
-
-.hs-app {
-  margin-left: auto;
-  color: var(--soft-on-ink);
+.hs-bar > .icon {
+  color: var(--app-muted);
   font-size: 1.2em;
 }
 
-.bubble {
+.hs-line {
+  color: var(--app-muted);
+}
+
+.scene-phone:not(.is-pending) .hs-bar .mark {
+  --rim: color-mix(in oklab, var(--fill) 42%, transparent);
+}
+
+/* The permission gate, as transcript/Prompt.svelte lays it out. */
+.hitl {
   display: grid;
-  gap: 0.2em;
+  gap: 0.45em;
   margin-top: auto;
-  padding: 0.7em;
-  border-radius: 1em 1em 1em 0.3em;
-  background: var(--ink-3);
-  transform-origin: 0 100%;
+  padding: 0.8em;
 }
 
-.bubble code,
-.ask code,
-.rule-card code {
-  font-size: 0.9em;
-}
-
-.tg-buttons {
+.hitl-head {
   display: flex;
-  gap: 0.3em;
-  margin-top: 0.5em;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4em 0.5em;
 }
 
-.tg-btn {
-  flex: 1 1 auto;
+.hitl-cmd {
+  padding: 0.2em 0 0.2em 0.7em;
+  border-left: 2px solid var(--app-line);
+}
+
+.hitl-more {
+  color: var(--app-muted);
+  font-size: 0.92em;
+  font-weight: 600;
+}
+
+.hitl-more::before {
+  margin-right: 0.45em;
+  content: "▸";
+}
+
+.hitl-foot {
+  justify-items: stretch;
+  align-items: center;
+  margin-top: 0.2em;
+}
+
+/* Approve and Deny stand at opposite ends, so a hand aiming at one can't land on the other. */
+.choice {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.4em;
+}
+
+.hitl-done {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  padding: 0.5em 0.2em;
-  border-radius: 0.5em;
-  background: color-mix(in oklab, var(--ivory) 13%, transparent);
-  font-size: 0.76em;
-  font-weight: 800;
-  white-space: nowrap;
-  transition:
-    background-color 180ms ease,
-    color 180ms ease;
+  gap: 0.35em;
+  color: var(--done-glyph);
+  font-weight: 600;
 }
 
-.tg-btn[data-allow] {
-  background: var(--ivory);
-  color: var(--ink);
-}
-
-.tg-check {
-  display: grid;
-  width: 1.15em;
-  margin-right: 0.2em;
-  overflow: hidden;
-  font-size: 1.15em;
-  transition: width 180ms var(--ease-out);
-}
-
-/* While the request is still open: nothing is ticked yet. */
-.scene-phone.is-pending .tg-btn[data-allow] {
-  background: color-mix(in oklab, var(--ivory) 13%, transparent);
-  color: var(--ivory);
-}
-
-.scene-phone.is-pending .tg-check {
-  width: 0;
-  margin-right: 0;
-}
-
-.scene-phone.is-pending .ask-done {
-  opacity: 0;
+.hitl-done .icon {
+  font-size: 1.2em;
 }
 
 .tap {
@@ -997,94 +1283,228 @@ h1 {
   height: 2.8em;
   margin: -1.4em 0 0 -1.4em;
   border-radius: 50%;
-  background: color-mix(in oklab, var(--ivory) 38%, transparent);
+  background: color-mix(in oklab, var(--app-ink) 22%, transparent);
   opacity: 0;
   pointer-events: none;
+}
+
+.aside {
+  display: grid;
+  align-content: center;
+  gap: 1.1em;
+  min-width: 0;
+}
+
+.aside-note {
+  color: var(--app-muted);
+  font-size: 0.95em;
+}
+
+.aside-note b {
+  display: block;
+  color: var(--app-ink);
+}
+
+.tg {
+  display: grid;
+  gap: 0.55em;
+  min-width: 0;
+  padding: 0.7em;
+}
+
+.tg-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.2em 0.4em;
+}
+
+.tg-head .icon {
+  color: #229ed9;
+  font-size: 1.25em;
+}
+
+.tg-msg {
+  display: grid;
+  gap: 0.15em;
+  padding: 0.5em 0.65em;
+  border-radius: 0.8em 0.8em 0.8em 0.25em;
+  background: var(--app-recess);
+  overflow-wrap: anywhere;
+}
+
+/* One row of three where there is room, as Telegram shows them; fewer across where there is not. */
+.tg-buttons {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(5.6em, 1fr));
+  gap: 0.3em;
+}
+
+.tg-btn {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  padding: 0.45em 0.2em;
+  border: 1px solid var(--app-line);
+  border-radius: 0.5em;
+  background: var(--app-recess);
+  font-size: 0.82em;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 /* Scene: rules */
 
 .scene-rules {
   display: grid;
-  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
   align-items: center;
   gap: 4%;
 }
 
 .talk {
   display: grid;
-  gap: 0.7em;
-  padding: 1em;
+  gap: 0.85em;
+  padding: 0.9em;
 }
 
-.msg {
-  justify-self: start;
-  max-width: 94%;
-  padding: 0.7em 0.9em;
-  border-radius: 0.9em 0.9em 0.9em 0.3em;
-  background: var(--ink-3);
+.turn {
+  display: grid;
+  gap: 0.15em;
 }
 
-.msg-rule {
-  justify-self: end;
-  border-radius: 0.9em 0.9em 0.3em 0.9em;
-  background: var(--butter);
-  color: var(--ink);
-  font-weight: 650;
-}
-
-.rule-tag {
-  display: flex;
+.who {
+  display: inline-flex;
   align-items: center;
-  gap: 0.35em;
-  margin-bottom: 0.25em;
-  font-size: 0.85em;
-  font-weight: 900;
+  gap: 0.3em;
+  color: var(--app-muted);
+  font-size: 0.86em;
+  font-weight: 600;
 }
 
-.rule-tag .icon {
+.who .icon {
   font-size: 1.25em;
 }
 
-mark {
-  padding: 0.05em 0.3em;
-  border-radius: 0.3em;
-  background: linear-gradient(var(--vermilion), var(--vermilion)) no-repeat 0 0 / 100% 100%;
-  color: var(--ink);
-  font-weight: 800;
+/* What the hub sent back on your behalf. */
+.turn-rule {
+  padding: 0.6em 0.7em;
+  border: 1px solid var(--app-line);
+  border-radius: 0.7em;
+  background: var(--app-recess);
 }
 
+.turn-rule .who {
+  color: var(--app-ink);
+}
+
+mark {
+  padding: 0.05em 0.25em;
+  border-radius: 0.3em;
+  background:
+    linear-gradient(
+      color-mix(in oklab, var(--app-brand) 30%, var(--app-raised)),
+      color-mix(in oklab, var(--app-brand) 30%, var(--app-raised))
+    )
+    no-repeat 0 0 / 100% 100%;
+  color: inherit;
+  font-weight: 600;
+}
+
+/* The rule, as its editor shows it (config/editors/RuleEditor.svelte). */
 .rule-card {
-  padding: 1em;
+  display: grid;
+  gap: 0.65em;
+  min-width: 0;
+  padding: 0.8em;
   transition: border-color 200ms ease;
 }
 
 .scene-rules.is-hit .rule-card {
-  border-color: var(--vermilion);
+  border-color: var(--app-brand);
 }
 
-.rule-card dl > div {
-  margin-top: 0.7em;
+.field {
+  display: grid;
+  gap: 0.3em;
 }
 
-.rule-card dt {
-  color: var(--soft-on-ink);
-  font-size: 0.82em;
-  font-weight: 700;
+.radios,
+.pickers {
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
-.rule-card dd {
-  font-weight: 750;
+.radios {
+  display: grid;
+  gap: 0.3em;
+}
+
+.radios li {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.1em 0.5em;
+  padding-left: 1.5em;
+  color: var(--app-muted);
+}
+
+.radios li::before {
+  position: absolute;
+  left: 0;
+  top: 0.2em;
+  width: 0.95em;
+  height: 0.95em;
+  border: 1px solid var(--app-nest);
+  border-radius: 50%;
+  content: "";
+}
+
+.radios .is-picked {
+  color: var(--app-ink);
+}
+
+.radios .is-picked::before {
+  border: 0.3em solid var(--app-ink);
+}
+
+.radios code {
+  padding: 0.05em 0.4em;
+  border-radius: 0.35em;
+  background: var(--app-recess);
+}
+
+.pickers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3em;
+}
+
+.pickers li {
+  padding: 0.15em 0.55em;
+  border: 1px solid var(--app-line);
+  border-radius: 0.5em;
+  color: var(--app-muted);
+  font-size: 0.9em;
+  white-space: nowrap;
+}
+
+.pickers .is-set {
+  background: var(--app-recess);
+  color: var(--app-ink);
+  font-weight: 600;
 }
 
 /* Scene: delegates */
 
 .scene-delegates {
   display: grid;
-  grid-template-rows: auto auto;
+  grid-template-rows: auto auto auto;
   align-content: center;
   justify-items: center;
-  gap: 16%;
+  gap: 8%;
 }
 
 .links {
@@ -1097,39 +1517,73 @@ mark {
 
 .links path {
   fill: none;
-  stroke: color-mix(in oklab, var(--ivory) 34%, transparent);
-  stroke-width: 2;
+  stroke: var(--app-nest);
+  stroke-width: 1.5;
   stroke-linecap: round;
 }
 
 .links circle {
-  fill: var(--butter);
+  fill: var(--app-brand);
   opacity: 0;
 }
 
 .node {
   position: relative;
   z-index: 1;
-  padding: 0.8em 0.9em;
+  min-width: 0;
+  padding: 0.65em 0.75em;
 }
 
 .parent {
   display: grid;
-  grid-template-columns: 2.4em minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 0.8em;
-  width: min(100%, 30em);
+  gap: 0.75em;
+  width: min(100%, 31em);
 }
 
-.scene .tally {
-  color: var(--butter);
-  font-weight: 800;
+.n-main {
+  display: grid;
+  min-width: 0;
+}
+
+.n-main b {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.n-sub {
+  justify-items: start;
+  color: var(--app-muted);
+  font-size: 0.9em;
+}
+
+.n-sub .tally {
+  color: var(--done-glyph);
+  font-weight: 600;
+}
+
+.n-on {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  min-width: 0;
+  color: var(--app-muted);
+  font-size: 0.9em;
+  white-space: nowrap;
+}
+
+.n-on .device {
+  width: auto;
+  height: 1.7em;
+  margin-left: 0.2em;
 }
 
 .kids {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 3.5%;
+  gap: 3%;
   width: 100%;
 }
 
@@ -1140,32 +1594,78 @@ mark {
   gap: 0.35em;
 }
 
-.kid .swap {
-  margin-top: 0.3em;
-  justify-items: start;
+.kid b {
+  line-height: 1.25;
 }
 
 .kid-type {
-  padding: 0.1em 0.55em;
+  max-width: 100%;
+  padding: 0.08em 0.5em;
   border-radius: 0.4em;
-  background: var(--butter);
-  color: var(--ink);
-  font-size: 0.8em;
-  font-weight: 900;
+  background: var(--app-ink);
+  color: var(--app-raised);
+  font-size: 0.82em;
+  font-weight: 600;
+}
+
+/* The session one delegate started on another machine sits under that delegate. */
+.grandkid {
+  width: 31.3%;
+}
+
+.n-state {
+  justify-items: start;
 }
 
 /* Scene: fleet sync */
 
 .scene-sync {
   display: grid;
-  grid-template-columns: minmax(0, 0.75fr) minmax(0, 1.25fr);
+  grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.18fr);
   align-items: center;
-  gap: 8%;
+  gap: 5%;
 }
 
 .hub {
   display: grid;
-  gap: 0.2em;
+  gap: 0.5em;
+}
+
+/* The line you paste, in the field the app gives it. */
+.paste {
+  display: grid;
+  gap: 0.35em;
+  padding-bottom: 0.35em;
+}
+
+.steps {
+  display: grid;
+}
+
+.steps > * {
+  grid-area: 1 / 1;
+  opacity: 0;
+}
+
+.steps > [data-step="skill"] {
+  opacity: 1;
+}
+
+.input {
+  min-width: 0;
+  padding: 0.5em 0.65em;
+  border: 1px solid var(--app-line);
+  border-radius: 0.6em;
+  background: var(--app-page);
+  white-space: nowrap;
+}
+
+.input code {
+  overflow: hidden;
+}
+
+.paste .app-btn {
+  justify-self: end;
 }
 
 .chips {
@@ -1176,43 +1676,65 @@ mark {
   list-style: none;
 }
 
-.hub .chips {
-  flex-direction: column;
-  align-items: flex-start;
-  margin-top: 0.6em;
-}
-
 .chip {
   display: inline-flex;
   align-items: center;
   gap: 0.35em;
-  padding: 0.28em 0.6em;
+  padding: 0.25em 0.6em;
+  border: 1px solid var(--app-line);
   border-radius: 0.5em;
-  background: var(--ink-3);
-  font-size: 0.84em;
-  font-weight: 750;
+  background: var(--app-recess);
+  font-size: 0.9em;
+  font-weight: 600;
   white-space: nowrap;
 }
 
 .chip .icon {
-  color: var(--butter);
-  font-size: 1.25em;
+  color: var(--app-muted);
+  font-size: 1.2em;
+}
+
+.chip-dot {
+  padding: 0.25em;
 }
 
 .machines {
   display: grid;
-  gap: 0.7em;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.3em 0.8em;
 }
 
 .machine {
+  --unit: 0.062em;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: 6.2em minmax(0, 1fr);
+  align-content: center;
   align-items: center;
-  gap: 0.5em 0.8em;
+  column-gap: 0.7em;
+  min-width: 0;
+}
+
+/* Each drawing keeps the size it has in the figure, so the four stay in scale with each other. */
+.machine .device {
+  grid-row: 1 / 4;
+  justify-self: center;
+  width: calc(var(--w) * var(--unit));
+  height: calc(var(--h) * var(--unit));
+}
+
+.machine b,
+.machine small {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .machine .chips {
-  grid-area: 2 / 1 / 3 / 3;
+  margin-top: 0.35em;
+}
+
+.scene-sync .lamp {
+  fill: var(--done-glyph);
 }
 
 /* Facts */
@@ -1221,7 +1743,18 @@ mark {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: clamp(20px, 2.6vw, 36px);
-  padding-block: clamp(36px, 5vw, 64px);
+  padding-block: clamp(40px, 5.5vw, 72px);
+}
+
+.facts-head {
+  grid-column: 1 / -1;
+}
+
+.facts-lede {
+  max-width: 62ch;
+  margin-top: 10px;
+  color: var(--soft-on-paper);
+  text-wrap: pretty;
 }
 
 .fact .icon {
@@ -1237,7 +1770,7 @@ mark {
 
 .fact p {
   margin-top: 4px;
-  color: var(--soft-on-butter);
+  color: var(--soft-on-paper);
   font-size: 0.97rem;
   text-wrap: pretty;
 }
@@ -1245,13 +1778,27 @@ mark {
 /* Cost */
 
 .cost .section-title {
+  max-width: calc(100% - clamp(110px, 16vw, 190px));
   margin-bottom: clamp(14px, 2vw, 22px);
 }
 
 .cost-grid {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
   gap: clamp(12px, 1.6vw, 20px);
+}
+
+/* Caw stands on the cards' top edge, as he does on the stage's. */
+.cost-caw {
+  position: absolute;
+  --caw-size: clamp(88px, 10.5vw, 136px);
+  --caw-delay: 500ms;
+  right: clamp(12px, 4%, 48px);
+  bottom: 100%;
+  width: var(--caw-size);
+  margin-bottom: calc(var(--caw-size) * -0.075);
+  pointer-events: none;
 }
 
 .card {
@@ -1263,7 +1810,7 @@ mark {
 
 .card-ink {
   background: var(--ink);
-  color: var(--ivory);
+  color: var(--paper);
 }
 
 .card-ink > p:not(.price) {
@@ -1275,9 +1822,10 @@ mark {
   background: var(--ink-3);
 }
 
-.card-ivory {
-  padding-right: clamp(110px, 15vw, 190px);
-  background: var(--ivory);
+/* Paper on a paper ground: an ink line marks its edge. */
+.card-paper {
+  border: 2px solid var(--ink);
+  background: var(--paper);
 }
 
 .card h3 {
@@ -1303,24 +1851,33 @@ mark {
   max-width: 46ch;
 }
 
+/* Apple's badge, as supplied: 40px high, with a quarter of that kept clear all round. */
+.store {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin-top: 8px;
+  margin-left: -10px;
+}
+
+.store-badge {
+  width: auto;
+  height: 40px;
+  margin: 10px;
+}
+
 .soon {
-  margin-top: 10px;
   font-weight: 900;
 }
 
 .card-link {
   display: inline-flex;
   align-items: center;
+  gap: 8px;
   min-height: 44px;
   margin-top: 6px;
   font-weight: 800;
-}
-
-.card-caw {
-  position: absolute;
-  right: clamp(8px, 1.6vw, 20px);
-  bottom: 0;
-  width: clamp(96px, 13vw, 168px);
 }
 
 /* Footer */
@@ -1338,7 +1895,7 @@ mark {
 }
 
 .foot-line {
-  color: var(--soft-on-butter);
+  color: var(--soft-on-paper);
   font-weight: 700;
 }
 
@@ -1351,6 +1908,7 @@ mark {
 .foot-nav a {
   display: inline-flex;
   align-items: center;
+  gap: 7px;
   min-height: 44px;
   font-weight: 800;
 }
@@ -1359,16 +1917,16 @@ mark {
 
 @media (hover: hover) and (pointer: fine) {
   .btn-ink:hover {
-    background: color-mix(in oklab, var(--ivory) 16%, var(--ink));
+    background: color-mix(in oklab, var(--paper) 16%, var(--ink));
   }
 
   .copy:hover {
-    background: color-mix(in oklab, var(--ivory) 14%, var(--vermilion));
+    background: color-mix(in oklab, var(--paper) 14%, var(--vermilion));
   }
 
   .tab:hover,
   .autoplay:hover {
-    color: var(--ivory);
+    color: var(--paper);
   }
 
   .top-link:hover,
@@ -1393,7 +1951,7 @@ mark {
   .hero-art {
     justify-self: start;
     width: clamp(128px, 36vw, 200px);
-    margin-left: 8%;
+    margin-left: 4%;
   }
 
   .stage {
@@ -1449,6 +2007,22 @@ mark {
 
   .facts {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 22px 18px;
+  }
+
+  .fact .icon {
+    font-size: 1.8rem;
+  }
+
+  .fact h3 {
+    margin-top: 6px;
+    font-size: 1.05rem;
+    line-height: 1.2;
+  }
+
+  .fact p {
+    font-size: 0.92rem;
+    line-height: 1.4;
   }
 
   .cost-grid {
@@ -1486,14 +2060,10 @@ mark {
     padding: 4.5%;
   }
 
-  .r-agent {
+  /* The third project steps out so the tree fits the shorter frame. */
+  .tree-extra,
+  .t-kind {
     display: none;
-  }
-
-  .row {
-    grid-template-columns: 2.2em minmax(0, 1fr) auto;
-    gap: 0.6em;
-    padding: 0.45em 0.5em;
   }
 
   .term {
@@ -1501,23 +2071,30 @@ mark {
   }
 
   .scene-phone {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto minmax(0, 1fr);
-    align-items: start;
+    grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
     gap: 4%;
   }
 
   .handset {
-    width: 76%;
-    height: 100%;
-    aspect-ratio: auto;
-    border-bottom: 0;
-    border-radius: 1.8em 1.8em 0 0;
-    margin-bottom: -6%;
+    width: 100%;
+    padding: 0.9em 0.6em 0.6em;
+    border-radius: 1.8em;
   }
 
-  .bubble {
-    margin-top: 0;
+  .hitl {
+    padding: 0.6em;
+  }
+
+  .hitl-more {
+    display: none;
+  }
+
+  .choice .app-btn {
+    padding: 0 0.5em;
+  }
+
+  .tg {
+    padding: 0.55em;
   }
 
   .scene-rules {
@@ -1528,50 +2105,70 @@ mark {
 
   .rule-card {
     order: -1;
-    padding: 0.7em 0.9em;
+    gap: 0.45em;
+    padding: 0.65em 0.8em;
   }
 
-  .rule-card dl > div {
-    margin-top: 0.3em;
-  }
-
-  .rule-card dl > div + div {
+  .field-reply,
+  .radios small {
     display: none;
   }
 
   .talk {
-    padding: 0.8em;
+    gap: 0.6em;
+    padding: 0.7em;
   }
 
   .scene-delegates {
-    gap: 12%;
+    gap: 6%;
   }
 
   .node {
-    padding: 0.6em 0.65em;
-  }
-
-  .parent {
-    grid-template-columns: 2.2em minmax(0, 1fr) auto;
-    gap: 0.6em;
+    padding: 0.55em 0.6em;
   }
 
   .kids {
     gap: 2.5%;
   }
 
+  .grandkid {
+    width: 46%;
+  }
+
   .scene-sync {
     grid-template-columns: minmax(0, 1fr);
     align-content: center;
-    gap: 5%;
+    gap: 4%;
   }
 
-  .hub .chips {
-    flex-direction: row;
+  .hub {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+  }
+
+  .paste {
+    grid-column: 1 / -1;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end;
+    padding-bottom: 0;
+  }
+
+  .paste > .field-k {
+    grid-column: 1 / -1;
+  }
+
+  .machines {
+    gap: 0.7em 0.5em;
+  }
+
+  .machine {
+    --unit: 0.04em;
+    grid-template-columns: 4.2em minmax(0, 1fr);
+    column-gap: 0.5em;
   }
 }
 
-/* Page-load intro. It runs in CSS so it starts with the first paint. */
+/* Page-load intro for the words. It runs in CSS so it starts with the first paint. */
 
 @media (prefers-reduced-motion: no-preference) {
   html {
@@ -1589,27 +2186,6 @@ mark {
   .install {
     animation: rise 600ms var(--ease-out) 170ms both;
   }
-
-  .hero-caw {
-    transform-origin: 50% 100%;
-    animation: hop 720ms var(--ease-hop) 120ms both;
-  }
-
-  .ticks path {
-    animation: tick 320ms var(--ease-out) both;
-  }
-
-  .ticks path:nth-child(1) {
-    animation-delay: 640ms;
-  }
-
-  .ticks path:nth-child(2) {
-    animation-delay: 700ms;
-  }
-
-  .ticks path:nth-child(3) {
-    animation-delay: 760ms;
-  }
 }
 
 @keyframes rise {
@@ -1620,20 +2196,6 @@ mark {
   }
 }
 
-@keyframes hop {
-  from {
-    opacity: 0;
-    transform: translateY(44px) scale(0.94);
-  }
-}
-
-@keyframes tick {
-  from {
-    stroke-dashoffset: -40;
-    opacity: 0;
-  }
-}
-
 /* Reduced motion: the same page, standing still. Fades stay. */
 
 @media (prefers-reduced-motion: reduce) {
@@ -1641,10 +2203,7 @@ mark {
   .copy,
   .tab,
   .autoplay,
-  .copy-icons > *,
-  .tg-check,
-  .percher,
-  .percher.is-on {
+  .copy-icons > * {
     transition: none;
   }
 
@@ -1675,7 +2234,6 @@ mark {
 
 .stage.is-instant .panel,
 .stage.is-instant .panel > .scene-frame,
-.stage.is-instant .panel > .blurb,
-.stage.is-instant .percher {
+.stage.is-instant .panel > .blurb {
   transition: none;
 }

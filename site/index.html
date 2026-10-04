@@ -8,7 +8,7 @@
       name="description"
       content="Caw&amp;Co is a self-hosted control plane for Claude Code, OpenCode and pi. One browser board shows every machine, project and session, and you answer the ones that are waiting."
     />
-    <meta name="theme-color" content="#F2D36B" />
+    <meta name="theme-color" content="#F4F0E6" />
     <meta property="og:title" content="Caw&amp;Co: one board for every coding agent you run" />
     <meta
       property="og:description"
@@ -35,32 +35,36 @@
   <body>
     <a class="skip" href="#main">Skip to content</a>
 
+    <!-- The three agents' glyphs, as the product draws them (HarnessGlyph.svelte). -->
+    <svg class="defs" width="0" height="0" aria-hidden="true">
+      <symbol id="hg-claude" viewBox="0 0 24 24"><path d="M12 4l7 4v8l-7 4-7-4V8z" /></symbol>
+      <symbol id="hg-opencode" viewBox="0 0 24 24"><path d="M9 8l-4 4 4 4M15 8l4 4-4 4" /></symbol>
+      <symbol id="hg-pi" viewBox="0 0 24 24"><path d="M5 7.5h14M9 7.5v9M15 7.5v6.5a2.5 2.5 0 0 0 4 0" /></symbol>
+    </svg>
+
     <header class="top wrap">
       <a class="wordmark" href="./" aria-label="Caw&amp;Co home">Caw&amp;Co</a>
       <nav class="top-nav" aria-label="Site">
-        <a class="top-link" href="https://github.com/Bewinxed/cawco">GitHub</a>
-        <a class="btn btn-ink" href="#install">Install</a>
+        <a class="top-link" href="https://github.com/Bewinxed/cawco"><i data-mark="github"></i>GitHub</a>
+        <a class="btn btn-ink btn-app" href="#install">
+          <img class="app-icon" src="/src/assets/brand/app-icon.webp" width="84" height="84" alt="">Install
+        </a>
       </nav>
     </header>
 
     <main id="main">
       <section class="hero wrap">
-        <div class="hero-art" data-hero-art>
-          <svg class="ticks" viewBox="0 0 120 120" aria-hidden="true">
-            <path data-tick d="M20 78 L46 86" />
-            <path data-tick d="M30 40 L52 62" />
-            <path data-tick d="M70 18 L76 46" />
-          </svg>
-          <img data-caw="hero" class="hero-caw" fetchpriority="high" decoding="async" alt="Caw, a round black crow with vermilion wing tips, cawing with one wing raised">
+        <div class="hero-art">
+          <i data-caw="ready-enter-distance" role="img" aria-label="Caw, a small fluffy black crow with vermilion wing tips"></i>
         </div>
         <div class="hero-copy">
-          <h1 data-hero-title>One board for every coding agent you run.</h1>
-          <p class="lede" data-hero-fade>
+          <h1>One board for every coding agent you run.</h1>
+          <p class="lede">
             Caw&amp;Co is a self-hosted control plane for Claude Code, OpenCode and pi. A small
             daemon on each machine reports to a hub on your own network. One browser tab then shows
             you every session and lets you answer the ones that are waiting.
           </p>
-          <div class="install" id="install" data-hero-fade>
+          <div class="install" id="install">
             <p class="install-label">Install on your first machine</p>
             <div class="cmd">
               <code data-cmd>curl -fsSL https://cawco.dev/install.sh | sh</code>
@@ -86,14 +90,8 @@
       <section class="features wrap" aria-labelledby="features-title">
         <h2 id="features-title" class="section-title">What a wall of terminal tabs can't do</h2>
 
-        <div class="stage" data-stage>
-          <div class="perch" aria-hidden="true">
-            <img data-caw="board" class="percher is-on" data-percher="board" decoding="async" alt="">
-            <img data-caw="phone" class="percher" data-percher="phone" decoding="async" alt="">
-            <img data-caw="rules" class="percher" data-percher="rules" decoding="async" alt="">
-            <img data-caw="delegates" class="percher" data-percher="delegates" decoding="async" alt="">
-            <img data-caw="sync" class="percher" data-percher="sync" decoding="async" alt="">
-          </div>
+        <div class="stage" data-stage data-arrives>
+          <div class="perch" aria-hidden="true"><i data-caw="needs-you-to-ready" data-wait></i></div>
 
           <div class="tabs" role="tablist" aria-label="What Caw&amp;Co does">
             <button class="tab" role="tab" type="button" id="tab-board" aria-controls="panel-board" aria-selected="true" data-tab="board">
@@ -124,51 +122,120 @@
               <div class="scene scene-board" aria-hidden="true">
                 <div class="win">
                   <div class="win-bar">
-                    <b>Fleet</b><span class="dim">3 machines online</span>
-                    <span class="needs" data-needs><b>1</b> needs you</span>
+                    <b>Projects</b>
+                    <span class="bar-meta"><i data-icon="server-2"></i>3 machines online</span>
+                    <span class="pill pill-attn" data-needs><i data-icon="arrow-up"></i>1 needs you</span>
                   </div>
-                  <ul class="rows">
-                    <li class="group" data-group>studio-mac</li>
-                    <li class="row" data-row>
-                      <span class="glyph"><img data-caw="statusWorking" alt=""></span>
-                      <span class="r-main"><b>Fix retry loop</b><small>cawco</small></span>
-                      <span class="r-agent">Claude Code</span>
-                      <span class="st st-working">working</span>
+                  <ul class="tree">
+                    <li>
+                      <div class="t-row" data-group>
+                        <span class="mark" style="--fill: var(--mark-2)"></span>
+                        <span class="t-name">cawco</span>
+                        <span class="t-on"><i data-device="cloud"></i>cloud</span>
+                      </div>
+                      <ul class="nest">
+                        <li data-row>
+                          <div class="t-row">
+                            <span class="mark" data-rim="live" style="--fill: var(--mark-2)"><i data-icon="rocket"></i></span>
+                            <span class="t-name">Fix retry loop</span>
+                            <svg class="hg" aria-hidden="true"><use href="#hg-claude" /></svg>
+                            <span class="t-age">2m</span>
+                          </div>
+                        </li>
+                        <li data-row>
+                          <div class="t-row">
+                            <span class="mark mark-deck" data-rim="live" style="--fill: var(--mark-2)"><b>2</b></span>
+                            <span class="t-name">Ship the 1.4 release</span>
+                            <svg class="hg" aria-hidden="true"><use href="#hg-claude" /></svg>
+                            <span class="t-age">now</span>
+                          </div>
+                          <ul class="nest" data-branch>
+                            <li data-leaf>
+                              <div class="t-row">
+                                <span class="mark" data-rim="live" style="--fill: var(--mark-2)"><i data-icon="box"></i></span>
+                                <span class="t-name">Build and smoke test</span>
+                                <svg class="hg" aria-hidden="true"><use href="#hg-opencode" /></svg>
+                                <span class="t-age">1m</span>
+                              </div>
+                            </li>
+                            <li data-leaf>
+                              <div class="t-row">
+                                <span class="mark" data-rim="live" style="--fill: var(--mark-2)"><i data-icon="book"></i></span>
+                                <span class="t-name">Review the diff</span>
+                                <svg class="hg" aria-hidden="true"><use href="#hg-pi" /></svg>
+                                <span class="t-age">now</span>
+                              </div>
+                            </li>
+                          </ul>
+                        </li>
+                      </ul>
                     </li>
-                    <li class="row" data-row>
-                      <span class="glyph"><img data-caw="statusDone" alt=""></span>
-                      <span class="r-main"><b>Rewrite hero copy</b><small>site</small></span>
-                      <span class="r-agent">OpenCode</span>
-                      <span class="st st-done">done</span>
+                    <li>
+                      <div class="t-row" data-group>
+                        <span class="mark" style="--fill: var(--mark-5)"></span>
+                        <span class="t-name">api</span>
+                        <span class="t-on"><i data-device="vm"></i>dev-vm</span>
+                      </div>
+                      <ul class="nest">
+                        <li data-row data-flip>
+                          <div class="t-row">
+                            <span class="mark" data-rim="attn" style="--fill: var(--mark-5)"><i data-icon="bolt"></i></span>
+                            <span class="t-name">Migrate auth tables</span>
+                            <svg class="hg" aria-hidden="true"><use href="#hg-pi" /></svg>
+                            <span class="t-age swap"><span data-a>now</span><span class="pill pill-attn" data-b>needs you</span></span>
+                          </div>
+                        </li>
+                        <li data-row>
+                          <div class="t-row">
+                            <span class="mark mark-run" data-rim="live"><i data-icon="routing-2"></i></span>
+                            <span class="t-name">Nightly release check</span>
+                            <span class="t-kind">workflow</span>
+                            <span class="t-age">now</span>
+                          </div>
+                          <ul class="nest" data-branch>
+                            <li data-leaf>
+                              <div class="t-row t-step">
+                                <span class="step step-done"><i data-icon="check-circle"></i></span>
+                                <span class="t-name">Build</span>
+                                <span class="t-age">48s</span>
+                              </div>
+                            </li>
+                            <li data-leaf>
+                              <div class="t-row t-step">
+                                <span class="step step-live"><i data-icon="play-circle"></i></span>
+                                <span class="t-name">Publish the notes</span>
+                                <span class="t-age">now</span>
+                              </div>
+                            </li>
+                          </ul>
+                        </li>
+                      </ul>
                     </li>
-                    <li class="group" data-group>nixbox</li>
-                    <li class="row" data-row data-flip>
-                      <span class="glyph swap"><img data-caw="statusWorking" data-a alt=""><img data-caw="statusNeedsYou" data-b alt=""></span>
-                      <span class="r-main"><b>Migrate auth tables</b><small>api</small></span>
-                      <span class="r-agent">pi</span>
-                      <span class="swap"><span class="st st-working" data-a>working</span><span class="st st-needs" data-b>needs you</span></span>
-                    </li>
-                    <li class="row" data-row>
-                      <span class="glyph"><img data-caw="statusWorking" alt=""></span>
-                      <span class="r-main"><b>Trace flaky test</b><small>api</small></span>
-                      <span class="r-agent">Claude Code</span>
-                      <span class="st st-working">working</span>
-                    </li>
-                    <li class="group" data-group>mini</li>
-                    <li class="row" data-row>
-                      <span class="glyph"><img data-caw="statusIdle" alt=""></span>
-                      <span class="r-main"><b>Build widget target</b><small>ios</small></span>
-                      <span class="r-agent">Claude Code</span>
-                      <span class="st st-idle">idle</span>
+                    <li class="tree-extra">
+                      <div class="t-row" data-group>
+                        <span class="mark" style="--fill: var(--mark-8)"></span>
+                        <span class="t-name">ios</span>
+                        <span class="t-on"><i data-device="laptop"></i>laptop</span>
+                      </div>
+                      <ul class="nest">
+                        <li data-row>
+                          <div class="t-row">
+                            <span class="mark" style="--fill: var(--mark-8)"><i data-icon="leaf"></i></span>
+                            <span class="t-name">Build widget target</span>
+                            <svg class="hg" aria-hidden="true"><use href="#hg-claude" /></svg>
+                            <span class="t-age">14m</span>
+                          </div>
+                        </li>
+                      </ul>
                     </li>
                   </ul>
                 </div>
                 <div class="terms">
-                  <div class="term" data-term style="--x: 3%; --y: 6%; --r: -5deg"><b>ssh studio-mac</b><span></span><span></span><span></span></div>
+                  <div class="term" data-term style="--x: 3%; --y: 6%; --r: -5deg"><b>ssh cloud</b><span></span><span></span><span></span></div>
                   <div class="term" data-term style="--x: 52%; --y: 3%; --r: 4deg"><b>tmux: 2</b><span></span><span></span><span></span></div>
-                  <div class="term" data-term style="--x: 24%; --y: 34%; --r: 2deg"><b>ssh nixbox</b><span></span><span></span><span></span></div>
+                  <div class="term" data-term style="--x: 24%; --y: 34%; --r: 2deg"><b>ssh dev-vm</b><span></span><span></span><span></span></div>
                   <div class="term" data-term style="--x: 58%; --y: 46%; --r: -3deg"><b>tmux: 4</b><span></span><span></span><span></span></div>
-                  <div class="term" data-term style="--x: 8%; --y: 62%; --r: 5deg"><b>ssh mini</b><span></span><span></span><span></span></div>
+                  <div class="term tree-extra" data-term style="--x: 8%; --y: 62%; --r: 5deg"><b>ssh laptop</b><span></span><span></span><span></span></div>
                 </div>
               </div>
             </div>
@@ -176,7 +243,7 @@
               <h3>See every session at once</h3>
               <dl class="versus">
                 <div><dt>The usual way</dt><dd>You keep one terminal tab per agent and one SSH session per machine, and you find out a session is stuck when you happen to look at it.</dd></div>
-                <div class="with"><dt>With Caw&amp;Co</dt><dd>Every session on every machine is a row on one board. Caw&amp;Co reads each status from the machine when you look, so a quiet board means nothing is waiting on you.</dd></div>
+                <div class="with"><dt>With Caw&amp;Co</dt><dd>Every session on every machine is a row under its project, and its delegates fold open under it. A workflow chains steps, checks and questions for you; its run shows each step the same way.</dd></div>
               </dl>
             </div>
           </div>
@@ -185,36 +252,46 @@
           <div class="panel" role="tabpanel" id="panel-phone" aria-labelledby="tab-phone" data-panel="phone">
             <div class="scene-frame">
               <div class="scene scene-phone" aria-hidden="true">
-                <div class="win">
-                  <div class="win-bar"><b>Fleet</b><span class="dim">nixbox</span></div>
-                  <div class="row" data-row>
-                    <span class="glyph swap"><img data-caw="statusNeedsYou" data-a alt=""><img data-caw="statusWorking" data-b alt=""></span>
-                    <span class="r-main"><b>Migrate auth tables</b><small>api · nixbox · pi</small></span>
-                    <span class="swap"><span class="st st-needs" data-a>needs you</span><span class="st st-working" data-b>working</span></span>
-                  </div>
-                  <div class="ask" data-ask>
-                    <span class="ask-k">Wants to run</span>
-                    <span class="ask-tool"><b>Bash</b><code>bun run db:push</code></span>
-                    <span class="ask-done" data-ask-done><i data-icon="check-circle"></i>Allowed</span>
-                  </div>
-                </div>
                 <div class="handset" data-handset>
                   <div class="hs-bar">
-                    <span class="hs-avatar"><img data-caw="statusNeedsYou" alt=""></span>
-                    <b>Caw&amp;Co</b><small>bot</small>
-                    <span class="hs-app"><i data-icon="plain"></i></span>
+                    <i data-icon="alt-arrow-left"></i>
+                    <span class="mark" data-rim="attn" style="--fill: var(--mark-5)"><i data-icon="bolt"></i></span>
+                    <span class="t-name">Migrate auth tables</span>
+                    <svg class="hg" aria-hidden="true"><use href="#hg-pi" /></svg>
                   </div>
-                  <div class="bubble" data-bubble>
-                    <small>api · nixbox</small>
-                    <b>Bash</b>
-                    <code>bun run db:push</code>
+                  <p class="hs-line">The schema is ready. Pushing it to the database next.</p>
+                  <div class="hitl" data-ask>
+                    <div class="hitl-head">
+                      <span class="swap pill-swap"><span class="pill pill-attn" data-a><i data-icon="arrow-up"></i>needs you</span><span class="pill pill-done" data-b>answered</span></span>
+                      <b>Permission: Bash</b>
+                    </div>
+                    <p class="hitl-lede">Run a shell command</p>
+                    <code class="hitl-cmd">bun run db:push</code>
+                    <span class="hitl-more">What this touches</span>
+                    <div class="swap hitl-foot">
+                      <div class="choice" data-a>
+                        <span class="app-btn app-btn-yes" data-allow><i data-icon="check-circle"></i>Approve</span>
+                        <span class="app-btn"><i data-icon="close-circle"></i>Deny</span>
+                      </div>
+                      <span class="hitl-done" data-b><i data-icon="check-circle"></i>Approved</span>
+                    </div>
+                  </div>
+                  <span class="tap" data-tap></span>
+                </div>
+                <div class="aside">
+                  <p class="aside-note"><b>The native app</b>iPhone, iPad and Mac. Not released yet.</p>
+                  <div class="tg" data-tg>
+                    <div class="tg-head"><i data-mark="telegram"></i><b>Telegram</b><small>works today</small></div>
+                    <div class="tg-msg">
+                      <b>Bash</b>
+                      <code>bun run db:push</code>
+                    </div>
                     <div class="tg-buttons">
-                      <span class="tg-btn" data-allow><span class="tg-check"><i data-icon="check-circle"></i></span>Allow</span>
+                      <span class="tg-btn">Allow</span>
                       <span class="tg-btn">Always allow</span>
                       <span class="tg-btn">Deny</span>
                     </div>
                   </div>
-                  <span class="tap" data-tap></span>
                 </div>
               </div>
             </div>
@@ -222,7 +299,7 @@
               <h3>Answer a prompt from your phone</h3>
               <dl class="versus">
                 <div><dt>The usual way</dt><dd>The agent stops at a permission prompt and waits until you are back at your desk.</dd></div>
-                <div class="with"><dt>With Caw&amp;Co</dt><dd>The prompt arrives in Telegram with Allow and Deny. Tap one and the session carries on.</dd></div>
+                <div class="with"><dt>With Caw&amp;Co</dt><dd>The prompt arrives in Telegram today, with Allow and Deny. The native app for iPhone, iPad and Mac is the same board at phone width, so you read the request and approve it there. It isn't released yet.</dd></div>
               </dl>
             </div>
           </div>
@@ -232,31 +309,58 @@
             <div class="scene-frame">
               <div class="scene scene-rules" aria-hidden="true">
                 <div class="win">
-                  <div class="win-bar"><b>Trace flaky test</b><span class="dim">api · nixbox · Claude Code</span></div>
+                  <div class="win-bar">
+                    <span class="mark" data-rim="live" style="--fill: var(--mark-5)"><i data-icon="fire"></i></span>
+                    <b>Trace flaky test</b>
+                    <svg class="hg" aria-hidden="true"><use href="#hg-claude" /></svg>
+                    <span class="bar-meta">dev-vm</span>
+                  </div>
                   <div class="talk">
-                    <p class="msg" data-msg1>Patched the retry helper, so the test <mark data-hit>should work</mark> now.</p>
-                    <p class="msg msg-rule" data-reply>
-                      <span class="rule-tag"><i data-icon="chat-round-check"></i>Rule: Unverified claim</span>
-                      You said it should work. Run it and report what actually happened, with the output.
-                    </p>
-                    <p class="msg" data-msg2>Ran it. 2 of 14 tests fail, both in the timeout path. Fixing those.</p>
+                    <div class="turn">
+                      <span class="who">Claude Code</span>
+                      <p data-msg1>Patched the retry helper, so the test <mark data-hit>should work</mark> now.</p>
+                    </div>
+                    <div class="turn turn-rule" data-reply>
+                      <span class="who"><i data-icon="chat-round-check"></i>Rule: Unverified claim</span>
+                      <p>You said it should work. Run it and report what actually happened, with the output.</p>
+                    </div>
+                    <div class="turn" data-msg2>
+                      <span class="who">Claude Code</span>
+                      <p>Ran it. 2 of 14 tests fail, both in the timeout path. Fixing those.</p>
+                    </div>
                   </div>
                 </div>
                 <div class="rule-card" data-card>
-                  <b>Unverified claim</b>
-                  <dl>
-                    <div><dt>When a session says</dt><dd><code>should work</code></dd></div>
-                    <div><dt>Send this reply</dt><dd>Run it and report what actually happened.</dd></div>
-                    <div><dt>Applies to</dt><dd>Every session</dd></div>
-                  </dl>
+                  <b class="rule-name">Unverified claim</b>
+                  <div class="field">
+                    <span class="field-k">Match</span>
+                    <ul class="radios">
+                      <li class="is-picked">A phrase<code>should work</code></li>
+                      <li>A regular expression</li>
+                      <li>Meaning<small>Jev answers yes or no</small></li>
+                    </ul>
+                  </div>
+                  <div class="field field-reply">
+                    <span class="field-k">Reply</span>
+                    <p>Run it and report what actually happened.</p>
+                  </div>
+                  <div class="field">
+                    <span class="field-k">Where it applies</span>
+                    <ul class="pickers">
+                      <li>Every machine</li>
+                      <li>Every project</li>
+                      <li class="is-set">Claude Code</li>
+                      <li class="is-set">opus</li>
+                    </ul>
+                  </div>
                 </div>
               </div>
             </div>
             <div class="blurb">
               <h3>Write your standing reply once</h3>
               <dl class="versus">
-                <div><dt>The usual way</dt><dd>You read each transcript to catch the same habits, like an agent saying a fix should work before running it, and you type the same reply again.</dd></div>
-                <div class="with"><dt>With Caw&amp;Co</dt><dd>A rule watches what every session says. When the phrase shows up, the hub sends your reply and the session acts on it.</dd></div>
+                <div><dt>The usual way</dt><dd>You read each transcript to catch the same habits, like a fix that "should work" but was never run, and you type the same reply again.</dd></div>
+                <div class="with"><dt>With Caw&amp;Co</dt><dd>A rule watches what every session says and sends your reply when a phrase or a regular expression matches. Connect Jev and it can match by meaning. Narrow a rule to one machine, project, agent or model.</dd></div>
               </dl>
             </div>
           </div>
@@ -266,39 +370,57 @@
             <div class="scene-frame">
               <div class="scene scene-delegates" aria-hidden="true">
                 <svg class="links" data-links aria-hidden="true"></svg>
-                <div class="node parent" data-parent>
-                  <span class="glyph swap"><img data-caw="statusWorking" data-a alt=""><img data-caw="statusDone" data-b alt=""></span>
-                  <span class="r-main"><b>Ship the 1.4 release</b><span class="swap"><small data-a>cawco · Claude Code</small><small class="tally" data-b>3 delegates reported</small></span></span>
-                  <span class="swap"><span class="st st-working" data-a>working</span><span class="st st-done" data-b>done</span></span>
+                <div class="node parent" data-node="parent">
+                  <span class="mark mark-deck" data-rim="live" style="--fill: var(--mark-2)"><b>3</b></span>
+                  <span class="n-main">
+                    <b>Ship the 1.4 release</b>
+                    <span class="swap n-sub"><span data-a>orchestrator, working</span><span class="tally" data-b>3 delegates reported</span></span>
+                  </span>
+                  <span class="n-on"><svg class="hg" aria-hidden="true"><use href="#hg-claude" /></svg>opus<i data-device="cloud"></i></span>
                 </div>
                 <div class="kids">
-                  <div class="node kid" data-kid>
+                  <div class="node kid" data-node="research" data-from="parent">
                     <span class="kid-type">research</span>
                     <b>Read the changelog sources</b>
-                    <small>pi</small>
-                    <span class="swap"><span class="st st-working" data-a>working</span><span class="st st-done" data-b>done</span></span>
+                    <span class="n-on"><svg class="hg" aria-hidden="true"><use href="#hg-pi" /></svg>pi<i data-device="cloud"></i></span>
+                    <span class="swap n-state"><span class="st st-live" data-a>working</span><span class="st st-done" data-b>done</span></span>
                   </div>
-                  <div class="node kid" data-kid>
+                  <div class="node kid" data-node="build" data-from="parent">
                     <span class="kid-type">build</span>
                     <b>Build and smoke test</b>
-                    <small>OpenCode</small>
-                    <span class="swap"><span class="st st-working" data-a>working</span><span class="st st-done" data-b>done</span></span>
+                    <span class="n-on"><svg class="hg" aria-hidden="true"><use href="#hg-opencode" /></svg>deepseek<i data-device="cloud"></i></span>
+                    <span class="swap n-state"><span class="st st-live" data-a>working</span><span class="st st-done" data-b>done</span></span>
                   </div>
-                  <div class="node kid" data-kid>
+                  <div class="node kid" data-node="review" data-from="parent">
                     <span class="kid-type">review</span>
                     <b>Review the diff</b>
-                    <small>Claude Code</small>
-                    <span class="swap"><span class="st st-working" data-a>working</span><span class="st st-done" data-b>done</span></span>
+                    <span class="n-on"><svg class="hg" aria-hidden="true"><use href="#hg-claude" /></svg>sonnet<i data-device="cloud"></i></span>
+                    <span class="swap n-state"><span class="st st-live" data-a>working</span><span class="st st-done" data-b>done</span></span>
                   </div>
+                </div>
+                <div class="node kid grandkid" data-node="simulator" data-from="build">
+                  <span class="kid-type">started on the laptop</span>
+                  <b>Run it on the simulator</b>
+                  <span class="n-on"><svg class="hg" aria-hidden="true"><use href="#hg-claude" /></svg>sonnet<i data-device="laptop"></i></span>
+                  <span class="swap n-state"><span class="st st-live" data-a>working</span><span class="st st-done" data-b>done</span></span>
                 </div>
               </div>
             </div>
             <div class="blurb">
               <h3>Let a session hand work to another</h3>
-              <dl class="versus">
-                <div><dt>The usual way</dt><dd>You copy the task into a second terminal, wait, and paste the answer back.</dd></div>
-                <div class="with"><dt>With Caw&amp;Co</dt><dd>A session can start a delegate: a separate session with the agent, model and effort you set for that kind of work. It reports back when it finishes. A workflow chains several steps and retries one that fails.</dd></div>
-              </dl>
+              <table class="compare">
+                <caption class="sr-only">A subagent compared with a delegate</caption>
+                <thead>
+                  <tr><td></td><th scope="col">Subagent</th><th scope="col">Delegate</th></tr>
+                </thead>
+                <tbody>
+                  <tr><th scope="row">Agent</th><td>its parent's</td><td>any on your fleet: Claude Code to OpenCode, and back</td></tr>
+                  <tr><th scope="row">Session</th><td>its parent's</td><td>its own, open to you</td></tr>
+                  <tr><th scope="row">Done</th><td>when it answers</td><td>when its parent's checks pass</td></tr>
+                  <tr><th scope="row">Checkout</th><td>usually shared</td><td>always its own clone</td></tr>
+                </tbody>
+              </table>
+              <p class="compare-note">On Claude Code the fleet turns the built-in subagent tool off by default, a setting you can change. A session can also start one on another machine: build on the big box, run the iOS simulator on the Mac.</p>
             </div>
           </div>
 
@@ -307,40 +429,67 @@
             <div class="scene-frame">
               <div class="scene scene-sync" aria-hidden="true">
                 <div class="node hub" data-hub>
-                  <b>Hub</b><small>Fleet tools</small>
+                  <!-- One line at a time: a skill's install command, an MCP package, a plugin marketplace. -->
+                  <div class="paste">
+                    <span class="field-k steps">
+                      <span data-step="skill">Fetch skill, source</span>
+                      <span data-step="mcp">MCP server, bunx package</span>
+                      <span data-step="market">Link marketplace, source</span>
+                    </span>
+                    <span class="input steps">
+                      <code data-step="skill" data-line>bunx skills add acme/review</code>
+                      <code data-step="mcp" data-line>@acme/github-mcp</code>
+                      <code data-step="market" data-line>acme/plugins</code>
+                    </span>
+                    <span class="app-btn app-btn-solid steps" data-add>
+                      <span data-step="skill">Fetch skill</span>
+                      <span data-step="mcp">Add server</span>
+                      <span data-step="market">Link</span>
+                    </span>
+                  </div>
+                  <span class="field-k">On the hub</span>
                   <ul class="chips">
-                    <li class="chip" data-src="mcp"><i data-icon="plug-circle"></i>github MCP</li>
-                    <li class="chip" data-src="skill"><i data-icon="magic-stick-3"></i>review skill</li>
-                    <li class="chip" data-src="hook"><i data-icon="link-round"></i>lint hook</li>
+                    <li class="chip" data-src="skill"><i data-icon="magic-stick-3"></i>review</li>
+                    <li class="chip" data-src="mcp"><i data-icon="plug-circle"></i>github-mcp</li>
+                    <li class="chip" data-src="market"><i data-icon="box"></i>plugins</li>
                   </ul>
                 </div>
                 <div class="machines">
-                  <div class="node machine" data-machine>
-                    <b>studio-mac</b>
+                  <div class="machine" data-machine>
+                    <i data-device="cloud"></i>
+                    <b>cloud</b><small>rented box</small>
                     <ul class="chips">
-                      <li class="chip" data-dst="mcp">github MCP</li>
-                      <li class="chip" data-dst="skill">review skill</li>
-                      <li class="chip" data-dst="hook">lint hook</li>
+                      <li class="chip chip-dot" data-dst="mcp"><i data-icon="plug-circle"></i></li>
+                      <li class="chip chip-dot" data-dst="skill"><i data-icon="magic-stick-3"></i></li>
+                      <li class="chip chip-dot" data-dst="market"><i data-icon="box"></i></li>
                     </ul>
-                    <span class="st st-done" data-synced>in sync</span>
                   </div>
-                  <div class="node machine" data-machine>
-                    <b>nixbox</b>
+                  <div class="machine" data-machine>
+                    <i data-device="vm"></i>
+                    <b>dev-vm</b><small>over SSH</small>
                     <ul class="chips">
-                      <li class="chip" data-dst="mcp">github MCP</li>
-                      <li class="chip" data-dst="skill">review skill</li>
-                      <li class="chip" data-dst="hook">lint hook</li>
+                      <li class="chip chip-dot" data-dst="mcp"><i data-icon="plug-circle"></i></li>
+                      <li class="chip chip-dot" data-dst="skill"><i data-icon="magic-stick-3"></i></li>
+                      <li class="chip chip-dot" data-dst="market"><i data-icon="box"></i></li>
                     </ul>
-                    <span class="st st-done" data-synced>in sync</span>
                   </div>
-                  <div class="node machine" data-machine>
-                    <b>mini</b>
+                  <div class="machine" data-machine>
+                    <i data-device="laptop"></i>
+                    <b>laptop</b><small>lid left ajar</small>
                     <ul class="chips">
-                      <li class="chip" data-dst="mcp">github MCP</li>
-                      <li class="chip" data-dst="skill">review skill</li>
-                      <li class="chip" data-dst="hook">lint hook</li>
+                      <li class="chip chip-dot" data-dst="mcp"><i data-icon="plug-circle"></i></li>
+                      <li class="chip chip-dot" data-dst="skill"><i data-icon="magic-stick-3"></i></li>
+                      <li class="chip chip-dot" data-dst="market"><i data-icon="box"></i></li>
                     </ul>
-                    <span class="st st-done" data-synced>in sync</span>
+                  </div>
+                  <div class="machine" data-machine>
+                    <i data-device="box"></i>
+                    <b>desk-box</b><small>always on</small>
+                    <ul class="chips">
+                      <li class="chip chip-dot" data-dst="mcp"><i data-icon="plug-circle"></i></li>
+                      <li class="chip chip-dot" data-dst="skill"><i data-icon="magic-stick-3"></i></li>
+                      <li class="chip chip-dot" data-dst="market"><i data-icon="box"></i></li>
+                    </ul>
                   </div>
                 </div>
               </div>
@@ -348,8 +497,8 @@
             <div class="blurb">
               <h3>Set a tool up once</h3>
               <dl class="versus">
-                <div><dt>The usual way</dt><dd>You add the same MCP server, skill or hook on each machine by hand, and the machines drift apart.</dd></div>
-                <div class="with"><dt>With Caw&amp;Co</dt><dd>Add it in the hub and every machine gets the same MCP servers, skills, plugins, memory and hooks.</dd></div>
+                <div><dt>The usual way</dt><dd>You add the same MCP server, skill or hook on each machine by hand, and they drift apart. One is a laptop you carry around half open so its agent stays awake.</dd></div>
+                <div class="with"><dt>With Caw&amp;Co</dt><dd>Paste a skill's install command, an owner/repo slug or a GitHub, npm or https source, and every machine gets it. MCP servers, plugins, memory and hooks sync too. Long jobs can live on a machine that stays on, so the lid can close.</dd></div>
               </dl>
             </div>
           </div>
@@ -362,7 +511,31 @@
         </div>
       </section>
 
-      <section class="facts wrap" aria-label="How it runs">
+      <section class="facts wrap" aria-labelledby="facts-title">
+        <div class="facts-head">
+          <h2 id="facts-title" class="section-title">As fluid as your workflow will be</h2>
+          <p class="facts-lede">Lists reflow where they stand and trees fold open along their rails, so you keep your place while the work moves. Ask your system for less motion and the interface holds still.</p>
+        </div>
+        <div class="fact">
+          <i data-icon="inbox-in"></i>
+          <h3>Queue the next message</h3>
+          <p>Send while the agent works. The message waits its turn, and you can take it back until it's read.</p>
+        </div>
+        <div class="fact">
+          <i data-icon="history"></i>
+          <h3>Long transcripts stay light</h3>
+          <p>Only the rows on screen are drawn, and older history loads a page at a time.</p>
+        </div>
+        <div class="fact">
+          <i data-icon="restart"></i>
+          <h3>Continue in a new session</h3>
+          <p>The hub summarises a long conversation with a model you pick and opens a fresh session from it, on any agent or model.</p>
+        </div>
+        <div class="fact">
+          <i data-icon="forward"></i>
+          <h3>Hand off, with a cost check</h3>
+          <p>Sessions message each other across machines. When an agent sends follow-up work to a Claude Code session whose prompt cache has expired, the hub refuses the first try and says a fresh delegate is usually cheaper.</p>
+        </div>
         <div class="fact">
           <i data-icon="server-square"></i>
           <h3>Self-hosted</h3>
@@ -387,7 +560,8 @@
 
       <section class="cost wrap" aria-labelledby="cost-title">
         <h2 id="cost-title" class="section-title">What it costs</h2>
-        <div class="cost-grid">
+        <div class="cost-grid" data-arrives>
+          <div class="cost-caw" aria-hidden="true"><i data-caw="ready-to-sleeping" data-wait></i></div>
           <article class="card card-ink">
             <h3>Caw&amp;Co</h3>
             <p class="price">Free</p>
@@ -404,14 +578,16 @@
               </button>
               <p class="cmd-alert" aria-hidden="true">Copying is blocked here. Select the command instead.</p>
             </div>
-            <a class="card-link" href="https://github.com/Bewinxed/cawco">github.com/Bewinxed/cawco</a>
+            <a class="card-link" href="https://github.com/Bewinxed/cawco"><i data-mark="github"></i>github.com/Bewinxed/cawco</a>
           </article>
-          <article class="card card-ivory">
-            <img data-caw="phone" class="card-caw" decoding="async" alt="">
+          <article class="card card-paper">
             <h3>The native app</h3>
             <p class="price">$9.99 <span>once</span></p>
-            <p>It runs on iPhone, iPad and Mac. You pay once and there is no trial.</p>
-            <p class="soon">It isn't released yet.</p>
+            <p>It runs on iPhone, iPad and Mac, and it's the same board at the size of your hand. You pay once and there is no trial.</p>
+            <div class="store">
+              <img class="store-badge" src="/src/assets/brand/app-store-badge.svg" width="120" height="40" alt="App Store badge">
+              <p class="soon">It isn't released yet.</p>
+            </div>
           </article>
         </div>
       </section>
@@ -421,8 +597,8 @@
       <span class="wordmark">Caw&amp;Co</span>
       <span class="foot-line">A little flock. A lot of work.</span>
       <nav class="foot-nav" aria-label="Links">
-        <a href="https://github.com/Bewinxed/cawco">GitHub</a>
-        <a href="install.sh">install.sh</a>
+        <a href="https://github.com/Bewinxed/cawco"><i data-mark="github"></i>GitHub</a>
+        <a href="install.sh"><i data-icon="file-text"></i>install.sh</a>
       </nav>
     </footer>
 

@@ -40,7 +40,6 @@ export function initStage(stage: HTMLElement): Stage {
     return {
       tab,
       panel,
-      percher: one(stage, `[data-percher="${id}"]`),
       scene: one(panel, '.scene'),
       bar: one(tab, '[data-bar]'),
     };
@@ -82,12 +81,11 @@ export function initStage(stage: HTMLElement): Stage {
     current = id;
     stage.classList.toggle('is-instant', instant);
     for (const other of ORDER) {
-      const { tab, panel, percher } = parts(other);
+      const { tab, panel } = parts(other);
       const on = other === id;
       tab.setAttribute('aria-selected', String(on));
       tab.tabIndex = on ? 0 : -1;
       panel.classList.toggle('is-on', on);
-      percher.classList.toggle('is-on', on);
     }
     play();
   }

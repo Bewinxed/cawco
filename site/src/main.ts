@@ -11,6 +11,21 @@ gsap.matchMedia().add('(prefers-reduced-motion: no-preference)', () => {
   return () => stage.setMotion(false);
 });
 
+// Further down the page Caw stands on the edge of a block, and his clip plays
+// once, when a good part of that block has scrolled into view. The clip itself
+// is CSS (see `.caw` in styles.css); this only says when.
+const arrivals = new IntersectionObserver(
+  (entries) => {
+    for (const entry of entries) {
+      if (!entry.isIntersecting) continue;
+      for (const clip of all(entry.target, '.caw[data-wait]')) clip.classList.add('is-playing');
+      arrivals.unobserve(entry.target);
+    }
+  },
+  { threshold: 0.35 },
+);
+for (const block of all(document, '[data-arrives]')) arrivals.observe(block);
+
 /** What a copy button says in each outcome, and how long it says it. */
 const OUTCOMES = {
   copied: { label: 'Copied', status: 'Install command copied.', hold: 2000 },
