@@ -131,6 +131,7 @@ final class AssistantPanelView: UIView {
                 button.tintColor = button.isHovered ? Palette.inkStrong : Palette.inkMuted
             }
             close.addAction(UIAction { [weak self] _ in self?.onClose() }, for: .primaryActionTriggered)
+            KitTip.attach(to: close, label: "Close assistant", keys: "⌘J")
             row.addArrangedSubview(close)
         }
         row.isLayoutMarginsRelativeArrangement = true

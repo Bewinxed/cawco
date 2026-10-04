@@ -54,7 +54,19 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
 
     var context: ShellContext {
         ShellContext(hub: hub, home: home, openSession: { [weak self] id in self?.openSession(id) }, go: { [weak self] place in self?.go(place) },
-                     forgetProject: { [weak self] project in self?.forgetProject(project) })
+                     forgetProject: { [weak self] project in self?.forgetProject(project) },
+                     startSession: { [weak self] machineId, cwd, projectId in self?.startSession(machineId: machineId, cwd: cwd, projectId: projectId) },
+                     sessionMenus: sessionMenus)
+    }
+
+    /// What a session's menu does through the shell, wherever the row stands.
+    var sessionMenus: SessionMenuContext {
+        SessionMenuContext(
+            hub: hub,
+            open: { [weak self] id in self?.openSession(id) },
+            continueInNewSession: panes.continueHandler.map { _ in { [weak self] id in self?.panes.continueInNewSession(id) } },
+            presenter: { [weak self] in self?.dialogPresenter ?? UIViewController() }
+        )
     }
 
     var activeSessionId: String? { currentId }
@@ -439,40 +451,39 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
 
     // MARK: Keys (Shell.svelte `shortcut`): none of them while the reader is typing.
 
-    @objc private func jumpKey() {
-        guard !UIResponder.isTyping else { return }
-        openJump(.key)
+    /// Whether a command has something to act on: a split needs the
+    /// conversations showing (`onSession`), one in front and another to leave behind.
+    func can(_ command: RootViewController.ShellCommand) -> Bool {
+        switch command {
+        case .jump, .assistant, .startSession:
+            return true
+        case .splitRight, .splitDown:
+            let showing = compact ? compactNav.topViewController === workspaceController : detail.shown === workspaceController
+            return showing && workspace.activeSessionId != nil && workspace.openIds.count >= 2
+        }
     }
 
-    @objc private func assistantKey() {
-        guard !UIResponder.isTyping else { return }
-        toggleAssistant()
+    /// The menu bar's commands and their keys; every one stands down while the reader is typing.
+    func perform(_ command: RootViewController.ShellCommand) {
+        guard !UIResponder.isTyping, can(command) else { return }
+        switch command {
+        case .jump: openJump(.key)
+        case .assistant: toggleAssistant()
+        case .startSession: startSession(machineId: nil, cwd: nil, projectId: nil)
+        // The conversation in front goes into the new half (`mod+\` right,
+        // `mod+shift+\` below), as VS Code binds it.
+        case .splitRight, .splitDown:
+            guard let here = workspace.activeSessionId else { return }
+            workspace.split(workspace.focusedLeaf, command == .splitRight ? .right : .bottom, here)
+        }
     }
 
-    /// Splits the focused group, the conversation in front going into the new
-    /// half (`mod+\` right, `mod+shift+\` below), as VS Code binds it.
-    @objc private func splitRightKey() { splitKey(.right) }
-    @objc private func splitDownKey() { splitKey(.bottom) }
-
-    private func splitKey(_ edge: Workspace.Edge) {
-        // Only where the conversations show (`onSession`).
-        let showing = compact ? compactNav.topViewController === workspaceController : detail.shown === workspaceController
-        guard !UIResponder.isTyping, showing else { return }
-        guard let here = workspace.activeSessionId, workspace.openIds.count >= 2 else { return }
-        workspace.split(workspace.focusedLeaf, edge, here)
-    }
-
+    /// Escape closes the desk's pane wherever focus is.
     override var keyCommands: [UIKeyCommand]? {
-        let commands = [
-            UIKeyCommand(title: "Jump to…", action: #selector(jumpKey), input: "k", modifierFlags: .command),
-            UIKeyCommand(title: "Assistant", action: #selector(assistantKey), input: "j", modifierFlags: .command),
-            UIKeyCommand(title: "Split Right", action: #selector(splitRightKey), input: "\\", modifierFlags: .command),
-            UIKeyCommand(title: "Split Down", action: #selector(splitDownKey), input: "\\", modifierFlags: [.command, .shift]),
-        ]
-        // Escape closes the desk's pane wherever focus is.
-        let all = assistantPane == nil ? commands : commands + [UIKeyCommand(input: UIKeyCommand.inputEscape, modifierFlags: [], action: #selector(escapeKey))]
-        for command in all { command.wantsPriorityOverSystemBehavior = true }
-        return all
+        guard assistantPane != nil else { return nil }
+        let escape = UIKeyCommand(input: UIKeyCommand.inputEscape, modifierFlags: [], action: #selector(escapeKey))
+        escape.wantsPriorityOverSystemBehavior = true
+        return [escape]
     }
 
     /// MachinesButton's popover, hung from the button's end.
@@ -519,6 +530,22 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
             guard let self else { return }
             UserDefaults.standard.set(preferredPrimaryColumnWidth, forKey: Self.railKey)
         }
+        // A key's step is a tween over `durControl`, from the width as drawn
+        // (a step still in flight included), so held arrows glide.
+        grip.onKey = { [weak self] x in
+            guard let self else { return }
+            let next = Self.clamp(x)
+            UserDefaults.standard.set(next, forKey: Self.railKey)
+            guard !UIAccessibility.isReduceMotionEnabled else {
+                preferredPrimaryColumnWidth = next
+                return
+            }
+            UIView.animate(withDuration: Motion.durControl, delay: 0, options: [.beginFromCurrentState, .curveEaseOut]) {
+                self.preferredPrimaryColumnWidth = next
+                self.view.layoutIfNeeded()
+            }
+        }
+        grip.target = { [weak self] in self.map { Double($0.preferredPrimaryColumnWidth) } ?? Self.railDefault }
         grip.width = { [weak self] in self.map { Double($0.primaryColumnWidth) } ?? Self.railDefault }
         rail.view.addSubview(grip)
         NSLayoutConstraint.activate([
@@ -594,6 +621,49 @@ final class RailGrip: UIView, UIPointerInteractionDelegate {
     @available(*, unavailable)
     required init?(coder _: NSCoder) {
         fatalError("RailGrip is built in code")
+    }
+
+    // A key steps the width (Shell.svelte `resizeKey`): the arrows by 8pt, 32
+    // with shift, Home and End to the ends; the grip takes the keyboard when
+    // it is pressed or reached by Tab.
+    var onKey: (Double) -> Void = { _ in }
+    /// The width the rail is going to, a step still in flight included.
+    var target: () -> Double = { 228 }
+    override var canBecomeFirstResponder: Bool { true }
+    override var canBecomeFocused: Bool { true }
+
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+        super.touchesBegan(touches, with: event)
+        becomeFirstResponder()
+    }
+
+    override func didUpdateFocus(in context: UIFocusUpdateContext, with coordinator: UIFocusAnimationCoordinator) {
+        super.didUpdateFocus(in: context, with: coordinator)
+        if context.nextFocusedItem === self { becomeFirstResponder() } else if context.previouslyFocusedItem === self { resignFirstResponder() }
+    }
+
+    override var keyCommands: [UIKeyCommand]? {
+        let keys: [(String, UIKeyModifierFlags)] = [
+            (UIKeyCommand.inputLeftArrow, []), (UIKeyCommand.inputRightArrow, []),
+            (UIKeyCommand.inputLeftArrow, .shift), (UIKeyCommand.inputRightArrow, .shift),
+            (UIKeyCommand.inputHome, []), (UIKeyCommand.inputEnd, []),
+        ]
+        return keys.map { input, flags in
+            let command = UIKeyCommand(input: input, modifierFlags: flags, action: #selector(stepKey(_:)))
+            command.wantsPriorityOverSystemBehavior = true
+            return command
+        }
+    }
+
+    @objc private func stepKey(_ command: UIKeyCommand) {
+        let step = command.modifierFlags.contains(.shift) ? 32.0 : 8.0
+        switch command.input {
+        case UIKeyCommand.inputLeftArrow: onKey(target() - step)
+        case UIKeyCommand.inputRightArrow: onKey(target() + step)
+        case UIKeyCommand.inputHome: onKey(ShellController.railMin)
+        case UIKeyCommand.inputEnd: onKey(ShellController.railMax)
+        default: break
+        }
     }
 
     @objc private func dragged(_ pan: UIPanGestureRecognizer) {

@@ -47,6 +47,10 @@ public struct ShellContext {
     public let go: (ShellDestination) -> Void
     /// Asks to forget a project (the confirm, then the hub).
     let forgetProject: (ProjectRow) -> Void
+    /// Starts a session, at a place when one is given (the New Session flow).
+    let startSession: (_ machineId: String?, _ cwd: String?, _ projectId: String?) -> Void
+    /// What a session's context menu needs from the shell.
+    let sessionMenus: SessionMenuContext
 }
 
 /// The routing hook each track fills: the screen a destination opens.

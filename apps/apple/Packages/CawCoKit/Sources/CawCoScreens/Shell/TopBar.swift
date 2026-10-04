@@ -280,6 +280,9 @@ final class TopBarCluster: UIView {
         hub.accessibilityLabel = "Change hub"
         hub.addAction(UIAction { [weak self] _ in self?.onHub() }, for: .primaryActionTriggered)
         hub.widthAnchor.constraint(equalToConstant: 28).isActive = true
+        KitTip.attach(to: machines, label: "Machines")
+        KitTip.attach(to: jump, label: "Jump to session", keys: "⌘K")
+        KitTip.attach(to: hub, label: "Change hub")
 
         attention.row.addArrangedSubview(GlyphView(.shield, tint: Palette.inkStrong))
         attention.isAccessibilityElement = true
@@ -359,7 +362,9 @@ final class TopBarCluster: UIView {
         machines.accessibilityValue = "\(online) online"
         assistant.expanded = assistantOpen
         assistant.accessibilityLabel = assistantOpen ? "Close assistant" : "Open assistant"
+        KitTip.attach(to: assistant, label: assistantOpen ? "Close assistant" : "Open assistant", keys: "⌘J")
         attention.accessibilityLabel = "\(blocked) waiting on you"
+        attention.toolTip = "\(blocked) waiting on you"
         badge.text = "\(blocked)"
         let showing = blocked > 0
         guard showing != (shownCount > 0) else { shownCount = blocked; return }

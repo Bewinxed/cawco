@@ -120,7 +120,13 @@ final class SessionRailRow: RailRow {
             guard let self else { return }
             onOpen(self.id)
         }, for: .primaryActionTriggered)
+        let hint = UIToolTipInteraction()
+        hint.delegate = self
+        addInteraction(hint)
     }
+
+    /// The age's `title`: when it last moved, in words.
+    var ageHint = ""
 
     func configure(title: String, status: MarkStatus, place: String, age text: String, count total: Int, failed: Int, open: Bool) {
         name.text = title
@@ -137,6 +143,15 @@ final class SessionRailRow: RailRow {
         let local = count.convert(point, from: self)
         if !count.isHidden, count.bounds.insetBy(dx: -4, dy: -4).contains(local) { return count }
         return super.hitTest(point, with: event).map { _ in self }
+    }
+}
+
+extension SessionRailRow: UIToolTipInteractionDelegate {
+    /// Only over the age, as the web's `title` sits on that span.
+    func toolTipInteraction(_: UIToolTipInteraction, configurationAt point: CGPoint) -> UIToolTipConfiguration? {
+        let box = age.convert(age.bounds, to: self)
+        guard !ageHint.isEmpty, box.contains(point) else { return nil }
+        return UIToolTipConfiguration(toolTip: ageHint, in: box)
     }
 }
 

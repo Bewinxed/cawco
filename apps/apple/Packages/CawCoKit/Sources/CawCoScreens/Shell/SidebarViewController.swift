@@ -157,6 +157,8 @@ final class SidebarViewController: ObservedViewController {
         assistantButton.addAction(UIAction { [weak self] _ in self?.host?.toggleAssistant() }, for: .primaryActionTriggered)
         startButton.addAction(UIAction { [weak self] _ in self?.host?.startSession(machineId: nil, cwd: nil, projectId: nil) }, for: .primaryActionTriggered)
         for action in [assistantButton, startButton] { navConstraint(action); action.widthAnchor.constraint(equalTo: action.heightAnchor).isActive = true }
+        KitTip.attach(to: assistantButton, label: "Assistant", keys: "⌘J")
+        KitTip.attach(to: startButton, label: "Start session", keys: "⇧⌘N")
         headerRow.addArrangedSubview(brand)
         headerRow.addArrangedSubview(assistantButton)
         headerRow.addArrangedSubview(startButton)
@@ -272,6 +274,7 @@ final class SidebarViewController: ObservedViewController {
         label.text = "Projects"
         sortButton.showsMenuAsPrimaryAction = true
         sortButton.menu = sortMenu()
+        KitTip.attach(to: newProjectButton, label: "New project")
         newProjectButton.addAction(UIAction { [weak self] _ in
             guard let self else { return }
             host?.newProject(from: newProjectButton)
@@ -302,6 +305,9 @@ final class SidebarViewController: ObservedViewController {
                 requestRefresh()
             }
         }
+        // The button's `title` and its name: which order the rail is in.
+        sortButton.toolTip = "Sort sessions — \(prefs.sort.label)"
+        sortButton.accessibilityLabel = "Sort sessions — currently \(prefs.sort.label)"
         return UIMenu(title: "Sort sessions by", options: .singleSelection, children: options)
     }
 
@@ -338,6 +344,7 @@ final class SidebarViewController: ObservedViewController {
         user.isEnabled = false
 
         configureButton.addAction(UIAction { [weak self] _ in self?.host?.go(.configure) }, for: .primaryActionTriggered)
+        KitTip.attach(to: configureButton, label: "Configure")
         let account = UIStackView(arrangedSubviews: [user, configureButton, themeButton])
         account.spacing = 4
         account.alignment = .center
@@ -501,6 +508,7 @@ final class SidebarViewController: ObservedViewController {
                     failed: node.failed,
                     open: openTrees.contains(node.row.id)
                 )
+                row.ageHint = at == 0 ? "No activity recorded" : "Last activity \(RailAge.ago(at, now: home.now))"
                 row.active = node.row.id == active
                 walk(node.children)
             }
@@ -699,7 +707,9 @@ final class ThemeButton: TapControl {
     /// `icon-swap`: the arriving glyph from 0.25 scale and 4pt blur, over `durControl` on the out curve.
     private func show(animated: Bool) {
         let dark = traitCollection.userInterfaceStyle == .dark
-        accessibilityLabel = Theme.current == .unspecified ? "System" : (dark ? "Dark mode" : "Light mode")
+        let label = Theme.current == .unspecified ? "System" : (dark ? "Dark mode" : "Light mode")
+        accessibilityLabel = label
+        KitTip.attach(to: self, label: label)
         let shown = dark ? moon : sun
         let hidden = dark ? sun : moon
         let still = !animated || UIAccessibility.isReduceMotionEnabled

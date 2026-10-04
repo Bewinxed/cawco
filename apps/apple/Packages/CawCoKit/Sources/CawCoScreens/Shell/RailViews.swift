@@ -41,6 +41,8 @@ class RailRow: TapControl {
     var glyphs: [GlyphView] = []
     /// The row's resting ink (`text-sidebar-foreground`, or muted for "N older").
     var restInk = Palette.sidebarForeground { didSet { paint(animated: false) } }
+    /// The row's ground at rest: clear, or a state's wash (a failed session's).
+    var restFill = UIColor.clear { didSet { if restFill != oldValue { paint(animated: false) } } }
 
     /// `height` nil: the caller sizes it (the nav rows' `--c-nav-h`).
     init(height: Double?, leading: Double, trailing: Double, gap: Double) {
@@ -95,7 +97,7 @@ class RailRow: TapControl {
         } else if hovering {
             Palette.surfaceHover
         } else {
-            .clear
+            restFill
         }
         let ink = active ? Palette.selectedInk : (hovering || isHighlighted ? Palette.foreground : restInk)
         let apply: @MainActor @Sendable () -> Void = {
@@ -325,6 +327,23 @@ enum RailAge {
         let weeks = (days / 7).rounded()
         if weeks < 52 { return "\(Int(weeks))w" }
         return "\(Int((days / 365).rounded()))y"
+    }
+
+    /// time.ts `formatDistanceToNow`: "just now", then whole seconds, minutes,
+    /// hours, days, weeks, months and years ago.
+    static func ago(_ at: Double, now: Double) -> String {
+        let seconds = Int(floor((now - at) / 1000))
+        if seconds < 5 { return "just now" }
+        if seconds < 60 { return "\(seconds)s ago" }
+        let minutes = seconds / 60
+        if minutes < 60 { return "\(minutes)m ago" }
+        let hours = minutes / 60
+        if hours < 24 { return "\(hours)h ago" }
+        let days = hours / 24
+        if days < 7 { return "\(days)d ago" }
+        if days / 7 < 4 { return "\(days / 7)w ago" }
+        if days / 30 < 12 { return "\(days / 30)mo ago" }
+        return "\(days / 365)y ago"
     }
 }
 

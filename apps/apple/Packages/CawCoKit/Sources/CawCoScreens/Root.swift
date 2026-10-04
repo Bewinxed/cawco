@@ -97,6 +97,19 @@ public final class RootViewController: ObservedViewController {
             Logger(subsystem: "dev.cawco.app", category: "Scene").error("new window refused: \(error.localizedDescription, privacy: .public)")
         }
     }
+    /// The shell's own commands (Shell.svelte `shortcut`, and Start session's
+    /// ⇧⌘N), for the menu bar and a hardware keyboard.
+    public enum ShellCommand: Sendable { case jump, assistant, startSession, splitRight, splitDown }
+
+    public func canRun(_ command: ShellCommand) -> Bool {
+        shownKey == "board" && !waiting.waiting && board.can(command)
+    }
+
+    public func run(_ command: ShellCommand) {
+        guard canRun(command) else { return }
+        board.perform(command)
+    }
+
     public func closeScene() {
         board.selected?.close()
         home.stop()

@@ -57,15 +57,29 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         reconnect.discoverabilityTitle = "Reconnect to the hub"
         let stop = UIKeyCommand(title: "Stop", action: #selector(stopSession), input: ".", modifierFlags: .command)
         let steer = UIKeyCommand(title: "Steer", action: #selector(steerSession), input: "l", modifierFlags: .command)
-        let newWindow = UIKeyCommand(title: "Open session in new window", action: #selector(openSessionWindow), input: "n", modifierFlags: [.command, .shift])
+        let newWindow = UIKeyCommand(title: "Open session in new window", action: #selector(openSessionWindow), input: "n", modifierFlags: [.command, .alternate])
+        // The shell's own (Shell.svelte `shortcut`; Sidebar.svelte's ⇧⌘N).
+        let start = UIKeyCommand(title: "Start Session", action: #selector(startNewSession), input: "n", modifierFlags: [.command, .shift])
+        let jump = UIKeyCommand(title: "Jump to Session…", action: #selector(jumpToSession), input: "k", modifierFlags: .command)
+        let assistant = UIKeyCommand(title: "Assistant", action: #selector(toggleAssistant), input: "j", modifierFlags: .command)
+        let splitRight = UIKeyCommand(title: "Split Right", action: #selector(splitRight), input: "\\", modifierFlags: .command)
+        let splitDown = UIKeyCommand(title: "Split Down", action: #selector(splitDown), input: "\\", modifierFlags: [.command, .shift])
+        for command in [start, jump, assistant, splitRight, splitDown] { command.wantsPriorityOverSystemBehavior = true }
         let fleet = UIMenu(title: "Fleet", children: [
+            UIMenu(options: .displayInline, children: [start, jump, assistant]),
             UIMenu(options: .displayInline, children: [approve, deny]),
             UIMenu(options: .displayInline, children: [reconnect]),
             UIMenu(options: .displayInline, children: [stop, steer]),
+            UIMenu(options: .displayInline, children: [splitRight, splitDown]),
             UIMenu(options: .displayInline, children: [newWindow]),
         ])
         builder.insertSibling(fleet, afterMenu: .view)
     }
+
+    private static let shellCommands: [Selector: RootViewController.ShellCommand] = [
+        #selector(startNewSession): .startSession, #selector(jumpToSession): .jump, #selector(toggleAssistant): .assistant,
+        #selector(splitRight): .splitRight, #selector(splitDown): .splitDown,
+    ]
 
     override func validate(_ command: UICommand) {
         super.validate(command)
@@ -79,7 +93,9 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         case #selector(openSessionWindow):
             command.attributes = board?.canOpenSessionWindow == true ? [] : .disabled
         default:
-            break
+            if let shell = Self.shellCommands[command.action] {
+                command.attributes = board?.canRun(shell) == true ? [] : .disabled
+            }
         }
     }
 
@@ -104,6 +120,11 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
     @objc private func stopSession() { board?.stopSession() }
     @objc private func steerSession() { board?.steerSession() }
     @objc private func openSessionWindow() { board?.openSessionWindow() }
+    @objc private func startNewSession() { board?.run(.startSession) }
+    @objc private func jumpToSession() { board?.run(.jump) }
+    @objc private func toggleAssistant() { board?.run(.assistant) }
+    @objc private func splitRight() { board?.run(.splitRight) }
+    @objc private func splitDown() { board?.run(.splitDown) }
 }
 
 /// One window: the root controller, which holds that window's connection to the hub.

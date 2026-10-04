@@ -38,8 +38,10 @@ public final class SessionMarkView: UIView {
     private let sweep = CAGradientLayer()
     private var status = MarkStatus.idle
 
-    public init() {
-        super.init(frame: CGRect(x: 0, y: 0, width: Self.tile, height: Self.tile))
+    /// `tile`: the tile's side where a list sets its own (`--mark-size`); the
+    /// glyph and the rim keep their size.
+    public init(tile: Double = SessionMarkView.tile) {
+        super.init(frame: CGRect(x: 0, y: 0, width: tile, height: tile))
         translatesAutoresizingMaskIntoConstraints = false
         layer.cornerRadius = Radius.radiusXs
         layer.cornerCurve = .continuous
@@ -58,8 +60,8 @@ public final class SessionMarkView: UIView {
         rim.addSublayer(sweep)
         layer.addSublayer(rim)
         NSLayoutConstraint.activate([
-            widthAnchor.constraint(equalToConstant: Self.tile),
-            heightAnchor.constraint(equalToConstant: Self.tile),
+            widthAnchor.constraint(equalToConstant: tile),
+            heightAnchor.constraint(equalToConstant: tile),
             sprite.centerXAnchor.constraint(equalTo: centerXAnchor),
             sprite.centerYAnchor.constraint(equalTo: centerYAnchor),
         ])
