@@ -1,0 +1,18 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.15/schema.json",
+  "root": false,
+  "files": {
+    "includes": [
+      "**",
+      "!dist",
+      "!node_modules",
+      "!research",
+      "!package-lock.json",
+      "!wrangler.jsonc",
+      "!scripts/deploy.mjs"
+    ]
+  },
+  "formatter": { "indentStyle": "space", "indentWidth": 2, "lineWidth": 100 },
+  "javascript": { "formatter": { "quoteStyle": "single" } },
+  "linter": { "enabled": true, "rules": { "preset": "recommended" } }
+}

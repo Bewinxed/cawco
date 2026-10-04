@@ -3,10 +3,22 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "dev": "vite",
     "build": "node scripts/build.mjs",
+    "check": "biome check . && tsc --noEmit",
     "deploy": "node scripts/deploy.mjs"
   },
+  "dependencies": {
+    "@fontsource-variable/nunito": "^5.3.0",
+    "gsap": "^3.15.0"
+  },
   "devDependencies": {
-    "esbuild": "^0.25.10"
+    "@biomejs/biome": "2.5.15",
+    "@iconify-json/solar": "^1.2.13",
+    "@iconify/utils": "^3.1.7",
+    "@types/node": "^26.6.4",
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.2"
   }
 }

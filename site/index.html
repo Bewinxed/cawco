@@ -1,0 +1,423 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Caw&amp;Co: one board for every coding agent you run</title>
+    <meta
+      name="description"
+      content="Caw&amp;Co is a self-hosted control plane for Claude Code, OpenCode and pi. One browser board shows every machine, project and session, and you answer the ones that are waiting."
+    />
+    <meta name="theme-color" content="#F2D36B" />
+    <meta property="og:title" content="Caw&amp;Co: one board for every coding agent you run" />
+    <meta
+      property="og:description"
+      content="A self-hosted control plane for Claude Code, OpenCode and pi. Free and open source."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://cawco.dev/" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link
+      rel="preload"
+      href="/node_modules/@fontsource-variable/nunito/files/nunito-latin-wght-normal.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link rel="stylesheet" href="/src/styles.css" />
+    <script type="module" src="/src/main.ts"></script>
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+
+    <header class="top wrap">
+      <a class="wordmark" href="/" aria-label="Caw&amp;Co home">Caw&amp;Co</a>
+      <nav class="top-nav" aria-label="Site">
+        <a class="top-link" href="https://github.com/Bewinxed/cawco">GitHub</a>
+        <a class="btn btn-ink" href="#install">Install</a>
+      </nav>
+    </header>
+
+    <main id="main">
+      <section class="hero wrap">
+        <div class="hero-art" data-hero-art>
+          <svg class="ticks" viewBox="0 0 120 120" aria-hidden="true">
+            <path data-tick d="M20 78 L46 86" />
+            <path data-tick d="M30 40 L52 62" />
+            <path data-tick d="M70 18 L76 46" />
+          </svg>
+          <img data-caw="hero" class="hero-caw" fetchpriority="high" decoding="async" alt="Caw, a round black crow with vermilion wing tips, cawing with one wing raised">
+        </div>
+        <div class="hero-copy">
+          <h1 data-hero-title>One board for every coding agent you run.</h1>
+          <p class="lede" data-hero-fade>
+            Caw&amp;Co is a self-hosted control plane for Claude Code, OpenCode and pi. A small
+            daemon on each machine reports to a hub on your own network. One browser tab then shows
+            you every session and lets you answer the ones that are waiting.
+          </p>
+          <div class="install" id="install" data-hero-fade>
+            <p class="install-label">Install on your first machine</p>
+            <div class="cmd">
+              <code data-cmd>curl -fsSL https://cawco.dev/install.sh | sh</code>
+              <button class="copy" type="button" data-copy>
+                <span class="copy-icons" aria-hidden="true">
+                  <span class="ic-copy"><i data-icon="copy"></i></span>
+                  <span class="ic-done"><i data-icon="check-circle"></i></span>
+                </span>
+                <span data-copy-label>Copy</span>
+              </button>
+            </div>
+            <p class="install-note">
+              It's free and open source, and it runs on macOS and on Linux with systemd.
+              <a href="/install.sh">Read the script first</a> or
+              <a href="https://github.com/Bewinxed/cawco">browse the source</a>.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section class="features wrap" aria-labelledby="features-title">
+        <h2 id="features-title" class="section-title">What a wall of terminal tabs can't do</h2>
+
+        <div class="stage" data-stage>
+          <div class="perch" aria-hidden="true">
+            <img data-caw="board" class="percher is-on" data-percher="board" decoding="async" alt="">
+            <img data-caw="phone" class="percher" data-percher="phone" decoding="async" alt="">
+            <img data-caw="rules" class="percher" data-percher="rules" decoding="async" alt="">
+            <img data-caw="delegates" class="percher" data-percher="delegates" decoding="async" alt="">
+            <img data-caw="sync" class="percher" data-percher="sync" decoding="async" alt="">
+          </div>
+
+          <div class="tabs" role="tablist" aria-label="What Caw&amp;Co does">
+            <button class="tab" role="tab" type="button" id="tab-board" aria-controls="panel-board" aria-selected="true" data-tab="board">
+              <i data-icon="widget-5"></i><span class="tab-name">One board</span>
+              <span class="tab-bar" aria-hidden="true"><span data-bar></span></span>
+            </button>
+            <button class="tab" role="tab" type="button" id="tab-phone" aria-controls="panel-phone" aria-selected="false" tabindex="-1" data-tab="phone">
+              <i data-icon="smartphone"></i><span class="tab-name">Phone approvals</span>
+              <span class="tab-bar" aria-hidden="true"><span data-bar></span></span>
+            </button>
+            <button class="tab" role="tab" type="button" id="tab-rules" aria-controls="panel-rules" aria-selected="false" tabindex="-1" data-tab="rules">
+              <i data-icon="chat-round-check"></i><span class="tab-name">Rules</span>
+              <span class="tab-bar" aria-hidden="true"><span data-bar></span></span>
+            </button>
+            <button class="tab" role="tab" type="button" id="tab-delegates" aria-controls="panel-delegates" aria-selected="false" tabindex="-1" data-tab="delegates">
+              <i data-icon="branching-paths-down"></i><span class="tab-name">Delegates</span>
+              <span class="tab-bar" aria-hidden="true"><span data-bar></span></span>
+            </button>
+            <button class="tab" role="tab" type="button" id="tab-sync" aria-controls="panel-sync" aria-selected="false" tabindex="-1" data-tab="sync">
+              <i data-icon="refresh-circle"></i><span class="tab-name">Fleet sync</span>
+              <span class="tab-bar" aria-hidden="true"><span data-bar></span></span>
+            </button>
+          </div>
+
+          <!-- One board -->
+          <div class="panel is-on" role="tabpanel" id="panel-board" aria-labelledby="tab-board" data-panel="board">
+            <div class="scene-frame">
+              <div class="scene scene-board" aria-hidden="true">
+                <div class="win">
+                  <div class="win-bar">
+                    <b>Fleet</b><span class="dim">3 machines online</span>
+                    <span class="needs" data-needs><b>1</b> needs you</span>
+                  </div>
+                  <ul class="rows">
+                    <li class="group" data-group>studio-mac</li>
+                    <li class="row" data-row>
+                      <span class="glyph"><img data-caw="statusWorking" alt=""></span>
+                      <span class="r-main"><b>Fix retry loop</b><small>cawco</small></span>
+                      <span class="r-agent">Claude Code</span>
+                      <span class="st st-working">working</span>
+                    </li>
+                    <li class="row" data-row>
+                      <span class="glyph"><img data-caw="statusDone" alt=""></span>
+                      <span class="r-main"><b>Rewrite hero copy</b><small>site</small></span>
+                      <span class="r-agent">OpenCode</span>
+                      <span class="st st-done">done</span>
+                    </li>
+                    <li class="group" data-group>nixbox</li>
+                    <li class="row" data-row data-flip>
+                      <span class="glyph swap"><img data-caw="statusWorking" data-a alt=""><img data-caw="statusNeedsYou" data-b alt=""></span>
+                      <span class="r-main"><b>Migrate auth tables</b><small>api</small></span>
+                      <span class="r-agent">pi</span>
+                      <span class="swap"><span class="st st-working" data-a>working</span><span class="st st-needs" data-b>needs you</span></span>
+                    </li>
+                    <li class="row" data-row>
+                      <span class="glyph"><img data-caw="statusWorking" alt=""></span>
+                      <span class="r-main"><b>Trace flaky test</b><small>api</small></span>
+                      <span class="r-agent">Claude Code</span>
+                      <span class="st st-working">working</span>
+                    </li>
+                    <li class="group" data-group>mini</li>
+                    <li class="row" data-row>
+                      <span class="glyph"><img data-caw="statusIdle" alt=""></span>
+                      <span class="r-main"><b>Build widget target</b><small>ios</small></span>
+                      <span class="r-agent">Claude Code</span>
+                      <span class="st st-idle">idle</span>
+                    </li>
+                  </ul>
+                </div>
+                <div class="terms">
+                  <div class="term" data-term style="--x: 3%; --y: 6%; --r: -5deg"><b>ssh studio-mac</b><span></span><span></span><span></span></div>
+                  <div class="term" data-term style="--x: 52%; --y: 3%; --r: 4deg"><b>tmux: 2</b><span></span><span></span><span></span></div>
+                  <div class="term" data-term style="--x: 24%; --y: 34%; --r: 2deg"><b>ssh nixbox</b><span></span><span></span><span></span></div>
+                  <div class="term" data-term style="--x: 58%; --y: 46%; --r: -3deg"><b>tmux: 4</b><span></span><span></span><span></span></div>
+                  <div class="term" data-term style="--x: 8%; --y: 62%; --r: 5deg"><b>ssh mini</b><span></span><span></span><span></span></div>
+                </div>
+              </div>
+            </div>
+            <div class="blurb">
+              <h3>See every session at once</h3>
+              <dl class="versus">
+                <div><dt>The usual way</dt><dd>You keep one terminal tab per agent and one SSH session per machine, and you find out a session is stuck when you happen to look at it.</dd></div>
+                <div class="with"><dt>With Caw&amp;Co</dt><dd>Every session on every machine is a row on one board. Caw&amp;Co reads each status from the machine when you look, so a quiet board means nothing is waiting on you.</dd></div>
+              </dl>
+            </div>
+          </div>
+
+          <!-- Phone approvals -->
+          <div class="panel" role="tabpanel" id="panel-phone" aria-labelledby="tab-phone" data-panel="phone">
+            <div class="scene-frame">
+              <div class="scene scene-phone" aria-hidden="true">
+                <div class="win">
+                  <div class="win-bar"><b>Fleet</b><span class="dim">nixbox</span></div>
+                  <div class="row" data-row>
+                    <span class="glyph swap"><img data-caw="statusNeedsYou" data-a alt=""><img data-caw="statusWorking" data-b alt=""></span>
+                    <span class="r-main"><b>Migrate auth tables</b><small>api · nixbox · pi</small></span>
+                    <span class="swap"><span class="st st-needs" data-a>needs you</span><span class="st st-working" data-b>working</span></span>
+                  </div>
+                  <div class="ask" data-ask>
+                    <span class="ask-k">Wants to run</span>
+                    <span class="ask-tool"><b>Bash</b><code>bun run db:push</code></span>
+                    <span class="ask-done" data-ask-done><i data-icon="check-circle"></i>Allowed</span>
+                  </div>
+                </div>
+                <div class="handset" data-handset>
+                  <div class="hs-bar">
+                    <span class="hs-avatar"><img data-caw="statusNeedsYou" alt=""></span>
+                    <b>Caw&amp;Co</b><small>bot</small>
+                    <span class="hs-app"><i data-icon="plain"></i></span>
+                  </div>
+                  <div class="bubble" data-bubble>
+                    <small>api · nixbox</small>
+                    <b>Bash</b>
+                    <code>bun run db:push</code>
+                    <div class="tg-buttons">
+                      <span class="tg-btn" data-allow><span class="tg-check"><i data-icon="check-circle"></i></span>Allow</span>
+                      <span class="tg-btn">Always allow</span>
+                      <span class="tg-btn">Deny</span>
+                    </div>
+                  </div>
+                  <span class="tap" data-tap></span>
+                </div>
+              </div>
+            </div>
+            <div class="blurb">
+              <h3>Answer a prompt from your phone</h3>
+              <dl class="versus">
+                <div><dt>The usual way</dt><dd>The agent stops at a permission prompt and waits until you are back at your desk.</dd></div>
+                <div class="with"><dt>With Caw&amp;Co</dt><dd>The prompt arrives in Telegram with Allow and Deny. Tap one and the session carries on.</dd></div>
+              </dl>
+            </div>
+          </div>
+
+          <!-- Rules -->
+          <div class="panel" role="tabpanel" id="panel-rules" aria-labelledby="tab-rules" data-panel="rules">
+            <div class="scene-frame">
+              <div class="scene scene-rules" aria-hidden="true">
+                <div class="win">
+                  <div class="win-bar"><b>Trace flaky test</b><span class="dim">api · nixbox · Claude Code</span></div>
+                  <div class="talk">
+                    <p class="msg" data-msg1>Patched the retry helper, so the test <mark data-hit>should work</mark> now.</p>
+                    <p class="msg msg-rule" data-reply>
+                      <span class="rule-tag"><i data-icon="chat-round-check"></i>Rule: Unverified claim</span>
+                      You said it should work. Run it and report what actually happened, with the output.
+                    </p>
+                    <p class="msg" data-msg2>Ran it. 2 of 14 tests fail, both in the timeout path. Fixing those.</p>
+                  </div>
+                </div>
+                <div class="rule-card" data-card>
+                  <b>Unverified claim</b>
+                  <dl>
+                    <div><dt>When a session says</dt><dd><code>should work</code></dd></div>
+                    <div><dt>Send this reply</dt><dd>Run it and report what actually happened.</dd></div>
+                    <div><dt>Applies to</dt><dd>Every session</dd></div>
+                  </dl>
+                </div>
+              </div>
+            </div>
+            <div class="blurb">
+              <h3>Write your standing reply once</h3>
+              <dl class="versus">
+                <div><dt>The usual way</dt><dd>You read each transcript to catch the same habits, like an agent saying a fix should work before running it, and you type the same reply again.</dd></div>
+                <div class="with"><dt>With Caw&amp;Co</dt><dd>A rule watches what every session says. When the phrase shows up, the hub sends your reply and the session acts on it.</dd></div>
+              </dl>
+            </div>
+          </div>
+
+          <!-- Delegates -->
+          <div class="panel" role="tabpanel" id="panel-delegates" aria-labelledby="tab-delegates" data-panel="delegates">
+            <div class="scene-frame">
+              <div class="scene scene-delegates" aria-hidden="true">
+                <svg class="links" data-links aria-hidden="true"></svg>
+                <div class="node parent" data-parent>
+                  <span class="glyph swap"><img data-caw="statusWorking" data-a alt=""><img data-caw="statusDone" data-b alt=""></span>
+                  <span class="r-main"><b>Ship the 1.4 release</b><span class="swap"><small data-a>cawco · Claude Code</small><small class="tally" data-b>3 delegates reported</small></span></span>
+                  <span class="swap"><span class="st st-working" data-a>working</span><span class="st st-done" data-b>done</span></span>
+                </div>
+                <div class="kids">
+                  <div class="node kid" data-kid>
+                    <span class="kid-type">research</span>
+                    <b>Read the changelog sources</b>
+                    <small>pi</small>
+                    <span class="swap"><span class="st st-working" data-a>working</span><span class="st st-done" data-b>done</span></span>
+                  </div>
+                  <div class="node kid" data-kid>
+                    <span class="kid-type">build</span>
+                    <b>Build and smoke test</b>
+                    <small>OpenCode</small>
+                    <span class="swap"><span class="st st-working" data-a>working</span><span class="st st-done" data-b>done</span></span>
+                  </div>
+                  <div class="node kid" data-kid>
+                    <span class="kid-type">review</span>
+                    <b>Review the diff</b>
+                    <small>Claude Code</small>
+                    <span class="swap"><span class="st st-working" data-a>working</span><span class="st st-done" data-b>done</span></span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="blurb">
+              <h3>Let a session hand work to another</h3>
+              <dl class="versus">
+                <div><dt>The usual way</dt><dd>You copy the task into a second terminal, wait, and paste the answer back.</dd></div>
+                <div class="with"><dt>With Caw&amp;Co</dt><dd>A session can start a delegate: a separate session with the agent, model and effort you set for that kind of work. It reports back when it finishes. A workflow chains several steps and retries one that fails.</dd></div>
+              </dl>
+            </div>
+          </div>
+
+          <!-- Fleet sync -->
+          <div class="panel" role="tabpanel" id="panel-sync" aria-labelledby="tab-sync" data-panel="sync">
+            <div class="scene-frame">
+              <div class="scene scene-sync" aria-hidden="true">
+                <div class="node hub" data-hub>
+                  <b>Hub</b><small>Fleet tools</small>
+                  <ul class="chips">
+                    <li class="chip" data-src="mcp"><i data-icon="plug-circle"></i>github MCP</li>
+                    <li class="chip" data-src="skill"><i data-icon="magic-stick-3"></i>review skill</li>
+                    <li class="chip" data-src="hook"><i data-icon="link-round"></i>lint hook</li>
+                  </ul>
+                </div>
+                <div class="machines">
+                  <div class="node machine" data-machine>
+                    <b>studio-mac</b>
+                    <ul class="chips">
+                      <li class="chip" data-dst="mcp">github MCP</li>
+                      <li class="chip" data-dst="skill">review skill</li>
+                      <li class="chip" data-dst="hook">lint hook</li>
+                    </ul>
+                    <span class="st st-done" data-synced>in sync</span>
+                  </div>
+                  <div class="node machine" data-machine>
+                    <b>nixbox</b>
+                    <ul class="chips">
+                      <li class="chip" data-dst="mcp">github MCP</li>
+                      <li class="chip" data-dst="skill">review skill</li>
+                      <li class="chip" data-dst="hook">lint hook</li>
+                    </ul>
+                    <span class="st st-done" data-synced>in sync</span>
+                  </div>
+                  <div class="node machine" data-machine>
+                    <b>mini</b>
+                    <ul class="chips">
+                      <li class="chip" data-dst="mcp">github MCP</li>
+                      <li class="chip" data-dst="skill">review skill</li>
+                      <li class="chip" data-dst="hook">lint hook</li>
+                    </ul>
+                    <span class="st st-done" data-synced>in sync</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="blurb">
+              <h3>Set a tool up once</h3>
+              <dl class="versus">
+                <div><dt>The usual way</dt><dd>You add the same MCP server, skill or hook on each machine by hand, and the machines drift apart.</dd></div>
+                <div class="with"><dt>With Caw&amp;Co</dt><dd>Add it in the hub and every machine gets the same MCP servers, skills, plugins, memory and hooks.</dd></div>
+              </dl>
+            </div>
+          </div>
+
+          <button class="autoplay" type="button" data-autoplay hidden>
+            <span class="ic-pause" aria-hidden="true"><i data-icon="pause"></i></span>
+            <span class="ic-play" aria-hidden="true"><i data-icon="play"></i></span>
+            <span data-autoplay-label>Pause demos</span>
+          </button>
+        </div>
+      </section>
+
+      <section class="facts wrap" aria-label="How it runs">
+        <div class="fact">
+          <i data-icon="server-square"></i>
+          <h3>Self-hosted</h3>
+          <p>The hub runs on your tailnet or LAN and is never bound to a public address.</p>
+        </div>
+        <div class="fact">
+          <i data-icon="code-square"></i>
+          <h3>Three agents, one board</h3>
+          <p>Claude Code, OpenCode and pi run side by side.</p>
+        </div>
+        <div class="fact">
+          <i data-icon="key-minimalistic-square-2"></i>
+          <h3>Your own accounts</h3>
+          <p>You sign in to each agent yourself. Caw&amp;Co doesn't sell model usage.</p>
+        </div>
+        <div class="fact">
+          <i data-icon="wallet-money"></i>
+          <h3>Spend in view</h3>
+          <p>See what each agent cost today, against a budget you set.</p>
+        </div>
+      </section>
+
+      <section class="cost wrap" aria-labelledby="cost-title">
+        <h2 id="cost-title" class="section-title">What it costs</h2>
+        <div class="cost-grid">
+          <article class="card card-ink">
+            <h3>Caw&amp;Co</h3>
+            <p class="price">Free</p>
+            <p>The hub, the daemon and the board are open source. You run them on your own machines.</p>
+            <div class="cmd">
+              <code data-cmd>curl -fsSL https://cawco.dev/install.sh | sh</code>
+              <button class="copy" type="button" data-copy>
+                <span class="copy-icons" aria-hidden="true">
+                  <span class="ic-copy"><i data-icon="copy"></i></span>
+                  <span class="ic-done"><i data-icon="check-circle"></i></span>
+                </span>
+                <span data-copy-label>Copy</span>
+              </button>
+            </div>
+            <a class="card-link" href="https://github.com/Bewinxed/cawco">github.com/Bewinxed/cawco</a>
+          </article>
+          <article class="card card-ivory">
+            <img data-caw="phone" class="card-caw" decoding="async" alt="">
+            <h3>The native app</h3>
+            <p class="price">$9.99 <span>once</span></p>
+            <p>It runs on iPhone, iPad and Mac. You pay once and there is no trial.</p>
+            <p class="soon">It isn't released yet.</p>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <footer class="foot wrap">
+      <span class="wordmark">Caw&amp;Co</span>
+      <span class="foot-line">A little flock. A lot of work.</span>
+      <nav class="foot-nav" aria-label="Links">
+        <a href="https://github.com/Bewinxed/cawco">GitHub</a>
+        <a href="/install.sh">install.sh</a>
+      </nav>
+    </footer>
+
+    <span class="sr-only" role="status" data-status></span>
+  </body>
+</html>
