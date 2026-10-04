@@ -520,6 +520,16 @@ public enum Size {
     public static let txPreviewMin: Double = 80
     public static let txPreviewThumbW: Double = 90
     public static let txPreviewThumbH: Double = 64
+    /// A tree mark's status dot, centred on the tile's top-right corner (TreeMark).
+    public static let statusDotSize: Double = 6
+    /// How much of the tile is cut away round its status dot, so the dot reads on any tile hue.
+    public static let statusDotCut: Double = 1.5
+    /// A compact session row's height: one line, in a tree in the rail (SessionRow).
+    public static let rowCompactH: Double = 28
+    /// A compact session row's gap between its mark, its name and its age, and its leading inset: tight, where the name has the least room, and wide enough that the mark's status dot clears the name.
+    public static let rowCompactGap: Double = 6
+    /// A compact session row's trailing inset: where every row in the rail ends.
+    public static let rowCompactPadEnd: Double = 8
 }
 
 public enum Effect {
