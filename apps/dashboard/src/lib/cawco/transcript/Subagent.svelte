@@ -16,6 +16,7 @@
    * grammar as the main one (`branchRows`).
    */
   import type { Message } from "../types";
+  import CompactionDivider from "./CompactionDivider.svelte";
   import { disclosure } from "./disclosure.svelte";
   import MessageBody from "./MessageBody.svelte";
   import MessageRow from "./MessageRow.svelte";
@@ -125,6 +126,8 @@
               <ToolGroup messages={row.messages} />
             {:else if row.kind === "question"}
               <ToolGroup messages={[row.message]} />
+            {:else if row.kind === "compaction"}
+              <CompactionDivider {row} />
             {:else if row.kind === "thinking"}
               <Thinking live={row.live} text={row.text} />
             {:else if row.kind === "stream"}

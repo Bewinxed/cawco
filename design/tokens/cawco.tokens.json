@@ -990,6 +990,16 @@
       "$type": "color",
       "$value": "{color.coral-11}"
     },
+    "brand-ink-strong": {
+      "$type": "color",
+      "$value": "oklch(55% 0.165 33)",
+      "$description": "Brand ink under the pointer: the most saturated vermillion a word can take and still hold 4.5:1 on the pane (4.78:1 by day, 7.65:1 at night). brand-hover measures 3.9:1 by day and is for fills.",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(76% 0.12 34)"
+        }
+      }
+    },
     "link-ink": {
       "$type": "color",
       "$value": "{color.coral-11}"

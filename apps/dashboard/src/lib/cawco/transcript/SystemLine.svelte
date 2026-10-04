@@ -49,8 +49,8 @@
   /** A failure card's heading is never the meaningless "Note". */
   const failTitle = $derived(message?.metadata?.errorTitle ?? "Turn failed");
   /**
-   * What the folded line SAYS. A note that carries a real title (a compaction
-   * summary, a local command's name) shows that title — its content is the
+   * What the folded line SAYS. A note that carries a real title (a failed
+   * hook, a local command's name) shows that title — its content is the
    * payload, which is exactly what must never be flattened into the trigger
    * line. Only a note with no title at all falls back to its content.
    */
@@ -60,7 +60,7 @@
   const foldTitle = $derived(named ? title : message?.content || title);
   /**
    * What opens under it. A command echo keeps its mono well; a titled note's
-   * content (the compacted summary, the reminder text) reads as prose through
+   * content (a hook's output, the reminder text) reads as prose through
    * MessageBody. A note whose content IS its shown line has nothing to open.
    */
   const foldCommand = $derived(message?.metadata?.command);

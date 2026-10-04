@@ -55,6 +55,7 @@
     watchedSessions,
   } from "./arrivals.svelte";
   import CatchUp from "./CatchUp.svelte";
+  import CompactionDivider from "./CompactionDivider.svelte";
   import Delegate from "./Delegate.svelte";
   import { disclosureAt } from "./disclosure.svelte";
   import Latest from "./Latest.svelte";
@@ -2753,6 +2754,11 @@
               <SystemLine
                 disclosed={disclosureAt(session.instanceId, row.key)}
                 harness={row.note}
+              />
+            {:else if row.kind === "compaction"}
+              <CompactionDivider
+                lead={ticket?.kind === "arrive" ? ticket.lead : null}
+                {row}
               />
             {:else if row.kind === "subagent"}
               <Subagent branch={row.branch} spawn={row.spawn} />

@@ -163,6 +163,11 @@
         "displayName": "Coral Wash",
         "canonical": "light-dark(oklch(0.946 0.03 38), oklch(0.665 0.17 33 / 0.16))"
       },
+      "brand-ink-strong": {
+        "role": "primary",
+        "displayName": "Coral Ink, Hovered",
+        "canonical": "light-dark(oklch(0.55 0.165 33), oklch(0.76 0.12 34))"
+      },
       "brand-ink": {
         "role": "primary",
         "displayName": "Coral Ink",

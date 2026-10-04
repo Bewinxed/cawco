@@ -1316,12 +1316,42 @@ function systemNote(
       "This session is being continued from a previous conversation"
     )
   ) {
-    return {
-      kind: "Session continued",
-      title: "Compacted conversation summary",
-    };
+    return COMPACT_SUMMARY;
   }
   return null;
+}
+
+/**
+ * The `noteKind` of a compaction's summary: the text the harness condensed the
+ * conversation before it into. One kind for every harness, so a client draws a
+ * compaction the same way wherever it was reported.
+ */
+export const COMPACT_SUMMARY_KIND = "Session continued";
+
+const COMPACT_SUMMARY = {
+  kind: COMPACT_SUMMARY_KIND,
+  title: "Compacted conversation summary",
+};
+
+/**
+ * A stored entry its harness marked as a compaction summary
+ * (`SessionMessage.compactSummary`), as the note Claude's own summary makes
+ * live: pi stores it in the user's role and opencode in the assistant's, and
+ * neither opens with the words {@link systemNote} knows Claude's by.
+ */
+export function compactSummaryRow(
+  entry: SessionMessage,
+  base: BlockBase
+): TranscriptBlock {
+  return {
+    ...base,
+    type: "ui.system_note",
+    content: transcriptUserText(entry.message) ?? "",
+    metadata: {
+      noteKind: COMPACT_SUMMARY.kind,
+      noteTitle: COMPACT_SUMMARY.title,
+    },
+  };
 }
 
 /** A note's opening line, with the markup that wraps it taken back out. */

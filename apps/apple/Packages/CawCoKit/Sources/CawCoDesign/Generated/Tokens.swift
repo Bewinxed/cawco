@@ -141,6 +141,8 @@ public enum Palette {
     public static let brandHover = Palette.named("brand-hover")
     public static let brandWash = Palette.named("brand-wash")
     public static let brandInk = Palette.named("brand-ink")
+    /// Brand ink under the pointer: the most saturated vermillion a word can take and still hold 4.5:1 on the pane (4.78:1 by day, 7.65:1 at night). brand-hover measures 3.9:1 by day and is for fills.
+    public static let brandInkStrong = Palette.named("brand-ink-strong")
     public static let linkInk = Palette.named("link-ink")
     public static let linkHover = Palette.named("link-hover")
     /// The action: coral under a white label. Darkened from the direction's 58.5/63% so white holds 4.5:1 on every stop of the gradient.

@@ -13,6 +13,7 @@ colors:
   brand-solid: "light-dark(oklch(0.645 0.175 33), oklch(0.665 0.17 33))"
   brand-wash: "light-dark(oklch(0.946 0.03 38), oklch(0.665 0.17 33 / 0.16))"
   brand-ink: "light-dark(oklch(0.5 0.15 32), oklch(0.8 0.1 34))"
+  brand-ink-strong: "light-dark(oklch(0.55 0.165 33), oklch(0.76 0.12 34))"
   link-ink: "light-dark(oklch(0.5 0.15 32), oklch(0.8 0.1 34))"
   selected-bg: "light-dark(oklch(0.905 0.062 48), oklch(0.34 0.075 40))"
   selected-ink: "light-dark(oklch(0.5 0.15 32), oklch(0.83 0.085 34))"
@@ -504,7 +505,7 @@ Warm low-chroma paper and roost neutrals, one coral that means "you act here", a
 ### Primary: the coral action
 - **Coral Action** (`action-solid`, hover `action-hover`, label `on-action`): the one action colour. A primary button, Send/Stop, the machine login link, the workflows primary, checked checkboxes and switches, and the reader's own row mark are filled with `action-surface`, a top-highlight gradient lifted ±0.03 L off `action-solid`. Hover runs the same gradient off `action-hover`. The direction's 58.5% / 63% coral was darkened so the white label holds 4.5:1 on every stop: 5.15:1 on the base and 4.54:1 on the top stop by day, 5.48:1 and 4.82:1 at night. Hover measures 6.23 / 5.48 (day) and 6.63 / 5.82 (night).
 - **Caw Coral ramp** (`coral-3`, `-5`, `-9`, `-10`, `-11`): the brand hue, #E65D46 at rest (`coral-9`, which is `brand-solid`). `brand-solid` fills marks and icon tiles that carry no text (the assistant logo, a filled workflow node, the progress bar, the input caret). White text never sits on `brand-solid`: on coral-9 it measures 3.56:1.
-- **Brand ink and wash** (`brand-ink`, `link-ink`: coral-11; `brand-wash`: coral-3 by day, coral-9 at 16% at night): links, the armed autopilot edge, an active filter chip, delegate and peer accents. Links measure 6.34 / 8.28:1 on raised.
+- **Brand ink and wash** (`brand-ink`, `link-ink`: coral-11; `brand-wash`: coral-3 by day, coral-9 at 16% at night): links, the armed autopilot edge, an active filter chip, delegate and peer accents. Links measure 6.34 / 8.28:1 on raised. `brand-ink-strong` is brand ink under the pointer (the transcript's "Compacted" divider): the most saturated vermillion a word holds 4.5:1 in, 4.78 / 7.65:1 on the pane; `brand-hover` (3.9:1 by day) is for fills, never words.
 - **Selected** (`selected-bg`, `selected-ink`, `selected-icon`): a warm apricot wash (hue 48, so it never reads pink) with coral ink, for the selected nav row and its count. Ink on wash measures 4.73 / 6.98:1.
 - **Chosen option** (`chip-chosen-bg`, `chip-chosen-ink`): the keycap of a picked answer chip fills vermillion with a white digit, instead of a focus ring. Night uses the dark action's lightness: the direction's 66% measured 3.33:1 under the digit.
 - **Focus and selection** (`focus-ring`, `selection`): the 2px keyboard ring is coral, and selected text takes a coral tint at 20% by day and 30% at night.

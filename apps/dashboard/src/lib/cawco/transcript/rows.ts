@@ -6,7 +6,11 @@
  * fixed chrome.
  */
 
-import { ASK_USER_QUESTION, type ToolGlance } from "@cawco/core";
+import {
+  ASK_USER_QUESTION,
+  COMPACT_SUMMARY_KIND,
+  type ToolGlance,
+} from "@cawco/core";
 import type { SubagentState } from "#lib/utils/flow-types.js";
 import type { SessionState } from "../client.svelte";
 import type { Message } from "../types";
@@ -69,7 +73,24 @@ export type Row =
    * the place it was read.
    */
   | { kind: "queued"; key: string; message: Message; grouped: boolean }
-  | { kind: "harness"; key: string; note: HarnessNote };
+  | { kind: "harness"; key: string; note: HarnessNote }
+  /**
+   * A compaction: the boundary the harness reported and the summary it wrote,
+   * as one divider. `brief` is null until the summary has arrived (live, it
+   * comes a moment after the boundary), and the divider opens onto nothing
+   * until then. Keyed by the boundary where there is one, so the summary
+   * landing is the same row gaining its brief.
+   */
+  | {
+      kind: "compaction";
+      key: string;
+      /** The session it is in: where its open state is kept. */
+      session: string;
+      brief: string | null;
+      preTokens?: number;
+      trigger?: "auto" | "manual";
+      timestamp?: string;
+    };
 
 /**
  * Who has the floor, row by row: a speaker line appears only when the speaker
@@ -125,6 +146,8 @@ function voiceOf(row: Row): Voice {
       return voiceOfMessage(row.message);
     case "live":
       return row.text ? "says" : "acts";
+    case "compaction":
+      return "note";
     default:
       // tools, livetool, question, subagent, delegate, thinking, stream, and
       // a harness task note: all of them the agent's run.
@@ -407,6 +430,46 @@ function receiptsOf(messages: Message[]): (m: Message, i: number) => Receipt {
   };
 }
 
+/** The harness's word that it compacted the conversation. */
+const isCompactBoundary = (m: Message | undefined): m is Message =>
+  m?.type === "system.compact_boundary";
+
+/** The summary a compaction wrote: its brief. */
+const isCompactSummary = (m: Message | undefined): m is Message =>
+  m?.type === "ui.system_note" && m.metadata?.noteKind === COMPACT_SUMMARY_KIND;
+
+/**
+ * The compaction that begins at `messages[i]`, and how many messages it is:
+ * a boundary with the summary right after it, a boundary whose summary has
+ * not arrived, or a summary read back without its boundary. `null` for any
+ * other message.
+ */
+function compactionAt(
+  messages: Message[],
+  i: number
+): { row: Row; span: number } | null {
+  const m = messages[i];
+  const boundary = isCompactBoundary(m) ? m : null;
+  const summary = boundary ? messages[i + 1] : m;
+  const brief = isCompactSummary(summary) ? summary : null;
+  const first = boundary ?? brief;
+  if (!first) {
+    return null;
+  }
+  return {
+    row: {
+      kind: "compaction",
+      key: `c:${keyOf(first, i)}`,
+      session: first.instanceId,
+      brief: brief?.content ?? null,
+      preTokens: boundary?.metadata?.preTokens,
+      trigger: boundary?.metadata?.trigger,
+      timestamp: first.timestamp,
+    },
+    span: boundary && brief ? 2 : 1,
+  };
+}
+
 /** The branch a tool.use spawned, when it opened one — a real subagent fold. */
 const branchOf = (
   m: Message,
@@ -554,6 +617,13 @@ function foldRange(
       continue;
     }
     starts.push(i);
+
+    const compaction = compactionAt(messages, i);
+    if (compaction) {
+      rows.push(compaction.row);
+      i += compaction.span;
+      continue;
+    }
 
     const own = ownRow(m, i, subagents, receipt);
     if (own) {

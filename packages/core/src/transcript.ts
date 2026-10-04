@@ -20,6 +20,7 @@ import {
   type BranchEvent,
   type BranchState,
   branchFor,
+  compactSummaryRow,
   type FrameMapping,
   mapFrame,
   newer,
@@ -237,6 +238,20 @@ export class TranscriptBuilder {
         for (const send of entry.sends) {
           put(rows, sendRef(this.instanceId, send, entry.uuid));
         }
+        continue;
+      }
+      // A compaction's summary is the harness's note, whichever role its
+      // harness stored it in: never the reader's turn or the agent's answer.
+      if (entry.compactSummary) {
+        put(
+          rows,
+          compactSummaryRow(entry, {
+            id: entry.uuid,
+            instanceId: this.instanceId,
+            ...(recorded ? { timestamp: recorded } : {}),
+            sdkUuid: entry.uuid,
+          })
+        );
         continue;
       }
       // A user turn the hub has no record of — typed into the harness itself,
