@@ -15,8 +15,13 @@ extension Components.Schemas.InstanceRow: TreeRow {}
 extension Components.Schemas.InstanceRow {
     /// Only a session the hub can still reach is live; the rest is history.
     public var isLive: Bool { status == .running || status == .starting }
-    /// On the board until the operator discards it: live, failed, asleep, or not askable right now.
-    public var isListed: Bool { isLive || status == .error || status == .sleeping || status == .unknown }
+    /// On the board until the operator discards it: live work, a real failure
+    /// to look at, a nap to wake from, one the operator stopped, or a row the
+    /// hub cannot ask about right now. A stopped session has ended, so it is
+    /// listed as ended sessions are (Finished until seen, Recent, its
+    /// project's tree); left out, it stood in no list at all, its menu and
+    /// its transcript out of reach. Only a discarded one is off the board.
+    public var isListed: Bool { isLive || status == .error || status == .sleeping || status == .stopped || status == .unknown }
     /// Its machine cannot be reached, so the hub does not know what it is doing.
     public var isStale: Bool { status == .unknown }
     public var isFailed: Bool { status == .error }
