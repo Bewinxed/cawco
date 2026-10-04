@@ -174,19 +174,6 @@ export class OpencodeActivity {
     return this.#sessions.get(id)?.state ?? "unobserved";
   }
 
-  /** Unknown coverage or any non-idle session prevents connection replacement. */
-  directoryIdle(directory: string): boolean {
-    if (this.#directories.get(directory)?.latest?.kind === "unreachable") {
-      return false;
-    }
-    const sessions = [...this.#sessions.values()].filter(
-      (entry) => entry.directory === directory
-    );
-    return (
-      sessions.length > 0 && sessions.every((entry) => entry.state === "idle")
-    );
-  }
-
   async #request(
     client: OpencodeClient,
     directory: string,
