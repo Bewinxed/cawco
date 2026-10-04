@@ -396,6 +396,8 @@ interface Ride {
   at: (d: number) => [x: number, y: number];
   /** How far along the whole line its way starts: at its parent's glyph. */
   base: number;
+  /** How far along its way it bends: where its corner starts, a few points round it, where it ends. */
+  bends: number[];
   /** Its place in its parent's deck (1 nearest), or 0: it is no card. */
   card: number;
   /** Its parent's colour, for the card it starts as. */
@@ -411,6 +413,9 @@ interface Ride {
   /** How far along its way it leaves the rail its siblings ride down. */
   turn: number;
 }
+
+/** How many chords a glyph's way round its corner is drawn as: each within a seventh of a pixel of the arc. */
+const ROUND = 4;
 
 interface Item {
   /** How far along the line its glyph is: at its place, or straight down. */
@@ -561,6 +566,7 @@ function rideOf(
     const length = Math.max(0, centre.y - from);
     return {
       ...ride,
+      bends: [],
       length,
       turn: length,
       at: (d) => [0, from + clamp(d, 0, length) - centre.y],
@@ -577,6 +583,10 @@ function rideOf(
   const length = before + down + arc + Math.max(0, centre.x - arm);
   return {
     ...ride,
+    bends: Array.from(
+      { length: ROUND + 1 },
+      (_, k) => before + down + (arc * k) / ROUND
+    ),
     length,
     turn: before + down,
     at: (d) => {
@@ -869,8 +879,8 @@ function planFold(shape: Shape, now: State, exit: number): Plan {
 
 /** Keyframes half a 60Hz frame apart, linear between: finer than any frame. */
 const STEP = 1000 / 120;
-/** How many times as often a line's cut is sampled (`railFrames`): about every millisecond. */
-const FINE = 8;
+/** How far apart along a stretch its cut is sampled (`railFrames`), px. */
+const GRAIN = 0.5;
 /** A frame at 60Hz: a fold's batch starts on the next one (`atTravel`). */
 const FRAME = 1000 / 60;
 /** Unclipped on that side: what a row draws outside itself shows. */
@@ -887,24 +897,35 @@ const wiped = (item: Item, v: number): Keyframe => ({
 
 /**
  * A glyph's keyframes, and its skin's: where the head puts it at each of
- * `times`, linear between them, a run of equal frames two (as `railFrames`,
- * and offset the same way). Its centre is `min(head, arrive)` along its way,
+ * `times`, linear between them, a run of equal frames two. Its centre is `min(head, arrive)` along its way,
  * never short of where it starts (a card, at its place in the deck). A card
  * comes from its card's size to its own, shedding the skin, over its way; a
  * glyph that is no card fades in over the first --ride-fade of its. Until
  * the head has reached the glyph its way starts at (a child's own children,
  * in a tree that opens whole), it is not drawn.
+ *
+ * Sampled at `times` and at the moments the head passes each place its way
+ * bends (where it sets off, each point round its corner, where it lands, the
+ * end of its fade). A tall tree folds its line at ten pixels a millisecond
+ * and more: a glyph's whole way fell between two of `times`, and it crossed
+ * its corner in a straight line, 16px off its line.
  */
 function rideFrames(
   plan: Plan,
   ride: Ride,
   times: number[]
 ): { glyph: Keyframe[]; skin: Keyframe[] } {
-  const last = Math.max(1, times.length - 1);
   const fade = numberOf("--ride-fade");
   const shrunk = ride.card * numberOf("--deck-shrink");
   const way = Math.max(ride.length - ride.lead, 1);
-  const samples = times.map((t) => {
+  const passed = [0, ride.lead, fade, ...ride.bends, ride.length].map((d) =>
+    clamp(plan.when(ride.base + d), 0, plan.total)
+  );
+  const moments = [...new Set([...times, ...passed])].sort((a, b) => a - b);
+  const last = Math.max(1, moments.length - 1);
+  const offsetOf = (k: number) =>
+    k === last || plan.total <= 0 ? k / last : moments[k] / plan.total;
+  const samples = moments.map((t) => {
     const along = plan.head(t) - ride.base;
     const d = clamp(along, ride.lead, ride.length);
     const [x, y] = ride.at(d);
@@ -928,8 +949,8 @@ function rideFrames(
   const skin: Keyframe[] = [];
   samples.forEach(({ worn, ...frame }, k) => {
     if (k === 0 || k === last || !same(k, k - 1) || !same(k, k + 1)) {
-      glyph.push({ offset: k / last, ...frame });
-      skin.push({ offset: k / last, opacity: worn });
+      glyph.push({ offset: offsetOf(k), ...frame });
+      skin.push({ offset: offsetOf(k), opacity: worn });
     }
   });
   return { glyph, skin };
@@ -972,7 +993,9 @@ function cutAt(stretch: Stretch, s: number): [right: number, below: number] {
     if (to <= 0 || end <= onGrid(edge)) {
       return size + CLEAR;
     }
-    return to >= size ? UNCUT : Math.max(0, size - (end - edge));
+    // Whole within a hundredth of a pixel: a head at the stretch's very end,
+    // a rounding short of it, left a cut of nothing on a line already whole.
+    return to >= size - 0.01 ? UNCUT : Math.max(0, size - (end - edge));
   };
   const below = (to: number) => cut(height, y, to);
   const right = (to: number) => cut(width, x, to);
@@ -1004,45 +1027,53 @@ function onGrid(place: number): number {
 }
 
 /**
- * A stretch's keyframes: sampled where the head passes it, and only there; a
- * run of equal frames is two. Each holds until the next (`step-end`): eased
- * from one to the next, a cut passed between pixels on its way. Each
- * sample's offset is its place in `times`
- * (evenly spaced over the plan), never its time over the plan's total: the
- * last one came to 1 and a rounding over, `animate` threw, and the throw
- * stopped the batch, every room and row after it held at its first frame.
+ * A stretch's keyframes: its cut at each `GRAIN` of its own length, at the
+ * moment the head stands there, and only where the cut changes. Each holds
+ * until the next (`step-end`): eased from one to the next, a cut passed
+ * between pixels on its way. An offset is never over 1 (`animate` throws on
+ * one, and the throw stops its fold).
  *
- * Sampled `FINE` times as often as `times`, each sample the cut at the
- * middle of the time it is held for: a cut never moves between samples, so
- * held from one of `times` to the next it stood up to a whole sample behind
- * the head, 3px behind the glyph riding the line's tip as it folded. A cut
- * only changes when its pixel does, so the keyframes are as many as before.
+ * Sampled by place, not by time: a cut never moves between samples, so
+ * sampled every 8ms it stood up to a whole sample behind the head, 3px
+ * behind the glyph riding the line's tip as a small tree folded and a whole
+ * stretch behind as a tall one did, whose head runs ten pixels a
+ * millisecond. By place it is within half a `GRAIN` of the head at any pace,
+ * and a stretch has as many keyframes as it has pixels at most.
  */
-function railFrames(plan: Plan, stretch: Stretch, times: number[]): Keyframe[] {
-  const last = Math.max(1, (times.length - 1) * FINE);
-  const held = plan.total / last / 2;
-  const cuts = Array.from({ length: last + 1 }, (_, k) =>
-    cutAt(
-      stretch,
-      plan.head(
-        k === last
-          ? plan.total
-          : Math.min(plan.total, (plan.total * k) / last + held)
-      )
-    )
-  );
-  const same = (a: number, b: number) =>
-    cuts[a][0] === cuts[b][0] && cuts[a][1] === cuts[b][1];
+function railFrames(plan: Plan, stretch: Stretch): Keyframe[] {
+  const { from } = stretch;
+  const to = endOf(stretch);
+  const steps = Math.max(1, Math.ceil((to - from) / GRAIN));
+  // Each place along the stretch, and when the head is there, in time's
+  // order: opening it comes in at the top, folding at the end.
+  const marks = Array.from({ length: steps + 1 }, (_, k) => {
+    const s = from + ((to - from) * k) / steps;
+    return { s, t: plan.when(s) };
+  })
+    .filter(({ t }) => t > 0 && t < plan.total)
+    .sort((a, b) => a.t - b.t);
+  // Held from one mark to the next, at the place midway between them.
+  const cuts = [
+    { t: 0, cut: cutAt(stretch, plan.head(0)) },
+    ...marks.map(({ s, t }, k) => ({
+      t,
+      cut: cutAt(stretch, (s + (marks[k + 1]?.s ?? s)) / 2),
+    })),
+    { t: plan.total, cut: cutAt(stretch, plan.head(plan.total)) },
+  ];
+  const last = cuts.length - 1;
   const frames: Keyframe[] = [];
-  cuts.forEach(([right, below], k) => {
-    if (k === 0 || k === last || !same(k, k - 1)) {
-      frames.push({
-        offset: k / last,
-        easing: "step-end",
-        [CUT_RIGHT]: px(right),
-        [CUT_BELOW]: px(below),
-      });
+  cuts.forEach(({ t, cut: [right, below] }, k) => {
+    const before = cuts[k - 1]?.cut;
+    if (k > 0 && k < last && before?.[0] === right && before[1] === below) {
+      return;
     }
+    frames.push({
+      offset: k === last || plan.total <= 0 ? k / last : t / plan.total,
+      easing: "step-end",
+      [CUT_RIGHT]: px(right),
+      [CUT_BELOW]: px(below),
+    });
   });
   return frames;
 }
@@ -1184,7 +1215,7 @@ function piecesOf(
       bottom: stretch.top + stretch.height,
       start: rests ? enters : 0,
       build: () => [
-        stretch.li.animate(railFrames(plan, stretch, times), {
+        stretch.li.animate(railFrames(plan, stretch), {
           duration: plan.total,
           easing: "linear",
           fill: "both",
