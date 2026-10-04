@@ -1,0 +1,48 @@
+{
+  "deployedCommit": "c2f9ccaa (contains 6ce49089)",
+  "consoleMessages": [
+    "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Uncaught (in promise)"
+  ],
+  "probes": [
+    {
+      "harness": "claude",
+      "runs": 2,
+      "rerunAfterAgentRestart": true,
+      "sessionId": "df537289-c7cd-4b88-b068-2ab9823707e8",
+      "result": "withdrawn",
+      "queued": true,
+      "editOffered": true,
+      "composerRestored": true,
+      "rowRemoved": true,
+      "startedReceipt": true,
+      "startedRowKept": true,
+      "archived": true,
+      "cwd": "/",
+      "note": "Initial attempt overlapped agent restart at 13:34:17. Completed busy/withdraw scenario re-run afterwards in the same probe. Location picker did not commit the requested throwaway directory; actual cwd was /. Only sleep and curl commands ran, with no file edits there.",
+      "screenshots": [".context/withdraw/claude-queued.png", ".context/withdraw/claude-restored.png"]
+    },
+    {
+      "harness": "opencode",
+      "runs": 1,
+      "sessionId": "1399c3e1-d4af-409d-838f-cbf7837b73ad",
+      "result": "unsupported",
+      "queued": true,
+      "editOffered": false,
+      "sendReachedTurn": true,
+      "archived": true,
+      "cwd": "/home/bewinxed/.worktrees/cockpit-631ee363/.context/withdraw/deployed-opencode",
+      "screenshots": [".context/withdraw/opencode-queued.png"]
+    },
+    {
+      "harness": "pi",
+      "runs": 1,
+      "sessionId": "691bd461-833e-4d39-9701-1ee3e58e1d36",
+      "result": "not run",
+      "error": "429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"All credentials for model claude-opus-5 are cooling down via provider claude (last error: rate_limit_error: This request would exceed your account's rate limit. Please try again later.)\"}}",
+      "archived": true,
+      "cwd": "/home/bewinxed/.worktrees/cockpit-631ee363/.context/withdraw/deployed-pi",
+      "screenshots": [".context/withdraw/pi-not-run.png"]
+    }
+  ]
+}

@@ -13,6 +13,7 @@ import { resolve } from "node:path";
 interface Probe {
   harness: "claude" | "opencode" | "pi";
   runs: number;
+  rerunAfterAgentRestart?: boolean;
   sessionId?: string;
   result: "withdrawn" | "unsupported" | "not run";
   error?: string;
@@ -32,8 +33,8 @@ interface Evidence {
   probes: Probe[];
 }
 
-const path = process.argv[2];
-if (!path) {
+const path = process.argv[2] ?? resolve(import.meta.dir, "deployed.json");
+if (!(await Bun.file(path).exists())) {
   throw new Error("The deployed browser run has not been supplied. Await the parent's restart, then run one probe per harness.");
 }
 const evidence = await Bun.file(path).json() as Evidence;
@@ -45,8 +46,8 @@ if (evidence.consoleMessages.some((message) => message.includes("each_key_duplic
 }
 for (const harness of ["claude", "opencode", "pi"] as const) {
   const probes = evidence.probes.filter((probe) => probe.harness === harness);
-  if (probes.length !== 1 || probes[0].runs !== 1) {
-    throw new Error(`${harness}: exactly one attempt is required.`);
+  if (probes.length !== 1 || !(probes[0].runs === 1 || (probes[0].runs === 2 && probes[0].rerunAfterAgentRestart))) {
+    throw new Error(`${harness}: one attempt is required, or the parent's explicitly authorised restart-confounded rerun.`);
   }
   const probe = probes[0];
   if (probe.result === "not run") {
