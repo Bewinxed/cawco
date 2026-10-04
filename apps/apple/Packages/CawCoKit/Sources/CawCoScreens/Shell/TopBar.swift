@@ -307,7 +307,8 @@ final class ChromeButton: TapControl {
         row.isUserInteractionEnabled = false
         row.translatesAutoresizingMaskIntoConstraints = false
         addSubview(row)
-        let inset = square ? 0 : Space.space3
+        // `padding: 0 11px` inside the control's 1px border.
+        let inset = square ? 0 : Space.space3 + 1
         NSLayoutConstraint.activate([
             heightAnchor.constraint(equalToConstant: 28),
             widthAnchor.constraint(greaterThanOrEqualToConstant: 28),

@@ -251,6 +251,7 @@ final class MachinesPopoverController: KitPopoverController {
     private var menus: [String: MachineMenu] = [:]
 
     static let entrance = KitPopover.Entrance(scale: 0.97, rise: 0, duration: Motion.durMenu, curve: Motion.easeOut)
+    private static let inset = 7.0
 
     init(host: MachinesHost) {
         self.host = host
@@ -279,10 +280,11 @@ final class MachinesPopoverController: KitPopoverController {
         stack.setCustomSpacing(Space.space1, after: list)
         stack.translatesAutoresizingMaskIntoConstraints = false
         card.addSubview(stack)
+        // `padding: 6px` inside the popover's 1px border.
         NSLayoutConstraint.activate([
-            stack.topAnchor.constraint(equalTo: card.topAnchor, constant: 6),
-            stack.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 6),
-            stack.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -6),
+            stack.topAnchor.constraint(equalTo: card.topAnchor, constant: Self.inset),
+            stack.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: Self.inset),
+            stack.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -Self.inset),
         ])
         follow()
     }
@@ -336,7 +338,7 @@ final class MachinesPopoverController: KitPopoverController {
     private func resize() {
         let width = min(320, (view.window?.bounds.width ?? UIScreen.main.bounds.width) - 16)
         stack.layoutIfNeeded()
-        let height = stack.systemLayoutSizeFitting(CGSize(width: width - 12, height: 0), withHorizontalFittingPriority: .required, verticalFittingPriority: .fittingSizeLevel).height + 12
+        let height = stack.systemLayoutSizeFitting(CGSize(width: width - Self.inset * 2, height: 0), withHorizontalFittingPriority: .required, verticalFittingPriority: .fittingSizeLevel).height + Self.inset * 2
         preferredContentSize = CGSize(width: width, height: height)
     }
 }
