@@ -24,6 +24,8 @@ public enum Palette {
     public static let coral11 = Palette.named("coral-11")
     /// Spark yellow, paper and roost ink: brand moments only (wordmark, mascot, art).
     public static let spark = Palette.named("spark")
+    /// Caw's vermilion, the same in both schemes: the tab icon's tile while something needs the operator.
+    public static let vermilion = Palette.named("vermilion")
     public static let paper = Palette.named("paper")
     public static let crowInk = Palette.named("crow-ink")
     /// Functional hues (Flexoki-derived). Error sits on crimson (hue 15) so failed never reads as the coral action.
@@ -391,6 +393,8 @@ public enum Radius {
     public static let wellR: Double = 7
     /// The reader's row mark.
     public static let rowMarkR: Double = 4.6
+    /// The tab icon's tile, at the 16px a tab draws it; its bitmap scales the corner with its side.
+    public static let tabIconR: Double = 4
 }
 
 public enum Size {

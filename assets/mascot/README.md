@@ -50,6 +50,14 @@ has finished, so a place that shows him for a wait follows DESIGN.md's Real Wait
 Apple: `CawWaiting`). The dashboard prefetches Rive's WASM and `loading.riv` from its page head,
 and serves the `.riv` files Brotli-compressed as `application/octet-stream`.
 
+The dashboard's tab icon is Caw too (`apps/dashboard/src/lib/cawco/tab-icon/`, DESIGN.md's Tab
+icon): the same runtime and the same bytes as `Caw.svelte`, driven through the runtime's
+low-level API (the file's `CawStates` machine advanced by the time gone by, his `Caw` view model
+bound) because a tab in the background runs no `requestAnimationFrame` for the `Rive` class to
+draw on. `working` and `needs-you` play there; the icon it rests on is `sleeping`, drawn once
+into `apps/dashboard/src/lib/assets/brand/cawco-tab-icon.png` by `bun run tab-icon` in
+apps/dashboard. Run that again after `node build.mjs` changes `sleeping.riv`.
+
 The state machine has no inputs. `Caw` has one instance, `Default` (both booleans off), and the
 artboard points at `Caw`, so a runtime that auto-binds gets that instance.
 
