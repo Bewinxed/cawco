@@ -70,5 +70,5 @@ timing = {
     "inks": inked,
     "halo": {"00": T.halo(drawn, rgb, centres, place)},
 }
-(out / "timing.json").write_text(json.dumps(timing, indent=2) + "\n")
+(out / "timing.json").write_text(T.dump_json(timing))
 print(f"{status}: body-00 from {still.name}, overlap with still {timing['stillOverlap']}, inks {inked}, halo {timing['halo']['00']} px")

@@ -41,6 +41,44 @@ LOOPS = HERE.parent / "loops"
 STILLS = HERE.parent / "stills"
 CACHE = Path.home() / ".cache" / "caw-loops"
 MEDIA = "https://backlot.bewinxed.com/api/takes/{}/media"
+# The repo formatter's line width (Biome).
+LINE = 80
+
+
+def dump_json(value: object) -> str:
+    """`value` as JSON in the layout the repo's formatter keeps, so a fresh trace passes lint:
+    two-space indents, every object one key to a line, and an array on one line where it fits the
+    line width, else one element to a line (numbers alone are packed, as many to a line as fit)."""
+
+    def inline(v: object) -> str | None:
+        if isinstance(v, dict):
+            return "{}" if not v else None
+        if isinstance(v, list):
+            parts = [inline(e) for e in v]
+            return None if None in parts else f"[{', '.join(parts)}]"
+        return json.dumps(v)
+
+    def lay(v: object, depth: int, lead: int) -> str:
+        pad, inner = "  " * depth, "  " * (depth + 1)
+        flat = inline(v)
+        # A value shares its line with what leads it (the indent and a key) and a comma after.
+        if flat is not None and lead + len(flat) + 1 <= LINE:
+            return flat
+        if isinstance(v, dict):
+            rows = [f"{inner}{json.dumps(k)}: {lay(e, depth + 1, len(inner) + len(json.dumps(k)) + 2)}" for k, e in v.items()]
+            return "{\n" + ",\n".join(rows) + f"\n{pad}}}"
+        if all(isinstance(e, (int, float)) and not isinstance(e, bool) for e in v):
+            lines, line = [], inner
+            for k, e in enumerate(v):
+                word = json.dumps(e) + ("," if k < len(v) - 1 else "")
+                if line != inner and len(line) + 1 + len(word) > LINE:
+                    lines.append(line)
+                    line = inner
+                line += ("" if line == inner else " ") + word
+            return "[\n" + "\n".join([*lines, line]) + f"\n{pad}]"
+        return "[\n" + ",\n".join(inner + lay(e, depth + 1, len(inner)) for e in v) + f"\n{pad}]"
+
+    return lay(value, 0, 0) + "\n"
 
 # Caw's inks, measured from his masters (~/cawco-design-kit/caw/*.png, coarse colour histogram of
 # opaque pixels): every traced region is filled with exactly one of these.
@@ -673,7 +711,7 @@ def trace(
         "stillOverlap": round(overlap(labels[0], still, place), 4),
         "halo": halos,
     }
-    (out / "timing.json").write_text(json.dumps(timing, indent=2) + "\n")
+    (out / "timing.json").write_text(dump_json(timing))
     return timing
 
 
