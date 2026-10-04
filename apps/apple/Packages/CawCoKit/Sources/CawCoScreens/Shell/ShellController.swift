@@ -136,9 +136,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         preferredSplitBehavior = .tile
         presentsWithGesture = false
         let width = UserDefaults.standard.double(forKey: Self.railKey)
-        minimumPrimaryColumnWidth = Self.railMin
-        maximumPrimaryColumnWidth = Self.railMax
-        preferredPrimaryColumnWidth = Self.clamp(width > 0 ? width : Self.railDefault)
+        setRail(Self.clamp(width > 0 ? width : Self.railDefault))
         delegate = self
         if #available(iOS 26.0, macCatalyst 26.0, *) {
             // The rail is resized by its own grip, as the web's is.
@@ -172,6 +170,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         barTabs.relayout()
+        placeGrip()
     }
 
     static func clamp(_ width: Double) -> Double { min(railMax, max(railMin, width.rounded())) }
@@ -568,46 +567,82 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     /// The rail's resize handle (Shell.svelte `.grip`): 6pt on the rail's
     /// trailing edge, the control border under a pointer; a drag sets the
     /// width 1:1, coalesced to a frame, and it is kept when the finger lifts.
+    /// Where a key's step is taking the rail, while its tween runs.
+    private var railGoal: Double?
+
+    /// Sets the rail's width, which is the grip's alone to set. From iOS 26
+    /// the split view's own separator also resizes a column, and a width left
+    /// by it stands over `preferredPrimaryColumnWidth` for good (measured: the
+    /// preferred width went 220, 216, 224 while the column stayed 278.5), so a
+    /// key's step could no longer move the rail. The column's limits are
+    /// therefore both the width itself: the system has no range to resize
+    /// in, and the width is whatever was set here, on every OS.
+    private func setRail(_ width: Double) {
+        minimumPrimaryColumnWidth = width
+        maximumPrimaryColumnWidth = width
+        preferredPrimaryColumnWidth = width
+        view.layoutIfNeeded()
+    }
+
+    private weak var grip: RailGrip?
+
+    /// The grip on the rail's trailing edge, 3pt either side of it, while the
+    /// rail stands beside the page.
+    private func placeGrip() {
+        guard let grip else { return }
+        let beside = !isCollapsed && !compact && displayMode == .oneBesideSecondary
+        grip.isHidden = !beside
+        guard beside else { return }
+        let edge = traitCollection.layoutDirection == .rightToLeft ? view.bounds.width - primaryColumnWidth : primaryColumnWidth
+        grip.frame = CGRect(x: edge - 3, y: 0, width: 6, height: view.bounds.height)
+        view.bringSubviewToFront(grip)
+    }
+
     private func installGrip() {
         let grip = RailGrip()
+        // The grip reports where the finger is across the split view; the
+        // rail's edge goes there.
         grip.onDrag = { [weak self] x in
             guard let self else { return }
-            preferredPrimaryColumnWidth = Self.clamp(x)
+            setRail(Self.clamp(traitCollection.layoutDirection == .rightToLeft ? view.bounds.width - x : x))
         }
         grip.onEnd = { [weak self] in
             guard let self else { return }
-            UserDefaults.standard.set(preferredPrimaryColumnWidth, forKey: Self.railKey)
+            UserDefaults.standard.set(primaryColumnWidth, forKey: Self.railKey)
         }
-        // A key's step is a tween over `durControl`, from the width as drawn
-        // (a step still in flight included), so held arrows glide.
+        // A key's step is a tween over `durControl`, from the width the rail
+        // is going to (a step still in flight included), so held arrows glide.
         grip.onKey = { [weak self] x in
             guard let self else { return }
             let next = Self.clamp(x)
+            railGoal = next
             UserDefaults.standard.set(next, forKey: Self.railKey)
             guard !UIAccessibility.isReduceMotionEnabled else {
-                preferredPrimaryColumnWidth = next
+                setRail(next)
+                railGoal = nil
                 return
             }
             UIView.animate(withDuration: Motion.durControl, delay: 0, options: [.beginFromCurrentState, .curveEaseOut]) {
-                self.preferredPrimaryColumnWidth = next
-                self.view.layoutIfNeeded()
+                self.setRail(next)
+            } completion: { [weak self] _ in
+                if self?.railGoal == next { self?.railGoal = nil }
             }
         }
-        grip.target = { [weak self] in self.map { Double($0.preferredPrimaryColumnWidth) } ?? Self.railDefault }
+        grip.target = { [weak self] in self.map { $0.railGoal ?? Double($0.primaryColumnWidth) } ?? Self.railDefault }
         grip.width = { [weak self] in self.map { Double($0.primaryColumnWidth) } ?? Self.railDefault }
-        rail.view.addSubview(grip)
-        NSLayoutConstraint.activate([
-            grip.topAnchor.constraint(equalTo: rail.view.topAnchor),
-            grip.bottomAnchor.constraint(equalTo: rail.view.bottomAnchor),
-            grip.trailingAnchor.constraint(equalTo: rail.view.trailingAnchor, constant: 3),
-            grip.widthAnchor.constraint(equalToConstant: 6),
-        ])
+        // In the split view's own view, over everything it draws: from iOS 26
+        // the split view lays a separator of its own on the rail's edge, and a
+        // grip inside the rail sat under it and never saw a touch.
+        grip.translatesAutoresizingMaskIntoConstraints = true
+        view.addSubview(grip)
+        self.grip = grip
+        placeGrip()
         // The rail's hairline against the page.
         let edge = UIView()
         edge.backgroundColor = Palette.borderHairline
         edge.isUserInteractionEnabled = false
         edge.translatesAutoresizingMaskIntoConstraints = false
-        rail.view.insertSubview(edge, belowSubview: grip)
+        rail.view.addSubview(edge)
         NSLayoutConstraint.activate([
             edge.topAnchor.constraint(equalTo: rail.view.topAnchor),
             edge.bottomAnchor.constraint(equalTo: rail.view.bottomAnchor),
@@ -653,12 +688,11 @@ final class RailGrip: UIView, UIPointerInteractionDelegate {
     var onDrag: (Double) -> Void = { _ in }
     var onEnd: () -> Void = {}
     var width: () -> Double = { 228 }
-    private var start = 0.0
 
     init() {
         super.init(frame: .zero)
-        translatesAutoresizingMaskIntoConstraints = false
         addGestureRecognizer(UIPanGestureRecognizer(target: self, action: #selector(dragged(_:))))
+        addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(pressed)))
         addGestureRecognizer(UIHoverGestureRecognizer(target: self, action: #selector(hovered(_:))))
         addInteraction(UIPointerInteraction(delegate: self))
         isAccessibilityElement = true
@@ -680,8 +714,8 @@ final class RailGrip: UIView, UIPointerInteractionDelegate {
     override var canBecomeFirstResponder: Bool { true }
     override var canBecomeFocused: Bool { true }
 
-    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
-        super.touchesBegan(touches, with: event)
+    /// A press on the grip, or the start of a drag, takes the keyboard.
+    @objc private func pressed() {
         becomeFirstResponder()
     }
 
@@ -690,34 +724,29 @@ final class RailGrip: UIView, UIPointerInteractionDelegate {
         if context.nextFocusedItem === self { becomeFirstResponder() } else if context.previouslyFocusedItem === self { resignFirstResponder() }
     }
 
-    override var keyCommands: [UIKeyCommand]? {
-        let keys: [(String, UIKeyModifierFlags)] = [
-            (UIKeyCommand.inputLeftArrow, []), (UIKeyCommand.inputRightArrow, []),
-            (UIKeyCommand.inputLeftArrow, .shift), (UIKeyCommand.inputRightArrow, .shift),
-            (UIKeyCommand.inputHome, []), (UIKeyCommand.inputEnd, []),
-        ]
-        return keys.map { input, flags in
-            let command = UIKeyCommand(input: input, modifierFlags: flags, action: #selector(stepKey(_:)))
-            command.wantsPriorityOverSystemBehavior = true
-            return command
+    // The keys are read as presses, which reach the view holding the
+    // keyboard directly; whatever it does not use goes on up the chain.
+    override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        var rest = presses
+        for press in presses {
+            guard let key = press.key else { continue }
+            let step = key.modifierFlags.contains(.shift) ? 32.0 : 8.0
+            switch key.keyCode {
+            case .keyboardLeftArrow: onKey(target() - step)
+            case .keyboardRightArrow: onKey(target() + step)
+            case .keyboardHome: onKey(ShellController.railMin)
+            case .keyboardEnd: onKey(ShellController.railMax)
+            default: continue
+            }
+            rest.remove(press)
         }
-    }
-
-    @objc private func stepKey(_ command: UIKeyCommand) {
-        let step = command.modifierFlags.contains(.shift) ? 32.0 : 8.0
-        switch command.input {
-        case UIKeyCommand.inputLeftArrow: onKey(target() - step)
-        case UIKeyCommand.inputRightArrow: onKey(target() + step)
-        case UIKeyCommand.inputHome: onKey(ShellController.railMin)
-        case UIKeyCommand.inputEnd: onKey(ShellController.railMax)
-        default: break
-        }
+        if !rest.isEmpty { super.pressesBegan(rest, with: event) }
     }
 
     @objc private func dragged(_ pan: UIPanGestureRecognizer) {
         switch pan.state {
-        case .began: start = width()
-        case .changed: onDrag(start + pan.translation(in: superview).x)
+        case .began: pressed()
+        case .changed: onDrag(pan.location(in: superview).x)
         case .ended, .cancelled: onEnd()
         default: break
         }
