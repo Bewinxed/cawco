@@ -138,7 +138,7 @@ async function fetchMachines(): Promise<Machine[]> {
   return (await response.json()) as Machine[];
 }
 
-/** The machines a session can start on now, by the names start_session takes. */
+/** The machines work can start on now, by the names delegate and start_session take. */
 const onlineNames = (machines: Machine[]): string =>
   machines
     .filter((machine) => machine.status === "online")
@@ -491,6 +491,8 @@ export interface HandoffActions {
       title: string;
       /** The repository a new workspace is cut from; this session's directory by default. */
       cwd?: string;
+      /** The machine it runs on, by hostname or machineId; the caller's by default. */
+      machine?: string;
       harness?: "claude" | "opencode" | "pi";
       model?: string;
       skills?: string[];
@@ -949,7 +951,7 @@ export const handoffActions = ({
       roster(instanceId),
       fetchMachines(),
     ]);
-    const where = `Machines online (start_session's \`machine\`): ${onlineNames(machines)}.`;
+    const where = `Machines online (\`machine\` on delegate and start_session): ${onlineNames(machines)}.`;
     if (peers.length === 0) {
       return `No other sessions are running.\n\n${where}`;
     }
@@ -1120,6 +1122,10 @@ export const handoffActions = ({
   },
 
   async delegate(prompt, opts) {
+    const { machine, ...request } = opts;
+    const target = machine
+      ? resolveMachine(await fetchMachines(), machine)
+      : undefined;
     if (opts.workspace) {
       await checkCold(undefined, opts.workspace, instanceId);
     }
@@ -1129,7 +1135,12 @@ export const handoffActions = ({
         "content-type": "application/json",
         ...(authorization ? { Authorization: authorization } : {}),
       },
-      body: JSON.stringify({ ...opts, parentInstanceId: instanceId, prompt }),
+      body: JSON.stringify({
+        ...request,
+        machineId: target?.machineId,
+        parentInstanceId: instanceId,
+        prompt,
+      }),
     });
     if (!response.ok) {
       throw new Error(await response.text());
@@ -1144,7 +1155,9 @@ export const handoffActions = ({
     return {
       id: started.instanceId,
       title: started.title,
-      text: started.text,
+      text: target
+        ? `${started.text} It runs on ${machineLabel(target.hostname)}.`
+        : started.text,
       workItemId: started.workItemId,
       workspaceId: started.workspaceId,
     };

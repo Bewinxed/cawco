@@ -138,6 +138,8 @@ export interface WorkItemRequest {
    */
   fork?: boolean;
   harness?: HarnessKind;
+  /** The machine a new workspace is cut on; the parent's by default. */
+  machineId?: string;
   model?: string;
   parentInstanceId: string;
   prompt: string;
@@ -540,16 +542,17 @@ export const createWorkItems = ({
   /** A new workspace: its machine cuts the clone and starts its boundary, then the hub files it. */
   const openWorkspace = async (
     parent: InstanceRow,
-    cwd: string
+    cwd: string,
+    machineId: string
   ): Promise<WorkspaceRow> => {
     const id = crypto.randomUUID();
-    const checkout = (await call(parent.machineId, CONTROL_WORKSPACE_CREATE, [
+    const checkout = (await call(machineId, CONTROL_WORKSPACE_CREATE, [
       cwd,
       id,
     ])) as WorkspaceCheckout;
     return db.createWorkspace({
       id,
-      machineId: parent.machineId,
+      machineId,
       repoRoot: checkout.repoRoot,
       path: checkout.path,
       branch: checkout.branch,
@@ -558,6 +561,29 @@ export const createWorkItems = ({
       state: "active",
       createdByInstanceId: parent.id,
     });
+  };
+
+  /** A new workspace's machine; a remote one needs its own repository and cannot fork. */
+  const targetMachine = (
+    request: WorkItemRequest,
+    parent: InstanceRow
+  ): string => {
+    const machineId = request.machineId ?? parent.machineId;
+    if (machineId !== parent.machineId) {
+      if (request.fork) {
+        throw new WorkItemRefusal(
+          400,
+          "A fork copies a conversation stored on the parent's machine; drop machine, or delegate without fork."
+        );
+      }
+      if (!request.cwd?.trim()) {
+        throw new WorkItemRefusal(
+          400,
+          "A delegate on another machine needs cwd: the repository's absolute path on that machine."
+        );
+      }
+    }
+    return machineId;
   };
 
   const settingsOf = (
@@ -683,11 +709,12 @@ export const createWorkItems = ({
       request.model ||
       request.harness ||
       request.fork ||
+      request.machineId !== undefined ||
       request.skills?.length
     ) {
       throw new WorkItemRefusal(
         400,
-        "a follow-up continues the same session; delegate without workspace for a different model"
+        "a follow-up continues the same session; delegate without workspace for a different model or machine"
       );
     }
     const { workspace, previous } = claim(needle);
@@ -720,8 +747,13 @@ export const createWorkItems = ({
     }
 
     if (!request.workspace) {
+      const machineId = targetMachine(request, parent);
       const settings = settingsOf(request, parent);
-      const workspace = await openWorkspace(parent, request.cwd ?? parent.cwd);
+      const workspace = await openWorkspace(
+        parent,
+        request.cwd ?? parent.cwd,
+        machineId
+      );
       return spawnIn(workspace, settings, parent, request);
     }
     // Awaited before the claim, which files the item in the same step as

@@ -9375,6 +9375,7 @@ export const createServer = (
             skills: t.Optional(t.Array(t.String())),
             canDelegate: t.Optional(t.Boolean()),
             cwd: t.Optional(t.String()),
+            machineId: t.Optional(t.String()),
             workspace: t.Optional(t.String()),
             fork: t.Optional(t.Boolean()),
             checks: checksSchema,

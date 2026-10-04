@@ -347,7 +347,7 @@ export function handoffTools(deps: HandoffDeps) {
     tool(
       "list_sessions",
       "List the other sessions running on the fleet, with the directory and machine each is working in, " +
-        "then the machines online now by the names start_session's `machine` takes. " +
+        "then the machines online now by the names `machine` takes on delegate and start_session. " +
         "The listing shows where each session works, not what it is currently doing, how busy it " +
         "is, or how likely it is to pick up a handoff — and recency is not an ownership signal. " +
         "Use it to find a session that already owns the work, or to name a delegate. For configured delegate types and model mappings, use list_delegate_types. " +
@@ -500,7 +500,7 @@ export function handoffTools(deps: HandoffDeps) {
         "Do NOT delegate: a single command or file read whose exact output you need; edits to files you are actively changing; anything the user asked to watch you do directly.\n\n" +
         "A delegate that is not a fork cannot see this conversation, so `prompt` must stand alone: intent, constraints, acceptance criteria, and what not to do. Keep the decisions yourself and ask for evidence and conclusions, not file dumps.\n\n" +
         "Prefer `type` over raw harness/model — it routes by what the work needs rather than a model string you must already know; use list_delegate_types for the live catalog. Prefer this over start_session when the work must report back, and over handoff for new standalone work (set cwd for another repository).\n\n" +
-        "Each call starts one work item in a workspace: a shared clone of the repository on its own branch, with a boundary every shell command of the delegate runs inside — it writes only its clone, its own /tmp and the package caches, sees and signals only its own processes, and cannot reach the service manager. Without `workspace` the item gets a new one; with `workspace` it is the follow-up there: a new item, under its own title, in the workspace's last session, which reads the brief as its next message on its cached transcript. " +
+        "Each call starts one work item in a workspace: a shared clone of the repository on its own branch, with a boundary every shell command of the delegate runs inside — on every machine it writes only its clone, its own /tmp and the package caches, and cannot reach the service manager. On Linux it also sees only its own processes; on macOS it can see other processes but cannot signal them. The workspace is cut on this session's machine unless `machine` names another one of the fleet. Without `workspace` the item gets a new one; with `workspace` it is the follow-up there: a new item, under its own title, in the workspace's last session, which reads the brief as its next message on its cached transcript. " +
         "A workspace runs one item at a time, and keeps its checkout while its session can be continued. To follow up on a delegate's work, handoff to that delegate, or delegate with its `workspace` to file the follow-up as its own item: either way it continues its own session and cached transcript. Prefer a fresh delegate unless the existing session is warm and holds context this task needs. A cold workspace session is refused once with the cost considerations, and a repeat of the call is delivered.\n\n" +
         "Set `fork: true` when the work needs what this conversation already holds: the delegate starts as a copy of this conversation (on this session's harness and model, so the prompt cache carries over) and reads the brief as its next turn, in a new workspace of its own." +
         delegateTypeLine(deps.delegateTypes),
@@ -541,7 +541,16 @@ export function handoffTools(deps: HandoffDeps) {
           .describe(
             "The repository a new workspace is cut from, on branch ws/<id> from the repository's " +
               "default branch, fetched from its remote as the workspace is cut. " +
+              "With `machine`, this is an absolute path on that machine, and required when that machine is not this session's. " +
               "Defaults to this session's directory; unused with `workspace`."
+          ),
+        machine: z
+          .string()
+          .optional()
+          .describe(
+            'The machine the work item runs on: its hostname as the fleet shows it (e.g. "Omars-MacBook-Pro", ' +
+              '"obelisk-of-light"; list_sessions ends with the machines online now) or its machineId. ' +
+              "Omit to run it on this session's machine. An unknown or offline machine is refused."
           ),
         skills: z
           .array(z.string())
@@ -559,7 +568,7 @@ export function handoffTools(deps: HandoffDeps) {
             "A workspace id from an earlier delegate's result or report. The new work item is its " +
               "follow-up: the brief goes to the session that workspace's last item ran, as its next message " +
               "on its cached transcript. Refused while an item there is still running, and with type, " +
-              "model, harness, skills or fork, which are that session's own; delegate without workspace for a different model."
+              "model, harness, skills, fork or machine, which are that session's own; delegate without workspace for a different model or machine."
           ),
         fork: z
           .boolean()
@@ -595,6 +604,7 @@ export function handoffTools(deps: HandoffDeps) {
         fork,
         can_delegate,
         checks,
+        machine,
       }) => {
         const result = await actions.delegate(prompt, {
           title,
@@ -607,6 +617,7 @@ export function handoffTools(deps: HandoffDeps) {
           type,
           canDelegate: can_delegate,
           checks,
+          machine,
         });
         const sc = {
           delegateInstanceId: result.id,
