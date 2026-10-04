@@ -16,6 +16,7 @@
   const STATUSES: CawStatus[] = [
     "loading",
     "reconnecting",
+    "needs-you",
     "ready",
     "sleeping",
   ];
