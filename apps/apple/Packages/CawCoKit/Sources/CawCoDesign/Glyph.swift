@@ -244,19 +244,62 @@ public final class GlyphView: UIImageView {
 
 /// Text in a type role: its font, line height, tracking and ink, set again
 /// when Dynamic Type changes.
+///
+/// The label holds the string it was given: `text`, its size on one line and
+/// what VoiceOver reads come from that. What it draws can differ in two ways,
+/// both WebKit's rules (`TextWrap`), worked out for the width it is drawn at:
+/// its lines under `wrap`, and where a tail that does not fit is cut.
 public final class KitLabel: UILabel {
     public var role: TypeRole { didSet { render() } }
     public var ink: UIColor { didSet { render() } }
     public var tracking: Double { didSet { render() } }
     /// Tabular figures, for times and counts that line up down a list.
     public var tabular = false { didSet { render() } }
+    /// How a label of more than one line chooses its lines: the web's
+    /// `text-wrap-style` on the element this label ports.
+    public var wrap: TextWrap = .greedy {
+        didSet {
+            guard wrap != oldValue else { return }
+            forget()
+            invalidateIntrinsicContentSize()
+            setNeedsDisplay()
+        }
+    }
 
     override public var text: String? {
         get { attributedText?.string }
         set { content = newValue ?? ""; render() }
     }
 
+    override public var attributedText: NSAttributedString? {
+        get { super.attributedText }
+        set { place(newValue) }
+    }
+
+    override public var numberOfLines: Int { didSet { forget() } }
+
+    override public var lineBreakMode: NSLineBreakMode {
+        get { super.lineBreakMode }
+        set {
+            // UIKit may restate the mode from a string's paragraph as the
+            // string is set; only a caller's own choice counts.
+            if !placing { cutsTail = newValue == .byTruncatingTail }
+            super.lineBreakMode = newValue
+            forget()
+        }
+    }
+
     private var content = ""
+    /// Whether text that does not fit ends in an ellipsis at its tail.
+    private var cutsTail = true
+    private var placing = false
+    private var paragraph: WrapParagraph?
+    /// The string last drawn or measured in place of the label's own, and
+    /// the width it was made for; a nil string is the label's own.
+    private var shown: (width: Double, text: NSAttributedString?)?
+    /// Draws and measures `shown` as a label does, so its lines sit where
+    /// the label's own would.
+    private static let canvas = UILabel()
 
     public init(_ role: TypeRole, ink: UIColor = Palette.inkStrong, tracking: Double = 0, lines: Int = 1) {
         self.role = role
@@ -283,6 +326,117 @@ public final class KitLabel: UILabel {
             ])
             attributes[.font] = UIFont(descriptor: descriptor, size: font.pointSize)
         }
-        super.attributedText = NSAttributedString(string: content, attributes: attributes)
+        place(NSAttributedString(string: content, attributes: attributes))
+    }
+
+    private func place(_ string: NSAttributedString?) {
+        placing = true
+        super.attributedText = string
+        placing = false
+        forget()
+    }
+
+    private func forget() {
+        paragraph = nil
+        shown = nil
+    }
+
+    /// A view dump says what the label draws when that is not its string.
+    override public var description: String {
+        guard let shown, let string = shown.text?.string else { return super.description }
+        return "\(super.description) drawn at \(shown.width): \(string.debugDescription)"
+    }
+
+    // MARK: Lines and the tail cut
+
+    override public func textRect(forBounds bounds: CGRect, limitedToNumberOfLines lines: Int) -> CGRect {
+        guard wrap != .greedy, lines != 1, let string = shown(bounds.width) else {
+            return super.textRect(forBounds: bounds, limitedToNumberOfLines: lines)
+        }
+        return canvas(string).textRect(forBounds: bounds, limitedToNumberOfLines: lines)
+    }
+
+    override public func drawText(in rect: CGRect) {
+        guard let string = shown(rect.width) else {
+            super.drawText(in: rect)
+            return
+        }
+        canvas(string).drawText(in: rect)
+    }
+
+    private func canvas(_ string: NSAttributedString) -> UILabel {
+        let canvas = Self.canvas
+        canvas.numberOfLines = numberOfLines
+        canvas.attributedText = string
+        canvas.lineBreakMode = .byClipping
+        canvas.frame = bounds
+        return canvas
+    }
+
+    private func shown(_ width: Double) -> NSAttributedString? {
+        if let shown, shown.width == width { return shown.text }
+        let string = compose(width)
+        shown = (width, string)
+        return string
+    }
+
+    /// The string to draw in a box `width` wide when it is not the label's
+    /// own: its lines parted where `wrap` parts them, and its last visible
+    /// line cut where it does not fit.
+    private func compose(_ width: Double) -> NSAttributedString? {
+        guard let full = super.attributedText, full.length > 0, width > 0 else { return nil }
+        if numberOfLines == 1 {
+            guard cutsTail, let kept = TextWrap.tailCut(full, width: width) else { return nil }
+            return Self.set(full, starts: [], cut: kept)
+        }
+        let limit = cutsTail ? numberOfLines : 0
+        guard wrap != .greedy || limit > 0 else { return nil }
+        let paragraph = self.paragraph ?? WrapParagraph(full)
+        self.paragraph = paragraph
+        // Too many lines for the label: the rule sees only the lines that show.
+        let greedy = limit > 0 ? paragraph.greedyStarts(width: width) : []
+        let over = limit > 0 && greedy.count >= limit
+        var starts: [Int]
+        if let chosen = paragraph.lineStarts(width: width, wrap: wrap, limit: over ? limit : 0) {
+            starts = chosen
+        } else if over {
+            starts = greedy
+        } else {
+            return nil
+        }
+        guard limit > 0, starts.count >= limit else {
+            return Self.set(full, starts: starts, cut: nil)
+        }
+        let string = full.string as NSString
+        let start = limit > 1 ? starts[limit - 2] : 0
+        var end = starts[limit - 1]
+        while end > start, let scalar = Unicode.Scalar(string.character(at: end - 1)), CharacterSet.whitespacesAndNewlines.contains(scalar) { end -= 1 }
+        let line = full.attributedSubstring(from: NSRange(location: start, length: end - start))
+        let kept = TextWrap.tailCut(line, width: width, continues: true) ?? line.length
+        return Self.set(full, starts: Array(starts.prefix(limit - 1)), cut: start + kept)
+    }
+
+    /// `full` with a line separator where each of `starts` begins a line and,
+    /// with a `cut`, U+2026 in place of everything from that offset on.
+    private static func set(_ full: NSAttributedString, starts: [Int], cut: Int?) -> NSAttributedString {
+        let string = full.string as NSString
+        let text = NSMutableAttributedString(attributedString: full)
+        if let cut {
+            text.replaceCharacters(in: NSRange(location: cut, length: text.length - cut), with: "\u{2026}")
+        }
+        for start in starts.reversed() {
+            // The spaces a line ends in go with the break, as the web hangs them.
+            var from = start
+            while from > 0, string.character(at: from - 1) == 0x20 { from -= 1 }
+            if from > 0, let scalar = Unicode.Scalar(string.character(at: from - 1)), CharacterSet.newlines.contains(scalar) { continue }
+            text.replaceCharacters(in: NSRange(location: from, length: start - from), with: "\u{2028}")
+        }
+        // Every line is already its own: nothing wraps and UIKit adds no ellipsis.
+        text.enumerateAttribute(.paragraphStyle, in: NSRange(location: 0, length: text.length)) { value, range, _ in
+            guard let style = (value as? NSParagraphStyle)?.mutableCopy() as? NSMutableParagraphStyle else { return }
+            style.lineBreakMode = .byClipping
+            text.addAttribute(.paragraphStyle, value: style, range: range)
+        }
+        return text
     }
 }
