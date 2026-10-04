@@ -1,0 +1,171 @@
+{
+  "take": "tk_0T5bd7egP2SetyC-4zIBK",
+  "frames": 14,
+  "fps": 24,
+  "drawings": [
+    {
+      "start": 0,
+      "length": 2,
+      "drawing": 3
+    },
+    {
+      "start": 2,
+      "length": 2,
+      "drawing": 4
+    },
+    {
+      "start": 4,
+      "length": 2,
+      "drawing": 5
+    },
+    {
+      "start": 6,
+      "length": 2,
+      "drawing": 6
+    },
+    {
+      "start": 8,
+      "length": 2,
+      "drawing": 7
+    },
+    {
+      "start": 10,
+      "length": 2,
+      "drawing": 8
+    },
+    {
+      "start": 12,
+      "length": 2,
+      "drawing": 9
+    }
+  ],
+  "placement": {
+    "scale": 0.6244127877166968,
+    "x": -63.57434731094878,
+    "y": -83.0935728836107
+  },
+  "stillOverlap": 0.9888,
+  "halo": {
+    "03": 0,
+    "04": 0,
+    "05": 0,
+    "06": 0,
+    "07": 0,
+    "08": 0,
+    "09": 0
+  },
+  "probe": {
+    "take": "tk_0T5bd7egP2SetyC-4zIBK",
+    "specksCleared": {},
+    "whiteMarksRemovedAtTrace": [],
+    "tracedFrames": 22,
+    "traced": [
+      [
+        0,
+        2,
+        88492
+      ],
+      [
+        2,
+        2,
+        87909
+      ],
+      [
+        4,
+        2,
+        88513
+      ],
+      [
+        6,
+        2,
+        86271
+      ],
+      [
+        8,
+        2,
+        85581
+      ],
+      [
+        10,
+        2,
+        71181
+      ],
+      [
+        12,
+        2,
+        78739
+      ],
+      [
+        14,
+        2,
+        36154
+      ],
+      [
+        16,
+        2,
+        22877
+      ],
+      [
+        18,
+        4,
+        0
+      ]
+    ],
+    "first": {
+      "against": "ready-attention/body-00",
+      "iou": 0.9883,
+      "sameInks": 0.9829,
+      "outlineMaxPx": 3.61,
+      "outlineP99Px": 2.0,
+      "largestDiffs": [
+        {
+          "px": 54,
+          "at": [
+            416,
+            167
+          ]
+        },
+        {
+          "px": 39,
+          "at": [
+            85,
+            270
+          ]
+        },
+        {
+          "px": 33,
+          "at": [
+            381,
+            164
+          ]
+        }
+      ]
+    },
+    "droppedLeadingFrames": 6,
+    "trimmedTrailingFrames": 2,
+    "lastInkPx": 0,
+    "frames": 14,
+    "slots": 7,
+    "drawings": 7,
+    "onTwos": true,
+    "whiteMarks": {},
+    "halo": {
+      "03": 0,
+      "04": 0,
+      "05": 0,
+      "06": 0,
+      "07": 0,
+      "08": 0,
+      "09": 0
+    },
+    "eyesCut": {},
+    "gates": {
+      "firstFrameP99": true,
+      "lastEmpty": true,
+      "onTwos": true,
+      "whiteMarks": true,
+      "halo": true,
+      "eyes": true
+    }
+  }
+}

@@ -1,0 +1,158 @@
+{
+  "take": "tk__FpJIyOXNwYMV2wPaX-x5",
+  "frames": 8,
+  "fps": 24,
+  "drawings": [
+    {
+      "start": 0,
+      "length": 2,
+      "drawing": 6
+    },
+    {
+      "start": 2,
+      "length": 2,
+      "drawing": 3
+    },
+    {
+      "start": 4,
+      "length": 2,
+      "drawing": 4
+    },
+    {
+      "start": 6,
+      "length": 2,
+      "drawing": 7
+    }
+  ],
+  "placement": {
+    "scale": 0.6242138364779874,
+    "x": -63.347484276729574,
+    "y": -82.28930817610069
+  },
+  "stillOverlap": 0.9916,
+  "halo": {
+    "03": 0,
+    "04": 0,
+    "06": 0,
+    "07": 0
+  },
+  "probe": {
+    "take": "tk__FpJIyOXNwYMV2wPaX-x5",
+    "specksCleared": {},
+    "whiteMarksRemovedAtTrace": [],
+    "tracedFrames": 22,
+    "traced": [
+      [
+        0,
+        6,
+        88511
+      ],
+      [
+        6,
+        2,
+        87557
+      ],
+      [
+        8,
+        2,
+        85442
+      ],
+      [
+        10,
+        2,
+        82475
+      ],
+      [
+        12,
+        2,
+        80649
+      ],
+      [
+        14,
+        8,
+        80836
+      ]
+    ],
+    "trimmedLeadingFrames": 8,
+    "trimmedTrailingFrames": 6,
+    "first": {
+      "against": "ready-attention/body-00",
+      "iou": 0.9892,
+      "sameInks": 0.9836,
+      "outlineMaxPx": 3.16,
+      "outlineP99Px": 1.41,
+      "largestDiffs": [
+        {
+          "px": 27,
+          "at": [
+            299,
+            191
+          ]
+        },
+        {
+          "px": 20,
+          "at": [
+            339,
+            150
+          ]
+        },
+        {
+          "px": 19,
+          "at": [
+            49,
+            291
+          ]
+        }
+      ]
+    },
+    "last": {
+      "against": "idle-nod-off/body-11",
+      "iou": 0.9903,
+      "sameInks": 0.9844,
+      "outlineMaxPx": 3.61,
+      "outlineP99Px": 1.41,
+      "largestDiffs": [
+        {
+          "px": 33,
+          "at": [
+            190,
+            243
+          ]
+        },
+        {
+          "px": 33,
+          "at": [
+            218,
+            374
+          ]
+        },
+        {
+          "px": 28,
+          "at": [
+            328,
+            286
+          ]
+        }
+      ]
+    },
+    "frames": 8,
+    "slots": 4,
+    "drawings": 4,
+    "onTwos": true,
+    "whiteMarks": {},
+    "halo": {
+      "03": 0,
+      "04": 0,
+      "06": 0,
+      "07": 0
+    },
+    "eyesCut": {},
+    "gates": {
+      "endsP99": true,
+      "onTwos": true,
+      "whiteMarks": true,
+      "halo": true,
+      "eyes": true
+    }
+  }
+}

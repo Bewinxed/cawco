@@ -11,7 +11,8 @@
     | "done"
     | "trying"
     | "loading"
-    | "reconnecting";
+    | "reconnecting"
+    | "sleeping";
 
   /**
    * The status files, as the build emits them: URLs only, so a file is
@@ -76,14 +77,17 @@
    * with nothing open yet, a fleet still being read, a hub being reached
    * again. Never in a row, an error or a permission request.
    *
-   * Drawn by Rive from his status's file, whose loops take turns on their
-   * own; this sets only the file's `Caw` view model: `dark` (the cream rim)
-   * and `reducedMotion` (his still). He fades in once his file is drawn
-   * (--dur-fade on --ease-out), and `onentered` says when that first fade
-   * has finished, so a place can keep him until then. A status change loads
-   * the new file and fades its Caw in over the shown one, which stays fully
-   * drawn underneath until the fade ends, so no frame is empty. At most two
-   * Caws are alive at once.
+   * Drawn by Rive from his status's file, whose clips and loops play on
+   * their own; this only sets the file's `Caw` view model and hears its
+   * triggers (assets/mascot/README.md, Contract). He comes in by his enter
+   * clip, and `onentered` says when it has ended, so a place can keep him
+   * until then. On a status change the shown file is told to `leave`; once
+   * it says he is back on his `still`, the new status's file takes over
+   * with `from` naming the old one and plays his arrival from that very
+   * drawing, so no frame is empty and at most two files are alive. With
+   * `present` off he plays his exit and `ongone` says when the page is
+   * empty. With less motion there are no clips: he fades (--dur-fade on
+   * --ease-out) in, across and out.
    *
    * `size` is the side of his still in px. His acting reaches past it, so
    * the canvases spill over the box unclipped and never take a pointer.
@@ -94,19 +98,28 @@
 
   let {
     status,
+    present = true,
     next = [],
     onentered,
+    ongone,
     size = 160,
   }: {
     status: CawStatus;
     /**
-     * Called once his first appearance has fully faded in, or once his file
-     * has failed to load, so whatever waits on him is never stuck.
+     * Off once the place is done with him: he goes back to his still, plays
+     * his exit, and `ongone` is called. The place keeps him mounted till then.
+     */
+    present?: boolean;
+    /**
+     * Called once his first appearance has played to its end, or once his
+     * file has failed to load, so whatever waits on him is never stuck.
      */
     onentered?: () => void;
+    /** Called once he has left an empty page behind after `present` went off. */
+    ongone?: () => void;
     /**
      * The statuses this place can change to. Their files are fetched once
-     * Caw is on screen, so a change fades in without waiting on the network.
+     * Caw is on screen, so a change never waits on the network.
      */
     next?: CawStatus[];
     /** Side of Caw's still in px; the artboard around it draws past it. */
@@ -118,25 +131,33 @@
   const BOX = { x: 43, y: 40, side: 512 };
 
   interface Layer {
-    /** When the status was asked for, for the fade's start mark. */
+    /** When the status was asked for, for the performance marks. */
     asked: number;
-    /** Its fade in, while it runs. */
+    canvas?: HTMLCanvasElement;
+    /** Its fade, while one runs (less motion only). */
     fade?: Animation;
+    /** `none` on a first appearance, else the status he was showing. */
+    from: "none" | CawStatus;
     id: number;
     rive?: Rive;
     shown: boolean;
     status: CawStatus;
+    /** Told to leave and back on his still: the next file may take over. */
+    still: boolean;
   }
-  /** Bottom to top: the Caw on screen, and during a change the one fading in over it. */
+  /** Bottom to top: the Caw on screen, and during a change the one taking over. */
   let layers = $state<Layer[]>([]);
   let nextId = 0;
+  /** His first appearance has been reported. */
+  let entered = false;
 
   const dark = $derived(theme.resolved === "dark");
   const reducedMotion = $derived(!motionOk.current);
 
   $effect(() => {
     const asked = status;
-    untrack(() => ask(asked));
+    const here = present;
+    untrack(() => (here ? ask(asked) : leave()));
   });
 
   // Every live Caw follows the scheme and the motion setting; their state machines do the rest.
@@ -149,23 +170,96 @@
     }
   });
 
+  function layerFor(incoming: CawStatus, from: Layer["from"]): Layer {
+    nextId += 1;
+    return {
+      id: nextId,
+      status: incoming,
+      from,
+      asked: performance.now(),
+      shown: false,
+      still: false,
+    };
+  }
+
+  const flag = (layer: Layer, name: "leave" | "exit", value: boolean) => {
+    const property = layer.rive?.viewModelInstance?.boolean(name);
+    if (property) {
+      property.value = value;
+    }
+  };
+
   /**
-   * Puts `incoming` on the way in. A Caw still loading for an earlier change
-   * is dropped, and during a fade the one below goes and the one fading in is
-   * drawn fully at once, so with the new one there are never more than two.
+   * Brings `incoming` on. The first Caw, or one whose file is still on its
+   * way, is simply the file for it. A Caw on screen is told to leave and the
+   * new file takes over from his still (`settle`); with less motion the new
+   * one fades in over him.
    */
   function ask(incoming: CawStatus) {
-    const top = layers.filter((l) => l.shown).at(-1);
-    top?.fade?.finish();
-    if (top?.status === incoming) {
-      layers = [top];
+    const [current] = layers;
+    if (!current?.shown) {
+      if (current?.status !== incoming) {
+        layers = [layerFor(incoming, "none")];
+      }
       return;
     }
-    nextId += 1;
-    layers = [
-      ...(top ? [top] : []),
-      { id: nextId, status: incoming, asked: performance.now(), shown: false },
-    ];
+    if (reducedMotion) {
+      const top = layers.at(-1) as Layer;
+      top.fade?.finish();
+      layers =
+        top.status === incoming ? [top] : [top, layerFor(incoming, top.status)];
+      return;
+    }
+    settle();
+  }
+
+  /** Moves the Caw on screen towards the status asked for, one step at a time. */
+  function settle() {
+    const [current] = layers;
+    if (!(current?.shown && present)) {
+      return;
+    }
+    flag(current, "exit", false);
+    if (current.status === status) {
+      // Asked back before the change happened: he carries on.
+      current.still = false;
+      flag(current, "leave", false);
+      layers = [current];
+      return;
+    }
+    if (!current.still) {
+      flag(current, "leave", true);
+      return;
+    }
+    if (layers[1]?.status !== status) {
+      layers = [current, layerFor(status, current.status)];
+    }
+  }
+
+  /** `present` went off: his exit, then `ongone`. Unloaded or with less motion, at once or a fade. */
+  function leave() {
+    const [current] = layers;
+    if (!current?.shown) {
+      layers = [];
+      ongone?.();
+      return;
+    }
+    layers = [current];
+    if (reducedMotion) {
+      current.fade = current.canvas?.animate([{ opacity: 1 }, { opacity: 0 }], {
+        duration: dur("--dur-fade"),
+        easing: ease("--ease-out"),
+        fill: "forwards",
+      });
+      (current.fade?.finished ?? Promise.resolve())
+        .then(() => ongone?.())
+        .catch(() => {
+          // Cancelled: the canvas left the page before its fade ended.
+        });
+      return;
+    }
+    flag(current, "leave", true);
+    flag(current, "exit", true);
   }
 
   function write(
@@ -186,11 +280,45 @@
     }
   }
 
-  /** Draws `layer`'s Caw into its canvas once its file is in, then fades it in. */
+  function reportEntered(layer: Layer) {
+    if (entered) {
+      return;
+    }
+    entered = true;
+    performance.measure(`caw ${layer.status} entered`, { start: layer.asked });
+    onentered?.();
+  }
+
+  /** Hears the file's triggers: the end of his coming in, his still while leaving, his exit's end. */
+  function listen(layer: Layer, rive: Rive) {
+    const caw = rive.viewModelInstance;
+    caw?.trigger("entered")?.on(() => reportEntered(layer));
+    caw?.trigger("still")?.on(() => {
+      layer.still = true;
+      settle();
+    });
+    caw?.trigger("gone")?.on(() => {
+      if (present) {
+        // Asked back mid-exit: he comes in afresh.
+        layers = [layerFor(status, "none")];
+      } else {
+        layers = [];
+        ongone?.();
+      }
+    });
+  }
+
+  /** Draws `layer`'s Caw into its canvas once its file is in, then starts him. */
   function mount(layer: Layer) {
     return (canvas: HTMLCanvasElement) => {
       let gone = false;
       let rive: Rive | undefined;
+      const failed = (error?: unknown) => {
+        console.error(`Caw ${layer.status} did not load`, error ?? "");
+        if (!layers.some((l) => l.shown)) {
+          reportEntered(layer);
+        }
+      };
       Promise.all([riveRuntime(), fileBytes(layer.status)])
         .then(([{ Rive, Layout, Fit, Alignment }, buffer]) => {
           if (gone) {
@@ -206,29 +334,20 @@
               fit: Fit.Contain,
               alignment: Alignment.Center,
             }),
-            onLoadError: () => {
-              console.error(`Caw ${layer.status} did not load`);
-              if (!layers.some((l) => l.shown)) {
-                onentered?.();
-              }
-            },
+            onLoadError: () => failed(),
             onLoad: () => {
               if (gone || !rive) {
                 return;
               }
               rive.resizeDrawingSurfaceToCanvas();
               write(rive, { dark, reducedMotion });
+              listen(layer, rive);
               layer.rive = rive;
               show(layer, canvas);
             },
           });
         })
-        .catch((error: unknown) => {
-          console.error(`Caw ${layer.status} did not load`, error);
-          if (!layers.some((l) => l.shown)) {
-            onentered?.();
-          }
-        });
+        .catch(failed);
       return () => {
         gone = true;
         rive?.cleanup();
@@ -237,44 +356,52 @@
   }
 
   /**
-   * Fades `layer` in; once it is fully drawn, the Caw below it goes, and on
-   * his first appearance the place hears he has entered.
+   * Starts `layer`: `from` picks his enter or his arrival, which begins on
+   * the drawing the Caw below holds, so that one goes once this one is drawn.
+   * With less motion the file holds his still and the canvas fades in.
    */
   function show(layer: Layer, canvas: HTMLCanvasElement) {
     const first = !layers.some((l) => l.shown);
-    performance.measure(`caw ${layer.status} fades in`, { start: layer.asked });
+    const from = layer.rive?.viewModelInstance?.enum("from");
+    if (from) {
+      from.value = layer.from;
+    }
+    layer.canvas = canvas;
     layer.shown = true;
     if (first) {
-      // Rive's render loop draws him in the next frame, ahead of this callback.
-      requestAnimationFrame(() =>
-        performance.measure(`caw ${layer.status} first drawn`, {
-          start: layer.asked,
-        })
-      );
       for (const upcoming of next) {
         fileBytes(upcoming).catch(() => {
           // Fetched again when that status is asked for.
         });
       }
     }
-    layer.fade = canvas.animate([{ opacity: 0 }, { opacity: 1 }], {
-      duration: dur("--dur-fade"),
-      easing: ease("--ease-out"),
-    });
-    layer.fade.finished
-      .then(() => {
-        layer.fade = undefined;
-        layers = layers.filter((l) => l.id >= layer.id);
-        if (first) {
-          performance.measure(`caw ${layer.status} entered`, {
-            start: layer.asked,
-          });
-          onentered?.();
-        }
-      })
-      .catch(() => {
-        // Cancelled: the canvas left the page before its fade ended.
+    if (reducedMotion) {
+      layer.fade = canvas.animate([{ opacity: 0 }, { opacity: 1 }], {
+        duration: dur("--dur-fade"),
+        easing: ease("--ease-out"),
       });
+      layer.fade.finished
+        .then(() => {
+          layer.fade = undefined;
+          layers = layers.filter((l) => l.id >= layer.id);
+          reportEntered(layer);
+        })
+        .catch(() => {
+          // Cancelled: the canvas left the page before its fade ended.
+        });
+      return;
+    }
+    // Rive's render loop draws him in the next frame; the Caw below goes in the one after.
+    requestAnimationFrame(() => {
+      performance.measure(`caw ${layer.status} first drawn`, {
+        start: layer.asked,
+      });
+      requestAnimationFrame(() => {
+        layers = layers.filter((l) => l.id >= layer.id);
+        // The status may have moved on while this file was loading.
+        untrack(settle);
+      });
+    });
   }
 </script>
 

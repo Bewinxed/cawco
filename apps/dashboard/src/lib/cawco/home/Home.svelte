@@ -58,6 +58,13 @@
       home.needs.length + home.working.length + home.finished.length === 0 &&
       home.empty
   );
+  /** Caw is on the page: from a first run until his exit has ended. */
+  let cawThere = $state(false);
+  $effect(() => {
+    if (firstRun) {
+      cawThere = true;
+    }
+  });
   /**
    * In the rail, the block over the groups with nothing in it: the hub is
    * live and read (no status line) and nothing needs the reader (no
@@ -122,7 +129,7 @@
      arriving opens its place while what follows slides down, one leaving
      closes, a session moving from Working to Finished closes in one list
      and its count pops on the other tab, a re-sort slides, a group's box
-     follows its height, and Caw fades where the groups were. With less
+     follows its height, and Caw comes and goes by his own clips. With less
      motion, only the fades run. In the rail the home is one box of the
      rail's own reflow, so what is under it slides as it grows. -->
 <section
@@ -181,17 +188,30 @@
 
     <WorkTabs onstart={start} {stale} waiting={!home.ready} bind:relaying />
 
-    {#if firstRun}
+    {#if cawThere}
       <!-- Caw only on a fleet with nothing in it yet, or while a machine
-           has not answered: the one empty state then. With sessions
-           somewhere, a tab with none says so itself (WorkTabs). -->
-      <figure class="caw" data-flip in:crossIn out:crossOut>
-        <Caw size={variant === "rail" ? 112 : 160} status="ready" />
+           has not answered: the one empty state then. Nothing is going on,
+           so he sleeps; while a machine is awaited he is awake. With sessions
+           somewhere, a tab with none says so itself (WorkTabs). He comes in
+           by his enter and leaves by his exit, and keeps his place until it
+           has played; only his line fades. -->
+      <figure class="caw" data-flip>
+        <Caw
+          next={["ready", "sleeping"]}
+          ongone={() => {
+            cawThere = false;
+          }}
+          present={firstRun}
+          size={variant === "rail" ? 112 : 160}
+          status={home.waitingOn.length > 0 ? "ready" : "sleeping"}
+        />
         <!-- The line's states share one cell and cross-fade (§8). -->
         <figcaption>
-          {#key cawLine}
-            <span in:crossIn out:crossOut>{cawLine}</span>
-          {/key}
+          {#if firstRun}
+            {#key cawLine}
+              <span in:crossIn out:crossOut>{cawLine}</span>
+            {/key}
+          {/if}
         </figcaption>
       </figure>
     {/if}

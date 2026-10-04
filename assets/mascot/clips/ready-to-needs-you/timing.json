@@ -1,0 +1,171 @@
+{
+  "take": "tk_1-5faYrEOy2GZO9TxC0MQ",
+  "frames": 10,
+  "fps": 24,
+  "drawings": [
+    {
+      "start": 0,
+      "length": 2,
+      "drawing": 7
+    },
+    {
+      "start": 2,
+      "length": 2,
+      "drawing": 3
+    },
+    {
+      "start": 4,
+      "length": 2,
+      "drawing": 4
+    },
+    {
+      "start": 6,
+      "length": 2,
+      "drawing": 5
+    },
+    {
+      "start": 8,
+      "length": 2,
+      "drawing": 8
+    }
+  ],
+  "placement": {
+    "scale": 0.6242138364779874,
+    "x": -63.472484276729574,
+    "y": -82.28930817610069
+  },
+  "stillOverlap": 0.9923,
+  "halo": {
+    "03": 0,
+    "04": 0,
+    "05": 0,
+    "07": 0,
+    "08": 0
+  },
+  "probe": {
+    "take": "tk_1-5faYrEOy2GZO9TxC0MQ",
+    "specksCleared": {},
+    "whiteMarksRemovedAtTrace": [],
+    "tracedFrames": 22,
+    "traced": [
+      [
+        0,
+        6,
+        88483
+      ],
+      [
+        6,
+        2,
+        86599
+      ],
+      [
+        8,
+        2,
+        85855
+      ],
+      [
+        10,
+        2,
+        82592
+      ],
+      [
+        12,
+        2,
+        82433
+      ],
+      [
+        14,
+        2,
+        84626
+      ],
+      [
+        16,
+        6,
+        85685
+      ]
+    ],
+    "trimmedLeadingFrames": 8,
+    "trimmedTrailingFrames": 4,
+    "first": {
+      "against": "ready-attention/body-00",
+      "iou": 0.9899,
+      "sameInks": 0.985,
+      "outlineMaxPx": 3.16,
+      "outlineP99Px": 1.41,
+      "largestDiffs": [
+        {
+          "px": 27,
+          "at": [
+            299,
+            191
+          ]
+        },
+        {
+          "px": 25,
+          "at": [
+            417,
+            167
+          ]
+        },
+        {
+          "px": 25,
+          "at": [
+            274,
+            424
+          ]
+        }
+      ]
+    },
+    "last": {
+      "against": "needs-you-hey/body-00",
+      "iou": 0.9893,
+      "sameInks": 0.9822,
+      "outlineMaxPx": 5.83,
+      "outlineP99Px": 1.41,
+      "largestDiffs": [
+        {
+          "px": 50,
+          "at": [
+            212,
+            339
+          ]
+        },
+        {
+          "px": 31,
+          "at": [
+            316,
+            146
+          ]
+        },
+        {
+          "px": 22,
+          "at": [
+            127,
+            365
+          ]
+        }
+      ]
+    },
+    "frames": 10,
+    "slots": 5,
+    "drawings": 5,
+    "onTwos": true,
+    "whiteMarks": {},
+    "halo": {
+      "03": 0,
+      "04": 0,
+      "05": 0,
+      "07": 0,
+      "08": 0
+    },
+    "eyesCut": {},
+    "gates": {
+      "firstFrameP99": true,
+      "landing": true,
+      "onTwos": true,
+      "whiteMarks": true,
+      "halo": true,
+      "eyes": true
+    }
+  }
+}

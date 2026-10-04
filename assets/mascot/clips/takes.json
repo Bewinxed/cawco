@@ -1,0 +1,18 @@
+{
+  "loading-enter": "tk_9Ynkh4j2QA8_dTi0Q_Qym",
+  "loading-exit": "tk_MmIgyN54qhqdTnTTWYMPN",
+  "loading-to-ready": "tk_jJ1vaO1y_2S8Qv4af0bEo",
+  "loading-to-reconnecting": "tk_Xu64_7Coh-2lxfllV8xyg",
+  "needs-you-to-ready": "tk_mKPtfT8FkRq106u8vwLQY",
+  "ready-enter": "tk_J1BpLkJv5QKN6OVbMN7US",
+  "ready-exit": "tk_0T5bd7egP2SetyC-4zIBK",
+  "ready-to-loading": "tk_uJM9sC4kYJzRO3TNIk9q_",
+  "ready-to-needs-you": "tk_1-5faYrEOy2GZO9TxC0MQ",
+  "ready-to-reconnecting": "tk_Jv4G-1NlUWnzvC0PIu_nT",
+  "ready-to-sleeping": "tk__FpJIyOXNwYMV2wPaX-x5",
+  "reconnecting-enter": "tk_fvU8oCkAAjrITMHmSHx5_",
+  "reconnecting-exit": "tk_2NEb8bFHPw88xrns6K7wy",
+  "reconnecting-to-loading": "tk_E8kAr_4yzQ97uaUWNosm2",
+  "reconnecting-to-ready": "tk_xHRpiUFpBqQ_5tCv2UP9T",
+  "sleeping-to-ready": "tk_VAsZI_AxNmzV5v6yHzpem"
+}

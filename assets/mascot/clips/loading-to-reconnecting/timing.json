@@ -1,0 +1,226 @@
+{
+  "take": "tk_Xu64_7Coh-2lxfllV8xyg",
+  "frames": 20,
+  "fps": 24,
+  "drawings": [
+    {
+      "start": 0,
+      "length": 2,
+      "drawing": 11
+    },
+    {
+      "start": 2,
+      "length": 2,
+      "drawing": 2
+    },
+    {
+      "start": 4,
+      "length": 2,
+      "drawing": 3
+    },
+    {
+      "start": 6,
+      "length": 2,
+      "drawing": 4
+    },
+    {
+      "start": 8,
+      "length": 2,
+      "drawing": 5
+    },
+    {
+      "start": 10,
+      "length": 2,
+      "drawing": 6
+    },
+    {
+      "start": 12,
+      "length": 2,
+      "drawing": 7
+    },
+    {
+      "start": 14,
+      "length": 2,
+      "drawing": 8
+    },
+    {
+      "start": 16,
+      "length": 2,
+      "drawing": 9
+    },
+    {
+      "start": 18,
+      "length": 2,
+      "drawing": 12
+    }
+  ],
+  "placement": {
+    "scale": 0.6243144424131627,
+    "x": -63.36457965831704,
+    "y": -82.50457038391221
+  },
+  "stillOverlap": 0.9909,
+  "halo": {
+    "02": 0,
+    "03": 0,
+    "04": 0,
+    "05": 0,
+    "06": 0,
+    "07": 0,
+    "08": 0,
+    "09": 0,
+    "11": 0,
+    "12": 0
+  },
+  "probe": {
+    "take": "tk_Xu64_7Coh-2lxfllV8xyg",
+    "specksCleared": {},
+    "whiteMarksRemovedAtTrace": [],
+    "tracedFrames": 22,
+    "traced": [
+      [
+        0,
+        2,
+        70938
+      ],
+      [
+        2,
+        2,
+        73085
+      ],
+      [
+        4,
+        2,
+        74945
+      ],
+      [
+        6,
+        2,
+        77286
+      ],
+      [
+        8,
+        2,
+        77244
+      ],
+      [
+        10,
+        2,
+        74869
+      ],
+      [
+        12,
+        2,
+        68346
+      ],
+      [
+        14,
+        2,
+        66332
+      ],
+      [
+        16,
+        2,
+        69388
+      ],
+      [
+        18,
+        2,
+        72876
+      ],
+      [
+        20,
+        2,
+        72997
+      ]
+    ],
+    "trimmedLeadingFrames": 2,
+    "trimmedTrailingFrames": 0,
+    "first": {
+      "against": "loading-feather/body-00",
+      "iou": 0.9895,
+      "sameInks": 0.9831,
+      "outlineMaxPx": 7.07,
+      "outlineP99Px": 2.0,
+      "largestDiffs": [
+        {
+          "px": 30,
+          "at": [
+            370,
+            196
+          ]
+        },
+        {
+          "px": 30,
+          "at": [
+            243,
+            212
+          ]
+        },
+        {
+          "px": 20,
+          "at": [
+            268,
+            236
+          ]
+        }
+      ]
+    },
+    "last": {
+      "against": "reconnecting-reach/body-00",
+      "iou": 0.987,
+      "sameInks": 0.9808,
+      "outlineMaxPx": 3.61,
+      "outlineP99Px": 1.41,
+      "largestDiffs": [
+        {
+          "px": 24,
+          "at": [
+            257,
+            166
+          ]
+        },
+        {
+          "px": 21,
+          "at": [
+            79,
+            320
+          ]
+        },
+        {
+          "px": 19,
+          "at": [
+            161,
+            441
+          ]
+        }
+      ]
+    },
+    "frames": 20,
+    "slots": 10,
+    "drawings": 10,
+    "onTwos": true,
+    "whiteMarks": {},
+    "halo": {
+      "02": 0,
+      "03": 0,
+      "04": 0,
+      "05": 0,
+      "06": 0,
+      "07": 0,
+      "08": 0,
+      "09": 0,
+      "11": 0,
+      "12": 0
+    },
+    "eyesCut": {},
+    "gates": {
+      "firstFrameP99": true,
+      "landing": true,
+      "onTwos": true,
+      "whiteMarks": true,
+      "halo": true,
+      "eyes": true
+    }
+  }
+}

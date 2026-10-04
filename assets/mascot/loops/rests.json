@@ -1,4 +1,8 @@
 {
+  "ready": {
+    "loop": "ready-attention",
+    "drawing": 0
+  },
   "sleeping": {
     "loop": "idle-nod-off",
     "drawing": 11

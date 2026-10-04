@@ -94,23 +94,47 @@
     if (cawco.hub === "unreachable") {
       return "reconnecting";
     }
-    return fleetHome.ready ? "ready" : "loading";
+    if (!fleetHome.ready) {
+      return "loading";
+    }
+    // He moves only while something needs the reader (owner: "it shouldn't
+    // animate if there's nothing the USER has to pay attention to"). With
+    // sessions merely working he is awake and still; with nothing going on
+    // he sleeps.
+    if (fleetHome.needs.length > 0) {
+      return "needs-you";
+    }
+    return fleetHome.working.length > 0 ? "ready" : "sleeping";
   });
+  /** The line under Caw: one per wait, and one for both of his rests. */
+  const detailLine = $derived.by(() => {
+    if (detailState === "reconnecting") {
+      return "Reaching the hub again…";
+    }
+    return detailState === "loading"
+      ? "Reading the fleet…"
+      : "Open a session from the list, or start one.";
+  });
+  /** The fleet is read and the hub is live: no wait, whether he sleeps or not. */
+  const atRest = $derived(
+    detailState !== "loading" && detailState !== "reconnecting"
+  );
 
   /* ── Caw stands in only for a real wait ──────────────────────────────────
      A wide screen with nothing open is usually a moment: the fleet is read
      and a session lands within a second. Loading and reconnecting are waits,
      so their Caw appears only once the wait has outlasted --dur-wait-grace;
      until then the area is its plain surface. Once he appears he is kept
-     until his fade in has finished, and what lands waits for that, so he
-     never blinks out mid-fade. Ready with nothing to open is no wait: it is
-     where to start, and shows at once. */
+     until his enter has played, and what lands waits for that, so he is
+     never cut off mid-entrance. After that what lands is not kept waiting:
+     he plays his exit over it. Ready with nothing to open is no wait: it
+     is where to start, and shows at once. */
   const detailEmpty = $derived(!homePage && workspace.activeSessionId === null);
   const nothingToOpen = $derived(fleetHome.ready && !fleetHome.landing);
-  const waiting = $derived(detailEmpty && detailState !== "ready");
+  const waiting = $derived(detailEmpty && !atRest);
   /** The wait outlasted its grace and Caw stands in for it. */
   let waitShown = $state(false);
-  /** Caw is mounted and his first fade in has not finished: what lands waits. */
+  /** Caw is mounted and his enter has not ended: what lands waits. */
   let entering = $state(false);
   $effect(() => {
     if (!waiting || waitShown) {
@@ -128,10 +152,16 @@
   });
   const detailShown = $derived(detailEmpty || entering);
   const cawShown = $derived(
-    entering ||
-      waitShown ||
-      (detailEmpty && detailState === "ready" && nothingToOpen)
+    entering || waitShown || (detailEmpty && atRest && nothingToOpen)
   );
+
+  /** Caw is mounted: from the moment he is wanted until his exit has ended. */
+  let cawThere = $state(false);
+  $effect(() => {
+    if (cawShown) {
+      cawThere = true;
+    }
+  });
 
   /** His slot mounting starts the hold; his `onentered` ends it. */
   const holdWhileEntering = () => {
@@ -525,42 +555,50 @@
          deck makes them reachable: the groups are a vertical stack that two
          fingers page through, so widening the window restores the grid and
          narrowing it loses nothing. -->
-    {#if detailShown}
+    {#if detailShown || cawThere}
       <!-- A wide screen with nothing open: while the fleet is first read,
            or the hub is being reached again, for longer than the grace, Caw
            says so; once it is read and nothing could be opened, the detail
            area says where to start. Before that it is its plain surface. The
            sidebar's home carries the facts either way. -->
-      <!-- It fades out as the conversation the app lands on fades in under
-           it. Caw stays and fades from one state's loops to the next himself;
-           the line under him cross-fades in one cell. -->
-      <div class="empty-detail" out:crossOut>
-        {#if cawShown}
+      <!-- Caw comes in by his enter, moves from one state to the next by its
+           clip, and when a conversation lands he plays his exit over it: the
+           ground clears at once and the conversation is never kept waiting on
+           him. The line under him cross-fades in one cell. -->
+      <div class="empty-detail" class:over={!detailShown}>
+        {#if cawThere}
           <div class="detail-state" {@attach holdWhileEntering}>
             <Caw
-              next={["loading", "ready", "reconnecting"]}
+              next={[
+                "loading",
+                "needs-you",
+                "ready",
+                "reconnecting",
+                "sleeping",
+              ]}
               onentered={() => {
                 entering = false;
               }}
+              ongone={() => {
+                cawThere = false;
+              }}
+              present={cawShown && detailShown}
               size={150}
               status={detailState}
             />
             <div class="detail-line">
-              {#key detailState}
-                <p in:crossIn out:crossOut>
-                  {#if detailState === "reconnecting"}
-                    Reaching the hub again…
-                  {:else if detailState === "loading"}
-                    Reading the fleet…
-                  {:else}
-                    Open a session from the list, or start one.
-                  {/if}
-                </p>
-              {/key}
+              {#if cawShown && detailShown}
+                {#key detailLine}
+                  <p in:crossIn out:crossOut>{detailLine}</p>
+                {/key}
+              {/if}
             </div>
           </div>
         {/if}
       </div>
+    {/if}
+    {#if detailShown}
+      <!-- The detail area stands in for the groups. -->
     {:else if narrow}
       <PaneDeck />
     {:else}
@@ -627,6 +665,16 @@
     background: var(--surface-recess);
     color: var(--ink-muted);
     font: var(--type-body);
+    transition: background-color var(--dur-fade) var(--ease-out);
+  }
+  /* A conversation has landed under him: only Caw's exit is left of the
+     detail area, drawn over it and out of the pointer's way. */
+  .empty-detail.over {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    background-color: transparent;
+    pointer-events: none;
   }
   .detail-state {
     display: flex;

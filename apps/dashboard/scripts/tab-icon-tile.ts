@@ -51,7 +51,14 @@ export async function openTile(
   const animation = (name: string) =>
     new rive.LinearAnimationInstance(artboard.animationByName(name), artboard);
   // The tile is his ground in both schemes, so he is never the night Caw.
-  for (const name of ["scheme_light", "motion_full"]) {
+  // A file draws nothing until it is told what to show: a loop shows itself,
+  // and a resting file shows his still.
+  const layers = [
+    ...(shot.animation ? [] : ["variant_still"]),
+    "scheme_light",
+    "motion_full",
+  ];
+  for (const name of layers) {
     const layer = animation(name);
     layer.apply(1);
     layer.delete();

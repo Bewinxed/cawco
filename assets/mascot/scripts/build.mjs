@@ -27,7 +27,7 @@ import {
   parseColor,
   writeRiv,
 } from "rive-mcp-server/dist/rivWriter.js";
-import { fileName, STATUS, statusScene } from "./scene.mjs";
+import { FROM, fileName, STATUS, statusScene } from "./scene.mjs";
 
 const outDirs = process.argv[2]
   ? [process.argv[2]]
@@ -46,11 +46,58 @@ const outDirs = process.argv[2]
 
 /** The `Caw` view model, in property order (a property's index is its id in a data-bind path). */
 const VIEW_MODEL = { name: "Caw", index: 0 };
-const PROPERTIES = ["reducedMotion", "dark"];
+const PROPERTIES = [
+  { name: "reducedMotion", type: "boolean" },
+  { name: "dark", type: "boolean" },
+  { name: "from", type: "enum" },
+  { name: "leave", type: "boolean" },
+  { name: "exit", type: "boolean" },
+  { name: "entered", type: "trigger" },
+  { name: "still", type: "trigger" },
+  { name: "gone", type: "trigger" },
+];
+/** `from`'s enum, the file's only one (a ViewModelPropertyEnumCustom names it by index). */
+const FROM_ENUM = { name: "CawFrom", index: 0 };
+/** Each property type's view-model objects and, for the ones transitions read, its condition's. */
+const TYPES = {
+  boolean: {
+    property: "ViewModelPropertyBoolean",
+    value: {
+      type: "ViewModelInstanceBoolean",
+      props: { propertyValue: false },
+    },
+    bindable: "BindablePropertyBoolean",
+    // The property key a DataBindContext writes on the bindable (its propertyValue).
+    bindableKey: 634,
+    comparator: (value) => ({
+      type: "TransitionValueBooleanComparator",
+      props: { value },
+    }),
+  },
+  enum: {
+    property: "ViewModelPropertyEnumCustom",
+    propertyProps: { enumId: FROM_ENUM.index },
+    // `unset`, the enum's first value.
+    value: { type: "ViewModelInstanceEnum", props: { propertyValue: 0 } },
+    bindable: "BindablePropertyEnum",
+    bindableKey: 637,
+    comparator: (value) => {
+      const index = FROM.indexOf(value);
+      if (index < 0) {
+        throw new Error(`'${value}' is not a value of ${FROM_ENUM.name}`);
+      }
+      return { type: "TransitionValueEnumComparator", props: { value: index } };
+    },
+  },
+  trigger: {
+    property: "ViewModelPropertyTrigger",
+    value: { type: "ViewModelInstanceTrigger", props: { propertyValue: 0 } },
+  },
+};
 /** Rive's TransitionConditionOp: equal 0, notEqual 1. */
 const OPS = { "==": 0, "!=": 1 };
-/** The property key a DataBindContext writes on a BindablePropertyBoolean (propertyValue). */
-const BOOLEAN_VALUE_KEY = 634;
+/** StateMachineFireOccurance::atStart in rive-runtime (animation/state_machine_fire_action.hpp). */
+const FIRE_AT_START = 0;
 /** LayerStateFlags::Random in rive-runtime (include/rive/animation/layer_state_flags.hpp). */
 const RANDOM_FLAG = 1;
 /** SolidColor.colorValue's property key (rive-mcp-server vendor/rive-defs/defs.json). */
@@ -74,45 +121,77 @@ function pathIds(ids) {
 
 function viewModelObjects() {
   return [
-    { type: "ViewModel", props: { name: VIEW_MODEL.name } },
-    ...PROPERTIES.map((name) => ({
-      type: "ViewModelPropertyBoolean",
-      props: { name },
+    // The enum comes first: a property names it by its index among the file's enums.
+    { type: "DataEnumCustom", props: { name: FROM_ENUM.name } },
+    ...FROM.map((key) => ({
+      type: "DataEnumValue",
+      props: { key, value: key },
     })),
-    // The default instance: reducedMotion and dark off.
+    { type: "ViewModel", props: { name: VIEW_MODEL.name } },
+    ...PROPERTIES.map(({ name, type }) => ({
+      type: TYPES[type].property,
+      props: { name, ...TYPES[type].propertyProps },
+    })),
+    // The default instance: every boolean off, `from` unset.
     {
       type: "ViewModelInstance",
       props: { name: "Default", viewModelId: VIEW_MODEL.index },
     },
-    ...PROPERTIES.map((_, i) => ({
-      type: "ViewModelInstanceBoolean",
-      props: { viewModelPropertyId: i, propertyValue: false },
+    ...PROPERTIES.map(({ type }, i) => ({
+      type: TYPES[type].value.type,
+      props: { viewModelPropertyId: i, ...TYPES[type].value.props },
     })),
   ];
 }
 
-function conditionObjects({ property, op, value }) {
-  const index = PROPERTIES.indexOf(property);
+/** A property's index in `Caw` and its type's objects. */
+function propertyOf(name) {
+  const index = PROPERTIES.findIndex((p) => p.name === name);
   if (index < 0) {
-    throw new Error(
-      `Transition reads unknown view-model property '${property}'`
-    );
+    throw new Error(`Unknown view-model property '${name}'`);
+  }
+  return { index, ...TYPES[PROPERTIES[index].type] };
+}
+
+function conditionObjects({ property, op, value }) {
+  const { index, bindable, bindableKey, comparator } = propertyOf(property);
+  if (!comparator) {
+    throw new Error(`Transitions cannot read '${property}'`);
   }
   if (!(op in OPS)) {
     throw new Error(`Unsupported condition op '${op}'`);
   }
   return [
     { type: "TransitionViewModelCondition", props: { opValue: OPS[op] } },
-    { type: "BindablePropertyBoolean", props: {} },
+    { type: bindable, props: {} },
     {
       type: "DataBindContext",
       props: {
-        propertyKey: BOOLEAN_VALUE_KEY,
+        propertyKey: bindableKey,
         sourcePathIds: pathIds([VIEW_MODEL.index, index]),
       },
     },
     { type: "TransitionPropertyViewModelComparator", props: {} },
-    { type: "TransitionValueBooleanComparator", props: { value } },
+    comparator(value),
+  ];
+}
+
+/** Fires one of `Caw`'s triggers when the state it follows is entered, or the transition taken. */
+function fireObjects(property) {
+  const { index, property: type } = propertyOf(property);
+  if (type !== TYPES.trigger.property) {
+    throw new Error(
+      `A state can only fire a trigger; '${property}' is not one`
+    );
+  }
+  return [
+    {
+      type: "StateMachineFireTrigger",
+      props: {
+        occursValue: FIRE_AT_START,
+        viewModelPathIds: pathIds([VIEW_MODEL.index, index]),
+      },
+    },
   ];
 }
 
@@ -264,15 +343,16 @@ function complete(objects, layers) {
       const layer = layers.find((l) => l.name === object.props.name);
       at = { layer, pending: emittedTransitions(layer), states: 0 };
     }
-    if (STATES.has(object.type) && at) {
-      flagRandomState(object, at);
-    }
+    const state = STATES.has(object.type) && at ? nextState(object, at) : null;
     if (object.type === "Artboard") {
       object.props.viewModelId = VIEW_MODEL.index;
       // CawStates is the artboard's only state machine; runtimes that ask for the default get it.
       object.props.defaultStateMachineId = 0;
     }
     result.push(object);
+    if (state?.fire) {
+      result.push(...fireObjects(state.fire));
+    }
     if (object.type === "Backboard") {
       result.push(...viewModelObjects());
     }
@@ -286,13 +366,14 @@ function complete(objects, layers) {
 
 const STATES = new Set(["AnimationState", "BlendState1DInput"]);
 
-/** Flags the layer's next state Random when its spec lists it as one. */
-function flagRandomState(object, at) {
+/** The layer's next state in its spec, flagged Random when the spec lists it as one. */
+function nextState(object, at) {
   const state = at.layer.states[at.states];
   at.states += 1;
   if (at.layer.random?.includes(state.name)) {
     object.props.flags = RANDOM_FLAG;
   }
+  return state;
 }
 
 /**
@@ -307,7 +388,10 @@ function completeTransition(object, at) {
   if (at.layer.random?.includes(transition.from)) {
     object.props.randomWeight = 1;
   }
-  return transition.when ? conditionObjects(transition.when) : [];
+  return [
+    ...(transition.fire ? fireObjects(transition.fire) : []),
+    ...(transition.when ? conditionObjects(transition.when) : []),
+  ];
 }
 
 for (const dir of outDirs) {
