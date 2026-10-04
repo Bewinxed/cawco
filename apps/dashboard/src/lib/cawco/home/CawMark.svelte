@@ -85,6 +85,19 @@
     return made;
   }
 
+  /** The nearest thing a mark scrolls in, if it stands in one. */
+  function scrollerOf(mark: HTMLElement): HTMLElement | null {
+    for (let up = mark.parentElement; up; up = up.parentElement) {
+      if (
+        up.scrollHeight > up.clientHeight &&
+        getComputedStyle(up).overflowY !== "visible"
+      ) {
+        return up;
+      }
+    }
+    return null;
+  }
+
   /** The arrivals already played, by their id: one never plays twice. */
   const played = new Set<string>();
 </script>
@@ -137,19 +150,32 @@
    * its line of text puts it — a centred word, a row a list placed at a
    * fraction of a pixel — and a canvas off the grid is resampled into a soft
    * copy of itself. The layout box stays where it is; what is drawn in it
-   * moves by less than half a device pixel, measured once the row is laid
-   * out and again when the window or its display changes.
+   * moves by less than half a device pixel. It is placed once the mark is
+   * laid out, and again whenever what scrolls around it changes size (a
+   * row above it grew, a page of history landed in front) or the window or
+   * its display changes. The observer reports after layout and before
+   * paint, so each placement reads a layout that is already done and is on
+   * screen in the same frame.
    */
   function snap(ink: HTMLElement) {
     const scale = ratio;
     // biome-ignore lint/complexity/noVoid: a resize re-runs this placement.
     void resized;
-    const frame = requestAnimationFrame(() => {
-      const box = (ink.parentElement as HTMLElement).getBoundingClientRect();
+    const mark = ink.parentElement as HTMLElement;
+    let scrolled = false;
+    const moved = new ResizeObserver(() => {
+      if (!scrolled) {
+        scrolled = true;
+        for (const content of scrollerOf(mark)?.children ?? []) {
+          moved.observe(content);
+        }
+      }
+      const box = mark.getBoundingClientRect();
       const off = (at: number) => Math.round(at * scale) / scale - at;
       ink.style.translate = `${off(box.left)}px ${off(box.top)}px`;
     });
-    return () => cancelAnimationFrame(frame);
+    moved.observe(mark);
+    return () => moved.disconnect();
   }
 
   /** Whether this mount is the arrival's one play. */
