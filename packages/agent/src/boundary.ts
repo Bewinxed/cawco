@@ -38,7 +38,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import type { WorkspaceRef } from "@cawco/core";
 import { sessionIdentityDir } from "@cawco/core/paths";
 import { type ProcSpec, sessiondEndpoint } from "@cawco/core/sessiond";
@@ -128,7 +128,10 @@ const cachesOf = (): string[] => [
   join(homedir(), ".npm"),
   // Playwright's browsers and most tools' caches live here on macOS.
   ...(process.platform === "darwin"
-    ? [join(homedir(), "Library", "Caches")]
+    ? [
+        join(homedir(), "Library", "Caches"),
+        join(homedir(), "Library", "Developer", "Xcode", "DerivedData"),
+      ]
     : []),
 ];
 
@@ -427,6 +430,18 @@ done`;
 const sbString = (path: string): string =>
   `"${path.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`;
 
+/** Resolve existing ancestors too, so an absent sign-in file still has a deny rule. */
+const secretRealpath = async (path: string): Promise<string> => {
+  try {
+    return await realpath(path);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      throw error;
+    }
+    return join(await secretRealpath(dirname(path)), basename(path));
+  }
+};
+
 /**
  * The Seatbelt profile for one workspace. Paths are real paths: Seatbelt
  * matches the resolved path, so a rule on a symlink never fires (a Mac's
@@ -439,6 +454,14 @@ const profileOf = async (
 ): Promise<string> => {
   const scratchPath = await realpath(scratch);
   const secretsPath = await realpath(sessionIdentityDir());
+  const signInPaths = await Promise.all(
+    [
+      join(homedir(), ".claude", ".credentials.json"),
+      join(homedir(), ".local", "share", "opencode", "auth.json"),
+      join(homedir(), ".pi", "agent", "auth.json"),
+      join(homedir(), ".cli-proxy-api"),
+    ].map(secretRealpath)
+  );
   const writable = await Promise.all(
     [ws, ...caches].map((path) => realpath(path))
   );
@@ -454,6 +477,9 @@ const profileOf = async (
     "(allow signal (target same-sandbox))",
     "(deny file-write*)",
     `(deny file-read* (subpath ${sbString(secretsPath)}))`,
+    ...signInPaths.map(
+      (path) => `(deny file-read* (subpath ${sbString(path)}))`
+    ),
     "(allow file-write*",
     ...[...writable, scratchPath].map(
       (path) => `  (subpath ${sbString(path)})`
