@@ -697,6 +697,8 @@
     --dur-rail: 180ms;
     /* Fades that carry a state change in place. */
     --dur-fade: 200ms;
+    /* The longest a transcript that opens on a compaction holds its reveal for Caw's mark to be drawn, so the first frame that shows the list shows him. A bound, not a pace: the list is shown the moment he is ready (about 90ms on a cold load), and at the bound without him. Under --dur-wait-grace, so the hold shows nothing of its own. */
+    --dur-mark-hold: 200ms;
     /* How long a wait runs before its loading state (Caw at loading or reconnecting) appears; a shorter wait shows its plain surface. NN/g, Response Times: no special feedback is needed for delays under 1.0 second. */
     --dur-wait-grace: 1000ms;
     --dur-pop: 260ms;

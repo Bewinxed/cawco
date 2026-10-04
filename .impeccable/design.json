@@ -2182,6 +2182,11 @@
         "purpose": "Fades that carry state in place: the theme wash, a toast stack closing up."
       },
       {
+        "name": "dur-mark-hold",
+        "value": "200ms",
+        "purpose": "The longest a transcript that opens on a compaction holds its reveal for Caw's mark to be drawn. A bound, not a pace."
+      },
+      {
         "name": "dur-pop",
         "value": "260ms",
         "purpose": "Floating surfaces opening, list arrivals, the live tail's height tween."

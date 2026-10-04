@@ -56,6 +56,7 @@
   } from "./arrivals.svelte";
   import CatchUp from "./CatchUp.svelte";
   import CompactionDivider from "./CompactionDivider.svelte";
+  import { compactionMarkComing } from "./compaction-mark";
   import Delegate from "./Delegate.svelte";
   import { disclosureAt } from "./disclosure.svelte";
   import Latest from "./Latest.svelte";
@@ -1950,6 +1951,8 @@
       return;
     }
     let frame: number | null = null;
+    /** This reveal is still the one being waited for. */
+    let live = true;
     /**
      * Every row in the viewport is drawn and measured: virtua has rendered
      * the rows the scroll offset covers — they abut, with no gap, from the
@@ -1991,10 +1994,25 @@
           wait();
           return;
         }
-        if (measured()) {
-          resume = null;
-          shown = true;
+        if (!measured()) {
+          return;
         }
+        // A list that opens on a compaction is shown with Caw beside the
+        // word, not a frame or two before him: it waits for his picture
+        // (bounded, see `compactionMarkComing`), then measures again.
+        const caw = renderedRows.some((row) => row.kind === "compaction")
+          ? compactionMarkComing()
+          : null;
+        if (caw) {
+          caw.then(() => {
+            if (live) {
+              wait();
+            }
+          });
+          return;
+        }
+        resume = null;
+        shown = true;
       });
     };
     const changes = new MutationObserver(wait);
@@ -2006,6 +2024,7 @@
     });
     wait();
     return () => {
+      live = false;
       changes.disconnect();
       if (frame !== null) {
         cancelAnimationFrame(frame);

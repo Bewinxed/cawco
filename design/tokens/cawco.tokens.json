@@ -2447,6 +2447,11 @@
       "$value": "200ms",
       "$description": "Fades that carry a state change in place."
     },
+    "dur-mark-hold": {
+      "$type": "duration",
+      "$value": "200ms",
+      "$description": "The longest a transcript that opens on a compaction holds its reveal for Caw's mark to be drawn, so the first frame that shows the list shows him. A bound, not a pace: the list is shown the moment he is ready (about 90ms on a cold load), and at the bound without him. Under --dur-wait-grace, so the hold shows nothing of its own."
+    },
     "dur-wait-grace": {
       "$type": "duration",
       "$value": "1000ms",

@@ -58,16 +58,26 @@
 
   /**
    * Draws a mark's rest ahead of the first mark that will show it: for a
-   * place that knows he is coming before his row is on screen.
+   * place that knows he is coming before his row is on screen. Answers with
+   * the drawing while it is on its way — over when the picture is there, or
+   * when it has failed, which is logged here — and with null once the
+   * picture is drawn.
    */
   export function warmCawMark(
     status: CawStatus,
     size: number,
     bleed: number
-  ): void {
-    restPicture(lookOf(status, size, bleed)).catch((error: unknown) => {
-      console.error(`Caw ${status} did not draw`, error);
-    });
+  ): Promise<void> | null {
+    const look = lookOf(status, size, bleed);
+    if (drawn.has(look.key)) {
+      return null;
+    }
+    return restPicture(look).then(
+      () => undefined,
+      (error: unknown) => {
+        console.error(`Caw ${status} did not draw`, error);
+      }
+    );
   }
 
   function restPicture(look: Look): Promise<HTMLCanvasElement> {
