@@ -200,8 +200,7 @@ final class AssistantPanelView: UIView {
         Task { @MainActor [weak self, hub] in
             // The seed goes through the one recorder the frames use: the same
             // row can arrive by both, and there is one merge.
-            // `limit=100` is the hub's own default (server.ts /api/supervisor/events).
-            let rows = (try? await hub.api.supervisor.events().ok.body.json) ?? []
+            let rows = (try? await hub.api.supervisor.events(.init(query: .init(limit: 100))).ok.body.json) ?? []
             for row in rows { _ = hub.fleet.recordSupervisorEvent(row) }
             self?.seeded = true
             self?.render()

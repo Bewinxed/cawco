@@ -34,11 +34,13 @@ public final class KitField: UITextField {
     override public func editingRect(forBounds bounds: CGRect) -> CGRect { bounds.insetBy(dx: 12, dy: 0) }
     override public func placeholderRect(forBounds bounds: CGRect) -> CGRect { bounds.insetBy(dx: 12, dy: 0) }
 
+    @discardableResult
     override public func becomeFirstResponder() -> Bool {
         defer { paint() }
         return super.becomeFirstResponder()
     }
 
+    @discardableResult
     override public func resignFirstResponder() -> Bool {
         defer { paint() }
         return super.resignFirstResponder()

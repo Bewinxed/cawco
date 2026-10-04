@@ -74,7 +74,7 @@ enum MachineHealth {
     }
 
     static func isMac(_ machine: MachineRow) -> Bool {
-        (machine.os ?? "").range(of: "darwin|mac", options: [.regularExpression, .caseInsensitive]) != nil
+        machine.os.range(of: "darwin|mac", options: [.regularExpression, .caseInsensitive]) != nil
     }
 }
 
@@ -311,7 +311,7 @@ final class MachinesPopoverController: KitPopoverController {
             let fault = MachineHealth.fault(machine, hubBuild: hub.fleet.hubBuild)
             let live = running.filter { $0.machineId == machine.machineId }.count
             let presence: MachineRowView.Presence = !up ? .off : (fault == nil ? .online : .away)
-            row.content.configure(glyph: MachineHealth.icon(machine.os ?? ""), hue: MachineHealth.hue(index, online: up),
+            row.content.configure(glyph: MachineHealth.icon(machine.os), hue: MachineHealth.hue(index, online: up),
                                   name: Naming.machineLabel(machine.hostname),
                                   meta: ["\(live) live", fault].compactMap(\.self).joined(separator: " · "), presence: presence)
             row.accessibilityLabel = Naming.machineLabel(machine.hostname)

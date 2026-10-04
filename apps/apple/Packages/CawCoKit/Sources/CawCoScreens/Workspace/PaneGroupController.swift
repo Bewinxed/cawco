@@ -515,3 +515,31 @@ final class SessionDrag {
         self.from = from
     }
 }
+
+/// A session row that can be carried into a group (dnd.svelte.ts
+/// `dragSession` with no group it left): the conversation it opens rides the
+/// drag, and its activity, so it can also be dropped out as a window.
+@MainActor
+final class SessionRowDrag: NSObject, UIDragInteractionDelegate {
+    private let sessionId: () -> String?
+
+    /// Makes `row` draggable as the conversation `sessionId` names when the drag starts.
+    static func attach(to row: UIView, sessionId: @escaping () -> String?) {
+        let delegate = SessionRowDrag(sessionId: sessionId)
+        row.addInteraction(UIDragInteraction(delegate: delegate))
+        objc_setAssociatedObject(row, &key, delegate, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+    }
+
+    nonisolated(unsafe) private static var key = 0
+
+    private init(sessionId: @escaping () -> String?) {
+        self.sessionId = sessionId
+    }
+
+    func dragInteraction(_: UIDragInteraction, itemsForBeginning _: any UIDragSession) -> [UIDragItem] {
+        guard let id = sessionId() else { return [] }
+        let item = UIDragItem(itemProvider: NSItemProvider(object: SessionViewController.activity(id)))
+        item.localObject = SessionDrag(sessionId: id, from: nil)
+        return [item]
+    }
+}

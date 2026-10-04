@@ -77,7 +77,7 @@ struct JumpIndex {
         }
         for machine in fleet.machines where machine.status == "online" {
             lists[1].append(JumpRow(id: "machine:\(machine.machineId)", kind: .machine, label: machine.hostname,
-                                    detail: "\(machine.os ?? "") · start a session here", target: .machine(machine.machineId)))
+                                    detail: "\(machine.os) · start a session here", target: .machine(machine.machineId)))
         }
         let words: [Activity: String] = [.working: "Working", .blocked: "Needs you", .idle: "Idle"]
         let running = fleet.rows.filter(\.isLive)

@@ -298,6 +298,7 @@ final class ProjectViewController: ObservedViewController {
         liveRows.set(mounted.map(\.id), animated: liveFollowed, in: scroll) { [weak self] id in
             let row = LiveSessionRowView()
             row.addAction(UIAction { [weak self] _ in self?.context.openSession(id) }, for: .primaryActionTriggered)
+            SessionRowDrag.attach(to: row) { id }
             // LiveSessionMenu, read from the fleet as it opens.
             ContextMenuHost.attach(to: row) { [weak self] copy in
                 guard let self, let now = context.hub.fleet.byId[id] else { return nil }
@@ -359,6 +360,10 @@ final class ProjectViewController: ObservedViewController {
                 guard let self, let info = context.hub.fleet.catalog(machineId).first(where: { $0.sessionId == key }) else { return }
                 context.openSession(context.hub.fleet.conversationId(sessionKey: key, machineId: machineId, cwd: info.cwd))
             }, for: .primaryActionTriggered)
+            SessionRowDrag.attach(to: row) { [weak self] in
+                guard let fleet = self?.context.hub.fleet, let info = fleet.catalog(machineId).first(where: { $0.sessionId == key }) else { return nil }
+                return fleet.conversationId(sessionKey: key, machineId: machineId, cwd: info.cwd)
+            }
             ContextMenuHost.attach(to: row) { [weak self] copy in
                 guard let self, let info = context.hub.fleet.catalog(machineId).first(where: { $0.sessionId == key }) else { return nil }
                 return SessionMenus.stored(machineId: machineId, info: info, context: context.sessionMenus, copy: copy)            }

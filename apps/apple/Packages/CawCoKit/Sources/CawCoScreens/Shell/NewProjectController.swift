@@ -119,7 +119,7 @@ final class NewProjectController: KitPopoverController, UITextFieldDelegate {
             return UIMenu(children: [UIAction(title: "No machines online", attributes: .disabled) { _ in }])
         }
         return UIMenu(options: .singleSelection, children: online.map { machine in
-            UIAction(title: "\(machine.hostname) · \(machine.os ?? "")", state: machine.machineId == machineId ? .on : .off) { [weak self] _ in
+            UIAction(title: "\(machine.hostname) · \(machine.os)", state: machine.machineId == machineId ? .on : .off) { [weak self] _ in
                 self?.machineId = machine.machineId
                 self?.showMachine()
                 self?.clearProblem()
@@ -129,7 +129,7 @@ final class NewProjectController: KitPopoverController, UITextFieldDelegate {
 
     private func showMachine() {
         let machine = hub.fleet.machines.first { $0.machineId == machineId }
-        machineSelect.setValue(machine.map { "\($0.hostname) · \($0.os ?? "")" } ?? "No machines online")
+        machineSelect.setValue(machine.map { "\($0.hostname) · \($0.os)" } ?? "No machines online")
         machineSelect.menu = machineMenu()
     }
 

@@ -80,7 +80,7 @@ final class MachineInventoryView: UIStackView {
         let isOpen = open.contains(id)
         let up = machine.status == "online"
         let head = InventoryHead()
-        head.configure(open: isOpen, os: machine.os ?? "", host: Naming.machineLabel(machine.hostname),
+        head.configure(open: isOpen, os: machine.os, host: Naming.machineLabel(machine.hostname),
                        note: isOpen ? "Hide" : (up ? "Show what it has" : "Offline"))
         head.isEnabled = up || isOpen
         head.addAction(UIAction { [weak self] _ in self?.expand(machine) }, for: .primaryActionTriggered)
