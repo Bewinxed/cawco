@@ -152,6 +152,18 @@
     const kept = new Set(rooted(all).map((row) => row.id));
     return all.filter((row) => kept.has(row.id) || isFailed(row));
   };
+  /**
+   * What a tab with no rows says of the delegates it leaves out: with the
+   * Delegates switch off, a tab whose only rows are delegates of sessions it
+   * does not list is empty, and "nothing is working" would be untrue.
+   */
+  const unlisted = (tab: WorkTab): string => {
+    const count = allOf(tab).length;
+    if (count === 1) {
+      return `1 delegate ${tab === "working" ? "is working" : "has finished"}. Its session is not listed here.`;
+    }
+    return `${count} delegates ${tab === "working" ? "are working" : "have finished"}. Their sessions are not listed here.`;
+  };
   /** A session the tab does not list, to stand in for a delegate's parent. */
   const known = (id: string): InstanceRow | undefined =>
     cawco.instanceIndex.byId.get(id);
@@ -828,90 +840,103 @@
         {/each}
       </div>
     {:else}
-      <div
-        class="list"
-        bind:this={listEl}
-        in:crossIn
-        {@attach reflow()}
-        {@attach highlight(ROW_PILL)}
-        {@attach holdWhileInside("home:")}
-        {@attach arrowKeys}
-      >
-        {#each drawn as entry (entry.group.machineId)}
-          {@const id = entry.group.machineId}
-          <div
-            class="group"
-            data-flip={plan ? undefined : "box"}
-            data-kind={entry.kind}
-            data-machine={id}
-            class:filled={entry.rows.length > 0 || entry.kind === "gone"}
-          >
-            <hr class="kit-seam">
-            {@render header(entry.group, headStyle(entry.kind, id))}
-            <div class="rows">
-              {#if plan?.layered.has(id) && entry.gone.length}
-                <!-- The rows this machine had, leaving in the places the new
+      <!-- The list and, over its top, the line a tab with no rows says: one
+           cell, as tall as the taller of the two. Changing to or from an
+           empty tab, the panel goes from one height to the other in one
+           move, never through nothing. -->
+      <div class="panel" in:crossIn>
+        <div
+          class="list"
+          bind:this={listEl}
+          {@attach reflow()}
+          {@attach highlight(ROW_PILL)}
+          {@attach holdWhileInside("home:")}
+          {@attach arrowKeys}
+        >
+          {#each drawn as entry (entry.group.machineId)}
+            {@const id = entry.group.machineId}
+            <div
+              class="group"
+              data-flip={plan ? undefined : "box"}
+              data-kind={entry.kind}
+              data-machine={id}
+              class:filled={entry.rows.length > 0 || entry.kind === "gone"}
+            >
+              <hr class="kit-seam">
+              {@render header(entry.group, headStyle(entry.kind, id))}
+              <div class="rows">
+                {#if plan?.layered.has(id) && entry.gone.length}
+                  <!-- The rows this machine had, leaving in the places the new
                    ones take, each new one arriving as its place clears. -->
-                {@render leaving(entry.gone, true)}
-              {/if}
-              <ul class="tree">
-                {#each under(
-                  shown,
-                  entry.rows,
-                  null
-                ) as row (`${swap.gen}:${row.id}`)}
-                  {@render treeNode(row, entry.rows, id)}
-                {/each}
-              </ul>
-              {#if !plan?.layered.has(id) && entry.gone.length}
-                {@render leaving(entry.gone, false)}
-              {/if}
-            </div>
-            <!-- The machine's last line: the rest of its trees, or back to
+                  {@render leaving(entry.gone, true)}
+                {/if}
+                <ul class="tree">
+                  {#each under(
+                    shown,
+                    entry.rows,
+                    null
+                  ) as row (`${swap.gen}:${row.id}`)}
+                    {@render treeNode(row, entry.rows, id)}
+                  {/each}
+                </ul>
+                {#if !plan?.layered.has(id) && entry.gone.length}
+                  {@render leaving(entry.gone, false)}
+                {/if}
+              </div>
+              <!-- The machine's last line: the rest of its trees, or back to
                its first few. It comes and goes in the relay like any other
                line, inside its machine's box. -->
-            {#if entry.kind !== "gone" && more.get(id)}
-              {@const line = more.get(id) as More}
-              <!-- A line of the list like the rows above it (`data-flip`): when
+              {#if entry.kind !== "gone" && more.get(id)}
+                {@const line = more.get(id) as More}
+                <!-- A line of the list like the rows above it (`data-flip`): when
                  a tree over it opens or folds, it slides with them. -->
-              <button
-                class="more focus-inset touch-hit press-tint"
-                data-flip={plan ? undefined : ""}
-                data-key={moreKey(id)}
-                data-rail-row
-                onclick={() => fold(id)}
-                style={enterAnim(moreKey(id))}
-                type="button"
-              >
-                {line.words}
-                {#if line.failed > 0}
-                  <span class="more-failed">· {line.failed} failed</span>
-                {/if}
-              </button>
-            {:else if plan?.more.get(id)}
-              <span
-                aria-hidden="true"
-                class="more"
-                style={leaveAnim(moreKey(id))}
-                >{plan.more.get(id)}</span
-              >
-            {/if}
-          </div>
-        {/each}
+                <button
+                  class="more focus-inset touch-hit press-tint"
+                  data-flip={plan ? undefined : ""}
+                  data-key={moreKey(id)}
+                  data-rail-row
+                  onclick={() => fold(id)}
+                  style={enterAnim(moreKey(id))}
+                  type="button"
+                >
+                  {line.words}
+                  {#if line.failed > 0}
+                    <span class="more-failed">· {line.failed} failed</span>
+                  {/if}
+                </button>
+              {:else if plan?.more.get(id)}
+                <span
+                  aria-hidden="true"
+                  class="more"
+                  style={leaveAnim(moreKey(id))}
+                  >{plan.more.get(id)}</span
+                >
+              {/if}
+            </div>
+          {/each}
+        </div>
         {#if groups.length === 0}
-          <!-- The tab is read and lists nothing. A line of the list like any
-             other: it arrives as the last row leaves and slides with what
-             is above it. Working names the next thing to do; with the hub
-             lost nothing is claimed about now, only what was last known. -->
+          <!-- The tab is read and lists nothing. It fades in where the rows
+             were as they leave, and out as rows arrive under it. Working
+             names the next thing to do; with the hub lost nothing is
+             claimed about now, only what was last known. -->
           <div
             class="vacant"
-            data-flip={plan ? undefined : ""}
             data-stale={stale || undefined}
-            in:crossIn
-            out:crossOut
+            transition:crossIn
           >
             {#if stale}
               <p>None listed when the hub was last reached.</p>
+            {:else if allOf(shown).length > 0}
+              <!-- Not empty: only delegates, which the switch leaves out. -->
+              <p>{unlisted(shown)}</p>
+              <Button
+                onclick={() => rail.setDelegates(true)}
+                size="xs"
+                variant="outline"
+              >
+                Show delegates
+              </Button>
             {:else if shown === "working"}
               <p>Nothing is working right now.</p>
               <Button onclick={onstart} size="xs" variant="outline">
@@ -1029,6 +1054,15 @@
       color: var(--ink-strong);
     }
   }
+  /* One cell for the list and the empty tab's line: the panel is as tall as
+     the taller of them. */
+  .panel {
+    display: grid;
+  }
+  .panel > * {
+    grid-area: 1 / 1;
+    min-inline-size: 0;
+  }
   .list {
     display: flex;
     flex-direction: column;
@@ -1046,6 +1080,7 @@
   .vacant {
     display: flex;
     flex-direction: column;
+    align-self: start;
     align-items: flex-start;
     gap: var(--space-2);
     padding: var(--space-2) var(--space-3);

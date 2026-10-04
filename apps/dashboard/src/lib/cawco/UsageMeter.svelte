@@ -25,6 +25,7 @@
   import Attention from "~icons/solar/hand-shake-bold-duotone";
   import { cawco } from "./client.svelte";
   import type { HubRead } from "./hub-read";
+  import OpenCodeLogo from "./OpenCodeLogo.svelte";
   import {
     about,
     firstToStop,
@@ -76,8 +77,10 @@
   const detail = (row: LimitRow): string => {
     const m = row.meter;
     const reset = m.window.resetsAt;
-    if (m.state === "stale" && claude) {
-      return readAgo(claude.fetchedAt, now);
+    // A stale window says how old its own provider's reading is.
+    const reading = row.provider === "Claude" ? claude : go;
+    if (m.state === "stale" && reading) {
+      return readAgo(reading.fetchedAt, now);
     }
     // A window that will not last says when it runs out; one that lasts,
     // when it resets.
@@ -101,6 +104,33 @@
       return "No Claude reading · login expired";
     }
     return error ? `No Claude reading · ${error}` : "No Claude reading yet";
+  });
+
+  /** The hub's word for a Go key the provider turned away. */
+  const KEY_REFUSED = /^HTTP 40[13]\b/;
+
+  /**
+   * What the list says of opencode when it has no windows to show: no
+   * machine holds a Go key, or every read of one failed before any
+   * succeeded. Nothing before the first read (an absence not known yet is
+   * not claimed), and nothing while a reading speaks (its rows show, stale
+   * or not).
+   */
+  const goNote = $derived.by((): string | null => {
+    if (!cawco.usageLimitsRead || go) {
+      return null;
+    }
+    const readings = Object.values(cawco.openCodeGoLimits);
+    if (readings.length === 0) {
+      return "opencode · sign in on a machine to see its limits";
+    }
+    const error = readings.find((reading) => reading.error)?.error;
+    if (!error) {
+      return null;
+    }
+    return KEY_REFUSED.test(error)
+      ? "opencode Go · key not accepted, sign in again on a machine"
+      : `opencode Go · could not read limits: ${error}`;
   });
 
   const glyphLabel: Record<string, string> = {
@@ -190,6 +220,13 @@
       {/each}
     </section>
   {/each}
+  {#if goNote}
+    <!-- opencode with no windows to show: why, and what to do about it. -->
+    <p class="pop-empty pop-note">
+      <span class="pop-mark"><OpenCodeLogo /></span>
+      {goNote}
+    </p>
+  {/if}
 {/snippet}
 
 <div class="strip" data-state={lead?.meter.state ?? "unknown"}>
@@ -332,6 +369,20 @@
     padding: 10px 12px;
     font: var(--type-meta);
     color: var(--ink-muted);
+  }
+  /* opencode's line when it has no windows: the same line, led by its
+     mark, with the hairline that parts one provider from the next. */
+  .pop-note {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    border-top: 1px solid var(--border-hairline);
+  }
+  .pop-mark {
+    display: inline-flex;
+    flex: none;
+    inline-size: 14px;
+    block-size: 14px;
   }
   .pop-group {
     display: flex;
