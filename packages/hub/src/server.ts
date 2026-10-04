@@ -70,6 +70,9 @@ import type {
 } from "@cawco/core";
 import {
   AGENT_BUSY,
+  AGENT_NOT_STARTED,
+  AGENT_RESTART_READINESS,
+  AGENT_RETIRE,
   ASK_USER_QUESTION,
   agentProblem,
   archiveRefusal,
@@ -2127,6 +2130,7 @@ export const createServer = (
     row: SentMessageRow,
     answering: boolean
   ): SentMessageRow => {
+    notStartedSends.delete(row.uuid);
     if (isKeepAlive(row.body)) {
       return changeSend(row, { state: "read" });
     }
@@ -2284,6 +2288,9 @@ export const createServer = (
     unstored: Unstored,
     why: string
   ): void => {
+    if (notStartedSends.has(send.uuid)) {
+      return;
+    }
     // Read meanwhile, or thrown away with its session: that stands.
     const now = db.sendRecord(send.uuid);
     if (now?.state !== "pending") {
@@ -3287,7 +3294,11 @@ export const createServer = (
    * from the moment its socket closes until it registers again or
    * {@link RECONNECT_GRACE_MS} runs out, whichever is first.
    */
-  const awaitingMachine = new Map<string, Envelope<SendPayload>[]>();
+  const awaitingMachine = new Map<string, Envelope[]>();
+  const notStartedSends = new Set<string>();
+  const heldRequestIds = new Set<string>();
+  const requestIdOf = (request: Envelope): string | undefined =>
+    request.requestId ?? (request.payload as { requestId?: string }).requestId;
 
   /**
    * What waited on a machine, sent now through {@link deliverSend}: after its
@@ -3299,7 +3310,29 @@ export const createServer = (
     const waited = awaitingMachine.get(machineId);
     awaitingMachine.delete(machineId);
     for (const envelope of waited ?? []) {
-      deliverSend(envelope);
+      const id = requestIdOf(envelope);
+      if (id) {
+        heldRequestIds.delete(id);
+      }
+      const agent = registry.agent(machineId);
+      if (envelope.verb === "send") {
+        const sent = envelope as Envelope<SendPayload>;
+        if (notStartedSends.has(sent.payload.message.uuid) && agent) {
+          agent.send(sent);
+        } else {
+          deliverSend(sent);
+        }
+      } else if (agent) {
+        agent.send(envelope);
+      } else if (id) {
+        waiting.get(id)?.({
+          kind: "control_result",
+          requestId: id,
+          ok: false,
+          error:
+            "The agent did not register within the restart grace. The request was not started.",
+        });
+      }
     }
   };
   /**
@@ -3385,7 +3418,7 @@ export const createServer = (
         waiting.delete(requestId);
         waitingMachines.delete(requestId);
         resolve("timeout");
-      }, timeoutMs);
+      }, timeoutMs + RECONNECT_GRACE_MS);
       waitingMachines.set(requestId, machineId);
       waiting.set(requestId, (frame) => {
         clearTimeout(timer);
@@ -7514,6 +7547,41 @@ export const createServer = (
         }
         return answer.result as { busy: number; instances: string[] };
       })
+      .get(
+        "/api/agents/:machineId/restart-readiness",
+        async ({ params, status }) => {
+          const answer = await callAgent(
+            params.machineId,
+            AGENT_RESTART_READINESS,
+            [],
+            BUSY_TIMEOUT_MS
+          );
+          if (typeof answer === "string") {
+            return status(503, `Restart readiness ${answer}`);
+          }
+          if (!answer.ok) {
+            return status(500, answer.error ?? "Restart readiness failed");
+          }
+          return answer.result as import("@cawco/core").AgentRestartReadiness;
+        }
+      )
+      .post("/api/agents/:machineId/retire", async ({ params, status }) => {
+        const answer = await callAgent(
+          params.machineId,
+          AGENT_RETIRE,
+          [],
+          BUSY_TIMEOUT_MS
+        );
+        if (typeof answer === "string") {
+          return status(503, `Agent retirement ${answer}`);
+        }
+        if (!answer.ok) {
+          return status(500, answer.error ?? "Agent retirement failed");
+        }
+        return answer.result as import("@cawco/core").AgentRestartReadiness & {
+          scheduled: boolean;
+        };
+      })
       .post(
         "/api/agents/:machineId/unowned-processes/stop",
         {
@@ -10383,6 +10451,48 @@ export const createServer = (
               break;
             }
             case "frames": {
+              const refused =
+                message.payload as import("@cawco/core").NotStartedFrame;
+              if (
+                refused.kind === "not_started" &&
+                refused.code === AGENT_NOT_STARTED
+              ) {
+                const { request } = refused;
+                if (
+                  !isEnvelope(request) ||
+                  request.machineId !== message.machineId
+                ) {
+                  break;
+                }
+                const queue = awaitingMachine.get(message.machineId) ?? [];
+                const id = requestIdOf(request);
+                if (id && heldRequestIds.has(id)) {
+                  break;
+                }
+                if (id) {
+                  heldRequestIds.add(id);
+                }
+                if (request.verb === "send") {
+                  if (
+                    notStartedSends.has(
+                      (request.payload as SendPayload).message.uuid
+                    )
+                  ) {
+                    break;
+                  }
+                  notStartedSends.add(
+                    (request.payload as SendPayload).message.uuid
+                  );
+                }
+                queue.push(request);
+                awaitingMachine.set(message.machineId, queue);
+                setTimeout(() => {
+                  if (awaitingMachine.get(message.machineId) === queue) {
+                    releaseAwaiting(message.machineId);
+                  }
+                }, RECONNECT_GRACE_MS);
+                break;
+              }
               const kind = peek(message.payload, "kind");
               if (kind === "cache_invalidated") {
                 const { reason, at } = message.payload as Extract<
@@ -11274,7 +11384,7 @@ export const createServer = (
             return;
           }
           // Sends to it wait for its next register, within the grace.
-          const awaiting: Envelope<SendPayload>[] = [];
+          const awaiting: Envelope[] = awaitingMachine.get(machineId) ?? [];
           awaitingMachine.set(machineId, awaiting);
           setTimeout(() => {
             if (awaitingMachine.get(machineId) === awaiting) {
@@ -11283,6 +11393,9 @@ export const createServer = (
           }, RECONNECT_GRACE_MS);
           for (const [requestId, machine] of waitingMachines) {
             if (machine === machineId) {
+              if (heldRequestIds.has(requestId)) {
+                continue;
+              }
               waiting.get(requestId)?.({
                 kind: "control_result",
                 requestId,

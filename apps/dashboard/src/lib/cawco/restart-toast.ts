@@ -15,9 +15,8 @@ import { toast } from "svelte-sonner";
 
 /**
  * Called on every `instances` frame with the agents it carried. Toasts once
- * per machine that just came back from an idle-gated deploy restart — a
- * machine mid-turn when the update landed and only just now went idle enough
- * to take it, exactly the case the wait exists for.
+ * per machine that just came back from a transaction-gated deploy restart.
+ * Its harness processes stayed in sessiond while the agent was replaced.
  */
 export function checkRestartToast(agents: readonly AgentRow[]): void {
   for (const agent of agents) {
@@ -26,7 +25,7 @@ export function checkRestartToast(agents: readonly AgentRow[]): void {
     }
     const name = agent.hostname || agent.machineId;
     toast.info(
-      `${name} updated and restarted — it was idle, so nothing was interrupted.`,
+      `${name} updated and restarted. Sessions carried on in sessiond.`,
       {
         id: `restart-${agent.machineId}-${Date.now()}`,
         duration: 6000,

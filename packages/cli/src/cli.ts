@@ -63,14 +63,13 @@ Services
   watches its own source and restarts itself on every edit, which costs nothing
   because the sessions live in the daemons and reconnect; the dashboard runs
   vite, which reloads an edited file without restarting at all. The agent is
-  never watched in either mode — it hosts your sessions, and a restart ends
-  whatever turn is in flight. \`status\` reads the mode back out of the unit.
+  never watched in either mode — an agent restart detaches and sessions carry on;
+  restarting sessiond ends them. \`status\` reads the mode back out of the unit.
 
-  \`restart agent\` is therefore always deliberate: it asks the hub how many of
-  this machine's sessions are mid-turn and refuses while any are. \`--when-idle\`
-  waits up to five minutes for those turns to finish and then restarts; \`--force\`
-  restarts regardless, and is also the only way through when the hub cannot be
-  reached to answer the question at all.
+  \`restart agent\` asks the running agent which requests retirement would cut.
+  \`--when-idle\` waits up to five minutes for those requests; sessions carry on.
+  \`restart sessiond\` still waits for turns, because it ends harness processes.
+  \`--force\` overrides that sessiond gate only; it never overrides agent holds.
 
 Deploying
   \`cawco deploy init\` clones ${DEPLOY_BRANCH} into ${deployRoot()} — a checkout
@@ -107,8 +106,8 @@ Options
   --to <version>  for \`update\`: a named release instead of the newest
   --origin <url>  for \`deploy init\`: the remote to clone (default this one's)
   --when-idle     for \`service restart\`: wait for this machine's sessions first
-  --force         for \`service restart\`, \`join\` and \`deploy init\`: restart the
-                  agent mid-turn anyway
+   --force         for \`service restart sessiond\`, \`join\` and \`deploy init\`:
+                   override the destructive sessiond restart gate
   --follow, -f    keep printing, for \`service logs\`
   --verbose       narrate the discovery ladder
   --help          this
@@ -429,7 +428,7 @@ const up = async (args: Args): Promise<number> => {
 
   // The daemon reads its hub from the environment, so this is the handoff.
   process.env[CAWCO_ENV.hubUrl] = hub.wsUrl;
-  const { currentBusy, runDaemon, watchDeployment } = await import(
+  const { currentRestartReadiness, runDaemon, watchDeployment } = await import(
     "@cawco/agent"
   );
   // A hub the operator named is never swapped; only a discovered one may be
@@ -449,12 +448,10 @@ const up = async (args: Args): Promise<number> => {
   // checkout is genuinely how this gets developed. It simply has to be chosen:
   // CAWCO_DEPLOY_POLL=1, or a clone that says so in its own marker.
   if (readEnv(CAWCO_ENV.deployPoll) === "1") {
-    // `busy` is this same process's own supervisor, read in-process — see
-    // `currentBusy`. Without it, a pull that lands mid-turn would restart
-    // the agent onto it blind; with it, the restart waits for `currentBusy()`
-    // to read 0 and is retried on every 60s tick until it does.
+    // One readiness/fence policy protects agent-owned requests. Session turns
+    // are not a hold: their processes remain in sessiond across retirement.
     watchDeployment({
-      busy: currentBusy,
+      readiness: currentRestartReadiness,
       root: CHECKOUT_ROOT,
       dashboardUrl: dashboardUrl(),
     });
@@ -531,7 +528,15 @@ const runUpdate = async (args: Args): Promise<number> => {
   const report = await registryUpdate({
     installed: state.installed,
     ...(wanted ? { to: wanted } : {}),
+    restartAgent: false,
+  });
+  await service("restart", {
+    ids: ["agent"],
+    mode: "prod",
+    follow: false,
+    whenIdle: true,
     force: args.force,
+    note: console.log,
   });
   console.log(`installed ${report.to}`);
   if (report.restarted.length > 0) {

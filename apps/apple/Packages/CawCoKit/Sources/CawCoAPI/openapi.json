@@ -1967,6 +1967,100 @@
         }
       }
     },
+    "/api/agents/{machineId}/restart-readiness": {
+      "get": {
+        "parameters": [
+          {
+            "name": "machineId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiAgentsByMachineIdRestartReadiness",
+        "responses": {
+          "200": {
+            "description": "getApiAgentsByMachineIdRestartReadiness 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentRestartReadiness"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "getApiAgentsByMachineIdRestartReadiness 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "getApiAgentsByMachineIdRestartReadiness 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agents/{machineId}/retire": {
+      "post": {
+        "parameters": [
+          {
+            "name": "machineId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "postApiAgentsByMachineIdRetire",
+        "responses": {
+          "200": {
+            "description": "postApiAgentsByMachineIdRetire 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiAgentsByMachineIdRetire200"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "postApiAgentsByMachineIdRetire 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "postApiAgentsByMachineIdRetire 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/agents/{machineId}/unowned-processes/stop": {
       "post": {
         "parameters": [
@@ -7231,6 +7325,24 @@
           "instances"
         ]
       },
+      "postApiAgentsByMachineIdRetire200": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/AgentRestartReadiness"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "scheduled": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "scheduled"
+            ]
+          }
+        ]
+      },
       "postApiAgentsByMachineIdUnownedProcessesStop200": {
         "type": "object",
         "properties": {
@@ -9601,6 +9713,9 @@
             "$ref": "#/components/schemas/ControlResultFrame"
           },
           {
+            "$ref": "#/components/schemas/NotStartedFrame"
+          },
+          {
             "$ref": "#/components/schemas/ErrorFrame"
           },
           {
@@ -9643,6 +9758,7 @@
             "asleep": "#/components/schemas/AsleepFrame",
             "recovery_unavailable": "#/components/schemas/RecoveryUnavailableFrame",
             "control_result": "#/components/schemas/ControlResultFrame",
+            "not_started": "#/components/schemas/NotStartedFrame",
             "error": "#/components/schemas/ErrorFrame",
             "user_message": "#/components/schemas/UserMessageFrame",
             "pulse": "#/components/schemas/PulseFrame",
@@ -12621,6 +12737,44 @@
           "on",
           "sent",
           "state"
+        ]
+      },
+      "AgentRestartReadiness": {
+        "description": "Agent-owned transactions, independent of provider/session turn activity.",
+        "type": "object",
+        "properties": {
+          "holds": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "reason": {
+                  "type": "string"
+                },
+                "ids": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "ids",
+                "reason"
+              ]
+            }
+          },
+          "ready": {
+            "type": "boolean"
+          },
+          "retiring": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "holds",
+          "ready",
+          "retiring"
         ]
       },
       "UnownedProcessStopResult": {
@@ -17614,6 +17768,58 @@
           "kind",
           "ok",
           "requestId"
+        ]
+      },
+      "NotStartedFrame": {
+        "description": "The original request was refused before admission, so replay cannot duplicate work.",
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "agent-retiring-not-started"
+            ]
+          },
+          "instanceId": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "not_started"
+            ]
+          },
+          "request": {
+            "description": "Every message on every hop. `payload` is whatever the verb carries — a neutral\nmessage, a harness option object, a control call — passed through. The hub\nroutes on the envelope fields and peeks only what harness.ts names.",
+            "type": "object",
+            "properties": {
+              "instanceId": {
+                "type": "string"
+              },
+              "machineId": {
+                "type": "string"
+              },
+              "payload": {},
+              "requestId": {
+                "description": "The `requestId` when the payload correlates to a permission or control reply.",
+                "type": "string"
+              },
+              "verb": {
+                "$ref": "#/components/schemas/Verb"
+              }
+            },
+            "required": [
+              "machineId",
+              "payload",
+              "verb"
+            ]
+          }
+        },
+        "required": [
+          "code",
+          "instanceId",
+          "kind",
+          "request"
         ]
       },
       "ErrorFrame": {
