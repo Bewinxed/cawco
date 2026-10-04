@@ -277,6 +277,8 @@ export interface SendPayload {
 export interface HeartbeatPayload {
   at: number;
   browserAvailable?: boolean;
+  /** Fresh sessiond custody after an owner-named stop or register recovery. */
+  custody?: SessionCustody;
   /**
    * Where the machine's deployment clone stands (contract C8), on every beat
    * for the same reason `instances` is: it is a live fact that changes without
@@ -454,8 +456,16 @@ export interface UnownedSessionProcess {
   harness: "claude" | "pi";
   instanceId: string;
   pid: number;
-  turnRunning: boolean;
+  /** null when retained output has no readable turn marker. */
+  turnRunning: boolean | null;
 }
+
+/** Machine-reported outcome for one owner-named unowned process. */
+export type UnownedProcessStopResult =
+  | { instanceId: string; status: "stopped" }
+  | { instanceId: string; status: "failed"; error: string };
+
+export const STOP_UNOWNED_PROCESSES = "stopUnownedProcesses";
 
 /** mDNS and router suffixes: they say "same network", which the fleet already implies. */
 const LOCAL_SUFFIXES = [".local", ".lan", ".home"];

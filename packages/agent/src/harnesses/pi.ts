@@ -2,7 +2,6 @@
 import type { SpawnPayload } from "@cawco/core";
 import type { Harness, HarnessContext, HarnessSession } from "../harness";
 import { parseProcId, procIdFor } from "../proc-id";
-import { endProc } from "../sessiond-client";
 import { PiProfile } from "./pi-services";
 import { adoptPi, piSessiond, piSnapshot, spawnPi } from "./pi-sessiond";
 
@@ -16,11 +15,6 @@ export class PiHarness extends PiProfile implements Harness {
       throw new Error(credential.reason);
     }
     return await spawnPi(spec, ctx);
-  }
-
-  /** Ends the held host on an explicit stop. */
-  async abandon(instanceId: string): Promise<void> {
-    await endProc(await piSessiond(), procIdFor("pi", instanceId));
   }
 
   async custodyCandidates() {

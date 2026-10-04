@@ -22,6 +22,7 @@ import {
   CONTROL_WORKSPACE_CREATE,
   CONTROL_WORKSPACE_MIGRATE,
   OPEN_MCP_AUTHORIZATION,
+  STOP_UNOWNED_PROCESSES,
 } from "@cawco/core";
 import { sessiondEndpoint } from "@cawco/core/sessiond";
 import { fetchClaudeLimits } from "@cawco/core/usage/limits";
@@ -472,38 +473,40 @@ export const custodyRow = (
  * What the register says about this machine's sessions: what sessiond is still
  * holding, and what each harness could resume.
  */
+const readCustody = async (): Promise<SessionCustody> => {
+  try {
+    const client = await SessiondClient.connect(
+      process.env.CAWCO_SESSIOND_ENDPOINT ?? sessiondEndpoint()
+    );
+    try {
+      const held = client.procs.filter((proc) => proc.alive);
+      return {
+        state: "available",
+        instances: held.flatMap((proc) => {
+          const id = parseProcId(proc.procId);
+          return id.kind === "claude" || id.kind === "pi"
+            ? [id.instanceId]
+            : [];
+        }),
+        opencode: held.some(
+          (proc) => parseProcId(proc.procId).kind === "opencode-server"
+        ),
+      };
+    } finally {
+      client.close();
+    }
+  } catch (error) {
+    Effect.runFork(
+      Effect.logWarning(`session custody unavailable: ${String(error)}`)
+    );
+    return { state: "unavailable", error: String(error) };
+  }
+};
+
 const readSessions = async () => {
   // Read before the catalog: listing OpenCode conversations may start a new
   // server, which must not be mistaken for one that survived this restart.
-  const custody: SessionCustody = await (async (): Promise<SessionCustody> => {
-    try {
-      const client = await SessiondClient.connect(
-        process.env.CAWCO_SESSIOND_ENDPOINT ?? sessiondEndpoint()
-      );
-      try {
-        const held = client.procs.filter((proc) => proc.alive);
-        return {
-          state: "available",
-          instances: held.flatMap((proc) => {
-            const id = parseProcId(proc.procId);
-            return id.kind === "claude" || id.kind === "pi"
-              ? [id.instanceId]
-              : [];
-          }),
-          opencode: held.some(
-            (proc) => parseProcId(proc.procId).kind === "opencode-server"
-          ),
-        };
-      } finally {
-        client.close();
-      }
-    } catch (error) {
-      Effect.runFork(
-        Effect.logWarning(`session custody unavailable: ${String(error)}`)
-      );
-      return { state: "unavailable", error: String(error) };
-    }
-  })();
+  const custody = await readCustody();
   const catalog = await resumableSessions();
   return { custody, catalog };
 };
@@ -840,9 +843,53 @@ const attach = (
      * back. Busy answers wait for them as they wait for claude's.
      */
     const reattaching: Promise<void>[] = [];
+    let hubRowIds: string[] = [];
+    const reportUnowned = async (signal?: AbortSignal): Promise<void> => {
+      const freshCustody = await readCustody();
+      const unownedProcesses =
+        freshCustody.state === "unavailable"
+          ? null
+          : await supervisor.listUnowned(hubRowIds).catch((error: unknown) => {
+              Effect.runFork(
+                Effect.logWarning(
+                  `unowned session listing unavailable: ${String(error)}`
+                )
+              );
+              return null;
+            });
+      signal?.throwIfAborted();
+      if (socket.readyState !== WebSocket.OPEN) {
+        throw new Error(
+          "The hub connection was lost before the fresh custody report could be sent."
+        );
+      }
+      send(socket, {
+        verb: "heartbeat",
+        machineId: identity.machineId,
+        payload: {
+          at: Date.now(),
+          instances: supervisor.instanceIds,
+          custody: freshCustody,
+          unownedProcesses,
+        } satisfies HeartbeatPayload,
+      });
+      if (unownedProcesses) {
+        Effect.runFork(
+          Effect.logInfo(
+            `left ${unownedProcesses.length} session process(es) no hub row names`
+          )
+        );
+      }
+    };
+    supervisor.registerDaemonFunction(STOP_UNOWNED_PROCESSES, async (ids) => {
+      const results = await supervisor.stopUnownedProcesses(ids as string[]);
+      await reportUnowned();
+      return { results };
+    });
 
     const takeCustody = (ackPayload: unknown, spawns: Envelope[]): void => {
       clearTimeout(registrationDeadline);
+      hubRowIds = (ackPayload as RegisterAckPayload).rowIds;
       const named = spawns.map((envelope) =>
         custodyRow(envelope.payload as SpawnPayload)
       );
@@ -872,35 +919,7 @@ const attach = (
             .splice(0)
             .map((envelope) => supervisor.dispatch(envelope))
         );
-        const unownedProcesses = await supervisor
-          .listUnowned((ackPayload as RegisterAckPayload).rowIds)
-          .catch((error: unknown) => {
-            Effect.runFork(
-              Effect.logWarning(
-                `unowned session listing unavailable: ${String(error)}`
-              )
-            );
-            return null;
-          });
-        signal.throwIfAborted();
-        if (socket.readyState === WebSocket.OPEN) {
-          send(socket, {
-            verb: "heartbeat",
-            machineId: identity.machineId,
-            payload: {
-              at: Date.now(),
-              instances: supervisor.instanceIds,
-              unownedProcesses,
-            } satisfies HeartbeatPayload,
-          });
-          if (unownedProcesses) {
-            Effect.runFork(
-              Effect.logInfo(
-                `left ${unownedProcesses.length} session process(es) no hub row names`
-              )
-            );
-          }
-        }
+        await reportUnowned(signal);
         return attached;
       };
       const custodyRecovered = (epoch: number, adopted: string[]) => {

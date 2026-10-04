@@ -1,6 +1,7 @@
-/** Five real private-stack custody proofs. Children only sleep; no credentials or model turns. */
+/** Real private-stack custody proofs. Children only sleep; no credentials or model turns. */
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { createRequire } from "node:module";
+import { createServer as createSocketServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve as resolvePath } from "node:path";
 
@@ -24,6 +25,29 @@ if (role === "agent") {
   });
   const { runDaemon } = await import("../packages/agent/src/daemon");
   runDaemon("unauthenticated");
+} else if (role === "unusable-listing") {
+  const { registerHarness } = await import("../packages/agent/src/harnesses");
+  const { SessionSupervisor } = await import("../packages/agent/src/session");
+  let adapterUses = 0;
+  const unusable = new Proxy(
+    { kind: "pi" } as import("../packages/agent/src/harness").Harness,
+    {
+      get(_target, property) {
+        if (property === "kind") {
+          return "pi";
+        }
+        adapterUses += 1;
+        throw new Error(
+          `pi adapter must not be used by listing: ${String(property)}`
+        );
+      },
+    }
+  );
+  registerHarness(unusable);
+  const supervisor = new SessionSupervisor();
+  const processes = await supervisor.listUnowned([]);
+  console.log(JSON.stringify({ processes, adapterUses }));
+  process.exit(0);
 } else if (role === "seed") {
   const { Effect } = await import(
     createRequire(join(root, "packages/hub/package.json")).resolve("effect")
@@ -98,10 +122,14 @@ if (role === "agent") {
   };
   const children = new Set<ReturnType<typeof Bun.spawn>>();
   let dbPath = join(scratch, "first.db");
-  const launch = (name: string, args: string[]) => {
+  const launch = (
+    name: string,
+    args: string[],
+    overrides: Record<string, string> = {}
+  ) => {
     const child = Bun.spawn([process.execPath, ...args], {
       cwd: root,
-      env: { ...env, CAWCO_DB_PATH: dbPath },
+      env: { ...env, CAWCO_DB_PATH: dbPath, ...overrides },
       stdout: Bun.file(join(scratch, `${name}.log`)),
       stderr: Bun.file(join(scratch, `${name}.err`)),
     });
@@ -176,6 +204,7 @@ if (role === "agent") {
     | undefined;
   let hub: ReturnType<typeof Bun.spawn> | undefined;
   let agent: ReturnType<typeof Bun.spawn> | undefined;
+  let unavailable: ReturnType<typeof createSocketServer> | undefined;
   try {
     launch("sessiond", [join(root, "packages/sessiond/src/main.ts")]);
     const { SessiondClient } = await import(
@@ -322,11 +351,159 @@ if (role === "agent") {
     console.log(
       `PASS 5 delete sleeping row: HTTP=${deleted.status}, body=${body}, held PID=${pids[0]} ended`
     );
+
+    const unusablePid = await spawn("pi:unusable-pi");
+    const alongsidePid = await spawn("alongside-claude");
+    const unusableListing = launch("unusable-listing", [
+      import.meta.path,
+      "unusable-listing",
+    ]);
+    if (await unusableListing.exited) {
+      throw new Error(
+        await Bun.file(join(scratch, "unusable-listing.err")).text()
+      );
+    }
+    const passive = JSON.parse(
+      await Bun.file(join(scratch, "unusable-listing.log")).text()
+    );
+    if (
+      passive.adapterUses !== 0 ||
+      !passive.processes.some(
+        (proc: { pid: number; harness: string; turnRunning: unknown }) =>
+          proc.pid === unusablePid &&
+          proc.harness === "pi" &&
+          proc.turnRunning === null
+      ) ||
+      !passive.processes.some(
+        (proc: { pid: number; harness: string }) =>
+          proc.pid === alongsidePid && proc.harness === "claude"
+      )
+    ) {
+      throw new Error(
+        `Unusable adapter hid held processes: ${JSON.stringify(passive)}`
+      );
+    }
+    console.log(
+      `PASS 9 unusable harness listing: adapter uses=${passive.adapterUses}, pi PID=${unusablePid} listed, claude PID=${alongsidePid} listed, unknown turnRunning=null`
+    );
+    await client.signal("pi:unusable-pi", "SIGTERM");
+    await client.signal("alongside-claude", "SIGTERM");
+    await wait(
+      "passive proof children ended",
+      alive,
+      (procs) =>
+        !procs.some(
+          (proc) => proc.pid === unusablePid || proc.pid === alongsidePid
+        )
+    );
+
+    const ownerIds = ["unowned-stop", "unowned-keep"];
+    const ownerPids = await Promise.all(ownerIds.map(spawn));
+    await stop(agent);
+    agent = launch("agent-owner-stops", [import.meta.path, "agent"]);
+    const beforeOwnerStop = await wait(
+      "owner stop list",
+      report,
+      (row) => row?.unownedProcesses?.length === ownerIds.length
+    );
+    const stopListed = async (instanceIds: string[]) => {
+      const response = await fetch(
+        `${base}/api/agents/custody-proof/unowned-processes/stop`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ instanceIds }),
+        }
+      );
+      return { code: response.status, body: await response.json() };
+    };
+    const stopped = await stopListed([ownerIds[0]]);
+    if (
+      stopped.code !== 200 ||
+      stopped.body.results?.length !== 1 ||
+      stopped.body.results[0].instanceId !== ownerIds[0] ||
+      stopped.body.results[0].status !== "stopped"
+    ) {
+      throw new Error(`Owner-named stop failed: ${JSON.stringify(stopped)}`);
+    }
+    const afterOwnerStop = await wait(
+      "owner stop refresh",
+      report,
+      (row) =>
+        row?.unownedProcesses?.length ===
+        beforeOwnerStop.unownedProcesses.length - 1
+    );
+    const survivors = await alive();
+    if (
+      survivors.some((proc) => proc.pid === ownerPids[0]) ||
+      !survivors.some((proc) => proc.pid === ownerPids[1]) ||
+      afterOwnerStop.unownedProcesses[0].instanceId !== ownerIds[1]
+    ) {
+      throw new Error(
+        "Owner stop did not end exactly its named child and shrink the list"
+      );
+    }
+    console.log(
+      `PASS 6 owner-named unowned stop: HTTP=${stopped.code}, body=${JSON.stringify(stopped.body)}, PID=${ownerPids[0]} gone, list=2->1, other PID=${ownerPids[1]} alive`
+    );
+
+    const refused = await stopListed([ownerIds[1], "not-listed"]);
+    if (
+      refused.code !== 409 ||
+      refused.body.instanceIds?.join(",") !== "not-listed" ||
+      !(await alive()).some((proc) => proc.pid === ownerPids[1])
+    ) {
+      throw new Error(
+        `Unlisted mixed request was not refused atomically: ${JSON.stringify(refused)}`
+      );
+    }
+    console.log(
+      `PASS 7 unlisted id refused: HTTP=${refused.code}, body=${JSON.stringify(refused.body)}, PIDs ended=0`
+    );
+
+    await stop(agent);
+    const unavailableEndpoint = join(scratch, "unavailable.sock");
+    unavailable = createSocketServer((socket) => {
+      socket.on("error", () => undefined);
+      socket.end(
+        `${JSON.stringify({ type: "welcome", capabilities: [], epoch: "unreadable-proof", procs: [] })}\n`
+      );
+    });
+    await new Promise<void>((resolve, reject) => {
+      unavailable?.once("error", reject);
+      unavailable?.listen(unavailableEndpoint, resolve);
+    });
+    agent = launch("agent-unavailable", [import.meta.path, "agent"], {
+      CAWCO_SESSIOND_ENDPOINT: unavailableEndpoint,
+    });
+    await wait(
+      "unavailable custody",
+      report,
+      (row) =>
+        row?.status === "online" &&
+        row.custody?.state === "unavailable" &&
+        row.unownedProcesses === null
+    );
+    const unreadable = await stopListed([ownerIds[1]]);
+    if (
+      unreadable.code !== 409 ||
+      !unreadable.body.error.includes("could not read sessiond") ||
+      !(await alive()).some((proc) => proc.pid === ownerPids[1])
+    ) {
+      throw new Error(
+        `Unavailable custody did not refuse: ${JSON.stringify(unreadable)}`
+      );
+    }
+    console.log(
+      `PASS 8 unavailable custody refused: HTTP=${unreadable.code}, body=${JSON.stringify(unreadable.body)}, PIDs ended=0`
+    );
   } catch (error) {
     for (const name of [
       "agent",
       "agent-restarted",
       "agent-stopped-row",
+      "agent-owner-stops",
+      "agent-unavailable",
       "hub",
       "hub-restarted",
       "hub-empty",
@@ -349,6 +526,9 @@ if (role === "agent") {
       await stop(hub);
     }
     holder?.close();
+    if (unavailable) {
+      await new Promise<void>((resolve) => unavailable?.close(() => resolve()));
+    }
     await Promise.all([...children].map(stop));
     await rm(scratch, { recursive: true, force: true });
     console.log("Private stack stopped; scratch state removed.");

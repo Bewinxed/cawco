@@ -30,6 +30,7 @@ import type {
   SessionPulse,
   SpawnPayload,
   StopPayload,
+  UnownedProcessStopResult,
   UnownedSessionProcess,
 } from "@cawco/core";
 import {
@@ -56,6 +57,7 @@ import {
   withWorktreeLine,
   worstFleetState,
 } from "@cawco/core";
+import { sessiondEndpoint } from "@cawco/core/sessiond";
 import { Effect } from "effect";
 import { type Boundary, boundaryFor } from "./boundary";
 import { fetchDefaultBranch } from "./clone";
@@ -70,7 +72,8 @@ import { prepareFleetMcp } from "./mcp-launcher";
 import { startPreview, stopPreview, stopPreviews } from "./preview";
 import { parseProcId, SESSION_PROC_KINDS } from "./proc-id";
 import { acknowledgeSessionCredential } from "./session-identity";
-import { procEpoch } from "./sessiond-client";
+import { endProc, procEpoch, SessiondClient } from "./sessiond-client";
+import { readHeldProcesses } from "./sessiond-custody";
 import { installTool, probeTools } from "./tools";
 import { type UpdateOptions, updateCheckout } from "./update";
 
@@ -81,9 +84,6 @@ import { type UpdateOptions, updateCheckout } from "./update";
  * satisfy this shape. Claude and pi share custody; OpenCode owns its server.
  */
 interface SessiondAdoption {
-  /** Ends a held child on an explicit stop, with everything it started. */
-  // biome-ignore lint/style/useConsistentMethodSignatures: a property signature changes parameter variance here and would break the claude adapter's implementation
-  abandon(instanceId: string): Promise<void>;
   // biome-ignore lint/style/useConsistentMethodSignatures: a property signature changes parameter variance here and would break the claude adapter's implementation
   adopt(
     instanceId: string,
@@ -1562,41 +1562,14 @@ export class SessionSupervisor {
     rowIds: readonly string[]
   ): Promise<UnownedSessionProcess[]> {
     const named = new Set(rowIds);
-    const unowned: UnownedSessionProcess[] = [];
-    for (const kind of SESSION_PROC_KINDS) {
-      const adapter = this.#adapter(kind) as Harness &
-        Partial<SessiondAdoption>;
-      // biome-ignore lint/performance/noAwaitInLoops: one harness's listing at a time
-      const held = await adapter.custodyCandidates?.();
-      for (const proc of held?.procs ?? []) {
-        const id = parseProcId(proc.procId);
-        if (
-          !(
-            (id.kind === "claude" || id.kind === "pi") &&
-            id.kind === kind &&
-            proc.alive
-          ) ||
-          (this.#sessions.has(id.instanceId) && named.has(id.instanceId)) ||
-          this.#adopting.has(id.instanceId) ||
-          // Something is on its way to it: a spawn starting it, a stop.
-          this.#queues.has(id.instanceId)
-        ) {
-          continue;
-        }
-        if (!adapter.turnRunning) {
-          throw new Error(`${kind} cannot read held turns`);
-        }
-        unowned.push({
-          instanceId: id.instanceId,
-          harness: id.kind,
-          cwd: proc.cwd ?? null,
-          pid: proc.pid,
-          // biome-ignore lint/performance/noAwaitInLoops: read each child's ring without changing custody
-          turnRunning: await adapter.turnRunning(id.instanceId, proc.head),
-        });
-      }
-    }
-    return unowned;
+    return await readHeldProcesses(
+      (instanceId) =>
+        !(
+          (this.#sessions.has(instanceId) && named.has(instanceId)) ||
+          this.#adopting.has(instanceId) ||
+          this.#queues.has(instanceId)
+        )
+    );
   }
 
   /**
@@ -2045,27 +2018,73 @@ export class SessionSupervisor {
   }
 
   async #endHeld(instanceId: string): Promise<boolean> {
-    let ended = false;
-    for (const kind of SESSION_PROC_KINDS) {
-      const adapter = this.#adapter(kind) as Harness &
-        Partial<SessiondAdoption>;
-      // biome-ignore lint/performance/noAwaitInLoops: inspect each harness for the explicit stop's child
-      const held = await adapter.custodyCandidates?.();
-      if (
-        !held?.procs.some((proc) => {
-          const id = parseProcId(proc.procId);
-          return proc.alive && id.kind === kind && id.instanceId === instanceId;
+    const client = await SessiondClient.connect(
+      process.env.CAWCO_SESSIOND_ENDPOINT ?? sessiondEndpoint()
+    );
+    try {
+      const children = client.procs.filter((proc) => {
+        const id = parseProcId(proc.procId);
+        return (
+          proc.alive &&
+          (id.kind === "claude" || id.kind === "pi") &&
+          id.instanceId === instanceId
+        );
+      });
+      await Promise.all(
+        children.map(async (child) => {
+          await endProc(client, child.procId);
+          const deadline = Date.now() + 10_000;
+          let alive = true;
+          while (alive && Date.now() < deadline) {
+            // biome-ignore lint/performance/noAwaitInLoops: confirmation follows sessiond's existing graceful stop and five-second kill grace
+            const after = await client.list();
+            alive = after.procs.some(
+              (proc) => proc.pid === child.pid && proc.alive
+            );
+            if (alive) {
+              await Bun.sleep(100);
+            }
+          }
+          if (alive) {
+            throw new Error(
+              `sessiond process ${child.pid} for ${instanceId} did not exit after its stop`
+            );
+          }
         })
-      ) {
-        continue;
-      }
-      if (!adapter.abandon) {
-        throw new Error(`${kind} cannot end held processes`);
-      }
-      await adapter.abandon(instanceId);
-      ended = true;
+      );
+      return children.length > 0;
+    } finally {
+      client.close();
     }
-    return ended;
+  }
+
+  /** Only the explicit machine control calls this; every child follows #stop's held path. */
+  async stopUnownedProcesses(
+    instanceIds: readonly string[]
+  ): Promise<UnownedProcessStopResult[]> {
+    return await Promise.all(
+      [...new Set(instanceIds)].map(
+        async (instanceId): Promise<UnownedProcessStopResult> => {
+          try {
+            if (!(await this.#endHeld(instanceId))) {
+              throw new Error(
+                `Nothing stopped for ${instanceId}: sessiond holds no live process for it`
+              );
+            }
+            this.#sessions.delete(instanceId);
+            this.#forgetPulse(instanceId);
+            this.#resumable.delete(instanceId);
+            return { instanceId, status: "stopped" };
+          } catch (error) {
+            return {
+              instanceId,
+              status: "failed",
+              error: error instanceof Error ? error.message : String(error),
+            };
+          }
+        }
+      )
+    );
   }
 
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one stop settles carried, sessiond-held and discarded custody with the same receipt

@@ -58,6 +58,7 @@ import type {
   ToolState,
   ToolStatus,
   TranscriptWhere,
+  UnownedProcessStopResult,
   UnownedSessionProcess,
   UpdateReport,
   UsageBucket,
@@ -123,6 +124,7 @@ import {
   reportMarker,
   ruleProblem,
   runDoing,
+  STOP_UNOWNED_PROCESSES,
   SUMMARISER_OUTPUT_RESERVE_TOKENS,
   SUMMARY_CAP_TOKENS,
   TARGET_HEADROOM_TOKENS,
@@ -7439,6 +7441,59 @@ export const createServer = (
         }
         return answer.result as { busy: number; instances: string[] };
       })
+      .post(
+        "/api/agents/:machineId/unowned-processes/stop",
+        {
+          body: t.Object({
+            instanceIds: t.Array(t.String({ minLength: 1 }), { minItems: 1 }),
+          }),
+        },
+        async ({ params, body, status }) => {
+          const custody = machineCustody.get(params.machineId);
+          const listed = unownedProcesses.get(params.machineId);
+          if (custody?.state === "unavailable" || listed === null) {
+            return status(409, {
+              error:
+                "The machine could not read sessiond. No processes were stopped.",
+            });
+          }
+          const instanceIds = [...new Set(body.instanceIds)];
+          const allowed = new Set(
+            (listed ?? []).map((proc) => proc.instanceId)
+          );
+          const notListed = instanceIds.filter((id) => !allowed.has(id));
+          if (notListed.length > 0) {
+            return status(409, {
+              error: `These processes are not listed as unowned on this machine: ${notListed.join(", ")}. No processes were stopped.`,
+              instanceIds: notListed,
+            });
+          }
+          const answer = await callAgent(
+            params.machineId,
+            STOP_UNOWNED_PROCESSES,
+            [instanceIds],
+            READ_TIMEOUT_MS * 2
+          );
+          if (answer === "offline") {
+            return status(404, {
+              error: `machine ${params.machineId} is not connected`,
+            });
+          }
+          if (answer === "timeout") {
+            return status(504, {
+              error: `machine ${params.machineId} did not answer; completion is unknown`,
+            });
+          }
+          if (!answer.ok) {
+            return status(502, {
+              error:
+                answer.error ??
+                "The machine did not confirm the process stops.",
+            });
+          }
+          return answer.result as { results: UnownedProcessStopResult[] };
+        }
+      )
       // And the update itself: the machine pulls, installs, rebuilds and restarts
       // what it serves, then says what it actually did.
       .post(
@@ -9968,6 +10023,16 @@ export const createServer = (
             }
             case "heartbeat": {
               db.touchAgent(message.machineId);
+              if ((message.payload as HeartbeatPayload).custody !== undefined) {
+                const custody = peekCustody(message.payload);
+                machineCustody.set(message.machineId, custody);
+                if (custody.state === "available") {
+                  heldProcesses.set(
+                    message.machineId,
+                    new Set(custody.instances)
+                  );
+                }
+              }
               const report = (message.payload as HeartbeatPayload)
                 .unownedProcesses;
               if (report === null || Array.isArray(report)) {
@@ -9983,7 +10048,8 @@ export const createServer = (
                           (proc.cwd === null || typeof proc.cwd === "string") &&
                           Number.isInteger(proc.pid) &&
                           proc.pid > 0 &&
-                          typeof proc.turnRunning === "boolean"
+                          (proc.turnRunning === null ||
+                            typeof proc.turnRunning === "boolean")
                       );
                 unownedProcesses.set(message.machineId, valid);
                 for (const proc of valid ?? []) {

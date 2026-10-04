@@ -96,13 +96,13 @@ import type { SessiondAwareContext } from "../session";
 import { acknowledgeSessionCredential } from "../session-identity";
 import {
   type BridgeRing,
-  endProc,
   ensureSessiond,
   procEpoch,
   SessiondClient,
   type SessiondWelcomeInfo,
   sessiondBridge,
 } from "../sessiond-client";
+import { ChildActivity, type RingLine, readRing } from "../sessiond-custody";
 import { claudeConfigDirs } from "../usage/scan-claude";
 import {
   hookFailureId,
@@ -1536,19 +1536,6 @@ const endsTurn = (message: unknown): boolean => {
   return reason === "end_turn" || reason === "stop_sequence";
 };
 
-/** The fields of a ring line an adoption reads; `undefined` when it is not JSON. */
-interface RingLine {
-  /** A `command_lifecycle` line's command: the uuid of the send it is. */
-  command_uuid?: unknown;
-  /** A control request's body; `input` is a `hook_callback`'s hook input. */
-  request?: { subtype?: unknown; input?: unknown };
-  request_id?: unknown;
-  session_id?: unknown;
-  skip_transcript?: unknown;
-  subtype?: unknown;
-  type?: unknown;
-}
-
 const parseLine = (data: string): RingLine | undefined => {
   try {
     return JSON.parse(data) as RingLine;
@@ -1556,130 +1543,6 @@ const parseLine = (data: string): RingLine | undefined => {
     return undefined;
   }
 };
-
-/** Lines only a running turn writes. `system` lines are read by subtype instead. */
-const TURN_LINES: ReadonlySet<unknown> = new Set([
-  "assistant",
-  "user",
-  "stream_event",
-  "tool_progress",
-  "control_request",
-  "control_cancel_request",
-]);
-
-/**
- * WHETHER THE CHILD IS MID-TURN, read off its ring one line at a time: an
- * adoption that meets a running turn makes it the attached session's, busy
- * from the start.
- *
- * `result` ends a turn. `init` opens one: the CLI writes it when it takes up a
- * message, not when it starts (on the isolated stack a fresh child wrote its
- * hooks and the `initialize` control_response, and its `init` came with the
- * first send). A `task_notification` is a turn about to open: the CLI hands
- * it to the model as the next turn (measured: notification, `init`, the turn,
- * `result`). The lines in {@link TURN_LINES} are the turn itself. Everything
- * else carries the previous answer, because an idle child keeps writing hook,
- * status, `commands_changed`, `rate_limit_event`, `background_tasks_changed`
- * and `control_response` lines after its `result`, so the LAST line almost
- * never says anything about the turn.
- */
-class ChildActivity {
-  /** `undefined` until a line has said anything about a turn. */
-  #waiting: boolean | undefined;
-
-  read(line: RingLine | undefined): void {
-    if (line === undefined) {
-      return;
-    }
-    if (line.type === "result") {
-      this.#waiting = true;
-      return;
-    }
-    if (TURN_LINES.has(line.type)) {
-      this.#waiting = false;
-      return;
-    }
-    if (line.type !== "system") {
-      return;
-    }
-    if (
-      line.subtype === "init" ||
-      (line.subtype === "task_notification" && line.skip_transcript !== true)
-    ) {
-      this.#waiting = false;
-    }
-  }
-
-  /** Whether any line read so far said something about a turn. */
-  get decided(): boolean {
-    return this.#waiting !== undefined;
-  }
-
-  /**
-   * A child that has said nothing about a turn is not running one: it has
-   * taken no turn in anything sessiond still remembers (see
-   * {@link ClaudeHarness.turnRunning}).
-   */
-  get turnRunning(): boolean {
-    return this.#waiting === false;
-  }
-}
-
-/**
- * Reads a child's ring from `afterSeq` through `head`, one line at a time, and
- * resolves with the first seq sessiond still held for that read.
- *
- * A cursor below what sessiond still holds is answered by its `reset`, which
- * names the oldest line it has, and the read reopens there: that is how a read
- * asks "how far back do you go". `head` is a listing's, taken before the read,
- * and the child has gone on writing since. When its ring has since dropped its
- * window (the 8 MB cap) or wrapped past `head`, the lines the read waits for
- * are gone: reopening there replays only lines above `head`, the child may be
- * idle, and the read would wait without a word. The ring's first line — or,
- * holding none, the next it will write — says whether any line up to `head`
- * is still there to read, and a read with nothing left to read ends.
- */
-const readRing = (
-  client: SessiondClient,
-  procId: string,
-  afterSeq: number,
-  head: number,
-  line: NonNullable<ProcLineListener["line"]>
-): Promise<number> => {
-  let oldest = afterSeq + 1;
-  return new Promise<number>((done) => {
-    if (head <= afterSeq) {
-      done(oldest);
-      return;
-    }
-    let reopened = false;
-    const listener: ProcLineListener = {
-      line: (event) => {
-        if (event.seq > head) {
-          return;
-        }
-        line(event);
-        if (event.seq === head) {
-          done(oldest);
-        }
-      },
-      exit: () => done(oldest),
-      reset: (nextSeq, from) => {
-        oldest = from ?? nextSeq;
-        if (reopened || oldest > head) {
-          done(oldest);
-          return;
-        }
-        reopened = true;
-        client.subscribe(procId, listener, oldest - 1);
-      },
-    };
-    client.subscribe(procId, listener, afterSeq);
-  });
-};
-
-/** What {@link readRing} hands a child's ring listener. */
-type ProcLineListener = Parameters<SessiondClient["subscribe"]>[1];
 
 /**
  * How many lines back from `head` the first look at a ring's end reads. A turn
@@ -2008,7 +1871,7 @@ export class ClaudeHarness implements Harness {
     const client = await this.sessiond();
     for (let span = TURN_LOOK_LINES; ; span *= 4) {
       const from = Math.max(head - span, 0);
-      const activity = new ChildActivity();
+      const activity = new ChildActivity("claude");
       // biome-ignore lint/performance/noAwaitInLoops: each look reaches further back only when the one before it found nothing about a turn
       const oldest = await readRing(
         client,
@@ -2156,11 +2019,6 @@ export class ClaudeHarness implements Harness {
     }
     session.adoptWakeups(wakeups);
     return session;
-  }
-
-  /** Ends the held child on an explicit stop. */
-  async abandon(instanceId: string): Promise<void> {
-    await endProc(await this.sessiond(), procIdFor("claude", instanceId));
   }
 
   /** What sessiond is still holding for this machine — the reattach's first read. */
