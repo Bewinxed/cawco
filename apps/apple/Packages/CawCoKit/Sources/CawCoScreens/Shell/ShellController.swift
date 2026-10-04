@@ -65,6 +65,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
             hub: hub,
             open: { [weak self] id in self?.openSession(id) },
             continueInNewSession: panes.continueHandler.map { _ in { [weak self] id in self?.panes.continueInNewSession(id) } },
+            continueStored: { [weak self] source in self?.newSession.continueSession(source) },
             presenter: { [weak self] in self?.dialogPresenter ?? UIViewController() }
         )
     }

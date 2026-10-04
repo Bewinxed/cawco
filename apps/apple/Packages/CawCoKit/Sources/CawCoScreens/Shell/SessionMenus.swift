@@ -15,6 +15,8 @@ struct SessionMenuContext {
     let open: (String) -> Void
     /// "Continue in new session…": PaneHost's one entry point, once that flow exists.
     let continueInNewSession: ((String) -> Void)?
+    /// The same flow for a stored transcript the hub holds no row for: it is named whole.
+    let continueStored: (ContinueSource) -> Void
     /// What the dialogs present over.
     let presenter: () -> UIViewController
 }
@@ -128,9 +130,11 @@ enum SessionMenus {
         let title = hub.fleet.storedTitle(sessionKey: info.sessionId, machineId: machineId) ?? info.sessionId
         let harness = info.harness.rawValue
         var first: [UIMenuElement] = [UIAction(title: "Open", image: Glyph.external.image) { _ in context.open(to) }]
-        if let onward = context.continueInNewSession {
-            first.append(UIAction(title: "Continue in new session…", image: Glyph.arrowRight.image) { _ in onward(to) })
-        }
+        // StoredSessionMenu names its source itself: the stored session's id, machine, folder, harness and title.
+        first.append(UIAction(title: "Continue in new session…", image: Glyph.arrowRight.image) { _ in
+            context.continueStored(ContinueSource(instanceId: info.sessionId, machineId: machineId, cwd: info.cwd ?? "",
+                                                  harness: harness, model: nil, title: title))
+        })
         if UIApplication.shared.supportsMultipleScenes {
             first.append(UIAction(title: "Open in new window", image: Glyph.window.image) { _ in openInNewWindow(to) })
         }
