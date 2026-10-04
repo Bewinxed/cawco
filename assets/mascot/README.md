@@ -25,7 +25,13 @@ that is all they do with him.
   drawing is traced from that picture (`trace_still.py`) into `loops/compacted/body-00.svg`,
   and the note is an ink of its own, cream, that only he carries (`rests.json` names it under
   `inks`). He comes in once by `compacted-enter` (he rises from below with a long strip of
-  paper and folds it into the note) and then rests; he has no exit and no arrivals.
+  paper and folds it into the note) and then rests; he has no exit and no arrivals. He is the
+  one Caw drawn at 18 px, so he has a look of his own (`LOOK` in `scene.mjs`; no other file's
+  bytes depend on it): his dark rim is one whole device pixel of a 1x screen at 18 CSS px,
+  512 / 18 = 28.4 artboard px, where the kit's 5.31 is 0.19 CSS px and measured 1.60:1 against
+  the dark page; and his cream note, 1.0:1 against the light page, carries a line of his black
+  ink as wide as that rim, in both schemes. `CAW_NOTE=butter node build.mjs <dir>` builds the
+  note in his yellow ink with no line instead, for comparing.
 - `sleeping` is what Caw shows when nothing is going on: no session working anywhere on the
   fleet and nothing needing the operator (owner: "it should have a 'sleeping' look too"). The
   drawing is the nod in the owner's idle-nod-off take, eyes closed and head dropped

@@ -138,6 +138,30 @@ const RIM_LIGHT = {
   join: "round",
 };
 const RIM_DARK_COLOR = `#FF${IVORY}`;
+/** The rim's width in artboard px: the kit's, unless a status's look names its own. */
+const KIT_RIM = 14 * 0.379_471_228_615_863_13;
+/** One device pixel of a 1x screen, in artboard px, where the stills' 512 box is drawn at 18 CSS px. */
+const PIXEL_AT_18 = 512 / 18;
+/** trace.py's inks as the drawings carry them: the note's cream, his black, his yellow. */
+const INK = { black: "#1b1b19", cream: "#fbf4e5", yellow: "#f2cc6b" };
+/**
+ * How a status is drawn where the kit's defaults do not carry it. A status not named here is
+ * drawn as the kit says, and its file's bytes do not depend on this table.
+ *
+ * `compacted` is the only Caw drawn at 18 CSS px, beside a word. The kit's 5.31 px rim is
+ * 0.19 CSS px there (measured 1.60:1 against the dark page at 1x): his black head was lost on the
+ * dark page. His rim is one whole device pixel of a 1x screen instead. His cream note measured
+ * 1.0:1 against the light page, so it is drawn one of two ways:
+ *   outline: the cream note with a line of his black ink round it, as wide as his rim;
+ *   butter:  the note filled with his yellow ink, no line.
+ * `CAW_NOTE=butter node build.mjs <dir>` builds the other one for the owner to compare.
+ */
+const LOOK = {
+  compacted: { rim: PIXEL_AT_18, note: process.env.CAW_NOTE ?? "outline" },
+};
+if (!["outline", "butter"].includes(LOOK.compacted.note)) {
+  throw new Error(`CAW_NOTE is 'outline' or 'butter', not '${LOOK.compacted.note}'`);
+}
 /**
  * The drawings are placed on the stills' 512 px box, but the acting leaves it. The artboard is
  * 592 square and Caw sits 43 px right and 40 px down in it: the still box is (43, 40, 512, 512),
@@ -171,27 +195,44 @@ function merge(id, parent, shapes, paint) {
  * One traced drawing's shapes under the group `id`, one per ink, and its base shape's id. The
  * base is its silhouette, filled black; it also carries the cream rim as a stroke that build.mjs
  * draws under the fill (`strokeUnder`), so the silhouette is stored once. An empty drawing (the
- * page a clip starts or ends on) has no shapes and no base.
+ * page a clip starts or ends on) has no shapes and no base. `look` is the status's entry in LOOK:
+ * its rim's width, and how its note is drawn (the note's line is a stroke under its fill too, so
+ * only its outer half shows, round the note).
  */
-function drawing(id, svg) {
+function drawing(id, svg, look = {}) {
   const body = importSvg(readFileSync(svg, "utf8"), { idPrefix: `${id}-` });
   // Fill order is ink order in the SVG: the black silhouette first, each ink above it.
   const inks = [...new Set(body.shapes.map((s) => s.fill.color))];
+  const rim = { ...RIM_LIGHT, thickness: 2 * (look.rim ?? KIT_RIM) };
+  const paint = (color, k) => {
+    if (k === 0) {
+      return { fill: { color }, stroke: rim, strokeUnder: true };
+    }
+    if (color === INK.cream && look.note === "outline") {
+      return {
+        fill: { color },
+        stroke: { color: INK.black, thickness: 2 * look.rim, join: "round" },
+        strokeUnder: true,
+      };
+    }
+    if (color === INK.cream && look.note === "butter") {
+      return { fill: { color: INK.yellow } };
+    }
+    return { fill: { color } };
+  };
   const shapes = inks.map((color, k) =>
     merge(
       `${id}-${k}`,
       id,
       body.shapes.filter((s) => s.fill.color === color),
-      k === 0
-        ? { fill: { color }, stroke: RIM_LIGHT, strokeUnder: true }
-        : { fill: { color } }
+      paint(color, k)
     )
   );
   return { shapes, bases: shapes.length ? [`${id}-0`] : [] };
 }
 
 /** One loop's or clip's groups and shapes under `caw`, hidden until played, and its timing. */
-function art(name, dir) {
+function art(name, dir, look) {
   const timing = JSON.parse(readFileSync(`${dir}timing.json`, "utf8"));
   const drawings = [...new Set(timing.drawings.map((d) => d.drawing))].sort(
     (a, b) => a - b
@@ -212,7 +253,7 @@ function art(name, dir) {
   for (const i of drawings) {
     const n = pad(i);
     groups.push({ id: `${name}-d${n}`, x: 0, y: 0, parent: `${name}-body` });
-    const drawn = drawing(`${name}-d${n}`, `${dir}body-${n}.svg`);
+    const drawn = drawing(`${name}-d${n}`, `${dir}body-${n}.svg`, look);
     shapes.push(...drawn.shapes);
     bases.push(...drawn.bases);
   }
@@ -316,14 +357,21 @@ export function statusScene(status) {
     bases.push(...drawn.bases);
     return drawn.timing;
   };
+  const look = LOOK[status];
   const loops = {};
   for (const name of variants) {
-    loops[name] = add(art(name, `${LOOPS}${name}/`));
+    loops[name] = add(art(name, `${LOOPS}${name}/`, look));
   }
   const rest = RESTS[status];
   if (rest) {
     groups.push({ id: REST, x: 0, y: 0, parent: "caw", opacity: 0 });
-    add(drawing(REST, `${LOOPS}${rest.loop}/body-${pad(rest.drawing)}.svg`));
+    add(
+      drawing(
+        REST,
+        `${LOOPS}${rest.loop}/body-${pad(rest.drawing)}.svg`,
+        look
+      )
+    );
   }
   const ways = clipsOf(status);
   const clips = {};
@@ -332,7 +380,7 @@ export function statusScene(status) {
     ways.exit,
     ...Object.values(ways.arrivals),
   ].flat()) {
-    clips[name] ??= add(art(name, `${CLIPS}${name}/`));
+    clips[name] ??= add(art(name, `${CLIPS}${name}/`, look));
   }
   const scheme = {
     name: "Scheme",
