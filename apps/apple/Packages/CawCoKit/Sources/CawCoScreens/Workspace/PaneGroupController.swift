@@ -112,6 +112,7 @@ final class PaneGroupController: UIViewController, TabSwipeHost, UIDropInteracti
         ])
         // The group's one composer: above the panes, under the rail and a drop preview.
         dock = ComposerDock(in: view, below: stack.topAnchor)
+        panes.installTray(in: dock)
         dock.onInset = { [weak self] inset in
             guard let self else { return }
             for id in mounted { panes.session(id)?.composerInset = inset }

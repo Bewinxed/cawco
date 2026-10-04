@@ -99,6 +99,7 @@ public final class SessionsStore {
         transcript.missing = false
         hub.ledger.beginRead(id)
         hub.tasks.refresh(id)
+        hub.workItems.load(parent: id)
         readers[id] = Task { [weak self] in
             guard let self else { return }
             do {

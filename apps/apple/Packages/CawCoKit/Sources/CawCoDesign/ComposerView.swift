@@ -56,6 +56,12 @@ public final class ComposerView: UIView, UITextViewDelegate {
 
     public var isWriting: Bool { field.isFirstResponder }
 
+    /// The row standing on the composer, outside its box (Composer.svelte
+    /// `.lift`): the delegate tray's fixed row. Prompts stand on top of it.
+    /// Its host puts the row in and shows it; it is kept clear at every
+    /// transcript's foot with the rest of the composer's height.
+    public let lift = UIView()
+
     /// The parked permission and question cards, standing on the pill.
     private let prompts = UIStackView()
     private var action: Action = .send
@@ -120,6 +126,10 @@ public final class ComposerView: UIView, UITextViewDelegate {
         prompts.spacing = Space.space3
         prompts.isHidden = true
         column.addArrangedSubview(prompts)
+        column.addArrangedSubview(lift)
+        // The row stands on the composer itself, with nothing between.
+        column.setCustomSpacing(0, after: lift)
+        lift.isHidden = true
         // The cards keep a step off the pill (`.stack` padding, `.prompts` margin).
         column.setCustomSpacing(Space.space3 + Space.space4 - Space.space2, after: prompts)
 
@@ -892,11 +902,11 @@ final class SwapGlyph: UIView {
 
 /// The kit spinner (components/ui/spinner): a 16pt ring at 25% with a
 /// quarter arc turning on it, in the tint.
-final class SpinnerView: UIView {
+public final class SpinnerView: UIView {
     private let track = CAShapeLayer()
     private let arc = CAShapeLayer()
 
-    override init(frame: CGRect) {
+    override public init(frame: CGRect) {
         super.init(frame: frame)
         isAccessibilityElement = true
         accessibilityLabel = "Loading"
@@ -911,11 +921,11 @@ final class SpinnerView: UIView {
     }
 
     @available(*, unavailable)
-    required init?(coder _: NSCoder) {
+    public required init?(coder _: NSCoder) {
         fatalError("SpinnerView is built in code")
     }
 
-    override func layoutSubviews() {
+    override public func layoutSubviews() {
         super.layoutSubviews()
         let path = UIBezierPath(arcCenter: CGPoint(x: bounds.midX, y: bounds.midY), radius: bounds.width * 9 / 24, startAngle: -.pi / 2, endAngle: .pi * 1.5, clockwise: true).cgPath
         for layer in [track, arc] {
@@ -924,13 +934,13 @@ final class SpinnerView: UIView {
         }
     }
 
-    override func tintColorDidChange() {
+    override public func tintColorDidChange() {
         super.tintColorDidChange()
         track.strokeColor = tintColor.cgColor
         arc.strokeColor = tintColor.cgColor
     }
 
-    override func didMoveToWindow() {
+    override public func didMoveToWindow() {
         super.didMoveToWindow()
         tintColorDidChange()
         guard window != nil, arc.animation(forKey: "spin") == nil else { return }

@@ -208,21 +208,7 @@ final class SessionHover: NSObject {
 
     /// present.ts `askDetailOf`: the questions, else the diff under its file,
     /// else the command, else the input as it came.
-    private static func detail(_ ask: ParkedAsk) -> String {
-        let questions = ask.questions
-        if !questions.isEmpty {
-            return questions.enumerated().map { index, question in
-                (["Q\(index + 1): \(question.question)"] + question.options.map { "- \($0.label)" }).joined(separator: "\n")
-            }.joined(separator: "\n")
-        }
-        let fields = Dictionary(ask.fields.map { ($0.key, $0.value) }, uniquingKeysWith: { first, _ in first })
-        if let diff = fields["diff"] {
-            let path = fields["filepath"] ?? fields["filePath"] ?? fields["path"]
-            return (path.map { "\($0)\n\n" } ?? "") + diff
-        }
-        if let command = ask.command { return command }
-        return ask.fields.map { "\($0.key): \($0.value)" }.joined(separator: "\n")
-    }
+    private static func detail(_ ask: ParkedAsk) -> String { ask.detail }
 
     private func card(_ id: String) -> UIView {
         let row = hub.fleet.byId[id]

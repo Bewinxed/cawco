@@ -50,6 +50,8 @@ public final class HubConnection {
     public let needs: NeedsYouStore
     public private(set) var sessions: SessionsStore!
     public private(set) var tasks: TasksStore!
+    /// The delegates' work items their parents' trays read.
+    public private(set) var workItems: WorkItemsStore!
     public private(set) var workflowRuns: WorkflowRunsStore!
 
     @ObservationIgnored private var run: Task<Void, Never>?
@@ -72,6 +74,7 @@ public final class HubConnection {
         }
         sessions = SessionsStore(hub: self)
         tasks = TasksStore(hub: self)
+        workItems = WorkItemsStore(hub: self)
         workflowRuns = WorkflowRunsStore(hub: self)
         ledger.applyFrame = { [weak self] id, data in self?.sessions.apply(id, data: data) }
         ledger.rereadHistory = { [weak self] id in self?.sessions.read(id) }
@@ -126,6 +129,7 @@ public final class HubConnection {
         outageTimer?.cancel(); outageTimer = nil
         sessions.reset()
         tasks.reset()
+        workItems.reset()
         workflowRuns.reset()
         live = nil
         for waiter in waiters.values { waiter.resume(throwing: URLError(.cancelled)) }
@@ -148,6 +152,7 @@ public final class HubConnection {
         needs.parked = [:]
         sessions.reset()
         tasks.reset()
+        workItems.reset()
         workflowRuns.reset()
     }
 
@@ -557,6 +562,8 @@ public final class HubConnection {
             if let raisedAt {
                 fleet.runAskRaisedAt[runId] = raisedAt
             }
+        case let .workItem(item):
+            workItems.adopt(item)
         case let .workflow(frame):
             fleet.runs[frame.runId] = BoardRun(frame.run)
             workflowRuns.read(frame.runId)

@@ -1,3 +1,4 @@
+import CawCoCore
 import CawCoDesign
 import UIKit
 
@@ -29,7 +30,29 @@ final class ComposerDock {
     /// A swipe is carrying the conversation.
     var held: Bool {
         get { composer.held }
-        set { composer.held = newValue }
+        set {
+            composer.held = newValue
+            tray?.held = newValue
+        }
+    }
+
+    /// The delegate tray standing on the composer (Composer.svelte
+    /// `.tray-slot`): the active conversation's own delegates.
+    private var tray: DelegateTrayView?
+
+    /// Puts the tray in the composer's lift. `open`: a delegate, in its own view.
+    func installTray(hub: HubConnection, open: @escaping (String) -> Void) {
+        let tray = DelegateTrayView(hub: hub)
+        tray.onOpen = open
+        tray.panelHost = host
+        composer.lift.addSubview(tray)
+        NSLayoutConstraint.activate([
+            tray.leadingAnchor.constraint(equalTo: composer.lift.leadingAnchor),
+            tray.trailingAnchor.constraint(equalTo: composer.lift.trailingAnchor),
+            tray.topAnchor.constraint(equalTo: composer.lift.topAnchor),
+            tray.bottomAnchor.constraint(equalTo: composer.lift.bottomAnchor),
+        ])
+        self.tray = tray
     }
 
     /// Installs the dock in `host`, never above `top`.
@@ -67,6 +90,9 @@ final class ComposerDock {
     /// be written to (a run) or no tab at all.
     func bind(_ binding: SessionComposerBinding?, direction: Int, landing: TimeInterval) {
         composer.bind(binding, direction: direction, landing: landing)
+        // One conversation's tray hands its place to the next.
+        tray?.parentId = binding?.sessionId
+        composer.lift.isHidden = tray == nil || binding == nil
         show(binding != nil)
     }
 

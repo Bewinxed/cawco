@@ -434,7 +434,7 @@ public struct ParkedAsk: Sendable {
     /// When the hub first parked it, ms epoch: one clock for every device.
     public let raisedAt: Double?
     /// Set when the hub routed it to the delegate's parent rather than to the operator.
-    let routedTo: String?
+    public let routedTo: String?
 
     public var isQuestion: Bool { Naming.questions(toolName, input.value) != nil }
     public var questions: [Components.Schemas.UserQuestion] { Naming.questions(toolName, input.value) ?? [] }

@@ -161,6 +161,8 @@ enum Frame {
     case pulse(Components.Schemas.PulseFrame)
     case supervisorEvent(Components.Schemas.SupervisorEvent)
     case workflow(Components.Schemas.WorkflowFrame)
+    /// A delegate's work item changed: its parent's tray reads it.
+    case workItem(Components.Schemas.WorkItemSummary)
     case ignored
 
     fileprivate init(_ payload: Components.Schemas.FramePayload, _ peek: Inbound.PayloadRoute) {
@@ -189,6 +191,8 @@ enum Frame {
             self = .supervisorEvent(frame.event)
         case .workflow(let frame):
             self = .workflow(frame)
+        case .workItem(let frame):
+            self = .workItem(frame.item)
         default:
             self = .ignored
         }

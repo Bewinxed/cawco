@@ -20,6 +20,11 @@ final class PaneHost {
         self.hub = hub
     }
 
+    /// The group's composer gets its delegate tray: the active conversation's own delegates.
+    func installTray(in dock: ComposerDock) {
+        dock.installTray(hub: hub) { [weak self] id in self?.onOpen(id) }
+    }
+
     func controller(for id: String) -> UIViewController {
         if let kept = built[id] { return kept }
         let made: UIViewController
