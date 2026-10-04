@@ -112,6 +112,9 @@ public enum Glyph: String, CaseIterable, Sendable {
     case stars = "stars-bold-duotone"
     case bookOpen = "book-2-bold-duotone"
     case link = "link-bold-duotone"
+    /// ContextMeter.svelte's `IconWindow`.
+    case layers = "layers-minimalistic-bold-duotone"
+    case fork = "branching-paths-up-bold-duotone"
     /// PiLogo.svelte: one ink, drawn in the text colour.
     case logoPi = "logo-pi"
 

@@ -783,47 +783,6 @@ private final class ModelPopover: KitPopoverController {
     }
 }
 
-/// The details card on the kit's floating surface (PaneTabs.svelte
-/// `.session-details-popover`): `min(416pt, the screen less 24pt)` wide, as
-/// tall as its content up to 760pt, its content edge to edge. Its height
-/// follows the content's over `durMorph`.
-final class SessionDetailsPopover: KitPopoverController {
-    let details: SessionDetailsController
-    private var sizes: NSKeyValueObservation?
-
-    init(_ details: SessionDetailsController) {
-        self.details = details
-        super.init()
-    }
-
-    override func viewDidLoad() {
-        super.viewDidLoad()
-        addChild(details)
-        details.view.translatesAutoresizingMaskIntoConstraints = false
-        card.addSubview(details.view)
-        NSLayoutConstraint.activate([
-            details.view.topAnchor.constraint(equalTo: card.topAnchor),
-            details.view.bottomAnchor.constraint(equalTo: card.bottomAnchor),
-            details.view.leadingAnchor.constraint(equalTo: card.leadingAnchor),
-            details.view.trailingAnchor.constraint(equalTo: card.trailingAnchor),
-        ])
-        details.didMove(toParent: self)
-        fit(details.preferredContentSize)
-    }
-
-    override func preferredContentSizeDidChange(forChildContentContainer container: any UIContentContainer) {
-        super.preferredContentSizeDidChange(forChildContentContainer: container)
-        fit(container.preferredContentSize)
-    }
-
-    private func fit(_ size: CGSize) {
-        let screen = view.window?.windowScene?.screen.bounds.width ?? UIScreen.main.bounds.width
-        let wide = min(SessionDetailsController.width, screen - 24)
-        let tall = size.height > 0 ? min(760, size.height) : 240
-        if preferredContentSize != CGSize(width: wide, height: tall) { preferredContentSize = CGSize(width: wide, height: tall) }
-    }
-}
-
 /// How a session's place is written short (SessionDetails.svelte `shortPath`).
 enum SessionIdentity {
     /// The home folder as `~`, and a deep path as its first part and its leaf:

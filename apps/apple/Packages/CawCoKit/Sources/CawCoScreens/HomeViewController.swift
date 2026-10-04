@@ -277,6 +277,10 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
                 case let .run(run): onOpen(run.rowId)
                 }
             }
+            cell.onPeek = { [weak self] in
+                guard let self, case let .ask(ask) = need.kind else { return }
+                Peek.show(PeekTarget(viewId: ask.instanceId, title: need.title), hub: hub, home: home, from: self, open: onOpen)
+            }
         }
         let tabs = UICollectionView.CellRegistration<TabsCell, Item> { [weak self] cell, _, _ in
             guard let self else { return }
@@ -302,6 +306,12 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
             cell.configure(depth: line.depth, first: line.first, last: line.last, through: entry.through)
             cell.row.configure(content)
             cell.row.count.onToggle = { [weak self] in self?.toggleTree(id) }
+            cell.actions.configure(title: content.title, peeks: content.peek != nil, archives: content.archives)
+            cell.actions.onPeek = { [weak self] in self?.peek(content) }
+            cell.actions.onArchive = { [weak self] in
+                guard let self else { return }
+                home.archive(home.treeOf(id))
+            }
         }
         let more = UICollectionView.CellRegistration<MoreCell, Item> { [weak self] cell, _, item in
             guard let self, case let .more(id) = item, let more = groups[id]?.group.more else { return }
@@ -338,6 +348,8 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
         let recentRow = UICollectionView.CellRegistration<RecentRowCell, Item> { [weak self] cell, _, item in
             guard let self, case let .recent(id) = item, let content = recentContent(id) else { return }
             cell.row.configure(content)
+            cell.actions.configure(title: content.title, peeks: content.peek != nil, archives: false)
+            cell.actions.onPeek = { [weak self] in self?.peek(content) }
         }
         let note = UICollectionView.CellRegistration<NoteCell, Item> { [weak self] cell, _, _ in
             cell.label.text = "No session matches “\(self?.search ?? "")”."
@@ -411,6 +423,12 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
         dataSource.apply(snapshot, animatingDifferences: false)
     }
 
+    /// Glance → peek → dive: the tail of this one, without leaving home.
+    private func peek(_ content: SessionRowView.Content) {
+        guard let id = content.peek else { return }
+        Peek.show(PeekTarget(viewId: id, title: content.title), hub: hub, home: home, from: self, open: onOpen)
+    }
+
     // MARK: What a row draws
 
     /// A work row's content: what its cell draws, and what tells the rows pass it moved.
@@ -428,7 +446,8 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
             fold: entry.line.fold,
             context: line.context,
             stale: !home.live,
-            hover: session.id
+            hover: session.id,
+            archives: entry.tab == .finished && !line.context && home.archivable(session)
         )
     }
 

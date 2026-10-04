@@ -153,9 +153,15 @@ final class NeedsCardCell: HomeCell {
     private var open: UIButton!
     var onAnswer: (NeedsYouStore.Answer) -> Void = { _ in }
     var onOpen: () -> Void = {}
+    /// Glance → peek → dive: read what led here before answering.
+    var onPeek: () -> Void = {}
+    private let peek = RowActionButton(.maximize)
+    /// Peek's room in the head: its 28pt less the 8pt it reaches into the card's padding.
+    private let peekRoom = UIView()
 
     override init(frame: CGRect) {
         super.init(frame: frame)
+        peek.addAction(UIAction { [weak self] _ in self?.onPeek() }, for: .touchUpInside)
         deny = KitButton.make("Deny", glyph: .close, glyphTint: Palette.inkMuted, variant: .secondary, height: .sm) { [weak self] in
             self?.onAnswer(.deny)
         }
@@ -166,9 +172,16 @@ final class NeedsCardCell: HomeCell {
         waited.tabular = true
         waited.setContentHuggingPriority(.required, for: .horizontal)
         waited.setContentCompressionResistancePriority(.required, for: .horizontal)
-        let head = UIStackView(arrangedSubviews: [title, waited])
+        let head = UIStackView(arrangedSubviews: [title, waited, peekRoom])
         head.spacing = Space.space2
         head.alignment = .firstBaseline
+        tile.addSubview(peek)
+        NSLayoutConstraint.activate([
+            peekRoom.widthAnchor.constraint(equalToConstant: RowActionButton.side - Space.space2),
+            peekRoom.heightAnchor.constraint(equalToConstant: 1),
+            peek.trailingAnchor.constraint(equalTo: peekRoom.trailingAnchor, constant: Space.space2),
+            peek.centerYAnchor.constraint(equalTo: waited.centerYAnchor),
+        ])
         actions.addArrangedSubview(deny)
         actions.addArrangedSubview(UIView())
         actions.addArrangedSubview(approve)
@@ -194,6 +207,10 @@ final class NeedsCardCell: HomeCell {
         title.text = item.title
         waited.text = item.raisedAt.map { "waiting \(Naming.span(ms: now - $0))" } ?? "waiting"
         place.text = item.place
+        let peeks = if case .ask = item.kind { true } else { false }
+        peek.isHidden = !peeks
+        peekRoom.isHidden = !peeks
+        peek.accessibilityLabel = "Peek \(item.title)"
         switch item.kind {
         case let .ask(parked):
             ask.text = parked.summary
@@ -416,10 +433,141 @@ final class MachineCell: HomeCell {
     }
 }
 
+/// A 28pt control at a row's or a card's end (HomeRow.svelte `.peek`,
+/// NeedsCard.svelte `.peek`): a 16pt glyph in muted ink at `--radius-xs`, a
+/// finger's 44pt around it. Under a pointer it fills and its ink turns strong.
+final class RowActionButton: UIControl {
+    static let side = 28.0
+    private let glyph: GlyphView
+    /// What it fills with at rest: nothing on a touch screen, the row's hover wash where it rises over the row.
+    var rest: UIColor? {
+        didSet { paint() }
+    }
+
+    private var over = false {
+        didSet { paint() }
+    }
+
+    init(_ icon: Glyph) {
+        glyph = GlyphView(icon, size: Size.iconMd, tint: Palette.inkMuted)
+        super.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
+        layer.cornerRadius = Radius.radiusXs
+        layer.cornerCurve = .continuous
+        glyph.isUserInteractionEnabled = false
+        addSubview(glyph)
+        NSLayoutConstraint.activate([
+            widthAnchor.constraint(equalToConstant: Self.side),
+            heightAnchor.constraint(equalToConstant: Self.side),
+            glyph.centerXAnchor.constraint(equalTo: centerXAnchor),
+            glyph.centerYAnchor.constraint(equalTo: centerYAnchor),
+        ])
+        addGestureRecognizer(UIHoverGestureRecognizer(target: self, action: #selector(hovered(_:))))
+        isAccessibilityElement = true
+        accessibilityTraits = .button
+    }
+
+    @available(*, unavailable)
+    required init?(coder _: NSCoder) {
+        fatalError("RowActionButton is built in code")
+    }
+
+    /// `.touch-hit`: a 44pt target centred on the 28pt box.
+    override func point(inside point: CGPoint, with _: UIEvent?) -> Bool {
+        let reach = traitCollection.userInterfaceIdiom == .mac ? 0 : (44 - Self.side) / 2
+        return bounds.insetBy(dx: -reach, dy: -reach).contains(point)
+    }
+
+    override var isHighlighted: Bool {
+        didSet { paint() }
+    }
+
+    @objc private func hovered(_ hover: UIHoverGestureRecognizer) {
+        over = hover.state == .began || hover.state == .changed
+    }
+
+    private func paint() {
+        let lit = over || isHighlighted
+        backgroundColor = lit ? Palette.surfaceFill : rest
+        glyph.tintColor = lit ? Palette.inkStrong : Palette.inkMuted
+    }
+}
+
+/// What stands at a session row's end beside the row itself (HomeRow.svelte):
+/// Peek, for a live session, and on a pointer Archive, for a finished one.
+/// A touch screen always shows Peek, in its own room after the row; a
+/// pointer finds both on hover, risen over the row's words a step left of
+/// its trailing column.
+@MainActor
+final class RowActions: NSObject {
+    let peek = RowActionButton(.maximize)
+    let archive = RowActionButton(.archive)
+    var onPeek: () -> Void = {}
+    var onArchive: () -> Void = {}
+    private let pointer: Bool
+    private let rowEnds: NSLayoutConstraint
+    private let rowYields: NSLayoutConstraint
+
+    /// `rowEnds`: the row's own trailing constraint to its cell, which Peek's room replaces on a touch screen.
+    init(cell: HomeCell, row: SessionRowView, rowEnds: NSLayoutConstraint) {
+        pointer = cell.traitCollection.userInterfaceIdiom == .mac
+        self.rowEnds = rowEnds
+        rowYields = row.trailingAnchor.constraint(equalTo: peek.leadingAnchor)
+        super.init()
+        let content = cell.contentView
+        for button in [archive, peek] {
+            content.addSubview(button)
+            button.centerYAnchor.constraint(equalTo: row.centerYAnchor).isActive = true
+            button.isHidden = true
+        }
+        peek.addAction(UIAction { [weak self] _ in self?.onPeek() }, for: .touchUpInside)
+        archive.addAction(UIAction { [weak self] _ in self?.onArchive() }, for: .touchUpInside)
+        if pointer {
+            // They take no room until wanted: block-centred on the row, a step left of the trailing column.
+            NSLayoutConstraint.activate([
+                peek.trailingAnchor.constraint(equalTo: row.end.leadingAnchor, constant: -Space.space1),
+                archive.trailingAnchor.constraint(equalTo: peek.leadingAnchor, constant: -Space.space1),
+            ])
+            for button in [archive, peek] {
+                button.rest = Palette.surfaceHover
+                button.alpha = 0
+            }
+            content.addGestureRecognizer(UIHoverGestureRecognizer(target: self, action: #selector(hovered(_:))))
+        } else {
+            peek.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -Space.space2).isActive = true
+        }
+    }
+
+    func configure(title: String, peeks: Bool, archives: Bool) {
+        peek.isHidden = !peeks
+        peek.accessibilityLabel = "Peek \(title)"
+        // A finger swipes the row away instead: no button for it.
+        archive.isHidden = !(archives && pointer)
+        archive.accessibilityLabel = "Archive \(title)"
+        let yields = peeks && !pointer
+        if yields {
+            rowEnds.isActive = false
+            rowYields.isActive = true
+        } else {
+            rowYields.isActive = false
+            rowEnds.isActive = true
+        }
+    }
+
+    @objc private func hovered(_ hover: UIHoverGestureRecognizer) {
+        let over = hover.state == .began || hover.state == .changed
+        Motion.easeOut.animator(Motion.durControl) { [peek, archive] in
+            peek.alpha = over ? 1 : 0
+            archive.alpha = over ? 1 : 0
+        }.startAnimation()
+    }
+}
+
 /// One session in a home group (HomeRow.svelte), at its depth in its tree,
 /// with its share of the nesting lines.
 final class RowCell: HomeCell {
     let row = SessionRowView()
+    private(set) var actions: RowActions!
     /// Its elbow (down from the rail above, round its corner, out to its
     /// glyph), the rail on past it, and each ancestor's rail through it: each
     /// its own stroke, so a tree's fold can draw each as far as its line's head.
@@ -444,12 +592,14 @@ final class RowCell: HomeCell {
         lead = row.leadingAnchor.constraint(equalTo: contentView.leadingAnchor)
         let bottom = row.bottomAnchor.constraint(equalTo: contentView.bottomAnchor)
         bottom.priority = .required - 1
+        let ends = row.trailingAnchor.constraint(equalTo: contentView.trailingAnchor)
         NSLayoutConstraint.activate([
             lead,
-            row.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
+            ends,
             row.topAnchor.constraint(equalTo: contentView.topAnchor, constant: Space.spaceRow),
             bottom,
         ])
+        actions = RowActions(cell: self, row: row, rowEnds: ends)
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (cell: RowCell, _: UITraitCollection) in
             cell.paintNest()
         }
@@ -637,6 +787,10 @@ final class SessionRowView: UIView, HoverSessionRow {
     private let trail = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
     private let line = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
     let count = TreeCountButton()
+    /// The second cell of the trailing column where the row has no count: it keeps the line's height and no width.
+    private let noCount = UIView()
+    /// The trailing column (`.end`): what rises over the row's end on a pointer stands left of it.
+    let end = UIStackView()
     private var status = MarkStatus.idle
 
     init() {
@@ -646,24 +800,37 @@ final class SessionRowView: UIView, HoverSessionRow {
         trail.setContentHuggingPriority(.required, for: .horizontal)
         trail.setContentCompressionResistancePriority(.required, for: .horizontal)
         title.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        let first = UIStackView(arrangedSubviews: [title, trail, count])
-        first.spacing = Space.space1
-        first.alignment = .center
-        let text = UIStackView(arrangedSubviews: [first, line])
-        text.axis = .vertical
-        let body = UIStackView(arrangedSubviews: [mark, text])
+        line.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        // Two lines of words, and at the row's end one column for what trails
+        // them: the age on the title's line and, on a parent, the count on the
+        // line below, both flush with the row's trailing edge.
+        let words = UIStackView(arrangedSubviews: [title, line])
+        words.axis = .vertical
+        end.axis = .vertical
+        end.alignment = .trailing
+        for cell in [trail, count, noCount] as [UIView] { end.addArrangedSubview(cell) }
+        end.setContentHuggingPriority(.required, for: .horizontal)
+        end.setContentCompressionResistancePriority(.required, for: .horizontal)
+        let body = UIStackView(arrangedSubviews: [mark, words, end])
         body.spacing = Space.space2
+        // The row's gap is a mark's; words and what trails them sit closer.
+        body.setCustomSpacing(Space.space1, after: words)
         body.alignment = .center
         body.translatesAutoresizingMaskIntoConstraints = false
         addSubview(body)
+        let thin = noCount.widthAnchor.constraint(equalToConstant: 0)
+        thin.priority = .defaultHigh
         NSLayoutConstraint.activate([
             body.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Space.space3),
             body.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Space.space3),
             body.topAnchor.constraint(equalTo: topAnchor, constant: Space.space1),
             body.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -Space.space1),
             heightAnchor.constraint(greaterThanOrEqualToConstant: Size.cBtnHLg),
-            first.heightAnchor.constraint(greaterThanOrEqualToConstant: Space.space5),
+            title.heightAnchor.constraint(greaterThanOrEqualToConstant: Space.space5),
             line.heightAnchor.constraint(greaterThanOrEqualToConstant: Space.space5),
+            trail.heightAnchor.constraint(greaterThanOrEqualToConstant: Space.space5),
+            noCount.heightAnchor.constraint(equalToConstant: Space.space5),
+            thin,
         ])
         // The row reads as one element (status word, title, line, age), and a
         // parent's count is a second one, its own button.
@@ -698,6 +865,12 @@ final class SessionRowView: UIView, HoverSessionRow {
         /// The instance the row stands for, where it stands for one: the
         /// session a hover card opens from it (`data-hover-session={instance?.id}`).
         var hover: String?
+        /// A finished row a pointer can archive from its end (`onarchive`).
+        var archives = false
+
+        /// The session Peek shows: a live instance's. A workflow run has no
+        /// tail of its own (its card is its steps), and a stored session no instance.
+        var peek: String? { hover.flatMap { BoardRun.runId(of: $0) == nil ? $0 : nil } }
     }
 
     /// HomeRow.svelte's `data-hover-session`: the rail's session card opens over the home's rows too.
@@ -716,6 +889,7 @@ final class SessionRowView: UIView, HoverSessionRow {
         } else {
             count.isHidden = true
         }
+        noCount.isHidden = content.fold != nil
         alpha = content.stale ? 0.55 : 1
         summary.accessibilityLabel = "\(content.status.word): \(content.title)"
         summary.accessibilityValue = [content.line, content.trail].filter { !$0.isEmpty }.joined(separator: ", ")
@@ -883,10 +1057,22 @@ final class SearchCell: HomeCell {
 /// A plain session row in Recent, or a line of words (no match).
 final class RecentRowCell: HomeCell {
     let row = SessionRowView()
+    private(set) var actions: RowActions!
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        pin(row, insets: NSDirectionalEdgeInsets(top: 2, leading: 0, bottom: 0, trailing: 0))
+        row.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(row)
+        let bottom = row.bottomAnchor.constraint(equalTo: contentView.bottomAnchor)
+        bottom.priority = .required - 1
+        let ends = row.trailingAnchor.constraint(equalTo: contentView.trailingAnchor)
+        NSLayoutConstraint.activate([
+            row.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
+            ends,
+            row.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 2),
+            bottom,
+        ])
+        actions = RowActions(cell: self, row: row, rowEnds: ends)
         pressTarget = row
     }
 }

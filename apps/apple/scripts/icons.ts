@@ -124,6 +124,8 @@ const SOLAR_ICONS = [
   "stars-bold-duotone", // the / menu: skills
   "book-2-bold-duotone", // the / menu: plugins
   "link-bold-duotone", // SessionDetails: Copy link
+  "layers-minimalistic-bold-duotone", // ContextMeter: IconWindow
+  "branching-paths-up-bold-duotone", // IconFork
 ];
 
 /**

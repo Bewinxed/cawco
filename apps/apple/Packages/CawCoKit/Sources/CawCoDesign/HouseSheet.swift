@@ -21,7 +21,16 @@ public final class HouseSheetController: UIViewController, UIViewControllerTrans
     public enum Style: Sendable {
         case card
         case edge
+        /// The drawer from the right (vaul `direction="right"`): the same
+        /// raised card, as tall as the screen less its 8pt inset, three
+        /// quarters of the screen wide and at most `sm` (384pt), no grabber.
+        /// It slides its width in and is dragged away to the right.
+        case side
     }
+
+    /// The content's foot stops at the safe area alone, without the drawer's
+    /// own padding under it (the peek sheet's `padding-bottom: env(safe-area-inset-bottom)`).
+    public var footAtSafeArea = false
 
     private let content: UIViewController
     private let style: Style
@@ -99,24 +108,40 @@ public final class HouseSheetController: UIViewController, UIViewControllerTrans
         // vaul's content box: the card is inset 8 inside it (`before:inset-2`)
         // and the content padded 16 (`p-4`), so 8 inside the card.
         // DESIGN.md: "a raised inner card (12px radius, inset 8px)".
-        let inset = style == .card ? 8.0 : 0
-        let pad = style == .card ? 16 - inset : 0
+        let inset = style == .edge ? 0 : 8.0
+        let pad = style == .edge ? 0 : 16 - inset
         footPad = column.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -pad)
         NSLayoutConstraint.activate([
-            card.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: inset),
             card.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -inset),
-            card.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor, constant: -inset),
-            card.heightAnchor.constraint(lessThanOrEqualTo: view.heightAnchor, multiplier: cap ?? (style == .card ? 0.8 : 0.88)),
-            // The grabber's `mt-4`, under the content box's `p-4` on the drawer.
-            handle.topAnchor.constraint(equalTo: card.topAnchor, constant: style == .card ? 16 + 16 - inset : 16),
-            handle.centerXAnchor.constraint(equalTo: card.centerXAnchor),
-            handle.widthAnchor.constraint(equalToConstant: 100),
-            handle.heightAnchor.constraint(equalToConstant: 6),
-            column.topAnchor.constraint(equalTo: handle.bottomAnchor, constant: style == .card ? 0 : Space.space2),
             column.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: pad),
             column.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -pad),
             footPad,
         ])
+        if style == .side {
+            handle.isHidden = true
+            // `w-3/4 sm:max-w-sm` is the content box; the card stands 8pt inside it.
+            let wide = card.widthAnchor.constraint(equalTo: view.widthAnchor, multiplier: 0.75, constant: -inset * 2)
+            wide.priority = .defaultHigh
+            NSLayoutConstraint.activate([
+                card.topAnchor.constraint(equalTo: view.topAnchor, constant: inset),
+                card.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -inset),
+                card.widthAnchor.constraint(lessThanOrEqualToConstant: 384 - inset * 2),
+                wide,
+                column.topAnchor.constraint(equalTo: card.topAnchor, constant: pad),
+            ])
+        } else {
+            NSLayoutConstraint.activate([
+                card.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: inset),
+                card.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor, constant: -inset),
+                card.heightAnchor.constraint(lessThanOrEqualTo: view.heightAnchor, multiplier: cap ?? (style == .card ? 0.8 : 0.88)),
+                // The grabber's `mt-4`, under the content box's `p-4` on the drawer.
+                handle.topAnchor.constraint(equalTo: card.topAnchor, constant: style == .card ? 16 + 16 - inset : 16),
+                handle.centerXAnchor.constraint(equalTo: card.centerXAnchor),
+                handle.widthAnchor.constraint(equalToConstant: 100),
+                handle.heightAnchor.constraint(equalToConstant: 6),
+                column.topAnchor.constraint(equalTo: handle.bottomAnchor, constant: style == .card ? 0 : Space.space2),
+            ])
+        }
         self.pad = pad
         self.inset = inset
         view.keyboardLayoutGuide.followsUndockedKeyboard = true
@@ -139,14 +164,15 @@ public final class HouseSheetController: UIViewController, UIViewControllerTrans
     override public func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         let keyboard = view.keyboardLayoutGuide.layoutFrame.height > view.safeAreaInsets.bottom + 1
-        let foot = -(pad + (keyboard ? 0 : max(0, view.safeAreaInsets.bottom - inset)))
+        let clear = keyboard ? 0 : max(0, view.safeAreaInsets.bottom - inset)
+        let foot = -(footAtSafeArea ? clear : pad + clear)
         if footPad != nil, footPad.constant != foot {
             footPad.constant = foot
         }
     }
 
     private func paint() {
-        card.layer.borderColor = (style == .card ? Palette.border : Palette.borderControl).resolvedColor(with: traitCollection).cgColor
+        card.layer.borderColor = (style == .edge ? Palette.borderControl : Palette.border).resolvedColor(with: traitCollection).cgColor
         card.layer.borderWidth = 1
     }
 
@@ -162,9 +188,19 @@ public final class HouseSheetController: UIViewController, UIViewControllerTrans
     private static let commit = 0.3
     private static let flick = 0.3
 
+    /// The way the card leaves: down, or to the right for the side drawer.
+    var away: CGAffineTransform { offset(travel + Space.space2) }
+    private var travel: Double { max(1, style == .side ? card.bounds.width : card.bounds.height) }
+
+    private func offset(_ by: Double) -> CGAffineTransform {
+        style == .side ? CGAffineTransform(translationX: by, y: 0) : CGAffineTransform(translationX: 0, y: by)
+    }
+
+    private func along(_ point: CGPoint) -> Double { style == .side ? point.x : point.y }
+
     @objc private func dragged(_ pan: UIPanGestureRecognizer) {
-        let height = max(1, card.bounds.height)
-        let dy = pan.translation(in: view).y
+        let height = travel
+        let dy = along(pan.translation(in: view))
         switch pan.state {
         case .began:
             dragging = scroller.map { $0.contentOffset.y <= -$0.adjustedContentInset.top + 0.5 } ?? true
@@ -174,13 +210,13 @@ public final class HouseSheetController: UIViewController, UIViewControllerTrans
                 scroller.contentOffset.y = -scroller.adjustedContentInset.top
             }
             let y = dy >= 0 ? dy : -min(-dy * Self.resist, height * Self.resistMax)
-            card.transform = CGAffineTransform(translationX: 0, y: y)
+            card.transform = offset(y)
             (presentationController as? HouseSheetPresentation)?.scrim.alpha = 1 - max(0, y) / height
         case .ended, .cancelled, .failed:
             guard dragging else { return }
             dragging = false
-            let velocity = pan.velocity(in: view).y / 1000
-            let y = card.transform.ty
+            let velocity = along(pan.velocity(in: view)) / 1000
+            let y = style == .side ? card.transform.tx : card.transform.ty
             let leaves = pan.state == .ended && (y > height * Self.commit || velocity > Self.flick)
             settle(leaving: leaves, from: y, height: height, velocity: velocity * 1000)
         default:
@@ -196,7 +232,7 @@ public final class HouseSheetController: UIViewController, UIViewControllerTrans
         let scrim = (presentationController as? HouseSheetPresentation)?.scrim
         let animator = UIViewPropertyAnimator(duration: TabSwipe.settle, timingParameters: spring)
         animator.addAnimations {
-            self.card.transform = CGAffineTransform(translationX: 0, y: target)
+            self.card.transform = self.offset(target)
             scrim?.alpha = leaving ? 0 : 1
         }
         if leaving {
@@ -290,7 +326,7 @@ final class HouseSheetMotion: NSObject, UIViewControllerAnimatedTransitioning {
             context.containerView.addSubview(sheet.view)
             sheet.view.layoutIfNeeded()
         }
-        let away = CGAffineTransform(translationX: 0, y: sheet.card.frame.height + Space.space2)
+        let away = sheet.away
         if presenting {
             if still { sheet.card.alpha = 0 } else { sheet.card.transform = away }
         }

@@ -52,6 +52,8 @@ public enum KitButton {
         case secondary
         /// Raised, on the control border.
         case outline
+        /// No fill and no edge at rest.
+        case ghost
     }
 
     public enum Height: Sendable {
@@ -149,6 +151,8 @@ public enum KitButton {
         case .outline:
             config.background.strokeColor = Palette.borderControl
             config.background.strokeWidth = 1
+        case .ghost:
+            config.background.strokeWidth = 0
         }
         return config
     }
@@ -165,6 +169,7 @@ public enum KitButton {
         case .action: return Palette.actionSolid
         case .secondary: return Palette.surfaceRecess
         case .outline: return Palette.surfaceRaised
+        case .ghost: return .clear
         }
     }
 }

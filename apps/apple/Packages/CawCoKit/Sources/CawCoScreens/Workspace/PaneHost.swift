@@ -85,21 +85,16 @@ final class PaneHost {
     /// The details' MCP count leads to the fleet's MCP configuration.
     var onOpenMcp: () -> Void = {}
 
-    /// Session details as PaneTabs.svelte hosts them: the house sheet on its
-    /// edge where a finger drives, the kit popover hung from the tab where a
-    /// pointer does. A workflow run's tab is its own details: it has no card.
-    func showDetails(_ id: String, from presenter: UIViewController?, source: UIView? = nil) {
+    /// Session details as a sheet (PaneTabs.svelte, where a finger drives):
+    /// the house sheet on its edge. Where a pointer drives, the group's tabs
+    /// host the card themselves (TabDetails). A workflow run's tab is its own
+    /// details: it has no card.
+    func showDetails(_ id: String, from presenter: UIViewController?) {
         guard let presenter, BoardRun.runId(of: id) == nil else { return }
         let details = details(for: id)
-        if presenter.traitCollection.horizontalSizeClass == .compact || source == nil {
-            let sheet = HouseSheetController(details, style: .edge, scroller: details.scroller)
-            details.onClose = { [weak sheet] in sheet?.dismiss(animated: true) }
-            presenter.present(sheet, animated: true)
-        } else if let source {
-            let popover = SessionDetailsPopover(details)
-            details.onClose = { [weak popover] in popover?.dismiss(animated: true) }
-            KitPopover.present(popover, from: source, in: presenter)
-        }
+        let sheet = HouseSheetController(details, style: .edge, scroller: details.scroller)
+        details.onClose = { [weak sheet] in sheet?.dismiss(animated: true) }
+        presenter.present(sheet, animated: true)
     }
 
     func continueInNewSession(_ id: String) {
