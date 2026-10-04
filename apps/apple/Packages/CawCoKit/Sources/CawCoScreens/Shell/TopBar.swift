@@ -11,16 +11,19 @@ import UIKit
 @MainActor
 enum TopBar {
     /// The bar's own look: `--surface-raised` with a 1pt `--seam` under it.
-    static func dress(_ bar: UINavigationBar) {
+    /// Hosting a group's tabs (`.top.hosting`) it is the shelf they stand on:
+    /// `--surface-shelf`, no seam, the hairline drawn in its own bottom pixel
+    /// by `BarTabs` so the chosen tab's sheet covers it.
+    static func dress(_ bar: UINavigationBar, hosting: Bool = false) {
         let appearance = UINavigationBarAppearance()
         appearance.configureWithOpaqueBackground()
-        appearance.backgroundColor = Palette.surfaceRaised
+        appearance.backgroundColor = hosting ? Palette.surfaceShelf : Palette.surfaceRaised
         // A whole point of seam, not the system's hairline.
         appearance.shadowImage = UIGraphicsImageRenderer(size: CGSize(width: 1, height: 1)).image { _ in
             UIColor.black.setFill()
             UIRectFill(CGRect(x: 0, y: 0, width: 1, height: 1))
         }.withRenderingMode(.alwaysTemplate)
-        appearance.shadowColor = Palette.seam
+        appearance.shadowColor = hosting ? .clear : Palette.seam
         appearance.titleTextAttributes = TypeScale.typeBody.attributes(color: Palette.inkStrong)
         bar.standardAppearance = appearance
         bar.scrollEdgeAppearance = appearance
@@ -57,6 +60,120 @@ enum TopBar {
         if #available(iOS 26.0, macCatalyst 26.0, *) {
             item.hidesSharedBackground = true
         }
+    }
+}
+
+// MARK: Hosted tabs
+
+/// The bar's slot when it carries a group's tabs (Shell.svelte `.slot-tabs`):
+/// the strip takes the crumb's place, from the bar's leading edge to the
+/// cluster, standing on the bar's floor. Arriving, it comes down 6pt as it
+/// fades in over `durControl` while the crumb fades where it stood; leaving,
+/// the crumb rises 4pt as it fades in. With less motion only the fades run.
+@MainActor
+final class BarTabs {
+    private weak var bar: UINavigationBar?
+    private let crumb: CrumbView
+    private let cluster: TopBarCluster
+    private let hairline = UIView()
+    private weak var strip: PaneTabsView?
+
+    init(bar: UINavigationBar, crumb: CrumbView, cluster: TopBarCluster) {
+        self.bar = bar
+        self.crumb = crumb
+        self.cluster = cluster
+        hairline.backgroundColor = Palette.borderHairline
+        hairline.isUserInteractionEnabled = false
+        hairline.translatesAutoresizingMaskIntoConstraints = false
+    }
+
+    var hosting: Bool { strip != nil }
+    private let slot = Slot()
+
+    /// The bar moved its items (a page change, a resize): the strip is measured again.
+    func relayout() {
+        slot.setNeedsLayout()
+    }
+
+    /// The strip's room in the bar: from the bar's leading edge to a `space2`
+    /// short of the cluster, on the bar's floor. Laid out by frame, because
+    /// the bar re-homes the cluster's item on every page change and a
+    /// constraint to it would not survive that. Only the strip takes touches.
+    private final class Slot: UIView {
+        weak var strip: PaneTabsView?
+        weak var cluster: UIView?
+
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            guard let strip else { return }
+            let lead = safeAreaInsets.left
+            var end = bounds.width - Space.space6
+            if let cluster, cluster.window != nil, cluster.window === window {
+                end = cluster.convert(cluster.bounds, to: self).minX - Space.space2
+            }
+            let height = PaneTabsView.item + 4
+            let frame = CGRect(x: lead, y: bounds.height - height, width: max(0, end - lead), height: height)
+            // Through bounds and centre: an arrival still in flight keeps its transform.
+            strip.bounds = CGRect(origin: .zero, size: frame.size)
+            strip.center = CGPoint(x: frame.midX, y: frame.midY)
+        }
+
+        override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+            let hit = super.hitTest(point, with: event)
+            return hit === self ? nil : hit
+        }
+    }
+
+    func host(_ next: PaneTabsView?) {
+        guard let bar, next !== strip else { return }
+        let still = UIAccessibility.isReduceMotionEnabled || bar.window == nil
+        let old = strip
+        strip = next
+        if let old, old.superview === slot {
+            old.removeFromSuperview()
+            old.translatesAutoresizingMaskIntoConstraints = false
+        }
+        TopBar.dress(bar, hosting: next != nil)
+        guard let next else {
+            hairline.removeFromSuperview()
+            slot.removeFromSuperview()
+            crumb.isHidden = false
+            crumb.alpha = 0
+            crumb.transform = still ? .identity : CGAffineTransform(translationX: 0, y: 4)
+            Motion.easeOut.animator(Motion.durControl) {
+                self.crumb.alpha = 1
+                self.crumb.transform = .identity
+            }.startAnimation()
+            return
+        }
+        if hairline.superview !== bar {
+            bar.addSubview(hairline)
+            NSLayoutConstraint.activate([
+                hairline.leadingAnchor.constraint(equalTo: bar.leadingAnchor),
+                hairline.trailingAnchor.constraint(equalTo: bar.trailingAnchor),
+                hairline.bottomAnchor.constraint(equalTo: bar.bottomAnchor),
+                hairline.heightAnchor.constraint(equalToConstant: 1),
+            ])
+        }
+        next.removeFromSuperview()
+        next.translatesAutoresizingMaskIntoConstraints = true
+        slot.strip = next
+        slot.cluster = cluster
+        if slot.superview !== bar {
+            slot.frame = bar.bounds
+            slot.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            bar.addSubview(slot)
+        }
+        slot.addSubview(next)
+        slot.setNeedsLayout()
+        slot.layoutIfNeeded()
+        next.alpha = 0
+        next.transform = still ? .identity : CGAffineTransform(translationX: 0, y: -6)
+        Motion.easeOut.animator(Motion.durControl) {
+            next.alpha = 1
+            next.transform = .identity
+            self.crumb.alpha = 0
+        }.startAnimation()
     }
 }
 

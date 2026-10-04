@@ -44,7 +44,35 @@ final class PaneGroupController: UIViewController, TabSwipeHost, UIDropInteracti
         }
     }
 
-    var hosted: Bool { strip.hosted }
+    /// The top bar carries this group's strip (a workspace of one group on a
+    /// wide screen): the strip leaves the group, which then starts at its panes.
+    var hosted: Bool {
+        get { strip.hosted }
+        set {
+            guard newValue != strip.hosted else { return }
+            strip.hosted = newValue
+            if isViewLoaded { placeStrip() }
+        }
+    }
+
+    private var ownStrip: [NSLayoutConstraint] = []
+    private var noStrip: NSLayoutConstraint?
+
+    private func placeStrip() {
+        if hosted {
+            NSLayoutConstraint.deactivate(ownStrip)
+            if strip.superview === view { strip.removeFromSuperview() }
+            noStrip?.isActive = true
+        } else {
+            noStrip?.isActive = false
+            strip.removeFromSuperview()
+            strip.translatesAutoresizingMaskIntoConstraints = false
+            strip.alpha = 1
+            strip.transform = .identity
+            view.insertSubview(strip, aboveSubview: stack)
+            NSLayoutConstraint.activate(ownStrip)
+        }
+    }
 
     init(leafId: String, workspace: Workspace, panes: PaneHost, context: ShellContext, hosted: Bool) {
         self.leafId = leafId
@@ -67,17 +95,14 @@ final class PaneGroupController: UIViewController, TabSwipeHost, UIDropInteracti
         stack.translatesAutoresizingMaskIntoConstraints = false
         stack.clipsToBounds = true
         view.addSubview(stack)
-        if !hosted {
-            view.addSubview(strip)
-            NSLayoutConstraint.activate([
-                strip.topAnchor.constraint(equalTo: view.topAnchor),
-                strip.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-                strip.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-                stack.topAnchor.constraint(equalTo: strip.bottomAnchor),
-            ])
-        } else {
-            stack.topAnchor.constraint(equalTo: view.topAnchor).isActive = true
-        }
+        ownStrip = [
+            strip.topAnchor.constraint(equalTo: view.topAnchor),
+            strip.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            strip.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            stack.topAnchor.constraint(equalTo: strip.bottomAnchor),
+        ]
+        noStrip = stack.topAnchor.constraint(equalTo: view.topAnchor)
+        placeStrip()
         NSLayoutConstraint.activate([
             stack.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             stack.trailingAnchor.constraint(equalTo: view.trailingAnchor),
@@ -125,6 +150,8 @@ final class PaneGroupController: UIViewController, TabSwipeHost, UIDropInteracti
         strip.dragFor = { [weak self] id, _ in self?.dragItem(id) }
         view.addInteraction(UIDropInteraction(delegate: self))
         stack.addInteraction(UIDropInteraction(delegate: self))
+        // Its own target too, for when the bar hosts it.
+        strip.addInteraction(UIDropInteraction(delegate: self))
         let tap = UITapGestureRecognizer(target: self, action: #selector(touched))
         tap.cancelsTouchesInView = false
         view.addGestureRecognizer(tap)
@@ -414,6 +441,11 @@ final class PaneGroupController: UIViewController, TabSwipeHost, UIDropInteracti
         return item
     }
 
+    /// The drop is on the strip: the strip itself (hosted in the bar), or the top of the group.
+    private func overStrip(_ interaction: UIDropInteraction, _ session: any UIDropSession) -> Bool {
+        interaction.view === strip || (interaction.view === view && !hosted && session.location(in: view).y < strip.frame.maxY)
+    }
+
     private func carried(_ session: any UIDropSession) -> SessionDrag? {
         session.items.first?.localObject as? SessionDrag
     }
@@ -424,7 +456,7 @@ final class PaneGroupController: UIViewController, TabSwipeHost, UIDropInteracti
 
     func dropInteraction(_ interaction: UIDropInteraction, sessionDidUpdate session: any UIDropSession) -> UIDropProposal {
         guard let drag = carried(session) else { return UIDropProposal(operation: .forbidden) }
-        if interaction.view === view, !hosted, session.location(in: view).y < strip.frame.maxY {
+        if overStrip(interaction, session) {
             // Over the strip: where in it the tab would land.
             hidePreview()
             strip.showCaret(at: strip.index(at: session.location(in: strip)))
@@ -452,8 +484,7 @@ final class PaneGroupController: UIViewController, TabSwipeHost, UIDropInteracti
         guard let drag = carried(session) else { return }
         hidePreview()
         strip.showCaret(at: nil)
-        let point = session.location(in: view)
-        if interaction.view === view, !hosted, point.y < strip.frame.maxY {
+        if overStrip(interaction, session) {
             let index = strip.index(at: session.location(in: strip))
             if drag.from == leafId { workspace.reorder(leafId, drag.sessionId, to: index) } else { workspace.move(drag.sessionId, to: leafId, at: index) }
             return

@@ -40,7 +40,23 @@ final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteraction
     var dragFor: ((String, TabView) -> UIDragItem?)?
 
     /// Hosted in the top bar: no shelf of its own, the bar draws it.
-    let hosted: Bool
+    var hosted: Bool {
+        didSet {
+            guard hosted != oldValue else { return }
+            dress()
+        }
+    }
+
+    /// `padding-block: 4px 0` over the 32pt tabs, in a group; hosted, the bar sizes it.
+    private lazy var ownHeight = heightAnchor.constraint(equalToConstant: Self.item + 4)
+
+    private func dress() {
+        backgroundColor = hosted ? .clear : Palette.surfaceShelf
+        hairline.isHidden = hosted
+        ownHeight.isActive = !hosted
+        setNeedsLayout()
+    }
+
     private let scroll = UIScrollView()
     private let track = UIView()
     private let fade = CAGradientLayer()
@@ -56,7 +72,6 @@ final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteraction
         self.hosted = hosted
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
-        backgroundColor = hosted ? .clear : Palette.surfaceShelf
         scroll.showsHorizontalScrollIndicator = false
         scroll.alwaysBounceHorizontal = false
         scroll.delegate = self
@@ -67,7 +82,6 @@ final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteraction
         hairline.backgroundColor = Palette.borderHairline
         hairline.translatesAutoresizingMaskIntoConstraints = false
         addSubview(hairline)
-        hairline.isHidden = hosted
         caret.backgroundColor = Palette.inkStrong
         caret.layer.cornerRadius = 1
         caret.isHidden = true
@@ -82,10 +96,7 @@ final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteraction
             hairline.bottomAnchor.constraint(equalTo: bottomAnchor),
             hairline.heightAnchor.constraint(equalToConstant: 1),
         ])
-        if !hosted {
-            // `padding-block: 4px 0` over the 32pt tabs.
-            heightAnchor.constraint(equalToConstant: Self.item + 4).isActive = true
-        }
+        dress()
         bringSubviewToFront(scroll)
         accessibilityLabel = "Open sessions in this group"
         accessibilityTraits = .tabBar

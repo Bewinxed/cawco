@@ -119,6 +119,8 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         TopBar.install(on: detail.navigationItem, crumb: mainCrumb, cluster: mainCluster, burger: nil)
         TopBar.install(on: board.navigationItem, crumb: compactCrumb, cluster: compactCluster, burger: burger)
         TopBar.install(on: workspaceController.navigationItem, crumb: sessionCrumb, cluster: sessionCluster, burger: sessionBurger)
+        // One group on a wide screen: its strip is the bar's, in the crumb's place.
+        workspaceController.onHost = { [weak self] strip in self?.barTabs.host(strip) }
         // Back on the board (a back swipe), the focused group shows nothing; its tabs stay.
         compactMotion.didShow = { [weak self] shown in
             guard let self, shown === compactNav.viewControllers.first, compact, workspace.activeSessionId != nil else { return }
@@ -162,6 +164,11 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         followWorkspace()
     }
 
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        barTabs.relayout()
+    }
+
     static func clamp(_ width: Double) -> Double { min(railMax, max(railMin, width.rounded())) }
 
     private var compact: Bool { traitCollection.horizontalSizeClass == .compact }
@@ -189,6 +196,11 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         mainNav.setViewControllers([regularPage], animated: !compact)
         compactMotion.route = travel
         compactNav.setViewControllers([compactPage], animated: compact)
+        hostTabs()
+        // The bar re-homes its items with the page: the hosted strip is measured against them again.
+        barTabs.relayout()
+        mainNav.transitionCoordinator?.animate(alongsideTransition: nil) { [weak self] _ in self?.barTabs.relayout() }
+        DispatchQueue.main.async { [weak self] in self?.barTabs.relayout() }
         rail.requestRefresh()
         railSheet?.requestRefresh()
     }
@@ -226,6 +238,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         if destination != .fleet { go(.fleet) }
         workspace.open(id)
         showWorkspace(animated: true)
+        hostTabs()
         rail.requestRefresh()
     }
 
@@ -262,6 +275,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     private func followWorkspace() {
         _ = workspace.version
         guard isViewLoaded else { return }
+        defer { hostTabs() }
         if compact {
             if workspace.activeSessionId == nil, compactNav.topViewController === workspaceController {
                 compactNav.popToRootViewController(animated: true)
@@ -273,6 +287,14 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
             // Tabs kept from the last run: a wide screen shows them, never an empty detail.
             showWorkspace(animated: false)
         }
+    }
+
+    private lazy var barTabs = BarTabs(bar: mainNav.navigationBar, crumb: mainCrumb, cluster: mainCluster)
+
+    /// The bar carries the tabs only where the conversations are the page in
+    /// front on a wide screen (Shell.svelte `hostedLeaf`: on a session page).
+    private func hostTabs() {
+        workspaceController.hosting = !compact && destination == .fleet && detail.shown === workspaceController
     }
 
     /// A wide screen never shows an empty detail if anything can be opened:
@@ -312,6 +334,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
                 compactNav.setViewControllers([compactNav.viewControllers.first ?? board], animated: false)
                 showWorkspace(animated: false)
             }
+            hostTabs()
         }
     }
 
@@ -524,6 +547,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
 
     /// The bar's facts, from the hub's word.
     private func refreshBars() {
+        defer { barTabs.relayout() }
         let fleet = hub.fleet
         let blocked = fleet.rows.filter { $0.isLive && home.activity($0.id) == .blocked }.count
         let online = fleet.machines.filter { $0.status == "online" }.count

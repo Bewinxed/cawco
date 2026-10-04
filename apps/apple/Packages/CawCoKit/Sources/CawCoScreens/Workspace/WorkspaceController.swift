@@ -78,6 +78,30 @@ final class WorkspaceController: ObservedViewController, BackSwipeGate {
         return 2
     }
 
+    // MARK: The bar's strip
+
+    /// A workspace that is one group has one strip, and on a wide screen the
+    /// top bar is where it goes (Shell.svelte `barLeaf`); a split keeps a
+    /// strip per group, and the narrow line keeps its own row. Called with
+    /// the strip the bar should carry, or nil to give the bar back its crumb.
+    var onHost: (PaneTabsView?) -> Void = { _ in }
+    /// Whether the shell lets the bar host at all (the conversations are the page in front).
+    var hosting = true { didSet { if hosting != oldValue { host() } } }
+    private weak var hostedStrip: PaneTabsView?
+
+    private func host() {
+        guard isViewLoaded else { return }
+        let width = view.window?.bounds.width ?? view.bounds.width
+        var one: PaneGroupController?
+        if hosting, !isDeck, width >= 900, case let .leaf(leaf) = workspace.root, !leaf.tabs.isEmpty { one = groups[leaf.id] }
+        for group in groups.values where group !== one { group.hosted = false }
+        one?.hosted = true
+        let strip = one?.strip
+        guard strip !== hostedStrip else { return }
+        hostedStrip = strip
+        onHost(strip)
+    }
+
     // MARK: Content
 
     override func refreshContent() {
@@ -96,6 +120,7 @@ final class WorkspaceController: ObservedViewController, BackSwipeGate {
             shape = next
             rebuild(leaves)
         }
+        host()
         let focused = workspace.focusedLeaf
         for leaf in leaves {
             guard let group = groups[leaf.id] else { continue }
