@@ -10385,6 +10385,10 @@
           "instanceId": {
             "type": "string"
           },
+          "processGeneration": {
+            "description": "The row's launch identity, including a held process not yet attached.",
+            "type": "string"
+          },
           "requestId": {
             "description": "Correlates the `control_result` frame confirming stop/discard or its failure.",
             "type": "string"
@@ -12332,6 +12336,54 @@
             "$ref": "#/components/schemas/BuildInfo",
             "description": "The cawco build this machine's daemon is running (NEW.md §12)."
           },
+          "custody": {
+            "description": "Last register's sessiond read, distinct from an available empty list.",
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "state": {
+                    "type": "string",
+                    "enum": [
+                      "available"
+                    ]
+                  },
+                  "instances": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "opencode": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "instances",
+                  "opencode",
+                  "state"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "state": {
+                    "type": "string",
+                    "enum": [
+                      "unavailable"
+                    ]
+                  },
+                  "error": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "error",
+                  "state"
+                ]
+              }
+            ]
+          },
           "deploy": {
             "$ref": "#/components/schemas/DeployInfo",
             "description": "Where this machine's deployment clone stands against the branch it deploys\nfrom, as its daemon last said (PLAN.md contract C8). Absent from a daemon\nthat predates the deployment channel and from one whose watcher has never\nticked, which a reader must render as *nothing to report* — never as\n\"current\". Live, not history: the hub holds it only for as long as it holds\nthe socket that asserted it."
@@ -12383,6 +12435,13 @@
           "tools": {
             "type": "object",
             "description": "Last-known workflow-tool status by tool id (NEW.md §10)."
+          },
+          "unownedProcesses": {
+            "description": "Unattached children reported after custody; null means not yet readable.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UnownedSessionProcess"
+            }
           }
         },
         "required": [
@@ -12791,6 +12850,40 @@
           "xhigh"
         ],
         "type": "string"
+      },
+      "UnownedSessionProcess": {
+        "type": "object",
+        "properties": {
+          "cwd": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "harness": {
+            "enum": [
+              "claude",
+              "pi"
+            ],
+            "type": "string"
+          },
+          "instanceId": {
+            "type": "string"
+          },
+          "pid": {
+            "type": "number"
+          },
+          "turnRunning": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "cwd",
+          "harness",
+          "instanceId",
+          "pid",
+          "turnRunning"
+        ]
       },
       "GeneratedImage": {
         "type": "object",

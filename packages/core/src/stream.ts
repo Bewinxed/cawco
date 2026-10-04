@@ -182,16 +182,9 @@ export interface RegisterAckPayload {
    * anyway.
    */
   ingested?: Record<string, IngestMark>;
-  /**
-   * This hub's restores name every row it has for a session process the
-   * machine holds, rows it had filed asleep or failed included. Only then is
-   * a held process no restore named one that no row owns, and only then does
-   * the machine stop it. ABSENT from a hub that predates it, which names
-   * fewer: an agent that updated first must not stop what that hub's
-   * successor would have named.
-   */
-  namesHeld?: true;
   ok: true;
+  /** Rows this hub has on the registering machine, independent of attachment. */
+  rowIds: string[];
 }
 
 const record = (value: unknown): Record<string, unknown> | undefined =>

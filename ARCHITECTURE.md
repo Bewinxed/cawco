@@ -164,10 +164,13 @@ instance, which is disposed when its last attached session leaves.
 sessiond is what makes "everything it runs" true: each child leads its own process group, a
 signal reaches the child's whole tree, and what a child leaves behind when it exits is swept.
 
-The same rule holds across a restart. At register the hub names, in its restores, every row it
-has for a process the machine still holds — a row a dying hub filed `sleeping` included — and
-the daemon attaches to each. A session process no restore names has no row behind it, and the
-machine's own agent stops it (`stopUnowned`).
+Across a restart, the hub names held rows in its restores, including a row a dying hub filed
+`sleeping`. After custody the daemon reports every session process it could not attach, with
+its instance id, harness, cwd, pid and turn state; a process still carried by an agent whose hub
+lost its row is reported too. The hub keeps that list on the machine's `/api/agents` response.
+Absence never authorises a stop. A held process ends on a stopped row's word, an explicit stop,
+the owner's row deletion, or retirement of a summariser no unsettled continuation names. A
+failed sessiond read is explicitly unavailable, not an empty custody list.
 
 ## Who writes what
 

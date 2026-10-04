@@ -47,6 +47,7 @@ import type {
   SendRecord,
   SentMessage,
   SessionCredentialInstall,
+  SessionCustody,
   SessionMessage,
   SessionPulse,
   SessionTooling,
@@ -57,6 +58,7 @@ import type {
   ToolState,
   ToolStatus,
   TranscriptWhere,
+  UnownedSessionProcess,
   UpdateReport,
   UsageBucket,
   UsageLimitsResponse,
@@ -495,11 +497,12 @@ const ack = (envelope: Envelope): Envelope<{ ok: true }> => ({
  */
 const registerAck = (
   envelope: Envelope,
-  ingested: Record<string, IngestMark>
+  ingested: Record<string, IngestMark>,
+  rowIds: string[]
 ): Envelope<RegisterAckPayload> => ({
   verb: envelope.verb,
   machineId: envelope.machineId,
-  payload: { ok: true, ingested, namesHeld: true },
+  payload: { ok: true, ingested, rowIds },
 });
 
 /** Sent back as a frame, the only verb a dashboard renders. */
@@ -826,11 +829,16 @@ const peekPreviews = (payload: unknown): ServingPreview[] => {
 };
 
 /** First-hand process custody, separate from the daemon's attached live list. */
-const peekCustody = (
-  payload: unknown
-): { instances: string[]; opencode: boolean } => {
+const peekCustody = (payload: unknown): SessionCustody => {
   const value = (payload as { custody?: unknown } | null)?.custody;
+  if ((value as { state?: unknown } | null)?.state !== "available") {
+    return {
+      state: "unavailable",
+      error: peek(value, "error") ?? "No sessiond custody read was supplied.",
+    };
+  }
   return {
+    state: "available",
     instances: peekInstances(value),
     opencode: (value as { opencode?: unknown } | null)?.opencode === true,
   };
@@ -1654,6 +1662,9 @@ export const createServer = (
     string,
     { machineId: string; since: number; reason: string }
   >();
+  const machineCustody = new Map<string, SessionCustody>();
+  const unownedProcesses = new Map<string, UnownedSessionProcess[] | null>();
+  const heldProcesses = new Map<string, Set<string>>();
 
   /**
    * When each session's activity was last written down, so the column that says
@@ -3981,11 +3992,15 @@ export const createServer = (
   };
 
   const stopFromHub = (machineId: string, instanceId: string): void => {
+    const [row] = db.getInstancesByIds([instanceId]);
     registry.agent(machineId)?.send({
       verb: "stop",
       machineId,
       instanceId,
-      payload: { instanceId },
+      payload: {
+        instanceId,
+        ...(row ? { processGeneration: processGeneration(row) } : {}),
+      },
     });
   };
 
@@ -4009,6 +4024,12 @@ export const createServer = (
     }
     ending.set(instanceId, machineId);
     stopFromHub(machineId, instanceId);
+  };
+
+  const endHeldRow = (machineId: string, instanceId: string): void => {
+    if (heldProcesses.get(machineId)?.has(instanceId)) {
+      endStopped(machineId, instanceId);
+    }
   };
 
   /**
@@ -4715,6 +4736,7 @@ export const createServer = (
 
   /** Relays a dashboard envelope to its machine; reports back if nobody is home. */
   const forward = (envelope: Envelope, dashboard: HubSocket): boolean => {
+    let outgoing = envelope;
     const agent = registry.agent(envelope.machineId);
     if (!agent) {
       toDashboard(
@@ -4723,7 +4745,19 @@ export const createServer = (
       );
       return false;
     }
-    agent.send(envelope);
+    if (envelope.verb === "stop" && envelope.instanceId) {
+      const [row] = db.getInstancesByIds([envelope.instanceId]);
+      if (row) {
+        outgoing = {
+          ...envelope,
+          payload: {
+            ...(envelope.payload as object),
+            processGeneration: processGeneration(row),
+          },
+        };
+      }
+    }
+    agent.send(outgoing);
     return true;
   };
 
@@ -4861,6 +4895,8 @@ export const createServer = (
       const justRestarted = restarts.delete(row.machineId);
       return {
         ...row,
+        custody: machineCustody.get(row.machineId),
+        unownedProcesses: unownedProcesses.get(row.machineId),
         status: registry.agent(row.machineId) ? "online" : "offline",
         // Additive and live, like `status` above: present only for a machine that
         // has actually reported one on this connection.
@@ -6658,7 +6694,11 @@ export const createServer = (
         agent.send({
           ...envelope,
           machineId: row.machineId,
-          payload: { instanceId: row.id, from: requester.id },
+          payload: {
+            instanceId: row.id,
+            from: requester.id,
+            processGeneration: processGeneration(row),
+          },
         });
         closePreview(row.id).catch(console.error);
         forgetPending(row.id, UNREAD.stopped);
@@ -7375,6 +7415,7 @@ export const createServer = (
             "This session is still running. Stop it first, then remove it."
           );
         }
+        endHeldRow(row.machineId, row.id);
         db.deleteInstance(row.id);
         forgetInstances([row.id]);
         publishInstances(row.machineId);
@@ -9672,12 +9713,19 @@ export const createServer = (
                   )
                 );
               const custody = peekCustody(message.payload);
-              const heldIds = new Set(custody.instances);
+              machineCustody.set(message.machineId, custody);
+              unownedProcesses.set(message.machineId, null);
+              const heldIds = new Set(
+                custody.state === "available" ? custody.instances : []
+              );
+              heldProcesses.set(message.machineId, heldIds);
+              const heldOpencode =
+                custody.state === "available" && custody.opencode;
               // Whose process outlived the agent: a child sessiond kept alive,
               // or the one opencode server, which keeps every session it holds.
               const outlived = ({ row }: (typeof settled)[number]): boolean =>
                 heldIds.has(row.id) ||
-                (custody.opencode &&
+                (heldOpencode &&
                   row.harness === "opencode" &&
                   row.sessionId !== null);
               const registeredAt = Date.now();
@@ -9689,7 +9737,8 @@ export const createServer = (
                 // (`decideCustody`). A send its harness has taken up is read
                 // either way — a read that happened while no agent was
                 // reading is not framed again.
-                const kept = outlived(orphan);
+                const kept =
+                  custody.state === "unavailable" || outlived(orphan);
                 forgetPending(orphan.row.id, UNREAD.ended, kept);
                 if (kept) {
                   inCustody.set(orphan.row.id, {
@@ -9707,12 +9756,13 @@ export const createServer = (
                 const [owner] = db.getInstancesByIds([parked.instanceId ?? ""]);
                 if (
                   parked.machineId === message.machineId &&
+                  custody.state === "available" &&
                   !(
                     owner &&
                     ["running", "starting", "unknown"].includes(owner.status)
                   ) &&
                   !heldIds.has(parked.instanceId ?? "") &&
-                  !(custody.opencode && owner?.harness === "opencode")
+                  !(heldOpencode && owner?.harness === "opencode")
                 ) {
                   pending.resolve(parked.requestId ?? "", "cancelled");
                 }
@@ -9752,8 +9802,7 @@ export const createServer = (
               // of them, and their processes ran on with nobody attached
               // (sixteen of them, 2026-10-04). Whatever sessiond holds that a
               // row here could run again is named in this register's
-              // restores; what no restore names, the machine stops
-              // (`stopUnowned`).
+              // restores; whatever custody cannot attach is listed by the agent.
               const justSettled = new Set(settled.map(({ row }) => row.id));
               const listedLive = new Set(peekInstances(message.payload));
               const filedAway = db
@@ -9769,6 +9818,7 @@ export const createServer = (
               const held = [...settled.filter(outlived), ...filedAway];
               const heldRows = new Set(held.map(({ row }) => row.id));
               const fresh = settled
+                .filter(() => custody.state === "available")
                 .filter(({ row }) => !heldRows.has(row.id))
                 .filter((orphan) => orphan.resumes && orphan.row.sessionId)
                 // `row` is the pre-settle snapshot, so this reads when the session
@@ -9803,17 +9853,22 @@ export const createServer = (
                   .filter((job) => !SETTLED.has(job.stage))
                   .map((job) => job.summariserInstanceId)
               );
-              for (const instanceId of peekInstances(message.payload)) {
-                if (summarisers.has(instanceId) && !named.has(instanceId)) {
-                  stopFromHub(message.machineId, instanceId);
-                }
-              }
+              const toEnd = db
+                .getInstancesByIds(
+                  reattachable([...heldIds], peekInstances(message.payload))
+                )
+                .filter(
+                  (row) =>
+                    row.machineId === message.machineId &&
+                    (row.status === "stopped" ||
+                      (row.kind === "summariser" && !named.has(row.id)))
+                );
               // Rows still live at disconnect (now settled above) retain custody.
               // A previously sleeping row only recovers within the fresh-spawn
               // horizon: an older held tool may apply a stale patch to a tree
               // since rewritten. Inspect those without attaching or replaying asks.
               // Discarded/stopped rows are never even sent to the server to probe.
-              if (custody.opencode) {
+              if (heldOpencode) {
                 for (const row of db.listInstances()) {
                   if (
                     row.machineId === message.machineId &&
@@ -9862,7 +9917,19 @@ export const createServer = (
                 peekInstances(message.payload),
                 revivable.map((orphan) => orphan.row.id)
               );
-              ws.send(registerAck(message, streams.ingestedFor(reattaching)));
+              ws.send(
+                registerAck(
+                  message,
+                  streams.ingestedFor(reattaching),
+                  db
+                    .listInstances()
+                    .filter((row) => row.machineId === message.machineId)
+                    .map((row) => row.id)
+                )
+              );
+              for (const row of toEnd) {
+                endStopped(message.machineId, row.id);
+              }
               // Behind the restores and the ack, so the agent reads each send
               // after the spawn it waits on.
               releaseAwaiting(message.machineId);
@@ -9882,6 +9949,31 @@ export const createServer = (
             }
             case "heartbeat": {
               db.touchAgent(message.machineId);
+              const report = (message.payload as HeartbeatPayload)
+                .unownedProcesses;
+              if (report === null || Array.isArray(report)) {
+                const valid =
+                  report === null
+                    ? null
+                    : report.filter(
+                        (proc) =>
+                          proc &&
+                          typeof proc.instanceId === "string" &&
+                          (proc.harness === "claude" ||
+                            proc.harness === "pi") &&
+                          (proc.cwd === null || typeof proc.cwd === "string") &&
+                          Number.isInteger(proc.pid) &&
+                          proc.pid > 0 &&
+                          typeof proc.turnRunning === "boolean"
+                      );
+                unownedProcesses.set(message.machineId, valid);
+                for (const proc of valid ?? []) {
+                  heldProcesses.get(message.machineId)?.add(proc.instanceId);
+                }
+              }
+              for (const id of peekInstances(message.payload)) {
+                heldProcesses.get(message.machineId)?.add(id);
+              }
               // The beat is the truth (contract C4). Every 15s the machine says
               // what it is carrying, and the hub's column is made to agree with
               // it: listed ids become `running`, and rows claiming a process the
@@ -10040,11 +10132,23 @@ export const createServer = (
               if (kind === "stopped" && message.instanceId) {
                 const [process] = db.getInstancesByIds([message.instanceId]);
                 if (
-                  !process ||
+                  process &&
                   peek(message.payload, "processGeneration") !==
                     processGeneration(process)
                 ) {
                   break;
+                }
+                heldProcesses
+                  .get(message.machineId)
+                  ?.delete(message.instanceId);
+                const listed = unownedProcesses.get(message.machineId);
+                if (listed) {
+                  unownedProcesses.set(
+                    message.machineId,
+                    listed.filter(
+                      (proc) => proc.instanceId !== message.instanceId
+                    )
+                  );
                 }
                 turnWaiters
                   .get(message.instanceId)
@@ -10741,6 +10845,7 @@ export const createServer = (
                     )
                     .map((row) => row.id);
                   for (const id of ids) {
+                    endHeldRow(transcript.machineId, id);
                     db.deleteInstance(id);
                   }
                   forgetInstances(ids);
@@ -10913,6 +11018,9 @@ export const createServer = (
           // Its deploy verdict was true of a checkout this hub can no longer ask
           // about; keeping it would be the stale-column defect in a Map.
           deploys.delete(machineId);
+          machineCustody.delete(machineId);
+          unownedProcesses.delete(machineId);
+          heldProcesses.delete(machineId);
           // An unconsumed restart event belonged to the connection that just
           // ended; the next one to hold this machineId did not just restart.
           restarts.delete(machineId);

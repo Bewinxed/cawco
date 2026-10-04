@@ -30,6 +30,7 @@ import type {
   SessionPulse,
   SpawnPayload,
   StopPayload,
+  UnownedSessionProcess,
 } from "@cawco/core";
 import {
   AGENT_BUSY,
@@ -80,7 +81,7 @@ import { type UpdateOptions, updateCheckout } from "./update";
  * satisfy this shape. Claude and pi share custody; OpenCode owns its server.
  */
 interface SessiondAdoption {
-  /** Ends the held child of an instance nobody owns, with everything it started. */
+  /** Ends a held child on an explicit stop, with everything it started. */
   // biome-ignore lint/style/useConsistentMethodSignatures: a property signature changes parameter variance here and would break the claude adapter's implementation
   abandon(instanceId: string): Promise<void>;
   // biome-ignore lint/style/useConsistentMethodSignatures: a property signature changes parameter variance here and would break the claude adapter's implementation
@@ -1556,31 +1557,12 @@ export class SessionSupervisor {
     };
   }
 
-  /**
-   * NO PROCESS STAYS IN SESSIOND WITHOUT AN OWNER. Run once a register's
-   * custody has been taken: the hub has named, in its restores, every row it
-   * has for a process this machine holds, and each of those is attached by
-   * now, failed to attach, or was never named. A session process that is
-   * alive and that this daemon neither carries nor is attaching or starting
-   * has no row behind it: it is stopped, with everything it started.
-   *
-   * Sixteen such processes ran their turns unseen for hours (2026-10-04): the
-   * hub had filed their rows asleep in a register it did not live to finish,
-   * its successor named none of them, and nothing could attach to one the hub
-   * had not named. Before that, such a process was attached to on sessiond's
-   * word alone, with no row's settings to run it under.
-   *
-   * Only the machine's own agent does this. One started from a worktree
-   * against another hub shares the machine's sessiond, and what that hub does
-   * not name is not its to stop.
-   *
-   * Answers the instances whose processes were stopped.
-   */
-  async stopUnowned(): Promise<string[]> {
-    if (!(await isMachineAgent())) {
-      return [];
-    }
-    const stopped: string[] = [];
+  /** Lists surviving children custody did not attach; absence never authorises a stop. */
+  async listUnowned(
+    rowIds: readonly string[]
+  ): Promise<UnownedSessionProcess[]> {
+    const named = new Set(rowIds);
+    const unowned: UnownedSessionProcess[] = [];
     for (const kind of SESSION_PROC_KINDS) {
       const adapter = this.#adapter(kind) as Harness &
         Partial<SessiondAdoption>;
@@ -1589,20 +1571,32 @@ export class SessionSupervisor {
       for (const proc of held?.procs ?? []) {
         const id = parseProcId(proc.procId);
         if (
-          !((id.kind === "claude" || id.kind === "pi") && proc.alive) ||
-          this.#sessions.has(id.instanceId) ||
+          !(
+            (id.kind === "claude" || id.kind === "pi") &&
+            id.kind === kind &&
+            proc.alive
+          ) ||
+          (this.#sessions.has(id.instanceId) && named.has(id.instanceId)) ||
           this.#adopting.has(id.instanceId) ||
           // Something is on its way to it: a spawn starting it, a stop.
           this.#queues.has(id.instanceId)
         ) {
           continue;
         }
-        // biome-ignore lint/performance/noAwaitInLoops: one process at a time; each stop is a few socket round trips
-        await adapter.abandon?.(id.instanceId);
-        stopped.push(id.instanceId);
+        if (!adapter.turnRunning) {
+          throw new Error(`${kind} cannot read held turns`);
+        }
+        unowned.push({
+          instanceId: id.instanceId,
+          harness: id.kind,
+          cwd: proc.cwd ?? null,
+          pid: proc.pid,
+          // biome-ignore lint/performance/noAwaitInLoops: read each child's ring without changing custody
+          turnRunning: await adapter.turnRunning(id.instanceId, proc.head),
+        });
       }
     }
-    return stopped;
+    return unowned;
   }
 
   /**
@@ -2050,8 +2044,39 @@ export class SessionSupervisor {
     session.send(message, { attachments, images, urgent });
   }
 
-  async #stop({ instanceId, discard, requestId }: StopPayload): Promise<void> {
-    const processGeneration = this.#generations.get(instanceId);
+  async #endHeld(instanceId: string): Promise<boolean> {
+    let ended = false;
+    for (const kind of SESSION_PROC_KINDS) {
+      const adapter = this.#adapter(kind) as Harness &
+        Partial<SessiondAdoption>;
+      // biome-ignore lint/performance/noAwaitInLoops: inspect each harness for the explicit stop's child
+      const held = await adapter.custodyCandidates?.();
+      if (
+        !held?.procs.some((proc) => {
+          const id = parseProcId(proc.procId);
+          return proc.alive && id.kind === kind && id.instanceId === instanceId;
+        })
+      ) {
+        continue;
+      }
+      if (!adapter.abandon) {
+        throw new Error(`${kind} cannot end held processes`);
+      }
+      await adapter.abandon(instanceId);
+      ended = true;
+    }
+    return ended;
+  }
+
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one stop settles carried, sessiond-held and discarded custody with the same receipt
+  async #stop({
+    instanceId,
+    discard,
+    requestId,
+    processGeneration: namedGeneration,
+  }: StopPayload): Promise<void> {
+    const processGeneration =
+      this.#generations.get(instanceId) ?? namedGeneration;
     // A stop is a decision about the session: nothing waits for its wake now.
     const crossed = this.#asleep.get(instanceId) ?? [];
     this.#asleep.delete(instanceId);
@@ -2069,17 +2094,19 @@ export class SessionSupervisor {
         await session.stop();
         this.#sessions.delete(instanceId);
       } else {
+        const endedHeld = await this.#endHeld(instanceId);
         const target = this.#resumable.get(instanceId);
         // A discard of an instance this machine holds nothing for — a spawn
         // that never produced a session — has nothing to stop: the row is
         // thrown away, or it could never leave the board.
         const aborted =
-          discard &&
-          (!target ||
-            (await target.adapter.abortSession?.(
-              target.sessionKey,
-              target.cwd
-            )));
+          endedHeld ||
+          (discard &&
+            (!target ||
+              (await target.adapter.abortSession?.(
+                target.sessionKey,
+                target.cwd
+              ))));
         if (!aborted) {
           throw new Error(
             `Nothing stopped for ${instanceId}: no live session or abortable server turn${discard ? "" : "; held turns require explicit discard"}`

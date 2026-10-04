@@ -18,7 +18,7 @@ export class PiHarness extends PiProfile implements Harness {
     return await spawnPi(spec, ctx);
   }
 
-  /** Ends the held host of an instance nobody owns (`SessionSupervisor.stopUnowned`). */
+  /** Ends the held host on an explicit stop. */
   async abandon(instanceId: string): Promise<void> {
     await endProc(await piSessiond(), procIdFor("pi", instanceId));
   }

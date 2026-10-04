@@ -2146,7 +2146,7 @@ export class ClaudeHarness implements Harness {
     return session;
   }
 
-  /** Ends the held child of an instance nobody owns (`SessionSupervisor.stopUnowned`). */
+  /** Ends the held child on an explicit stop. */
   async abandon(instanceId: string): Promise<void> {
     await endProc(await this.sessiond(), procIdFor("claude", instanceId));
   }

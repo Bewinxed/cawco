@@ -301,6 +301,8 @@ export interface HeartbeatPayload {
    * the same beat as `harnesses`, for the same reason.
    */
   tools?: ToolStatus[];
+  /** After register custody: unattached sessiond children; null means the read failed. */
+  unownedProcesses?: UnownedSessionProcess[] | null;
 }
 
 /**
@@ -322,6 +324,8 @@ export interface StopPayload {
   /** The instance a fleet-originated stop claims as its caller; the hub honours the call only when the target is that instance's own delegate. */
   from?: string;
   instanceId: string;
+  /** The row's launch identity, including a held process not yet attached. */
+  processGeneration?: string;
   /** Correlates the `control_result` frame confirming stop/discard or its failure. */
   requestId?: string;
 }
@@ -399,6 +403,8 @@ export interface AgentRow {
    * The cawco build this machine's daemon is running (NEW.md §12).
    */
   build?: BuildInfo;
+  /** Last register's sessiond read, distinct from an available empty list. */
+  custody?: SessionCustody;
   /**
    * Where this machine's deployment clone stands against the branch it deploys
    * from, as its daemon last said (PLAN.md contract C8). Absent from a daemon
@@ -435,6 +441,20 @@ export interface AgentRow {
    * Last-known workflow-tool status by tool id (NEW.md §10).
    */
   tools?: Record<string, ToolStatus>;
+  /** Unattached children reported after custody; null means not yet readable. */
+  unownedProcesses?: UnownedSessionProcess[] | null;
+}
+
+export type SessionCustody =
+  | { state: "available"; instances: string[]; opencode: boolean }
+  | { state: "unavailable"; error: string };
+
+export interface UnownedSessionProcess {
+  cwd: string | null;
+  harness: "claude" | "pi";
+  instanceId: string;
+  pid: number;
+  turnRunning: boolean;
 }
 
 /** mDNS and router suffixes: they say "same network", which the fleet already implies. */

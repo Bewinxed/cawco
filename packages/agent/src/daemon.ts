@@ -8,6 +8,8 @@ import type {
   HarnessReport,
   HeartbeatAckPayload,
   HeartbeatPayload,
+  RegisterAckPayload,
+  SessionCustody,
   SpawnPayload,
 } from "@cawco/core";
 import {
@@ -94,7 +96,7 @@ export interface RegisterPayload extends MachineIdentity {
    */
   build?: BuildInfo;
   /** Custody is not attachment: these still need a handle before being listed live. */
-  custody?: { instances: string[]; opencode: boolean };
+  custody: SessionCustody;
   /**
    * Where this machine's deployment clone stood at register (contract C8), so a
    * board that has just been handed a machine knows without waiting a beat.
@@ -473,7 +475,7 @@ export const custodyRow = (
 const readSessions = async () => {
   // Read before the catalog: listing OpenCode conversations may start a new
   // server, which must not be mistaken for one that survived this restart.
-  const custody = await (async () => {
+  const custody: SessionCustody = await (async (): Promise<SessionCustody> => {
     try {
       const client = await SessiondClient.connect(
         process.env.CAWCO_SESSIOND_ENDPOINT ?? sessiondEndpoint()
@@ -481,6 +483,7 @@ const readSessions = async () => {
       try {
         const held = client.procs.filter((proc) => proc.alive);
         return {
+          state: "available",
           instances: held.flatMap((proc) => {
             const id = parseProcId(proc.procId);
             return id.kind === "claude" || id.kind === "pi"
@@ -498,6 +501,7 @@ const readSessions = async () => {
       Effect.runFork(
         Effect.logWarning(`session custody unavailable: ${String(error)}`)
       );
+      return { state: "unavailable", error: String(error) };
     }
   })();
   const catalog = await resumableSessions();
@@ -564,23 +568,30 @@ const attach = (
         ? consumeRestartMarker(deployRoot(), build.commit)
         : Promise.resolve(false)
     );
-    const payload: RegisterPayload = {
+    const registerPayload = (
+      snapshot: Awaited<ReturnType<typeof readSessions>>,
+      first = false
+    ): RegisterPayload => ({
       ...identity,
       instances: supervisor.instanceIds,
       previews: servingPreviews(),
-      ...(custody ? { custody } : {}),
-      ...(catalog
+      custody: snapshot.custody,
+      ...(snapshot.catalog
         ? {
-            resumable: catalog.map((entry) => entry.sessionId),
+            resumable: snapshot.catalog.map((entry) => entry.sessionId),
             resumableAt: Object.fromEntries(
-              catalog.map((entry) => [entry.sessionId, entry.lastModified])
+              snapshot.catalog.map((entry) => [
+                entry.sessionId,
+                entry.lastModified,
+              ])
             ),
           }
         : {}),
       build,
       ...(latestDeploy() ? { deploy: latestDeploy() } : {}),
-      ...(restarted ? { restarted: true } : {}),
-    };
+      ...(first && restarted ? { restarted: true } : {}),
+    });
+    let payload = registerPayload({ custody, catalog }, true);
     // NO BUSY ANSWER BEFORE CUSTODY HAS SAID. From the register until the
     // sessions this connection takes custody of have each said whether their
     // turn is running (`takeCustody` below), a busy question waits: before
@@ -588,7 +599,7 @@ const attach = (
     // agent read `0` for 23 s while two sessions worked (2026-10-01). Let go
     // when custody is handed over, or when the connection ends without it.
     let custodyEpoch = supervisor.beginCustody(
-      payload.custody?.instances ?? []
+      payload.custody.state === "available" ? payload.custody.instances : []
     );
     let recoveryController: AbortController | undefined;
     let registrationAttempt = 0;
@@ -606,10 +617,16 @@ const attach = (
           30_000,
           1000 * 2 ** Math.min(registrationAttempt - 1, 5)
         );
-        registrationDeadline = setTimeout(() => {
+        registrationDeadline = setTimeout(async () => {
           if (awaitingRegisterAck && socket.readyState === WebSocket.OPEN) {
+            payload = registerPayload(await readSessions());
+            if (!awaitingRegisterAck || socket.readyState !== WebSocket.OPEN) {
+              return;
+            }
             custodyEpoch = supervisor.beginCustody(
-              payload.custody?.instances ?? []
+              payload.custody.state === "available"
+                ? payload.custody.instances
+                : []
             );
             send(socket, {
               verb: "register",
@@ -849,6 +866,41 @@ const attach = (
         });
         await Promise.all(outcomes);
         signal.throwIfAborted();
+        // Wait for explicit stops sent behind the ack before taking the listing.
+        await Promise.all(
+          custodyWaiting
+            .splice(0)
+            .map((envelope) => supervisor.dispatch(envelope))
+        );
+        const unownedProcesses = await supervisor
+          .listUnowned((ackPayload as RegisterAckPayload).rowIds)
+          .catch((error: unknown) => {
+            Effect.runFork(
+              Effect.logWarning(
+                `unowned session listing unavailable: ${String(error)}`
+              )
+            );
+            return null;
+          });
+        signal.throwIfAborted();
+        if (socket.readyState === WebSocket.OPEN) {
+          send(socket, {
+            verb: "heartbeat",
+            machineId: identity.machineId,
+            payload: {
+              at: Date.now(),
+              instances: supervisor.instanceIds,
+              unownedProcesses,
+            } satisfies HeartbeatPayload,
+          });
+          if (unownedProcesses) {
+            Effect.runFork(
+              Effect.logInfo(
+                `left ${unownedProcesses.length} session process(es) no hub row names`
+              )
+            );
+          }
+        }
         return attached;
       };
       const custodyRecovered = (epoch: number, adopted: string[]) => {
