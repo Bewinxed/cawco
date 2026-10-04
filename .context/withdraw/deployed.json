@@ -37,12 +37,21 @@
     {
       "harness": "pi",
       "runs": 1,
-      "sessionId": "691bd461-833e-4d39-9701-1ee3e58e1d36",
+      "sessionId": "4ee75064-8680-4a8c-b78e-994325443af6",
       "result": "not run",
       "error": "429 {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"All credentials for model claude-opus-5 are cooling down via provider claude (last error: rate_limit_error: This request would exceed your account's rate limit. Please try again later.)\"}}",
       "archived": true,
-      "cwd": "/home/bewinxed/.worktrees/cockpit-631ee363/.context/withdraw/deployed-pi",
-      "screenshots": [".context/withdraw/pi-not-run.png"]
+      "cwd": "/home/bewinxed/.worktrees/cockpit-631ee363/.context/withdraw/deployed-pi-followup",
+      "followupAfterLimitReset": true,
+      "followupDashboardVersion": "c22f5800",
+      "note": "One authorised follow-up attempt through the deployed New session modal after the reported limit reset. Folder field confirmed before launch. First turn returned the same 429; queued-send and started-send scenarios were not run. No retry or credential route.",
+      "previousAttempt": {
+        "sessionId": "691bd461-833e-4d39-9701-1ee3e58e1d36",
+        "result": "not run",
+        "archived": true,
+        "screenshot": ".context/withdraw/pi-not-run.png"
+      },
+      "screenshots": [".context/withdraw/pi-followup-not-run.png"]
     }
   ]
 }

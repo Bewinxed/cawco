@@ -54,6 +54,9 @@ for (const harness of ["claude", "opencode", "pi"] as const) {
     if (harness !== "pi" || !probe.error) {
       throw new Error(`${harness}: only unavailable pi may be not run, with its exact product error.`);
     }
+    if (probe.sessionId && !probe.archived) {
+      throw new Error("Pi's failed probe session must be archived.");
+    }
   } else {
     if (!probe.sessionId || !probe.queued || !probe.archived) {
       throw new Error(`${harness}: missing queued-session or archive evidence.`);
@@ -64,6 +67,9 @@ for (const harness of ["claude", "opencode", "pi"] as const) {
       }
     } else if (!(probe.result === "unsupported" && probe.editOffered === false && probe.sendReachedTurn)) {
       throw new Error(`${harness}: unsupported queued sends must have no Edit and still reach the turn.`);
+    }
+    if (harness === "pi" && !(probe.startedReceipt && probe.startedRowKept)) {
+      throw new Error("Pi's started-send receipt must be started and its row must remain.");
     }
   }
   if (probe.screenshots.length === 0) {
