@@ -54,7 +54,6 @@ import type {
 } from "@cawco/core";
 import {
   CAWCO_SCRATCH_TAG,
-  CONTROL_RELOAD_SKILLS,
   CONTROL_SUPPORTED_COMMANDS,
   classifyCommand,
   isEffortLevel,
@@ -4566,27 +4565,22 @@ export async function refreshCommands(
     );
   };
   try {
-    const [supported, reloaded] = await Promise.allSettled([
-      request<SupportedCommands>(CONTROL_SUPPORTED_COMMANDS),
-      request<{ skills: SlashCommand[] } | undefined>(CONTROL_RELOAD_SKILLS),
-    ]);
-    if (supported.status === "fulfilled") {
-      const commands = supported.value;
-      target.commands.names = commands.map((command) => command.name);
-      target.commands.detailed = detailsOf(commands);
-      if (commands.some((command) => command.kind)) {
-        target.commands.skills = commands
-          .filter((command) => command.kind === "skill")
-          .map((command) => command.name);
-      }
-    } else if (!isCustodyRefusal(supported.reason)) {
+    const commands = await request<SupportedCommands>(
+      CONTROL_SUPPORTED_COMMANDS
+    );
+    target.commands.names = commands.map((command) => command.name);
+    target.commands.detailed = detailsOf(commands);
+    if (commands.some((command) => command.kind)) {
+      target.commands.skills = commands
+        .filter((command) => command.kind === "skill")
+        .map((command) => command.name);
+    }
+  } catch (error) {
+    if (!isCustodyRefusal(error)) {
       console.error(
         `[cawco] supportedCommands on ${instanceId} failed:`,
-        supported.reason
+        error
       );
-    }
-    if (reloaded.status === "fulfilled" && reloaded.value?.skills) {
-      target.commands.skills = reloaded.value.skills.map((skill) => skill.name);
     }
   } finally {
     target.commands.at = Date.now();

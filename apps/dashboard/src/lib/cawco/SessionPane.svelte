@@ -590,12 +590,13 @@
   // the MCP ask keeps that refusal as `[]`. `isLive` is the board's notion —
   // a sleeping row is on the board too — and a sleeping session has no process
   // to ask, so the gate is the running list.
-  $effect(() => {
-    const liveForCommands =
-      !!session &&
+  const liveForCommands = $derived(
+    !!session &&
       cawco.runningInstances.some((row) => row.id === viewId) &&
       !!machineId &&
-      cawco.status === "connected";
+      cawco.status === "connected"
+  );
+  $effect(() => {
     if (!liveForCommands) {
       return;
     }

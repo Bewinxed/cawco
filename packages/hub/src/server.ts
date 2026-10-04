@@ -83,6 +83,7 @@ import {
   CONTROL_LIST_SESSIONS,
   CONTROL_MODEL_CATALOG,
   CONTROL_READ_SESSION_CONTEXT,
+  CONTROL_RELOAD_SKILLS,
   CONTROL_RUN_COMMAND,
   CONTROL_SEARCH_TRANSCRIPTS,
   CONTROL_SET_PERMISSION_MODE,
@@ -5449,7 +5450,7 @@ export const createServer = (
    * A machine that just converged wrote new skill files and plugin installs
    * under sessions that are already running. The SDK picks both up without a
    * restart — `reloadSkills`/`reloadPlugins` on the session's Query — so every
-   * live session on that machine is told the moment its sync report lands,
+   * live session on that machine is told when its reported content hashes move,
    * and a skill adopted from the rail is usable in the session that adopted
    * it seconds later (user, 2026-08-08). Fire-and-forget: a session racing
    * shutdown answers with an error nobody is waiting on.
@@ -5459,7 +5460,7 @@ export const createServer = (
    * session failure, so only a claude session — and a legacy row whose
    * `harness` predates the rework and is therefore claude — is told.
    *
-   * `hooksChanged` adds a third control, `reinitialize` — the SDK `Query`
+   * A changed hook report adds `reinitialize` — the SDK `Query`
    * method that actually re-reads settings, hooks included, rather than only
    * the two narrower things the other verbs cover. It is heavier than a
    * reload, so it is sent only when this sync's report says the hook set on
@@ -5470,8 +5471,11 @@ export const createServer = (
   const refreshSessions = (
     machineId: string,
     agent: HubSocket,
-    hooksChanged: boolean
+    methods: readonly string[]
   ): void => {
+    if (methods.length === 0) {
+      return;
+    }
     for (const row of db.listInstances()) {
       if (row.machineId !== machineId) {
         continue;
@@ -5482,9 +5486,6 @@ export const createServer = (
       if (row.harness && row.harness !== "claude") {
         continue;
       }
-      const methods = hooksChanged
-        ? (["reloadSkills", "reloadPlugins", "reinitialize"] as const)
-        : (["reloadSkills", "reloadPlugins"] as const);
       for (const method of methods) {
         const requestId = crypto.randomUUID();
         const payload: ControlPayload = {
@@ -6067,6 +6068,23 @@ export const createServer = (
     dashboard: HubSocket,
     remember = true
   ): boolean => {
+    // The hub owns skill reloads: an unchanged catalog must retain the CLI's
+    // sent-skills record, including when an older dashboard asks to reload it.
+    if (message.payload.method === CONTROL_RELOAD_SKILLS) {
+      const requestId = message.requestId ?? message.payload.requestId;
+      const frame: ControlResult = {
+        kind: "control_result",
+        requestId,
+        ok: false,
+        error: "Skills reload when synced fleet content changes.",
+      };
+      if (remember) {
+        toDashboard(dashboard, { ...message, verb: "frames", payload: frame });
+      } else {
+        streams.settleCommand(requestId, frame);
+      }
+      return true;
+    }
     if (relayPermissionAnswer(message, dashboard, remember)) {
       return true;
     }
@@ -11100,20 +11118,39 @@ export const createServer = (
                 pendingFleet.delete(message.requestId);
                 const report = peekFleetReport(message.payload);
                 if (report) {
-                  // Read before the overwrite: this is the only place either
-                  // side of the change is in hand at once, and `reinitialize`
-                  // below has to know which machine actually moved.
-                  const previousHooks = db
+                  // Compare the machine's persisted content before overwriting
+                  // its report; timestamps and insertion order cannot cause a reload.
+                  const previous = db
                     .listAgents()
-                    .find((row) => row.machineId === message.machineId)
-                    ?.fleet?.hooks;
+                    .find((row) => row.machineId === message.machineId)?.fleet;
+                  const sameHashes = (
+                    before: Record<string, string> = {},
+                    after: Record<string, string> = {}
+                  ): boolean =>
+                    Object.keys(before).length === Object.keys(after).length &&
+                    Object.entries(before).every(
+                      ([key, hash]) => after[key] === hash
+                    );
+                  const skillsChanged = !sameHashes(
+                    previous?.have?.skills,
+                    report.have?.skills
+                  );
+                  const pluginsChanged = !sameHashes(
+                    previous?.have?.plugins,
+                    report.have?.plugins
+                  );
                   const hooksChanged =
-                    JSON.stringify(previousHooks ?? {}) !==
+                    JSON.stringify(previous?.hooks ?? {}) !==
                     JSON.stringify(report.hooks ?? {});
                   db.setAgentFleet(message.machineId, report);
                   publishInstances(message.machineId);
-                  // The disk just changed under this machine's live sessions.
-                  refreshSessions(message.machineId, ws, hooksChanged);
+                  refreshSessions(message.machineId, ws, [
+                    ...(pluginsChanged ? ["reloadPlugins"] : []),
+                    ...(skillsChanged && !pluginsChanged
+                      ? [CONTROL_RELOAD_SKILLS]
+                      : []),
+                    ...(hooksChanged ? ["reinitialize"] : []),
+                  ]);
                 }
               }
               // A control a route is waiting on: the reply is that request's
