@@ -323,8 +323,8 @@ const ensure = async (ref: WorkspaceRef): Promise<Boundary> => {
  */
 const ANCHOR = `exec 2>&1
 set -eu
-ws=$1 scratch=$2 run=$3 uid=$4 gid=$5 runtime=$6 hidden=$7 ssh=$8
-shift 8
+ws=$1 scratch=$2 run=$3 uid=$4 gid=$5 runtime=$6 hidden=$7 ssh=$8 home=$9
+shift 9
 mount -o remount,bind,ro=recursive /
 mount -o remount,rw /proc
 for path in "$ws" "$scratch" "$run" "$@"; do
@@ -334,6 +334,17 @@ done
 mount --bind "$scratch" /tmp
 if [ -n "$runtime" ] && [ -d "$runtime" ]; then mount --bind "$run" "$runtime"; fi
 if [ -n "$hidden" ] && [ -d "$hidden" ]; then mount -t tmpfs -o size=4k,mode=0555 hidden "$hidden"; fi
+mask=$(mktemp -d "$run/auth-mask.XXXXXX")
+mount -t tmpfs -o size=4k,mode=0700,uid=0,gid=0 auth-mask "$mask"
+touch "$mask/empty"
+mount -o remount,bind,ro "$mask"
+for path in "$home/.claude/.credentials.json" "$home/.local/share/opencode/auth.json" "$home/.pi/agent/auth.json"; do
+  if [ -f "$path" ]; then
+    mount --bind "$mask/empty" "$path"
+    mount -o remount,bind,ro "$path"
+  fi
+done
+if [ -d "$home/.cli-proxy-api" ]; then mount -t tmpfs -o size=4k,mode=0555 hidden "$home/.cli-proxy-api"; fi
 if [ -n "$ssh" ]; then mount --bind "$ssh" ${SSH_INCLUDES}; fi
 mount -t tmpfs -o mode=1777,nosuid,nodev shm /dev/shm
 exec unshare --user --mount --map-user="$uid" --map-group="$gid" bash -c 'echo ${READY}; while :; do sleep 86400 & wait; done'`;
@@ -386,6 +397,7 @@ const linuxSpec = async (
       hideable(runtime, kept),
       hideable(dirname(sessiondPath()), kept),
       ssh,
+      homedir(),
       ...caches,
     ],
   };

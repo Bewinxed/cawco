@@ -1225,7 +1225,21 @@ export const startDaemon = (auth?: AuthState, rediscover = false) =>
  * already gone, and kills the daemon the usual way.
  */
 export const runDaemon = (auth?: AuthState, rediscover = false): void => {
-  const daemon = Effect.runFork(startDaemon(auth, rediscover));
+  const daemon = Effect.runFork(
+    startDaemon(auth, rediscover).pipe(
+      Effect.catchDefect((error) =>
+        Effect.logError(
+          `[daemon] ${error instanceof Error ? error.message : String(error)}`
+        ).pipe(
+          Effect.andThen(
+            Effect.sync(() => {
+              process.exitCode = 1;
+            })
+          )
+        )
+      )
+    )
+  );
   const drain = (signal: NodeJS.Signals): void => {
     // bun-types' `NodeJS.Process` merge redeclares `off` for its own
     // `"memoryPressure"` event only, which shadows @types/node's generic

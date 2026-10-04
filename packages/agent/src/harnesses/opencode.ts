@@ -5832,9 +5832,18 @@ export class OpencodeHarness implements Harness {
     }
     try {
       const client = await this.#ensure();
+      // This probe initializes the default directory's MCP servers, but owns no session.
       const result = await reached(
         client.mcp.status({}, { signal: AbortSignal.timeout(10_000) })
-      );
+      ).finally(async () => {
+        const disposed = await client.instance.dispose(
+          {},
+          { signal: AbortSignal.timeout(10_000) }
+        );
+        if (disposed.error) {
+          throw new Error(errorText(disposed.error));
+        }
+      });
       if (result.error || !result.data) {
         throw new Error(errorText(result.error));
       }
