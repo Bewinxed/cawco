@@ -157,9 +157,9 @@ enum Frame {
     /// A workflow run's question: answered in its run, never parked as a session's ask.
     case runQuestion(runId: String, raisedAt: Double?)
     case usage(Components.Schemas.FramePayload.Value10Payload)
-    case controlResult(Components.Schemas.FramePayload.Value13Payload)
+    case controlResult(Components.Schemas.FramePayload.Value14Payload)
     case error(requestId: String?, message: String)
-    case pulse(Components.Schemas.FramePayload.Value16Payload)
+    case pulse(Components.Schemas.FramePayload.Value17Payload)
     case supervisorEvent(Components.Schemas.SupervisorEvent)
     case workflow(Components.Schemas.WorkflowFrame)
     case ignored
@@ -179,15 +179,15 @@ enum Frame {
             self = .permissionSettled(frame)
         } else if let frame = payload.value10, frame.kind == .usage {
             self = .usage(frame)
-        } else if let frame = payload.value13, frame.kind == .controlResult {
+        } else if let frame = payload.value14, frame.kind == .controlResult {
             self = .controlResult(frame)
-        } else if let frame = payload.value14, frame.kind == .error {
+        } else if let frame = payload.value15, frame.kind == .error {
             self = .error(requestId: frame.requestId, message: frame.message)
-        } else if let frame = payload.value16, frame.kind == .pulse {
+        } else if let frame = payload.value17, frame.kind == .pulse {
             self = .pulse(frame)
-        } else if let frame = payload.value19, frame.kind == .supervisorEvent {
+        } else if let frame = payload.value20, frame.kind == .supervisorEvent {
             self = .supervisorEvent(frame.event)
-        } else if let frame = payload.value21 {
+        } else if let frame = payload.value22 {
             self = .workflow(frame)
         } else {
             self = .ignored
