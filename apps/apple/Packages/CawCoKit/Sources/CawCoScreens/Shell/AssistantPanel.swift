@@ -136,7 +136,8 @@ final class AssistantPanelView: UIView {
         }
         row.isLayoutMarginsRelativeArrangement = true
         row.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 0, leading: 12, bottom: 0, trailing: 12)
-        row.heightAnchor.constraint(equalToConstant: 47).isActive = true
+        // `.panel-head` is 47 with its hairline inside it: 46 and the rule under it.
+        row.heightAnchor.constraint(equalToConstant: 46).isActive = true
         title.accessibilityTraits = .header
         return row
     }
@@ -345,8 +346,7 @@ final class AssistantPanelView: UIView {
         session.widthAnchor.constraint(equalToConstant: 100).isActive = true
         let source = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
         source.text = event.source.rawValue
-        let verdict = KitBadge(event.verdict.rawValue, variant: Self.tone(event.verdict))
-        verdict.layer.cornerRadius = 9
+        let verdict = Self.pill(event.verdict)
         let row = UIStackView(arrangedSubviews: [time, session, source, verdict])
         row.spacing = Space.space2
         row.alignment = .firstBaseline
@@ -360,16 +360,32 @@ final class AssistantPanelView: UIView {
         }
         row.isLayoutMarginsRelativeArrangement = true
         row.directionalLayoutMargins = NSDirectionalEdgeInsets(top: Space.space1, leading: 0, bottom: Space.space1, trailing: 0)
+        // `.log-row`: the 18pt pill and `space1` above and under it.
+        row.heightAnchor.constraint(equalToConstant: 18 + Space.space1 * 2).isActive = true
         return row
     }
 
-    private static func tone(_ verdict: SupervisorEvent.VerdictPayload) -> KitBadge.Variant {
-        switch verdict {
-        case .reply: .live
-        case .escalate, .ask: .attn
-        case .error: .fail
-        case .silent, .skipped: .secondary
+    /// `.log-verdict`: an 18pt pill, 6pt in, label type, in its tone's ground and ink.
+    private static func pill(_ verdict: SupervisorEvent.VerdictPayload) -> UIView {
+        let (ground, ink): (UIColor, UIColor) = switch verdict {
+        case .reply: (Palette.statusLiveBg, Palette.statusLiveInk)
+        case .escalate, .ask: (Palette.statusAttnBg, Palette.statusAttnInk)
+        case .error: (Palette.statusFailBg, Palette.statusFailInk)
+        case .silent, .skipped: (Palette.surfaceRecess, Palette.inkMuted)
         }
+        let label = KitLabel(TypeScale.typeLabel, ink: ink)
+        label.text = verdict.rawValue
+        let pill = UIStackView(arrangedSubviews: [label])
+        pill.alignment = .center
+        pill.isLayoutMarginsRelativeArrangement = true
+        pill.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 0, leading: 6, bottom: 0, trailing: 6)
+        pill.backgroundColor = ground
+        pill.layer.cornerRadius = 9
+        pill.heightAnchor.constraint(equalToConstant: 18).isActive = true
+        pill.setContentHuggingPriority(.required, for: .horizontal)
+        pill.isAccessibilityElement = true
+        pill.accessibilityLabel = verdict.rawValue
+        return pill
     }
 }
 
@@ -390,12 +406,24 @@ final class AssistantHolder: UIViewController {
         fatalError("AssistantHolder is built in code")
     }
 
+    /// The drawer's own header stands between the grabber and the panel's
+    /// head: `Drawer.Header` is `p-4` around a title only a screen reader
+    /// meets, 32pt of clear card.
     override func loadView() {
-        view = panel
+        let box = UIView()
         panel.backgroundColor = .clear
-        let tall = panel.heightAnchor.constraint(equalToConstant: UIScreen.main.bounds.height * 0.85)
+        panel.translatesAutoresizingMaskIntoConstraints = false
+        box.addSubview(panel)
+        let tall = box.heightAnchor.constraint(equalToConstant: UIScreen.main.bounds.height * 0.85)
         tall.priority = .defaultHigh
-        tall.isActive = true
+        NSLayoutConstraint.activate([
+            panel.topAnchor.constraint(equalTo: box.topAnchor, constant: 32),
+            panel.bottomAnchor.constraint(equalTo: box.bottomAnchor),
+            panel.leadingAnchor.constraint(equalTo: box.leadingAnchor),
+            panel.trailingAnchor.constraint(equalTo: box.trailingAnchor),
+            tall,
+        ])
+        view = box
     }
 
     override func viewDidDisappear(_ animated: Bool) {
@@ -450,7 +478,8 @@ final class AssistantPane: UIView {
             trailingAnchor.constraint(equalTo: host.trailingAnchor, constant: -24),
             widthAnchor.constraint(equalToConstant: 380),
             tall,
-            heightAnchor.constraint(lessThanOrEqualTo: host.heightAnchor, constant: -64),
+            // `min(899px, 100dvh - 64px)` under `top: 40px`: never nearer the foot than 24.
+            bottomAnchor.constraint(lessThanOrEqualTo: host.bottomAnchor, constant: -24),
         ])
     }
 
