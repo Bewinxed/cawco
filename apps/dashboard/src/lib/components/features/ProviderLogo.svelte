@@ -56,7 +56,7 @@
   };
 
   /* The marks drawn in a single ink. Upstream they carry a fixed dark fill
-     (`github-icon` is #161614) or none at all, which paints black. */
+     (the GitHub mark) or none at all, which paints black. */
   const INK = new Set(["openai", "xai", "moonshot", "github"]);
 
   let {
