@@ -10,16 +10,17 @@
 # The builds run one after the other into one DerivedData: two xcodebuilds
 # sharing it lock its build.db. -skipPackagePluginValidation lets the
 # OpenAPIGenerator build plugin (CawCoAPI) run without Xcode's trust prompt.
-# The checkout is rsynced to ~/build/cawco-apple, never the deploy clone.
-# Sessions that build at the same time each set CAWCO_BUILD_DIR to a name of
-# their own (~/build/<name>): one directory shared by two builds has each
-# rsync delete the other's files and both lock one build.db.
+# Each workspace owns ~/build/cawco-apple/<workspace>, including DerivedData
+# and logs. A Mac-side lock covers retirement, rsync and both builds.
 # Only processes this script starts are stopped, by PID.
 set -euo pipefail
 
 SSH=(ssh -F "$HOME/.ssh/config" -o BatchMode=yes mac)
-BUILD=${CAWCO_BUILD_DIR:-cawco-apple}
-REMOTE=build/$BUILD/apps/apple
+ROOT=$(git rev-parse --show-toplevel)
+BUILD=$(basename "$ROOT")
+if [[ $ROOT == "$HOME/cockpit" ]]; then BUILD=main; fi
+[[ $BUILD =~ ^[a-zA-Z0-9._-]+$ ]] || { echo "invalid workspace name: $BUILD" >&2; exit 2; }
+REMOTE=build/cawco-apple/$BUILD/apps/apple
 
 [[ -f apps/apple/project.yml ]] || { echo "run from the repo root" >&2; exit 2; }
 PLATFORM=${1:-both}
@@ -28,19 +29,85 @@ case $PLATFORM in
   *) echo "usage: build-both.sh [ios|macos]" >&2; exit 2 ;;
 esac
 
-"${SSH[@]}" "mkdir -p $REMOTE"
+# Pass the authoritative workspace inventory from this host, never the Mac's
+# copies. Fail before retirement if the inventory cannot be read.
+LIVE=(main "$BUILD")
+[[ -d $HOME/.worktrees ]] || { echo "missing workspace inventory: $HOME/.worktrees" >&2; exit 2; }
+for workspace in "$HOME"/.worktrees/*; do
+  [[ ! -d $workspace ]] || LIVE+=("$(basename "$workspace")")
+done
+
+read -r -d '' PREPARE <<'EOF' || true
+set -euo pipefail
+BUILD=$1
+shift
+ROOT="$HOME/build/cawco-apple"
+mkdir -p "$ROOT/.locks"
+LOCK="$ROOT/.locks/$BUILD"
+command -v shlock >/dev/null || { echo "shlock is required for Apple workspace builds" >&2; exit 2; }
+shlock -p $$ -f "$LOCK" || { echo "workspace $BUILD is already building (lock: $LOCK)" >&2; exit 3; }
+trap 'rm -f "$LOCK"' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM HUP
+
+retire() {
+  local directory=$1 lock=$2 size
+  [[ -e $directory && ! -L $directory ]] || return 0
+  # Active old scripts have no lock: recursive mtimes protect their work too.
+  [[ -z $(find "$directory" -mmin -180 -print -quit) ]] || return 0
+  shlock -p $$ -f "$lock" || return 0
+  size=$(du -sh "$directory" | awk '{print $1}')
+  echo "RETIRED $directory ($size)"
+  rm -rf -- "$directory"
+  rm -f "$lock"
+}
+for directory in "$ROOT"/* "$ROOT"/.[!.]* "$ROOT"/..?*; do
+  [[ -e $directory ]] || continue
+  name=${directory##*/}
+  [[ $name != .locks ]] || continue
+  live=0
+  for workspace in "$@"; do [[ $name != "$workspace" ]] || live=1; done
+  [[ $live == 1 ]] || retire "$directory" "$ROOT/.locks/$name"
+done
+for directory in "$HOME"/build/cawco-apple-*; do
+  retire "$directory" "$ROOT/.locks/legacy-${directory##*/}"
+done
+mkdir -p "$ROOT/$BUILD/apps/apple"
+echo READY
+# The same SSH process keeps the lock while the caller rsyncs, then executes
+# the build script sent on stdin. EOF on a failed sync releases the lock.
+bash --norc -s -- "build/cawco-apple/$BUILD/apps/apple" "$PLATFORM" "$BUILD"
+EOF
+printf -v COMMAND 'PLATFORM=%q bash --norc -c %q --' "$PLATFORM" "$PREPARE"
+for argument in "$BUILD" "${LIVE[@]}"; do printf -v COMMAND '%s %q' "$COMMAND" "$argument"; done
+coproc MAC_BUILD { "${SSH[@]}" "$COMMAND"; }
+MAC_PID=$MAC_BUILD_PID
+exec {MAC_INPUT}>&"${MAC_BUILD[1]}" {MAC_OUTPUT}<&"${MAC_BUILD[0]}"
+MAC_WRITE=${MAC_BUILD[1]}
+MAC_READ=${MAC_BUILD[0]}
+exec {MAC_WRITE}>&- {MAC_READ}<&-
+release() { exec {MAC_INPUT}>&-; }
+trap release EXIT
+while IFS= read -r line <&"$MAC_OUTPUT"; do
+  [[ $line != READY ]] || break
+  echo "$line"
+done
+if [[ ${line:-} != READY ]]; then wait "$MAC_PID"; exit 1; fi
+echo "BUILD DIRECTORY mac:~/build/cawco-apple/$BUILD"
 rsync -a --delete \
   --exclude .build --exclude DerivedData \
   --exclude CawCo.xcodeproj --exclude CawCo/Info.plist \
   -e "ssh -F $HOME/.ssh/config -o BatchMode=yes" \
   apps/apple/ "mac:$REMOTE/"
 
-"${SSH[@]}" bash -s -- "$REMOTE" "$PLATFORM" "$BUILD" <<'EOF'
+cat >&"$MAC_INPUT" <<'EOF'
 set -euo pipefail
 cd "$HOME/$1"
 PLATFORM=$2
 BUILD=$3
-DD="$HOME/build/$BUILD/DerivedData"
+DD="$HOME/build/cawco-apple/$BUILD/DerivedData"
+LOGS="$HOME/build/cawco-apple/$BUILD/logs"
+mkdir -p "$LOGS"
 SETTLE=8
 XCODEGEN=$(command -v xcodegen || echo /opt/homebrew/bin/xcodegen)
 "$XCODEGEN" generate --quiet
@@ -48,9 +115,9 @@ XCODEGEN=$(command -v xcodegen || echo /opt/homebrew/bin/xcodegen)
 build() { # <destination> <label>
   xcodebuild -project CawCo.xcodeproj -scheme CawCo -destination "$1" \
     -derivedDataPath "$DD" -skipPackagePluginValidation build \
-    >"/tmp/$BUILD-build-$2.log" 2>&1 || {
-    grep -a -E "error:|BUILD FAILED" "/tmp/$BUILD-build-$2.log" | sort -u | head -40
-    echo "FAILED $2 (full log: mac:/tmp/$BUILD-build-$2.log)"
+    >"$LOGS/build-$2.log" 2>&1 || {
+    grep -a -E "error:|BUILD FAILED" "$LOGS/build-$2.log" | sort -u | head -40
+    echo "FAILED $2 (full log: mac:$LOGS/build-$2.log)"
     exit 1
   }
   echo "BUILT $2"
@@ -91,7 +158,7 @@ print(best[1], best[2], best[3])
   }
   xcrun simctl bootstatus "$UDID" -b >/dev/null
   xcrun simctl install "$UDID" "$DD/Build/Products/Debug-iphonesimulator/CawCo.app"
-  LOG=/tmp/cawco-launch-iOS.log
+  LOG="$LOGS/launch-iOS.log"
   : >"$LOG"
   if ! xcrun simctl launch --terminate-running-process \
     --stdout="$LOG" --stderr="$LOG" "$UDID" dev.cawco.app >>"$LOG" 2>&1; then
@@ -119,7 +186,7 @@ print(best[1], best[2], best[3])
 # directly, so its PID and stderr are ours.
 macos() {
   build "platform=macOS,variant=Mac Catalyst" macOS
-  LOG=/tmp/cawco-launch-macOS.log
+  LOG="$LOGS/launch-macOS.log"
   "$DD/Build/Products/Debug-maccatalyst/CawCo.app/Contents/MacOS/CawCo" >"$LOG" 2>&1 &
   PID=$!
   sleep "$SETTLE"
@@ -139,3 +206,7 @@ macos() {
 if [[ $PLATFORM != macos ]]; then ios; fi
 if [[ $PLATFORM != ios ]]; then macos; fi
 EOF
+release
+trap - EXIT
+cat <&"$MAC_OUTPUT"
+wait "$MAC_PID"
