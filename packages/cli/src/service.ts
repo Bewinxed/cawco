@@ -542,6 +542,12 @@ export interface ServiceSpec {
   /** Printed after a LaunchAgent install, for the one service that has more to say. */
   readonly launchAgentNote?: readonly string[];
   readonly mode: ServiceMode;
+  /**
+   * systemd `OOMPolicy=`, for a service whose processes are not one piece of
+   * work. Absent, systemd's default `stop` ends every process of the unit when
+   * the kernel kills one of them for memory. launchd has no counterpart.
+   */
+  readonly oomPolicy?: "continue";
   /** Whether the service is really up, which the init system does not know. */
   readonly probe: () => Promise<string | undefined>;
   /**
@@ -694,6 +700,14 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
       // crash is worth restarting for (design §11: `Restart=on-failure`).
       restartOnSuccess: false,
       restartSec: 2,
+      // Every session on the machine runs in this one unit. Under systemd's
+      // default, the kernel killing one process of it for memory ends the
+      // unit: one browser tab chosen by the OOM killer took every session
+      // down with it ("Failed with result 'oom-kill'", 2026-10-04). The
+      // manual, systemd.service(5): "If set to continue and a process in the
+      // unit is killed by the OOM killer, this is logged but the unit
+      // continues running."
+      oomPolicy: "continue",
       check: needs(layout.sessiond, "sessiond"),
       probe: probeSessiond,
     },
@@ -949,7 +963,7 @@ ${environment(spec)
   .map(([key, value]) => `Environment=${key}=${value}`)
   .join("\n")}
 Restart=${spec.restartOnSuccess ? "always" : "on-failure"}
-RestartSec=${spec.restartSec}
+RestartSec=${spec.restartSec}${spec.oomPolicy ? `\nOOMPolicy=${spec.oomPolicy}` : ""}
 
 [Install]
 WantedBy=default.target

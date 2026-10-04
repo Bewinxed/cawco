@@ -257,7 +257,7 @@ export const changedServices = async (
  * because the daemon cannot depend on the CLI that owns them. The unit names
  * must stay identical to the installer's in `packages/cli`.
  */
-const unitPath = (id: Service): string =>
+const unitPath = (id: Service | "sessiond"): string =>
   platform() === "darwin"
     ? join(homedir(), "Library", "LaunchAgents", `dev.cawco.${id}.plist`)
     : join(
@@ -268,7 +268,7 @@ const unitPath = (id: Service): string =>
       );
 
 /** A service nobody installed here is not this machine's to restart. */
-const isInstalled = (id: Service): Promise<boolean> =>
+const isInstalled = (id: Service | "sessiond"): Promise<boolean> =>
   Bun.file(unitPath(id)).exists();
 
 const restartCommand = (id: Service): string[] =>
@@ -468,22 +468,40 @@ const buildsDashboard = async (root: string): Promise<boolean> =>
  * from before the update and knows only the old units. `cli` is that entry
  * point, run from `cwd`, the root of what arrived. An update that did not
  * reach the dashboard, and a machine that never installed it, are left alone.
+ *
+ * sessiond's unit goes the same way when the update reached the agent, whose
+ * code the installer is part of. Under systemd an install over a running
+ * service writes the file, reloads the manager and leaves the process alone,
+ * so no session is touched. Under launchd an install boots the service out to
+ * load its plist, which would end every session on the Mac, and the plist
+ * carries nothing an update changes: it is not written there.
  */
-export const installDashboardUnits = async (
+export const installUnits = async (
   changed: UpdateReport["changed"],
   cli: string,
   cwd: string
 ): Promise<void> => {
-  if (!(changed.includes("dashboard") && (await isInstalled("dashboard")))) {
-    return;
+  const owed: (Service | "sessiond")[] = [];
+  if (changed.includes("dashboard") && (await isInstalled("dashboard"))) {
+    owed.push("dashboard");
   }
-  const units = await run(
-    [process.execPath, cli, "service", "install", "dashboard"],
-    SERVICE_TIMEOUT_MS,
-    cwd
-  );
-  if (!units.ok) {
-    throw failed("installing the dashboard's units", units);
+  if (
+    platform() === "linux" &&
+    changed.includes("agent") &&
+    (await isInstalled("sessiond"))
+  ) {
+    owed.push("sessiond");
+  }
+  for (const id of owed) {
+    // biome-ignore lint/performance/noAwaitInLoops: one install at a time, so a failure names its service
+    const units = await run(
+      [process.execPath, cli, "service", "install", id],
+      SERVICE_TIMEOUT_MS,
+      cwd
+    );
+    if (!units.ok) {
+      throw failed(`installing ${id}'s units`, units);
+    }
   }
 };
 
@@ -666,7 +684,7 @@ const pullAndRestart = async (
   // running dashboard's pages point at, so anything that can fail between the
   // build and the restart leaves the live dashboard serving pages whose
   // scripts are gone. A units step that fails here leaves the old build whole.
-  await installDashboardUnits(
+  await installUnits(
     report.changed,
     join(root, "packages", "cli", "src", "cli.ts"),
     root

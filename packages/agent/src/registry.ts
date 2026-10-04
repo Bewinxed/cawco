@@ -21,13 +21,7 @@ import { realpath } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { UpdateReport } from "@cawco/core";
 import { CAWCO_ENV, readEnv } from "@cawco/core";
-import {
-  failed,
-  installDashboardUnits,
-  restartStack,
-  run,
-  SERVICES,
-} from "./update";
+import { failed, installUnits, restartStack, run, SERVICES } from "./update";
 
 /**
  * What a user installs. One package, so a fleet has one version to compare.
@@ -186,7 +180,7 @@ export const registryUpdate = async ({
     throw failed("finding bun's global bin directory", bin);
   }
   const cli = await realpath(join(bin.said, PACKAGE_NAME));
-  await installDashboardUnits(report.changed, cli, dirname(cli));
+  await installUnits(report.changed, cli, dirname(cli));
 
   return restartStack(report, { restartAgent, force, busy }, [
     "the dashboard ships built, so nothing was compiled here",
