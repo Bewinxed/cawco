@@ -165,7 +165,11 @@ build() { # <destination> <label>
   xcodebuild -project CawCo.xcodeproj -scheme CawCo -destination "$1" \
     -derivedDataPath "$DD" -skipPackagePluginValidation build \
     >"$LOGS/build-$2.log" 2>&1 || {
-    grep -a -E "error:|BUILD FAILED" "$LOGS/build-$2.log" | sort -u | head -40
+    if grep -a -q -E "error:|BUILD FAILED" "$LOGS/build-$2.log"; then
+      grep -a -E "error:|BUILD FAILED" "$LOGS/build-$2.log" | sort -u | head -40 || true
+    else
+      tail -20 "$LOGS/build-$2.log" || true
+    fi
     echo "FAILED $2 (full log: mac:$LOGS/build-$2.log)"
     exit 1
   }
@@ -213,7 +217,11 @@ print(best[1], best[2], best[3])
   : >"$LOG"
   if ! xcrun simctl launch --terminate-running-process \
     --stdout="$LOG" --stderr="$LOG" "$UDID" dev.cawco.app >>"$LOG" 2>&1; then
-    grep -E "dyld|abort|rror|Library not loaded|Reason" "$LOG" | head -20
+    if grep -q -E "dyld|abort|rror|Library not loaded|Reason" "$LOG"; then
+      grep -E "dyld|abort|rror|Library not loaded|Reason" "$LOG" | head -20 || true
+    else
+      tail -20 "$LOG" || true
+    fi
     echo "FAILED launch $LABEL"
     end_ios
     exit 1
@@ -224,7 +232,11 @@ print(best[1], best[2], best[3])
     echo "LAUNCHED $LABEL"
     end_ios
   else
-    grep -E "dyld|abort|Library not loaded|Reason|Fatal" "$LOG" | head -20
+    if grep -q -E "dyld|abort|Library not loaded|Reason|Fatal" "$LOG"; then
+      grep -E "dyld|abort|Library not loaded|Reason|Fatal" "$LOG" | head -20 || true
+    else
+      tail -20 "$LOG" || true
+    fi
     find "$HOME/Library/Logs/DiagnosticReports" -name 'CawCo*.ips' -newer "$LOG" 2>/dev/null |
       head -1 | xargs -I{} grep -m3 -E '"(indicator|namespace|reasons)"' {} || true
     echo "FAILED launch $LABEL"
@@ -249,7 +261,11 @@ macos() {
     echo "LAUNCHED macOS"
   else
     wait "$PID" 2>/dev/null || true
-    grep -E "dyld|abort|Library not loaded|Reason|Termination" "$LOG" | head -20
+    if grep -q -E "dyld|abort|Library not loaded|Reason|Termination" "$LOG"; then
+      grep -E "dyld|abort|Library not loaded|Reason|Termination" "$LOG" | head -20 || true
+    else
+      tail -20 "$LOG" || true
+    fi
     echo "FAILED launch macOS"
     exit 1
   fi
