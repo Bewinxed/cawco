@@ -935,23 +935,42 @@ function addNote(target: SessionState, message: Message): void {
   place(target);
 }
 
+/** Takes the row `id` names out of `list`, and hands it over. */
+function pull(list: Message[], id: string): Message | undefined {
+  const at = list.findIndex((message) => message.id === id);
+  return at < 0 ? undefined : list.splice(at, 1)[0];
+}
+
 /**
- * A block the hub sent, as the object this view holds it under. A send this
- * view already draws — its own copy on the way, or the row waiting to be read
- * — is the same row taking the hub's word, so it is adopted in place rather
- * than drawn twice; this tab's own copy then leaves its list.
+ * A block the hub sent, entering `into` as the object this view holds it
+ * under. An id names one row, held by one list: a send goes from this tab's
+ * own (`local`) to waiting (`queued`) to placed (`blocks`), and the list it
+ * was in gives it up in the same step it enters the next. The object on
+ * screen takes the hub's word in place, so the row stays where it is drawn.
+ * This holds whatever the block is — the hub's row for the send, or the row
+ * the harness stored under the send's own id.
  */
-function take(target: SessionState, block: TranscriptBlock): Message {
+function take(
+  target: SessionState,
+  block: TranscriptBlock,
+  into: "blocks" | "queued"
+): Message {
   const fresh = block as Message;
-  if (!block.state) {
-    return fresh;
-  }
-  const held = target.messages.find(
-    (message) => message.id === block.id && message.state
-  );
-  if (target.local.some((message) => message.id === block.id)) {
-    target.local = target.local.filter((message) => message.id !== block.id);
-  }
+  const mine = pull(target.local, block.id);
+  const waiting =
+    into === "blocks"
+      ? pull(target.queued, block.id)
+      : target.queued.find((message) => message.id === block.id);
+  // A placed send the hub moves leaves `blocks` and comes back in one batch:
+  // the row still on screen is the one it comes back as.
+  const held =
+    waiting ??
+    mine ??
+    (block.state
+      ? target.messages.find(
+          (message) => message.id === block.id && message.state
+        )
+      : undefined);
   if (!held) {
     return fresh;
   }
@@ -1147,15 +1166,15 @@ function applyTranscript(
         void readTranscript(target.instanceId, true);
         place(target);
         return;
-      case "block.append": {
-        const block = take(target, event.block);
-        if (block.parentToolUseId) {
-          branchOf(target, block.parentToolUseId).messages.push(block);
+      case "block.append":
+        if (event.block.parentToolUseId) {
+          branchOf(target, event.block.parentToolUseId).messages.push(
+            event.block as Message
+          );
         } else {
-          target.blocks.push(block);
+          target.blocks.push(take(target, event.block, "blocks"));
         }
         break;
-      }
       case "block.insert": {
         const at =
           event.after === null
@@ -1163,7 +1182,7 @@ function applyTranscript(
             : target.blocks.findLastIndex(
                 (message) => message.id === event.after
               ) + 1;
-        target.blocks.splice(at, 0, take(target, event.block));
+        target.blocks.splice(at, 0, take(target, event.block, "blocks"));
         break;
       }
       case "block.update":
@@ -1179,7 +1198,9 @@ function applyTranscript(
         break;
       }
       case "queue":
-        target.queued = event.blocks.map((block) => take(target, block));
+        target.queued = event.blocks.map((block) =>
+          take(target, block, "queued")
+        );
         break;
       case "branch": {
         const known = target.subagents[event.branch.toolUseId];
@@ -1234,8 +1255,10 @@ function adoptTranscriptPage(target: SessionState, page: TranscriptPage): void {
   if (where.sessionKey) {
     target.sessionId = where.sessionKey;
   }
-  target.blocks = page.blocks.map((block) => take(target, block));
-  target.queued = (page.queued ?? []).map((block) => take(target, block));
+  target.blocks = page.blocks.map((block) => take(target, block, "blocks"));
+  target.queued = (page.queued ?? []).map((block) =>
+    take(target, block, "queued")
+  );
   target.notes = [];
   target.cursor = page.cursor;
   const { tail } = page;
@@ -1283,7 +1306,9 @@ function prependTranscriptPage(
 ): void {
   const known = new Set(target.blocks.map((block) => block.id));
   target.blocks = [
-    ...(page.blocks as Message[]).filter((block) => !known.has(block.id)),
+    ...page.blocks
+      .filter((block) => !known.has(block.id))
+      .map((block) => take(target, block, "blocks")),
     ...target.blocks,
   ];
   target.cursor = page.cursor;
@@ -3663,7 +3688,11 @@ function noteSendSubmitted(
     const { sendFailed: _failed, ...kept } = drawn.metadata ?? {};
     drawn.state = "sending";
     drawn.metadata = kept;
-  } else if (replaces === undefined) {
+  } else if (
+    replaces === undefined &&
+    // A send the hub already placed is drawn by the hub's row for it.
+    !target.messages.some((message) => message.id === commandId)
+  ) {
     target.local.push(
       localUserMessage(instanceId, commandId, text, selectionExtras(extras))
     );
