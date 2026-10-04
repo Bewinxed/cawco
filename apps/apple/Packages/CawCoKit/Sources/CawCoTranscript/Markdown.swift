@@ -132,6 +132,9 @@ enum MarkdownRender {
         var element: Markup?
         // The web's markdown keeps quotes and dashes as typed: no smart punctuation.
         for node in Document(parsing: source, options: [.disableSmartOpts]).children {
+            // A block that is only comments is an empty text node: no box, and
+            // nothing for the blocks around it to stand against.
+            if let html = node as? HTMLBlock, shown(html.rawHTML).allSatisfy(\.isWhitespace) { continue }
             // Raw HTML blocks in a row are bare text nodes side by side: they run
             // on in one line box, nothing between them (`</details><custom-tag>`).
             if node is HTMLBlock, previous is HTMLBlock, let last = out.last, case let .text(before) = last.kind,
@@ -228,6 +231,12 @@ enum MarkdownRender {
         return (top, bottom)
     }
 
+    /// Raw HTML as the web's markdown leaves it: a tag or an unknown element is
+    /// its source as text, and a comment is nothing at all.
+    static func shown(_ rawHTML: String) -> String {
+        rawHTML.replacing(/<!--.*?-->/.dotMatchesNewlines(), with: "")
+    }
+
     /// The top-level blocks a source is cut at: each one, but a raw HTML block
     /// that follows another stays with it, since the two draw as one line (`blocks`).
     static func pieceHeads(_ children: [Markup]) -> [Markup] {
@@ -300,7 +309,7 @@ enum MarkdownRender {
         case let html as HTMLBlock:
             // The web's markdown renders no raw HTML: the block is its source as
             // a bare text node, white space collapsed as `white-space: normal` does.
-            let text = html.rawHTML.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+            let text = shown(html.rawHTML).split(whereSeparator: \.isWhitespace).joined(separator: " ")
             return .text(NSAttributedString(string: text, attributes: base(style)))
         default:
             return .text(flow(node, style: style, depth: 0))
@@ -512,10 +521,18 @@ enum MarkdownRender {
 
     static func inline(_ node: Markup, attributes: [NSAttributedString.Key: Any], style: ProseStyle) -> NSAttributedString {
         let out = NSMutableAttributedString()
+        /// Prose text as `white-space: normal` sets it: a run of spaces is one
+        /// space, and none follows a space already set (the two either side of
+        /// a comment that drew nothing).
+        func collapsed(_ text: String) -> String {
+            var text = text.replacing(#/ {2,}/#, with: " ")
+            if out.string.hasSuffix(" "), text.hasPrefix(" ") { text.removeFirst() }
+            return text
+        }
         func walk(_ node: Markup, _ attributes: [NSAttributedString.Key: Any]) {
             for child in node.children {
                 switch child {
-                case let text as Markdown.Text: out.append(autolinked(text.string, attributes))
+                case let text as Markdown.Text: out.append(autolinked(collapsed(text.string), attributes))
                 case is Strong:
                     var strong = traits(attributes, bold: true)
                     if let ink = style.strongInk { strong[.foregroundColor] = ink }
@@ -551,11 +568,12 @@ enum MarkdownRender {
                 case is LineBreak: out.append(NSAttributedString(string: "\u{2028}", attributes: attributes))
                 case let image as Markdown.Image: out.append(NSAttributedString(string: image.plainText, attributes: attributes))
                 case let html as InlineHTML:
-                    // The web's markdown (svelte-streamdown) renders no raw HTML: a tag, a
-                    // comment, an unknown element is its source as text. The one tag its
-                    // lexer reads is `<br>` (marked-br: `/^<br\s*\/?>/i`), a line break.
+                    // The web's markdown (svelte-streamdown) renders no raw HTML: a tag or
+                    // an unknown element is its source as text, and a comment is nothing.
+                    // The one tag its lexer reads is `<br>` (marked-br: `/^<br\s*\/?>/i`),
+                    // a line break.
                     let isBreak = html.rawHTML.wholeMatch(of: /<br\s*\/?>/.ignoresCase()) != nil
-                    out.append(NSAttributedString(string: isBreak ? "\u{2028}" : html.rawHTML, attributes: attributes))
+                    out.append(NSAttributedString(string: isBreak ? "\u{2028}" : shown(html.rawHTML), attributes: attributes))
                 default: walk(child, attributes)
                 }
             }
