@@ -421,6 +421,8 @@ interface Move {
   animation?: Animation;
   /** Drops the slide's start while a style still holds the element. */
   hold?: () => void;
+  /** How far from its place it is parked while its way is further out (`parkOf`). */
+  park?: number | null;
   /** How much of the way it has come at a progress of its timing (`paced`). */
   share?: (progress: number) => number;
   x: number;
@@ -546,19 +548,25 @@ function paced(
   to: Keyframe,
   distance: number
 ): {
+  /** How much of the way it has come at a share of its time. */
+  along: (time: number) => number;
   frames: Keyframe[];
   share: (progress: number) => number;
   timing: { duration: number; easing: string };
 } {
   if (pace.speed && distance > 0) {
-    const along = glide(distance, pace.speed);
+    const way = glide(distance, pace.speed);
+    const share = (progress: number) =>
+      way.covered(progress * way.duration) / distance;
     return {
-      frames: along.frames(from, to),
-      share: (progress) => along.covered(progress * along.duration) / distance,
-      timing: { duration: Math.max(1, along.duration), easing: "linear" },
+      along: share,
+      frames: way.frames(from, to),
+      share,
+      timing: { duration: Math.max(1, way.duration), easing: "linear" },
     };
   }
   return {
+    along: easeInOut,
     frames: [from, to],
     share: (progress) => progress,
     timing: pace.close ? closing() : travel(),
@@ -713,7 +721,15 @@ function heldBy(move: Move | undefined) {
   }
   const timed = move.animation.effect?.getComputedTiming().progress ?? 1;
   const progress = move.share ? move.share(timed) : timed;
-  return { x: move.x * (1 - progress), y: move.y * (1 - progress) };
+  const y = move.y * (1 - progress);
+  return {
+    x: move.x * (1 - progress),
+    // Parked (`parkOf`), it is drawn no further out than its park.
+    y:
+      typeof move.park === "number"
+        ? Math.sign(y) * Math.min(move.park, Math.abs(y))
+        : y,
+  };
 }
 
 /** An element's own `translate`, offset by a step: composed, never replaced. */
@@ -772,6 +788,57 @@ function unseen(view: number, place: Placed, dy: number): boolean {
   const off = (at: number) => at + place.h <= 0 || at >= window.innerHeight;
   return off(top) && off(top + dy);
 }
+
+/**
+ * How far from its place a slide is parked, when it starts further out of
+ * the viewport than that: just past the viewport's edge on the side it comes
+ * from, its bleed clear of it. It stands there until its true way brings it
+ * as near, and is on that way from then on, so what the reader sees of it is
+ * the slide it always was: it comes in over the edge, at the pace and on the
+ * frame it would have. Slid its whole way, a row 4,256px under the rail's
+ * foot (the rows under a tree of 133 folding) crossed twenty viewports of
+ * layer in 160ms, and the compositor put frames out before it had them
+ * drawn: over five runs of thirty folds, 8 to 43 frames with content
+ * missing (30 a run), and 9 to 29 parked (20 a run). Only a slide straight
+ * up or down is parked; `null`, it runs its whole way.
+ */
+function parkOf(
+  view: number,
+  place: Placed,
+  x: number,
+  y: number
+): number | null {
+  if (x !== 0) {
+    return null;
+  }
+  const top = view + place.cy;
+  const clear =
+    BLEED + Math.max(0, y > 0 ? window.innerHeight - top : top + place.h);
+  return Math.abs(y) > clear ? clear : null;
+}
+
+/**
+ * A slide's keyframes parked `park` px from its place (`parkOf`): where its
+ * way has it at each step of its time, never further out than that, linear
+ * between steps half a 60Hz frame apart.
+ */
+function parkedFrames(
+  y: number,
+  park: number,
+  duration: number,
+  along: (time: number) => number
+): Keyframe[] {
+  const steps = Math.max(2, Math.ceil(duration / PARK_STEP));
+  return Array.from({ length: steps + 1 }, (_, k) => {
+    const left = Math.abs(y) * (1 - along(k / steps));
+    return {
+      offset: k / steps,
+      translate: `0px ${(Math.sign(y) * Math.min(park, left)).toFixed(2)}px`,
+    };
+  });
+}
+/** A parked slide's keyframes are this far apart, ms. */
+const PARK_STEP = 1000 / 120;
 
 /** `height`: its laid-out height, how far its uncovering travels. */
 function arrival(element: HTMLElement, still: boolean, height: number) {
@@ -1022,7 +1089,7 @@ function spanOf(
 /** What one change will do, decided before anything is written. */
 interface Plan {
   edges: { carry?: Carry; element: HTMLElement; from: number; to: number }[];
-  slides: { element: HTMLElement; x: number; y: number }[];
+  slides: { element: HTMLElement; park: number | null; x: number; y: number }[];
   spans: { element: HTMLElement; from: number; to: number }[];
   stops: HTMLElement[];
 }
@@ -1157,7 +1224,7 @@ class Reflow {
       };
     });
     plan.slides.forEach((slide, i) => {
-      this.#slide(slide.element, slide.x, slide.y, own[i]);
+      this.#slide(slide.element, slide.x, slide.y, own[i], slide.park);
     });
     plan.edges.forEach((edge, i) => {
       const { carry } = edge;
@@ -1318,10 +1385,11 @@ class Reflow {
       was.ref === place.ref &&
       (was.x !== place.x || Math.abs(was.y + shift - place.y) > 0.01);
     if (moved && (Math.abs(x) > 0.5 || Math.abs(y) > 0.5)) {
-      if (unseen(this.#viewTop(), place, y)) {
+      const view = this.#viewTop();
+      if (unseen(view, place, y)) {
         plan.stops.push(element);
       } else {
-        plan.slides.push({ element, x, y });
+        plan.slides.push({ element, x, y, park: parkOf(view, place, x, y) });
       }
     } else if (moved) {
       // Laid out where it is drawn (a change turned back before its slide
@@ -1366,7 +1434,13 @@ class Reflow {
   }
 
   /** `own`: its own `translate`, read with its hold dropped (`change`). */
-  #slide(element: HTMLElement, x: number, y: number, own: string) {
+  #slide(
+    element: HTMLElement,
+    x: number,
+    y: number,
+    own: string,
+    park: number | null
+  ) {
     // The first frames hold it with a style, which their layout reads. An
     // animation started in the same update runs off the main thread, and the
     // frame is drawn, and counted as a layout shift, as though it had
@@ -1386,13 +1460,26 @@ class Reflow {
         { translate: "0px 0px" },
         Math.hypot(x, y)
       );
-      const animation = element.animate(slide.frames, {
-        ...slide.timing,
-        composite: "add",
-      });
+      // Parked, its frames are its way sampled over its time, so its timing
+      // is linear and its share of the way is read off its time.
+      const animation =
+        park === null
+          ? element.animate(slide.frames, {
+              ...slide.timing,
+              composite: "add",
+            })
+          : element.animate(
+              parkedFrames(y, park, slide.timing.duration, slide.along),
+              {
+                duration: slide.timing.duration,
+                easing: "linear",
+                composite: "add",
+              }
+            );
       animation.startTime = at;
       move.animation = animation;
-      move.share = slide.share;
+      move.park = park;
+      move.share = park === null ? slide.share : slide.along;
       animation.finished.then(
         () => {
           if (this.#moves.get(element) === move) {
