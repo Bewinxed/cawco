@@ -142,7 +142,7 @@ it actually means.
 | A separate fleet session spawned by a parent session (a full fleet instance, hub-named `<checkout>#<short id>`) | **delegate** | A whole other session handed a task; reported back to the parent. | "subagent" (a subagent is a child task inside one session); "handoff" as the noun for the entity (allowed as the verb/event) |
 | A host running the cawco daemon | **machine** | The roster rows, the offline states, the select-at-spawn type. | "host" in user-facing copy (fine as a network term in the code) |
 | The connected collective of machines the operator supervises | **fleet** | The board, the global-nav entry, "the fleet is down". | "cluster", "network" (ambiguous) |
-| A standing permission rule watching sessions | **rule** | The Rules surface and its rows. | "policy", "permission set" |
+| A standing instruction the hub enforces on every session: what to watch for and what to answer | **rule** | The Rules surface and its rows. | "policy", "permission set" |
 | Daily cost against a limit | **spend** (the number) / **budget** (the limit) | The Usage surface's total and threshold. | "cost" when the operator-facing term for the whole surface is Spend/Usage |
 
 **Banned-synonym quick list** (for the gate and for writers): `run` ≡ entity, `session` ≡ execution,

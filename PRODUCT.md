@@ -61,7 +61,7 @@ Away from a desk, the operator uses a Telegram bridge to receive permission prom
 - **delegate**: a separate fleet session spawned by a parent, reported back
 - **machine**: a host running the cawco daemon
 - **fleet**: the connected collective of machines
-- **rule**: a standing permission rule
+- **rule**: a standing instruction the hub enforces on every session
 - **spend / budget**: daily cost number / the limit
 
 **How state is shown (derived liveness in the UI):**
