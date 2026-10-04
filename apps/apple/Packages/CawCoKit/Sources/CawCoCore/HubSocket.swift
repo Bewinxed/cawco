@@ -1,3 +1,4 @@
+import CawCoAPI
 import Foundation
 
 /// One `/ws/dashboard` socket as an `AsyncThrowingStream`: it says when it
@@ -7,7 +8,30 @@ import Foundation
 struct HubSocket: Sendable {
     enum Event: Sendable {
         case opened
-        case message(Data)
+        case message(Message)
+    }
+
+    /// One message off the socket, read where it arrived: decoding a whole
+    /// board frame never runs on the main actor. The stream keeps the order.
+    struct Message: Sendable {
+        let read: Result<Inbound, any Error>
+        /// A board frame's pulses and continuations, which it carries beside its rows.
+        let pulses: [String: Components.Schemas.SessionPulse]
+        let continuations: [Components.Schemas.ContinuationJob]
+
+        init(_ data: Data) {
+            read = Result { try Inbound.read(data) }
+            if case .frame(.instances) = try? read.get() {
+                pulses = Inbound.pulses(data, enveloped: true)
+                continuations = Inbound.continuations(data)
+            } else if case .frame(.instancesDelta) = try? read.get() {
+                pulses = Inbound.pulses(data, enveloped: true)
+                continuations = Inbound.continuations(data)
+            } else {
+                pulses = [:]
+                continuations = []
+            }
+        }
     }
 
     let events: AsyncThrowingStream<Event, any Error>
@@ -29,9 +53,9 @@ struct HubSocket: Sendable {
                 while true {
                     switch try await task.receive() {
                     case let .data(data):
-                        continuation.yield(.message(data))
+                        continuation.yield(.message(Message(data)))
                     case let .string(text):
-                        continuation.yield(.message(Data(text.utf8)))
+                        continuation.yield(.message(Message(Data(text.utf8))))
                     @unknown default:
                         break
                     }

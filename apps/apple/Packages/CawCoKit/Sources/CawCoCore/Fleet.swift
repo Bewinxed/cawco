@@ -136,10 +136,20 @@ public final class FleetStore {
     /// Every workflow run as a session row (`runRowOf`).
     public private(set) var runRows: [InstanceRow] = []
     public internal(set) var runs: [String: BoardRun] = [:] {
-        didSet { reindex() }
+        didSet { if indexing { reindex() } }
     }
     public internal(set) var workflowNames: [String: String] = [:] {
-        didSet { reindex() }
+        didSet { if indexing { reindex() } }
+    }
+    @ObservationIgnored private var indexing = true
+
+    /// The first read of the workflows and their runs: both land, and the rows are indexed once.
+    func adopt(workflowNames names: [String: String], runs next: [String: BoardRun]) {
+        indexing = false
+        workflowNames = names
+        runs = next
+        indexing = true
+        reindex()
     }
     /// When the hub parked each waiting run's question, ms epoch.
     public internal(set) var runAskRaisedAt: [String: Double] = [:]

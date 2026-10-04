@@ -175,8 +175,8 @@ public final class HubConnection {
                     switch event {
                     case .opened:
                         opened()
-                    case let .message(data):
-                        receive(data)
+                    case let .message(message):
+                        receive(message)
                     }
                 }
             } catch {
@@ -334,6 +334,24 @@ public final class HubConnection {
         guard let client else {
             return false
         }
+        // The reads and their decoding run off the main actor; only what they
+        // found is adopted here, so the first frames keep drawing while the
+        // fleet is read.
+        let adopt = await Self.readFleet(client)
+        guard adopt(self) else { return false }
+        let runs = await Self.readRuns(client)
+        runs(self)
+        return true
+    }
+
+    /// What a read found, put on the connection once the read is over.
+    private typealias Adoption<Result> = @MainActor @Sendable (HubConnection) -> Result
+
+    /// The registry reads, each decoded where it was read: the hub's answers,
+    /// the instance rows in the board's own shape, and the parked asks out of
+    /// their envelopes. Nothing here touches the main actor.
+    @concurrent
+    private nonisolated static func readFleet(_ client: Client) async -> Adoption<Bool> {
         async let machines = try? await client.getApiAgents().ok.body.json
         async let rows = try? await client.getApiInstances().ok.body.json
         async let projects = try? await client.getApiProjects().ok.body.json
@@ -344,52 +362,75 @@ public final class HubConnection {
         // between reports has missed every `usage` frame.
         async let limits = try? await client.getApiUsageLimits().ok.body.json
         async let spend = try? await client.getApiUsageSpend().ok.body.json
-        let (readMachines, readRows, readProjects, readPending, readLimits, readSpend) = await (machines, rows, projects, pending, limits, spend)
-        if let readLimits {
-            fleet.adopt(limits: readLimits.machines.map { ($0.machineId, $0.limits, $0.openCodeGo) })
-        }
-        if let readSpend {
-            fleet.adopt(spend: readSpend)
-        } else {
-            fleet.spend = nil
-            fleet.spendFailed = true
-        }
-        guard !Task.isCancelled else {
-            return false
-        }
-        if let readMachines {
-            adopt(machines: readMachines)
-        }
-        if let readProjects {
-            fleet.projects = readProjects
-        }
-        if let readRows {
-            do {
-                fleet.adopt(rows: try Wire.transcode(readRows, as: [InstanceRow].self))
-                tasks.sweepLiveLedgers()
-            } catch {
-                log.error("instances unreadable: \(String(describing: error), privacy: .public)")
+        let (readMachines, readRows, readProjects, readPending, readLimits, readSpend, readCarried) =
+            await (machines, rows, projects, pending, limits, spend, carried)
+        let cancelled = Task.isCancelled
+        let boardRows = readRows.map { read in Result { try Wire.transcode(read, as: [InstanceRow].self) } }
+        // The hub's whole list of asks: one settled while this device was away
+        // sent its `permission_settled` to nobody listening.
+        var asks: [(AskFrame, String?)] = []
+        var runAsks: [(String, Double?)] = []
+        for envelope in readPending ?? [] where envelope.verb == .frames {
+            guard let data = try? Wire.data(envelope.payload), let frame = try? Inbound.frame(data) else {
+                continue
+            }
+            switch frame {
+            case let .permissionRequest(ask, routedTo): asks.append((ask, routedTo))
+            case let .runQuestion(runId, raisedAt): runAsks.append((runId, raisedAt))
+            default: break
             }
         }
-        if let readPending {
-            adopt(pending: readPending)
+        let limitRows = readLimits.map { read in read.machines.map { ($0.machineId, $0.limits, $0.openCodeGo) } }
+        let hasPending = readPending != nil
+        return { [asks, runAsks] hub in
+            if let limitRows {
+                hub.fleet.adopt(limits: limitRows)
+            }
+            if let readSpend {
+                hub.fleet.adopt(spend: readSpend)
+            } else {
+                hub.fleet.spend = nil
+                hub.fleet.spendFailed = true
+            }
+            guard !cancelled else {
+                return false
+            }
+            if let readMachines {
+                hub.adopt(machines: readMachines)
+            }
+            if let readProjects {
+                hub.fleet.projects = readProjects
+            }
+            switch boardRows {
+            case let .success(rows):
+                hub.fleet.adopt(rows: rows)
+                hub.tasks.sweepLiveLedgers()
+            case let .failure(error):
+                hub.log.error("instances unreadable: \(String(describing: error), privacy: .public)")
+            case nil:
+                break
+            }
+            if hasPending {
+                for (runId, raisedAt) in runAsks { hub.fleet.runAskRaisedAt[runId] = raisedAt }
+                hub.needs.replace(with: asks)
+            }
+            if let readCarried {
+                hub.fleet.continuations = readCarried
+            }
+            if readMachines == nil || readRows == nil || readProjects == nil {
+                hub.log.error("fleet read incomplete: machines \(readMachines != nil) rows \(readRows != nil) projects \(readProjects != nil)")
+                return false
+            }
+            hub.fleet.fleetRead = true
+            return true
         }
-        if let readCarried = await carried {
-            fleet.continuations = readCarried
-        }
-        if readMachines == nil || readRows == nil || readProjects == nil {
-            log.error("fleet read incomplete: machines \(readMachines != nil) rows \(readRows != nil) projects \(readProjects != nil)")
-            return false
-        }
-        fleet.fleetRead = true
-        await readRuns(client)
-        return true
     }
 
     /// Every workflow and its runs (workflow-state.svelte.ts `refreshWorkflows`);
-    /// `workflow` frames keep them current from then on.
-    private func readRuns(_ client: Client) async {
-        defer { fleet.runsRead = true }
+    /// `workflow` frames keep them current from then on. Read and shaped off
+    /// the main actor, as the registry is.
+    @concurrent
+    private nonisolated static func readRuns(_ client: Client) async -> Adoption<Void> {
         do {
             let workflows = try await client.getApiWorkflows().ok.body.json.workflows
             var names: [String: String] = [:]
@@ -410,31 +451,17 @@ public final class HubConnection {
             for run in batches {
                 runs[run.value1.id] = BoardRun(run)
             }
-            fleet.workflowNames = names
-            fleet.runs = runs
+            return { [names, runs] hub in
+                hub.fleet.adopt(workflowNames: names, runs: runs)
+                hub.fleet.runsRead = true
+            }
         } catch {
-            log.error("workflow runs unreadable: \(String(describing: error), privacy: .public)")
-        }
-    }
-
-    /// The hub's whole list: an ask settled while this device was away sent
-    /// its `permission_settled` to nobody listening.
-    private func adopt(pending: [Components.Schemas.GetApiPending200Payload]) {
-        var asks: [(AskFrame, String?)] = []
-        for envelope in pending where envelope.verb == .frames {
-            guard let data = try? Wire.data(envelope.payload), let frame = try? Inbound.frame(data) else {
-                continue
-            }
-            switch frame {
-            case let .permissionRequest(ask, routedTo):
-                asks.append((ask, routedTo))
-            case let .runQuestion(runId, raisedAt):
-                fleet.runAskRaisedAt[runId] = raisedAt
-            default:
-                break
+            let said = String(describing: error)
+            return { hub in
+                hub.log.error("workflow runs unreadable: \(said, privacy: .public)")
+                hub.fleet.runsRead = true
             }
         }
-        needs.replace(with: asks)
     }
 
     /// A machine that came online after the connect-time read has its stored sessions read now.
@@ -518,16 +545,16 @@ public final class HubConnection {
 
     // MARK: Frames
 
-    private func receive(_ data: Data) {
+    private func receive(_ message: HubSocket.Message) {
         do {
-            switch try Inbound.read(data) {
+            switch try message.read.get() {
             case let .stream(message):
                 ledger.handle(message)
             case let .frame(frame):
                 switch frame {
                 case .instances, .instancesDelta:
-                    fleet.merge(pulses: Inbound.pulses(data, enveloped: true))
-                    fleet.continuations = Inbound.continuations(data)
+                    fleet.merge(pulses: message.pulses)
+                    fleet.continuations = message.continuations
                 default:
                     break
                 }

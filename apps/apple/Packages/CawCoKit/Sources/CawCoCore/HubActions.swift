@@ -97,24 +97,27 @@ extension HubConnection {
     public func readImage(machineId: String, path: String) async throws -> Components.Schemas.FsImage {
         try await fileRequest(machineId: machineId, op: .image, path: path)
     }
-    private func fileRequest<T: Decodable>(machineId: String, op: Components.Schemas.FsPayload.OpPayload,
+    private func fileRequest<T: Decodable & Sendable>(machineId: String, op: Components.Schemas.FsPayload.OpPayload,
                                            path: String, content: String? = nil) async throws -> T {
         let requestId = UUID().uuidString.lowercased()
         let payload = Components.Schemas.FsPayload(content: content, op: op, path: path, requestId: requestId)
-        return try decodeResult(await request(machineId: machineId, verb: .fs, requestId: requestId, payload: payload))
+        return try await Self.decodeResult(await request(machineId: machineId, verb: .fs, requestId: requestId, payload: payload))
     }
 
     /// Typed escape hatch for the machine's other neutral controls. The
     /// concrete wrappers below are the web dashboard's current controls.
-    public func machineControl<T: Decodable>(machineId: String, method: String, args: [OpenAPIValueContainer] = [],
+    public func machineControl<T: Decodable & Sendable>(machineId: String, method: String, args: [OpenAPIValueContainer] = [],
         harness: Components.Schemas.ControlPayload.HarnessPayload? = nil, timeout: Duration = .seconds(15)) async throws -> T {
-        try decodeResult(await control(machineId, harness: harness, method: method, args: args, timeout: timeout))
+        try await Self.decodeResult(await control(machineId, harness: harness, method: method, args: args, timeout: timeout))
     }
-    public func sessionControl<T: Decodable>(instanceId: String, machineId: String, method: String,
+    public func sessionControl<T: Decodable & Sendable>(instanceId: String, machineId: String, method: String,
                                              args: [OpenAPIValueContainer] = []) async throws -> T {
-        try decodeResult(await control(machineId, instanceId: instanceId, method: method, args: args))
+        try await Self.decodeResult(await control(machineId, instanceId: instanceId, method: method, args: args))
     }
-    private func decodeResult<T: Decodable>(_ result: OpenAPIValueContainer?) throws -> T {
+    /// A control's answer in its typed shape, decoded off the main actor: a
+    /// machine's stored-session catalog is hundreds of rows.
+    @concurrent
+    private nonisolated static func decodeResult<T: Decodable & Sendable>(_ result: OpenAPIValueContainer?) async throws -> T {
         try Wire.decoder().decode(T.self, from: result.map { try Wire.data($0) } ?? Data("null".utf8))
     }
 
@@ -143,7 +146,7 @@ extension HubConnection {
     public func listSessions(machineId: String, limit: Int? = nil,
         harness: Components.Schemas.ControlPayload.HarnessPayload? = nil) async throws -> [Components.Schemas.NeutralSessionInfo] {
         let options: [String: (any Sendable)?] = limit.map { ["limit": $0] } ?? [:]
-        return try decodeResult(await control(machineId, harness: harness, method: "listSessions", args: [options]))
+        return try await Self.decodeResult(await control(machineId, harness: harness, method: "listSessions", args: [options]))
     }
     public func renameSession(machineId: String, sessionKey: String, title: String, dir: String? = nil,
         harness: Components.Schemas.ControlPayload.HarnessPayload? = nil) async throws {
@@ -216,7 +219,7 @@ extension HubConnection {
     private func directory(_ dir: String?) -> [String: String] { dir.map { ["dir": $0] } ?? [:] }
     public func todos(machineId: String, sessionKey: String, dir: String? = nil,
         harness: Components.Schemas.ControlPayload.HarnessPayload = .opencode) async throws -> [Components.Schemas.NeutralTask] {
-        try decodeResult(await control(machineId, harness: harness, method: "getTodos", args: [sessionKey, dir]))
+        try await Self.decodeResult(await control(machineId, harness: harness, method: "getTodos", args: [sessionKey, dir]))
     }
     public func repositories(machineId: String) async throws -> Components.Schemas.ReposResult {
         try await machineControl(machineId: machineId, method: "listRepos")
@@ -225,17 +228,17 @@ extension HubConnection {
         try await machineControl(machineId: machineId, method: "beginLogin")
     }
     public func completeLogin(machineId: String, code: String) async throws -> Components.Schemas.AuthState {
-        try decodeResult(await control(machineId, method: "completeLogin", args: [code]))
+        try await Self.decodeResult(await control(machineId, method: "completeLogin", args: [code]))
     }
     public func unlockKeychain(machineId: String, password: String) async throws -> Components.Schemas.AuthState {
-        try decodeResult(await control(machineId, method: "unlockKeychain", args: [password]))
+        try await Self.decodeResult(await control(machineId, method: "unlockKeychain", args: [password]))
     }
     public func installTool(machineId: String, id: String, pinnedVersion: String? = nil) async throws -> Components.Schemas.ToolStatus {
         let args = pinnedVersion.map { [id, $0] } ?? [id]
-        return try decodeResult(await control(machineId, method: "installTool", args: args, timeout: .seconds(300)))
+        return try await Self.decodeResult(await control(machineId, method: "installTool", args: args, timeout: .seconds(300)))
     }
     public func updateMachine(machineId: String, restartAgent: Bool = true, force: Bool = false) async throws -> Components.Schemas.UpdateReport {
-        try decodeResult(await control(machineId, method: "updateCawco",
+        try await Self.decodeResult(await control(machineId, method: "updateCawco",
             args: [["restartAgent": restartAgent, "force": force]], timeout: .seconds(180)))
     }
 
