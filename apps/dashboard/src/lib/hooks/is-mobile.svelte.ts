@@ -39,9 +39,15 @@ export class IsTouchPortrait extends MediaQuery {
 }
 
 /**
+ * Where the rail is a drawer: under 900px wide, the line the Shell's styles
+ * hide the rail and show the burger at. Width alone: a tablet held upright
+ * at 900px or more is on the narrow line below and still has its rail.
+ */
+export const DRAWER_QUERY = "(max-width: 899px)";
+
+/**
  * The app's one narrow line: under 900px wide, or a touch device held
  * upright. The Shell, the session deck and `/config` all ask this, and the
  * Shell mirrors the answer into the `cawco-narrow` cookie the server reads.
  */
-export const NARROW_QUERY =
-  "(max-width: 899px), ((pointer: coarse) and (orientation: portrait))";
+export const NARROW_QUERY = `${DRAWER_QUERY}, ((pointer: coarse) and (orientation: portrait))`;

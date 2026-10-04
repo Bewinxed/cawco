@@ -511,16 +511,8 @@ export function atTravel(
         taking = null;
       }
       const at = open.since ?? Number(document.timeline.currentTime);
-      // Each on its own: one that throws is reported and the rest still
-      // start. A tree in a rail that was not rendered threw as it took off,
-      // and the same tree in the drawer over it, later in the batch, stood
-      // held hidden until the page was reloaded.
       for (const go of open.runs) {
-        try {
-          go(at, open.pace);
-        } catch (error) {
-          reportError(error);
-        }
+        go(at, open.pace);
       }
     };
     requestAnimationFrame(tick);

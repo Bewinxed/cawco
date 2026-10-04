@@ -45,6 +45,12 @@ function catchUp(): void {
   turnedIn = null;
 }
 
+/**
+ * Projects whose older list is open, in whichever rail is mounted (the wide
+ * screen's, the drawer's); in memory, so a reload shuts them.
+ */
+export const olderOpen = new SvelteSet<string>();
+
 export const openTrees = {
   has(id: string, list: TreeList): boolean {
     return turnedIn !== null && turnedIn !== list

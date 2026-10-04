@@ -8,6 +8,7 @@
    * resizable column whose width is this browser's, not the fleet's.
    */
   import { onMount, untrack } from "svelte";
+  import type { Attachment } from "svelte/attachments";
   import { MediaQuery } from "svelte/reactivity";
   import { TextMorph } from "torph/svelte";
   import {
@@ -28,7 +29,7 @@
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Tooltip from "#lib/components/ui/tooltip/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
-  import { NARROW_QUERY } from "#lib/hooks/is-mobile.svelte.js";
+  import { DRAWER_QUERY, NARROW_QUERY } from "#lib/hooks/is-mobile.svelte.js";
   import {
     IconChevronLeft,
     IconSearch,
@@ -44,10 +45,13 @@
   import AssistantPanel from "./assistant/AssistantPanel.svelte";
   import ConfirmDialog from "./ConfirmDialog.svelte";
   import { cawco, hubSocketUrl, reconnectNow } from "./client.svelte";
+  import { continuing } from "./continue.svelte";
   import JumpPalette, { type JumpOpener } from "./JumpPalette.svelte";
   import MachinesButton from "./MachinesButton.svelte";
   import SessionSurface from "./SessionSurface.svelte";
   import Sidebar from "./Sidebar.svelte";
+  import NewSessionDialog from "./spawn/NewSessionDialog.svelte";
+  import { newSession, spawning } from "./spawn/new-session.svelte";
   import PaneTabs from "./workspace/PaneTabs.svelte";
   import { type WorkspaceV1, workspace } from "./workspace/workspace.svelte";
 
@@ -273,9 +277,7 @@
     const key = event.key.toLowerCase();
     if (key === "n" && event.shiftKey) {
       event.preventDefault();
-      document
-        .querySelector<HTMLButtonElement>('[aria-label="Start session"]')
-        ?.click();
+      newSession();
       return;
     }
     if (key === "k") {
@@ -414,6 +416,44 @@
   const narrow = $derived(
     browser ? narrowQuery.current : (page.data.narrow as boolean)
   );
+
+  /* ── One rail ────────────────────────────────────────────────────────
+     The server cannot know the width, so it always draws the rail and the
+     styles hide it under the drawer's line: a wide screen's first paint is
+     the rail, a phone's is without it, and neither waits for a script. In
+     the browser only the rail that is shown is mounted: the wide screen's
+     at the drawer's line and over, the drawer's under it, and neither is
+     hydrated, measured or animated while it is not drawn. A rail that was
+     left mounted and hidden opened every tree the drawer opened, with no
+     layout to open it in. What a rail shows is kept outside it (which trees
+     are open, the row in front, the dialog it starts a session in), and the
+     wide screen's scroll is kept here, so crossing the line either way
+     brings it back as it was left. */
+  const drawerQuery = new MediaQuery(DRAWER_QUERY);
+  const railed = $derived(browser ? !drawerQuery.current : true);
+
+  /** Where each of the rail's scroll boxes stood, by name ("" its own). */
+  const railScroll = new Map<string, number>();
+  const nameOf = (box: HTMLElement) => box.dataset.keepScroll ?? "";
+  /** Puts the wide screen's rail back where it was scrolled to, and keeps up with it. */
+  const keepScroll: Attachment<HTMLElement> = (node) => {
+    for (const box of [
+      node,
+      ...node.querySelectorAll<HTMLElement>("[data-keep-scroll]"),
+    ]) {
+      box.scrollTop = railScroll.get(nameOf(box)) ?? 0;
+    }
+    // Scrolls do not bubble; they are heard on their way down.
+    const heard = ({ target }: Event) => {
+      const box = target as HTMLElement;
+      if (box === node || box.dataset.keepScroll !== undefined) {
+        railScroll.set(nameOf(box), box.scrollTop);
+      }
+    };
+    const options = { capture: true, passive: true } as const;
+    node.addEventListener("scroll", heard, options);
+    return () => node.removeEventListener("scroll", heard, options);
+  };
 
   $effect(() => {
     // The Cookie Store API is async and unsupported in Safari; this write must
@@ -624,13 +664,16 @@
 <Tooltip.Provider>
   <div class="shell" style="--sidebar-width: var(--rail-w, {railWidth}px)">
     <aside class="rail hidden min-[900px]:flex">
-      <Sidebar
-        {assistantOpen}
-        {narrow}
-        onassistant={() => {
-          assistantOpen = !assistantOpen;
-        }}
-      />
+      {#if railed}
+        <Sidebar
+          {assistantOpen}
+          {narrow}
+          onassistant={() => {
+            assistantOpen = !assistantOpen;
+          }}
+          scroller={keepScroll}
+        />
+      {/if}
       <div
         aria-label="Resize sidebar"
         aria-orientation="vertical"
@@ -645,7 +688,17 @@
       ></div>
     </aside>
 
-    <Sheet.Root bind:open={railOpen}>
+    <!-- Open only under the drawer's line: widened past it while open, the
+         sheet's scrim stood over the whole wide screen with nothing in it.
+         Narrowed again, it is open as it was left. -->
+    <Sheet.Root
+      bind:open={
+        () => railOpen && !railed,
+        (open) => {
+          railOpen = open;
+        }
+      }
+    >
       <Sheet.Content
         class="rail-sheet w-[284px] p-0 min-[900px]:hidden"
         side="left"
@@ -653,14 +706,16 @@
         <Sheet.Header class="sr-only">
           <Sheet.Title>Navigation</Sheet.Title>
         </Sheet.Header>
-        <Sidebar
-          {assistantOpen}
-          {narrow}
-          onassistant={() => {
-            railOpen = false;
-            assistantOpen = true;
-          }}
-        />
+        {#if !railed}
+          <Sidebar
+            {assistantOpen}
+            {narrow}
+            onassistant={() => {
+              railOpen = false;
+              assistantOpen = true;
+            }}
+          />
+        {/if}
       </Sheet.Content>
     </Sheet.Root>
 
@@ -840,6 +895,24 @@
   <ConfirmDialog />
   <!-- One Connect a machine dialog for every entry that adds one (join/join.svelte.ts). -->
   <AddMachineDialog />
+  <!-- One New Session dialog for the rail's rows and every session menu's
+       Continue (spawn/new-session, continue.svelte.ts). -->
+  <NewSessionDialog
+    continueFrom={continuing.source ?? undefined}
+    onclose={() => {
+      spawning.open = false;
+      continuing.source = null;
+      continuing.restore = null;
+    }}
+    onexitcontinue={() => {
+      spawning.open = true;
+      continuing.source = null;
+      continuing.restore = null;
+    }}
+    open={spawning.open || continuing.source !== null}
+    prefill={continuing.source ? undefined : spawning.prefill}
+    restore={continuing.restore ?? undefined}
+  />
 
   <AssistantPanel bind:open={assistantOpen} />
 </Tooltip.Provider>

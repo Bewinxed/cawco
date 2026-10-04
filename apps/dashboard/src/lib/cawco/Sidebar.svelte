@@ -16,6 +16,7 @@
    * A session says what it is doing on its mark's rim (SessionMark) rather
    * than in a text pill or a dot of its own.
    */
+  import { untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
   import { SvelteMap, SvelteSet } from "svelte/reactivity";
   import { TextMorph } from "torph/svelte";
@@ -51,7 +52,6 @@
     type ProjectRow,
   } from "./client.svelte";
   import { LAST_KEY as CONFIG_LAST_KEY, SECTIONS } from "./config/sections";
-  import { continuing } from "./continue.svelte";
   import FolderMenu from "./FolderMenu.svelte";
   import { folderPrefs } from "./folder-prefs.svelte";
   import Home from "./home/Home.svelte";
@@ -64,7 +64,7 @@
   import { heldOrder, holdWhileInside } from "./motion/held-order.svelte";
   import { reflow } from "./motion/rows.svelte";
   import NewProjectPopover from "./NewProjectPopover.svelte";
-  import { openTrees } from "./open-trees.svelte";
+  import { olderOpen, openTrees } from "./open-trees.svelte";
   import ProjectMark from "./ProjectMark.svelte";
   import { type RailSort, rail } from "./rail.svelte";
   import SessionHover from "./SessionHover.svelte";
@@ -72,7 +72,7 @@
     STATUS_WORD,
     sessionStatus,
   } from "./SessionMark.svelte";
-  import NewSessionDialog from "./spawn/NewSessionDialog.svelte";
+  import { newSession } from "./spawn/new-session.svelte";
   import TreeCount from "./TreeCount.svelte";
   import { rooted, tree } from "./tree";
   import UsageMeter from "./UsageMeter.svelte";
@@ -83,12 +83,20 @@
     onassistant,
     assistantOpen,
     narrow,
+    scroller,
   }: {
     /** Toggles the assistant, which Shell owns so ⌘J and this row share it. */
     onassistant: () => void;
     assistantOpen: boolean;
     /** The Shell's live narrow answer: a phone opens Configure on its list. */
     narrow: boolean;
+    /**
+     * Attached to the box the rail's groups scroll in, once they are drawn.
+     * The Shell keeps the wide screen's scroll through it while the rail is
+     * away (Shell `keepScroll`); a box of its own inside names itself with
+     * `data-keep-scroll`.
+     */
+    scroller?: Attachment<HTMLElement>;
   } = $props();
 
   const path = $derived(page.url.pathname);
@@ -168,19 +176,26 @@
    * How far the fleet's first read has come: 1 workflow runs, 2 machines and
    * sessions, 3 every online machine's stored sessions (or the hub is known
    * to be unreachable). It only climbs: a machine coming online later is a
-   * live change, not part of the first read.
+   * live change, not part of the first read. A rail mounted after the read
+   * (the drawer opening, the window widening past the drawer's line) starts
+   * where the read stands, so its groups are drawn in the update that
+   * mounts it and its scroll can be put back over them (`scroller`).
    */
-  let stage = $state(0);
-  $effect(() => {
-    let next = 0;
+  const readSoFar = (): number => {
     if (cawco.hub === "unreachable") {
-      next = 3;
-    } else if (workflowState.loaded) {
-      next = 1;
-      if (cawco.fleetRead) {
-        next = cawco.catalogsRead ? 3 : 2;
-      }
+      return 3;
     }
+    if (!workflowState.loaded) {
+      return 0;
+    }
+    if (!cawco.fleetRead) {
+      return 1;
+    }
+    return cawco.catalogsRead ? 3 : 2;
+  };
+  let stage = $state(untrack(readSoFar));
+  $effect(() => {
+    const next = readSoFar();
     if (next > stage) {
       stage = next;
     }
@@ -209,22 +224,6 @@
   const SLOT = "inline-flex size-[18px] shrink-0 items-center justify-center";
   /** A line glyph in the slot: 16px, 1px of air. */
   const SLOT_GLYPH = "size-4";
-
-  /* ---- spawn ---------------------------------------------------------- */
-
-  let spawnOpen = $state(false);
-  let spawnPrefill = $state<
-    { machineId?: string; cwd?: string; projectId?: string } | undefined
-  >(undefined);
-
-  function newSession(prefill?: {
-    machineId?: string;
-    cwd?: string;
-    projectId?: string;
-  }) {
-    spawnPrefill = prefill;
-    spawnOpen = true;
-  }
 
   /* ---- projects ------------------------------------------------------- */
 
@@ -489,8 +488,6 @@
     return { recent, older };
   }
 
-  /** Projects whose older list is open; in memory, so a reload shuts them. */
-  const olderOpen = new SvelteSet<string>();
   /** Projects whose older rows are asked for and not yet drawn. */
   const olderPending = new SvelteSet<string>();
   /** How many of an open project's older trees are drawn so far. */
@@ -941,7 +938,7 @@
        session starting, a count moving. Every group, row, count and status
        mark is `data-flip`, so it arrives and leaves in place and what it moves
        slides instead of jumping (motion/rows `reflow`). -->
-  <Sidebar.Content class="gap-0 py-1" {@attach reflow()}>
+  <Sidebar.Content class="gap-0 py-1" {@attach reflow()} {@attach scroller}>
     <!-- On a wide screen the home is the sidebar: what needs you, what is
          working, what finished, and the rest, while the transcripts take the
          screen. On the narrow line the home is the session surface's own
@@ -1214,6 +1211,7 @@
                           <ul
                             class="older"
                             data-flip-anchor
+                            data-keep-scroll={project.id}
                             onintroend={() =>
                               fillOlder(project.id, lists.older.length)}
                             in:branch={OLDER_TREE}
@@ -1307,23 +1305,6 @@
   <SessionHover within={railEl} />
 </div>
 <!-- end flex column wrapper -->
-
-<NewSessionDialog
-  continueFrom={continuing.source ?? undefined}
-  onclose={() => {
-    spawnOpen = false;
-    continuing.source = null;
-    continuing.restore = null;
-  }}
-  onexitcontinue={() => {
-    spawnOpen = true;
-    continuing.source = null;
-    continuing.restore = null;
-  }}
-  open={spawnOpen || continuing.source !== null}
-  prefill={continuing.source ? undefined : spawnPrefill}
-  restore={continuing.restore ?? undefined}
-/>
 
 <style>
   /* The brand row's icon: the lead column's 18px tile, on the tile's radius.

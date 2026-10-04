@@ -1,6 +1,6 @@
 /**
  * Which session the New Session dialog is continuing, when it is. Set by the
- * session menus, read by the one dialog mount in the sidebar: the menus live
+ * session menus, read by the one dialog mount in the Shell: the menus live
  * in rows all over the app, and the dialog must not be mounted once per row.
  *
  * Also the continuations this tab started. The hub carries each one to its
