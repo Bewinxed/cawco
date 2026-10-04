@@ -33,16 +33,7 @@ final class ProjectStartController: KitPopoverController, UITextFieldDelegate {
         let prompt = UIStackView(arrangedSubviews: [label, field])
         prompt.axis = .vertical
         prompt.spacing = Space.space1
-        var ghost = UIButton.Configuration.plain()
-        ghost.attributedTitle = AttributedString("Start empty", attributes: AttributeContainer(TypeScale.typeLabel.attributes(color: Palette.inkStrong, tracking: -0.01)))
-        ghost.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: Space.space3, bottom: 0, trailing: Space.space3)
-        ghost.background.cornerRadius = Radius.radiusMd
-        let empty = UIButton(configuration: ghost, primaryAction: UIAction { [weak self] _ in self?.start(nil) })
-        empty.configurationUpdateHandler = { button in
-            button.configuration?.background.backgroundColor = button.isHighlighted ? Palette.surfaceFill : (button.isHovered ? Palette.surfaceHover : .clear)
-        }
-        empty.houseStyle()
-        empty.heightAnchor.constraint(equalToConstant: Size.cBtnHSm).isActive = true
+        let empty = KitButton.make("Start empty", variant: .ghost, height: .sm) { [weak self] in self?.start(nil) }
         let go = KitButton.make("Start", variant: .action, height: .sm) { [weak self] in self?.start(self?.field.text) }
         let actions = UIStackView(arrangedSubviews: [UIView(), empty, go])
         actions.spacing = Space.space2

@@ -331,16 +331,11 @@ final class ProjectDocsView: UIStackView {
                 renderBody()
             })
         } else {
-            var ghost = UIButton.Configuration.plain()
-            ghost.attributedTitle = AttributedString("Cancel", attributes: AttributeContainer(TypeScale.typeLabel.attributes(color: Palette.inkStrong)))
-            ghost.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: Space.space3, bottom: 0, trailing: Space.space3)
-            let cancel = UIButton(configuration: ghost, primaryAction: UIAction { [weak self] _ in
+            let cancel = KitButton.make("Cancel", variant: .ghost, height: .sm) { [weak self] in
                 self?.draft = nil
                 self?.renderHeader()
                 self?.renderBody()
-            })
-            cancel.houseStyle()
-            cancel.heightAnchor.constraint(equalToConstant: Size.cBtnHSm).isActive = true
+            }
             let save = KitButton.make(saving ? "Saving…" : "Save", variant: .outline, height: .sm) { [weak self] in self?.save() }
             save.configuration?.showsActivityIndicator = saving
             if docError != nil { save.configuration?.background.strokeColor = Palette.destructive }

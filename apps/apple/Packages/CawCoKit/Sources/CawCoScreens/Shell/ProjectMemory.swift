@@ -118,12 +118,8 @@ final class ProjectMemoryCard: TileView {
         actions.arrangedSubviews.forEach { $0.removeFromSuperview() }
         (footer.superview as? UIStackView)?.isHidden = !editing
         if editing {
-            var ghost = UIButton.Configuration.plain()
-            ghost.attributedTitle = AttributedString("Cancel", attributes: AttributeContainer(TypeScale.typeLabel.attributes(color: Palette.inkStrong)))
-            ghost.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 8)
-            let cancel = UIButton(configuration: ghost, primaryAction: UIAction { [weak self] _ in self?.cancel() })
+            let cancel = KitButton.make("Cancel", variant: .ghost, height: .xs) { [weak self] in self?.cancel() }
             cancel.isEnabled = !saving
-            cancel.houseStyle()
             let save = KitButton.make(saving ? "Saving…" : "Save", variant: .outline, height: .xs) { [weak self] in self?.save() }
             save.isEnabled = draft != (content ?? "")
             save.configuration?.showsActivityIndicator = saving

@@ -96,6 +96,7 @@ final class ProjectViewController: ObservedViewController {
                 column.bottomAnchor.constraint(equalTo: scroller.contentLayoutGuide.bottomAnchor),
                 column.leadingAnchor.constraint(equalTo: scroller.frameLayoutGuide.leadingAnchor, constant: pad),
                 column.trailingAnchor.constraint(equalTo: scroller.frameLayoutGuide.trailingAnchor, constant: -pad),
+                scroller.contentLayoutGuide.widthAnchor.constraint(equalTo: scroller.frameLayoutGuide.widthAnchor),
             ])
         }
         // `mt-6` between the docs and what follows them on one column.
@@ -135,20 +136,12 @@ final class ProjectViewController: ObservedViewController {
         // The machine follows the folder; neither stretches to the actions.
         titles.alignment = .leading
         // The header's actions: Forget project… as the kit's ghost button in muted ink.
-        var forgetStyle = UIButton.Configuration.plain()
-        forgetStyle.attributedTitle = AttributedString("Forget project…", attributes: AttributeContainer(TypeScale.typeButton.attributes(color: Palette.mutedForeground, tracking: -0.01)))
-        // The web button's 1px border is part of its box: the padding starts inside it, as in `KitButton`.
-        forgetStyle.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: Space.space4 + 1, bottom: 0, trailing: Space.space4 + 1)
-        forgetStyle.background.cornerRadius = Radius.radiusMd
-        let forget = UIButton(configuration: forgetStyle, primaryAction: UIAction { [weak self] _ in
+        let forget = KitButton.make("Forget project…", variant: .ghost) { [weak self] in
             guard let self, let project = context.hub.fleet.projects.first(where: { $0.id == projectId }) else { return }
             context.forgetProject(project)
-        })
-        forget.configurationUpdateHandler = { button in
-            button.configuration?.background.backgroundColor = button.isHighlighted ? Palette.surfaceFill : .clear
         }
-        forget.houseStyle()
-        forget.heightAnchor.constraint(equalToConstant: Size.cBtnH).isActive = true
+        // `class="text-muted-foreground"`.
+        forget.configuration?.attributedTitle = AttributedString("Forget project…", attributes: AttributeContainer(TypeScale.typeButton.attributes(color: Palette.mutedForeground, tracking: -0.01)))
         // New session opens its popover from the button's end; Side quest starts one at once.
         startButton = KitButton.make("New session", variant: .action) { [weak self] in
             guard let self else { return }
@@ -202,18 +195,10 @@ final class ProjectViewController: ObservedViewController {
             for _ in 0 ..< 8 { skeleton.addArrangedSubview(SkeletonView(height: 36)) }
         }
         // `variant="ghost" size="sm"` in muted ink, at the start.
-        var ghost = UIButton.Configuration.plain()
-        ghost.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: Space.space3, bottom: 0, trailing: Space.space3)
-        ghost.background.cornerRadius = Radius.radiusMd
-        moreButton = UIButton(configuration: ghost, primaryAction: UIAction { [weak self] _ in
+        moreButton = KitButton.make("Show more", variant: .ghost, height: .sm) { [weak self] in
             self?.showMore = true
             self?.requestRefresh()
-        })
-        moreButton.configurationUpdateHandler = { button in
-            button.configuration?.background.backgroundColor = button.isHighlighted ? Palette.surfaceFill : (button.isHovered ? Palette.surfaceHover : .clear)
         }
-        moreButton.houseStyle()
-        moreButton.heightAnchor.constraint(equalToConstant: Size.cBtnHSm).isActive = true
         moreRow.addArrangedSubview(moreButton)
         moreRow.addArrangedSubview(UIView())
         // `px-1` on the empty state.
@@ -390,7 +375,7 @@ final class ProjectViewController: ObservedViewController {
         moreRow.isHidden = showMore || more <= 0
         if more > 0 {
             moreButton.configuration?.attributedTitle = AttributedString(
-                "Show \(more) more", attributes: AttributeContainer(TypeScale.typeLabel.attributes(color: Palette.mutedForeground))
+                "Show \(more) more", attributes: AttributeContainer(TypeScale.typeLabel.attributes(color: Palette.mutedForeground, tracking: -0.01))
             )
         }
     }
