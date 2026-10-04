@@ -18,7 +18,7 @@
    */
   import { untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
-  import { SvelteMap, SvelteSet } from "svelte/reactivity";
+  import { SvelteSet } from "svelte/reactivity";
   import { TextMorph } from "torph/svelte";
   import cawcoIcon from "#lib/assets/brand/cawco-icon.png";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -59,7 +59,7 @@
   import { rowHref } from "./links";
   import { markHue } from "./mark";
   import { type BranchOptions, branch, nestFrom } from "./motion/branch.svelte";
-  import { CURVE, dur } from "./motion/curves.svelte";
+  import { CURVE, dur, numberOf } from "./motion/curves.svelte";
   import { echoBeat } from "./motion/echo.svelte";
   import { heldOrder, holdWhileInside } from "./motion/held-order.svelte";
   import { reflow } from "./motion/rows.svelte";
@@ -71,6 +71,7 @@
   import SessionRow, { ROW_PILL } from "./SessionRow.svelte";
   import { newSession } from "./spawn/new-session.svelte";
   import TreeMark from "./TreeMark.svelte";
+  import TreeRows from "./TreeRows.svelte";
   import { rooted, topsIn, tree } from "./tree";
   import UsageMeter from "./UsageMeter.svelte";
   import { workflowState } from "./workflow-state.svelte";
@@ -499,12 +500,31 @@
 
   /** Projects whose older rows are asked for and not yet drawn. */
   const olderPending = new SvelteSet<string>();
-  /** How many of an open project's older trees are drawn so far. */
-  const olderDrawn = new SvelteMap<string, number>();
   /** The frame each project's older rows are next drawn on. */
   const olderFrames = new Map<string, number>();
-  /** Older trees drawn a frame once the box's first rows stand. */
-  const OLDER_STEP = 24;
+  /** The gap between two rows of an older box, px (`.older`). */
+  const OLDER_GAP = 2;
+
+  /**
+   * A tree's rows are drawn as far as the reader can see, the rest standing
+   * as one empty item of their height until they are (TreeRows). That height
+   * is the rows' own tokens added up: a row is --row-compact-h tall, and one
+   * with its delegates open holds their list under it, --tree-gap down and
+   * its rows --tree-gap apart.
+   */
+  const rowHeight = () => numberOf("--row-compact-h");
+  const treeGap = () => numberOf("--tree-gap");
+  const branchKey = (node: Branch): string => node.row.id;
+  function branchSize(node: Branch): number {
+    if (!(node.count > 0 && openTrees.has(node.row.id, "rail"))) {
+      return rowHeight();
+    }
+    let under = 0;
+    for (const child of node.children) {
+      under += treeGap() + branchSize(child);
+    }
+    return rowHeight() + under;
+  }
 
   /**
    * Opens a project's older rows, or folds them. The press shows at once: the
@@ -512,8 +532,8 @@
    * press, and the rows are drawn on the frame after that one is painted, so
    * the press never waits on them. Only what the box shows is drawn then (a
    * project with 275 older rows drew every one in the press's own task); the
-   * rest follow once the box has opened (`fillOlder`). A press while it is
-   * busy or open takes it back, whatever was under way.
+   * rest follow once the box has opened (TreeRows). A press while it is busy
+   * or open takes it back, whatever was under way.
    */
   function toggleOlder(id: string) {
     cancelAnimationFrame(olderFrames.get(id) ?? 0);
@@ -521,7 +541,6 @@
     if (olderOpen.has(id) || olderPending.has(id)) {
       olderOpen.delete(id);
       olderPending.delete(id);
-      olderDrawn.delete(id);
       return;
     }
     olderPending.add(id);
@@ -531,28 +550,8 @@
     later(() =>
       later(() => {
         olderFrames.delete(id);
-        olderDrawn.set(id, OLDER_ROWS);
         olderOpen.add(id);
         olderPending.delete(id);
-      })
-    );
-  }
-  /**
-   * The rest of an open box's rows, a frame at a time under its fold, from
-   * the moment its opening ends: drawn while it opened, they were measured
-   * into its line, which then ran the length of every row and landed seconds
-   * late.
-   */
-  function fillOlder(id: string, total: number) {
-    const drawn = olderDrawn.get(id);
-    if (drawn === undefined || drawn >= total) {
-      return;
-    }
-    olderFrames.set(
-      id,
-      requestAnimationFrame(() => {
-        olderDrawn.set(id, drawn + OLDER_STEP);
-        fillOlder(id, total);
       })
     );
   }
@@ -591,7 +590,7 @@
     mark();
     const sizes = new ResizeObserver(mark);
     sizes.observe(node);
-    // Rows that arrive after the box opened (`fillOlder`) leave its own size
+    // Rows that arrive after the box opened (TreeRows) leave its own size
     // as it was: only its content grew.
     const rows = new MutationObserver(mark);
     rows.observe(node, { childList: true });
@@ -843,9 +842,13 @@
         out:branch={TREE}
         {@attach nestFrom(".tree-mark")}
       >
-        {#each node.children as child (child.row.id)}
-          {@render subRow(child)}
-        {/each}
+        <TreeRows
+          gap={treeGap()}
+          items={node.children}
+          key={branchKey}
+          row={subRow}
+          size={branchSize}
+        />
       </ul>
     {/if}
   </li>
@@ -1128,12 +1131,16 @@
                     out:branch={LEAD_TREE}
                     {@attach nestFrom(".tree-mark", LEAD)}
                   >
-                    {#each branches(
-                      lists.recent,
-                      `rail:${project.id}:recent`
-                    ) as node (node.row.id)}
-                      {@render subRow(node)}
-                    {/each}
+                    <TreeRows
+                      gap={treeGap()}
+                      items={branches(
+                        lists.recent,
+                        `rail:${project.id}:recent`
+                      )}
+                      key={branchKey}
+                      row={subRow}
+                      size={branchSize}
+                    />
                     {#if lists.older.length > 0}
                       {@const olderVisible = olderShown(project, lists.older)}
                       {@const olderBusy = olderPending.has(project.id)}
@@ -1193,7 +1200,7 @@
                           {@const olderTrees = branches(
                             lists.older,
                             `rail:${project.id}:older`
-                          ).slice(0, olderDrawn.get(project.id))}
+                          )}
                           <!-- Older sessions scroll in a box of their own,
                                  six rows at most, so opening them never
                                  pushes the projects below far or the footer.
@@ -1206,15 +1213,18 @@
                             class="older"
                             data-flip-anchor
                             data-keep-scroll={project.id}
-                            onintroend={() =>
-                              fillOlder(project.id, lists.older.length)}
                             in:branch={LEAD_TREE}
                             out:branch={LEAD_TREE}
                             {@attach scrollEdges}
                           >
-                            {#each olderTrees as node (node.row.id)}
-                              {@render subRow(node)}
-                            {/each}
+                            <TreeRows
+                              gap={OLDER_GAP}
+                              items={olderTrees}
+                              key={branchKey}
+                              room={OLDER_ROWS * (rowHeight() + OLDER_GAP)}
+                              row={subRow}
+                              size={branchSize}
+                            />
                           </ul>
                         {/if}
                       </Sidebar.MenuSubItem>

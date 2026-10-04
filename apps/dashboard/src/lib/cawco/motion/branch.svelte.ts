@@ -711,10 +711,28 @@ function measure(group: HTMLElement, options: BranchOptions): Shape {
     arrived.set(li ?? el, item.arrive);
     items.push(item);
   }
+  // Rows a list has not drawn yet (TreeRows) stand as one empty item under
+  // the last it has: the line runs on to the last of them, as far below its
+  // drawn sibling's glyph as that row will stand below the sibling. Read to
+  // the last drawn row only, a tall tree's line was a third as long, and
+  // folded before its rows were all drawn it ran back at a third the pace.
+  const rests = [
+    ...group.querySelectorAll<HTMLElement>("li[data-tree-rest]"),
+  ].map((rest) => {
+    const above = rest.previousElementSibling;
+    const at = above ? arrived.get(above) : undefined;
+    return at === undefined || !above
+      ? 0
+      : at +
+          rest.getBoundingClientRect().top -
+          above.getBoundingClientRect().top +
+          Number(rest.dataset.treeRest);
+  });
   const length = Math.max(
     0,
     ...items.map((item) => item.arrive),
-    ...stretches.map(endOf)
+    ...stretches.map(endOf),
+    ...rests
   );
   return {
     start,
