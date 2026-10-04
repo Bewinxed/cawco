@@ -45,6 +45,8 @@ public final class HubConnection {
 
     public let ledger = Ledger()
     public let fleet = FleetStore()
+    /// What the new-session form was last set to: every start without a form runs on it.
+    public let spawnPrefs = SpawnPrefs()
     public let needs: NeedsYouStore
     public private(set) var sessions: SessionsStore!
     public private(set) var workflowRuns: WorkflowRunsStore!
