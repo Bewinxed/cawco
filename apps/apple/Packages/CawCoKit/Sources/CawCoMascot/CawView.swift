@@ -193,9 +193,6 @@ public final class CawView: UIView {
         }
         fade = animator
         animator.startAnimation()
-        // Committed now, so the render server runs his fade while the main thread builds whatever
-        // arrives: a home list's first layout held him on screen 280 ms past his leave.
-        CATransaction.flush()
     }
 
     private func cancelLoading() {
@@ -383,6 +380,9 @@ public final class CawWaiting: UIViewController {
         update()
     }
 
+    /// One frame of a 60 Hz screen: long enough for a transaction to be committed.
+    private static let frame = 1.0 / 60
+
     private func update() {
         guard isViewLoaded else {
             return
@@ -391,10 +391,21 @@ public final class CawWaiting: UIViewController {
             grace?.cancel()
             grace = nil
             graceOver = false
-            // He starts fading before the content is built, fades out over it, and is taken away
-            // when he has gone.
-            caw?.present = false
-            showContent()
+            guard let caw else {
+                showContent()
+                return
+            }
+            // He fades out over the content and is taken away when he has gone. The content is
+            // mounted one frame after his leave, so his fade is committed and the render server
+            // runs it while the main thread builds the content: mounted in the same turn, a home
+            // list's first layout held him frozen on screen for 670 ms before his fade began.
+            caw.present = false
+            DispatchQueue.main.asyncAfter(deadline: .now() + CawWaiting.frame) { [weak self] in
+                guard let self, !waiting, !entering else {
+                    return
+                }
+                showContent()
+            }
             return
         }
         hideContent()
