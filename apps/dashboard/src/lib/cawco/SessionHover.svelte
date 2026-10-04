@@ -73,21 +73,29 @@
     );
   }
 
-  function open(row: HTMLElement, id: string): void {
+  /** The row the open card stands beside. */
+  let anchor: HTMLElement | null = null;
+
+  function stand(row: HTMLElement): void {
     const box = row.getBoundingClientRect();
     const rail = within?.getBoundingClientRect();
-    gliding = openId !== null && openId !== id;
     place = {
       x: Math.round((rail?.right ?? box.right) + 4),
       y: Math.round(box.top),
       origin: Math.round(box.height / 2),
     };
+  }
+  function open(row: HTMLElement, id: string): void {
+    gliding = openId !== null && openId !== id;
+    anchor = row;
+    stand(row);
     openId = id;
   }
   function close(): void {
     clearTimeout(dwell);
     clearTimeout(closing);
     openId = null;
+    anchor = null;
     gliding = false;
   }
   function hold(): void {
@@ -122,6 +130,13 @@
       }
       if (id === openId) {
         hold();
+        // A session listed twice (Working, and under its project): the card
+        // glides to whichever of its rows the pointer is on.
+        if (row !== anchor) {
+          gliding = true;
+          anchor = row;
+          stand(row);
+        }
         return;
       }
       prefetch(id);
@@ -141,6 +156,53 @@
       root.removeEventListener("pointerleave", leave);
       clearTimeout(dwell);
       clearTimeout(closing);
+    };
+  });
+
+  /**
+   * The open card keeps to its row as the rail's list scrolls under a
+   * resting pointer, a frame at a time and with no glide. A row scrolled out
+   * of the list's box closes it, the way the pointer leaving does. Scroll
+   * does not bubble, so the one listener captures on the rail.
+   */
+  const isOpen = $derived(openId !== null);
+  $effect(() => {
+    const root = within;
+    if (!(root && isOpen)) {
+      return;
+    }
+    let frame = 0;
+    let gone = false;
+    const follow = (event: Event) => {
+      const scroller = event.target;
+      if (frame || !(scroller instanceof Element)) {
+        return;
+      }
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        const row = anchor;
+        if (!row || (row.isConnected && !scroller.contains(row))) {
+          return;
+        }
+        const box = row.getBoundingClientRect();
+        const view = scroller.getBoundingClientRect();
+        const out =
+          !row.isConnected || box.bottom <= view.top || box.top >= view.bottom;
+        if (out) {
+          if (!gone) {
+            release();
+          }
+        } else {
+          gliding = false;
+          stand(row);
+        }
+        gone = out;
+      });
+    };
+    root.addEventListener("scroll", follow, { capture: true, passive: true });
+    return () => {
+      root.removeEventListener("scroll", follow, { capture: true });
+      cancelAnimationFrame(frame);
     };
   });
 
