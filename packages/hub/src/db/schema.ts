@@ -256,6 +256,8 @@ export const instances = sqliteTable("instances", {
   >(),
   cacheTtl: text("cache_ttl").$type<"5m" | "1h">(),
   lastRequestAt: timestamp("last_request_at"),
+  contextTokens: integer("context_tokens"),
+  contextReadAt: timestamp("context_read_at"),
   keepAliveMisses: integer("keep_alive_misses").notNull().default(0),
   /** In-flight ping identity survives a hub or agent restart. */
   keepAliveTurn: text("keep_alive_turn"),

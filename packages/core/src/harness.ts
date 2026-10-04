@@ -962,6 +962,7 @@ export const CONTROL_QUERIES: ReadonlySet<string> = new Set([
 export const CONTROL_LIST_SESSIONS = "listSessions";
 export const CONTROL_GET_SESSION_INFO = "getSessionInfo";
 export const CONTROL_GET_SESSION_MESSAGES = "getSessionMessages";
+export const CONTROL_READ_SESSION_CONTEXT = "readSessionContext";
 export const CONTROL_RENAME_SESSION = "renameSession";
 export const CONTROL_TAG_SESSION = "tagSession";
 export const CONTROL_DELETE_SESSION = "deleteSession";

@@ -60,6 +60,8 @@ export const keepAliveState = (
     sent: row.keepAliveSent,
     cap: keepAliveCap(row),
     ttl: row.cacheTtl,
+    contextTokens: row.contextTokens,
+    contextReadAt: row.contextReadAt?.getTime() ?? null,
   };
   if (!row.keepAliveEnabled) {
     return { ...base, state: row.keepAliveStopped ?? "off" };
@@ -124,6 +126,9 @@ export const keepAliveResult = (
   }
   return {
     cacheTtl: ttl,
+    ...(result.cache
+      ? { contextTokens: input, contextReadAt: new Date() }
+      : {}),
     ...(result.lastRequestAt === undefined
       ? {}
       : { lastRequestAt: new Date(result.lastRequestAt) }),

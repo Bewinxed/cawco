@@ -701,6 +701,8 @@ export interface InstanceRow {
 
 export interface KeepAlive {
   cap: number;
+  contextReadAt: number | null;
+  contextTokens: number | null;
   nextAt: number | null;
   on: boolean;
   sent: number;

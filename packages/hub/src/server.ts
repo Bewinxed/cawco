@@ -81,6 +81,7 @@ import {
   CONTROL_INTERRUPT,
   CONTROL_LIST_SESSIONS,
   CONTROL_MODEL_CATALOG,
+  CONTROL_READ_SESSION_CONTEXT,
   CONTROL_RUN_COMMAND,
   CONTROL_SEARCH_TRANSCRIPTS,
   CONTROL_SET_PERMISSION_MODE,
@@ -5003,6 +5004,8 @@ export const createServer = (
         keepAliveMisses: _misses,
         keepAliveTurn: _turn,
         cacheTtl: _ttl,
+        contextTokens: _contextTokens,
+        contextReadAt: _contextReadAt,
         ...visible
       } = row;
       return {
@@ -7582,13 +7585,11 @@ export const createServer = (
           const [row] = instanceId ? db.getInstancesByIds([instanceId]) : [];
           const turns = row
             ? db.recordedTurns(row.id)
-            : { turns: 0, lastTurnAt: null, unboundedTurns: 0 };
+            : { hasTurns: false, lastTurnAt: null, unbounded: false };
           const activityBound =
             !!row &&
-            (turns.unboundedTurns > 0 ||
-              (row.harness === "claude" &&
-                !!row.sessionId &&
-                turns.turns === 0));
+            (turns.unbounded ||
+              (row.harness === "claude" && !!row.sessionId && !turns.hasTurns));
           // Activity writes are throttled; the closing pulse can land within that window.
           const lastTurnAt = activityBound
             ? new Date(
@@ -7601,10 +7602,65 @@ export const createServer = (
           return {
             row: row ?? null,
             midTurn: !!(row && pulses.get(row.id)?.busy),
-            turns: turns.turns,
+            hasTurns: turns.hasTurns,
             lastTurnAt,
             activityBound,
           };
+        }
+      )
+      .post(
+        "/api/instances/:id/context-size",
+        hidden,
+        async ({ params, status }) => {
+          const [row] = db.getInstancesByIds([params.id]);
+          if (!row) {
+            return status(404, "Session not found");
+          }
+          if (row.contextTokens !== null) {
+            return {
+              tokens: row.contextTokens,
+              readAt: (row.contextReadAt as Date).getTime(),
+            };
+          }
+          if (row.harness !== "claude" || !row.sessionId) {
+            return { reason: "no stored Claude conversation" };
+          }
+          const answer = await callAgent(
+            row.machineId,
+            CONTROL_READ_SESSION_CONTEXT,
+            [row.sessionId, row.cwd],
+            2000,
+            "claude"
+          );
+          if (answer === "offline" || answer === "timeout") {
+            return { reason: answer };
+          }
+          if (!answer.ok) {
+            return { reason: answer.error ?? "transcript read failed" };
+          }
+          const reading = answer.result as
+            | { tokens: number; readAt: number }
+            | { reason: string }
+            | undefined;
+          if (!reading) {
+            return { reason: "agent has no context reader" };
+          }
+          if ("tokens" in reading) {
+            // A live result that arrived during this read is newer than the stored transcript.
+            const [current] = db.getInstancesByIds([row.id]);
+            if (current.contextTokens === null) {
+              db.updateKeepAlive(row.id, {
+                contextTokens: reading.tokens,
+                contextReadAt: new Date(reading.readAt),
+              });
+            }
+            const [measured] = db.getInstancesByIds([row.id]);
+            return {
+              tokens: measured.contextTokens,
+              readAt: (measured.contextReadAt as Date).getTime(),
+            };
+          }
+          return reading;
         }
       )
       // What these conversations are called — *whether or not the board still

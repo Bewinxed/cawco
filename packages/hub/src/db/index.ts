@@ -708,9 +708,9 @@ export interface DbShape {
     status?: DelegateAskStatus;
   }) => DelegateEvent;
   readonly recordedTurns: (instanceId: string) => {
-    turns: number;
+    hasTurns: boolean;
     lastTurnAt: string | null;
-    unboundedTurns: number;
+    unbounded: boolean;
   };
   /**
    * Keeps a version that is about to be replaced or destroyed — a save, an
@@ -945,6 +945,8 @@ export interface DbShape {
         | "keepAliveStopped"
         | "cacheTtl"
         | "lastRequestAt"
+        | "contextTokens"
+        | "contextReadAt"
         | "keepAliveMisses"
         | "keepAliveTurn"
       >
@@ -3344,11 +3346,14 @@ const make = (path: string): DbShape => {
     recordedTurns: (instanceId) =>
       db
         .select({
-          turns: sql<number>`count(distinct ${completedTurns.resultId})`,
+          hasTurns: sql<boolean>`count(*) > 0`.mapWith(Boolean),
           lastTurnAt: sql<
             string | null
           >`max(coalesce(${completedTurns.completedAt}, strftime('%Y-%m-%dT%H:%M:%fZ', ${delegateEvents.createdAt} / 1000.0, 'unixepoch')))`,
-          unboundedTurns: sql<number>`count(case when ${completedTurns.completedAt} is null and ${delegateEvents.createdAt} is null then 1 end)`,
+          unbounded:
+            sql<boolean>`count(case when ${completedTurns.completedAt} is null and ${delegateEvents.createdAt} is null then 1 end) > 0`.mapWith(
+              Boolean
+            ),
         })
         .from(completedTurns)
         .leftJoin(
@@ -3361,9 +3366,9 @@ const make = (path: string): DbShape => {
         )
         .where(eq(completedTurns.instanceId, instanceId))
         .get() as {
-        turns: number;
+        hasTurns: boolean;
         lastTurnAt: string | null;
-        unboundedTurns: number;
+        unbounded: boolean;
       },
     delegateAsk: (requestId) => {
       const row = db

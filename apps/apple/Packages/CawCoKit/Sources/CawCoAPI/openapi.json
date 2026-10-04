@@ -13179,6 +13179,18 @@
           "cap": {
             "type": "number"
           },
+          "contextReadAt": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "contextTokens": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
           "nextAt": {
             "type": [
               "null",
@@ -13213,6 +13225,8 @@
         },
         "required": [
           "cap",
+          "contextReadAt",
+          "contextTokens",
           "nextAt",
           "on",
           "sent",

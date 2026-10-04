@@ -883,10 +883,11 @@ export async function readSessionWhole(
  */
 export async function readSessionEnd(
   path: string,
-  count = 200
+  count = 200,
+  populateCache = true
 ): Promise<{ complete: boolean; messages: SDKSessionMessage[] }> {
   // Cache hit: use walked-messages cache, slice to the last `count`.
-  const cached = cache.peek(path);
+  const cached = populateCache ? cache.peek(path) : undefined;
   if (cached) {
     const entry = await cache.get(path);
     if (!entry.walkedMessages) {
@@ -915,13 +916,54 @@ export async function readSessionEnd(
       result.startOffset === prevStart
     ) {
       // Fire-and-forget: populate the cache so phase-2 full read is free.
-      // biome-ignore lint/suspicious/noEmptyBlockStatements: intentional fire-and-forget
-      cache.get(path).catch(() => {});
+      if (populateCache) {
+        // biome-ignore lint/suspicious/noEmptyBlockStatements: intentional fire-and-forget
+        cache.get(path).catch(() => {});
+      }
       return { complete: result.complete, messages };
     }
     prevStart = result.startOffset;
     // The raw-record target is a proxy for window size: asking for at least
     // double what the last window held forces readTranscriptEnd to widen.
     target = Math.max(target * 2, result.records.length * 2);
+  }
+}
+
+export async function readSessionContext(path: string) {
+  let count = 8;
+  let previous = -1;
+  for (;;) {
+    // biome-ignore lint/performance/noAwaitInLoops: widen the tail only when the preceding read found no usage.
+    const { messages, complete } = await readSessionEnd(path, count, false);
+    for (const entry of messages.reverse()) {
+      if (entry.type !== "assistant" || entry.error || entry.compactSummary) {
+        continue;
+      }
+      const { usage } = entry.message as {
+        usage?: {
+          input_tokens: number;
+          cache_read_input_tokens?: number;
+          cache_creation_input_tokens?: number;
+        };
+      };
+      if (usage && typeof usage.input_tokens === "number") {
+        return {
+          tokens:
+            usage.input_tokens +
+            (usage.cache_read_input_tokens ?? 0) +
+            (usage.cache_creation_input_tokens ?? 0),
+          readAt: Date.now(),
+        };
+      }
+    }
+    if (complete || messages.length === previous) {
+      return {
+        reason: complete
+          ? "no assistant usage"
+          : "transcript tail byte limit reached",
+      };
+    }
+    previous = messages.length;
+    count *= 2;
   }
 }

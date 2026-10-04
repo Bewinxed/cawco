@@ -48,6 +48,7 @@ import type {
 import {
   ASK_USER_QUESTION,
   CLAUDE_CONVERSATION_GONE,
+  CONTROL_READ_SESSION_CONTEXT,
   CONTROL_SET_EFFORT,
   CONTROL_SET_MODEL,
   CONTROL_WITHDRAW_SEND,
@@ -106,6 +107,7 @@ import { ChildActivity, type RingLine, readRing } from "../sessiond-custody";
 import { claudeConfigDirs } from "../usage/scan-claude";
 import {
   hookFailureId,
+  readSessionContext,
   readSessionEnd,
   readSessionFull,
   readSessionWhole,
@@ -2114,9 +2116,17 @@ export class ClaudeHarness implements Harness {
     return deleteSession(sessionKey, { ...(dir ? { dir } : {}) });
   }
 
-  // biome-ignore lint/suspicious/useAwait: Harness.machine returns Promise<unknown>; the `default` branch returns bare undefined, which needs async's implicit wrap
   async machine(method: string, args: unknown[]): Promise<unknown> {
     switch (method) {
+      case CONTROL_READ_SESSION_CONTEXT: {
+        const file = await claudeSessionFile(
+          args[0] as string,
+          args[1] as string | undefined
+        );
+        return file
+          ? await readSessionContext(file)
+          : { reason: "transcript missing" };
+      }
       case MARKETPLACE_CATALOG:
         return marketplaceCatalog(args[0] as string);
       case READ_MEMORY_FILE:
