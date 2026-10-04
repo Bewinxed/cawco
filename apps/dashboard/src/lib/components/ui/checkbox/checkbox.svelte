@@ -18,7 +18,7 @@
     "justify-center rounded-[var(--radius-xs)] border",
     "touch-hit border-input",
     "disabled:cursor-not-allowed disabled:opacity-50",
-    "group-has-disabled/field:opacity-50",
+    "group-data-[disabled=true]/field:opacity-50",
     "aria-invalid:border-destructive",
     "aria-invalid:aria-checked:border-action-solid",
     "data-checked:border-action-solid data-checked:bg-action-solid",

@@ -12,7 +12,7 @@
 
 <div
   class={cn(
-    "font-medium group-has-[>svg]/alert:col-start-2 [&_a]:underline [&_a]:underline-offset-3 [&_a]:hover:text-foreground",
+    "font-medium [&_a]:underline [&_a]:underline-offset-3 [&_a]:hover:text-foreground [svg~&]:col-start-2",
     className
   )}
   data-slot="alert-title"
