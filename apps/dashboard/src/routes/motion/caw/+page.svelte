@@ -4,7 +4,7 @@
    *
    * Where Caw stands in the app depends on the fleet: an empty one, a wait,
    * a hub out of reach. Judging how he comes in, changes and leaves there
-   * means arranging the fleet first, and nothing about his clips needs it.
+   * means arranging the fleet first, and nothing about his motion needs it.
    *
    * So this route mounts `Caw` itself, with the same props the home and the
    * detail area give him, and is driven from `window.__caw`, so a script can
@@ -43,12 +43,12 @@
       mounted = true;
       note(`mount ${first}`);
     },
-    /** A status change: he leaves by his still and arrives by the clip. */
+    /** A status change: the old status fades out, then the new one comes in. */
     change(next: CawStatus) {
       status = next;
       note(`change ${next}`);
     },
-    /** The place is done with him: his exit, then `gone`. */
+    /** The place is done with him: he fades out, then `gone`. */
     leave() {
       present = false;
       note("leave");

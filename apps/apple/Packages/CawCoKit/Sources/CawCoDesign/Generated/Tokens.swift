@@ -593,7 +593,7 @@ public enum Motion {
     /// In seconds.
     public static let breath: TimeInterval = 2
     public static let pressScale: Double = 0.97
-    /// How far Caw shrinks as he fades out mid-loop, over dur-fade on ease-out, when what he stood in for has arrived. Material 3, Easing and duration: exit transitions are faster than enters, 200ms.
+    /// How far Caw shrinks as he fades out, from any drawing, over dur-fade on ease-out, and the size a Caw whose status has no drawn enter fades in from, over dur-pop. Material 3, Easing and duration: exit transitions are faster than enters, 200ms.
     public static let leaveScale: Double = 0.97
     public static let popScale: Double = 0.92
     /// How far each card of a session mark's deck shows below the one in front (SessionMark).

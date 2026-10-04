@@ -1,10 +1,10 @@
 // CawCoMascot: Caw, CawCo's mascot, drawn by Rive from one .riv per status.
 //
 // The files' contract (assets/mascot/README.md): each status file holds that status's loops (or
-// its one resting drawing) and the clips that bring him in, take him out and join him to the
-// other statuses, and a view model `Caw` bound to its state machine `CawStates`. This module
-// picks the file for the status, sets `dark`, `reducedMotion`, `from`, `leave` and `exit`, and
-// hears `entered`, `still` and `gone`; Caw himself changes in the .riv files, never in Swift.
+// its one resting drawing) and, where one was drawn, its enter, and a view model `Caw` bound to
+// its state machine `CawStates`. This module picks the file for the status, sets `dark` and
+// `reducedMotion`, reads `enters` and hears `entered`; Caw himself changes in the .riv files,
+// never in Swift.
 //
 // Resources/caw/<status>.riv are written by assets/mascot/scripts/build.mjs, byte for byte the
 // same files as assets/mascot/caw/<status>.riv.
@@ -37,15 +37,14 @@ public enum CawStatus: String, CaseIterable, Sendable {
 /// setting (`reducedMotion`) on his own. Decorative, so hidden from VoiceOver: the screen
 /// around him carries the words.
 ///
-/// He comes in by his enter clip, and `onEntered` is called when it has ended, or when his file
-/// fails to load, so a place can keep him until then (`CawWaiting` does). On a status change the
-/// shown file is told to `leave`; once it says he is back on his `still`, the new status's file
-/// takes over with `from` naming the old one and plays his arrival from that very drawing, so no
-/// frame is ever empty and at most two files are alive. With `present` off he is gone within
-/// `Motion.durFade` and `onGone` is called: on his still he plays his exit clip; anywhere else he
-/// holds the drawing he is on and fades out, so what he stood in for is never under a looping
-/// Caw. Under Reduce Motion there are no clips: he fades (`Motion.durFade` on `Motion.easeOut`)
-/// in, across and out.
+/// He comes in by his status's drawn enter, or where it has none by a fade up from
+/// `Motion.leaveScale` over `Motion.durPop`, and `onEntered` is called when that has ended, or
+/// when his file fails to load, so a place can keep him until then (`CawWaiting` does). He goes
+/// the same way from any drawing: he holds the one he is on and fades out to `Motion.leaveScale`
+/// over `Motion.durFade`, so what he stood in for is never under a looping Caw. With `present`
+/// off `onGone` is called once he has gone; on a status change the new status's file comes in
+/// once the old one has, so one file is alive at a time. Under Reduce Motion there is no enter
+/// and no scale: he fades (`Motion.durFade` on `Motion.easeOut`) in, across and out.
 ///
 /// The view's bounds hold Caw's still: the largest centred square in them is the files' still
 /// box. His acting reaches past that box, so he draws past the bounds there; nothing here clips
@@ -59,9 +58,8 @@ public final class CawView: UIView {
         }
     }
 
-    /// Off once the place is done with him: he leaves at once, by his exit clip from his still or
-    /// a fade from anywhere else, and `onGone` is called. The place keeps him in its hierarchy
-    /// until then.
+    /// Off once the place is done with him: he fades out at once and `onGone` is called. The
+    /// place keeps him in its hierarchy until then.
     public var present = true {
         didSet {
             guard present != oldValue else {
@@ -83,6 +81,8 @@ public final class CawView: UIView {
     /// The file being read for a first appearance or a change, and the status it is for.
     private var loading: (status: CawStatus, task: Task<Void, Never>)?
     private var fade: UIViewPropertyAnimator?
+    /// The Caw on screen is fading out: whatever is asked for next comes in once he has gone.
+    private var leaving = false
     private var entered = false
 
     public init(status: CawStatus) {
@@ -112,8 +112,8 @@ public final class CawView: UIView {
     }
 
     /// For a place that is going away itself (a cell, a screen): takes him out of it, stands
-    /// him where he was on `container`, and lets him play his exit there over whatever comes.
-    /// He removes himself once he is gone.
+    /// him where he was on `container`, and lets him fade out there over whatever comes. He
+    /// removes himself once he is gone.
     public func leave(over container: UIView) {
         let place = convert(bounds, to: container)
         removeFromSuperview()
@@ -135,74 +135,61 @@ public final class CawView: UIView {
     private var dark: Bool { traitCollection.userInterfaceStyle == .dark }
     private var reducedMotion: Bool { UIAccessibility.isReduceMotionEnabled }
 
-    /// Brings `status` on. The first Caw is simply the file for it, coming in by its enter. A
-    /// Caw on screen is told to leave and the new file takes over from his still (`settle`);
-    /// under Reduce Motion the new one fades in over him.
+    /// Brings `status` on. The first Caw is simply the file for it. A Caw on screen showing
+    /// another status fades out, and the new status's file comes in once he has gone; under
+    /// Reduce Motion the new one fades in over him.
     private func ask() {
         guard window != nil else {
             return
         }
         guard let shown else {
-            load(status, from: nil)
+            load(status)
             return
         }
         if reducedMotion {
             if shown.status == status {
                 cancelLoading()
             } else {
-                load(status, from: shown.status)
+                load(status)
             }
             return
         }
-        settle()
+        if !leaving, shown.status != status {
+            fadeOut(shown)
+        }
     }
 
-    /// Moves the Caw on screen towards `status`, one step at a time.
-    private func settle() {
-        guard let shown, present else {
-            return
-        }
-        shown.set(CawContract.exit, false)
-        if shown.status == status {
-            // Asked back before the change happened: he carries on.
-            cancelLoading()
-            shown.still = false
-            shown.set(CawContract.leave, false)
-            return
-        }
-        guard shown.still else {
-            shown.set(CawContract.leave, true)
-            return
-        }
-        load(status, from: shown.status)
-    }
-
-    /// `present` went off. On his still (a rest, or held there by a change) he plays his exit
-    /// clip. Anywhere else, mid-loop or mid-clip, he holds the drawing he is on and fades out over
-    /// `Motion.durFade`, shrinking to `Motion.leaveScale`: no exit clip can start from a pose it
-    /// was not drawn from, and what has arrived is never left under him. Under Reduce Motion the
-    /// fade alone. With no Caw yet, he is gone at once.
+    /// `present` went off: he fades out from the drawing he is on. With no Caw yet, he is gone
+    /// at once.
     private func leave() {
         cancelLoading()
         guard let shown else {
             onGone?()
             return
         }
-        CawContract.log.info("Caw \(shown.status.rawValue, privacy: .public) leaves")
-        if !reducedMotion, shown.still || (shown.landed && shown.rests) {
-            shown.set(CawContract.leave, true)
-            shown.set(CawContract.exit, true)
-            return
+        if !leaving {
+            fadeOut(shown)
         }
+    }
+
+    /// `layer`'s Caw goes: he holds the drawing he is on and fades out over `Motion.durFade`,
+    /// shrinking to `Motion.leaveScale`, from wherever a fade in had brought him; under Reduce
+    /// Motion the fade alone, taking a Caw he was fading across with him. Then the status asked
+    /// for comes in afresh, or with `present` off the place is left empty (`gone`).
+    private func fadeOut(_ layer: CawLayer) {
+        CawContract.log.info("Caw \(layer.status.rawValue, privacy: .public) leaves")
+        leaving = true
         fade?.stopAnimation(true)
-        shown.view.isPaused = true
+        layer.view.isPaused = true
         let scale = reducedMotion ? 1 : Motion.leaveScale
-        let animator = Motion.easeOut.animator(Motion.durFade) {
-            shown.view.alpha = 0
-            shown.view.transform = CGAffineTransform(scaleX: scale, y: scale)
+        let animator = Motion.easeOut.animator(Motion.durFade) { [self] in
+            for view in subviews {
+                view.alpha = 0
+                view.transform = CGAffineTransform(scaleX: scale, y: scale)
+            }
         }
         animator.addCompletion { [weak self] _ in
-            self?.gone(shown)
+            self?.gone(layer)
         }
         fade = animator
         animator.startAnimation()
@@ -213,9 +200,8 @@ public final class CawView: UIView {
         loading = nil
     }
 
-    /// Reads `status`'s file and starts its Caw: `from` is nil on a first appearance, else the
-    /// status he is leaving. A newer status cancels this one while it loads.
-    private func load(_ status: CawStatus, from: CawStatus?) {
+    /// Reads `status`'s file and starts its Caw. A newer status cancels this one while it loads.
+    private func load(_ status: CawStatus) {
         if loading?.status == status {
             return
         }
@@ -227,7 +213,7 @@ public final class CawView: UIView {
             }
             let incoming: CawLayer
             do {
-                incoming = try await CawLayer.load(status, from: from, dark: dark, reducedMotion: reducedMotion)
+                incoming = try await CawLayer.load(status, dark: dark, reducedMotion: reducedMotion)
             } catch {
                 CawContract.log.error("Caw \(status.rawValue, privacy: .public) did not load: \(String(describing: error), privacy: .public)")
                 loading = nil
@@ -240,58 +226,47 @@ public final class CawView: UIView {
                 return
             }
             loading = nil
-            await start(incoming, asked: asked)
+            start(incoming, asked: asked)
         }
         loading = (status, task)
     }
 
-    /// Puts `incoming` on screen. His clip begins on the drawing the Caw below holds, so that
-    /// one goes once this one has drawn. Under Reduce Motion the file holds his still and the
-    /// view fades in.
-    private func start(_ incoming: CawLayer, asked: ContinuousClock.Instant) async {
+    /// Puts `incoming` on screen, its file begun: his drawn enter is playing, and the file says
+    /// `entered` at its end. A file with no drawn enter has him there already, so the view fades
+    /// in from `Motion.leaveScale` over `Motion.durPop`; under Reduce Motion every file holds his
+    /// still and the view fades in over `Motion.durFade`, across the Caw below.
+    private func start(_ incoming: CawLayer, asked: ContinuousClock.Instant) {
         let below = shown
-        incoming.hear(
-            entered: { [weak self, weak incoming] in
-                incoming?.landed = true
-                self?.reportEntered()
-            },
-            still: { [weak self, weak incoming] in
-                incoming?.still = true
-                self?.settle()
-            },
-            gone: { [weak self, weak incoming] in
-                if let incoming {
-                    self?.gone(incoming)
-                }
-            }
-        )
+        incoming.hearEntered { [weak self] in
+            self?.reportEntered()
+        }
         addSubview(incoming.view)
         shown = incoming
         setNeedsLayout()
         layoutIfNeeded()
         CawContract.log.info("Caw \(incoming.status.rawValue, privacy: .public) starts \((ContinuousClock.now - asked).milliseconds, format: .fixed(precision: 1)) ms after it was asked for")
-        if reducedMotion {
-            fade?.stopAnimation(true)
-            incoming.view.alpha = 0
-            let animator = Motion.easeOut.animator(Motion.durFade) {
-                incoming.view.alpha = 1
-            }
-            animator.addCompletion { [weak self] _ in
-                below?.view.removeFromSuperview()
-                self?.reportEntered()
-            }
-            fade = animator
-            animator.startAnimation()
+        fade?.stopAnimation(true)
+        // A fade across that this one cut short left its own Caw below: that one goes now.
+        for view in subviews where view !== incoming.view && view !== below?.view {
+            view.removeFromSuperview()
+        }
+        if incoming.enters, !reducedMotion {
+            below?.view.removeFromSuperview()
             return
         }
-        if let below {
-            // His arrival's first drawing is the one below, held for two frames of the clip
-            // (83 ms): the file below goes once this one has had time to draw it.
-            try? await Task.sleep(for: CawContract.handover)
-            below.view.removeFromSuperview()
+        let scale = reducedMotion ? 1 : Motion.leaveScale
+        incoming.view.alpha = 0
+        incoming.view.transform = CGAffineTransform(scaleX: scale, y: scale)
+        let animator = Motion.easeOut.animator(reducedMotion ? Motion.durFade : Motion.durPop) {
+            incoming.view.alpha = 1
+            incoming.view.transform = .identity
         }
-        // The status may have moved on while this file was loading.
-        settle()
+        animator.addCompletion { [weak self] _ in
+            below?.view.removeFromSuperview()
+            self?.reportEntered()
+        }
+        fade = animator
+        animator.startAnimation()
     }
 
     private func reportEntered() {
@@ -303,17 +278,20 @@ public final class CawView: UIView {
         onEntered?()
     }
 
-    /// `layer` has left an empty page. Asked back meanwhile, he comes in afresh.
+    /// `layer` has faded out. With `present` on, the status asked for comes in afresh.
     private func gone(_ layer: CawLayer) {
         guard shown === layer else {
             return
         }
-        layer.view.removeFromSuperview()
+        for view in subviews {
+            view.removeFromSuperview()
+        }
         shown = nil
+        leaving = false
+        CawContract.log.info("Caw \(layer.status.rawValue, privacy: .public) gone")
         if present {
             ask()
         } else {
-            CawContract.log.info("Caw \(layer.status.rawValue, privacy: .public) gone")
             onGone?()
         }
     }
@@ -350,8 +328,8 @@ public final class CawView: UIView {
 /// A place's wait with Caw standing in for it. While `waiting`, the place is its plain surface
 /// for `Motion.durWaitGrace`; a wait that outlasts it shows Caw at `status` (loading or
 /// reconnecting), centred at `side`. Once he shows, `content` waits until his enter has played,
-/// so he is never cut off mid-entrance; after that `content` lands at once and he plays his
-/// exit over it. A wait shorter than the grace shows no Caw at all: `content` simply appears.
+/// so he is never cut off mid-entrance; after that `content` lands at once and he fades out
+/// over it. A wait shorter than the grace shows no Caw at all: `content` simply appears.
 public final class CawWaiting: UIViewController {
     public var waiting: Bool {
         didSet {
@@ -411,7 +389,7 @@ public final class CawWaiting: UIViewController {
             grace = nil
             graceOver = false
             showContent()
-            // He plays his exit over the content and is taken away when it has ended.
+            // He fades out over the content and is taken away when he has gone.
             caw?.present = false
             return
         }
@@ -503,62 +481,48 @@ private final class CawLayer {
     let status: CawStatus
     let view: RiveUIView
     let caw: ViewModelInstance
-    /// Told to leave and back on his still: the next file may take over.
-    var still = false
-    /// His coming in has ended (`entered`): he is in his loops, or at rest.
-    var landed = false
-    /// The file's `rests`: its status is one held drawing, his still.
-    let rests: Bool
-    private var hearing: [Task<Void, Never>] = []
+    /// The file's `enters`: it carries a drawn enter, and says `entered` at its end.
+    let enters: Bool
+    private var hearing: Task<Void, Never>?
 
-    private init(status: CawStatus, view: RiveUIView, caw: ViewModelInstance, rests: Bool) {
+    private init(status: CawStatus, view: RiveUIView, caw: ViewModelInstance, enters: Bool) {
         self.status = status
         self.view = view
         self.caw = caw
-        self.rests = rests
+        self.enters = enters
     }
 
     isolated deinit {
-        for task in hearing {
-            task.cancel()
-        }
+        hearing?.cancel()
     }
 
-    static func load(_ status: CawStatus, from: CawStatus?, dark: Bool, reducedMotion: Bool) async throws -> CawLayer {
+    static func load(_ status: CawStatus, dark: Bool, reducedMotion: Bool) async throws -> CawLayer {
         let file = try await CawFiles.file(for: status)
         let artboard = try await file.createArtboard(CawContract.artboard)
         let stateMachine = try await artboard.createStateMachine(CawContract.stateMachine)
         // Retained in the layer and bound explicitly: the view writes to this instance for its lifetime.
         let caw = try await file.createViewModelInstance(.viewModelDefault(from: .name(CawContract.viewModel)))
         CawContract.write(to: caw, dark: dark, reducedMotion: reducedMotion)
-        // `from` starts him: his enter on a first appearance, else his arrival from that status.
-        caw.setValue(of: CawContract.from, to: from?.rawValue ?? CawContract.fromNone)
         try await stateMachine.bindViewModelInstances(main: caw)
         let rive = try await Rive(file: file, artboard: artboard, stateMachine: stateMachine)
         let view = RiveUIView(rive: rive, delegate: nil, isPaused: false)
         view.isUserInteractionEnabled = false
         view.isAccessibilityElement = false
         view.backgroundColor = .clear
-        return try await CawLayer(status: status, view: view, caw: caw, rests: caw.value(of: CawContract.rests))
+        return try await CawLayer(status: status, view: view, caw: caw, enters: caw.value(of: CawContract.enters))
     }
 
-    func set(_ property: BoolProperty, _ value: Bool) {
-        caw.setValue(of: property, to: value)
-    }
-
-    /// Hears the file's triggers: the end of his coming in, his still while leaving, his exit's end.
-    func hear(entered: @escaping @MainActor () -> Void, still: @escaping @MainActor () -> Void, gone: @escaping @MainActor () -> Void) {
-        for (trigger, action) in [(CawContract.entered, entered), (CawContract.still, still), (CawContract.gone, gone)] {
-            let fired = caw.stream(of: trigger)
-            hearing.append(Task {
-                do {
-                    for try await _ in fired {
-                        action()
-                    }
-                } catch {
-                    CawContract.log.error("Caw trigger \(trigger.path, privacy: .public) failed: \(String(describing: error), privacy: .public)")
+    /// Hears the file's `entered`: the end of his drawn enter.
+    func hearEntered(_ action: @escaping @MainActor () -> Void) {
+        let fired = caw.stream(of: CawContract.entered)
+        hearing = Task {
+            do {
+                for try await _ in fired {
+                    action()
                 }
-            })
+            } catch {
+                CawContract.log.error("Caw trigger entered failed: \(String(describing: error), privacy: .public)")
+            }
         }
     }
 }
@@ -579,19 +543,9 @@ private enum CawContract {
     static let viewModel = "Caw"
     static let reducedMotion = BoolProperty(path: "reducedMotion")
     static let dark = BoolProperty(path: "dark")
-    static let from = EnumProperty(path: "from")
-    /// `from` on a first appearance; otherwise it is the status he was showing.
-    static let fromNone = "none"
-    static let leave = BoolProperty(path: "leave")
-    static let exit = BoolProperty(path: "exit")
-    /// Read, never written: on in a file whose status rests on one drawing.
-    static let rests = BoolProperty(path: "rests")
+    /// Read, never written: on in a file that carries a drawn enter.
+    static let enters = BoolProperty(path: "enters")
     static let entered = TriggerProperty(path: "entered")
-    static let still = TriggerProperty(path: "still")
-    static let gone = TriggerProperty(path: "gone")
-    /// How long the file below stays once the next one has started: under the 83 ms its first
-    /// drawing, the same picture, is held.
-    static let handover = Duration.milliseconds(50)
     static let log = Logger(subsystem: "dev.cawco.app", category: "Caw")
 
     static func write(to caw: ViewModelInstance, dark: Bool, reducedMotion: Bool) {

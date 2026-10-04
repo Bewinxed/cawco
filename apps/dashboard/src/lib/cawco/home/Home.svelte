@@ -52,7 +52,7 @@
       home.needs.length + home.working.length + home.finished.length === 0 &&
       home.empty
   );
-  /** Caw is on the page: from a first run until his exit has ended. */
+  /** Caw is on the page: from a first run until he has faded out. */
   let cawThere = $state(false);
   $effect(() => {
     if (firstRun) {
@@ -156,8 +156,8 @@
            has not answered: the one empty state then. Nothing is going on,
            so he sleeps; while a machine is awaited he is awake. With sessions
            somewhere, a tab with none says so itself (WorkTabs). He comes in
-           by his enter and leaves by his exit, and keeps his place until it
-           has played; only his line fades. -->
+           by his enter, or by a fade where his status has none, and fades
+           out, keeping his place until he has gone. -->
       <figure class="caw" data-flip>
         <Caw
           next={["ready", "sleeping"]}

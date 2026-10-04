@@ -1,8 +1,8 @@
 // Proves each of Caw's per-status Rive files (assets/mascot/caw/<status>.riv) on Rive's official
 // runtime (@rive-app/canvas-advanced, WASM) in headless Chromium: its `Caw` view model drives its
-// state machine, `dark` puts the cream rim on, its variants take turns without repeating one,
-// every drawing stays on screen two frames or more, reduced motion holds its still, and it loads
-// and instances within the 100 ms budget.
+// state machine, his enter plays once and fires `entered` on his still, `dark` puts the cream rim
+// on, its variants take turns without repeating one, every drawing stays on screen two frames or
+// more, reduced motion holds its still, and it loads and instances within the 100 ms budget.
 //
 // The expected pictures come from the file itself: each loop's own animations (the loop, a scheme,
 // a motion state) are applied directly, without the state machine, and every slot of every loop is
@@ -18,7 +18,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright-core";
-import { clipsOf, FROM, fileName, STATUS } from "./scene.mjs";
+import { enterOf, fileName, STATUS } from "./scene.mjs";
 
 const ADVANCE_S = 0.5;
 const SIZE = 512;
@@ -171,21 +171,14 @@ window.run = async (b64, job) => {
       expected.push({ loop: job.rest, dark, slot: 0, frame: snap(still) });
     }
   }
-  // The empty page (before \`from\` is set, after the exit) and each clip's frames, in light.
-  const light = (name, time) => {
-    play(name, time);
+  // His enter's frames, in light.
+  const enter = [];
+  for (let f = 0; f < job.enterFrames; f++) {
+    play("enter", (f + 0.5) / job.fps);
     play("scheme_light", 0);
     play("motion_full", 0);
     still.advance(0);
-    return snap(still);
-  };
-  const hidden = light("variant_hidden", 0);
-  const clips = {};
-  for (const clip of job.clips) {
-    clips[clip.name] = [];
-    for (let f = 0; f < clip.frames; f++) {
-      clips[clip.name].push(light("clip_" + clip.name, (f + 0.5) / job.fps));
-    }
+    enter.push(snap(still));
   }
   for (const loop of job.loops) {
     for (const dark of [false, true]) {
@@ -212,8 +205,7 @@ window.run = async (b64, job) => {
     viewModel: vm.name,
     properties: vm.getProperties(),
     enums: file.enums().map((e) => ({ name: e.name, values: e.values })),
-    hidden,
-    clips,
+    enter,
     expected,
     timelines,
     steps: [],
@@ -236,17 +228,9 @@ window.run = async (b64, job) => {
     vmi.boolean("reducedMotion").value = s.reducedMotion;
     return { dark: vmi.boolean("dark").value, reducedMotion: vmi.boolean("reducedMotion").value };
   };
-  seek(0);
-  report.unset = snap(ab);
-  report.rests = vmi.boolean("rests").value;
-  // A first appearance: his enter plays, and the steps begin once it has ended.
-  vmi.enum("from").value = "none";
-  const entered = vmi.trigger("entered");
-  for (let t = 0; t < 4 && !entered.hasChanged; t += 1 / 60) {
-    seek(1 / 60);
-  }
-  report.enteredFirst = entered.hasChanged;
-  entered.clearChanges();
+  report.enters = vmi.boolean("enters").value;
+  // The steps begin once his enter has ended.
+  seek((job.enterFrames + 1) / job.fps);
   for (const s of job.steps) {
     const readBack = set(s);
     changed.length = 0;
@@ -267,54 +251,29 @@ window.run = async (b64, job) => {
     }
     report.watches.push({ reducedMotion, states: [...changed], frames });
   }
-  // Each way in, then out: a fresh state machine per \`from\` value, one frame (1/24 s) apart,
-  // half a frame off the keys. \`leave\` is asked the moment he has come in, \`exit\` on his still.
-  report.drives = job.froms.map((from) => {
+  // His arrival: a fresh state machine, one frame (1/24 s) apart, half a frame off the keys,
+  // until \`entered\` fires or his enter's length and a second have gone by.
+  {
     const a = file.artboardByName("Caw");
     const m = new rive.StateMachineInstance(a.stateMachineByName("CawStates"), a);
-    // Its own instance of \`Caw\`, so nothing an earlier drive set is left on it.
+    // Its own instance of \`Caw\`, so nothing set above is left on it.
     const v = file.defaultArtboardViewModel(a).instanceByName("Default");
     m.bindViewModelInstance(v);
-    m.advanceAndApply(0);
-    const before = snap(a);
-    const fresh = v.enum("from").value + "," + v.boolean("leave").value + "," + v.boolean("exit").value;
     // Taken before anything fires: a trigger's changes count from when it is first asked for.
-    const triggers = {
-      entered: v.trigger("entered"),
-      still: v.trigger("still"),
-      gone: v.trigger("gone"),
-    };
-    const fired = (name) => {
-      const p = triggers[name];
-      const yes = p.hasChanged;
-      if (yes) p.clearChanges();
-      return yes;
-    };
-    const run = (until, limit) => {
-      const frames = [];
-      for (let k = 0; k < limit * job.fps; k++) {
-        m.advanceAndApply(1 / job.fps);
-        // Read before drawing: drawing the frame clears a trigger's change.
-        const hit = fired(until);
-        frames.push(snap(a));
-        if (hit) return { frames, at: (k + 1) / job.fps };
-      }
-      return { frames, at: null };
-    };
-    v.enum("from").value = from;
+    const entered = v.trigger("entered");
     m.advanceAndApply(0.5 / job.fps);
-    // With no clip he is there, and \`entered\` fires, in that very advance.
-    const there = fired("entered");
-    const first = snap(a);
-    const coming = there ? { frames: [], at: 0 } : run("entered", 4);
-    v.boolean("leave").value = true;
-    const stilling = run("still", 7);
-    v.boolean("exit").value = true;
-    const going = run("gone", 4);
+    const frames = [];
+    let at = null;
+    for (let k = 0; k < job.enterFrames + job.fps && at === null; k++) {
+      // Read before drawing: drawing the frame clears a trigger's change.
+      if (entered.hasChanged) at = k / job.fps;
+      frames.push(snap(a));
+      m.advanceAndApply(1 / job.fps);
+    }
+    report.arrival = { frames, at };
     m.delete();
     a.delete();
-    return { from, fresh, before, first, coming, stilling, going };
-  });
+  }
   return report;
 };
 window.ready = true;
@@ -347,7 +306,7 @@ const browser = await chromium.launch({
   executablePath: chromiumPath(),
 });
 
-async function run(bytes, loops, clips, froms) {
+async function run(bytes, loops, enterFrames) {
   // A fresh context and page per run: a fresh WASM instance under the pinned clocks and entropy.
   const context = await browser.newContext();
   await context.route(`${ORIGIN}/**`, (route) => {
@@ -391,8 +350,7 @@ async function run(bytes, loops, clips, froms) {
       ? WATCH_LOOPS * Math.max(...loops.map((l) => l.frames))
       : Math.round(HOLD_S * FPS),
     rest: REST,
-    clips,
-    froms,
+    enterFrames,
     loops,
     steps: STEPS,
   };
@@ -447,13 +405,12 @@ const totals = {
   stills: 0,
   rested: 0,
   held: 0,
-  ways: 0,
-  waysOk: 0,
+  drawn: 0,
+  enter: 0,
+  plain: 0,
+  there: 0,
 };
 const failures = [];
-/** Each file's still, and each arrival clip's first picture, to compare across files. */
-const stills = {};
-const arrivalStarts = [];
 for (const status of STATUS) {
   const name = fileName(status);
   const fail = (m) => failures.push(`${name}.riv: ${m}`);
@@ -463,21 +420,14 @@ for (const status of STATUS) {
   const resting = loops.length === 0;
   /** The picture reduced motion holds: the first loop's first drawing, or the rest drawing. */
   const stillOf = loops[0]?.name ?? REST;
-  const ways = clipsOf(status);
-  const clipFrames = (clip) =>
-    JSON.parse(readFileSync(here(`../clips/${clip}/timing.json`), "utf8"))
-      .frames;
-  const clips = [
-    ...new Set([ways.enter, ways.exit, ...Object.values(ways.arrivals)].flat()),
-  ].map((clip) => ({ name: clip, frames: clipFrames(clip) }));
-  // A first appearance, and every status he can arrive from by a clip.
-  const froms = [
-    "none",
-    ...Object.keys(ways.arrivals).filter((f) => ways.arrivals[f].length),
-  ];
+  const enter = enterOf(status);
+  const enterFrames = enter
+    ? JSON.parse(readFileSync(here(`../clips/${enter}/timing.json`), "utf8"))
+        .frames
+    : 0;
   // biome-ignore lint/performance/noAwaitInLoops: one file at a time, so no run's load timing shares the CPU with another
-  const now = await run(bytes, loops, clips, froms);
-  const again = await run(bytes, loops, clips, froms);
+  const now = await run(bytes, loops, enterFrames);
+  const again = await run(bytes, loops, enterFrames);
   totals.files += 1;
 
   const pictures = new Map();
@@ -495,128 +445,76 @@ for (const status of STATUS) {
   if (
     now.inputs !== 0 ||
     now.viewModel !== "Caw" ||
-    JSON.stringify(now.enums) !==
-      JSON.stringify([{ name: "CawFrom", values: FROM }]) ||
+    now.enums.length !== 0 ||
     props !==
       JSON.stringify([
         ["reducedMotion", "boolean"],
         ["dark", "boolean"],
-        ["from", "enumType"],
-        ["leave", "boolean"],
-        ["exit", "boolean"],
         ["entered", "trigger"],
-        ["still", "trigger"],
-        ["gone", "trigger"],
-        ["rests", "boolean"],
+        ["enters", "boolean"],
       ])
   ) {
     fail(
       `contract: view model ${now.viewModel} ${props}, enums ${JSON.stringify(now.enums)}, ${now.inputs} inputs`
     );
   }
-  if (now.rests !== Boolean(rests[status])) {
+  if (now.enters !== Boolean(enter)) {
     fail(
-      `\`rests\` reads ${now.rests} in a file that ${rests[status] ? "rests" : "waits"}`
+      `\`enters\` reads ${now.enters} in a file with ${enter ? "a" : "no"} drawn enter`
     );
   }
-  if (now.unset !== now.hidden) {
-    fail("before `from` is set it draws something");
-  }
-  if (!now.enteredFirst) {
-    fail("a first appearance never fires `entered`");
-  }
 
-  // The ways in and out. Frames are compared as the order of distinct pictures: a way in shows
-  // its clips' drawings in order and ends on his still; `leave` brings his still and `still`;
-  // `exit` shows the exit's drawings in order and ends on an empty page with `gone`.
+  // His arrival, compared as the order of distinct pictures. A drawn enter shows its drawings in
+  // order, each two frames or more, and `entered` fires as it lands on his still. With none he is
+  // there on the first frame, on his rest or on a loop's first drawing, and `entered` never
+  // fires: the apps fade him in.
   const stillPicture = now.expected.find(
     (e) => e.loop === stillOf && e.slot === 0 && !e.dark
   ).frame;
   const distinct = (frames) =>
     frames.filter((f, k) => k === 0 || f !== frames[k - 1]);
   const same = (a, b) => a.length === b.length && a.every((f, k) => f === b[k]);
-  const played = (clipNames) => clipNames.flatMap((c) => now.clips[c]);
-  const within = (at, frames) =>
-    at !== null && Math.abs(at * FPS - frames) <= 2;
-  for (const clip of clips) {
+  const beforeArrival = failures.length;
+  const { frames: arrived, at } = now.arrival;
+  if (enter) {
     const runs = [];
-    for (const [k, f] of now.clips[clip.name].entries()) {
-      if (k > 0 && f === now.clips[clip.name][k - 1]) {
+    for (const [k, f] of now.enter.entries()) {
+      if (k > 0 && f === now.enter[k - 1]) {
         runs[runs.length - 1] += 1;
       } else {
         runs.push(1);
       }
     }
     if (!runs.every((n) => n >= 2)) {
-      fail(`clip ${clip.name} drawings on screen for ${runs.join(",")} frames`);
+      fail(`${enter} drawings on screen for ${runs.join(",")} frames`);
     }
+    if (now.enter.at(-1) !== stillPicture) {
+      fail(`${enter} does not land on his still`);
+    }
+    if (!same(distinct(arrived), distinct([...now.enter, stillPicture]))) {
+      fail(`his arrival does not show ${enter} in order, then his still`);
+    }
+    if (at === null || Math.abs(at * FPS - enterFrames) > 2) {
+      fail(`entered after ${at} s, ${enter} lasts ${enterFrames} frames`);
+    }
+    totals.drawn += 1;
+    totals.enter += failures.length === beforeArrival ? 1 : 0;
+  } else {
+    const first = (pictures.get(arrived[0]) ?? []).some(
+      (d) => d.slot === 0 && !d.dark
+    );
+    if (!first) {
+      fail("with no drawn enter his first frame is not a first drawing");
+    }
+    if (at !== null) {
+      fail(`with no drawn enter \`entered\` fired after ${at} s`);
+    }
+    totals.plain += 1;
+    totals.there += failures.length === beforeArrival ? 1 : 0;
   }
-  const exitFrames = ways.exit.reduce((n, c) => n + clipFrames(c), 0);
-  let waysOk = 0;
-  const timing = [];
-  for (const d of now.drives) {
-    const at = failures.length;
-    const coming = d.from === "none" ? ways.enter : ways.arrivals[d.from];
-    const comingFrames = coming.reduce((n, c) => n + clipFrames(c), 0);
-    if (d.fresh !== "unset,false,false") {
-      fail(`from ${d.from}: its \`Caw\` instance starts as ${d.fresh}`);
-    }
-    if (d.before !== now.hidden) {
-      fail(`from ${d.from}: something is drawn before \`from\` is set`);
-    }
-    if (coming.length) {
-      const shown = distinct([d.first, ...d.coming.frames]);
-      // The frame `entered` fires on is his still or his first loop's first drawing: the same picture.
-      if (!same(shown, distinct([...played(coming), stillPicture]))) {
-        fail(
-          `from ${d.from}: the way in does not show ${coming.join(" + ")} in order, then his still`
-        );
-      }
-      if (!within(d.coming.at, comingFrames)) {
-        fail(
-          `from ${d.from}: entered after ${d.coming.at} s, clips last ${comingFrames} frames`
-        );
-      }
-      if (now.clips[coming.at(-1)].at(-1) !== stillPicture) {
-        fail(`from ${d.from}: ${coming.at(-1)} does not land on his still`);
-      }
-    } else if (d.coming.at === null) {
-      fail(`from ${d.from}: never entered`);
-    }
-    if (d.stilling.at === null || d.stilling.frames.at(-1) !== stillPicture) {
-      fail(
-        `from ${d.from}: \`leave\` did not bring his still (\`still\` after ${d.stilling.at} s, on his still: ${d.stilling.frames.at(-1) === stillPicture})`
-      );
-    }
-    const leaving = distinct([d.stilling.frames.at(-1), ...d.going.frames]);
-    if (
-      d.going.at === null ||
-      !same(leaving, distinct([stillPicture, ...played(ways.exit), now.hidden]))
-    ) {
-      fail(
-        `from ${d.from}: \`exit\` does not show ${ways.exit.join(" + ") || "nothing"} in order, then an empty page`
-      );
-    } else if (!within(d.going.at, exitFrames)) {
-      fail(
-        `from ${d.from}: gone after ${d.going.at} s, exit lasts ${exitFrames} frames`
-      );
-    }
-    waysOk += failures.length === at ? 1 : 0;
-    timing.push(`${d.from} in ${Math.round((comingFrames / FPS) * 1000)} ms`);
-  }
-  totals.ways += now.drives.length;
-  totals.waysOk += waysOk;
-  stills[name] = stillPicture;
-  for (const [from, coming] of Object.entries(ways.arrivals)) {
-    if (coming.length) {
-      arrivalStarts.push({
-        name,
-        from,
-        clip: coming[0],
-        frame: now.clips[coming[0]][0],
-      });
-    }
-  }
+  const arrival = enter
+    ? `${enter} ${Math.round((enterFrames / FPS) * 1000)} ms`
+    : "no drawn enter";
 
   // Scheme and reduced motion: each step shows a slot of one of the loops in the scheme `dark`
   // selects; under reduced motion, the first loop's first slot.
@@ -731,29 +629,18 @@ for (const status of STATUS) {
   console.log(
     `${name}.riv ${(bytes.length / 1e6).toFixed(2)} MB: load+instance ${median.toFixed(0)} ms (cold ${now.timings[0].toFixed(0)}); ` +
       `scheme/reduced steps ${matched}/${STEPS.length}; on twos ${twos}/${loops.length} loops; ` +
-      `reducedMotion ${held ? "holds still" : "MOVES"}; rotation ${rotation}; ways ${waysOk}/${now.drives.length} (${timing.join(", ")}; out ${Math.round((exitFrames / FPS) * 1000)} ms) — ${ok ? "ok" : "FAIL"}`
+      `reducedMotion ${held ? "holds still" : "MOVES"}; rotation ${rotation}; ${arrival} — ${ok ? "ok" : "FAIL"}`
   );
 }
 await browser.close();
-// A status change hands over on one picture: an arrival opens on the other file's still.
-let handovers = 0;
-for (const a of arrivalStarts) {
-  if (a.frame === stills[a.from]) {
-    handovers += 1;
-  } else {
-    failures.push(
-      `${a.name}.riv: ${a.clip} does not open on ${a.from}'s still`
-    );
-  }
-}
 for (const f of failures) {
   console.log(`  FAIL ${f}`);
 }
 console.log(`loops animate: ${totals.animate}/${totals.looping}`);
 console.log(`stills rest: ${totals.rested}/${totals.stills}`);
 console.log(`reducedMotion holds still: ${totals.held}/${totals.files}`);
-console.log(`ways in and out: ${totals.waysOk}/${totals.ways}`);
-console.log(`handovers on one picture: ${handovers}/${arrivalStarts.length}`);
+console.log(`drawn enters play and land: ${totals.enter}/${totals.drawn}`);
+console.log(`no drawn enter, simply there: ${totals.there}/${totals.plain}`);
 console.log(`files proven: ${totals.ok}/${totals.files}`);
 if (failures.length === 0 && totals.ok === STATUS.length) {
   console.log("Caw view model drives the state machine in every status file");

@@ -28,7 +28,7 @@ final class ConnectViewController: ObservedViewController, UITextFieldDelegate {
     private let found = UIStackView()
     private let foundHead = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
     private var connectButton: UIButton!
-    /// Caw on this screen; when the screen goes, Root lets him play his exit over the next one.
+    /// Caw on this screen; when the screen goes, Root lets him fade out over the next one.
     private(set) var caw: CawView?
     private var shownFound: [HubDiscovery.Found] = []
 

@@ -127,7 +127,7 @@
      until then the area is its plain surface. Once he appears he is kept
      until his enter has played, and what lands waits for that, so he is
      never cut off mid-entrance. After that what lands is not kept waiting:
-     he plays his exit over it. Ready with nothing to open is no wait: it
+     he fades out over it. Ready with nothing to open is no wait: it
      is where to start, and shows at once. */
   const detailEmpty = $derived(!homePage && workspace.activeSessionId === null);
   const nothingToOpen = $derived(fleetHome.ready && !fleetHome.landing);
@@ -155,7 +155,7 @@
     entering || waitShown || (detailEmpty && atRest && nothingToOpen)
   );
 
-  /** Caw is mounted: from the moment he is wanted until his exit has ended. */
+  /** Caw is mounted: from the moment he is wanted until he has faded out. */
   let cawThere = $state(false);
   $effect(() => {
     if (cawShown) {
@@ -561,10 +561,11 @@
            says so; once it is read and nothing could be opened, the detail
            area says where to start. Before that it is its plain surface. The
            sidebar's home carries the facts either way. -->
-      <!-- Caw comes in by his enter, moves from one state to the next by its
-           clip, and when a conversation lands he plays his exit over it: the
-           ground clears at once and the conversation is never kept waiting on
-           him. The line under him cross-fades in one cell. -->
+      <!-- Caw comes in by his enter; from one state to the next the old one
+           fades out and the new one comes in; and when a conversation lands
+           he fades out over it: the ground clears at once and the
+           conversation is never kept waiting on him. The line under him
+           cross-fades in one cell. -->
       <div class="empty-detail" class:over={!detailShown}>
         {#if cawThere}
           <div class="detail-state" {@attach holdWhileEntering}>
@@ -667,8 +668,8 @@
     font: var(--type-body);
     transition: background-color var(--dur-fade) var(--ease-out);
   }
-  /* A conversation has landed under him: only Caw's exit is left of the
-     detail area, drawn over it and out of the pointer's way. */
+  /* A conversation has landed under him: only Caw fading out is left of
+     the detail area, drawn over it and out of the pointer's way. */
   .empty-detail.over {
     position: absolute;
     inset: 0;

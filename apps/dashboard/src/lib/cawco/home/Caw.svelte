@@ -151,7 +151,6 @@
         // With less motion the file holds his still; a second of its clock
         // lets the scheme's rim, which fades in over 200ms, settle.
         caw.boolean("reducedMotion").value = true;
-        caw.enum("from").value = "none";
         for (let step = 0; step < 60; step += 1) {
           machine.advanceAndApply(1 / 60);
         }
@@ -159,7 +158,6 @@
         rive.resolveAnimationFrame();
       },
       enter(landed) {
-        caw.enum("from").value = "none";
         let last: number | undefined;
         let request = rive.requestAnimationFrame(function tick(now) {
           machine.advanceAndApply(last === undefined ? 0 : (now - last) / 1000);
@@ -190,19 +188,18 @@
    * with nothing open yet, a fleet still being read, a hub being reached
    * again. Never in a row, an error or a permission request.
    *
-   * Drawn by Rive from his status's file, whose clips and loops play on
+   * Drawn by Rive from his status's file, whose enter and loops play on
    * their own; this only sets the file's `Caw` view model and hears its
-   * triggers (assets/mascot/README.md, Contract). He comes in by his enter
-   * clip, and `onentered` says when it has ended, so a place can keep him
-   * until then. On a status change the shown file is told to `leave`; once
-   * it says he is back on his `still`, the new status's file takes over
-   * with `from` naming the old one and plays his arrival from that very
-   * drawing, so no frame is empty and at most two files are alive. With
-   * `present` off he is gone within --dur-fade, and `ongone` says when:
-   * on his still he plays his exit clip; anywhere else he holds the drawing
-   * he is on and fades out, so what he stood in for is never under a
-   * looping Caw. With less motion there are no clips: he fades (--dur-fade
-   * on --ease-out) in, across and out.
+   * `entered` (assets/mascot/README.md, Contract). He comes in by his
+   * status's drawn enter, or where it has none by a fade up from
+   * --leave-scale over --dur-pop, and `onentered` says when that has ended,
+   * so a place can keep him until then. He goes the same way from any
+   * drawing: he holds the one he is on and fades out to --leave-scale over
+   * --dur-fade, so what he stood in for is never under a looping Caw. With
+   * `present` off `ongone` says when he has gone; on a status change the
+   * new status's file comes in once the old one has, so one file is alive
+   * at a time. With less motion there is no enter and no scale: he fades
+   * (--dur-fade on --ease-out) in, across and out.
    *
    * `size` is the side of his still in px. His acting reaches past it, so
    * the canvases spill over the box unclipped and never take a pointer.
@@ -226,9 +223,8 @@
   }: {
     status: CawStatus;
     /**
-     * Off once the place is done with him: he leaves at once, by his exit
-     * clip from his still or a fade from anywhere else, and `ongone` is
-     * called. The place keeps him mounted till then.
+     * Off once the place is done with him: he fades out at once and
+     * `ongone` is called. The place keeps him mounted till then.
      */
     present?: boolean;
     /**
@@ -251,22 +247,16 @@
     /** When the status was asked for, for the performance marks. */
     asked: number;
     canvas?: HTMLCanvasElement;
-    /** Its fade, while one runs: a leave mid-loop, or any move with less motion. */
+    /** Its fade, while one runs: in with no drawn enter or with less motion, or out. */
     fade?: Animation;
-    /** `none` on a first appearance, else the status he was showing. */
-    from: "none" | CawStatus;
     id: number;
-    /** His coming in has ended (`entered`): he is in his loops, or at rest. */
-    landed: boolean;
-    /** The file's `rests`: its status is one held drawing, his still. */
-    rests: boolean;
+    /** Fading out: whatever is asked for next comes in once he has gone. */
+    leaving: boolean;
     rive?: Rive;
     shown: boolean;
     status: CawStatus;
-    /** Told to leave and back on his still: the next file may take over. */
-    still: boolean;
   }
-  /** Bottom to top: the Caw on screen, and during a change the one taking over. */
+  /** The Caw on screen and, while less motion fades one status across another, the one over him. */
   let layers = $state<Layer[]>([]);
   let nextId = 0;
   /** His first appearance has been reported. */
@@ -291,86 +281,48 @@
     }
   });
 
-  function layerFor(incoming: CawStatus, from: Layer["from"]): Layer {
+  function layerFor(incoming: CawStatus): Layer {
     nextId += 1;
     return {
       id: nextId,
       status: incoming,
-      from,
       asked: performance.now(),
-      landed: false,
-      rests: false,
+      leaving: false,
       shown: false,
-      still: false,
     };
   }
 
-  const flag = (layer: Layer, name: "leave" | "exit", value: boolean) => {
-    const property = layer.rive?.viewModelInstance?.boolean(name);
-    if (property) {
-      property.value = value;
-    }
-  };
-
   /**
    * Brings `incoming` on. The first Caw, or one whose file is still on its
-   * way, is simply the file for it. A Caw on screen is told to leave and the
-   * new file takes over from his still (`settle`); with less motion the new
-   * one fades in over him.
+   * way, is simply the file for it. A Caw on screen showing another status
+   * fades out, and the new status's file comes in once he has gone; with
+   * less motion the new one fades in over him.
    */
   function ask(incoming: CawStatus) {
     const [current] = layers;
     if (!current?.shown) {
       if (current?.status !== incoming) {
-        layers = [layerFor(incoming, "none")];
+        layers = [layerFor(incoming)];
       }
       return;
     }
-    if (current.fade && !reducedMotion) {
-      // Asked back while he fades out: he comes in afresh once the fade ends.
+    if (current.leaving && !reducedMotion) {
+      // Asked for while he fades out: the status comes in once the fade ends.
       return;
     }
     if (reducedMotion) {
-      const top = layers.at(-1) as Layer;
+      // The Caw on top of those on screen stays under the new one; a file still loading goes.
+      const top = layers.findLast((l) => l.shown) as Layer;
       top.fade?.finish();
-      layers =
-        top.status === incoming ? [top] : [top, layerFor(incoming, top.status)];
+      layers = top.status === incoming ? [top] : [top, layerFor(incoming)];
       return;
     }
-    settle();
-  }
-
-  /** Moves the Caw on screen towards the status asked for, one step at a time. */
-  function settle() {
-    const [current] = layers;
-    if (!(current?.shown && present)) {
-      return;
-    }
-    flag(current, "exit", false);
-    if (current.status === status) {
-      // Asked back before the change happened: he carries on.
-      current.still = false;
-      flag(current, "leave", false);
-      layers = [current];
-      return;
-    }
-    if (!current.still) {
-      flag(current, "leave", true);
-      return;
-    }
-    if (layers[1]?.status !== status) {
-      layers = [current, layerFor(status, current.status)];
+    if (current.status !== incoming) {
+      fadeOut(current);
     }
   }
 
-  /**
-   * `present` went off. On his still (a rest, or held there by a change) he
-   * plays his exit clip. Anywhere else, mid-loop or mid-clip, he holds the
-   * drawing he is on and fades out over --dur-fade, shrinking to
-   * --leave-scale: no exit clip can start from a pose it was not drawn
-   * from, and what has arrived is never left under him. With less motion
-   * the fade alone.
-   */
+  /** `present` went off: he fades out from the drawing he is on. */
   function leave() {
     const [current] = layers;
     if (!current?.shown) {
@@ -379,29 +331,35 @@
       return;
     }
     layers = [current];
-    if (
-      !reducedMotion &&
-      (current.still || (current.landed && current.rests))
-    ) {
-      flag(current, "leave", true);
-      flag(current, "exit", true);
-      return;
+    if (!current.leaving) {
+      fadeOut(current);
     }
-    current.rive?.pause();
+  }
+
+  /**
+   * `layer`'s Caw goes: he holds the drawing he is on and fades out over
+   * --dur-fade, shrinking to --leave-scale, from wherever a fade in had
+   * brought him; with less motion the fade alone. Then the status asked
+   * for comes in afresh, or with `present` off the page is left empty.
+   */
+  function fadeOut(layer: Layer) {
+    layer.leaving = true;
+    layer.rive?.pause();
+    layer.fade?.commitStyles();
+    layer.fade?.cancel();
     const end = reducedMotion
       ? { opacity: 0 }
       : { opacity: 0, transform: `scale(${numberOf("--leave-scale")})` };
-    current.fade = current.canvas?.animate([{ opacity: 1 }, end], {
+    layer.fade = layer.canvas?.animate([end], {
       duration: dur("--dur-fade"),
       easing: ease("--ease-out"),
       fill: "forwards",
     });
-    (current.fade?.finished ?? Promise.resolve())
+    (layer.fade?.finished ?? Promise.resolve())
       .then(() => {
-        // Asked back while he faded: he comes in afresh.
-        layers = present ? [layerFor(status, "none")] : [];
+        performance.measure(`caw ${layer.status} gone`);
+        layers = present ? [layerFor(status)] : [];
         if (!present) {
-          performance.measure(`caw ${current.status} gone`);
           ongone?.();
         }
       })
@@ -437,29 +395,6 @@
     onentered?.();
   }
 
-  /** Hears the file's triggers: the end of his coming in, his still while leaving, his exit's end. */
-  function listen(layer: Layer, rive: Rive) {
-    const caw = rive.viewModelInstance;
-    caw?.trigger("entered")?.on(() => {
-      layer.landed = true;
-      reportEntered(layer);
-    });
-    caw?.trigger("still")?.on(() => {
-      layer.still = true;
-      settle();
-    });
-    caw?.trigger("gone")?.on(() => {
-      if (present) {
-        // Asked back mid-exit: he comes in afresh.
-        layers = [layerFor(status, "none")];
-      } else {
-        layers = [];
-        performance.measure(`caw ${layer.status} gone`);
-        ongone?.();
-      }
-    });
-  }
-
   /** Draws `layer`'s Caw into its canvas once its file is in, then starts him. */
   function mount(layer: Layer) {
     return (canvas: HTMLCanvasElement) => {
@@ -493,9 +428,9 @@
               }
               rive.resizeDrawingSurfaceToCanvas();
               write(rive, { dark, reducedMotion });
-              layer.rests =
-                rive.viewModelInstance?.boolean("rests")?.value ?? false;
-              listen(layer, rive);
+              rive.viewModelInstance
+                ?.trigger("entered")
+                ?.on(() => reportEntered(layer));
               layer.rive = rive;
               show(layer, canvas);
             },
@@ -510,16 +445,14 @@
   }
 
   /**
-   * Starts `layer`: `from` picks his enter or his arrival, which begins on
-   * the drawing the Caw below holds, so that one goes once this one is drawn.
-   * With less motion the file holds his still and the canvas fades in.
+   * Shows `layer`, whose file has begun: his drawn enter is playing, and the
+   * file says `entered` at its end. A file with no drawn enter (`enters`
+   * off) has him there already, so the canvas fades in from --leave-scale
+   * over --dur-pop; with less motion every file holds his still and the
+   * canvas fades in over --dur-fade, across the Caw below.
    */
   function show(layer: Layer, canvas: HTMLCanvasElement) {
     const first = !layers.some((l) => l.shown);
-    const from = layer.rive?.viewModelInstance?.enum("from");
-    if (from) {
-      from.value = layer.from;
-    }
     layer.canvas = canvas;
     layer.shown = true;
     if (first) {
@@ -529,33 +462,38 @@
         });
       }
     }
-    if (reducedMotion) {
-      layer.fade = canvas.animate([{ opacity: 0 }, { opacity: 1 }], {
-        duration: dur("--dur-fade"),
-        easing: ease("--ease-out"),
-      });
-      layer.fade.finished
-        .then(() => {
-          layer.fade = undefined;
-          layers = layers.filter((l) => l.id >= layer.id);
-          reportEntered(layer);
-        })
-        .catch(() => {
-          // Cancelled: the canvas left the page before its fade ended.
-        });
-      return;
-    }
-    // Rive's render loop draws him in the next frame; the Caw below goes in the one after.
+    // Rive's render loop draws him in the next frame.
     requestAnimationFrame(() => {
       performance.measure(`caw ${layer.status} first drawn`, {
         start: layer.asked,
       });
-      requestAnimationFrame(() => {
-        layers = layers.filter((l) => l.id >= layer.id);
-        // The status may have moved on while this file was loading.
-        untrack(settle);
-      });
     });
+    const enters =
+      layer.rive?.viewModelInstance?.boolean("enters")?.value ?? false;
+    if (enters && !reducedMotion) {
+      return;
+    }
+    layer.fade = reducedMotion
+      ? canvas.animate([{ opacity: 0 }, { opacity: 1 }], {
+          duration: dur("--dur-fade"),
+          easing: ease("--ease-out"),
+        })
+      : canvas.animate(
+          [
+            { opacity: 0, transform: `scale(${numberOf("--leave-scale")})` },
+            { opacity: 1, transform: "none" },
+          ],
+          { duration: dur("--dur-pop"), easing: ease("--ease-out") }
+        );
+    layer.fade.finished
+      .then(() => {
+        layer.fade = undefined;
+        layers = layers.filter((l) => l.id >= layer.id);
+        reportEntered(layer);
+      })
+      .catch(() => {
+        // Cancelled: he was asked to go, or the canvas left the page, before the fade ended.
+      });
   }
 </script>
 

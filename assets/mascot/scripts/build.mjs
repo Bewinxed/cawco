@@ -27,7 +27,7 @@ import {
   parseColor,
   writeRiv,
 } from "rive-mcp-server/dist/rivWriter.js";
-import { FROM, fileName, RESTS, STATUS, statusScene } from "./scene.mjs";
+import { enterOf, fileName, STATUS, statusScene } from "./scene.mjs";
 
 const outDirs = process.argv[2]
   ? [process.argv[2]]
@@ -49,17 +49,10 @@ const VIEW_MODEL = { name: "Caw", index: 0 };
 const PROPERTIES = [
   { name: "reducedMotion", type: "boolean" },
   { name: "dark", type: "boolean" },
-  { name: "from", type: "enum" },
-  { name: "leave", type: "boolean" },
-  { name: "exit", type: "boolean" },
   { name: "entered", type: "trigger" },
-  { name: "still", type: "trigger" },
-  { name: "gone", type: "trigger" },
-  // Read by the apps, never written: on in a file whose status rests on one drawing.
-  { name: "rests", type: "boolean" },
+  // Read by the apps, never written: on in a file that carries a drawn enter.
+  { name: "enters", type: "boolean" },
 ];
-/** `from`'s enum, the file's only one (a ViewModelPropertyEnumCustom names it by index). */
-const FROM_ENUM = { name: "CawFrom", index: 0 };
 /** Each property type's view-model objects and, for the ones transitions read, its condition's. */
 const TYPES = {
   boolean: {
@@ -75,21 +68,6 @@ const TYPES = {
       type: "TransitionValueBooleanComparator",
       props: { value },
     }),
-  },
-  enum: {
-    property: "ViewModelPropertyEnumCustom",
-    propertyProps: { enumId: FROM_ENUM.index },
-    // `unset`, the enum's first value.
-    value: { type: "ViewModelInstanceEnum", props: { propertyValue: 0 } },
-    bindable: "BindablePropertyEnum",
-    bindableKey: 637,
-    comparator: (value) => {
-      const index = FROM.indexOf(value);
-      if (index < 0) {
-        throw new Error(`'${value}' is not a value of ${FROM_ENUM.name}`);
-      }
-      return { type: "TransitionValueEnumComparator", props: { value: index } };
-    },
   },
   trigger: {
     property: "ViewModelPropertyTrigger",
@@ -123,18 +101,12 @@ function pathIds(ids) {
 
 function viewModelObjects(status) {
   return [
-    // The enum comes first: a property names it by its index among the file's enums.
-    { type: "DataEnumCustom", props: { name: FROM_ENUM.name } },
-    ...FROM.map((key) => ({
-      type: "DataEnumValue",
-      props: { key, value: key },
-    })),
     { type: "ViewModel", props: { name: VIEW_MODEL.name } },
     ...PROPERTIES.map(({ name, type }) => ({
       type: TYPES[type].property,
-      props: { name, ...TYPES[type].propertyProps },
+      props: { name },
     })),
-    // The default instance: every boolean off but `rests` in a resting file, `from` unset.
+    // The default instance: every boolean off but `enters` in a file with a drawn enter.
     {
       type: "ViewModelInstance",
       props: { name: "Default", viewModelId: VIEW_MODEL.index },
@@ -144,7 +116,9 @@ function viewModelObjects(status) {
       props: {
         viewModelPropertyId: i,
         ...TYPES[type].value.props,
-        ...(name === "rests" ? { propertyValue: Boolean(RESTS[status]) } : {}),
+        ...(name === "enters"
+          ? { propertyValue: Boolean(enterOf(status)) }
+          : {}),
       },
     })),
   ];

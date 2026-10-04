@@ -2,31 +2,32 @@
 # requires-python = ">=3.11"
 # dependencies = ["numpy", "pillow", "scipy", "vtracer==0.6.15", "resvg-py==0.5.0"]
 # ///
-"""Traces one of Caw's transition clips with trace.py into assets/mascot/clips/<clip>/
+"""Traces one of Caw's enters with trace.py into assets/mascot/clips/<status>-enter/
 (body-NN.svg + timing.json, the loops' format), then trims, measures, snaps and gates it.
 
-A clip is named for what it joins, and its ends are the statuses' stills, the drawings his still
-state shows: a resting status's drawing (loops/rests.json), else the first drawing of the
-status's first loop (loops/takes.json). trace.py registers a take onto a still picture; here that
-picture is rendered from the end drawing itself, so a clip sits exactly on what it snaps to:
-  <status>-enter     an empty page, then he lands on the status's still. Traced from its landing
-                     backwards (frame pairs reversed, each pair kept in order), so trace.py
-                     registers drawing 00 onto the still as for every loop. The landing holds
-                     become one two-frame drawing, measured against the loop's body-00 and then
-                     replaced by it; the leading empty pages become one two-frame empty drawing.
-  <status>-exit      from the still, he leaves and the page is empty. The take's first drawing is
-                     measured against body-00; the leading still drawings go, so the clip opens
-                     on his first move; the trailing empty pages become one two-frame empty
-                     drawing.
-  <from>-to-<status> from one status's still to another's. Leading and trailing holds each become
-                     one two-frame drawing, measured against the two body-00s, then replaced by
-                     them.
-Gates: a landing (an enter's or a change's last drawing) inked as its still on 98% of their
-pixels or more; a start with its outline's p99 within 4 px of its still; the empty ends 0 ink px; on twos; no white
-marks; halo 0 on every drawing; every eye intact (trace.py's cut_eyes). A clip that passes is
-listed in clips/takes.json; one that fails exits non-zero and is not.
+An enter starts on an empty page, or with him small and far off, and lands on the status's still, the drawing his still state
+shows: a resting status's drawing (loops/rests.json), else the first drawing of the status's
+first loop (loops/takes.json). trace.py registers a take onto a still picture; here that picture
+is rendered from the still's drawing itself, so the enter sits exactly on what it snaps to. It is
+traced from its landing backwards (frame pairs reversed, each pair kept in order), so trace.py
+registers drawing 00 onto the still as for every loop. The landing holds become one two-frame
+drawing, measured against the loop's body-00 and then replaced by it; the leading empty pages
+become one two-frame empty drawing.
 
-usage (from assets/mascot/scripts): uv run trace_clip.py <clip> <take>
+Gates: the landing inked as its still on 98% of their pixels or more; the first drawing empty or
+carrying 5% of the still's ink at most, so he never appears at size;
+on twos; no white marks; halo 0 on every drawing; every eye intact (trace.py's cut_eyes); and the
+safe area: on every drawing his ink sits inside the line 3.5% in from each edge of the tighter of
+the take's frame and the artboard the apps draw, so he is wholly visible or not there at all (EBU
+R95 and ITU-R BT.1848 give the 3.5% action-safe margin; SMPTE RP 218: "all significant action
+shall be contained"). An enter that passes is listed in the folder's takes.json; one that fails
+exits non-zero and is not.
+
+usage (from assets/mascot/scripts):
+  uv run trace_clip.py <status>-enter <take> [clips folder]   into assets/mascot/clips by default
+  uv run trace_clip.py --safe [--dir <clips folder>] [clip ...]   the safe-area check alone, over
+      clips already traced (every clip in the folder by default): one line per clip naming the
+      drawings outside the safe line, and a non-zero exit if any named clip breaks it
 """
 import io
 import json
@@ -47,11 +48,10 @@ LOOPS_REPO = T.LOOPS
 CLIPS = LOOPS_REPO.parent / "clips"
 SIZE = 512
 STILL_HOLD = 0.95  # share inked the same as a still, at or above which a drawing holds it
-# A leading drawing at this silhouette IoU with the start still or above still holds it: held
-# still drawings drift a little (0.80-0.84 measured), every anticipation sits at 0.68 or under.
-LEAD_STILL = 0.75
-END_P99 = 4.0  # px at 512: the most a measured end may sit off its still before the snap
 LANDING = 0.98  # share of a landing's inked pixels that carry its still's ink
+# The most ink an enter's first drawing may carry, as a share of its still's: an empty page, or
+# him far off (a take that has him in its first frame at a ninth of his size measures 0.013).
+OPENS_SMALL = 0.05
 SPECK = 200  # opaque px at 512: a drawing with less is dust traced off the take's paper
 INKS = np.array([[20, 20, 20], [230, 80, 50], [244, 240, 230], [245, 200, 40]])
 WHITE = np.array([244, 240, 230])
@@ -59,7 +59,57 @@ WHITE = np.array([244, 240, 230])
 # cream fill sits 20 from the eye white's; a fill renders exactly, its soft edge is see-through).
 OWN_INK = 8
 
+# The artboard the apps draw, in the stills' units: 592 square, the still box 43 right, 40 down.
+ARTBOARD = (-43.0, -40.0, 592.0)
+SAFE = 0.035  # EBU R95 / ITU-R BT.1848 action-safe margin, in from each edge
+SAFE_PX = 600  # the side the safe area is measured at
+
+
+def unsafe_drawings(folder: Path) -> list[int]:
+    """The clip's drawings, counted from 1 in playing order, with ink outside the safe line: 3.5%
+    in from each edge of the tighter of the take's frame and the artboard."""
+    timing = json.loads((folder / "timing.json").read_text())
+    p = timing["placement"]
+    take = (p["x"], p["y"], 1024 * p["scale"])
+    left, top = max(take[0], ARTBOARD[0]), max(take[1], ARTBOARD[1])
+    right = min(take[0] + take[2], ARTBOARD[0] + ARTBOARD[2])
+    bottom = min(take[1] + take[2], ARTBOARD[1] + ARTBOARD[2])
+    # A view one margin wider than the box, so ink beyond its edge is seen too.
+    w, h = right - left, bottom - top
+    view = f'viewBox="{left - SAFE * w} {top - SAFE * h} {w * (1 + 2 * SAFE)} {h * (1 + 2 * SAFE)}"'
+    inner = np.zeros((SAFE_PX, SAFE_PX), bool)
+    m = round(SAFE_PX * 2 * SAFE / (1 + 2 * SAFE))
+    inner[m : SAFE_PX - m, m : SAFE_PX - m] = True
+    out = []
+    for k, slot in enumerate(timing["drawings"]):
+        text = (folder / f"body-{slot['drawing']:02d}.svg").read_text()
+        text = text.replace('viewBox="0 0 512 512"', view + ' preserveAspectRatio="none"')
+        png = resvg_py.svg_to_bytes(svg_string=text, width=SAFE_PX, height=SAFE_PX)
+        ink = np.asarray(Image.open(io.BytesIO(bytes(png))).convert("RGBA"))[..., 3] > 127
+        if (ink & ~inner).any():
+            out.append(k + 1)
+    return out
+
+
+if sys.argv[1:2] == ["--safe"]:
+    args = sys.argv[2:]
+    folder = CLIPS
+    if args[:1] == ["--dir"]:
+        folder, args = Path(args[1]), args[2:]
+    names = args or sorted(d.name for d in folder.iterdir() if (d / "timing.json").exists())
+    broken = False
+    for clip in names:
+        slots = len(json.loads((folder / clip / "timing.json").read_text())["drawings"])
+        unsafe = unsafe_drawings(folder / clip)
+        broken |= bool(unsafe)
+        print(f"{clip}: {slots} drawings, " + (f"outside the safe line: {unsafe}" if unsafe else "all inside the safe line"))
+    sys.exit(1 if broken else 0)
+
 name, take = sys.argv[1:3]
+if not name.endswith("-enter"):
+    sys.exit(f"{name}: a clip is a status's enter, <status>-enter")
+if sys.argv[3:]:
+    CLIPS = Path(sys.argv[3]).resolve()
 variants = json.loads((LOOPS_REPO / "takes.json").read_text())
 rests = json.loads((LOOPS_REPO / "rests.json").read_text())
 # Each status's still: the loop it is drawn in and the drawing's number there.
@@ -71,16 +121,9 @@ for status, rest in rests.items():
     first.setdefault(status, rest)
 for status, v in first.items():
     v["still"] = status
-if name.endswith("-enter"):
-    kind, start, end = "enter", None, first[name.removesuffix("-enter")]
-elif name.endswith("-exit"):
-    kind, start, end = "exit", first[name.removesuffix("-exit")], None
-else:
-    a, b = name.split("-to-")
-    kind, start, end = "change", first[a], first[b]
-# A status's own inks (rests.json "inks": the compacted Caw's cream note) are traced in every clip
-# that starts or lands on it.
-own_inks = sorted({ink for v in (start, end) if v for ink in rests.get(v["still"].replace("-", "_"), {}).get("inks", [])})
+end = first[name.removesuffix("-enter")]
+# A status's own inks (rests.json "inks": the compacted Caw's cream note) are traced in its enter.
+own_inks = sorted(rests.get(end["still"].replace("-", "_"), {}).get("inks", []))
 T.use_inks(own_inks)
 out = CLIPS / name
 if out.exists():
@@ -148,71 +191,61 @@ def body_without_white_marks(label: np.ndarray) -> str:
 
 T.trace_body = body_without_white_marks
 original, grouped, decided = T.frames_of, T.drawings_of, T.decide
-picture_stills = [v["still"] for v in (start, end) if v and v["loop"] not in {x["loop"] for vs in variants.values() for x in vs}]
-if picture_stills:
+if end["loop"] not in {x["loop"] for vs in variants.values() for x in vs}:
     # trace.py's refine() sizes a take by the extent of its traced outline against the still's.
     # That holds when the still was traced from a take too: the tracer rounds both the same. A
     # still traced from its picture (trace_still.py: the compacted Caw) keeps its tips where the
     # picture has them, while a take's tuft tip came out 1.75 units higher, and refine() shrank
     # the whole landing by 0.5% to fit it (scale 0.6213 where the frame's is 0.625): a ring of
-    # black missing all round. So such a clip keeps placement()'s whole-pixel registration.
+    # black missing all round. So such an enter keeps placement()'s whole-pixel registration.
     T.refine = lambda silhouette, place, still: place
-if kind != "change":
-    # trace.py tells an eye white from a see-through gap by where the stills have paper. A bird
-    # crossing the page is nowhere near his still, and that evidence cut the eyes out of a flying
-    # drawing (hollow rings on dark). So on an enter or an exit nothing is evidence, and every
-    # enclosed white is told by its shape and its ring (see_through's own rule for a guess).
-    def no_evidence(enclosed: list, seed_paper: np.ndarray) -> list:
-        out = []
-        for regions in enclosed:
-            ids, sizes = np.unique(regions[regions > 0], return_counts=True)
-            out.append({int(r): (False, False) for r in ids[sizes >= T.MIN_REGION]})
-        return out
 
-    T.decide = no_evidence
-if kind == "enter":
 
-    def reversed_pairs(state: str, take_id: str) -> np.ndarray:
-        f = original(state, take_id)
-        n, h, w, c = f.shape
-        return f.reshape(n // 2, 2, h, w, c)[::-1].reshape(n, h, w, c).copy()
+# trace.py tells an eye white from a see-through gap by where the stills have paper. A bird
+# crossing the page is nowhere near his still, and that evidence cut the eyes out of a flying
+# drawing (hollow rings on dark). So nothing is evidence, and every enclosed white is told by its
+# shape and its ring (see_through's own rule for a guess).
+def no_evidence(enclosed: list, seed_paper: np.ndarray) -> list:
+    out = []
+    for regions in enclosed:
+        ids, sizes = np.unique(regions[regions > 0], return_counts=True)
+        out.append({int(r): (False, False) for r in ids[sizes >= T.MIN_REGION]})
+    return out
 
-    T.frames_of = reversed_pairs
 
-    # Drawing 00 is the take's last frame pair exactly: trace.py would merge it with the pairs
-    # before it that differ by under SAME_DRAWING and trace their average, and a prop still
-    # settling there would blur into a half-size one.
-    def last_pair_alone(frames: np.ndarray) -> list:
-        groups = grouped(frames)
-        at, length, members = groups[0]
-        if length > 2:
-            rest = [m for m in members if m >= 2]
-            groups = [(at, 2, [m for m in members if m < 2]), (2, length - 2, rest), *groups[1:]]
-        return groups
+def reversed_pairs(state: str, take_id: str) -> np.ndarray:
+    f = original(state, take_id)
+    n, h, w, c = f.shape
+    return f.reshape(n // 2, 2, h, w, c)[::-1].reshape(n, h, w, c).copy()
 
-    T.drawings_of = last_pair_alone
 
-# trace.py registers drawing 00 onto a still: the one the take opens on, or for an enter (traced
-# backwards) the one it lands on.
-opening = end if kind == "enter" else start
-closing = end["still"] if kind == "change" else None
+# Drawing 00 is the take's last frame pair exactly: trace.py would merge it with the pairs
+# before it that differ by under SAME_DRAWING and trace their average, and a prop still
+# settling there would blur into a half-size one.
+def last_pair_alone(frames: np.ndarray) -> list:
+    groups = grouped(frames)
+    at, length, members = groups[0]
+    if length > 2:
+        rest = [m for m in members if m >= 2]
+        groups = [(at, 2, [m for m in members if m < 2]), (2, length - 2, rest), *groups[1:]]
+    return groups
+
+
+T.decide, T.frames_of, T.drawings_of = no_evidence, reversed_pairs, last_pair_alone
 T.LOOPS = CLIPS
-# The stills trace.py registers onto, rendered from the end drawings.
+# The still trace.py registers the landing onto, rendered from its drawing.
 stills = Path(tempfile.mkdtemp())
-for v in (start, end):
-    if v:
-        png = resvg_py.svg_to_bytes(svg_string=(LOOPS_REPO / v["loop"] / f"body-{v['drawing']:02d}.svg").read_text(), width=SIZE, height=SIZE)
-        (stills / f"light-{v['still']}.png").write_bytes(bytes(png))
+body00 = LOOPS_REPO / end["loop"] / f"body-{end['drawing']:02d}.svg"
+(stills / f"light-{end['still']}.png").write_bytes(
+    bytes(resvg_py.svg_to_bytes(svg_string=body00.read_text(), width=SIZE, height=SIZE))
+)
 T.STILLS = stills
-timing = T.trace(name, take, opening["still"], closing)
+timing = T.trace(name, take, end["still"], None)
 # Eyes, on the fresh trace (trace.py's own timing and drawings): eye whites shown see-through.
-eyes_cut = T.cut_eyes(name, take, opening["still"], closing)
+eyes_cut = T.cut_eyes(name, take, end["still"], None)
 frames = timing["frames"]
-slots = timing["drawings"]
-if kind == "enter":
-    slots = [{**s, "start": frames - s["start"] - s["length"]} for s in reversed(slots)]
+slots = [{**s, "start": frames - s["start"] - s["length"]} for s in reversed(timing["drawings"])]
 
-body00 = lambda v: LOOPS_REPO / v["loop"] / f"body-{v['drawing']:02d}.svg"  # noqa: E731
 place = (timing["placement"]["scale"], timing["placement"]["x"], timing["placement"]["y"])
 pictures = {d: render(out / f"body-{d:02d}.svg") for d in sorted({s["drawing"] for s in slots})}
 specks = {}
@@ -224,8 +257,8 @@ for d, p in pictures.items():
         pictures[d] = render(out / f"body-{d:02d}.svg")
 masks = {d: p[..., 3] > 127 for d, p in pictures.items()}
 ink_px = {d: int(m.sum()) for d, m in masks.items()}
-targets = {v["still"]: render(body00(v)) for v in (start, end) if v}
-like = {still: {d: same_inks(p, t) for d, p in pictures.items()} for still, t in targets.items()}
+target = render(body00)
+like = {d: same_inks(p, target) for d, p in pictures.items()}
 report = {
     "take": take,
     "specksCleared": specks,
@@ -236,14 +269,8 @@ report = {
 }
 
 
-def holds(d: int, v: dict) -> bool:
-    """Whether drawing `d` still shows `v`'s still."""
-    target = targets[v["still"]]
-    return like[v["still"]][d] >= STILL_HOLD or iou(masks[d], target[..., 3] > 127) >= LEAD_STILL
-
-
-def measure(d: int, v: dict) -> dict:
-    target = targets[v["still"]]
+def measure(d: int) -> dict:
+    """How drawing `d` sits against the still."""
     target_mask = target[..., 3] > 127
     dmax, d99 = displacement(masks[d], target_mask)
     # Where it differs: the largest regions inked differently from the target (size, centre).
@@ -252,7 +279,7 @@ def measure(d: int, v: dict) -> dict:
     top = [int(i) + 1 for i in np.argsort(sizes)[::-1][:3]]
     centres = ndimage.center_of_mass(np.ones_like(differ), differ, top)
     return {
-        "against": f"{v['loop']}/body-{v['drawing']:02d}",
+        "against": f"{end['loop']}/body-{end['drawing']:02d}",
         "iou": round(iou(masks[d], target_mask), 4),
         "sameInks": round(same_inks(pictures[d], target), 4),
         "outlineMaxPx": round(dmax, 2),
@@ -269,71 +296,27 @@ def retime(held: list[dict]) -> list[dict]:
     return out_slots
 
 
-snapped = {}
-if kind == "enter":
-    # The landing: the trailing run inked as the still, one two-frame drawing.
-    tail = len(slots) - 1
-    while tail - 1 > 0 and like[end["still"]][slots[tail - 1]["drawing"]] >= STILL_HOLD:
-        tail -= 1
-    # The opening: the leading run of empty pages, one two-frame drawing.
-    lead = 0
-    while lead + 1 < tail and ink_px[slots[lead + 1]["drawing"]] == 0:
-        lead += 1
-    report["trimmedLeadingFrames"] = slots[lead]["start"]
-    report["trimmedTrailingFrames"] = frames - (slots[tail]["start"] + 2)
-    report["last"] = measure(slots[tail]["drawing"], end)
-    report["firstInkPx"] = ink_px[slots[lead]["drawing"]]
-    snap_id = max(pictures) + 1
-    shutil.copy(body00(end), out / f"body-{snap_id:02d}.svg")
-    snapped[snap_id] = end
-    slots = retime(
-        [{**slots[lead], "length": 2}, *slots[lead + 1 : tail], {**slots[tail], "drawing": snap_id, "length": 2}]
-    )
-    gates = {
-        "landing": report["last"]["sameInks"] >= LANDING,
-        "firstEmpty": report["firstInkPx"] == 0,
-    }
-elif kind == "exit":
-    report["first"] = measure(slots[0]["drawing"], start)
-    lead = 0
-    while lead < len(slots) and holds(slots[lead]["drawing"], start):
-        lead += 1
-    # The leaving: the trailing run of empty pages, one two-frame drawing.
-    tail = len(slots)
-    while tail - 1 > lead and ink_px[slots[tail - 1]["drawing"]] == 0:
-        tail -= 1
-    has_empty_end = tail < len(slots)
-    report["droppedLeadingFrames"] = slots[lead]["start"] if lead < len(slots) else frames
-    report["trimmedTrailingFrames"] = frames - (slots[tail]["start"] + 2) if has_empty_end else 0
-    kept = slots[lead:tail] + ([{**slots[tail], "length": 2}] if has_empty_end else [])
-    report["lastInkPx"] = ink_px[kept[-1]["drawing"]] if kept else -1
-    slots = retime(kept)
-    gates = {
-        "firstFrameP99": report["first"]["outlineP99Px"] <= END_P99,
-        "lastEmpty": report["lastInkPx"] == 0,
-    }
-else:
-    lead = 1
-    while lead < len(slots) and holds(slots[lead]["drawing"], start):
-        lead += 1
-    tail = len(slots) - 1
-    while tail - 1 >= lead and like[end["still"]][slots[tail - 1]["drawing"]] >= STILL_HOLD:
-        tail -= 1
-    report["trimmedLeadingFrames"] = slots[lead]["start"] - 2 if lead < len(slots) else 0
-    report["trimmedTrailingFrames"] = frames - (slots[tail]["start"] + 2)
-    report["first"] = measure(slots[0]["drawing"], start)
-    report["last"] = measure(slots[tail]["drawing"], end)
-    start_id, end_id = max(pictures) + 1, max(pictures) + 2
-    shutil.copy(body00(start), out / f"body-{start_id:02d}.svg")
-    shutil.copy(body00(end), out / f"body-{end_id:02d}.svg")
-    snapped = {start_id: start, end_id: end}
-    slots = retime(
-        [{**slots[0], "drawing": start_id, "length": 2}, *slots[lead:tail], {**slots[tail], "drawing": end_id, "length": 2}]
-    )
-    gates = {
-        "firstFrameP99": report["first"]["outlineP99Px"] <= END_P99,
-        "landing": report["last"]["sameInks"] >= LANDING,
-    }
+# The landing: the trailing run inked as the still, one two-frame drawing.
+tail = len(slots) - 1
+while tail - 1 > 0 and like[slots[tail - 1]["drawing"]] >= STILL_HOLD:
+    tail -= 1
+# The opening: the leading run of empty pages, one two-frame drawing.
+lead = 0
+while lead + 1 < tail and ink_px[slots[lead + 1]["drawing"]] == 0:
+    lead += 1
+report["trimmedLeadingFrames"] = slots[lead]["start"]
+report["trimmedTrailingFrames"] = frames - (slots[tail]["start"] + 2)
+report["last"] = measure(slots[tail]["drawing"])
+report["firstInkPx"] = ink_px[slots[lead]["drawing"]]
+snap_id = max(pictures) + 1
+shutil.copy(body00, out / f"body-{snap_id:02d}.svg")
+slots = retime(
+    [{**slots[lead], "length": 2}, *slots[lead + 1 : tail], {**slots[tail], "drawing": snap_id, "length": 2}]
+)
+gates = {
+    "landing": report["last"]["sameInks"] >= LANDING,
+    "opensSmall": report["firstInkPx"] <= OPENS_SMALL * int((target[..., 3] > 127).sum()),
+}
 
 # Drawings no slot shows any more go.
 used = {s["drawing"] for s in slots}
@@ -367,19 +350,18 @@ for d in sorted(used):
     if touching:
         white_marks[f"body-{d:02d}"] = touching
 
-# Halo per drawing: trace.py's own measure for each traced drawing, the source loops' for snaps
-# (read from the loops' takes the right way round).
+# Halo per drawing: trace.py's own measure for each traced drawing, the still's loop's for the
+# snapped landing (read from the loop's take the right way round).
 T.LOOPS = LOOPS_REPO
 T.frames_of, T.drawings_of, T.decide = original, grouped, decided
 takes = {v["loop"]: v["take"] for vs in variants.values() for v in vs}
-halos = {f"{d:02d}": timing["halo"][f"{d:02d}"] for d in sorted(used) if d not in snapped}
-for d, v in snapped.items():
-    # A rest traced from its picture (trace_still.py) has no take: its halo was measured there.
-    halos[f"{d:02d}"] = (
-        T.measure_halo(v["loop"], takes[v["loop"]])[f"{v['drawing']:02d}"]
-        if v["loop"] in takes
-        else json.loads((LOOPS_REPO / v["loop"] / "timing.json").read_text())["halo"][f"{v['drawing']:02d}"]
-    )
+halos = {f"{d:02d}": timing["halo"][f"{d:02d}"] for d in sorted(used) if d != snap_id}
+# A rest traced from its picture (trace_still.py) has no take: its halo was measured there.
+halos[f"{snap_id:02d}"] = (
+    T.measure_halo(end["loop"], takes[end["loop"]])[f"{end['drawing']:02d}"]
+    if end["loop"] in takes
+    else json.loads((LOOPS_REPO / end["loop"] / "timing.json").read_text())["halo"][f"{end['drawing']:02d}"]
+)
 eyes = {k: v for k, v in eyes_cut.items() if int(k) in used and v >= T.CUT_EYE}
 
 report.update(
@@ -393,14 +375,19 @@ report.update(
 )
 gates.update(onTwos=twos, whiteMarks=not white_marks, halo=all(v == 0 for v in halos.values()), eyes=not eyes)
 report["gates"] = gates
+# The safe area is read from the clip as written, so its timing goes down first.
+timing.update(frames=report["frames"], drawings=slots)
+(out / "timing.json").write_text(T.dump_json(timing))
+report["outsideSafe"] = unsafe_drawings(out)
+gates["safeArea"] = not report["outsideSafe"]
 timing.update(frames=report["frames"], drawings=slots, halo=halos, probe=report)
-(out / "timing.json").write_text(json.dumps(timing, indent=2) + "\n")
+(out / "timing.json").write_text(T.dump_json(timing))
 print(json.dumps(report))
 listed = CLIPS / "takes.json"
 clips = json.loads(listed.read_text()) if listed.exists() else {}
 clips.pop(name, None)
 if all(gates.values()):
     clips[name] = take
-listed.write_text(json.dumps(dict(sorted(clips.items())), indent=2) + "\n")
+listed.write_text(T.dump_json(dict(sorted(clips.items()))))
 if not all(gates.values()):
     sys.exit(f"{name}: failed {[g for g, ok in gates.items() if not ok]}")

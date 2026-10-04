@@ -777,7 +777,7 @@ final class FleetDetailController: ObservedViewController {
         empty.addArrangedSubview(caw)
         empty.addArrangedSubview(line)
         empty.translatesAutoresizingMaskIntoConstraints = false
-        // He plays his exit over the conversation that lands, so he never takes its touches.
+        // He fades out over the conversation that lands, so he never takes its touches.
         empty.isUserInteractionEnabled = false
         caw.onGone = { [weak self] in
             guard let self else { return }
@@ -814,7 +814,7 @@ final class FleetDetailController: ObservedViewController {
     }
 
     /// With nothing open, Caw and his line stand in the detail area. Once a conversation is in
-    /// front the line goes and he plays his exit over it; `onGone` then puts the area away.
+    /// front the line goes and he fades out over it; `onGone` then puts the area away.
     private func standIn() {
         let open = shown != nil
         line.isHidden = open

@@ -8,21 +8,17 @@
 //     comes back to shows an earlier drawing again. Its still is its first loop's first drawing.
 //   - a status that rests (assets/mascot/loops/rests.json: `ready`, `sleeping`) is one traced
 //     drawing, its still, and never plays a loop: nothing is going on.
-// A status also carries the transition clips that join its still to an empty page and to the
-// other statuses' stills (assets/mascot/clips/, listed in clips/takes.json): `<status>-enter`,
-// `<status>-exit` and `<other>-to-<status>`. A clip is drawn like a loop. Where a clip was not
-// shot, the way goes through `ready`, in two clips (asleep, he comes in awake and nods off).
+// A status may also carry its enter, the clip that brings him from an empty page to his still
+// (assets/mascot/clips/<status>-enter, listed in clips/takes.json), drawn like a loop. A status
+// with no drawn enter is simply there, and the apps fade it in. There is no drawn way out: the
+// apps fade him away (README, Contract).
 // A drawing's first shape is its black silhouette, which also carries the cream rim as a stroke
 // drawn under the fill; the colour scheme keys that stroke's colour.
 //
 // Three state-machine layers, each driven by the `Caw` view model:
-//   Variant — draws nothing until `from` is set, then plays his enter (`from` none) or his
-//             arrival from that status, firing `entered` at its end. Then a status that waits
-//             plays its loops, the first one after a clip and at each loop's end one of the
-//             others, so the same one never plays twice in a row; a status that rests holds
-//             its still. With `leave` on, the clip or loop on screen plays to its end and he
-//             holds his still, firing `still` (a rest is there already); `exit` then plays his
-//             exit to an empty page, firing `gone`. `leave` taken back, he carries on.
+//   Variant — plays his enter, firing `entered` at its end. Then a status that waits plays its
+//             loops, the first one after his enter and at each loop's end one of the others, so
+//             the same one never plays twice in a row; a status that rests holds its still.
 //   Scheme  — `dark` fades every drawing's cream rim in (dark) or out (light) over 200 ms.
 //   Motion  — `reducedMotion` holds his still.
 //
@@ -78,46 +74,12 @@ export const VARIANTS = (() => {
   return out;
 })();
 
-/**
- * What `from` can say (the `CawFrom` enum, in value order): `unset` until an app sets it, `none`
- * for a first appearance, or the status he was showing just before.
- */
-export const FROM = ["unset", "none", ...STATUS.map(fileName)];
-
-/** The clips that have been shot and passed their gates (clips/takes.json, by trace_clip.py). */
+/** The enters that have been shot and passed their gates (clips/takes.json, by trace_clip.py). */
 const SHOT = JSON.parse(readFileSync(`${CLIPS}takes.json`, "utf8"));
-/** `clips` when every one of them was shot, else no way at all. */
-const way = (...clips) => (clips.every((c) => c in SHOT) ? clips : null);
-/**
- * The clips a status file plays, each a list in playing order: his enter, his exit, and his
- * arrival for each `from` status. A way with no clip of its own goes through `ready`; a way
- * with none at all is empty, and he is simply there (or gone).
- */
-export function clipsOf(status) {
-  const name = fileName(status);
-  const via = name !== "ready";
-  const arrivals = {};
-  for (const other of STATUS.map(fileName)) {
-    if (other !== name) {
-      arrivals[other] =
-        way(`${other}-to-${name}`) ??
-        (via && other !== "ready"
-          ? way(`${other}-to-ready`, `ready-to-${name}`)
-          : null) ??
-        [];
-    }
-  }
-  return {
-    enter:
-      way(`${name}-enter`) ??
-      (via ? way("ready-enter", `ready-to-${name}`) : null) ??
-      [],
-    exit:
-      way(`${name}-exit`) ??
-      (via ? way(`${name}-to-ready`, "ready-exit") : null) ??
-      [],
-    arrivals,
-  };
+/** A status's drawn enter, `<status>-enter`, or null where none was shot. */
+export function enterOf(status) {
+  const clip = `${fileName(status)}-enter`;
+  return clip in SHOT ? clip : null;
 }
 
 /** motion.dur-fade in design/tokens/cawco.tokens.json: "Fades that carry a state change in place." */
@@ -191,7 +153,7 @@ function merge(id, parent, shapes, paint) {
  * One traced drawing's shapes under the group `id`, one per ink, and its base shape's id. The
  * base is its silhouette, filled black; it also carries the cream rim as a stroke that build.mjs
  * draws under the fill (`strokeUnder`), so the silhouette is stored once. An empty drawing (the
- * page a clip starts or ends on) has no shapes and no base. `look` is the status's entry in LOOK:
+ * page an enter starts on) has no shapes and no base. `look` is the status's entry in LOOK:
  * its rim's width, and the ink its note is filled with in place of the traced cream.
  */
 function drawing(id, svg, look = {}) {
@@ -219,7 +181,7 @@ function drawing(id, svg, look = {}) {
   return { shapes, bases: shapes.length ? [`${id}-0`] : [] };
 }
 
-/** One loop's or clip's groups and shapes under `caw`, hidden until played, and its timing. */
+/** One loop's or enter's groups and shapes under `caw`, hidden until played, and its timing. */
 function art(name, dir, look) {
   const timing = JSON.parse(readFileSync(`${dir}timing.json`, "utf8"));
   const drawings = [...new Set(timing.drawings.map((d) => d.drawing))].sort(
@@ -263,13 +225,13 @@ function playTracks(name, timing) {
   ];
 }
 
-function animations(status, loops, clips, bases) {
+function animations(status, loops, enter, bases) {
   const variants = VARIANTS[status];
   /** Everything the Variant layer can show: one is opaque at a time. */
   const all = [
     ...variants,
     ...(RESTS[status] ? [REST] : []),
-    ...Object.keys(clips),
+    ...(enter ? [enter.name] : []),
   ];
   const opacity = (target, value) => ({
     target,
@@ -291,8 +253,8 @@ function animations(status, loops, clips, bases) {
       property: "strokeColor",
       keyframes: [{ frame: 0, color, easing: "hold" }],
     }));
-  // His still, where every clip starts or lands: the rest drawing, or the first variant on its
-  // first drawing.
+  // His still, where his enter lands: the rest drawing, or the first variant on its first
+  // drawing.
   const still = RESTS[status]
     ? only(REST)
     : [
@@ -314,14 +276,16 @@ function animations(status, loops, clips, bases) {
         variants.length > 1 ? "oneShot" : "loop"
       )
     ),
-    ...Object.entries(clips).map(([name, timing]) =>
-      anim(
-        `clip_${name}`,
-        [...only(name), ...playTracks(name, timing)],
-        timing.frames
-      )
-    ),
-    // Nothing drawn: before `from` is set, and after the exit.
+    ...(enter
+      ? [
+          anim(
+            "enter",
+            [...only(enter.name), ...playTracks(enter.name, enter.timing)],
+            enter.timing.frames
+          ),
+        ]
+      : []),
+    // Nothing drawn: the instant before the Variant layer picks what he does first.
     anim("variant_hidden", only(null)),
     anim("variant_still", still),
     anim("scheme_light", rim(RIM_LIGHT.color)),
@@ -332,7 +296,7 @@ function animations(status, loops, clips, bases) {
   ];
 }
 
-/** One status's scene: its loops or its rest, its clips, and the state machine that plays them. */
+/** One status's scene: its loops or its rest, its enter, and the state machine that plays them. */
 export function statusScene(status) {
   const flag = (property, value) => ({ property, op: "==", value });
   const variants = VARIANTS[status];
@@ -357,15 +321,10 @@ export function statusScene(status) {
       drawing(REST, `${LOOPS}${rest.loop}/body-${pad(rest.drawing)}.svg`, look)
     );
   }
-  const ways = clipsOf(status);
-  const clips = {};
-  for (const name of [
-    ways.enter,
-    ways.exit,
-    ...Object.values(ways.arrivals),
-  ].flat()) {
-    clips[name] ??= add(art(name, `${CLIPS}${name}/`, look));
-  }
+  const clip = enterOf(status);
+  const enter = clip
+    ? { name: clip, timing: add(art(clip, `${CLIPS}${clip}/`, look)) }
+    : null;
   const scheme = {
     name: "Scheme",
     states: [
@@ -405,89 +364,49 @@ export function statusScene(status) {
     artboard: { name: "Caw", width: ARTBOARD, height: ARTBOARD },
     groups,
     shapes,
-    animations: animations(status, loops, clips, bases),
+    animations: animations(status, loops, enter, bases),
     stateMachine: {
       name: "CawStates",
       inputs: [],
-      layers: [variantLayer(status, loops, clips, ways), scheme, motion],
+      layers: [variantLayer(status, loops, enter), scheme, motion],
     },
   };
 }
 
-/** The Variant layer: the way in, the loops or the rest, his still, the way out. */
-function variantLayer(status, loops, clips, { enter, exit, arrivals }) {
-  const flag = (property, value) => ({ property, op: "==", value });
+/** The Variant layer: his enter, then the loops or the rest. */
+function variantLayer(status, loops, enter) {
   const variants = VARIANTS[status];
   const rest = RESTS[status];
   // Whole milliseconds, rounded down: a one-shot's time stops at its end, so an exit time past
   // it would never be reached.
   const endMs = (timing) => Math.floor((timing.frames / FPS) * 1000);
   const loopStates = variants.map((name) => `loop_${name}`);
-  /** Where he is once he has come in: his first loop, or his rest. */
-  const home = rest ? REST : loopStates[0];
-  const states = [{ name: "hidden", animation: "variant_hidden" }];
-  const transitions = [{ from: "entry", to: "hidden" }];
-  /** A way's clips as a chain of states named `<way>_<n>`: its first and last state. */
-  const chain = (name, clipNames) => {
-    const names = clipNames.map((_, k) => `${name}_${k}`);
-    for (const [k, clip] of clipNames.entries()) {
-      states.push({ name: names[k], animation: `clip_${clip}` });
-      if (k > 0) {
-        transitions.push({
-          from: names[k - 1],
-          to: names[k],
-          exitTimeMs: endMs(clips[clipNames[k - 1]]),
-        });
-      }
-    }
-    return {
-      first: names[0],
-      last: names.at(-1),
-      endMs: endMs(clips[clipNames.at(-1)]),
-    };
-  };
-  // How he comes in for each `from` value: by its clips, or with none shot he is simply there.
-  for (const value of FROM.slice(1)) {
-    const coming = value === "none" ? enter : (arrivals[value] ?? []);
-    if (coming.length === 0) {
-      for (const to of rest ? [REST] : loopStates) {
-        transitions.push({
-          from: "hidden",
-          to,
-          when: flag("from", value),
-          fire: "entered",
-        });
-      }
-      continue;
-    }
-    const came = chain(`from_${value}`, coming);
+  const states = [{ name: "start", animation: "variant_hidden" }];
+  const transitions = [{ from: "entry", to: "start" }];
+  if (enter) {
+    states.push({ name: "enter", animation: "enter" });
     transitions.push(
-      { from: "hidden", to: came.first, when: flag("from", value) },
-      // A clip lands on his still, so his first loop (or his rest) follows it.
+      { from: "start", to: "enter" },
+      // His enter lands on his still, so his first loop (or his rest) follows it.
       {
-        from: came.last,
-        to: home,
-        exitTimeMs: came.endMs,
-        when: flag("leave", false),
-        fire: "entered",
-      },
-      {
-        from: came.last,
-        to: "still",
-        exitTimeMs: came.endMs,
-        when: flag("leave", true),
+        from: "enter",
+        to: rest ? REST : loopStates[0],
+        exitTimeMs: endMs(enter.timing),
         fire: "entered",
       }
     );
+  } else {
+    // No drawn enter: he is simply there, on his rest or on any one of his loops.
+    for (const to of rest ? [REST] : loopStates) {
+      transitions.push({ from: "start", to });
+    }
   }
   if (rest) {
-    // Resting, he is on his still already: leaving starts at once.
     states.push({ name: REST, animation: "variant_still" });
-    transitions.push({ from: REST, to: "still", when: flag("leave", true) });
   }
   for (const name of variants) {
     states.push({ name: `loop_${name}`, animation: `loop_${name}` });
-    // At a loop's end, any other variant: never the same one twice running. Leaving, his still.
+    // At a loop's end, any other variant: never the same one twice running.
     transitions.push(
       ...variants
         .filter((other) => other !== name)
@@ -495,32 +414,13 @@ function variantLayer(status, loops, clips, { enter, exit, arrivals }) {
           from: `loop_${name}`,
           to: `loop_${other}`,
           exitTimeMs: endMs(loops[name]),
-          when: flag("leave", false),
-        })),
-      {
-        from: `loop_${name}`,
-        to: "still",
-        exitTimeMs: endMs(loops[name]),
-        when: flag("leave", true),
-      }
+        }))
     );
-  }
-  states.push({ name: "still", animation: "variant_still", fire: "still" });
-  const going = exit.length ? chain("exit", exit) : null;
-  transitions.push(
-    { from: "still", to: going?.first ?? "gone", when: flag("exit", true) },
-    // `leave` taken back: he carries on from his still.
-    { from: "still", to: home, when: flag("leave", false) }
-  );
-  states.push({ name: "gone", animation: "variant_hidden", fire: "gone" });
-  if (going) {
-    transitions.push({ from: going.last, to: "gone", exitTimeMs: going.endMs });
   }
   return {
     name: "Variant",
-    // Flagged Random by build.mjs: each of these states' outgoing transitions is a weighted draw
-    // among the ones whose conditions hold.
-    random: ["hidden", ...loopStates],
+    // Flagged Random by build.mjs: each of these states' outgoing transitions is a weighted draw.
+    random: ["start", ...loopStates],
     states,
     transitions,
   };

@@ -2486,7 +2486,7 @@
     "leave-scale": {
       "$type": "number",
       "$value": "0.97",
-      "$description": "How far Caw shrinks as he fades out mid-loop, over dur-fade on ease-out, when what he stood in for has arrived. Material 3, Easing and duration: exit transitions are faster than enters, 200ms."
+      "$description": "How far Caw shrinks as he fades out, from any drawing, over dur-fade on ease-out, and the size a Caw whose status has no drawn enter fades in from, over dur-pop. Material 3, Easing and duration: exit transitions are faster than enters, 200ms."
     },
     "pop-scale": {
       "$type": "number",

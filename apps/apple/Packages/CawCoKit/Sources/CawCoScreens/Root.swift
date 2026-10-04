@@ -166,7 +166,7 @@ public final class RootViewController: ObservedViewController {
         view.addSubview(next.view)
         next.didMove(toParent: self)
         shown = next
-        // A screen with Caw on it is going: he plays his exit over the one that arrives.
+        // A screen with Caw on it is going: he fades out over the one that arrives.
         (previous as? ConnectViewController)?.caw?.leave(over: view)
         guard let previous else {
             return
