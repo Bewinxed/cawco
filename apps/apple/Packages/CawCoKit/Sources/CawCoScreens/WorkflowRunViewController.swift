@@ -609,7 +609,8 @@ final class RunStepsView: UIView {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("RunStepsView is built in code") }
 
-    func configure(_ model: RunModel, going: Bool, live: Bool, rerun: @escaping (String) -> Void) {
+    /// `interactive` false (a hover card's steps): no way into a step's tab and nothing folds.
+    func configure(_ model: RunModel, going: Bool, live: Bool, interactive: Bool = true, rerun: @escaping (String) -> Void) {
         list.arrangedSubviews.forEach { $0.removeFromSuperview() }
         glyphs = []
         durations = []
@@ -630,7 +631,7 @@ final class RunStepsView: UIView {
             let row = UIStackView(arrangedSubviews: [line])
             row.spacing = Space.space1
             row.alignment = .center
-            if let target = step.instanceId ?? step.childRunId.map({ BoardRun.prefix + $0 }) {
+            if interactive, let target = step.instanceId ?? step.childRunId.map({ BoardRun.prefix + $0 }) {
                 var config = UIButton.Configuration.plain()
                 config.image = Glyph.external.image.resized(to: 12)
                 config.imageColorTransformer = UIConfigurationColorTransformer { _ in Palette.inkMuted }
@@ -651,7 +652,7 @@ final class RunStepsView: UIView {
             box.axis = .vertical
             box.spacing = Space.space1
             // On the tab every step folds: its result, and Re-run from this step (offered dimmed while the run goes).
-            do {
+            if interactive {
                 let count = TreeCountButton()
                 let lines = step.result.map { $0.split(separator: "\n", omittingEmptySubsequences: false).count } ?? 1
                 let open = opened.contains(step.id)

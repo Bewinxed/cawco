@@ -86,8 +86,9 @@ final class ProjectBlock: UIStackView, UIContextMenuInteractionDelegate {
 
 /// A session under its project (`SUB_ROW`: 28pt, its mark, its name, when it
 /// last moved, and its delegates' count when it has any).
-final class SessionRailRow: RailRow {
+final class SessionRailRow: RailRow, HoverSessionRow {
     let id: String
+    var hoverSessionId: String? { id }
     let mark = SessionMarkView()
     let name = KitLabel(TypeScale.typeLabel.withWeight(.regular), ink: Palette.sidebarForeground)
     private let age = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)

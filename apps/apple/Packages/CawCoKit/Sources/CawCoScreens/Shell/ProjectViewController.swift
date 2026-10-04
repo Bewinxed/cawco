@@ -384,9 +384,14 @@ final class ProjectViewController: ObservedViewController {
         }
     }
 
-    /// The session's plan, counted: none until the hub's task store lands in
-    /// Core (`hub.tasks`), so every working row times its step instead.
-    private func plan(for _: String) -> (done: Int, total: Int)? { nil }
+    /// The session's plan, counted (`tasksOf`, `taskProgress`): read only, as
+    /// the board's sweep and the frames keep the store current. A session
+    /// with no plan has none, and a working one times its step instead.
+    private func plan(for id: String) -> (done: Int, total: Int)? {
+        guard let tasks = context.hub.tasks, let snapshot = tasks.snapshot(id), !snapshot.tasks.isEmpty else { return nil }
+        let progress = tasks.progress(snapshot)
+        return (progress.done, progress.total)
+    }
 
     /// The next chunk of the live list a frame on (`LIVE_STEP`), then the list follows the fleet.
     private func mountMore(of count: Int) {

@@ -58,6 +58,8 @@ final class SidebarViewController: ObservedViewController {
     /// Every project block and session row the rail has drawn, by id, kept across updates.
     private var blocks: [String: ProjectBlock] = [:]
     private var sessionRows: [String: SessionRailRow] = [:]
+    /// The rail's session card (SessionHover): its `tail` takes the transcript's tail view.
+    private(set) var sessionHover: SessionHover?
     private var drawnShape = ""
     private var olderOpen = Set<String>()
     private var openTrees = Set<String>()
@@ -108,6 +110,10 @@ final class SidebarViewController: ObservedViewController {
         column.addArrangedSubview(homeSlot)
         column.addArrangedSubview(buildProjects())
         mountHome(nil)
+        // The session card, beside the rail a pointer rests in; the sheet is a finger's.
+        if !inSheet {
+            sessionHover = SessionHover(hub: hub, home: home, rail: view) { [weak self] in self?.splitViewController?.view }
+        }
         registerForTraitChanges([UITraitHorizontalSizeClass.self, UITraitUserInterfaceIdiom.self]) { (rail: SidebarViewController, _: UITraitCollection) in
             rail.sizeNavRows()
         }
