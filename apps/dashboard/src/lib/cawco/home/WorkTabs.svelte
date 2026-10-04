@@ -95,7 +95,7 @@
     lastAt,
     type MachineGroup,
     machineName,
-    projectOf,
+    projectOfRow,
     span,
   } from "./home-state.svelte";
   import { type Arrival, planRelay, type RelayLine } from "./relay-plan";
@@ -627,16 +627,14 @@
   function workingLine(row: InstanceRow): string {
     const tool = cawco.currentToolOf(row.id);
     const doing = tool ? `${tool.name} ${tool.glance}`.trim() : "";
-    return [projectOf(row.machineId, row.cwd), doing]
-      .filter(Boolean)
-      .join(" · ");
+    return [projectOfRow(row), doing].filter(Boolean).join(" · ");
   }
   /** A finished row's line: its project, and why, if it failed. */
   function finishedLine(row: InstanceRow): string {
     const why = isFailed(row)
       ? `failed${row.lastError ? `: ${row.lastError}` : ""}`
       : "";
-    return [projectOf(row.machineId, row.cwd), why].filter(Boolean).join(" · ");
+    return [projectOfRow(row), why].filter(Boolean).join(" · ");
   }
   /** The row's meta line, naming its machine when it is not its group's. */
   function metaLine(row: InstanceRow, tab: WorkTab, group: string): string {

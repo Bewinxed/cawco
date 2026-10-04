@@ -323,10 +323,10 @@
    * of a parent in its list. A row with no parent the rail knows is its own
    * top, and lists by its own project, machine and folder.
    */
+  const topOf = $derived.by(() =>
+    topsIn(new Map([...running, ...notRunning].map((row) => [row.id, row])))
+  );
   const listed = $derived.by(() => {
-    const topOf = topsIn(
-      new Map([...running, ...notRunning].map((row) => [row.id, row]))
-    );
     const lists = new Map<
       string,
       { live: InstanceRow[]; resting: InstanceRow[] }
@@ -374,6 +374,15 @@
 
   const sessionsOf = (project: ProjectRow): InstanceRow[] =>
     listed.get(project.id)?.live ?? NOTHING;
+
+  /**
+   * A project's count, on its mark: the sessions running in it that are
+   * their own top. Its delegates are counted on their parent's mark; counted
+   * here too, a session and the ten it started read as eleven on the
+   * project, and the number is the project's status, not its rows.
+   */
+  const runningIn = (project: ProjectRow): number =>
+    sessionsOf(project).filter((row) => topOf(row) === row).length;
 
   /* ---- recent and older ------------------------------------------------
    * A project lists what is recent — running, waiting on you, or moved in
@@ -459,8 +468,9 @@
     // A tree stays whole on the side its top row is on, so a delegate of a
     // recent session folds under it rather than standing alone among the
     // older ones.
+    // Its top is the rail's (`topOf`): a row lists where its top lists, so
+    // the top of every row here is in this project's rows too.
     const all = [...live, ...resting];
-    const topOf = topsIn(new Map(all.map((row) => [row.id, row])));
     // A project with only a few sessions lists them all: the list is topped
     // up to the older box's six rows from the newest older trees, and a fold
     // that would hide one row lists it instead, at the same height.
@@ -1058,7 +1068,7 @@
             {@attach holdWhileInside("rail:")}
           >
             {#each orderedProjects as project (project.id)}
-              {@const sessions = sessionsOf(project)}
+              {@const runningCount = runningIn(project)}
               {@const expanded = !folderPrefs.collapsed(project.cwd)}
               <li
                 class="group/menu-item relative"
@@ -1087,14 +1097,14 @@
                          session's says its delegates; the whole row is the
                          switch, so the mark only draws the morph. -->
                     <ProjectMark
-                      count={sessions.length}
+                      count={runningCount}
                       hue={markHue(project.cwd)}
                       open={expanded}
                     />
                     <span class="min-w-0 flex-1 truncate"
                       >{project.name}
-                      {#if sessions.length > 0}
-                        <span class="sr-only">, {sessions.length} running</span>
+                      {#if runningCount > 0}
+                        <span class="sr-only">, {runningCount} running</span>
                       {/if}</span
                     >
                   </Sidebar.MenuButton>

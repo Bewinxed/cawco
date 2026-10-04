@@ -40,6 +40,7 @@ import { heldOrder } from "../motion/held-order.svelte";
 import { permissionSummary } from "../permission-summary";
 import { questionsOf } from "../question";
 import { rail } from "../rail.svelte";
+import { topsIn } from "../tree";
 import { runHref } from "../workflow-runs";
 import { workflowState } from "../workflow-state.svelte";
 import { choices } from "./choices.svelte";
@@ -230,6 +231,17 @@ export function projectOf(
     project?.name ??
     (folder.split("/").filter(Boolean).pop() ?? "").replace(WORKSPACE_ID, "")
   );
+}
+
+/**
+ * The project a row is named by: that of the session at the top of its
+ * chain of parents (tree.ts `topsIn`), as the rail places it. Named by its
+ * own machine and folder, a delegate in a worktree or on another machine
+ * named no project, or another one.
+ */
+export function projectOfRow(row: InstanceRow): string {
+  const top = topsIn(cawco.instanceIndex.byId)(row);
+  return projectOf(top.machineId, top.cwd);
 }
 
 /** "machine · project". */
