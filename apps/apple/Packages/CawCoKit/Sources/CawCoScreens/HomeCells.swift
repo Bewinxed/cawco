@@ -175,13 +175,6 @@ final class NeedsCardCell: HomeCell {
         let head = UIStackView(arrangedSubviews: [title, waited, peekRoom])
         head.spacing = Space.space2
         head.alignment = .firstBaseline
-        tile.addSubview(peek)
-        NSLayoutConstraint.activate([
-            peekRoom.widthAnchor.constraint(equalToConstant: RowActionButton.side - Space.space2),
-            peekRoom.heightAnchor.constraint(equalToConstant: 1),
-            peek.trailingAnchor.constraint(equalTo: peekRoom.trailingAnchor, constant: Space.space2),
-            peek.centerYAnchor.constraint(equalTo: waited.centerYAnchor),
-        ])
         actions.addArrangedSubview(deny)
         actions.addArrangedSubview(UIView())
         actions.addArrangedSubview(approve)
@@ -194,11 +187,17 @@ final class NeedsCardCell: HomeCell {
         column.setCustomSpacing(Space.space1 * 2, after: ask)
         column.translatesAutoresizingMaskIntoConstraints = false
         tile.addSubview(column)
+        // Peek stands over the head, in the tile: it and its room share the tile only once the column is in it.
+        tile.addSubview(peek)
         NSLayoutConstraint.activate([
             column.leadingAnchor.constraint(equalTo: tile.leadingAnchor, constant: Space.space4),
             column.trailingAnchor.constraint(equalTo: tile.trailingAnchor, constant: -Space.space4),
             column.topAnchor.constraint(equalTo: tile.topAnchor, constant: Space.space3),
             column.bottomAnchor.constraint(equalTo: tile.bottomAnchor, constant: -Space.space3),
+            peekRoom.widthAnchor.constraint(equalToConstant: RowActionButton.side - Space.space2),
+            peekRoom.heightAnchor.constraint(equalToConstant: 1),
+            peek.trailingAnchor.constraint(equalTo: peekRoom.trailingAnchor, constant: Space.space2),
+            peek.centerYAnchor.constraint(equalTo: waited.centerYAnchor),
         ])
         pin(tile)
     }
