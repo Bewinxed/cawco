@@ -403,7 +403,9 @@ final class TableBlock: UIView {
         }
         columnWidths = Array(repeating: [], count: columns)
         let start = Self.columns(extents, fitting: bounds.width > 0 ? bounds.width : extents.reduce(0) { $0 + $1.most })
-        func line(_ cells: [NSAttributedString], head: Bool) -> UIView {
+        /// One row. `ruled`: the 1pt rule under it, which stands below the
+        /// row's cells and adds to its height, as a collapsed border does.
+        func line(_ cells: [NSAttributedString], head: Bool, ruled: Bool) -> UIView {
             let row = UIStackView()
             row.axis = .horizontal
             row.alignment = .top
@@ -419,7 +421,8 @@ final class TableBlock: UIView {
                 row.addArrangedSubview(box)
             }
             let wrap = UIView()
-            wrap.pin(row)
+            wrap.pin(row, insets: UIEdgeInsets(top: 0, left: 0, bottom: ruled ? 1 : 0, right: 0))
+            guard ruled else { return wrap }
             let rule = UIView()
             rule.backgroundColor = Palette.border
             rule.translatesAutoresizingMaskIntoConstraints = false
@@ -432,11 +435,9 @@ final class TableBlock: UIView {
             ])
             return wrap
         }
-        if !head.isEmpty { grid.addArrangedSubview(line(head, head: true)) }
+        if !head.isEmpty { grid.addArrangedSubview(line(head, head: true, ruled: true)) }
         for (i, row) in rows.enumerated() {
-            let drawn = line(row, head: false)
-            if i == rows.count - 1 { drawn.subviews.last?.isHidden = true }
-            grid.addArrangedSubview(drawn)
+            grid.addArrangedSubview(line(row, head: false, ruled: i < rows.count - 1))
         }
     }
 }

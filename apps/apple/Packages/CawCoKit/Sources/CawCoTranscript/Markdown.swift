@@ -295,11 +295,9 @@ enum MarkdownRender {
             if text.hasSuffix("\n") { text.removeLast() }
             return .code(language: code.language, text: text)
         case let table as Table:
-            let head = Array(table.head.cells).map { cell in
-                inline(cell, attributes: cellAttributes(style, head: true), style: style)
-            }
+            let head = Array(table.head.cells).map { cell($0, head: true, style: style) }
             let rows = table.body.rows.map { row in
-                Array(row.cells).map { inline($0, attributes: cellAttributes(style, head: false), style: style) }
+                Array(row.cells).map { cell($0, head: false, style: style) }
             }
             return .table(head: head, rows: Array(rows))
         case let quote as BlockQuote:
@@ -344,8 +342,32 @@ enum MarkdownRender {
 
     private static func cellAttributes(_ style: ProseStyle, head: Bool) -> [NSAttributedString.Key: Any] {
         // prose-sm's table: 0.857em of the body, line height 1.5; th at the strong weight.
-        Styled.attributes(style.role, color: style.ink, size: TypeScale.textMeta, weight: head ? TypeScale.weightStrong : nil,
+        Styled.attributes(style.role, color: style.ink, size: style.role.points * TypeScale.proseSmTableSize,
+                          weight: head ? TypeScale.weightStrong : nil,
                           leading: TypeScale.leadingRoot, lineBreak: .byWordWrapping, textKit2: true)
+    }
+
+    /// A table cell's text. Inline code is a larger face than the cell's, on a
+    /// line of its own height (`[&_code]:text-meta`): where it reaches further
+    /// from the baseline than the cell's own line does, the line box is that
+    /// much taller (LineBox.strut). Mobile Safari: 18.77 a line against 18.
+    private static func cell(_ node: Markup, head: Bool, style: ProseStyle) -> NSAttributedString {
+        let attributes = cellAttributes(style, head: head)
+        let text = inline(node, attributes: attributes, style: style)
+        guard let font = attributes[.font] as? UIFont, let paragraph = attributes[.paragraphStyle] as? NSParagraphStyle else { return text }
+        let line = LineBox.strut(font, height: font.pointSize * TypeScale.leadingRoot)
+        var grown = 0.0
+        text.enumerateAttribute(.inlineCode, in: NSRange(location: 0, length: text.length)) { value, range, _ in
+            guard value != nil, let mono = text.attribute(.font, at: range.location, effectiveRange: nil) as? UIFont else { return }
+            let code = LineBox.strut(mono, height: mono.pointSize * TypeScale.typeMeta.leading)
+            grown = max(grown, max(0, code.above - line.above) + max(0, code.below - line.below))
+        }
+        guard grown > 0, let taller = paragraph.mutableCopy() as? NSMutableParagraphStyle else { return text }
+        taller.minimumLineHeight += grown
+        taller.maximumLineHeight += grown
+        let out = NSMutableAttributedString(attributedString: text)
+        out.addAttribute(.paragraphStyle, value: taller, range: NSRange(location: 0, length: out.length))
+        return out
     }
 
     /// A block of running text: a paragraph, a heading, a list.
@@ -546,8 +568,14 @@ enum MarkdownRender {
                     mono[.font] = TypeScale.typeCode.font(style.codeSize, weight: TypeScale.weightBody)
                     mono[.inlineCode] = style.codeSurface
                     mono[.inlineCodePad] = style.codePad
-                    // Its 4pt inline padding, as room either side of the run.
-                    if out.length > 0 {
+                    // Its 4pt inline padding, as room either side of the run. Where
+                    // it opens the text there is no character before it to carry the
+                    // room, so a zero-width one does.
+                    if out.length == 0 {
+                        var lead = attributes
+                        lead[.kern] = Space.space1
+                        out.append(NSAttributedString(string: "\u{200B}", attributes: lead))
+                    } else {
                         let before = out.length - 1
                         let kern = out.attribute(.kern, at: before, effectiveRange: nil) as? Double ?? 0
                         out.addAttribute(.kern, value: kern + Space.space1, range: NSRange(location: before, length: 1))

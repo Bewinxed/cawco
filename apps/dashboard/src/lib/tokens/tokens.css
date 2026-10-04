@@ -490,6 +490,8 @@
     --prose-sm-quote-inset: 1.1111111;
     /* prose-sm: above and below a horizontal rule, in the body's ems. */
     --prose-sm-rule: 2.8571429;
+    /* prose-sm: a table's font size, in the body's ems. A hair over 12px of 14px, which is what makes a browser take the face's 3px descent up to 4. */
+    --prose-sm-table-size: 0.8571429;
     --weight-body: 400;
     /* Nothing in product UI goes above 500. */
     --weight-strong: 500;

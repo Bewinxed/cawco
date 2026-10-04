@@ -339,6 +339,8 @@ public enum TypeScale {
     public static let proseSmQuoteInset: Double = 1.111111
     /// prose-sm: above and below a horizontal rule, in the body's ems.
     public static let proseSmRule: Double = 2.857143
+    /// prose-sm: a table's font size, in the body's ems. A hair over 12px of 14px, which is what makes a browser take the face's 3px descent up to 4.
+    public static let proseSmTableSize: Double = 0.857143
     public static let weightBody: UIFont.Weight = .regular
     /// Nothing in product UI goes above 500.
     public static let weightStrong: UIFont.Weight = .medium
