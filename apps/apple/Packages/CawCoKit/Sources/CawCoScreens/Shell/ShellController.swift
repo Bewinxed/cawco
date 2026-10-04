@@ -382,7 +382,8 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
                 refreshBars()
                 rail.requestRefresh()
             }
-            let sheet = HouseSheetController(holder, style: .card, scroller: panel.scroller)
+            // `max-height: 85dvh` on the assistant's drawer.
+            let sheet = HouseSheetController(holder, style: .card, scroller: panel.scroller, cap: 0.85)
             assistantSheet = sheet
             dialogPresenter.present(sheet, animated: true)
         } else {

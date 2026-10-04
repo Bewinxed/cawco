@@ -93,11 +93,21 @@ final class ComposerDock {
         var lead = Space.space3
         var trail = -Space.space3
         var foot = -Space.space2
+        // Composer.svelte `.composer`: past the 900pt line it is
+        // `min(720px, 100% - 50px)` wide, centred in its group, a `space4` off
+        // the foot; at or under it, edge to edge less `space3`, a `space2` off.
+        let room = host.bounds.inset(by: host.safeAreaInsets).width
+        if (host.window?.bounds.width ?? host.bounds.width) > 900, room > 0 {
+            let side = max(Space.space3, (room - min(720, room - 50)) / 2)
+            lead = side
+            trail = -side
+            foot = -Space.space4
+        }
         if #available(iOS 27.1, macCatalyst 27.1, *) {
             let safe = host.bounds.inset(by: host.safeAreaInsets)
             let keyboardTop = host.keyboardLayoutGuide.layoutFrame.minY
-            let normal = CGRect(x: safe.minX + Space.space3, y: keyboardTop - Space.space2 - composer.bounds.height,
-                                width: max(0, safe.width - Space.space3 * 2), height: composer.bounds.height)
+            let normal = CGRect(x: safe.minX + lead, y: keyboardTop + foot - composer.bounds.height,
+                                width: max(0, safe.width - lead + trail), height: composer.bounds.height)
             // Test the undisplaced pose, not the previous layout's displaced
             // frame; otherwise avoidance would toggle on and off every pass.
             for region in host.reservedRegions(kind: .division) where region.isActive && normal.intersects(region.frame) {

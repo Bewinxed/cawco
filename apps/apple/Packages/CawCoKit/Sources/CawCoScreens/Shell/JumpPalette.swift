@@ -351,8 +351,9 @@ final class JumpPaletteController: UIViewController, UIViewControllerTransitioni
         column.translatesAutoresizingMaskIntoConstraints = false
         well.addSubview(column)
 
+        // `sm:max-w-2xl`: 672pt wherever the window has it; a long row truncates, it never widens the panel.
         let wanted = frameView.widthAnchor.constraint(equalToConstant: 672)
-        wanted.priority = .defaultHigh
+        wanted.priority = .required - 1
         NSLayoutConstraint.activate([
             frameView.centerXAnchor.constraint(equalTo: view.centerXAnchor),
             wanted,
@@ -756,6 +757,7 @@ final class JumpPaletteController: UIViewController, UIViewControllerTransitioni
         let trailLabel = UILabel()
         trailLabel.attributedText = trail
         trailLabel.lineBreakMode = .byTruncatingTail
+        trailLabel.setContentCompressionResistancePriority(.defaultLow + 1, for: .horizontal)
         let row = UIStackView(arrangedSubviews: [GlyphView(glyph, size: 16, tint: Palette.inkMuted), nameLabel, trailLabel])
         row.spacing = 8
         row.alignment = .center

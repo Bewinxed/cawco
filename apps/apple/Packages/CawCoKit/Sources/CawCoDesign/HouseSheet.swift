@@ -31,11 +31,16 @@ public final class HouseSheetController: UIViewController, UIViewControllerTrans
     private weak var scroller: UIScrollView?
     private var dragging = false
 
+    /// The most of the screen it stands tall, where a sheet sets its own
+    /// (the assistant's `max-height: 85dvh`); nil, the style's (80%, 88%).
+    private let cap: Double?
+
     /// `scroller`: the content's own scroll view, which hands a downward pull
     /// to the sheet once it is at its top (vaul's `lockAtTop`).
-    public init(_ content: UIViewController, title: String? = nil, style: Style = .card, scroller: UIScrollView? = nil) {
+    public init(_ content: UIViewController, title: String? = nil, style: Style = .card, scroller: UIScrollView? = nil, cap: Double? = nil) {
         self.content = content
         self.style = style
+        self.cap = cap
         titleText = title
         self.scroller = scroller
         super.init(nibName: nil, bundle: nil)
@@ -101,7 +106,7 @@ public final class HouseSheetController: UIViewController, UIViewControllerTrans
             card.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: inset),
             card.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -inset),
             card.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor, constant: -inset),
-            card.heightAnchor.constraint(lessThanOrEqualTo: view.heightAnchor, multiplier: style == .card ? 0.8 : 0.88),
+            card.heightAnchor.constraint(lessThanOrEqualTo: view.heightAnchor, multiplier: cap ?? (style == .card ? 0.8 : 0.88)),
             // The grabber's `mt-4`, under the content box's `p-4` on the drawer.
             handle.topAnchor.constraint(equalTo: card.topAnchor, constant: style == .card ? 16 + 16 - inset : 16),
             handle.centerXAnchor.constraint(equalTo: card.centerXAnchor),
