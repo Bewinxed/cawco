@@ -1,11 +1,11 @@
 <script lang="ts" module>
   /**
-   * One arm of the wave, drawn from the label outward: a 12px wavelength at
-   * 3px amplitude, longer than any column. Its svg has no viewBox, so the
+   * One arm of the wave, drawn from the label outward: a 16px wavelength at
+   * 1.5px amplitude, longer than any column. Its svg has no viewBox, so the
    * path is in CSS pixels and the column's width only decides how much of it
    * is drawn (the dash, below): it repeats, it is never scaled.
    */
-  const WAVE = `M1 4q3-6 6 0${"t6 0".repeat(799)}`;
+  const WAVE = `M1 3q4-3 8 0${"t8 0".repeat(599)}`;
 </script>
 
 <script lang="ts">
@@ -13,8 +13,12 @@
    * A compaction in the transcript: a wavy vermillion line across the column
    * with "Compacted" set in the middle of it. The whole divider is the button
    * that opens the compaction's brief under it; until the brief has arrived
-   * there is nothing to open, and the button waits disabled.
+   * there is nothing to open, and the button waits disabled. A chevron comes
+   * in beside the word under the pointer or keyboard focus, and stays, turned
+   * down, while the brief is open; a finger has no hover, so there it is
+   * always shown.
    */
+  import IconChevron from "~icons/solar/alt-arrow-right-bold-duotone";
   import { unfold } from "../motion/fold.svelte";
   import { morph } from "../motion/morph.svelte";
   import { disclosureAt } from "./disclosure.svelte";
@@ -74,7 +78,9 @@
   <span class="arm start">
     <svg aria-hidden="true" class="wave"><path d={WAVE} /></svg>
   </span>
-  Compacted
+  <span class="mid"
+    >Compacted<span class="chev"><IconChevron aria-hidden="true" /></span></span
+  >
   <span class="arm">
     <svg aria-hidden="true" class="wave"><path d={WAVE} /></svg>
   </span>
@@ -92,7 +98,9 @@
 
 <style>
   .divider {
-    --line: var(--seam);
+    --line: var(--brand-solid);
+    /* How far in the chevron is: 0 away, 1 beside the word. */
+    --chev: 0;
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
     align-items: center;
@@ -110,14 +118,67 @@
     &:disabled {
       cursor: default;
     }
-    /* Line and word step to the stronger vermillion, and nothing else. */
+    /* The chevron is in for keyboard focus and while the brief is open. */
+    &:is(:focus-visible, [aria-expanded="true"]) {
+      --chev: 1;
+    }
+    /* Under the pointer the line and word step to the stronger vermillion
+       and the chevron comes in; nothing else. */
     @media (hover: hover) and (pointer: fine) {
       &:hover:not(:disabled) {
-        --line: var(--brand-solid);
+        --line: var(--brand-ink-strong);
+        --chev: 1;
         color: var(--brand-ink-strong);
       }
     }
+    /* A finger has no hover: what opens always shows that it does. */
+    @media (pointer: coarse) {
+      &:not(:disabled) {
+        --chev: 1;
+      }
+    }
     transition: color var(--dur-control) var(--ease-out);
+  }
+  .mid {
+    white-space: nowrap;
+  }
+  /* The chevron takes no room until it is in: the word stands where it
+     stands without it, and the centre widens as it comes, so the arms give
+     way rather than jump. `middle` sets it on the word's x-height. */
+  .chev {
+    display: inline-block;
+    vertical-align: middle;
+    inline-size: calc(var(--chev) * 12px);
+    block-size: 12px;
+    margin-inline-start: calc(var(--chev) * var(--space-1));
+    opacity: var(--chev);
+    transition: opacity var(--dur-control) var(--ease-out);
+
+    & :global(svg) {
+      display: block;
+      inline-size: 12px;
+      block-size: 12px;
+      scale: calc(0.25 + 0.75 * var(--chev));
+      filter: blur(calc((1 - var(--chev)) * 4px));
+    }
+    /* Open: it points down. */
+    [aria-expanded="true"] & :global(svg) {
+      rotate: 90deg;
+    }
+    /* Transitions, so leaving half-way turns back from where it is. */
+    @media (prefers-reduced-motion: no-preference) {
+      transition:
+        opacity var(--dur-control) var(--ease-out),
+        inline-size var(--dur-control) var(--ease-out),
+        margin-inline-start var(--dur-control) var(--ease-out);
+
+      & :global(svg) {
+        transition:
+          scale var(--dur-control) var(--ease-out),
+          filter var(--dur-control) var(--ease-out),
+          rotate var(--dur-toggle) var(--ease-out);
+      }
+    }
   }
   /* Each arm is the container its wave is measured against. */
   .arm {
@@ -126,7 +187,7 @@
   .wave {
     display: block;
     inline-size: 100%;
-    block-size: 8px;
+    block-size: 6px;
 
     /* Mirrored, so both arms run outward from the word. */
     .start > & {
@@ -135,12 +196,13 @@
 
     & path {
       /* How much of the path the arm shows, along the curve: the wave is
-         1.479px long for each pixel it crosses. Dashed to that length, the
+         1.087px long for each pixel it crosses. Dashed to that length, the
          line ends on a round cap just inside the column, not on a clip. */
-      --run: calc((100cqi - 2px) * 1.47);
+      --run: calc((100cqi - 2px) * 1.08);
       fill: none;
       stroke: var(--line);
-      stroke-width: 1.5px;
+      /* One pixel, in whole device pixels. */
+      stroke-width: max(var(--dpx, 1px), round(1px, var(--dpx, 1px)));
       stroke-linecap: round;
       stroke-dasharray: var(--run) 9999px;
       transition: stroke var(--dur-control) var(--ease-out);
