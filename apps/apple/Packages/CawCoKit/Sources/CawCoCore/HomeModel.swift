@@ -371,7 +371,7 @@ public final class HomeModel {
                     instance: nil,
                     markPlace: info.cwd ?? machine.machineId,
                     machineId: machine.machineId,
-                    title: storedTitle(info, machineId: machine.machineId),
+                    title: fleet.storedTitle(info, machineId: machine.machineId),
                     place: place(machine.machineId, info.cwd),
                     at: info.lastModified
                 )
@@ -380,14 +380,6 @@ public final class HomeModel {
         var unique = Set<String>()
         let items = (live + stored).sorted { $0.at != $1.at ? $0.at > $1.at : $0.id < $1.id }.filter { unique.insert($0.id).inserted }
         return held.order("home:recent", items, id: \.id)
-    }
-
-    private func storedTitle(_ info: StoredSession, machineId: String) -> String {
-        let row = (fleet.bySession[info.sessionId] ?? [])
-            .filter { $0.machineId == machineId && $0.cwd == info.cwd }
-            .max { $0.updatedMs < $1.updatedMs }
-        let named = (row?.titleSource != nil ? row?.title : nil) ?? info.customTitle ?? info.summary
-        return Naming.sessionTitle(title: named, firstMessage: info.firstPrompt, cwd: info.cwd, id: info.sessionId)
     }
 
     /// The usage strip: the window that stops you first, from the readings the hub keeps current.
