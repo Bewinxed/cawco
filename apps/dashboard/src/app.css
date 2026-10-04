@@ -628,13 +628,15 @@
   [data-branch-draw] .tree-mark {
     pointer-events: none;
   }
-  /* A working row's echo is away while the tree it is in opens or folds
-     (held, or its line drawing), and back as the fold lands. Its layer was
-     made as the row was drawn, in the frames the fold builds its own; the
-     compositor put those frames out before the echo's box was painted, each
-     one counted as a frame with content missing: 18 in 12 toggles of a
-     project with two working sessions, none with the echo away. */
-  :is([data-branch-draw], [data-branch-hold]) .tree-mark .echo-box {
+  /* A working row's echo is away while the tree it is in opens (held), and
+     back as the opening lands. Its layer was made as the row was drawn, in
+     the frames the opening builds its own; the compositor put those frames
+     out before the echo's box was painted, each one counted as a frame with
+     content missing: 18 in 12 toggles of a project with two working
+     sessions, none with the echo away. Only while it opens: taken away as a
+     fold began, what is drawn after the echo changed layers in that frame,
+     and that frame went out with content missing instead. */
+  [data-branch-hold] .tree-mark .echo-box {
     display: none;
   }
   /* A group folding away is out of the pointer's reach from the press that
