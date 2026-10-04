@@ -94,7 +94,7 @@ import {
   motionOk,
   numberOf,
 } from "./curves.svelte";
-import { atTravel, beforeReflow, heldToTravel } from "./rows.svelte";
+import { atTravel, BLEED, beforeReflow, heldToTravel } from "./rows.svelte";
 
 export interface BranchOptions {
   /** A row's glyph, a selector inside the row: its line ends there. */
@@ -883,17 +883,32 @@ const STEP = 1000 / 120;
 const GRAIN = 0.5;
 /** A frame at 60Hz: a fold's batch starts on the next one (`atTravel`). */
 const FRAME = 1000 / 60;
-/** Unclipped on that side: what a row draws outside itself shows. */
-const OPEN = "-100vmax";
+/**
+ * How far above and left of its row a glyph is drawn on its way to it. A
+ * row's clip is open that far and the rows' `BLEED` more, and no further:
+ * the glyph rides on a layer of its own, so its row's clip is a layer as
+ * large as the clip (motion/rows `BLEED`). Open by 100vmax on three sides,
+ * every row of a tree was a layer 1605 by 2654px.
+ */
+function reachOf(item: Item): { left: number; up: number } {
+  const [x, y] = item.ride ? item.ride.at(0) : [0, 0];
+  return { left: Math.max(0, -x), up: Math.max(0, -y) };
+}
 
-/** A group cut `below` px up from its foot: the room it still has. */
-const shut = (below: number): string =>
-  `inset(${OPEN} ${OPEN} ${px(Math.max(0, below))} ${OPEN})`;
+/**
+ * A group cut `below` px up from its foot: the room it still has. Open
+ * above as far as its line starts, at its parent's glyph.
+ */
+const shut = (shape: Shape, below: number): string =>
+  `inset(${px(-(BLEED + Math.max(0, -shape.start)))} ${px(-BLEED)} ${px(Math.max(0, below))} ${px(-BLEED)})`;
 
 /** A row's title `v` of the way wiped in: cut from the right, past its glyph. */
-const wiped = (item: Item, v: number): Keyframe => ({
-  clipPath: `inset(${OPEN} ${px((item.width - item.reveal) * (1 - v))} ${OPEN} ${OPEN})`,
-});
+const wiped = (item: Item, v: number): Keyframe => {
+  const { left, up } = reachOf(item);
+  return {
+    clipPath: `inset(${px(-(BLEED + up))} ${px((item.width - item.reveal) * (1 - v))} ${px(-BLEED)} ${px(-(BLEED + left))})`,
+  };
+};
 
 /**
  * A glyph's keyframes, and its skin's: where the head puts it at each of
@@ -1655,8 +1670,8 @@ function fold(group: HTMLElement, options: BranchOptions): TransitionConfig {
       // showed over them until the unmount.
       const room = group.animate(
         [
-          { clipPath: shut(shape.height - state.room) },
-          { clipPath: shut(shape.height) },
+          { clipPath: shut(shape, shape.height - state.room) },
+          { clipPath: shut(shape, shape.height) },
         ],
         { duration: plan.total, easing: CURVE.inOut, fill: "both" }
       );

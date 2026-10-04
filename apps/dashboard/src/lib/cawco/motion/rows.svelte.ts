@@ -864,11 +864,27 @@ function departure(
 }
 
 /**
+ * How far past its own box a clip is left open on a side it does not cut,
+ * px: room for what a box draws outside itself (a shadow, a rim, a focus
+ * ring, a well's bleed), and no more.
+ *
+ * Whatever is animated inside a clipped box is drawn from a layer of its
+ * own, and then the browser draws the clip from a layer too, as large as
+ * the clip. Open by 100vmax, each was the box and 1440px beyond it on every
+ * open side: a tree's forty rows took the page from 78 to over 200
+ * megapixels of layers on a screen at two device pixels, the tiles of
+ * everything else (the rail, the transcript) were dropped to make room, and
+ * a frame went out before they were drawn again: the rail and the pane
+ * blinked on every fold.
+ */
+export const BLEED = 64;
+
+/**
  * A moving edge clips only at the edge: above it and either side, whatever
  * the box draws outside itself (a shadow, a nesting rail reaching up to its
  * parent's glyph, an arm out to the left) shows all the while.
  */
-const OPEN = "-100vmax";
+const OPEN = `${-BLEED}px`;
 /** A box's clip, read for where its bottom edge is drawn: above (hiding) or below its foot. */
 const CLIP_BOTTOM = /^inset\(\S+ \S+ (-?[\d.]+)px/;
 

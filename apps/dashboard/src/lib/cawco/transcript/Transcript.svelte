@@ -45,6 +45,7 @@
     easeOut,
     motionOk,
   } from "../motion/curves.svelte";
+  import { BLEED } from "../motion/rows.svelte";
   import { carry, waiting } from "../motion/share.svelte";
   import { rebuildScheduler } from "../workspace/scheduler.svelte";
   import {
@@ -725,8 +726,11 @@
     slidFrom.set(node, top);
     // A row that gained a speaker line starts with it above where the row
     // began — over the row above. It is cut off there and opens as the row
-    // travels. The sides and bottom stay open: a well bleeds past its box.
+    // travels. The sides and bottom stay open as far as a well bleeds past
+    // its box (motion/rows `BLEED`): the row slides on a layer as large as
+    // its clip.
     const gained = Math.max(0, height - box.height - node.offsetTop);
+    const open = `${-BLEED}px`;
     for (const running of node.getAnimations()) {
       if (running.id === SLIDE) {
         running.cancel();
@@ -737,9 +741,9 @@
       [
         {
           translate: `0 ${delta}px`,
-          clipPath: `inset(${gained}px -100vmax -100vmax)`,
+          clipPath: `inset(${gained}px ${open} ${open})`,
         },
-        { translate: "0 0", clipPath: "inset(0px -100vmax -100vmax)" },
+        { translate: "0 0", clipPath: `inset(0px ${open} ${open})` },
       ],
       timing
     );
