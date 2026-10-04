@@ -34,13 +34,22 @@ public final class KitPopover: NSObject, UIViewControllerTransitioningDelegate {
     private let align: Align
     private let offset: Double
     private let entrance: Entrance
+    /// Views under the popover that still take touches while it is up: the
+    /// sibling triggers of a popover group, so a press on one moves to its
+    /// popover instead of only closing this one.
+    private var passthrough: [Weak] = []
+
+    struct Weak {
+        weak var view: UIView?
+    }
 
     /// Presents `content` off `source`; keep the returned object for as long as it is up.
     @MainActor
     @discardableResult
     public static func present(_ content: UIViewController, from source: UIView, in presenter: UIViewController, align: Align = .start, offset: Double = 6,
-                               entrance: Entrance = .standard) -> KitPopover {
+                               entrance: Entrance = .standard, passthrough: [UIView] = []) -> KitPopover {
         let popover = KitPopover(source: source, align: align, offset: offset, entrance: entrance)
+        popover.passthrough = passthrough.map { Weak(view: $0) }
         content.modalPresentationStyle = .custom
         content.transitioningDelegate = popover
         objc_setAssociatedObject(content, &KitPopover.key, popover, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
@@ -58,7 +67,23 @@ public final class KitPopover: NSObject, UIViewControllerTransitioningDelegate {
     }
 
     public func presentationController(forPresented presented: UIViewController, presenting: UIViewController?, source _: UIViewController) -> UIPresentationController? {
-        Presentation(presentedViewController: presented, presenting: presenting, anchor: source, align: align, offset: offset)
+        let presentation = Presentation(presentedViewController: presented, presenting: presenting, anchor: source, align: align, offset: offset)
+        presentation.catcher.passthrough = passthrough
+        return presentation
+    }
+
+    /// The ground under the card: a tap on it closes the popover, but where a
+    /// passthrough control stands the tap is that control's own press.
+    final class Catcher: UIView {
+        var passthrough: [Weak] = []
+
+        func control(at point: CGPoint) -> UIControl? {
+            for entry in passthrough {
+                guard let view = entry.view as? UIControl, view.window != nil, !view.isHidden else { continue }
+                if view.point(inside: convert(point, to: view), with: nil) { return view }
+            }
+            return nil
+        }
     }
 
     public func animationController(forPresented _: UIViewController, presenting _: UIViewController, source _: UIViewController) -> (any UIViewControllerAnimatedTransitioning)? {
@@ -73,7 +98,7 @@ public final class KitPopover: NSObject, UIViewControllerTransitioningDelegate {
         private weak var anchor: UIView?
         private let align: Align
         private let offset: Double
-        private let catcher = UIView()
+        let catcher = Catcher()
         /// Whether the card hangs above its trigger (no room below).
         private(set) var above = false
 
@@ -119,7 +144,7 @@ public final class KitPopover: NSObject, UIViewControllerTransitioningDelegate {
             guard let container = containerView else { return }
             catcher.frame = container.bounds
             catcher.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-            catcher.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(outside)))
+            catcher.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(outside(_:))))
             container.insertSubview(catcher, at: 0)
             NotificationCenter.default.addObserver(self, selector: #selector(keyboardMoved(_:)), name: UIResponder.keyboardWillChangeFrameNotification, object: nil)
         }
@@ -130,7 +155,8 @@ public final class KitPopover: NSObject, UIViewControllerTransitioningDelegate {
 
         override func preferredContentSizeDidChange(forChildContentContainer _: any UIContentContainer) {
             containerView?.setNeedsLayout()
-            Motion.easeOut.animator(Motion.durMorph) { self.containerView?.layoutIfNeeded() }.startAnimation()
+            let pace = (presentedViewController as? KitPopoverController)?.resize
+            (pace?.curve ?? Motion.easeOut).animator(pace?.duration ?? Motion.durMorph) { self.containerView?.layoutIfNeeded() }.startAnimation()
         }
 
         /// Where the card grows from: the trigger's side of it.
@@ -142,7 +168,11 @@ public final class KitPopover: NSObject, UIViewControllerTransitioningDelegate {
             return CGPoint(x: x, y: above ? 1 : 0)
         }
 
-        @objc private func outside() {
+        @objc private func outside(_ tap: UITapGestureRecognizer) {
+            if let control = catcher.control(at: tap.location(in: catcher)) {
+                control.sendActions(for: .touchUpInside)
+                return
+            }
             presentedViewController.dismiss(animated: true)
         }
     }
@@ -196,6 +226,9 @@ public final class KitPopover: NSObject, UIViewControllerTransitioningDelegate {
 /// material (`material-panel`) where a caller asks for it.
 open class KitPopoverController: UIViewController {
     public let card = UIView()
+    /// How the card follows a change of its content's size: a popover whose
+    /// content folds open sets the fold's own pace (default `durMorph` on the out curve).
+    public var resize: (duration: TimeInterval, curve: TimingCurve)?
     private let material: Bool
     private var blur: UIVisualEffectView?
 

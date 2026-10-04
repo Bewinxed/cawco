@@ -134,6 +134,8 @@ public final class FleetStore {
     /// The first read of every workflow and its runs came back, or failed.
     public internal(set) var runsRead = false
     public internal(set) var projects: [Components.Schemas.GetApiProjects200Payload] = []
+    /// The continuations the hub is carrying, settled ones for a few minutes after.
+    public internal(set) var continuations: [Components.Schemas.ContinuationJob] = []
     public internal(set) var pulses: [String: SessionPulse] = [:]
     /// When each session's current turn began, ms epoch; absent while idle.
     public internal(set) var turnSince: [String: Double] = [:]

@@ -11,11 +11,15 @@
 # sharing it lock its build.db. -skipPackagePluginValidation lets the
 # OpenAPIGenerator build plugin (CawCoAPI) run without Xcode's trust prompt.
 # The checkout is rsynced to ~/build/cawco-apple, never the deploy clone.
+# Sessions that build at the same time each set CAWCO_BUILD_DIR to a name of
+# their own (~/build/<name>): one directory shared by two builds has each
+# rsync delete the other's files and both lock one build.db.
 # Only processes this script starts are stopped, by PID.
 set -euo pipefail
 
 SSH=(ssh -F "$HOME/.ssh/config" -o BatchMode=yes mac)
-REMOTE=build/cawco-apple/apps/apple
+BUILD=${CAWCO_BUILD_DIR:-cawco-apple}
+REMOTE=build/$BUILD/apps/apple
 
 [[ -f apps/apple/project.yml ]] || { echo "run from the repo root" >&2; exit 2; }
 PLATFORM=${1:-both}
@@ -31,11 +35,12 @@ rsync -a --delete \
   -e "ssh -F $HOME/.ssh/config -o BatchMode=yes" \
   apps/apple/ "mac:$REMOTE/"
 
-"${SSH[@]}" bash -s -- "$REMOTE" "$PLATFORM" <<'EOF'
+"${SSH[@]}" bash -s -- "$REMOTE" "$PLATFORM" "$BUILD" <<'EOF'
 set -euo pipefail
 cd "$HOME/$1"
 PLATFORM=$2
-DD="$HOME/build/cawco-apple/DerivedData"
+BUILD=$3
+DD="$HOME/build/$BUILD/DerivedData"
 SETTLE=8
 XCODEGEN=$(command -v xcodegen || echo /opt/homebrew/bin/xcodegen)
 "$XCODEGEN" generate --quiet
@@ -43,9 +48,9 @@ XCODEGEN=$(command -v xcodegen || echo /opt/homebrew/bin/xcodegen)
 build() { # <destination> <label>
   xcodebuild -project CawCo.xcodeproj -scheme CawCo -destination "$1" \
     -derivedDataPath "$DD" -skipPackagePluginValidation build \
-    >"/tmp/cawco-build-$2.log" 2>&1 || {
-    grep -E "error:|BUILD FAILED" "/tmp/cawco-build-$2.log" | sort -u | head -40
-    echo "FAILED $2 (full log: mac:/tmp/cawco-build-$2.log)"
+    >"/tmp/$BUILD-build-$2.log" 2>&1 || {
+    grep -a -E "error:|BUILD FAILED" "/tmp/$BUILD-build-$2.log" | sort -u | head -40
+    echo "FAILED $2 (full log: mac:/tmp/$BUILD-build-$2.log)"
     exit 1
   }
   echo "BUILT $2"

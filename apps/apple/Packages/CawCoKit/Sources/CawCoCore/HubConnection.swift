@@ -334,6 +334,8 @@ public final class HubConnection {
         async let rows = try? await client.getApiInstances().ok.body.json
         async let projects = try? await client.getApiProjects().ok.body.json
         async let pending = try? await client.getApiPending().ok.body.json
+        // A continuation that moved while this device was away.
+        async let carried = try? await client.getApiContinuations().ok.body.json
         // Read on connect, not only pushed on change: a device that connects
         // between reports has missed every `usage` frame.
         async let limits = try? await client.getApiUsageLimits().ok.body.json
@@ -367,6 +369,9 @@ public final class HubConnection {
         }
         if let readPending {
             adopt(pending: readPending)
+        }
+        if let readCarried = await carried {
+            fleet.continuations = readCarried
         }
         if readMachines == nil || readRows == nil || readProjects == nil {
             log.error("fleet read incomplete: machines \(readMachines != nil) rows \(readRows != nil) projects \(readProjects != nil)")
@@ -518,6 +523,7 @@ public final class HubConnection {
                 switch frame {
                 case .instances, .instancesDelta:
                     fleet.merge(pulses: Inbound.pulses(data, enveloped: true))
+                    fleet.continuations = Inbound.continuations(data)
                 default:
                     break
                 }

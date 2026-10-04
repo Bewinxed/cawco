@@ -97,6 +97,21 @@ public enum Glyph: String, CaseIterable, Sendable {
     case osApple = "os-apple"
     case osTux = "os-tux"
     case osWindows = "os-windows"
+    // The new-session dialog (spawn/*.svelte).
+    case chatRound = "chat-round-line-bold-duotone"
+    case folderOpen = "folder-open-bold-duotone"
+    case database = "database-bold-duotone"
+    case tuning = "tuning-2-bold-duotone"
+    case notes = "notes-bold-duotone"
+    case closeSquare = "close-square-bold-duotone"
+    case addCircle = "add-circle-linear"
+    case addCircleSolid = "add-circle-bold-duotone"
+    case cpuBolt = "cpu-bolt-bold-duotone"
+    case arrowLeft = "arrow-left-linear"
+    case stars = "stars-bold-duotone"
+    case bookOpen = "book-2-bold-duotone"
+    /// PiLogo.svelte: one ink, drawn in the text colour.
+    case logoPi = "logo-pi"
 
     /// The web's names for glyphs the transcript already carries under its own.
     public static let send = Glyph.toolMessage // plain-2-bold-duotone (IconSend)
@@ -121,6 +136,70 @@ public enum Glyph: String, CaseIterable, Sendable {
         case "win32", "windows": .osWindows
         default: .server
         }
+    }
+}
+
+/// A maker's or a harness's mark in its own colours (HarnessLogo.svelte,
+/// ProviderLogo.svelte, the GitHub mark): never tinted, only placed.
+public enum BrandLogo: String, Sendable {
+    case claude = "logo-claude"
+    case openai = "logo-openai"
+    case github = "logo-github"
+    case grok = "logo-grok"
+    case mistral = "logo-mistral"
+    case moonshot = "logo-moonshot"
+    case qwen = "logo-qwen"
+    case deepseek = "logo-deepseek"
+    case gemini = "logo-gemini"
+    case meta = "logo-meta"
+    case minimax = "logo-minimax"
+    case nvidia = "logo-nvidia"
+    case zhipu = "logo-zhipu"
+    case opencode = "logo-opencode"
+
+    public var image: UIImage {
+        guard let image = UIImage(named: rawValue, in: .module, with: nil) else {
+            preconditionFailure("Icons.xcassets has no \(rawValue); run apps/apple/scripts/icons.ts")
+        }
+        return image.withRenderingMode(.alwaysOriginal)
+    }
+
+    /// ProviderLogo.svelte's LOGOS, by the lab `providerOf` names.
+    public static func provider(_ lab: String?) -> BrandLogo? {
+        switch lab {
+        case "anthropic": .claude
+        case "openai": .openai
+        case "deepseek": .deepseek
+        case "google": .gemini
+        case "xai": .grok
+        case "qwen": .qwen
+        case "moonshot": .moonshot
+        case "zhipu": .zhipu
+        case "meta": .meta
+        case "mistral": .mistral
+        case "minimax": .minimax
+        case "nvidia": .nvidia
+        default: nil
+        }
+    }
+
+    /// HarnessLogo.svelte: the harness's mark, as an image view at `side`.
+    @MainActor
+    public static func harnessView(_ harness: String, side: Double = 16) -> UIImageView {
+        let view: UIImageView = switch harness {
+        case "claude": UIImageView(image: BrandLogo.claude.image)
+        case "opencode": UIImageView(image: BrandLogo.opencode.image)
+        case "pi": GlyphView(.logoPi, size: side, tint: Palette.inkStrong)
+        default: UIImageView(image: BrandLogo.openai.image)
+        }
+        view.contentMode = .scaleAspectFit
+        view.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            view.widthAnchor.constraint(equalToConstant: side),
+            view.heightAnchor.constraint(equalToConstant: side),
+        ])
+        view.isAccessibilityElement = false
+        return view
     }
 }
 

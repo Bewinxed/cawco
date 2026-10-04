@@ -53,6 +53,8 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
     var onSelectTab: (HomeModel.Tab) -> Void = { _ in }
     /// Opens the Usage page from the strip's corner link.
     var onUsagePage: (() -> Void)?
+    /// Set on the page (not the rail's copy): its dock's Start session.
+    var onStart: (() -> Void)?
     var collectionView: UICollectionView!
     private(set) lazy var layout = makeLayout()
     private var dataSource: UICollectionViewDiffableDataSource<Section, Item>!
@@ -113,6 +115,42 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
         view.addSubview(collectionView)
         dataSource = makeDataSource()
         swipe = TabSwipe(host: self, in: view)
+        if onStart != nil { installDock() }
+    }
+
+    /// The page's dock (Home.svelte `.dock`): Start session held at the
+    /// bottom, where the phone's thumb reaches, over the recess fading in
+    /// across its first 12pt so the list scrolls out from under it.
+    private func installDock() {
+        let dock = DockView()
+        let button = KitButton.make("Start session", glyph: .plus, variant: .action, height: .lg, stretch: true) { [weak self] in self?.onStart?() }
+        dock.translatesAutoresizingMaskIntoConstraints = false
+        dock.addSubview(button)
+        view.addSubview(dock)
+        NSLayoutConstraint.activate([
+            dock.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            dock.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            dock.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            button.topAnchor.constraint(equalTo: dock.topAnchor, constant: Space.space3),
+            button.leadingAnchor.constraint(equalTo: dock.leadingAnchor, constant: Space.space5),
+            button.trailingAnchor.constraint(equalTo: dock.trailingAnchor, constant: -Space.space5),
+            button.heightAnchor.constraint(equalToConstant: Size.cBtnHLg),
+        ])
+        let foot = button.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -Space.space3)
+        foot.isActive = true
+        dockFoot = foot
+        // The list ends above the dock: its safe area grows by the dock's own height.
+        additionalSafeAreaInsets.bottom = Space.space3 + Size.cBtnHLg + Space.space3
+    }
+
+    private var dockFoot: NSLayoutConstraint?
+
+    /// The dock's foot clears the home indicator: the screen's own inset, without the room the dock adds.
+    override func viewSafeAreaInsetsDidChange() {
+        super.viewSafeAreaInsetsDidChange()
+        guard let dockFoot else { return }
+        let own = max(0, view.safeAreaInsets.bottom - additionalSafeAreaInsets.bottom)
+        dockFoot.constant = -(Space.space3 + own)
     }
 
     // MARK: Layout

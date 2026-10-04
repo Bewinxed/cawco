@@ -18,14 +18,28 @@ public enum Toast {
     public static func success(_ message: String, in view: UIView?) { show(message, kind: .success, in: view) }
     public static func error(_ message: String, in view: UIView?) { show(message, kind: .error, in: view) }
 
-    public static func show(_ message: String, kind: Kind = .plain, in view: UIView?) {
+    /// What a toast offers to do about what it says (sonner's `action`).
+    public struct Action {
+        public let label: String
+        public let run: @MainActor () -> Void
+
+        public init(_ label: String, run: @escaping @MainActor () -> Void) {
+            self.label = label
+            self.run = run
+        }
+    }
+
+    /// `description`: a second line under the message, in muted ink.
+    /// `sticky`: it stays until swiped away or its action is taken
+    /// (`duration: Infinity`), for a toast that carries the way to recover.
+    public static func show(_ message: String, description: String? = nil, kind: Kind = .plain, action: Action? = nil, sticky: Bool = false, in view: UIView?) {
         guard let scene = view?.window?.windowScene ?? UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first else { return }
         let layer = layers[ObjectIdentifier(scene)] ?? {
             let made = ToastWindow(windowScene: scene)
             layers[ObjectIdentifier(scene)] = made
             return made
         }()
-        layer.add(message, kind: kind)
+        layer.add(message, description: description, kind: kind, action: action, sticky: sticky)
         UIAccessibility.post(notification: .announcement, argument: message)
     }
 
@@ -61,9 +75,9 @@ private final class ToastWindow: UIWindow {
     /// Up to 640pt a toast drops from the top, under the top bar; wider it sits in the bottom-right corner.
     private var narrow: Bool { bounds.width <= 640 }
 
-    func add(_ message: String, kind: Toast.Kind) {
+    func add(_ message: String, description: String?, kind: Toast.Kind, action: Toast.Action?, sticky: Bool) {
         guard let host = rootViewController?.view else { return }
-        let toast = ToastView(message: message, kind: kind)
+        let toast = ToastView(message: message, description: description, kind: kind, action: action)
         toast.onDismiss = { [weak self, weak toast] velocity in
             guard let self, let toast else { return }
             remove(toast, thrown: velocity)
@@ -82,6 +96,7 @@ private final class ToastWindow: UIWindow {
             toast.center = rest
         }.startAnimation()
         restack(except: toast)
+        guard !sticky else { return }
         Task { @MainActor [weak self, weak toast] in
             try? await Task.sleep(for: .seconds(Self.lifetime))
             guard let self, let toast, toast.superview != nil, !toast.held else { return }
@@ -135,7 +150,7 @@ private final class ToastView: UIView {
     private var start = CGPoint.zero
     private var began = Date()
 
-    init(message: String, kind: Toast.Kind) {
+    init(message: String, description: String?, kind: Toast.Kind, action: Toast.Action?) {
         super.init(frame: .zero)
         backgroundColor = Palette.surfaceRaised
         layer.cornerRadius = Radius.radiusLg
@@ -144,9 +159,37 @@ private final class ToastView: UIView {
         boxShadow = Shadow.shadowOverlay
         let label = KitLabel(TypeScale.typeBody, ink: Palette.inkStrong, lines: 0)
         label.text = message
-        let row = UIStackView(arrangedSubviews: [label])
+        let text = UIStackView(arrangedSubviews: [label])
+        text.axis = .vertical
+        text.spacing = 2
+        if let description, !description.isEmpty {
+            let detail = KitLabel(TypeScale.typeLabel, ink: Palette.inkMuted, lines: 0)
+            detail.text = description
+            text.addArrangedSubview(detail)
+        }
+        let row = UIStackView(arrangedSubviews: [text])
         row.spacing = 6
         row.alignment = .center
+        if let action {
+            // sonner's action: a small solid button at the toast's end.
+            var config = UIButton.Configuration.plain()
+            config.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 8)
+            config.attributedTitle = AttributedString(action.label, attributes: AttributeContainer(
+                TypeScale.typeLabel.withWeight(.medium).attributes(color: Palette.onInk)))
+            let button = UIButton(configuration: config)
+            button.backgroundColor = Palette.inkSolid
+            button.layer.cornerRadius = Radius.radiusSm
+            button.layer.cornerCurve = .continuous
+            button.heightAnchor.constraint(equalToConstant: 24).isActive = true
+            button.setContentCompressionResistancePriority(.required, for: .horizontal)
+            button.setContentHuggingPriority(.required, for: .horizontal)
+            button.addAction(UIAction { [weak self] _ in
+                action.run()
+                self?.onDismiss(nil)
+            }, for: .touchUpInside)
+            row.addArrangedSubview(button)
+            row.setCustomSpacing(12, after: text)
+        }
         let glyph: Glyph? = switch kind {
         case .plain, .loading: nil
         case .success: .passed
@@ -165,8 +208,9 @@ private final class ToastView: UIView {
             row.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -16),
         ])
         addGestureRecognizer(UIPanGestureRecognizer(target: self, action: #selector(panned(_:))))
-        isAccessibilityElement = true
-        accessibilityLabel = message
+        // With an action the button is its own element; without, the toast reads as one.
+        isAccessibilityElement = action == nil
+        accessibilityLabel = [message, description].compactMap { $0 }.joined(separator: ". ")
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (view: ToastView, _: UITraitCollection) in view.paint() }
         paint()
     }

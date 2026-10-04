@@ -82,12 +82,15 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         super.init(style: .doubleColumn)
         panes.onReturnToFleet = { [weak self] id in self?.returnToFleet(id) }
         panes.onOpen = { [weak self] id in self?.openSession(id) }
+        panes.continueHandler = { [weak self] id in self?.newSession.continueSession(id) }
         rail.host = self
         rail.homeController = railHome
         for home in [railHome, board] {
             home.onOpen = { [weak self] id in self?.openSession(id) }
             home.onUsagePage = { [weak self] in self?.go(.usage) }
         }
+        // The page's dock: Start session where the phone's thumb reaches.
+        board.onStart = { [weak self] in self?.startSession(machineId: nil, cwd: nil, projectId: nil) }
 
         let railNav = UINavigationController(rootViewController: rail)
         railNav.setNavigationBarHidden(true, animated: false)
@@ -387,9 +390,23 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         closeAssistant()
     }
 
-    func startSession(machineId _: String?, cwd _: String?, projectId _: String?) {
-        railSheet?.dismiss(animated: true)
+    /// The New Session form, with what the caller knows filled in (Sidebar.svelte `newSession`).
+    func startSession(machineId: String?, cwd: String?, projectId: String?) {
+        // The phone's rail sheet steps aside first: the form opens over the page, not over the sheet.
+        if let sheet = railSheet {
+            sheet.dismiss(animated: true) { [weak self] in self?.newSession.start(machineId: machineId, cwd: cwd, projectId: projectId) }
+        } else {
+            newSession.start(machineId: machineId, cwd: cwd, projectId: projectId)
+        }
     }
+
+    private lazy var newSession: NewSessionFlow = {
+        let flow = NewSessionFlow(hub: hub)
+        flow.presenter = { [weak self] in self?.dialogPresenter }
+        flow.open = { [weak self] id in self?.openSession(id) }
+        flow.title = { [weak self] id in self?.panes.title(id) }
+        return flow
+    }()
 
     /// NewProjectPopover: hung off the rail's plus, wherever the rail is.
     func newProject(from source: UIView) {

@@ -98,6 +98,16 @@ enum Inbound {
         let pulses: [String: Components.Schemas.SessionPulse]?
     }
 
+    /// The continuations the hub is carrying, riding each board frame.
+    private struct Continuations: Decodable {
+        let continuations: [Components.Schemas.ContinuationJob]?
+    }
+
+    /// A board frame's continuation table: empty when it carries none.
+    static func continuations(_ data: Data) -> [Components.Schemas.ContinuationJob] {
+        (try? Wire.decoder().decode(Envelope<Continuations>.self, from: data))?.payload.continuations ?? []
+    }
+
     /// The pulses a board frame carries, when it carries any.
     static func pulses(_ data: Data, enveloped: Bool) -> [String: Components.Schemas.SessionPulse] {
         let decoder = Wire.decoder()
