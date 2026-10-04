@@ -1,6 +1,7 @@
 import CawCoAPI
 import CawCoCore
 import CawCoDesign
+import OSLog
 import UIKit
 
 /// The views each item kind draws, for a list that is not the collection:
@@ -531,6 +532,39 @@ final class DelegateView: RailRow, RowContent, Disclosing {
         if window == nil { ticker?.invalidate(); ticker = nil }
     }
 
+    // MARK: The tray
+
+    /// What the tray was last told of this card: in view, out of it, or nothing yet.
+    private var seen: Bool?
+    /// Where the mark stood, in its window, the last time it was in view.
+    private var lastMark: CGRect?
+
+    /// Says whether the card's mark is in `view`, the transcript's visible box
+    /// in window space (tray.svelte.ts `trayCard`). The first time it leaves
+    /// while the delegate may enter the tray, the tray flies its mark to a chip.
+    func track(in view: CGRect) {
+        guard let id, let hub = env.hub, window != nil else { return }
+        let box = mark.convert(mark.bounds, to: nil)
+        let visible = box.intersects(view)
+        if visible { lastMark = box }
+        guard visible != seen else { return }
+        seen = visible
+        Self.log.info("card \(String(id.prefix(8)), privacy: .public) \(visible ? "in view" : "out of view", privacy: .public), mark \(box.debugDescription, privacy: .public)")
+        DelegateTrayState.shared.card(id, visible: visible, mark: box, hub: hub)
+    }
+
+    private static let log = Logger(subsystem: "dev.cawco.app", category: "Tray")
+
+    /// The card is taken off the screen altogether, which is the card leaving
+    /// too: its mark departs from where it was last drawn in view.
+    func untrack() {
+        guard seen != nil, let id, let hub = env.hub else { return }
+        Self.log.info("card \(String(id.prefix(8)), privacy: .public) off screen, mark last \(self.lastMark?.debugDescription ?? "never in view", privacy: .public)")
+        DelegateTrayState.shared.card(id, visible: nil, mark: lastMark, hub: hub)
+        seen = nil
+        lastMark = nil
+    }
+
     enum Phase: String { case spawning, working, blocked, reported, idle, sleeping, stopped, failed }
 
     struct Report { let body: String; let failed: Bool; let count: Int; let at: Date? }
@@ -579,6 +613,8 @@ final class DelegateView: RailRow, RowContent, Disclosing {
         self.block = block
         key = block.disclosureKey
         let input = block.toolInput
+        // A cell handed to another delegate: the one it drew has left the screen.
+        if block.string("delegateInstanceId") != id { untrack() }
         id = block.string("delegateInstanceId")
         let f = facts(block)
         let stub = block.content.split(separator: "/").last.map(String.init)

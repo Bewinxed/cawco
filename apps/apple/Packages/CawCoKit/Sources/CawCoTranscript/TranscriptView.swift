@@ -75,6 +75,12 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     private var link: CADisplayLink?
     private var proxy: DisplayTarget?
     private var watchedDelegates = Set<String>()
+    /// The session this view answers the delegate tray for (DelegateTrayState `reportRow`).
+    private var trayKey: String?
+    /// The tray's news this view has already said.
+    private var spoken: DelegateTrayState.News?
+    /// The report the tray asked for, until the scroll to it has settled.
+    private var revealing: String?
     private let latestButton = DockPill(glyph: .arrowDown, title: "Jump to latest")
     private let catchUp = DockPill(glyph: nil, title: "Catching up…")
     private let compacting = DockPill(glyph: nil, title: "Compacting context…", pill: true)
@@ -184,6 +190,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     deinit {
         MainActor.assumeIsolated {
             for id in watchedDelegates { hub?.sessions.close(id) }
+            leaveTray()
         }
     }
 
@@ -219,7 +226,107 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             link.add(to: .main, forMode: .common)
             self.link = link
             lastTick = 0
+        } else {
+            // Off the screen, every delegate card this view drew has left it.
+            for cell in collection.visibleCells { (cell as? HostCell<DelegateView>)?.row.untrack() }
         }
+        joinTray()
+    }
+
+    // MARK: The delegate tray
+
+    /// Answers the tray for this view's session while it is on screen: the row
+    /// a report is drawn in, for the chip that flies home to it.
+    private func joinTray() {
+        let id = env.sessionId
+        guard window != nil, !id.isEmpty else { leaveTray(); return }
+        guard trayKey != id else { return }
+        leaveTray()
+        trayKey = id
+        DelegateTrayState.shared.reportRow[id] = { [weak self] block in self?.reportRow(block) }
+    }
+
+    private func leaveTray() {
+        if let trayKey { DelegateTrayState.shared.reportRow[trayKey] = nil }
+        trayKey = nil
+    }
+
+    /// The row `block` is drawn in right now, when its top is inside the
+    /// list's view (DelegateTray.svelte `reportInView`); the tray checks its
+    /// foot against the composer itself.
+    private func reportRow(_ block: String) -> UIView? {
+        guard let index = dataSource.indexPath(for: block),
+              let cell = collection.cellForItem(at: index) as? HostCell<PeerView>, let row = cell.row else { return nil }
+        let box = row.convert(row.bounds, to: collection)
+        let inView = box.height > 0 && box.minY >= visibleBox.minY
+        Self.tray.info("report row \(block, privacy: .public) \(inView ? "in view" : "above the view", privacy: .public), row \(box.debugDescription, privacy: .public), view \(self.visibleBox.debugDescription, privacy: .public)")
+        return inView ? row : nil
+    }
+
+    private static let tray = Logger(subsystem: "dev.cawco.app", category: "Tray")
+
+    /// The list's view: its bounds less what the bars and the composer cover.
+    private var visibleBox: CGRect { collection.bounds.inset(by: collection.adjustedContentInset) }
+
+    /// What the tray asked of this session since the last frame: a report to
+    /// bring into view (Transcript.svelte `trayReveal`), and its news to say
+    /// (`trayNews`).
+    private func honourTray() {
+        let tray = DelegateTrayState.shared
+        let id = env.sessionId
+        if let want = tray.reveal[id] {
+            tray.reveal[id] = nil
+            if let target = centred(want), abs(target - collection.contentOffset.y) > 0.5 {
+                pendingPosition = nil
+                Self.tray.info("reveal \(want, privacy: .public): offset \(Double(self.collection.contentOffset.y), format: .fixed(precision: 1)) to \(Double(target), format: .fixed(precision: 1))")
+                if UIAccessibility.isReduceMotionEnabled {
+                    collection.contentOffset.y = target
+                    place(collection)
+                    settled(want)
+                } else {
+                    // The tail is not followed while the list glides to the row.
+                    revealing = want
+                    gliding = true
+                    collection.setContentOffset(CGPoint(x: 0, y: target), animated: true)
+                }
+            }
+        }
+        if landed, let news = tray.news[id], news != spoken {
+            spoken = news
+            if !news.assertive.isEmpty {
+                UIAccessibility.post(notification: .announcement, argument: NSAttributedString(
+                    string: news.assertive, attributes: [.accessibilitySpeechAnnouncementPriority: UIAccessibilityPriority.high]
+                ))
+            } else if !news.polite.isEmpty {
+                UIAccessibility.post(notification: .announcement, argument: news.polite)
+            }
+        }
+    }
+
+    /// The offset that stands `id`'s row in the middle of the list's view, as
+    /// near as the list's ends allow (`scrollToIndex`, `align: "center"`).
+    private func centred(_ id: String) -> CGFloat? {
+        guard let index = dataSource.indexPath(for: id), let frame = collection.layoutAttributesForItem(at: index)?.frame else { return nil }
+        let inset = collection.adjustedContentInset
+        let view = collection.bounds.height - inset.top - inset.bottom
+        return min(bottomOffset, max(-inset.top, frame.midY - view / 2 - inset.top))
+    }
+
+    /// The glide to a revealed report has settled. Rows it passed were sized
+    /// on the way, so the row is centred once more where it now stands.
+    public func scrollViewDidEndScrollingAnimation(_ scrollView: UIScrollView) {
+        guard let want = revealing else { return }
+        revealing = nil
+        gliding = false
+        if let target = centred(want) { collection.contentOffset.y = target }
+        place(scrollView)
+        settled(want)
+    }
+
+    /// Where a revealed row came to rest, for the log.
+    private func settled(_ id: String) {
+        guard let index = dataSource.indexPath(for: id), let frame = collection.layoutAttributesForItem(at: index)?.frame else { return }
+        Self.tray.info("revealed \(id, privacy: .public): row \(frame.debugDescription, privacy: .public), view \(self.visibleBox.debugDescription, privacy: .public)")
     }
 
     override public func layoutSubviews() {
@@ -237,6 +344,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     public func configure(_ transcript: SessionTranscript) {
         self.transcript = transcript
         env.sessionId = transcript.id
+        joinTray()
         env.machineId = transcript.location?.machineId
         if let harness = transcript.facts?.harness ?? transcript.location?.harness {
             env.agentName = ["claude": "Claude Code", "opencode": "opencode", "code": "opencode", "pi": "pi"][harness] ?? harness
@@ -465,10 +573,13 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         restoreIfReady()
         if following, !gliding { latest() }
         let visible = collection.visibleCells
+        let seen = collection.convert(visibleBox, to: nil)
         for cell in visible {
             (cell as? HostCell<PieceView>)?.row.fade(now)
             (cell as? HostCell<ThinkingView>)?.row.fade(now)
+            (cell as? HostCell<DelegateView>)?.row.track(in: seen)
         }
+        honourTray()
         updateDock()
     }
 
@@ -568,6 +679,8 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         cell.contentView.layer.removeAllAnimations()
         cell.contentView.alpha = 1
         cell.contentView.transform = .identity
+        // A delegate's card off the screen is the card leaving (tray.svelte.ts `trayCard`).
+        (cell as? HostCell<DelegateView>)?.row.untrack()
     }
 
     // MARK: Disclosure
@@ -676,6 +789,13 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         guard scrollView.isDragging || scrollView.isDecelerating else { return }
         pendingPosition = nil
         gliding = false
+        revealing = nil
+        place(scrollView)
+    }
+
+    /// Where the reader stands against the tail: following it, or far enough
+    /// from it for "Jump to latest".
+    private func place(_ scrollView: UIScrollView) {
         // From the tail as the reader can reach it: past the inset the composer stands in.
         let distance = scrollView.contentSize.height + scrollView.adjustedContentInset.bottom - scrollView.contentOffset.y - scrollView.bounds.height
         following = distance <= Space.space8
