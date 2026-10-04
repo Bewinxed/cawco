@@ -19,7 +19,6 @@
     IconArrowRight,
     IconCheck,
     IconExternal,
-    IconFolder,
     IconFork,
     IconPenLine,
     IconStop,
@@ -49,15 +48,9 @@
     instance: InstanceRow;
     /** Set only where the row is listed as finished: takes it off the list. */
     onarchive?: () => void;
-    /**
-     * Set only where the rail has flattened this session's directory out of
-     * its folder — the way back. A row drawn inside a folder is already
-     * grouped, and offering it the verb would say nothing.
-     */
-    ongroup?: () => void;
   }
 
-  let { instance, ongroup, onarchive, children }: Props = $props();
+  let { instance, onarchive, children }: Props = $props();
 
   let renaming = $state(false);
   /**
@@ -205,12 +198,6 @@
       >
         <IconStop />
         Stop
-      </ContextMenu.Item>
-    {/if}
-    {#if ongroup}
-      <ContextMenu.Item onSelect={ongroup}>
-        <IconFolder />
-        Group into folder
       </ContextMenu.Item>
     {/if}
     {#if onarchive}

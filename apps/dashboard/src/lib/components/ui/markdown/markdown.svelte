@@ -71,6 +71,24 @@
     descriptionDetail: { base: "" },
   };
 
+  const COMMENT = /<!--[\s\S]*?-->/g;
+  const ESCAPES: Record<string, string> = {
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+  };
+
+  /**
+   * What an HTML run in the source draws. A comment is a note to whoever
+   * edits the file and draws nothing, as markdown has it; any other markup
+   * is shown as the text it is, never run.
+   */
+  function literal(token: { raw: string }): string {
+    return token.raw
+      .replace(COMMENT, "")
+      .replace(/[&<>]/g, (character) => ESCAPES[character]);
+  }
+
   /**
    * What is drawn of a streaming message: everything up to its last whole
    * word. A word still arriving ("crac" → "cracked") grows in place, and a
@@ -239,6 +257,7 @@
     {content}
     controls={{ mermaid: false, table: false }}
     mergeTheme={false}
+    renderHtml={literal}
     static={!tokens}
     theme={PLAIN}
   >

@@ -13,7 +13,6 @@
   import * as ContextMenu from "#lib/components/ui/context-menu/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import {
-    IconAlignLeft,
     IconChevronUp,
     IconExternal,
     IconPalette,
@@ -37,8 +36,6 @@
     oncollapseothers?: () => void;
     /** Start a session here, prefilled with this directory. */
     onnew: () => void;
-    /** Flatten this folder's sessions into plain rows. Rail only. */
-    onungroup?: () => void;
     /** Set when the directory is registered; an ad-hoc cwd has none. */
     project?: ProjectRow | null;
   }
@@ -48,7 +45,6 @@
     cwd,
     project = null,
     onnew,
-    onungroup,
     oncollapseothers,
     children,
   }: Props = $props();
@@ -104,12 +100,6 @@
           <IconPin />
           Pin to rail
         {/if}
-      </ContextMenu.Item>
-    {/if}
-    {#if onungroup}
-      <ContextMenu.Item onSelect={onungroup}>
-        <IconAlignLeft />
-        Ungroup folder
       </ContextMenu.Item>
     {/if}
 

@@ -7,12 +7,22 @@
   import { MediaQuery } from "svelte/reactivity";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Drawer from "#lib/components/ui/drawer/index.js";
+  import { afterNavigate } from "$app/navigation";
   import PeekPane from "../PeekPane.svelte";
   import { closePeek, peek } from "./peek.svelte";
 
   const touch = new MediaQuery(
     "(hover: none), (pointer: coarse), (max-width: 640px)"
   );
+
+  // A peek belongs to the place it was opened from. Leaving that place puts
+  // it away, whichever control did the leaving: its own Open, a rail row, the
+  // browser's back.
+  afterNavigate(({ from, to }) => {
+    if (from && to && from.url.pathname !== to.url.pathname) {
+      closePeek();
+    }
+  });
 </script>
 
 <Drawer.Root

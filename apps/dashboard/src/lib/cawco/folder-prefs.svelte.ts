@@ -1,7 +1,6 @@
 /**
  * What the reader has said about a directory, over what the app inferred:
- * whether the rail draws it as a folder, whether that folder is shut, and
- * which hue it wears. All the same kind of claim — "this directory, to me, is
+ * whether its folder in the rail is shut, and which hue it wears. All the same kind of claim — "this directory, to me, is
  * this" — so they live in one document under one key. A folder shut in the
  * rail stays shut across reloads because the answer is kept here.
  *
@@ -12,13 +11,9 @@
 import { identityHue } from "./identity";
 import { readJson, writeJson } from "./storage";
 
-/** Whether the rail folds this directory's sessions under a header. */
-export type Grouping = "grouped" | "ungrouped";
-
 export interface FolderPref {
   /** The rail's folder for this directory is shut. */
   collapsed?: true;
-  grouping?: Grouping;
   /** A hue chosen by hand; without one, the cwd's hash chooses. */
   hue?: number;
 }
@@ -62,11 +57,6 @@ export const folderPrefs = {
   collapsed: (cwd: string): boolean => prefs[cwd]?.collapsed === true,
   setCollapsed(cwd: string, collapsed: boolean): void {
     edit(cwd, { collapsed: collapsed ? true : undefined });
-  },
-  /** What the reader said about grouping, if they said anything. */
-  grouping: (cwd: string): Grouping | undefined => prefs[cwd]?.grouping,
-  setGrouping(cwd: string, grouping: Grouping | undefined): void {
-    edit(cwd, { grouping });
   },
   /** The hue this directory wears: the chosen one, else the hashed one. */
   hue: (cwd: string): number => prefs[cwd]?.hue ?? identityHue(cwd),
