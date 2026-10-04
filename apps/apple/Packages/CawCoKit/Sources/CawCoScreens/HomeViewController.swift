@@ -622,7 +622,7 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
         if !structural, redrawn.isEmpty, old.sectionIdentifiers == next.sectionIdentifiers {
             return
         }
-        // The fleet has something in it now: Caw's cell goes, and he plays his exit over the list.
+        // The fleet has something in it now: Caw's cell goes, and he fades out over the list.
         if before.contains(.caw), !after.contains(.caw), let at = dataSource.indexPath(for: .caw) {
             (collectionView.cellForItem(at: at) as? CawCell)?.leave(over: view)
         }

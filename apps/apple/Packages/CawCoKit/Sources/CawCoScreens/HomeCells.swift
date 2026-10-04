@@ -948,7 +948,7 @@ final class CawCell: HomeCell {
         ])
     }
 
-    /// The fleet has something in it now and this cell is going: he plays his exit over
+    /// The fleet has something in it now and this cell is going: he fades out over
     /// `container`, where the rows that arrive slide in under him.
     func leave(over container: UIView) {
         caw?.leave(over: container)
