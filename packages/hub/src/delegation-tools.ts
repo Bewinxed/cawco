@@ -17,14 +17,6 @@ const sessionTitle = () =>
     .max(SESSION_TITLE_MAX)
     .describe(SESSION_TITLE_DESCRIPTION);
 
-const confirmColdParameter = () =>
-  z
-    .boolean()
-    .optional()
-    .describe(
-      "Confirm reuse of a cold session after weighing its full-price transcript against a fresh delegate's tight brief."
-    );
-
 /** A work item's acceptance checks: `delegate` files them, `set_item_checks` replaces them. */
 const checksParameter = () =>
   z
@@ -377,7 +369,7 @@ export function handoffTools(deps: HandoffDeps) {
         "and line), and what you are asking them to do. For new standalone work, use delegate instead. " +
         "To follow up on your own delegate after it reports (done, failed or cancelled), hand off to it: " +
         "the message reopens its work item in the same session, on its cached transcript. " +
-        "Prefer a fresh delegate unless the existing session is warm and holds context this task needs. A cold target other than your own parent is refused before delivery; repeat with confirmCold: true only after weighing the refusal's cost considerations.",
+        "Prefer a fresh delegate unless the existing session is warm and holds context this task needs. A cold target other than your own parent is refused once with the cost considerations, and a repeat of the call is delivered.",
       {
         target: z
           .string()
@@ -396,13 +388,12 @@ export function handoffTools(deps: HandoffDeps) {
             "Force delivery to one of YOUR delegates: a busy claude delegate reads it mid-turn; " +
               "other harnesses interrupt their turn to read it now. Only valid toward your own delegates."
           ),
-        confirmCold: confirmColdParameter(),
       },
-      async ({ target, message, urgent, confirmCold }) => ({
+      async ({ target, message, urgent }) => ({
         content: [
           {
             type: "text" as const,
-            text: await actions.handoff(target, message, urgent, confirmCold),
+            text: await actions.handoff(target, message, urgent),
           },
         ],
       })
@@ -510,7 +501,7 @@ export function handoffTools(deps: HandoffDeps) {
         "A delegate that is not a fork cannot see this conversation, so `prompt` must stand alone: intent, constraints, acceptance criteria, and what not to do. Keep the decisions yourself and ask for evidence and conclusions, not file dumps.\n\n" +
         "Prefer `type` over raw harness/model — it routes by what the work needs rather than a model string you must already know; use list_delegate_types for the live catalog. Prefer this over start_session when the work must report back, and over handoff for new standalone work (set cwd for another repository).\n\n" +
         "Each call starts one work item in a workspace: a shared clone of the repository on its own branch, with a boundary every shell command of the delegate runs inside — it writes only its clone, its own /tmp and the package caches, sees and signals only its own processes, and cannot reach the service manager. Without `workspace` the item gets a new one; with `workspace` it is the follow-up there: a new item, under its own title, in the workspace's last session, which reads the brief as its next message on its cached transcript. " +
-        "A workspace runs one item at a time, and keeps its checkout while its session can be continued. To follow up on a delegate's work, handoff to that delegate, or delegate with its `workspace` to file the follow-up as its own item: either way it continues its own session and cached transcript. Prefer a fresh delegate unless the existing session is warm and holds context this task needs. A cold workspace session is refused before an item is created; repeat with confirmCold: true only after weighing the refusal's cost considerations.\n\n" +
+        "A workspace runs one item at a time, and keeps its checkout while its session can be continued. To follow up on a delegate's work, handoff to that delegate, or delegate with its `workspace` to file the follow-up as its own item: either way it continues its own session and cached transcript. Prefer a fresh delegate unless the existing session is warm and holds context this task needs. A cold workspace session is refused once with the cost considerations, and a repeat of the call is delivered.\n\n" +
         "Set `fork: true` when the work needs what this conversation already holds: the delegate starts as a copy of this conversation (on this session's harness and model, so the prompt cache carries over) and reads the brief as its next turn, in a new workspace of its own." +
         delegateTypeLine(deps.delegateTypes),
       {
@@ -570,7 +561,6 @@ export function handoffTools(deps: HandoffDeps) {
               "on its cached transcript. Refused while an item there is still running, and with type, " +
               "model, harness, skills or fork, which are that session's own; delegate without workspace for a different model."
           ),
-        confirmCold: confirmColdParameter(),
         fork: z
           .boolean()
           .optional()
@@ -602,7 +592,6 @@ export function handoffTools(deps: HandoffDeps) {
         cwd,
         skills,
         workspace,
-        confirmCold,
         fork,
         can_delegate,
         checks,
@@ -614,7 +603,6 @@ export function handoffTools(deps: HandoffDeps) {
           model,
           skills,
           workspace,
-          confirmCold,
           fork,
           type,
           canDelegate: can_delegate,

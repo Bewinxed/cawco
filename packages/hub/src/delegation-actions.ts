@@ -507,7 +507,6 @@ export interface HandoffActions {
       canDelegate?: boolean;
       /** An existing workspace's id: the new item is its follow-up. */
       workspace?: string;
-      confirmCold?: boolean;
       /** The item's session forks this conversation, in a new workspace. */
       fork?: boolean;
       /** The item's acceptance checks, run by the hub at finish_item. */
@@ -523,12 +522,7 @@ export interface HandoffActions {
     request: ImageGenerationRequest
   ) => Promise<GeneratedImage>;
   // biome-ignore lint/style/useConsistentMethodSignatures: implemented below; property-style would change parameter variance against that implementation
-  handoff(
-    target: string,
-    message: string,
-    urgent?: boolean,
-    confirmCold?: boolean
-  ): Promise<string>;
+  handoff(target: string, message: string, urgent?: boolean): Promise<string>;
   // biome-ignore lint/style/useConsistentMethodSignatures: implemented below; property-style would change parameter variance against that implementation
   interruptDelegate(target: string): Promise<string>;
   readonly listDelegateTypes: () => Promise<{ types: DelegateType[] }>;
@@ -670,14 +664,13 @@ async function saveWorkflowProgram(
   return response.json();
 }
 
+const coldRefusals = new Map<string, string>();
+
 async function checkCold(
   instanceId: string | undefined,
   workspace: string | undefined,
-  confirmCold: boolean | undefined
+  caller: string
 ): Promise<void> {
-  if (confirmCold) {
-    return;
-  }
   const response = await fetch(`${hubHttpUrl()}/api/followup-state`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -693,31 +686,49 @@ async function checkCold(
     turns: number;
     lastTurnAt: string | null;
   };
-  if (!row || midTurn) {
+  if (!row) {
     return;
   }
   row.lastRequestAt = row.lastRequestAt ? new Date(row.lastRequestAt) : null;
-  const lastTurn = lastTurnAt ? new Date(lastTurnAt) : undefined;
-  const expires = promptCacheExpiresAt(row, lastTurn);
+  const expires = promptCacheExpiresAt(row, lastTurnAt);
   const now = Date.now();
-  if (expires !== null && expires <= now) {
-    const title = row.title ?? row.derivedTitle ?? row.cwd;
-    const measured = !!(row.cacheTtl && row.lastRequestAt);
-    const idle = Math.floor(
-      (now - ((measured ? row.lastRequestAt : lastTurn) as Date).getTime()) /
-        60_000
-    );
-    const lifetime = row.cacheTtl === "1h" ? "1 hour" : "5 minutes";
-    const age = measured
-      ? `has been idle for ${idle} minutes`
-      : `ended its last recorded turn ${idle} minutes ago`;
-    const cache = measured
-      ? `Its observed prompt-cache lifetime is ${lifetime} and its cache has expired`
-      : "Its prompt-cache lifetime was not measured and is at most 1 hour. Its cache has expired";
-    throw new Error(
-      `Cold session "${title}" (${row.id}) ${age}; recorded model turns in its transcript: ${turns}. ${cache}, so waking it re-reads that whole transcript at full price. A fresh delegate with a tight brief is usually cheaper. Reuse this session only if it already holds context this task needs and rebuilding that context in a fresh brief would cost more than the transcript. To send anyway, repeat the same call with confirmCold: true.`
-    );
+  const prefix = `${row.id}:`;
+  if (midTurn || expires === null || expires > now) {
+    for (const key of coldRefusals.keys()) {
+      if (key.startsWith(prefix)) {
+        coldRefusals.delete(key);
+      }
+    }
+    return;
   }
+  const key = `${prefix}${caller}`;
+  const turn = `${row.lastRequestAt?.getTime() ?? ""}:${lastTurnAt ?? ""}`;
+  if (coldRefusals.get(key) === turn) {
+    coldRefusals.delete(key);
+    return;
+  }
+  // Bound warnings in memory; a newer turn also invalidates an unused repeat.
+  if (coldRefusals.size >= 256) {
+    coldRefusals.delete(coldRefusals.keys().next().value as string);
+  }
+  coldRefusals.set(key, turn);
+  const title = row.title ?? row.derivedTitle ?? row.cwd;
+  const measured = !!(row.cacheTtl && row.lastRequestAt);
+  const idle = Math.floor(
+    (now -
+      (
+        (measured ? row.lastRequestAt : new Date(lastTurnAt as string)) as Date
+      ).getTime()) /
+      60_000
+  );
+  const lifetime = row.cacheTtl === "1h" ? "1 hour" : "5 minutes";
+  const age = measured
+    ? `Its last request was ${idle} minutes ago`
+    : `Its last recorded turn ended ${idle} minutes ago`;
+  const cache = measured ? lifetime : "not measured, at most 1 hour";
+  throw new Error(
+    `Refused: "${title}" (${row.id}) is cold. ${age} and its prompt cache (${cache}) has expired, so the next message makes it re-read its whole transcript (recorded model turns: ${turns}) at full price. Nothing was sent.\n\nCheck first:\n1. Does this task need context that session already holds, which a brief could not carry?\n2. Would a fresh delegate with a tight brief cost less than that transcript?\n3. Is the message still needed at all, or was it meant for a session that has moved on?\n\nThen: if a fresh delegate fits, start one with delegate and no workspace. If no message is needed, stop. If this session is the right one, make the same call again and it will be delivered.`
+  );
 }
 
 export const handoffActions = ({
@@ -965,15 +976,14 @@ export const handoffActions = ({
   async handoff(
     target: string,
     message: string,
-    urgent = false,
-    confirmCold = false
+    urgent = false
   ): Promise<string> {
     const { peers, asleep, own } = await roster(instanceId);
     const peer = urgent
       ? resolveDelegate(peers, target, instanceId)
       : resolveHandoff(peers, asleep, target, own);
     if (peer.row.id !== own?.parentInstanceId) {
-      await checkCold(peer.row.id, undefined, confirmCold);
+      await checkCold(peer.row.id, undefined, instanceId);
     }
     const woken = asleep.includes(peer);
     const whose =
@@ -1111,7 +1121,7 @@ export const handoffActions = ({
 
   async delegate(prompt, opts) {
     if (opts.workspace) {
-      await checkCold(undefined, opts.workspace, opts.confirmCold);
+      await checkCold(undefined, opts.workspace, instanceId);
     }
     const response = await fetch(`${hubHttpUrl()}/api/work-items`, {
       method: "POST",

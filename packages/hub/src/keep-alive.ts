@@ -34,7 +34,7 @@ export const keepAliveCap = (row: KeepAliveRow): number => {
 
 export const promptCacheExpiresAt = (
   row: KeepAliveRow,
-  lastTurnAt?: Date
+  lastTurnAt?: string | null
 ): number | null => {
   if (row.cacheTtl && row.lastRequestAt) {
     return (
@@ -44,7 +44,7 @@ export const promptCacheExpiresAt = (
   }
   // Without a measurement, only the longest Claude lifetime proves expiry.
   return row.harness === "claude" && lastTurnAt
-    ? lastTurnAt.getTime() + 3_600_000
+    ? new Date(lastTurnAt).getTime() + 3_600_000
     : null;
 };
 
