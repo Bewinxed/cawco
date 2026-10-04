@@ -271,6 +271,13 @@
       return;
     }
     const key = event.key.toLowerCase();
+    if (key === "n" && event.shiftKey) {
+      event.preventDefault();
+      document
+        .querySelector<HTMLButtonElement>('[aria-label="Start session"]')
+        ?.click();
+      return;
+    }
     if (key === "k") {
       event.preventDefault();
       jumpOpener = "key";
