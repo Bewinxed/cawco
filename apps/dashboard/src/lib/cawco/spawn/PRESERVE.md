@@ -131,7 +131,7 @@ It reruns on `ResizeObserver` width changes (`PromptWell.svelte:35-48`) to preve
 <meta content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" name="viewport">
 ```
 
-- On phones (`max-width: 640px`) the card is the kit Drawer (`#lib/components/ui/drawer`, vaul): a bottom sheet with safe-area bottom padding that follows the finger from its header and dismisses on vaul's distance (25%) or flick (0.4 px/ms) thresholds. vaul's `repositionInputs` keeps it above the keyboard; the dialog no longer measures `window.visualViewport` itself.
+- On phones (`max-width: 640px`) the card is the kit Drawer (`#lib/components/ui/drawer`, vaul): a bottom sheet with safe-area bottom padding that follows the finger from its header and dismisses on vaul's distance (25%) or flick (0.4 px/ms) thresholds. The kit Drawer keeps it inside the visible viewport: it publishes `visualViewport`'s `offsetTop` and `height` on the sheet as `--visible-top` and `--visible-height`, and `app.css` rests the sheet on the bottom of that area, capped at the smaller of it and the sheet's `--drawer-max-height`. Above a keyboard the header and Start stay on screen and the body scrolls. vaul's `repositionInputs` is off in the kit.
 - The mobile prompt may scroll within `min-height: 0`, and textarea height is capped against the measured visible viewport minus 160px and safe area (`NewSessionDialog.svelte:735-750`).
 - Mobile popovers become full-viewport fixed panels in the same measured viewport. Their shell fixes top/left/right/width/height and their content has safe-area top/bottom padding and its own vertical scroll (`ComposerPopover.svelte:151-177`):
 

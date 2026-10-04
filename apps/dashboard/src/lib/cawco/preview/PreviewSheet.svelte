@@ -179,7 +179,6 @@
     modal={false}
     noBodyStyles
     {open}
-    repositionInputs={false}
     shouldScaleBackground={false}
     {snapPoints}
     bind:activeSnapPoint={snap}

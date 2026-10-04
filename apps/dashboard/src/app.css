@@ -1012,6 +1012,17 @@
     animation-fill-mode: forwards;
   }
 
+  /* A kit bottom sheet rests on the bottom of what the reader can see and is
+     no taller than it: on the keyboard while one is up, on the screen's edge
+     otherwise. The sheet carries the visible viewport as --visible-top and
+     --visible-height (ui/drawer/drawer-content); a sheet names its own cap
+     in --drawer-max-height. Neither value transitions, so the sheet steps
+     with the keyboard instead of animating against it. */
+  [data-slot="drawer-content"][data-vaul-drawer-direction="bottom"] {
+    bottom: calc(100% - var(--visible-top) - var(--visible-height));
+    max-height: min(var(--drawer-max-height, 80vh), var(--visible-height));
+  }
+
   /* Two icons sharing one slot; the outgoing icon animates out too. */
   .icon-swap {
     display: inline-grid;

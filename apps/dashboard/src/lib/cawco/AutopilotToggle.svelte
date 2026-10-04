@@ -192,7 +192,7 @@
       {/snippet}
     </Drawer.Trigger>
     <Drawer.Content
-      class="max-h-[85vh] pb-[calc(1rem+env(safe-area-inset-bottom))]"
+      class="pb-[calc(1rem+env(safe-area-inset-bottom))] [--drawer-max-height:85vh]"
     >
       <Drawer.Header class="p-0 pb-3 text-left">
         <Drawer.Title class="text-left">Autopilot</Drawer.Title>

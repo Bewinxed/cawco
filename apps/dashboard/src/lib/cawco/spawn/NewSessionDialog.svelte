@@ -1286,14 +1286,18 @@
     backdrop-filter: blur(var(--scrim-blur));
     -webkit-backdrop-filter: blur(var(--scrim-blur));
   }
-  :global(.session-card) {
-    position: fixed;
+  /* The dialog stands centred in the window; the sheet's place and height
+     are the kit drawer's. */
+  :global(.session-card:not([data-vaul-drawer])) {
     inset: 0;
-    z-index: 81;
     margin: auto;
     width: min(980px, 100vw - 48px);
     height: fit-content;
     max-height: calc(100dvh - 48px);
+  }
+  :global(.session-card) {
+    position: fixed;
+    z-index: 81;
     display: flex;
     flex-direction: column;
     background: var(--surface-recess);
@@ -1458,13 +1462,13 @@
   @media (max-width: 640px) {
     /* The kit drawer (vaul) carries the sheet: it rises from the bottom,
        follows the finger from the header down and lets go past vaul's
-       distance or flick thresholds. */
+       distance or flick thresholds. The kit rests it on the bottom of the
+       visible viewport and caps it there (app.css, the rule for bottom
+       sheets), so above a keyboard the header and Start stay on screen and
+       the body scrolls between them. */
     :global(.session-card[data-vaul-drawer]) {
-      inset: auto 0 0;
+      --drawer-max-height: calc(100dvh - max(env(safe-area-inset-top), 24px));
       margin: 0;
-      width: 100%;
-      height: auto;
-      max-height: calc(100dvh - max(env(safe-area-inset-top), 24px));
       border-radius: var(--radius-lg) var(--radius-lg) 0 0;
       padding: 0 7px max(env(safe-area-inset-bottom), 7px);
     }
