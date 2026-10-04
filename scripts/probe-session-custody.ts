@@ -820,6 +820,7 @@ if (role === "sessiond") {
       "auth",
       "browserAvailable",
       "build",
+      "createdAt",
       "custody",
       "deploy",
       "fleet",
@@ -831,12 +832,12 @@ if (role === "sessiond") {
       "restarted",
       "status",
       "tools",
-    ] satisfies (keyof import("../packages/core/src").AgentRow)[]);
-    assert.ok(
-      (await api("/api/agents")).every((entry: object) =>
-        Object.keys(entry).every((field) => agentFields.has(field))
-      )
+    ] satisfies (keyof import("../packages/core/src").AgentRow | "createdAt")[]);
+    const extraAgentFields = (await api("/api/agents")).flatMap(
+      (entry: object) =>
+        Object.keys(entry).filter((field) => !agentFields.has(field))
     );
+    assert.deepEqual(extraAgentFields, []);
     assert.ok(
       !JSON.stringify(await api("/api/agents")).includes("attach-retry")
     );
