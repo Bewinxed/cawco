@@ -49,6 +49,7 @@ public final class HubConnection {
     public let spawnPrefs = SpawnPrefs()
     public let needs: NeedsYouStore
     public private(set) var sessions: SessionsStore!
+    public private(set) var tasks: TasksStore!
     public private(set) var workflowRuns: WorkflowRunsStore!
 
     @ObservationIgnored private var run: Task<Void, Never>?
@@ -70,6 +71,7 @@ public final class HubConnection {
             return nil
         }
         sessions = SessionsStore(hub: self)
+        tasks = TasksStore(hub: self)
         workflowRuns = WorkflowRunsStore(hub: self)
         ledger.applyFrame = { [weak self] id, data in self?.sessions.apply(id, data: data) }
         ledger.rereadHistory = { [weak self] id in self?.sessions.read(id) }
@@ -123,6 +125,7 @@ public final class HubConnection {
         fleetRead?.cancel(); fleetRead = nil
         outageTimer?.cancel(); outageTimer = nil
         sessions.reset()
+        tasks.reset()
         workflowRuns.reset()
         live = nil
         for waiter in waiters.values { waiter.resume(throwing: URLError(.cancelled)) }
@@ -145,6 +148,7 @@ public final class HubConnection {
         fleet.spendFailed = false
         needs.parked = [:]
         sessions.reset()
+        tasks.reset()
         workflowRuns.reset()
     }
 
@@ -356,6 +360,7 @@ public final class HubConnection {
         if let readRows {
             do {
                 fleet.adopt(rows: try Wire.transcode(readRows, as: [InstanceRow].self))
+                tasks.sweepLiveLedgers()
             } catch {
                 log.error("instances unreadable: \(String(describing: error), privacy: .public)")
             }
@@ -531,11 +536,13 @@ public final class HubConnection {
             if let hubBuild { fleet.hubBuild = hubBuild }
             adopt(machines: board.agents)
             fleet.adopt(rows: board.instances)
+            tasks.sweepLiveLedgers()
             fleet.liveRead = true
         case let .instancesDelta(delta, hubBuild):
             if let hubBuild { fleet.hubBuild = hubBuild }
             adopt(machines: delta.agents)
             fleet.patch(upserts: delta.upserts, removed: delta.removed)
+            tasks.sweepLiveLedgers()
         case let .permissionRequest(ask, routedTo):
             needs.park(ask, routedTo: routedTo)
         case let .permissionSettled(settled):
