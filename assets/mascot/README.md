@@ -29,11 +29,11 @@ that is all they do with him.
   one Caw drawn at 18 px, so he has a look of his own (`LOOK` in `scene.mjs`; no other file's
   bytes depend on it): his dark rim is one whole device pixel of a 1x screen at 18 CSS px,
   512 / 18 = 28.4 artboard px, where the kit's 5.31 is 0.19 CSS px and measured 1.60:1 against
-  the dark page; and his cream note, 1.0:1 against the light page, carries a line of his black
-  ink as wide as that rim. The line is on the Scheme layer with the rim: in dark it clears over
-  the same 200 ms, so the silhouette's rim runs round head and note in one piece and nothing
-  black sits on the dark page. `CAW_NOTE=butter node build.mjs <dir>` builds the note in his
-  yellow ink with no line instead, for comparing.
+  the dark page; and his note, traced in cream (1.0:1 against the light page), is filled with
+  his yellow ink instead, the butter note the owner picked ("I choose butter"). It has no line
+  of its own: the rim is grown from the whole silhouette, note included, so on the dark page
+  one rim runs round head and note. Its edge measures 2.0:1 against the light page and 9.4:1
+  (1x) and 7.4:1 (2x) against the dark page.
 - `sleeping` is what Caw shows when nothing is going on: no session working anywhere on the
   fleet and nothing needing the operator (owner: "it should have a 'sleeping' look too"). The
   drawing is the nod in the owner's idle-nod-off take, eyes closed and head dropped

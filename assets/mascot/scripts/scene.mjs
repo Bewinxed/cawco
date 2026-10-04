@@ -142,8 +142,8 @@ const RIM_DARK_COLOR = `#FF${IVORY}`;
 const KIT_RIM = 14 * 0.379_471_228_615_863_13;
 /** One device pixel of a 1x screen, in artboard px, where the stills' 512 box is drawn at 18 CSS px. */
 const PIXEL_AT_18 = 512 / 18;
-/** trace.py's inks as the drawings carry them: the note's cream, his black, his yellow. */
-const INK = { black: "#1b1b19", cream: "#fbf4e5", yellow: "#f2cc6b" };
+/** trace.py's inks as the drawings carry them: the note's cream, and his yellow. */
+const INK = { cream: "#fbf4e5", yellow: "#f2cc6b" };
 /**
  * How a status is drawn where the kit's defaults do not carry it. A status not named here is
  * drawn as the kit says, and its file's bytes do not depend on this table.
@@ -151,25 +151,13 @@ const INK = { black: "#1b1b19", cream: "#fbf4e5", yellow: "#f2cc6b" };
  * `compacted` is the only Caw drawn at 18 CSS px, beside a word. The kit's 5.31 px rim is
  * 0.19 CSS px there (measured 1.60:1 against the dark page at 1x): his black head was lost on the
  * dark page. His rim is one whole device pixel of a 1x screen instead. His cream note measured
- * 1.0:1 against the light page, so it is drawn one of two ways:
- *   outline: the cream note with a line of his black ink round it, as wide as his rim. The
- *            line is on the Scheme layer like the rim: there in light, cleared in dark, where a
- *            black line cannot be seen and covered the rim at his beak (the note's outer edge
- *            measured 2.03:1 at 2x). Cleared, the silhouette's own rim runs round head and
- *            note in one piece. It is cleared, not turned Ivory: the line is drawn over his
- *            head, so an Ivory one would paint a pixel of rim onto his black beak;
- *   butter:  the note filled with his yellow ink, no line.
- * `CAW_NOTE=butter node build.mjs <dir>` builds the other one for the owner to compare.
+ * 1.0:1 against the light page, so it is filled with his yellow ink, the butter note the owner
+ * picked ("I choose butter"). It has no line of its own: the silhouette the rim is grown from
+ * includes the note, so on the dark page one rim runs round head and note.
  */
 const LOOK = {
-  compacted: { rim: PIXEL_AT_18, note: process.env.CAW_NOTE ?? "outline" },
+  compacted: { rim: PIXEL_AT_18, note: INK.yellow },
 };
-if (!["outline", "butter"].includes(LOOK.compacted.note)) {
-  throw new Error(`CAW_NOTE is 'outline' or 'butter', not '${LOOK.compacted.note}'`);
-}
-/** The note's line per scheme: his black ink in light, the same ink fully clear in dark. */
-const LINE_LIGHT_COLOR = "#FF1B1B19";
-const LINE_DARK_COLOR = "#001B1B19";
 /**
  * The drawings are placed on the stills' 512 px box, but the acting leaves it. The artboard is
  * 592 square and Caw sits 43 px right and 40 px down in it: the still box is (43, 40, 512, 512),
@@ -204,30 +192,19 @@ function merge(id, parent, shapes, paint) {
  * base is its silhouette, filled black; it also carries the cream rim as a stroke that build.mjs
  * draws under the fill (`strokeUnder`), so the silhouette is stored once. An empty drawing (the
  * page a clip starts or ends on) has no shapes and no base. `look` is the status's entry in LOOK:
- * its rim's width, and how its note is drawn (the note's line is a stroke under its fill too, so
- * only its outer half shows, round the note). `lines` are the shapes that carry such a line,
- * for the colour scheme to key.
+ * its rim's width, and the ink its note is filled with in place of the traced cream.
  */
 function drawing(id, svg, look = {}) {
   const body = importSvg(readFileSync(svg, "utf8"), { idPrefix: `${id}-` });
   // Fill order is ink order in the SVG: the black silhouette first, each ink above it.
   const inks = [...new Set(body.shapes.map((s) => s.fill.color))];
   const rim = { ...RIM_LIGHT, thickness: 2 * (look.rim ?? KIT_RIM) };
-  const lines = [];
   const paint = (color, k) => {
     if (k === 0) {
       return { fill: { color }, stroke: rim, strokeUnder: true };
     }
-    if (color === INK.cream && look.note === "outline") {
-      lines.push(`${id}-${k}`);
-      return {
-        fill: { color },
-        stroke: { color: INK.black, thickness: 2 * look.rim, join: "round" },
-        strokeUnder: true,
-      };
-    }
-    if (color === INK.cream && look.note === "butter") {
-      return { fill: { color: INK.yellow } };
+    if (color === INK.cream && look.note) {
+      return { fill: { color: look.note } };
     }
     return { fill: { color } };
   };
@@ -239,7 +216,7 @@ function drawing(id, svg, look = {}) {
       paint(color, k)
     )
   );
-  return { shapes, bases: shapes.length ? [`${id}-0`] : [], lines };
+  return { shapes, bases: shapes.length ? [`${id}-0`] : [] };
 }
 
 /** One loop's or clip's groups and shapes under `caw`, hidden until played, and its timing. */
@@ -261,16 +238,14 @@ function art(name, dir, look) {
   ];
   const shapes = [];
   const bases = [];
-  const lines = [];
   for (const i of drawings) {
     const n = pad(i);
     groups.push({ id: `${name}-d${n}`, x: 0, y: 0, parent: `${name}-body` });
     const drawn = drawing(`${name}-d${n}`, `${dir}body-${n}.svg`, look);
     shapes.push(...drawn.shapes);
     bases.push(...drawn.bases);
-    lines.push(...drawn.lines);
   }
-  return { groups, shapes, timing, bases, lines };
+  return { groups, shapes, timing, bases };
 }
 
 /** Keys switching a loop to the drawing each slot shows, on the frame the take starts it. */
@@ -288,7 +263,7 @@ function playTracks(name, timing) {
   ];
 }
 
-function animations(status, loops, clips, bases, lines) {
+function animations(status, loops, clips, bases) {
   const variants = VARIANTS[status];
   /** Everything the Variant layer can show: one is opaque at a time. */
   const all = [
@@ -310,17 +285,12 @@ function animations(status, loops, clips, bases, lines) {
     tracks,
   });
   // The writer has no stroke-colour keys; build.mjs writes these `strokeColor` tracks itself.
-  const stroke = (targets, color) =>
-    targets.map((target) => ({
+  const rim = (color) =>
+    bases.map((target) => ({
       target,
       property: "strokeColor",
       keyframes: [{ frame: 0, color, easing: "hold" }],
     }));
-  // Each scheme keys the rim on every silhouette and, where a status has one, its note's line.
-  const scheme = (rimColor, lineColor) => [
-    ...stroke(bases, rimColor),
-    ...stroke(lines, lineColor),
-  ];
   // His still, where every clip starts or lands: the rest drawing, or the first variant on its
   // first drawing.
   const still = RESTS[status]
@@ -354,8 +324,8 @@ function animations(status, loops, clips, bases, lines) {
     // Nothing drawn: before `from` is set, and after the exit.
     anim("variant_hidden", only(null)),
     anim("variant_still", still),
-    anim("scheme_light", scheme(RIM_LIGHT.color, LINE_LIGHT_COLOR)),
-    anim("scheme_dark", scheme(RIM_DARK_COLOR, LINE_DARK_COLOR)),
+    anim("scheme_light", rim(RIM_LIGHT.color)),
+    anim("scheme_dark", rim(RIM_DARK_COLOR)),
     anim("motion_full", []),
     // His still, whatever the Variant layer last chose.
     anim("motion_reduced", still),
@@ -369,12 +339,10 @@ export function statusScene(status) {
   const groups = [{ id: "caw", ...ORIGIN }];
   const shapes = [];
   const bases = [];
-  const lines = [];
   const add = (drawn) => {
     groups.push(...(drawn.groups ?? []));
     shapes.push(...drawn.shapes);
     bases.push(...drawn.bases);
-    lines.push(...drawn.lines);
     return drawn.timing;
   };
   const look = LOOK[status];
@@ -441,7 +409,7 @@ export function statusScene(status) {
     artboard: { name: "Caw", width: ARTBOARD, height: ARTBOARD },
     groups,
     shapes,
-    animations: animations(status, loops, clips, bases, lines),
+    animations: animations(status, loops, clips, bases),
     stateMachine: {
       name: "CawStates",
       inputs: [],
