@@ -72,6 +72,7 @@ final class AssistantPanelView: UIView {
             body.bottomAnchor.constraint(equalTo: scroll.contentLayoutGuide.bottomAnchor, constant: -Space.space5),
             body.leadingAnchor.constraint(equalTo: scroll.frameLayoutGuide.leadingAnchor, constant: Space.space4),
             body.trailingAnchor.constraint(equalTo: scroll.frameLayoutGuide.trailingAnchor, constant: -Space.space4),
+            scroll.contentLayoutGuide.widthAnchor.constraint(equalTo: scroll.frameLayoutGuide.widthAnchor),
         ])
         body.addArrangedSubview(section("Supervisor", [statusBox]))
         autopilotSection.axis = .vertical

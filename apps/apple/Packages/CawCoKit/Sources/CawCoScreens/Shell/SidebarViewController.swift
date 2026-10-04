@@ -104,6 +104,8 @@ final class SidebarViewController: ObservedViewController {
             column.bottomAnchor.constraint(equalTo: scroll.contentLayoutGuide.bottomAnchor, constant: -4),
             column.leadingAnchor.constraint(equalTo: scroll.frameLayoutGuide.leadingAnchor),
             column.trailingAnchor.constraint(equalTo: scroll.frameLayoutGuide.trailingAnchor),
+            // The content is as wide as the rail: it scrolls one way only.
+            scroll.contentLayoutGuide.widthAnchor.constraint(equalTo: scroll.frameLayoutGuide.widthAnchor),
         ])
         column.addArrangedSubview(group(buildPlaces()))
         homeSlot.translatesAutoresizingMaskIntoConstraints = false
@@ -129,6 +131,18 @@ final class SidebarViewController: ObservedViewController {
 
     private func navConstraint(_ view: UIView) {
         let height = view.heightAnchor.constraint(equalToConstant: navHeight)
+        height.priority = .required - 1
+        height.isActive = true
+        navHeights.append(height)
+    }
+
+    /// A row of nav-height controls is that tall itself: its controls only
+    /// centre in it, so without this the header and the footer could take
+    /// any height above their controls' and the scroller between them any
+    /// below its own, down to nothing. One short of required, as the
+    /// controls' own are: a rail measured at no height keeps its constraints.
+    private func navRow(_ row: UIStackView) {
+        let height = row.heightAnchor.constraint(equalToConstant: navHeight)
         height.priority = .required - 1
         height.isActive = true
         navHeights.append(height)
@@ -171,6 +185,7 @@ final class SidebarViewController: ObservedViewController {
         headerRow.axis = .horizontal
         headerRow.spacing = 4
         headerRow.alignment = .center
+        navRow(headerRow)
         let box = UIView()
         box.translatesAutoresizingMaskIntoConstraints = false
         headerRow.translatesAutoresizingMaskIntoConstraints = false
@@ -345,6 +360,7 @@ final class SidebarViewController: ObservedViewController {
         let account = UIStackView(arrangedSubviews: [user, configureButton, themeButton])
         account.spacing = 4
         account.alignment = .center
+        navRow(account)
         let stack = UIStackView(arrangedSubviews: [usage, account])
         stack.axis = .vertical
         stack.spacing = 8
