@@ -7,7 +7,7 @@ const base = "http://127.0.0.1:3456";
 const saved = await Bun.file(new URL("./baseline.json", import.meta.url)).json();
 const id = saved.probe.id as string;
 assert.match(id, /^[a-f0-9-]{36}$/);
-assert.equal(saved.probe.directory, "/home/bewinxed/.worktrees/cockpit-2fbd52a5/.context/keepalive/probe-rerun-workdir");
+assert.equal(saved.probe.directory, "/home/bewinxed/.worktrees/cockpit-2fbd52a5/.context/keepalive/probe-two-ping-workdir");
 const target = "65293f76-43b6-4848-aa44-6fe515b8d07e";
 const path = new URL("./deployed.json", import.meta.url);
 const api = async (route: string, method = "GET", body?: unknown) => {
@@ -31,6 +31,7 @@ const evidence: Record<string, any> = {
   probe: { ...saved.probe, baseline: undefined, beforeTranscript: undefined, archived: false },
   baseline: saved.probe.baseline,
   frames: [],
+  pings: [],
   socketGaps: [],
   restarts: [],
   stateHistory: [],
@@ -52,6 +53,7 @@ let agentStart: number | undefined;
 let beforePing: Promise<void> | undefined;
 let observedResult: any;
 let latestRow = saved.probe.baseline;
+let reportedColdAt: number | undefined;
 const results = new Set<string>();
 const events = new Set<string>();
 let writes = Promise.resolve(0);
@@ -80,6 +82,12 @@ const observeBoard = (snapshot: any) => {
   }
   latestRow = (snapshot.instances ?? snapshot.upserts ?? []).find((row: any) => row.id === id) ?? latestRow;
   evidence.stateHistory.push({ receivedAt: now, status: latestRow.status, lastRequestAt: latestRow.lastRequestAt, keepAlive: latestRow.keepAlive });
+  if (armed && latestRow.keepAlive.on && latestRow.keepAlive.state === "cold" && latestRow.keepAlive.cold?.at !== reportedColdAt) {
+    reportedColdAt = latestRow.keepAlive.cold?.at;
+    evidence.coldHolds ??= [];
+    evidence.coldHolds.push({ at: now, cold: latestRow.keepAlive.cold, pingsObserved: evidence.pings.length });
+    void notify(`Own two-ping probe ${id} went cold: ${latestRow.keepAlive.cold?.reason}. Guard sent no rebuild. Read evidence and re-arm once only by a completed real turn on this same probe, then declare its next wait_item. Do not change the live fleet. Observer remains connected.`);
+  }
 };
 
 const captureBeforePing = () => {
@@ -120,7 +128,7 @@ const finalize = async () => {
     await persist();
     const ping = observedResult.message;
     const input = (ping.usage?.input_tokens ?? 0) + (ping.cache?.read ?? 0) + (ping.cache?.write ?? 0);
-    const firstSend = evidence.frames.find((frame: any) => frame.kind === "send" && frame.record?.keepAlive);
+    const firstSend = evidence.frames.findLast((frame: any) => frame.kind === "send" && frame.record?.keepAlive);
     console.log(`RESULT ${id}: sent ${firstSend?.record.acceptedAt}; received ${new Date(evidence.pingResultAt).toISOString()}; input ${input}; read ${ping.cache?.read}; write ${ping.cache?.write}; sent ${evidence.after.keepAlive.sent}`);
     complete = true;
     if (retry) clearTimeout(retry);
@@ -176,8 +184,22 @@ const connect = () => {
       if (frame.kind === "frame" && frame.message.type === "result" && !results.has(frame.message.uuid)) {
         results.add(frame.message.uuid);
         observedResult = captured;
-        result.resolve(captured);
-        void finalize();
+        const usage = frame.message.usage;
+        const cache = frame.message.cache;
+        const input = (usage?.input_tokens ?? 0) + (cache?.read ?? 0) + (cache?.write ?? 0);
+        const share = input > 0 ? (cache?.read ?? 0) / input : 0;
+        evidence.pings.push({ frame: captured, input, read: cache?.read, write: cache?.write, share });
+        if (share < 0.9 || evidence.pings.length >= 2) {
+          result.resolve(captured);
+          void finalize();
+        } else {
+          void ownRow().then(async row => {
+            evidence.firstPingAfter = row;
+            await persist();
+            console.log(`FIRST_PING ${id}: input ${input}; read ${cache.read}; write ${cache.write}; share ${share}; nextAt ${row.keepAlive.nextAt}`);
+            await notify(`Keep-alive first ping completed for ${id}: input ${input}, read ${cache.read}, write ${cache.write}, share ${share}. Still on; next due ${new Date(row.keepAlive.nextAt).toISOString()}. Read .context/keepalive/deployed.json and declare the second wait_item. Observer remains connected; do not send a real turn or switch it off. Only this probe.`);
+          });
+        }
       }
     }
     if (message.payload?.kind === "pulse" && message.instanceId === id) {

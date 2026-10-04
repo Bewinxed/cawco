@@ -4,6 +4,7 @@ import {
   type KeepAlive,
   type NeutralResultMessage,
   type NeutralUserMessage,
+  promptCacheUsage,
   resolveRates,
   type SendPayload,
 } from "@cawco/core";
@@ -36,6 +37,9 @@ export const promptCacheExpiresAt = (
   row: KeepAliveRow,
   lastTurnAt?: string | null
 ): number | null => {
+  if (row.cacheCold) {
+    return null;
+  }
   if (row.cacheTtl && row.lastRequestAt) {
     return (
       row.lastRequestAt.getTime() +
@@ -60,6 +64,8 @@ export const keepAliveState = (
     sent: row.keepAliveSent,
     cap: keepAliveCap(row),
     ttl: row.cacheTtl,
+    cold: row.cacheCold,
+    lastPingUsage: row.lastPingUsage,
     contextTokens: row.contextTokens,
     contextReadAt: row.contextReadAt?.getTime() ?? null,
   };
@@ -68,6 +74,9 @@ export const keepAliveState = (
   }
   if (row.status === "sleeping") {
     return { ...base, state: "asleep" };
+  }
+  if (row.cacheCold) {
+    return { ...base, state: "cold" };
   }
   if (
     usage?.windows.some(
@@ -93,17 +102,7 @@ export const keepAliveState = (
 };
 
 /** Usage counts include uncached input plus cache reads and writes, as Claude reports them. */
-export const keepAliveUsage = (result: NeutralResultMessage) => {
-  const { cache = { read: 0, write: 0 } } = result;
-  const { usage } = result as NeutralResultMessage & {
-    usage?: { input_tokens?: number };
-  };
-  return {
-    input: (usage?.input_tokens ?? 0) + cache.read + cache.write,
-    read: cache.read,
-    write: cache.write,
-  };
-};
+export const keepAliveUsage = promptCacheUsage;
 
 export const keepAliveResult = (
   row: KeepAliveRow,
@@ -111,9 +110,28 @@ export const keepAliveResult = (
   ping: boolean
 ) => {
   const { cache = { read: 0, write: 0 } } = result;
-  const { input, read } = keepAliveUsage(result);
-  const hit = input > 0 && read >= input / 2;
-  const misses = ping && !hit ? row.keepAliveMisses + 1 : 0;
+  const usage = keepAliveUsage(result);
+  const { input, read } = usage;
+  const hit = input > 0 && read >= input * 0.9;
+  const at = Date.now();
+  let cold = row.cacheCold;
+  if (ping && !hit) {
+    cold = {
+      reason:
+        input > 0
+          ? `ping read ${Math.round((read / input) * 100)}%`
+          : "ping reported no cache usage",
+      at,
+    };
+  } else if (
+    !ping &&
+    result.cacheReusable === true &&
+    result.cache &&
+    result.lastRequestAt !== undefined &&
+    input > 0
+  ) {
+    cold = null;
+  }
   const sent = ping ? row.keepAliveSent + 1 : 0;
   // An unknown lifetime remains unknown. Cache reads retain the last observed write lifetime.
   let ttl = row.cacheTtl;
@@ -127,9 +145,6 @@ export const keepAliveResult = (
   if (ping && sent >= keepAliveCap({ ...row, cacheTtl: ttl })) {
     stopped = "stopped-cap";
   }
-  if (ping && misses >= 2) {
-    stopped = "stopped-miss";
-  }
   if (["stopped", "discarded", "error"].includes(row.status)) {
     stopped = null;
   }
@@ -142,7 +157,8 @@ export const keepAliveResult = (
       ? {}
       : { lastRequestAt: new Date(result.lastRequestAt) }),
     keepAliveSent: sent,
-    keepAliveMisses: misses,
+    cacheCold: cold,
+    lastPingUsage: ping ? { ...usage, at } : row.lastPingUsage,
     keepAliveTurn: null,
     keepAliveStopped: stopped,
     ...(stopped ? { keepAliveEnabled: false } : {}),

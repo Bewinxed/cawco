@@ -5014,7 +5014,8 @@ export const createServer = (
         keepAliveEnabled: _enabled,
         keepAliveSent: _sent,
         keepAliveStopped: _stopped,
-        keepAliveMisses: _misses,
+        cacheCold: _cold,
+        lastPingUsage: _usage,
         keepAliveTurn: _turn,
         cacheTtl: _ttl,
         contextTokens: _contextTokens,
@@ -7968,9 +7969,7 @@ export const createServer = (
             db.updateKeepAlive(params.id, {
               keepAliveEnabled: body.keepAlive,
               keepAliveStopped: null,
-              ...(body.keepAlive
-                ? { keepAliveSent: 0, keepAliveMisses: 0 }
-                : {}),
+              ...(body.keepAlive ? { keepAliveSent: 0 } : {}),
             });
           }
           if (permissionMode !== undefined) {
@@ -10356,6 +10355,16 @@ export const createServer = (
             }
             case "frames": {
               const kind = peek(message.payload, "kind");
+              if (kind === "cache_invalidated") {
+                const { reason, at } = message.payload as Extract<
+                  FramePayload,
+                  { kind: "cache_invalidated" }
+                >;
+                db.invalidateClaudeCaches(message.machineId, reason, at);
+                publishInstances(message.machineId);
+                // Cache bookkeeping is neither a turn nor fleet attention.
+                break;
+              }
               // A continuation's summariser: an internal worker only its
               // continuation talks to (see `summarisers`).
               const internal =
@@ -10876,6 +10885,7 @@ export const createServer = (
                   }
                 } else if (neutral.type === "result") {
                   const [cacheRow] = db.getInstancesByIds([message.instanceId]);
+                  // biome-ignore lint/suspicious/noUnnecessaryConditions: a session can be removed before its last result arrives
                   if (cacheRow?.harness === "claude") {
                     db.updateKeepAlive(
                       cacheRow.id,
@@ -11049,6 +11059,7 @@ export const createServer = (
                 const line = unstarted?.workItemId
                   ? workItems.spawnFailed(unstarted, reason)
                   : undefined;
+                // biome-ignore lint/suspicious/noUnnecessaryConditions: spawnFailed returns a report only for a recorded live work item
                 if (unstarted && line !== undefined) {
                   reportToParent(unstarted, `${reason}${line}`, true);
                 }

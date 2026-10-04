@@ -251,14 +251,21 @@ export const instances = sqliteTable("instances", {
     .notNull()
     .default(false),
   keepAliveSent: integer("keep_alive_sent").notNull().default(0),
-  keepAliveStopped: text("keep_alive_stopped").$type<
-    "stopped-cap" | "stopped-miss"
-  >(),
+  keepAliveStopped: text("keep_alive_stopped").$type<"stopped-cap">(),
   cacheTtl: text("cache_ttl").$type<"5m" | "1h">(),
   lastRequestAt: timestamp("last_request_at"),
   contextTokens: integer("context_tokens"),
   contextReadAt: timestamp("context_read_at"),
-  keepAliveMisses: integer("keep_alive_misses").notNull().default(0),
+  cacheCold: text("cache_cold", { mode: "json" }).$type<{
+    reason: string;
+    at: number;
+  }>(),
+  lastPingUsage: text("last_ping_usage", { mode: "json" }).$type<{
+    input: number;
+    read: number;
+    write: number;
+    at: number;
+  }>(),
   /** In-flight ping identity survives a hub or agent restart. */
   keepAliveTurn: text("keep_alive_turn"),
   workflowRunId: text("workflow_run_id"),

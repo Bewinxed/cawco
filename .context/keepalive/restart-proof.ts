@@ -6,7 +6,7 @@ await mkdir(root, { recursive: true });
 const child = Bun.fileURLToPath(new URL("./private-hub.ts", import.meta.url));
 const evidence: unknown[] = [];
 
-async function stack(name: string, due: number, busy = false) {
+export async function stack(name: string, due: number, busy = false) {
   const id = `keepalive-${name}-${crypto.randomUUID()}`;
   const db = Bun.fileURLToPath(new URL(`${id}.db`, root));
   const sends: { at: number; uuid: string }[] = [];
@@ -44,6 +44,7 @@ async function stack(name: string, due: number, busy = false) {
         send({ kind: "control_result", requestId, ok: true, result }, requestId);
       } else if (envelope.verb === "send") {
         const record = { at: Date.now(), uuid: envelope.payload.message.uuid };
+        send({ kind: "frame", instanceId: id, harness: "claude", message: { type: "system", subtype: "read", read: [record.uuid] } });
         sends.push(record);
         sent.resolve(record);
       }
@@ -89,6 +90,7 @@ async function stack(name: string, due: number, busy = false) {
   };
   return {
     id, sends, logs, start, stop, request,
+    emit: (payload: unknown) => send(payload),
     row: async () => (await request("/api/instances")).find((row: { id: string }) => row.id === id),
     arm: () => request(`/api/instances/${id}`, { keepAlive: true }),
     connect,
@@ -121,6 +123,7 @@ async function prove(name: string, run: (s: Awaited<ReturnType<typeof stack>>, d
   }
 }
 
+if (import.meta.main) {
 await prove("hub restart inside window preserves original deadline", async (s, due) => {
   await s.stop();
   await s.start();
@@ -165,3 +168,4 @@ await prove("agent reconnect after hub restart fires with no pulse replay", asyn
   assert.equal(s.sends.length, 1);
 }, 3_000);
 await Bun.write(new URL("./private-proof.json", import.meta.url), JSON.stringify(evidence, null, 2));
+}

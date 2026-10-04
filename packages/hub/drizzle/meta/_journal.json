@@ -498,6 +498,13 @@
       "when": 1791060000004,
       "tag": "0070_work_item_waits",
       "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "6",
+      "when": 1791060000005,
+      "tag": "0071_prompt_cache_cold",
+      "breakpoints": true
     }
   ]
 }

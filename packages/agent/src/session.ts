@@ -51,6 +51,7 @@ import {
   MESSAGES_READ,
   PREVIEW_START,
   PREVIEW_STOP,
+  promptCacheUsage,
   RESOLVE_PERMISSION,
   readIngested,
   repoPath,
@@ -73,6 +74,12 @@ import { isMachineAgent } from "./machine-agent";
 import { prepareFleetMcp } from "./mcp-launcher";
 import { startPreview, stopPreview, stopPreviews } from "./preview";
 import { parseProcId, SESSION_PROC_KINDS } from "./proc-id";
+import {
+  type PromptWriteNotice,
+  promptWrite,
+  promptWriteReason,
+  withPromptWrites,
+} from "./prompt-writes";
 import { acknowledgeSessionCredential } from "./session-identity";
 import { endProc, procEpoch, SessiondClient } from "./sessiond-client";
 import { readHeldProcesses } from "./sessiond-custody";
@@ -482,6 +489,24 @@ export class SessionSupervisor {
   /** The sessions with a turn in flight — from the `send` that starts one until the turn ends. */
   readonly #busy = new Set<string>();
   readonly #keepAlive = new Map<string, string>();
+  readonly #cacheCold = new Set<string>();
+  readonly #realPromptEpoch = new Map<string, number>();
+  #promptEpoch = 0;
+  #promptWrites = 0;
+  readonly #observePromptWrite = ({
+    phase,
+    reason,
+    at,
+  }: PromptWriteNotice): void => {
+    this.#promptEpoch += 1;
+    this.#promptWrites += phase === "begin" ? 1 : -1;
+    for (const [id, session] of this.#sessions) {
+      if (session.harness === "claude") {
+        this.#cacheCold.add(id);
+      }
+    }
+    this.sink({ kind: "cache_invalidated", reason, at });
+  };
   readonly #imageRequests = new Map<string, string>();
 
   /**
@@ -1043,6 +1068,8 @@ export class SessionSupervisor {
    * explicit close or a stop.
    */
   #forgetPulse(instanceId: string): void {
+    this.#cacheCold.delete(instanceId);
+    this.#realPromptEpoch.delete(instanceId);
     this.#keepAlive.delete(instanceId);
     this.#busy.delete(instanceId);
     this.#activeAt.delete(instanceId);
@@ -1469,6 +1496,7 @@ export class SessionSupervisor {
           this.#keepAlive.delete(instanceId);
         }
         const keepAlive = this.#keepAlive.has(instanceId);
+        this.#observeCacheFrame(instanceId, adapter.kind, message, keepAlive);
         if (keepAlive) {
           message.keepAlive = true;
         }
@@ -1562,6 +1590,47 @@ export class SessionSupervisor {
         }
       },
     };
+  }
+
+  /** A real turn can refresh a cache only after all known prompt writes. */
+  #observeCacheFrame(
+    instanceId: string,
+    harness: HarnessKind,
+    message: NeutralMessage,
+    keepAlive: boolean
+  ): void {
+    if (harness !== "claude") {
+      return;
+    }
+    if (
+      !keepAlive &&
+      message.type === "system" &&
+      message.subtype === "init" &&
+      !this.#realPromptEpoch.has(instanceId)
+    ) {
+      this.#realPromptEpoch.set(instanceId, this.#promptEpoch);
+    }
+    if (message.type !== "result") {
+      return;
+    }
+    const usage = promptCacheUsage(message);
+    if (keepAlive) {
+      if (!(usage.input > 0 && usage.read >= usage.input * 0.9)) {
+        this.#cacheCold.add(instanceId);
+      }
+      return;
+    }
+    message.cacheReusable =
+      this.#promptWrites === 0 &&
+      this.#realPromptEpoch.get(instanceId) === this.#promptEpoch;
+    if (
+      message.cacheReusable &&
+      message.lastRequestAt !== undefined &&
+      usage.input > 0
+    ) {
+      this.#cacheCold.delete(instanceId);
+    }
+    this.#realPromptEpoch.delete(instanceId);
   }
 
   /** Lists surviving children custody did not attach; absence never authorises a stop. */
@@ -2008,6 +2077,11 @@ export class SessionSupervisor {
       );
     }
     if (keepAlive) {
+      if (this.#cacheCold.has(instanceId) || this.#promptWrites > 0) {
+        throw new Error(
+          "Keep-alive refused: the Claude prompt changed; a real turn must refresh its cache."
+        );
+      }
       if (
         session.harness !== "claude" ||
         this.#busy.has(instanceId) ||
@@ -2019,6 +2093,9 @@ export class SessionSupervisor {
       }
       this.#keepAlive.set(instanceId, message.uuid);
     } else {
+      if (session.harness === "claude" && !this.#busy.has(instanceId)) {
+        this.#realPromptEpoch.set(instanceId, this.#promptEpoch);
+      }
       this.#touch(instanceId);
     }
     session.send(message, { attachments, images, urgent });
@@ -2311,7 +2388,15 @@ export class SessionSupervisor {
         kind: "control_result",
         requestId,
         ok: true,
-        result: await runFs(payload),
+        result: await withPromptWrites(this.#observePromptWrite, async () => {
+          const reason =
+            payload.op === "write"
+              ? promptWriteReason(expandHome(payload.path))
+              : undefined;
+          return reason
+            ? await promptWrite(reason, () => runFs(payload))
+            : await runFs(payload);
+        }),
       });
     } catch (error) {
       this.sink({
@@ -2377,8 +2462,17 @@ export class SessionSupervisor {
   >();
 
   /** Converges the fleet across every harness that has a profile, merged into one report. */
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: merges every FleetSyncReport field across harnesses field-by-field, on purpose (see the comments below on why nothing is dropped)
-  async #syncFleet(
+  #syncFleet(
+    incoming: FleetConfig | undefined,
+    which: "syncFleet" | "fleetStatus"
+  ): Promise<FleetSyncReport> {
+    return withPromptWrites(this.#observePromptWrite, () =>
+      this.#convergeFleet(incoming, which)
+    );
+  }
+
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: merges every existing fleet report field across harnesses, preserving per-harness ownership
+  async #convergeFleet(
     incoming: FleetConfig | undefined,
     which: "syncFleet" | "fleetStatus"
   ): Promise<FleetSyncReport> {

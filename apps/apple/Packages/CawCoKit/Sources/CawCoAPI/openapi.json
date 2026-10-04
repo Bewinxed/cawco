@@ -9556,6 +9556,9 @@
         "description": "`frames`: everything a session produces, flowing agent→hub→dashboard. The\n`frame` kind is a neutral message; `raw` on it carries the harness's own\nevent verbatim.",
         "oneOf": [
           {
+            "$ref": "#/components/schemas/CacheInvalidatedFrame"
+          },
+          {
             "$ref": "#/components/schemas/FleetMcpFrame"
           },
           {
@@ -9625,6 +9628,7 @@
         "discriminator": {
           "propertyName": "kind",
           "mapping": {
+            "cache_invalidated": "#/components/schemas/CacheInvalidatedFrame",
             "fleet_mcp": "#/components/schemas/FleetMcpFrame",
             "preview": "#/components/schemas/PreviewFrame",
             "frame": "#/components/schemas/MessageFrame",
@@ -12528,6 +12532,21 @@
           "cap": {
             "type": "number"
           },
+          "cold": {
+            "type": "object",
+            "properties": {
+              "reason": {
+                "type": "string"
+              },
+              "at": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "at",
+              "reason"
+            ]
+          },
           "contextReadAt": {
             "type": [
               "null",
@@ -12538,6 +12557,29 @@
             "type": [
               "null",
               "number"
+            ]
+          },
+          "lastPingUsage": {
+            "type": "object",
+            "properties": {
+              "input": {
+                "type": "number"
+              },
+              "read": {
+                "type": "number"
+              },
+              "write": {
+                "type": "number"
+              },
+              "at": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "at",
+              "input",
+              "read",
+              "write"
             ]
           },
           "nextAt": {
@@ -12559,7 +12601,6 @@
               "off",
               "paused-usage",
               "stopped-cap",
-              "stopped-miss",
               "waiting"
             ],
             "type": "string"
@@ -16321,6 +16362,10 @@
               "write"
             ]
           },
+          "cacheReusable": {
+            "description": "Claude's real turn began after every known prompt write had finished.",
+            "type": "boolean"
+          },
           "errors": {
             "type": "array",
             "items": {
@@ -16819,6 +16864,28 @@
       },
       "T_1": {
         "type": "object"
+      },
+      "CacheInvalidatedFrame": {
+        "type": "object",
+        "properties": {
+          "at": {
+            "type": "number"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "cache_invalidated"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "at",
+          "kind",
+          "reason"
+        ]
       },
       "FleetMcpFrame": {
         "type": "object",

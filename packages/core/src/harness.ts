@@ -682,6 +682,8 @@ export interface NeutralStreamMessage {
 export interface NeutralResultMessage {
   /** Prompt-cache tokens the turn read from / wrote to, when the harness reports them. */
   cache?: { read: number; write: number; write5m?: number; write1h?: number };
+  /** Claude's real turn began after every known prompt write had finished. */
+  cacheReusable?: boolean;
   errors?: string[];
   /**
    * The sends this error failed, set by the hub: read, and answered by nothing
@@ -705,6 +707,19 @@ export interface NeutralResultMessage {
   type: "result";
   uuid?: string;
 }
+
+/** Claude reports uncached input separately from cache reads and writes. */
+export const promptCacheUsage = (result: NeutralResultMessage) => {
+  const { cache = { read: 0, write: 0 } } = result;
+  const { usage } = result as NeutralResultMessage & {
+    usage?: { input_tokens?: number };
+  };
+  return {
+    input: (usage?.input_tokens ?? 0) + cache.read + cache.write,
+    read: cache.read,
+    write: cache.write,
+  };
+};
 
 /**
  * A `system` frame. One loose interface rather than a subtype union: the folding

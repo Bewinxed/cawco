@@ -702,19 +702,19 @@ export interface InstanceRow {
 
 export interface KeepAlive {
   cap: number;
+  cold: { reason: string; at: number } | null;
   contextReadAt: number | null;
   contextTokens: number | null;
+  lastPingUsage: {
+    input: number;
+    read: number;
+    write: number;
+    at: number;
+  } | null;
   nextAt: number | null;
   on: boolean;
   sent: number;
-  state:
-    | "off"
-    | "waiting"
-    | "cold"
-    | "paused-usage"
-    | "asleep"
-    | "stopped-cap"
-    | "stopped-miss";
+  state: "off" | "waiting" | "cold" | "paused-usage" | "asleep" | "stopped-cap";
   ttl: "5m" | "1h" | null;
 }
 
@@ -871,6 +871,7 @@ export const RESTART_LOST =
  * event verbatim.
  */
 export type FramePayload =
+  | import("./frames").CacheInvalidatedFrame
   | import("./frames").FleetMcpFrame
   | import("./frames").PreviewFrame
   | import("./frames").MessageFrame

@@ -370,6 +370,12 @@ export interface DbShape {
   readonly instanceBySessionId: (
     sessionId: string
   ) => typeof instances.$inferSelect | undefined;
+  /** Known prompt writes invalidate every Claude cache on the owning machine. */
+  readonly invalidateClaudeCaches: (
+    machineId: string,
+    reason: string,
+    at: number
+  ) => void;
   readonly lastMcpSignInMachine: () => string | undefined;
   /** Keys a send to the id its harness stores it under. */
   readonly linkSend: (uuid: string, harnessId: string) => void;
@@ -947,7 +953,8 @@ export interface DbShape {
         | "lastRequestAt"
         | "contextTokens"
         | "contextReadAt"
-        | "keepAliveMisses"
+        | "cacheCold"
+        | "lastPingUsage"
         | "keepAliveTurn"
       >
     >
@@ -1498,6 +1505,17 @@ const make = (path: string): DbShape => {
   };
 
   return {
+    invalidateClaudeCaches: (machineId, reason, at) => {
+      db.update(instances)
+        .set({ cacheCold: { reason, at } })
+        .where(
+          and(
+            eq(instances.machineId, machineId),
+            eq(instances.harness, "claude")
+          )
+        )
+        .run();
+    },
     updateKeepAlive: (id, patch) => {
       db.update(instances)
         .set({

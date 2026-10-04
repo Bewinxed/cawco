@@ -1,0 +1,74 @@
+[
+  {
+    "kind": "skills",
+    "cold": {
+      "reason": "prompt changed: skill private-skill",
+      "at": 1791149263503
+    },
+    "sends": 0
+  },
+  {
+    "kind": "plugins",
+    "cold": {
+      "reason": "prompt changed: plugins marketplace files",
+      "at": 1791149265645
+    },
+    "sends": 0
+  },
+  {
+    "kind": "user CLAUDE.md",
+    "cold": {
+      "reason": "prompt changed: user CLAUDE.md",
+      "at": 1791149267739
+    },
+    "sends": 0
+  },
+  {
+    "kind": "memory docs",
+    "cold": {
+      "reason": "prompt changed: memory doc model.md",
+      "at": 1791149269862
+    },
+    "sends": 0
+  },
+  {
+    "kind": "MCP servers",
+    "cold": {
+      "reason": "prompt changed: MCP servers",
+      "at": 1791149271934
+    },
+    "sends": 0
+  },
+  {
+    "kind": "hooks",
+    "cold": {
+      "reason": "prompt changed: hook private",
+      "at": 1791149274168
+    },
+    "sends": 0
+  },
+  {
+    "kind": "hook registration",
+    "cold": {
+      "reason": "prompt changed: hooks registration",
+      "at": 1791149276253
+    },
+    "sends": 0
+  },
+  {
+    "kind": "model memory hook",
+    "cold": {
+      "reason": "prompt changed: model memory hook",
+      "at": 1791149278313
+    },
+    "sends": 0
+  },
+  {
+    "kind": "agent definitions",
+    "cold": {
+      "reason": "prompt changed: agent definitions",
+      "at": 1791149280476
+    },
+    "sends": 0
+  }
+]

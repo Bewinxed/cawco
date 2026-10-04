@@ -24,6 +24,13 @@ export interface FleetMcpFrame {
   servers: FleetMcpServer[];
 }
 
+export interface CacheInvalidatedFrame {
+  at: number;
+  instanceId?: undefined;
+  kind: "cache_invalidated";
+  reason: string;
+}
+
 export interface PreviewFrame {
   instanceId: string;
   kind: "preview";
