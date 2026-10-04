@@ -21,6 +21,7 @@ const api = async (route: string, method = "GET", body?: unknown) => {
   return await response.json();
 };
 const ownRow = async () => (await api("/api/instances")).find((row: { id: string }) => row.id === id);
+const ownUsage = async () => (await api("/api/usage/limits")).machines.find((machine: any) => machine.machineId === saved.probe.baseline.machineId)?.limits;
 const health = await api("/health");
 const deployedCommit = execFileSync("git", ["rev-parse", health.build.commit], { encoding: "utf8" }).trim();
 assert.match(deployedCommit, /^[a-f0-9]{40}$/);
@@ -32,6 +33,8 @@ const evidence: Record<string, any> = {
   frames: [],
   socketGaps: [],
   restarts: [],
+  stateHistory: [],
+  usageReadings: [{ receivedAt: Date.now(), limits: await ownUsage() }],
   pulsesDuringWait: [],
   before: { unread: false, news: false, turnsEnded: saved.probe.beforeTranscript.facts.turnsEnded },
 };
@@ -48,6 +51,7 @@ let hubStart: number | undefined;
 let agentStart: number | undefined;
 let beforePing: Promise<void> | undefined;
 let observedResult: any;
+let latestRow = saved.probe.baseline;
 const results = new Set<string>();
 const events = new Set<string>();
 let writes = Promise.resolve(0);
@@ -74,12 +78,14 @@ const observeBoard = (snapshot: any) => {
   if (snapshot.pulses?.[id]) {
     evidence.latestPulse = snapshot.pulses[id];
   }
+  latestRow = (snapshot.instances ?? snapshot.upserts ?? []).find((row: any) => row.id === id) ?? latestRow;
+  evidence.stateHistory.push({ receivedAt: now, status: latestRow.status, lastRequestAt: latestRow.lastRequestAt, keepAlive: latestRow.keepAlive });
 };
 
 const captureBeforePing = () => {
   if (beforePing) return;
-  beforePing = Promise.all([ownRow(), api(`/api/instances/${id}/transcript`)]).then(([row, transcript]) => {
-    evidence.beforePing = { row, transcript, observedAt: Date.now() };
+  beforePing = Promise.all([ownRow(), api(`/api/instances/${id}/transcript`), ownUsage()]).then(([row, transcript, usage]) => {
+    evidence.beforePing = { row, transcript, usage, observedAt: Date.now() };
     const news = evidence.latestPulse?.activity === "idle" && evidence.latestPulse.at > Date.parse(row.seenAt);
     evidence.before = { unread: !!news, news: !!news, turnsEnded: transcript.facts.turnsEnded };
   });
@@ -98,6 +104,12 @@ const finalize = async () => {
     evidence.pingResultAt = observedResult.receivedAt;
     evidence.after = await ownRow();
     evidence.afterTranscript = await api(`/api/instances/${id}/transcript`);
+    evidence.usageReadings.push({ receivedAt: Date.now(), limits: await ownUsage() });
+    const due = evidence.enabled.keepAlive.nextAt;
+    evidence.usageBeforeDue = evidence.usageReadings.filter((reading: any) => reading.receivedAt < due).at(-1);
+    evidence.usageAfterDue = evidence.usageReadings.find((reading: any) => reading.receivedAt >= due);
+    evidence.stateBeforeDue = evidence.stateHistory.filter((reading: any) => reading.receivedAt < due).at(-1);
+    evidence.stateAfterDue = evidence.stateHistory.find((reading: any) => reading.receivedAt >= due) ?? { receivedAt: Date.now(), status: evidence.after.status, lastRequestAt: evidence.after.lastRequestAt, keepAlive: evidence.after.keepAlive };
     const pulse = evidence.latestPulse;
     const news = pulse?.activity === "idle" && pulse.at > Date.parse(evidence.after.seenAt);
     evidence.observed = { unread: !!news, news: !!news, turnsEnded: evidence.afterTranscript.facts.turnsEnded };
@@ -171,6 +183,11 @@ const connect = () => {
     if (message.payload?.kind === "pulse" && message.instanceId === id) {
       evidence.latestPulse = message.payload.pulse;
       evidence.pulsesDuringWait.push({ ...message.payload.pulse, receivedAt: Date.now() });
+    }
+    if (message.payload?.kind === "usage") {
+      const reading = message.payload.limits.find((reading: any) => reading.machineId === evidence.baseline.machineId);
+      if (reading) evidence.usageReadings.push({ receivedAt: Date.now(), limits: reading.payload });
+      void persist();
     }
   });
   socket.addEventListener("close", (event) => {
