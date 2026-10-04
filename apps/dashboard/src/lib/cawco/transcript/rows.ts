@@ -461,7 +461,9 @@ function compactionAt(
       kind: "compaction",
       key: `c:${keyOf(first, i)}`,
       session: first.instanceId,
-      brief: brief?.content ?? null,
+      // A summary the harness stored with no words in it (a compaction that
+      // was cut short) is no brief: the divider has nothing to open.
+      brief: brief?.content.trim() ? brief.content : null,
       preTokens: boundary?.metadata?.preTokens,
       trigger: boundary?.metadata?.trigger,
       timestamp: first.timestamp,
