@@ -36,6 +36,7 @@ final class MachineAuthStatusView: UIStackView {
         head.spacing = Space.space2
         head.alignment = .leading
         title.accessibilityTraits = .header
+        title.wrap = .balance
         buttonRow.addArrangedSubview(UIView())
         addArrangedSubview(head)
         addArrangedSubview(buttonRow)
@@ -63,6 +64,7 @@ final class MachineAuthStatusView: UIStackView {
     private func sayLine(_ text: String) {
         let label = KitLabel(TypeScale.typeLabel.withWeight(.regular), ink: Palette.mutedForeground, lines: 0)
         label.text = text
+        label.wrap = .pretty
         line.show(label)
     }
 
@@ -178,6 +180,7 @@ final class MachineLoginController: MachineAuthDialog, UITextFieldDelegate {
             glyph: .key
         )
         asking.text = "Asking \(machine.hostname) for a login link…"
+        asking.wrap = .pretty
         openLink = KitButton.make("Open the authorisation page", glyph: .external, variant: .action, height: .sm, stretch: true) { [weak self] in
             guard let url = self?.url else { return }
             UIApplication.shared.open(url)
@@ -188,6 +191,7 @@ final class MachineLoginController: MachineAuthDialog, UITextFieldDelegate {
         codeField.delegate = self
         codeField.returnKeyType = .go
         codeField.addAction(UIAction { [weak self] _ in self?.paintSubmit() }, for: .editingChanged)
+        problem.wrap = .pretty
         problem.isHidden = true
         let cancel = KitButton.make("Cancel", variant: .outline) { [weak self] in self?.dismiss(animated: true) }
         submit = KitButton.make("Log in", variant: .action) { [weak self] in self?.finish() }
@@ -324,6 +328,8 @@ final class UnlockKeychainController: MachineAuthDialog, UITextFieldDelegate {
         password.returnKeyType = .go
         password.addAction(UIAction { [weak self] _ in self?.submit.isEnabled = !(self?.password.text ?? "").isEmpty }, for: .editingChanged)
         note.text = "Sent over your tunnel to that machine, used once, and not stored anywhere."
+        note.wrap = .pretty
+        problem.wrap = .pretty
         problem.isHidden = true
         let cancel = KitButton.make("Cancel", variant: .outline) { [weak self] in self?.dismiss(animated: true) }
         submit = KitButton.make("Unlock", variant: .action) { [weak self] in self?.unlock() }

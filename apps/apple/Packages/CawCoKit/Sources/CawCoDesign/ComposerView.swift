@@ -134,6 +134,7 @@ public final class ComposerView: UIView, UITextViewDelegate {
         column.setCustomSpacing(Space.space3 + Space.space4 - Space.space2, after: prompts)
 
         error.isHidden = true
+        error.wrap = .pretty
         error.accessibilityTraits = .updatesFrequently
         let errorBox = UIView()
         errorBox.addSubview(error)

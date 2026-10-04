@@ -314,6 +314,7 @@ final class PeekController: ObservedViewController {
         let line = seam()
         line.translatesAutoresizingMaskIntoConstraints = false
         noteBox.addSubview(line)
+        note.wrap = .pretty
         inset(note, into: noteBox, top: 12 + 1, bottom: 12)
         NSLayoutConstraint.activate([
             line.topAnchor.constraint(equalTo: noteBox.topAnchor),
@@ -446,6 +447,7 @@ final class PeekController: ObservedViewController {
             let summary = ask.isQuestion ? "asked a question" : ask.summary
             let words = KitLabel(TypeScale.typeBody, ink: Palette.foreground, lines: 0)
             words.text = summary
+            words.wrap = .pretty
             let buttons = UIStackView()
             buttons.alignment = .center
             if ask.isQuestion {

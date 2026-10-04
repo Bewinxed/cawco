@@ -392,6 +392,7 @@ final class ProjectDocsView: UIStackView {
         let line = KitLabel(TypeScale.typeLabel.withWeight(.regular), ink: Palette.mutedForeground, lines: 0)
         line.text = "Add a README.md at the top of the checkout and it shows up here."
         line.textAlignment = .center
+        line.wrap = .pretty
         let stack = UIStackView(arrangedSubviews: [mark, title, line])
         stack.axis = .vertical
         stack.alignment = .center

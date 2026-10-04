@@ -84,8 +84,12 @@ public final class ConfirmSheetController: UIViewController {
         let description = KitLabel(TypeScale.typeLabel.with(weight: .regular), ink: Palette.inkMuted, lines: 0)
         description.text = body
         description.textAlignment = .center
+        // `text-balance` below `md` (alert-dialog-description.svelte): the sheet is the phone's layout.
+        description.wrap = .balance
         failure.isHidden = true
         failure.textAlignment = .center
+        // `p.failure` (cawco/ConfirmDialog.svelte).
+        failure.wrap = .pretty
         confirm = destructive
             ? KitButton.destructive(confirmLabel, stretch: true) { [weak self] in self?.accept() }
             : KitButton.make(confirmLabel, variant: .action, height: .lg, stretch: true) { [weak self] in self?.accept() }

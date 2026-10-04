@@ -15,9 +15,11 @@ public final class KitEmptyState: UIStackView {
         let mark = GlyphView(icon, size: 20, tint: Palette.inkMuted)
         let heading = KitLabel(TypeScale.typeTitle, ink: Palette.inkStrong, tracking: -0.01, lines: 0)
         heading.text = title
+        heading.wrap = .balance
         heading.accessibilityTraits = .header
         let why = KitLabel(TypeScale.typeBody, ink: Palette.inkMuted, lines: 0)
         why.text = line
+        why.wrap = .pretty
         // `60ch`: sixty of the body face's zeros.
         let zero = ("0" as NSString).size(withAttributes: [.font: TypeScale.typeBody.font]).width
         why.widthAnchor.constraint(lessThanOrEqualToConstant: zero * 60).isActive = true

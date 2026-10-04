@@ -55,6 +55,7 @@ final class MachineInventoryView: UIStackView {
     private func note(_ text: String) -> KitLabel {
         let label = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted, lines: 0)
         label.text = text
+        label.wrap = .pretty
         return label
     }
 

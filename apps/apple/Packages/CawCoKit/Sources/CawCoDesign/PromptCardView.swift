@@ -61,6 +61,7 @@ public final class PromptCardView: UIView {
             buildPermission(column)
         }
         wait.isHidden = true
+        wait.wrap = .pretty
         column.addArrangedSubview(wait)
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (card: PromptCardView, _: UITraitCollection) in
             card.paint()
@@ -126,6 +127,7 @@ public final class PromptCardView: UIView {
         let label = KitLabel(TypeScale.typeBody, ink: Palette.inkStrong, lines: 0)
         label.role = TypeRole(weight: TypeScale.typeBody.weight, size: TypeScale.typeBody.size, leading: TypeScale.leadingBody, family: TypeScale.typeBody.family)
         label.text = text
+        label.wrap = .pretty
         return label
     }
 

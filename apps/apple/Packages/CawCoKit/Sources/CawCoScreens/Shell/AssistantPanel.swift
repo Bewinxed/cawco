@@ -164,6 +164,7 @@ final class AssistantPanelView: UIView {
     private func note(_ text: String, ink: UIColor = Palette.inkMuted, role: TypeRole = TypeScale.typeBody, lines: Int = 0) -> KitLabel {
         let label = KitLabel(role, ink: ink, lines: lines)
         label.text = text
+        label.wrap = .pretty
         return label
     }
 

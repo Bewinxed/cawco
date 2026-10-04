@@ -61,6 +61,7 @@ final class TaskPanelView: UIStackView {
             guard let description = task.description, !description.isEmpty else { continue }
             let body = KitLabel(TypeScale.typeBody, ink: Palette.foreground, lines: 0)
             body.text = description
+            body.wrap = .pretty
             let box = UIView()
             body.translatesAutoresizingMaskIntoConstraints = false
             box.addSubview(body)

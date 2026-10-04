@@ -224,6 +224,7 @@ final class AddMachineController: KitDialogController {
             let mark = GlyphView(.passed, size: 20, tint: Palette.statusDoneInk)
             let said = KitLabel(TypeScale.typeBody, ink: Palette.statusDoneInk, lines: 0)
             said.text = "\(joinedName(join.job?.machineId)) joined the fleet."
+            said.wrap = .pretty
             let row = UIStackView(arrangedSubviews: [mark, said])
             row.spacing = 10
             row.alignment = .center
@@ -303,6 +304,7 @@ final class AddMachineController: KitDialogController {
         column.alignment = .leading
         if keyOpen, let info = join.info {
             let hint = KitLabel(TypeScale.typeMeta, ink: Palette.inkSubtle, lines: 0)
+            hint.wrap = .pretty
             if let key = info.sshPublicKey {
                 hint.text = "The machine has to accept this key: it goes in ~/.ssh/authorized_keys for the user you sign in as."
                 let box = CopyBox(text: key, label: "This hub's SSH public key")
@@ -336,6 +338,7 @@ final class AddMachineController: KitDialogController {
         guard let job = join.job else { return UIView() }
         let lead = KitLabel(TypeScale.typeBody, ink: Palette.inkMuted, lines: 0)
         lead.text = "Adding \(job.target). It keeps installing if you close this."
+        lead.wrap = .pretty
         let steps = job.lines.filter { $0.hasPrefix(Self.stepPrefix) }.map { String($0.dropFirst(Self.stepPrefix.count)) }
         let list = UIStackView()
         list.axis = .vertical
@@ -430,6 +433,7 @@ final class AddMachineController: KitDialogController {
     private func commandPane() -> UIView {
         let lead = KitLabel(TypeScale.typeBody, ink: Palette.inkMuted, lines: 0)
         lead.text = "Run this on the machine you want to add. It installs Bun if needed, clones CawCo and starts the agent."
+        lead.wrap = .pretty
         let column = UIStackView(arrangedSubviews: [addressField(), lead])
         column.axis = .vertical
         column.spacing = Space.space3

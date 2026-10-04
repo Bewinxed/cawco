@@ -207,6 +207,7 @@ final class ContextPopover: KitPopoverController {
     private func label(_ text: String, ink: UIColor = Palette.foreground, lines: Int = 1) -> KitLabel {
         let label = KitLabel(TypeScale.typeLabel, ink: ink, lines: lines)
         label.text = text
+        label.wrap = .pretty
         return label
     }
 

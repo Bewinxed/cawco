@@ -59,6 +59,7 @@ final class ProjectMemoryCard: TileView {
         rule.backgroundColor = Palette.border.withAlphaComponent(0.5)
         rule.heightAnchor.constraint(equalToConstant: 1).isActive = true
         footer.text = "This file is the repo's own — commit it to share it. Git is its sync; CawCo does not replicate it."
+        footer.wrap = .pretty
         let footerBox = UIStackView(arrangedSubviews: [footer])
         footerBox.isLayoutMarginsRelativeArrangement = true
         footerBox.directionalLayoutMargins = NSDirectionalEdgeInsets(top: Space.space2, leading: Space.space4, bottom: Space.space2, trailing: Space.space4)
@@ -203,6 +204,7 @@ final class ProjectMemoryCard: TileView {
     private func line(_ text: String) -> KitLabel {
         let label = KitLabel(TypeScale.typeMeta, ink: Palette.mutedForeground, lines: 2)
         label.text = text
+        label.wrap = .pretty
         return label
     }
 

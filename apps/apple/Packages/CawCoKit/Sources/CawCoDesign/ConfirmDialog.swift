@@ -63,6 +63,8 @@ public final class ConfirmDialog: UIViewController, UIViewControllerTransitionin
         title.text = titleText
         let description = KitLabel(TypeScale.typeLabel.withWeight(.regular), ink: Palette.mutedForeground, lines: 0)
         description.text = body
+        // `text-balance md:text-pretty` (alert-dialog-description.svelte).
+        description.wrap = UIScreen.main.bounds.width >= 768 ? .pretty : .balance
         description.isHidden = body == nil
         failure.font = TypeScale.typeBody.font
         failure.textColor = Palette.statusFailInk

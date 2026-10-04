@@ -330,6 +330,7 @@ public final class SessionDetailsController: ObservedViewController {
         // Identity: the title, the link, the harness's mark level with the first line.
         titleWrap.accessibilityTraits = .header
         titleWrap.lineBreakMode = .byTruncatingTail
+        titleWrap.wrap = .pretty
         let copyLink = KitGhostButton(.link, label: "Copy link")
         copyLink.addAction(UIAction { [weak self] _ in
             guard let self, let link else { return }
@@ -722,6 +723,7 @@ public final class SessionDetailsController: ObservedViewController {
         feedbackShown = key
         let label = KitLabel(TypeScale.typeBody.with(leading: TypeScale.leadingBody), ink: ink, lines: 0)
         label.text = text
+        label.wrap = .pretty
         var parts: [UIView] = [label]
         if check { parts.insert(GlyphView(.answer, size: 16, tint: Palette.statusDoneGlyph), at: 0) }
         let row = UIStackView(arrangedSubviews: parts)

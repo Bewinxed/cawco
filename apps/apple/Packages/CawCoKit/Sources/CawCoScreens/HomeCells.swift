@@ -164,6 +164,7 @@ final class NeedsCardCell: HomeCell {
     override init(frame: CGRect) {
         super.init(frame: frame)
         peek.addAction(UIAction { [weak self] _ in self?.onPeek() }, for: .touchUpInside)
+        ask.wrap = .pretty
         deny = KitButton.make("Deny", glyph: .close, glyphTint: Palette.inkMuted, variant: .secondary, height: .sm) { [weak self] in
             self?.onAnswer(.deny)
         }
@@ -1099,6 +1100,7 @@ final class NoteCell: HomeCell {
 
     override init(frame: CGRect) {
         super.init(frame: frame)
+        label.wrap = .pretty
         pin(label, insets: NSDirectionalEdgeInsets(top: Space.space1, leading: Space.space3, bottom: Space.space1, trailing: Space.space3))
     }
 }

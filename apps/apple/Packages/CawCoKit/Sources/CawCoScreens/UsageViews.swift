@@ -280,6 +280,7 @@ final class UsageSheetController: ObservedViewController {
     private static func line(_ text: String, mark: String?, ruled: Bool) -> UIView {
         let label = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted, lines: 0)
         label.text = text
+        label.wrap = .pretty
         let row = UIStackView(arrangedSubviews: (mark.map { [usageMark($0)] } ?? []) + [label])
         row.spacing = 6
         row.alignment = .center

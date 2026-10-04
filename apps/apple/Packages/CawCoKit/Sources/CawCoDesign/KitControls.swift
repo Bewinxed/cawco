@@ -160,6 +160,8 @@ public final class KitAlert: UIView {
         translatesAutoresizingMaskIntoConstraints = false
         layer.cornerRadius = Radius.radiusMd
         layer.cornerCurve = .continuous
+        // `text-pretty` (alert-description.svelte).
+        label.wrap = .pretty
         let (ground, ink): (UIColor, UIColor) = switch tone {
         case .plain: (Palette.surfaceRecess, Palette.inkStrong)
         case .destructive: (Palette.statusFailBg, Palette.statusFailInk)
