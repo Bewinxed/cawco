@@ -1175,8 +1175,10 @@
     position: relative;
   }
   /* A child's parent column: a click on the rail there folds the parent,
-     and the rail brightens under the pointer to say so. It reaches from a
-     step left of the rail to the row's own left edge. */
+     and the pointer's own cursor says so. It reaches from a step left of
+     the rail to the row's own left edge. It draws nothing: a bar that
+     darkened the rail under the pointer read as the line itself reacting,
+     and a nesting line never changes because the pointer is on it. */
   .gutter {
     position: absolute;
     inset-block: 0;
@@ -1187,23 +1189,6 @@
     border: 0;
     background: none;
     cursor: pointer;
-
-    &::before {
-      content: "";
-      position: absolute;
-      inset-block: 0;
-      left: calc(var(--space-2) - 1px);
-      inline-size: 3px;
-      border-radius: var(--radius-hair);
-      background: var(--ink-strong);
-      opacity: 0;
-      transition: opacity var(--dur-control) var(--ease-out);
-    }
-  }
-  @media (hover: hover) and (pointer: fine) {
-    .gutter:hover::before {
-      opacity: 0.3;
-    }
   }
   /* The old rows, out of the layout either way: the group's own height is
      only what stays, so the height drive holds it while they leave and then
