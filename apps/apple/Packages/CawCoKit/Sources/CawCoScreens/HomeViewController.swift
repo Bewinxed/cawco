@@ -62,6 +62,8 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
     private var rows: [String: RowLine] = [:]
     private var groups: [String: (group: HomeModel.MachineGroup, seam: Bool)] = [:]
     private var recentItems: [String: HomeModel.RecentItem] = [:]
+    /// Everything Recent lists, before the search narrows it.
+    private var recentAll: [HomeModel.RecentItem] = []
     /// A cell is under the finger; `pending` is the snapshot waiting for it to lift.
     private var pressed = false
     private var pending: (snapshot: NSDiffableDataSourceSnapshot<Section, Item>, animated: Bool)?
@@ -263,7 +265,7 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
         }
         let recentHead = UICollectionView.CellRegistration<RecentHeadCell, Item> { [weak self] cell, _, _ in
             guard let self else { return }
-            cell.configure(count: home.recent.count, open: home.recentOpen)
+            cell.configure(count: recentAll.count, open: home.recentOpen)
         }
         let recentSearch = UICollectionView.CellRegistration<SearchCell, Item> { [weak self] cell, _, _ in
             guard let self else { return }
@@ -356,8 +358,9 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
             snapshot.appendItems(needList.map { .need($0.id) }, toSection: .needs)
         }
 
-        let working = home.rows(.working)
-        let finished = home.rows(.finished)
+        let board = home.board
+        let working = board.working
+        let finished = board.finished
         counts = (working.count, finished.count, finished.contains(where: \.isFailed))
         rows = [:]
         groups = [:]
@@ -365,7 +368,7 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
             snapshot.appendSections([.work])
             var items: [Item] = [.tabs]
             var filledBefore = false
-            for group in home.groups(home.tab) {
+            for group in board.groups {
                 let filled = !group.lines.isEmpty
                 groups[group.machineId] = (group, filled && filledBefore)
                 filledBefore = filledBefore || filled
@@ -385,7 +388,8 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
             snapshot.appendItems(items, toSection: .work)
         }
 
-        let recent = home.recent
+        let recent = board.recent
+        recentAll = recent
         if live, needList.isEmpty, working.isEmpty, finished.isEmpty, recent.isEmpty {
             // Caw only on a fleet with nothing in it yet, or while a machine has not answered.
             let waiting = home.waitingOn
@@ -406,7 +410,7 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
             var items: [Item] = [.recentHead]
             if home.recentOpen {
                 items.append(.recentSearch)
-                let matches = recentMatches(recent)
+                let matches = recentMatches()
                 for item in matches.prefix(recentShown) {
                     recentItems[item.id] = item
                     items.append(.recent(item.id))
@@ -422,13 +426,13 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
         return snapshot
     }
 
-    private func recentMatches(_ recent: [HomeModel.RecentItem]? = nil) -> [HomeModel.RecentItem] {
-        let all = recent ?? home.recent
+    /// What the last update listed in Recent, narrowed by the search.
+    private func recentMatches() -> [HomeModel.RecentItem] {
         let needle = search.trimmingCharacters(in: .whitespaces).lowercased()
         guard !needle.isEmpty else {
-            return all
+            return recentAll
         }
-        return all.filter { $0.title.lowercased().contains(needle) || $0.place.lowercased().contains(needle) }
+        return recentAll.filter { $0.title.lowercased().contains(needle) || $0.place.lowercased().contains(needle) }
     }
 
     /// Applies `next`, the lines that stay reconfigured in place (their cells

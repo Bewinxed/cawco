@@ -335,17 +335,29 @@ public final class HomeModel {
     }
 
     /// Everything else that can be opened: idle and sleeping sessions, and the stored transcripts.
-    public var recent: [RecentItem] {
+    private func recent(working: [InstanceRow], finished: [InstanceRow]) -> [RecentItem] {
         var shown = Set(working.map(\.id))
         shown.formUnion(finished.map(\.id))
         shown.formUnion(needs.compactMap(\.instanceId))
+        // Thousands of transcripts stand in a handful of folders: each
+        // folder's place is worked out once.
+        var places: [String: String] = [:]
+        func place(_ machineId: String, _ cwd: String?) -> String {
+            let key = "\(machineId)\n\(cwd ?? "")"
+            if let known = places[key] {
+                return known
+            }
+            let named = fleet.placeOf(machineId, cwd)
+            places[key] = named
+            return named
+        }
         let live = fleet.rows.filter { row in
             (delegates || row.parentInstanceId == nil) && row.isListed && !shown.contains(row.id)
                 && (activity(row.id) == .idle || row.isResumable || row.isStale || row.isFailed)
         }.map { row in
             RecentItem(
                 id: row.id, instance: row, markPlace: row.cwd.isEmpty ? row.machineId : row.cwd,
-                machineId: row.machineId, title: fleet.title(row), place: fleet.placeOf(row.machineId, row.cwd), at: fleet.lastAt(row)
+                machineId: row.machineId, title: fleet.title(row), place: place(row.machineId, row.cwd), at: fleet.lastAt(row)
             )
         }
         let running = Set(fleet.rows.filter(\.isListed).compactMap(\.sessionId))
@@ -357,7 +369,7 @@ public final class HomeModel {
                     markPlace: info.cwd ?? machine.machineId,
                     machineId: machine.machineId,
                     title: storedTitle(info, machineId: machine.machineId),
-                    place: fleet.placeOf(machine.machineId, info.cwd),
+                    place: place(machine.machineId, info.cwd),
                     at: info.lastModified
                 )
             }
@@ -368,8 +380,8 @@ public final class HomeModel {
     }
 
     private func storedTitle(_ info: StoredSession, machineId: String) -> String {
-        let row = fleet.rows
-            .filter { $0.sessionId == info.sessionId && $0.machineId == machineId && $0.cwd == info.cwd }
+        let row = (fleet.bySession[info.sessionId] ?? [])
+            .filter { $0.machineId == machineId && $0.cwd == info.cwd }
             .max { $0.updatedMs < $1.updatedMs }
         let named = (row?.titleSource != nil ? row?.title : nil) ?? info.customTitle ?? info.summary
         return Naming.sessionTitle(title: named, firstMessage: info.firstPrompt, cwd: info.cwd, id: info.sessionId)
@@ -398,7 +410,10 @@ public final class HomeModel {
     /// A tab's own rows: delegates under a listed parent fold into its count;
     /// one whose parent the tab does not list only with the switch on, or when it failed.
     public func rows(_ tab: Tab) -> [InstanceRow] {
-        let rows = all(tab)
+        rows(of: all(tab))
+    }
+
+    private func rows(of rows: [InstanceRow]) -> [InstanceRow] {
         if delegates {
             return rows
         }
@@ -407,7 +422,36 @@ public final class HomeModel {
     }
 
     public func lines(_ tab: Tab) -> [TreeLine<InstanceRow>] {
-        tree(rows(tab), anchor: tab == .working ? .last : .first, context: { self.fleet.byId[$0] })
+        lines(tab, rows: rows(tab))
+    }
+
+    private func lines(_ tab: Tab, rows: [InstanceRow]) -> [TreeLine<InstanceRow>] {
+        tree(rows, anchor: tab == .working ? .last : .first, context: { self.fleet.byId[$0] })
+    }
+
+    /// What Home lists, read together: each tab is sorted once, and the
+    /// groups and Recent are drawn from those same rows. Home redraws on
+    /// every pulse, so its lists are not each worked out from the fleet.
+    public struct Board {
+        /// Each tab's own rows (`rows(_:)`).
+        public let working: [InstanceRow]
+        public let finished: [InstanceRow]
+        /// The chosen tab's lines by machine, each session followed by its delegates.
+        public let groups: [MachineGroup]
+        public let recent: [RecentItem]
+    }
+
+    public var board: Board {
+        let working = working
+        let finished = finished
+        let workingRows = rows(of: working)
+        let finishedRows = rows(of: finished)
+        return Board(
+            working: workingRows,
+            finished: finishedRows,
+            groups: groups(tab, lines: lines(tab, rows: tab == .working ? workingRows : finishedRows)),
+            recent: recent(working: working, finished: finished)
+        )
     }
 
     public struct Line: Identifiable {
@@ -435,8 +479,7 @@ public final class HomeModel {
 
     /// A tab's lines by machine, each session followed by its delegates under
     /// the machine its top-level session runs on, capped at `moreAt` trees.
-    public func groups(_ tab: Tab) -> [MachineGroup] {
-        let lines = lines(tab)
+    private func groups(_ tab: Tab, lines: [TreeLine<InstanceRow>]) -> [MachineGroup] {
         let visible = collapse(lines) { self.openTrees.contains($0) }
         var order: [String] = []
         var byMachine: [String: [TreeLine<InstanceRow>]] = [:]

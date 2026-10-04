@@ -192,7 +192,7 @@ final class ProjectViewController: ObservedViewController {
         let shown = showMore ? stored : Array(stored.prefix(Self.storedFirst))
         for info in shown {
             let view = SessionRowView()
-            let title = fleet.storedTitle(sessionKey: info.sessionId, machineId: project.machineId) ?? info.sessionId
+            let title = fleet.storedTitle(info)
             view.configure(.init(id: info.sessionId, place: info.cwd ?? project.cwd, status: .idle, title: title))
             let id = fleet.conversationId(sessionKey: info.sessionId, machineId: project.machineId, cwd: info.cwd)
             sessions.addArrangedSubview(tappable(view) { [weak self] in self?.context.openSession(id) })

@@ -90,7 +90,7 @@ struct JumpIndex {
         var titles: [String: String] = [:]
         for machine in fleet.machines {
             for (i, info) in fleet.catalog(machine.machineId).enumerated() {
-                let title = fleet.storedTitle(sessionKey: info.sessionId, machineId: machine.machineId) ?? info.sessionId
+                let title = fleet.storedTitle(info)
                 titles[info.sessionId] = title
                 let to = fleet.conversationId(sessionKey: info.sessionId, machineId: machine.machineId, cwd: info.cwd)
                 guard !destinations.contains(to) else { continue }

@@ -189,6 +189,10 @@ public final class FleetStore {
     public internal(set) var liveRead = false
 
     public internal(set) var byId: [String: InstanceRow] = [:]
+    /// The session rows by the harness session each runs, in `rows` order.
+    /// A stored transcript is matched to its rows here: the lists that walk
+    /// every catalog entry would otherwise scan every row for each one.
+    public private(set) var bySession: [String: [InstanceRow]] = [:]
 
     init() {}
 
@@ -229,6 +233,13 @@ public final class FleetStore {
             index[row.id] = row
         }
         byId = index
+        var sessions: [String: [InstanceRow]] = [:]
+        for row in rows {
+            if let key = row.sessionId {
+                sessions[key, default: []].append(row)
+            }
+        }
+        bySession = sessions
     }
 
     /// A step's session hangs under its run, called by its step alone: the hub
@@ -320,15 +331,19 @@ public final class FleetStore {
     /// links.ts `conversationHref`: a known instance's id, otherwise the
     /// stored transcript's bare session key. There is no machine-prefixed id.
     public func conversationId(sessionKey: String, machineId: String, cwd: String?) -> String {
-        let candidates = rows.filter { $0.sessionId == sessionKey }
+        let candidates = bySession[sessionKey] ?? []
         let located = candidates.filter { $0.machineId == machineId && $0.cwd == (cwd ?? "") }
         let eligible = located.isEmpty ? candidates : located
         return eligible.sorted { $0.updatedMs != $1.updatedMs ? $0.updatedMs > $1.updatedMs : $0.id < $1.id }.first?.id ?? sessionKey
     }
 
     public func storedTitle(sessionKey: String, machineId: String) -> String? {
-        guard let info = catalogs[machineId]?.first(where: { $0.sessionId == sessionKey }) else { return nil }
-        return Naming.sessionTitle(title: info.customTitle ?? info.summary, firstMessage: info.firstPrompt, cwd: info.cwd, id: info.sessionId)
+        catalogs[machineId]?.first(where: { $0.sessionId == sessionKey }).map(storedTitle)
+    }
+
+    /// A stored transcript's own title.
+    public func storedTitle(_ info: StoredSession) -> String {
+        Naming.sessionTitle(title: info.customTitle ?? info.summary, firstMessage: info.firstPrompt, cwd: info.cwd, id: info.sessionId)
     }
 
     /// When a session last moved: its pulse, else the hub's own update time. A run's is when it last moved.
