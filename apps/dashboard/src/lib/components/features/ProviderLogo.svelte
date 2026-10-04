@@ -107,10 +107,18 @@
 {/if}
 
 <style>
-  /* The descendants too: `github-icon` sets its fill on the path, and a
-     presentation attribute loses to any rule that matches. */
+  /* The ink is the mark's `color`, and its shapes fill with `currentColor`.
+     `--ink-strong` is a `light-dark()` value, and WebKit resolved that
+     function wrongly inside an SVG `fill` (bugs.webkit.org 283489), which
+     left these marks in the light theme's ink on the dark ground. `color`
+     takes the same token the way every line of text does. The descendants
+     too: `github-icon` sets its fill on the path, and a presentation
+     attribute loses to any rule that matches. */
+  :global(svg.provider-ink) {
+    color: var(--ink-strong);
+  }
   :global(svg.provider-ink),
   :global(svg.provider-ink *) {
-    fill: var(--ink-strong);
+    fill: currentColor;
   }
 </style>
