@@ -79,7 +79,7 @@
     gliding = openId !== null && openId !== id;
     place = {
       x: Math.round((rail?.right ?? box.right) + 4),
-      y: Math.round(Math.min(Math.max(8, box.top), innerHeight - 160)),
+      y: Math.round(box.top),
       origin: Math.round(box.height / 2),
     };
     openId = id;

@@ -225,12 +225,13 @@
       block-size: 4px;
     }
   }
-  /* Beside a list: level with its row, in the viewport. */
+  /* Beside a list: level with its row, pulled back inside the viewport by
+     its own height (the 100%), 8px clear of either edge. */
   .panel.right {
     position: fixed;
     inset-block-start: 0;
     inset-inline-start: var(--x);
-    translate: 0 var(--y);
+    translate: 0 clamp(8px, var(--y), calc(100dvh - 100% - 8px));
     transform-origin: 0 var(--origin);
     z-index: 40;
 
