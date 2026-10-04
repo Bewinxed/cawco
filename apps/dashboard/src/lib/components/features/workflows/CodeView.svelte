@@ -115,10 +115,7 @@
     ".cm-cursor": { borderLeftColor: "var(--ink-strong)" },
     ".cm-selectionBackground, &.cm-focused .cm-selectionBackground, ::selection":
       {
-        // By day the active line is surface-fill's own step, so a selection
-        // is told from it by hue: the app's selected tint (muted ink on it
-        // is 4.51:1, strong 10.20:1). By night it keeps surface-fill.
-        backgroundColor: "light-dark(var(--selected-bg), var(--surface-fill))",
+        backgroundColor: "var(--surface-fill)",
       },
     ".cm-lintRange-error": {
       backgroundImage: "none",
