@@ -538,7 +538,9 @@
       w,
       room,
       dx: more.offsetLeft - x,
-      tall: fan.scrollHeight > room,
+      // The stack's own height: the fan's scroll height also counts the
+      // folded chips, which stand a chip below it.
+      tall: (fan.firstElementChild as HTMLElement).offsetHeight > room,
     };
   }
   // The row changed (a chip came or went, the window resized): "+N" stands
@@ -555,11 +557,14 @@
     measureFan();
     fanOpen = true;
     fanPinned = pin || fanPinned;
-    // A fan taller than its room opens at "+N", its nearest chips.
-    if (fan && fanBox.tall) {
+  }
+  // A fan taller than its room opens at "+N", on its nearest chips: once
+  // it is open, which is when it scrolls.
+  $effect(() => {
+    if (fanOpen && fanBox.tall && fan) {
       fan.scrollTop = fan.scrollHeight;
     }
-  }
+  });
   function closeFan(): void {
     // Focus inside the fan goes back to "+N" as the fan folds into it.
     if (fan?.contains(document.activeElement)) {
