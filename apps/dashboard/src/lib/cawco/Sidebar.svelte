@@ -995,7 +995,7 @@
       </Sidebar.Menu>
     </Sidebar.Group>
     {#if !narrow}
-      <Home active variant="rail" />
+      <Home variant="rail" />
     {/if}
 
     <!-- The groups built from the fleet come in together, once every read

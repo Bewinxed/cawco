@@ -1,9 +1,9 @@
 /**
- * The New Session dialog the rail opens: whether it is open, and where it
- * starts. The Shell mounts the one dialog; the rail's rows only ask for it,
- * so it is there whichever rail is mounted (the wide screen's, the drawer's)
- * and when neither is, and what is typed in it outlives the rail it was
- * opened from.
+ * The New Session dialog: whether it is open, and where it starts. The Shell
+ * mounts the one dialog; every opener (the rail's rows, the phone's Start
+ * session, a `?spawn=` link) only asks for it, so it is there whichever rail
+ * is mounted (the wide screen's, the drawer's) and when neither is, and what
+ * is typed in it outlives the place it was opened from.
  */
 export interface SpawnPrefill {
   cwd?: string;

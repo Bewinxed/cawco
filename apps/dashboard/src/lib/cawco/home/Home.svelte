@@ -11,16 +11,13 @@
    * Then the rows stay as last known and greyed, there is no headline and
    * no Caw, and the status line says the hub is gone.
    */
-  import { untrack } from "svelte";
   import { TextMorph } from "torph/svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import { IconPlus } from "#lib/icons.js";
-  import { goto } from "$app/navigation";
-  import { page } from "$app/state";
   import Attention from "~icons/solar/hand-shake-bold-duotone";
   import { crossIn, crossOut, morphMs } from "../motion/curves.svelte";
   import { reflow } from "../motion/rows.svelte";
-  import NewSessionDialog from "../spawn/NewSessionDialog.svelte";
+  import { newSession } from "../spawn/new-session.svelte";
   import UsageMeter from "../UsageMeter.svelte";
   import Caw from "./Caw.svelte";
   import HomeRecent from "./HomeRecent.svelte";
@@ -31,12 +28,9 @@
 
   let {
     variant,
-    active,
   }: {
     /** `page` is the phone's home; `rail` is the wide screen's sidebar. */
     variant: "page" | "rail";
-    /** Whether this home is the one on screen (it answers `?spawn=`). */
-    active: boolean;
   } = $props();
 
   const stale = $derived(!home.live);
@@ -87,42 +81,6 @@
     }
     return "Your sessions will land here.";
   });
-
-  /* ── Start session ──────────────────────────────────────────────────── */
-
-  let spawnOpen = $state(false);
-  let spawnPrefill = $state<{ machineId?: string; cwd?: string } | undefined>(
-    undefined
-  );
-
-  // "Spawn here" from anywhere in the app arrives as `?spawn=<machine>` on
-  // `/session`; consumed once and cleared, so a reload is not a second spawn.
-  $effect(() => {
-    if (!active) {
-      return;
-    }
-    const machineId = page.url.searchParams.get("spawn");
-    if (!machineId) {
-      return;
-    }
-    untrack(() => {
-      spawnPrefill = {
-        machineId,
-        cwd: page.url.searchParams.get("cwd") ?? undefined,
-      };
-      spawnOpen = true;
-      const url = new URL(page.url.href);
-      url.searchParams.delete("spawn");
-      url.searchParams.delete("cwd");
-      // biome-ignore lint/complexity/noVoid: the dialog is already open; the URL cleanup is a courtesy
-      void goto(url, { replace: true });
-    });
-  });
-
-  function start() {
-    spawnPrefill = undefined;
-    spawnOpen = true;
-  }
 </script>
 
 <!-- Every state change here travels (motion/rows `reflow`): a request
@@ -186,7 +144,12 @@
       </section>
     {/if}
 
-    <WorkTabs onstart={start} {stale} waiting={!home.ready} bind:relaying />
+    <WorkTabs
+      onstart={() => newSession()}
+      {stale}
+      waiting={!home.ready}
+      bind:relaying
+    />
 
     {#if cawThere}
       <!-- Caw only on a fleet with nothing in it yet, or while a machine
@@ -224,21 +187,13 @@
   {#if variant === "page"}
     <!-- The phone's thumb reaches the bottom; Start session lives there. -->
     <div class="dock">
-      <Button class="w-full" onclick={start} size="lg">
+      <Button class="w-full" onclick={() => newSession()} size="lg">
         <IconPlus />
         Start session
       </Button>
     </div>
   {/if}
 </section>
-
-<NewSessionDialog
-  onclose={() => {
-    spawnOpen = false;
-  }}
-  open={spawnOpen}
-  prefill={spawnPrefill}
-/>
 
 <style>
   .home {

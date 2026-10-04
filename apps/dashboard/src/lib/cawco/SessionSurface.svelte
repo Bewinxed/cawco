@@ -540,7 +540,7 @@
     class:hidden-surface={boardHidden}
   >
     {#if homePage}
-      <Home active={onBoard && shown} variant="page" />
+      <Home variant="page" />
     {/if}
   </div>
 

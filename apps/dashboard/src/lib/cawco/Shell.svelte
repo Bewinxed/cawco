@@ -38,7 +38,7 @@
   } from "#lib/icons.js";
   import { isTyping } from "#lib/utils/typing.js";
   import { browser } from "$app/env";
-  import { onNavigate } from "$app/navigation";
+  import { goto, onNavigate } from "$app/navigation";
   import { page } from "$app/state";
   import AddMachineDialog from "./AddMachineDialog.svelte";
   import AssistantOrb from "./assistant/AssistantOrb.svelte";
@@ -310,6 +310,25 @@
   }
 
   const onSession = $derived(page.url.pathname.startsWith("/session"));
+  // "Spawn here" from anywhere in the app arrives as `?spawn=<machine>`;
+  // consumed once and cleared, so a reload is not a second spawn.
+  $effect(() => {
+    const machineId = page.url.searchParams.get("spawn");
+    if (!machineId) {
+      return;
+    }
+    untrack(() => {
+      newSession({
+        machineId,
+        cwd: page.url.searchParams.get("cwd") ?? undefined,
+      });
+      const url = new URL(page.url.href);
+      url.searchParams.delete("spawn");
+      url.searchParams.delete("cwd");
+      // biome-ignore lint/complexity/noVoid: the dialog is already open; the URL cleanup is a courtesy
+      void goto(url, { replace: true });
+    });
+  });
   /**
    * The session surface (board, groups, panes) is mounted the first time a
    * `/session` page shows and never again after that: under another spoke it
@@ -895,8 +914,9 @@
   <ConfirmDialog />
   <!-- One Connect a machine dialog for every entry that adds one (join/join.svelte.ts). -->
   <AddMachineDialog />
-  <!-- One New Session dialog for the rail's rows and every session menu's
-       Continue (spawn/new-session, continue.svelte.ts). -->
+  <!-- One New Session dialog for every opener (the rail's rows, the phone's
+       Start session, a `?spawn=` link) and every session menu's Continue
+       (spawn/new-session, continue.svelte.ts). -->
   <NewSessionDialog
     continueFrom={continuing.source ?? undefined}
     onclose={() => {

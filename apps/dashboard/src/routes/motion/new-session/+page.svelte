@@ -1,31 +1,21 @@
 <script lang="ts">
-  import NewSessionDialog from "#lib/cawco/spawn/NewSessionDialog.svelte";
+  import { onMount } from "svelte";
+  import { newSession } from "#lib/cawco/spawn/new-session.svelte.js";
   import { page } from "$app/state";
 
-  let dialogOpen = $state(true);
+  /** The bench opens the Shell's one dialog, on `?projectId=` when given. */
+  function open() {
+    const projectId = page.url.searchParams.get("projectId");
+    newSession(projectId ? { projectId } : undefined);
+  }
+  onMount(open);
 </script>
 
 <svelte:head><title>New session | CawCo</title></svelte:head>
 <main>
   <h1>New session</h1>
-  <button
-    onclick={() => {
-      dialogOpen = true;
-    }}
-    type="button"
-  >
-    New session
-  </button>
+  <button onclick={open} type="button">New session</button>
 </main>
-<NewSessionDialog
-  onclose={() => {
-    dialogOpen = false;
-  }}
-  open={dialogOpen}
-  prefill={page.url.searchParams.has("projectId")
-    ? { projectId: page.url.searchParams.get("projectId") ?? undefined }
-    : undefined}
-/>
 
 <style>
   main {
