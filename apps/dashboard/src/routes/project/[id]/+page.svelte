@@ -7,6 +7,7 @@
    */
   import { flushSync, tick, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
+  import { toast } from "svelte-sonner";
   import type { InstanceRow, ProjectRow } from "#lib/cawco/client.svelte.js";
   import {
     cawco,
@@ -423,7 +424,7 @@
     showMore ? stored : stored.slice(0, STORED_FIRST)
   );
 
-  function startSession(scratch: boolean) {
+  async function startSession(scratch: boolean) {
     if (!project) {
       return;
     }
@@ -434,17 +435,25 @@
     // that same model.
     const level = spawnPrefs.effort;
     const prompt = spawnPrompt.trim() || undefined;
-    const instanceId = spawnSession({
-      machineId: project.machineId,
-      cwd: project.cwd,
-      projectId: project.id,
-      permissionMode: perm,
-      harness: spawnPrefs.harness,
-      model: mod,
-      effort: level ?? undefined,
-      prompt,
-      scratch: scratch ? {} : undefined,
-    });
+    // The page leaves for the session only once the hub has taken the spawn;
+    // one it refuses stays here, with the hub's reason.
+    let instanceId: string;
+    try {
+      instanceId = await spawnSession({
+        machineId: project.machineId,
+        cwd: project.cwd,
+        projectId: project.id,
+        permissionMode: perm,
+        harness: spawnPrefs.harness,
+        model: mod,
+        effort: level ?? undefined,
+        prompt,
+        scratch: scratch ? {} : undefined,
+      });
+    } catch (error) {
+      toast.error(message(error));
+      return;
+    }
     rememberSpawn({
       harness: spawnPrefs.harness,
       model: mod,

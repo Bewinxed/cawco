@@ -675,6 +675,13 @@ interface Waiter {
 /** Control calls awaiting their `control_result`, keyed by the SDK `requestId`. */
 const inflight = new Map<string, Waiter>();
 
+/**
+ * Spawns the hub has not answered yet: the request each waits on, by the
+ * instance it asked for. The hub refuses one with an error frame under that
+ * request, and takes one by opening its row ({@link spawnSession}).
+ */
+const opening = new Map<string, string>();
+
 /** The newest-page read in flight per view: a second ask joins it. */
 const pageReads = new Map<string, Promise<TranscriptOutcome>>();
 
@@ -2092,6 +2099,13 @@ function handleFrame(frame: FramePayload): void {
     } else {
       patchInstances(frame.upserts, frame.removed);
     }
+    // A spawn the hub took is answered by the row it opened.
+    for (const [id, requestId] of opening) {
+      if (instanceIndex.byId.has(id)) {
+        opening.delete(id);
+        settle(requestId, (waiter) => waiter.resolve(undefined));
+      }
+    }
     // The hub's now-state for every session it lists (C3), so a freshly-opened
     // dashboard knows working/blocked/idle at once instead of waiting for the
     // next per-instance `pulse` frame. Structural read, same as `handoffs` and
@@ -3444,7 +3458,15 @@ function bind(socket: WebSocket): void {
     if (envelope.verb !== "frames") {
       return;
     }
-    handleFrame(envelope.payload);
+    const { payload } = envelope;
+    // The hub's own refusal names the request it answers on the envelope
+    // alone: read from the payload only, it settled nothing, and whoever
+    // asked waited out the timeout while the reason went to the console.
+    handleFrame(
+      payload.kind === "error" && !payload.requestId
+        ? { ...payload, requestId: envelope.requestId }
+        : payload
+    );
     sweepOnTraffic();
   };
 
@@ -3606,21 +3628,30 @@ function start({
   const instanceId = newId();
   const payload = explicit(machineId, { instanceId, ...spawn });
   send({ verb: "spawn", machineId, instanceId, payload });
+  return opened(machineId, payload);
+}
 
-  const created = session(instanceId);
+/** The view a spawn that has gone out streams into. */
+function opened(machineId: string, payload: SpawnPayload): SessionState {
+  const created = session(payload.instanceId);
   created.machineId = machineId;
-  created.cwd = spawn.cwd;
-  created.harness = spawn.harness ?? "claude";
+  created.cwd = payload.cwd;
+  created.harness = payload.harness ?? "claude";
   created.permissionMode = payload.permissionMode ?? null;
   // What was sent, so the header shows it during the wait for the first
   // init — which then corrects it to whatever the harness resolved it to.
   created.model = payload.model ?? null;
-  created.scratch = Boolean(spawn.scratch);
+  created.scratch = Boolean(payload.scratch);
   return created;
 }
 
-/** Starts a session on `machineId` and returns the id its route lives at. */
-export function spawnSession({
+/**
+ * Starts a session on `machineId` and returns the id its route lives at, once
+ * the hub has taken the spawn: its row is open. A spawn the hub refuses throws
+ * the hub's reason, and nothing of it is kept here: no view, no first prompt
+ * sent, no id for a caller to navigate to.
+ */
+export async function spawnSession({
   machineId,
   cwd,
   prompt,
@@ -3642,9 +3673,11 @@ export function spawnSession({
   scratch?: SpawnPayload["scratch"];
   bootstrap?: SpawnPayload["bootstrap"];
   projectId?: string;
-}): string {
-  const created = start({
-    machineId,
+}): Promise<string> {
+  const instanceId = newId();
+  const requestId = newId();
+  const payload = explicit(machineId, {
+    instanceId,
     cwd,
     harness,
     permissionMode,
@@ -3654,6 +3687,20 @@ export function spawnSession({
     bootstrap,
     projectId,
   });
+  try {
+    await ask<void>(
+      requestId,
+      "Starting the session",
+      CONTROL_TIMEOUT_MS,
+      () => {
+        opening.set(instanceId, requestId);
+        send({ verb: "spawn", machineId, instanceId, requestId, payload });
+      }
+    );
+  } finally {
+    opening.delete(instanceId);
+  }
+  const created = opened(machineId, payload);
   if (prompt?.trim()) {
     // Followed before its first prompt goes, on the socket that carries it:
     // that send's record is among the first frames the session's stream

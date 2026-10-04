@@ -329,9 +329,28 @@
     }
     return "";
   });
+  /**
+   * The model a start names: the picked entry, or the machine's default by
+   * the model it resolves to. Unknown while the machine's models are still
+   * being read, and when it names its default no more precisely than
+   * "default"; a start then would name none, and the hub refuses that.
+   */
+  const startModel = $derived(selected?.id ?? model);
+  const modelUnknown = $derived(startModel === "" || startModel === "default");
+  const modelReading = $derived.by(() => {
+    if (!(modelUnknown && machineIds.length)) {
+      return "";
+    }
+    return entries.length
+      ? "Choose a model for this session."
+      : `Reading the models on ${machine?.hostname ?? machineId}…`;
+  });
   const reading = $derived(
     cawco.hub === "connected"
-      ? error || locationReading || (locationUnverified ? "Reading…" : "")
+      ? error ||
+          locationReading ||
+          (locationUnverified ? "Reading…" : "") ||
+          modelReading
       : "No spawn while the hub is unreachable. Reconnect to continue."
   );
   const locationInformational = $derived(
@@ -388,6 +407,7 @@
       Boolean(offlineMachine) ||
       unreadable ||
       locationUnverified ||
+      modelUnknown ||
       (repo !== undefined && !REPO.test(repo.trim()))
   );
   /** The source as the prompt's opening chip; a session title is often its first prompt, so it is cut short. */
@@ -639,7 +659,7 @@
     if (unreadable || offlineMachine) {
       return locationReading;
     }
-    return locationUnverified ? "Reading…" : "";
+    return locationUnverified ? "Reading…" : modelReading;
   }
   function close() {
     submission += 1;
@@ -805,7 +825,7 @@
   function shownModel(draft: SessionDraft): string {
     return draft.usedModel === "default" ? "" : draft.usedModel;
   }
-  function spawnOne(target: string, draft: SessionDraft): string {
+  function spawnOne(target: string, draft: SessionDraft): Promise<string> {
     const toAttach =
       draft.projectId && cawco.project(draft.projectId)?.machineId === target
         ? draft.projectId
@@ -872,9 +892,13 @@
         }
         // Every machine gets spawned; `first` only remembers which one to
         // open. `first ||= spawnOne(…)` short-circuited after machine one, so
-        // "Start 3 sessions" started exactly one.
-        const spawned = spawnOne(target, draft);
+        // "Start 3 sessions" started exactly one. Each waits for the hub's
+        // answer: one it refuses throws its reason, and nothing navigates.
+        const spawned = await spawnOne(target, draft);
         first ||= spawned;
+      }
+      if (!current()) {
+        return;
       }
       recordModelUse(draft.harness, draft.usedModel);
       rememberSpawn({
