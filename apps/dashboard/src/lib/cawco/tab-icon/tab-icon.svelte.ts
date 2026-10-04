@@ -3,21 +3,22 @@
  * see of CawCo while another tab is in front (favicon.now/guides/
  * animated-favicon: "Short-lived progress, recording, or urgent-state
  * indicators can be useful when the tab is backgrounded"). It is Caw's head
- * on a rounded tile, and it moves only for what the operator has to look at
- * (owner: "it shouldn't animate if there's nothing the USER has to pay
- * attention to"):
+ * on a rounded butter tile, and it moves only for what the operator has to
+ * look at (owner: "it shouldn't animate if there's nothing the USER has to
+ * pay attention to"):
  *
- * - something needs the operator (the home's Needs you): his pleading head
- *   bobs on a vermilion tile, the one state that moves;
- * - else something is working: his head, awake, still on butter;
- * - else his head asleep, still on butter: the icon the page is served with.
+ * - something needs the operator (the home's Needs you): Caw waves a wing at
+ *   them beside his head (owner: "like hey pay attention"), the one state
+ *   that moves;
+ * - else something is working: his head, awake, still;
+ * - else his head asleep, still: the icon the page is served with.
  *
  * Every picture is drawn ahead from Caw's own files by `bun run tab-icon`,
  * so the page draws nothing and loads no Rive for its icon. A still runs
  * nothing at all: no clock, no canvas ("always restore the canonical
  * favicon", same guide). Under Reduced Motion every state is its still.
  *
- * Moving is swapping the icon's href between the bob's drawings ("JavaScript
+ * Moving is swapping the icon's href between the wave's drawings ("JavaScript
  * can swap icon URLs", same guide; css-tricks.com/the-making-of-an-animated-
  * favicon assigns a PNG data URL as the href), 12 times a second: the pace
  * his loops are held at, on twos, so no drawing of his is skipped and none is
@@ -28,7 +29,7 @@
  */
 import { untrack } from "svelte";
 import needsYouStill from "#lib/assets/brand/tab-icon-needs-you.png";
-import needsYouBob from "#lib/assets/brand/tab-icon-needs-you-bob.png";
+import needsYouWave from "#lib/assets/brand/tab-icon-needs-you-wave.png";
 import sleepingStill from "#lib/assets/brand/tab-icon-sleeping.png";
 import workingStill from "#lib/assets/brand/tab-icon-working.png";
 import { home } from "../home/home-state.svelte";
@@ -58,14 +59,14 @@ function doing(): Doing {
 }
 
 /**
- * The bob's drawings, each a PNG data URL: its strip of square drawings cut
+ * The wave's drawings, each a PNG data URL: its strip of square drawings cut
  * up once, the first time something needs the operator.
  */
-let bob: Promise<string[]> | undefined;
-function bobDrawings(): Promise<string[]> {
-  bob ??= (async () => {
+let wave: Promise<string[]> | undefined;
+function waveDrawings(): Promise<string[]> {
+  wave ??= (async () => {
     const strip = new Image();
-    strip.src = needsYouBob;
+    strip.src = needsYouWave;
     await strip.decode();
     const side = strip.height;
     const canvas = document.createElement("canvas");
@@ -82,10 +83,10 @@ function bobDrawings(): Promise<string[]> {
     });
   })();
   // A strip that did not load is asked for again next time.
-  bob.catch(() => {
-    bob = undefined;
+  wave.catch(() => {
+    wave = undefined;
   });
-  return bob;
+  return wave;
 }
 
 /** An attachment for the page's `<link rel="icon">`. */
@@ -96,7 +97,7 @@ export function tabIcon(link: HTMLLinkElement) {
   // The home's lists move often; the icon hears only a change of state.
   const status = $derived(doing());
 
-  /** Shows a state's still, and with it stops his bob. */
+  /** Shows a state's still, and with it stops his wave. */
   function still(state: Doing) {
     asked += 1;
     clock?.terminate();
@@ -104,11 +105,11 @@ export function tabIcon(link: HTMLLinkElement) {
     link.href = STILL[state];
   }
 
-  /** Bobs his head on a worker's clock; his still stands until the strip is in. */
-  async function plead() {
+  /** Waves on a worker's clock; his still stands until the strip is in. */
+  async function hail() {
     still("needs-you");
     const mine = asked;
-    const drawings = await bobDrawings();
+    const drawings = await waveDrawings();
     if (mine !== asked) {
       return;
     }
@@ -135,7 +136,7 @@ export function tabIcon(link: HTMLLinkElement) {
     const state = status;
     if (state === "needs-you" && motionOk.current) {
       untrack(() => {
-        plead().catch((error: unknown) => {
+        hail().catch((error: unknown) => {
           console.error("[cawco] the tab icon did not move:", error);
         });
       });

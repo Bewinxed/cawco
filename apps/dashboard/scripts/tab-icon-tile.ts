@@ -1,7 +1,7 @@
 /**
- * Caw's head on the tab icon's tile: a rounded square of one colour with
+ * Caw on the tab icon's tile: a rounded square of one colour with
  * transparent corners, and Caw drawn over it by Rive from his status's file,
- * seen through a shot's head box (tab-icon-shots.ts). Nothing here draws
+ * seen through a shot's box (tab-icon-shots.ts). Nothing here draws
  * him: the file's own animation for the loop is applied at the frame asked
  * for, the way assets/mascot/scripts/prove-viewmodel.mjs renders each loop.
  *
@@ -9,7 +9,7 @@
  * the pictures made here.
  */
 import type { RuntimeLoader } from "@rive-app/canvas";
-import { FPS, HEAD, type Shot } from "./tab-icon-shots";
+import { FPS, type Shot } from "./tab-icon-shots";
 
 /** Rive's low-level runtime, as the dashboard's own package loads it. */
 export type RiveRuntime = Awaited<
@@ -71,10 +71,10 @@ export async function openTile(
     throw new Error("The tab icon has no 2D canvas");
   }
 
-  // His head box fills the tile; the rest of him is cut by the tile's edge.
-  const scale = side / HEAD;
-  const left = BOX.x + shot.at.x - HEAD / 2;
-  const top = BOX.y + shot.at.y - HEAD / 2;
+  // The shot's box fills the tile; the rest of him is cut by the tile's edge.
+  const scale = side / shot.box.side;
+  const left = BOX.x + shot.box.x - shot.box.side / 2;
+  const top = BOX.y + shot.box.y - shot.box.side / 2;
   const frame = {
     minX: -left * scale,
     minY: -top * scale,

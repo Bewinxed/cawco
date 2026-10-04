@@ -22,8 +22,6 @@
     --coral-11: light-dark(oklch(50% 0.15 32), oklch(80% 0.1 34));
     /* Spark yellow, paper and roost ink: brand moments only (wordmark, mascot, art). */
     --spark: #f2d36b;
-    /* Caw's vermilion, the same in both schemes: the tab icon's tile while something needs the operator. */
-    --vermilion: #e65d46;
     --paper: #f4f0e6;
     --crow-ink: #171715;
     /* Functional hues (Flexoki-derived). Error sits on crimson (hue 15) so failed never reads as the coral action. */

@@ -51,13 +51,14 @@ Apple: `CawWaiting`). The dashboard prefetches Rive's WASM and `loading.riv` fro
 and serves the `.riv` files Brotli-compressed as `application/octet-stream`.
 
 The dashboard's tab icon is Caw too (`apps/dashboard/src/lib/cawco/tab-icon/`, DESIGN.md's Tab
-icon): his head only, through a fixed box per state (`apps/dashboard/scripts/tab-icon-shots.ts`
+icon): his head, through a fixed box per state (`apps/dashboard/scripts/tab-icon-shots.ts`
 names each state's loop, frames and box). Its pictures are drawn ahead by `bun run tab-icon` in
 apps/dashboard, which applies a loop's own animation at each frame through the runtime's
 low-level API, as `prove-viewmodel.mjs` renders a loop, and writes them to
 `apps/dashboard/src/lib/assets/brand/`: a still per state (`tab-icon-<state>.png`, from
 `needs-you.riv`, `working.riv` at frame 20 of `loop_working-idea`, and `sleeping.riv`) and
-`tab-icon-needs-you-bob.png`, frames 46 to 85 of `loop_needs-you-point-plead` side by side. The
+`tab-icon-needs-you-wave.png`, frames 54 to 85 of `loop_needs-you-hey` side by side, seen
+through a box that holds his head and his right wing so the wing-beat reads as a wave. The
 icon moves in one state, while something needs the operator, by stepping through that strip; the
 page itself loads no Rive and draws nothing for its icon (drawn live, his head cost 4% of the
 main thread). Run `bun run tab-icon` again after `node build.mjs` changes any of the three files,

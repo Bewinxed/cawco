@@ -7,10 +7,10 @@
  * - src/lib/assets/brand/tab-icon-<state>.png, each state's still: what the
  *   icon shows whenever it is not moving, and `sleeping` the one every page
  *   is served with;
- * - src/lib/assets/brand/tab-icon-needs-you-bob.png, the needs-you bob's
+ * - src/lib/assets/brand/tab-icon-needs-you-wave.png, the needs-you wave's
  *   drawings side by side, which the icon steps through while it moves;
  * - .context/favicon/<state>-<side>.png at the repository's root, one strip
- *   per state at 32 and 64 px (the needs-you bob a drawing at a time, the
+ *   per state at 32 and 64 px (the needs-you wave a drawing at a time, the
  *   stills alone), for looking at.
  *
  * Run it again whenever Caw's files, the shots or the tile's tokens change:
@@ -154,18 +154,20 @@ async function strip(job: Job): Promise<Buffer> {
 }
 
 const radius = Number.parseFloat(token("tab-icon-r"));
-const bob = Array.from(
+const wave = Array.from(
   { length: (NEEDS_YOU.to - NEEDS_YOU.from) / 2 },
   (_, beat) => NEEDS_YOU.from + beat * 2
 );
 const states = [
-  { shot: NEEDS_YOU, moving: bob },
+  { shot: NEEDS_YOU, moving: wave },
   { shot: WORKING, moving: [WORKING.frame] },
   { shot: SLEEPING, moving: [SLEEPING.frame] },
 ];
 
+// Every state stands on the same butter tile.
+const colour = token("spark");
 const art = states.flatMap(({ shot, moving }) => {
-  const job = { shot, colour: token(shot.tile), radius };
+  const job = { shot, colour, radius };
   return [
     {
       file: join(STILLS, `tab-icon-${shot.status}.png`),
@@ -174,7 +176,7 @@ const art = states.flatMap(({ shot, moving }) => {
     ...(moving.length > 1
       ? [
           {
-            file: join(STILLS, `tab-icon-${shot.status}-bob.png`),
+            file: join(STILLS, `tab-icon-${shot.status}-wave.png`),
             job: { ...job, side: SIDE, frames: moving },
           },
         ]

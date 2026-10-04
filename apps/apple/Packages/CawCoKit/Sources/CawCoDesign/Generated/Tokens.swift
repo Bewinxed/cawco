@@ -24,8 +24,6 @@ public enum Palette {
     public static let coral11 = Palette.named("coral-11")
     /// Spark yellow, paper and roost ink: brand moments only (wordmark, mascot, art).
     public static let spark = Palette.named("spark")
-    /// Caw's vermilion, the same in both schemes: the tab icon's tile while something needs the operator.
-    public static let vermilion = Palette.named("vermilion")
     public static let paper = Palette.named("paper")
     public static let crowInk = Palette.named("crow-ink")
     /// Functional hues (Flexoki-derived). Error sits on crimson (hue 15) so failed never reads as the coral action.

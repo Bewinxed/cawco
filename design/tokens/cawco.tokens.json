@@ -230,11 +230,6 @@
       "$value": "#F2D36B",
       "$description": "Spark yellow, paper and roost ink: brand moments only (wordmark, mascot, art)."
     },
-    "vermilion": {
-      "$type": "color",
-      "$value": "#E65D46",
-      "$description": "Caw's vermilion, the same in both schemes: the tab icon's tile while something needs the operator."
-    },
     "paper": {
       "$type": "color",
       "$value": "#F4F0E6"
