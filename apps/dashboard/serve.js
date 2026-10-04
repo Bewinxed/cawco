@@ -40,17 +40,19 @@ import { fileURLToPath } from "node:url";
 import sockets from "socket-activation";
 
 /**
- * The scheme this server speaks, told to adapter-node. Unset, the adapter
- * assumes a TLS proxy in front and takes its own origin to be `https://<host>`;
- * SvelteKit's CSRF check then refuses (403) every mutating request it counts
- * as a form whose `Origin` is the page's `http://<host>` — and from Kit 3 on
- * that includes any POST or DELETE sent with no body (a preview's Close, a
- * project's delete, a rule's delete). This server only speaks plain HTTP, so
- * every request is stamped `http` (`serveApp`). The adapter reads the
- * header's name once, as its handler module loads.
+ * adapter-node needs the browser's scheme and host for SvelteKit's CSRF check,
+ * including mutating requests with no body (preview Close and other deletes).
+ * Direct access is plain HTTP; a TLS-terminating proxy forwards the browser's
+ * scheme and may forward its host separately. publicOrigin reads Forwarded,
+ * then X-Forwarded-* and defaults to http and Host for direct requests. The
+ * adapter reads these header names once when its handler loads. Trusting them
+ * preserves CSRF protection: a cross-site browser form cannot set Forwarded or
+ * X-Forwarded-* headers, and its Origin still differs from the dashboard's origin.
  */
 const PROTOCOL_HEADER = "x-cawco-protocol";
+const HOST_HEADER = "x-cawco-host";
 process.env.PROTOCOL_HEADER = PROTOCOL_HEADER;
+process.env.HOST_HEADER = HOST_HEADER;
 const { handler } = await import("./build/handler.js");
 // Captured once: version.json on disk changes during a build before this process restarts.
 const runningVersion = readFileSync(
@@ -61,6 +63,39 @@ const runningVersion = readFileSync(
 const target = new URL(process.env.CAWCO_HUB_URL || "http://localhost:3456");
 const targetPort = Number(target.port || 80);
 const previewPort = Number(process.env.CAWCO_PREVIEW_PORT || targetPort + 1);
+
+// RFC 7239 permits quoted values and case-insensitive parameter names. Commas
+// inside quoted extension values belong to the first element, not the next hop.
+const FIRST_FORWARDED_ELEMENT = /^(?:[^",]|"(?:\\.|[^"\\])*")*/;
+const FORWARDED_PARAMETER =
+  /(?:^|;)\s*([!#$%&'*+.^_`|~0-9a-z-]+)\s*=\s*("(?:\\.|[^"\\])*"|[^;\s]+)\s*(?=;|$)/gi;
+const QUOTED_PAIR = /\\(.)/g;
+
+function publicOrigin(req) {
+  const first =
+    req.headers.forwarded?.match(FIRST_FORWARDED_ELEMENT)?.[0] ?? "";
+  const forwarded = new Map(
+    [...first.matchAll(FORWARDED_PARAMETER)].map(([, name, value]) => [
+      name.toLowerCase(),
+      value.startsWith('"')
+        ? value.slice(1, -1).replace(QUOTED_PAIR, "$1")
+        : value,
+    ])
+  );
+  const protocol = (
+    forwarded.get("proto") ??
+    req.headers["x-forwarded-proto"]?.split(",")[0] ??
+    "http"
+  )
+    .trim()
+    .toLowerCase();
+  const host =
+    forwarded.get("host") ?? req.headers["x-forwarded-host"]?.split(",")[0];
+  return {
+    protocol: protocol === "https" || protocol === "http" ? protocol : "http",
+    host: host?.trim() || req.headers.host,
+  };
+}
 
 const PREVIEW_PREFIX = /^\/preview\/([^/]+)\//;
 /**
@@ -292,11 +327,13 @@ function serveApp(req, res) {
       res.destroy();
     });
   });
-  req.headers[PROTOCOL_HEADER] = "http";
   handler(req, res);
 }
 
 const server = http.createServer((req, res) => {
+  const origin = publicOrigin(req);
+  req.headers[PROTOCOL_HEADER] = origin.protocol;
+  req.headers[HOST_HEADER] = origin.host;
   const info = previewMatch(req);
   if (info) {
     proxyPreviewHttp(req, res, info);
