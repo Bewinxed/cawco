@@ -239,8 +239,9 @@
     pointer-events: none;
   }
   /* The sheet fills its host (the space above the composer) edge to edge,
-     so the kit content's inset card, its top margin, its height cap, its
-     padding and its drawn grab bar give way to `.sheet`, which draws the
+     so the kit content's inset card, its place in the visible viewport, its
+     height cap, its padding and its drawn grab bar give way to `.sheet`,
+     which draws the
      surface and holds the vaul handle: the one box that comes out of the
      Preview button. */
   :global(.preview-sheet) {
@@ -249,6 +250,7 @@
     display: flex;
     flex-direction: column;
     max-height: none;
+    translate: none;
     margin: 0;
     padding: 0;
     outline: none;
