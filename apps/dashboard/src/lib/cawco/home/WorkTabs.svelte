@@ -103,7 +103,18 @@
     stale,
     waiting,
     onstart,
+    relaying = $bindable(false),
   }: {
+    /**
+     * A change of the rows is in flight (`relay`): the list's heights are
+     * driven here, frame by frame. The boxes around the list (this section,
+     * the home) are no reflow's to move meanwhile: left `data-flip="box"`,
+     * the rail's reflow heard them resize part-way through and ran its own
+     * edge over them from the height it last knew. On the first change after
+     * a load that was the height before the click, so the home shut to it
+     * and opened again.
+     */
+    relaying?: boolean;
     /** The hub is not live: the rows are what was last known. */
     stale: boolean;
     /** The first read is not in: the tabs stand over rows that wait. */
@@ -475,6 +486,7 @@
     // from here this owns them.
     reread(reflowsFrom(list ?? null));
     flushSync(() => {
+      relaying = true;
       plan = { ...base, enter: relayed.enter };
       swap.swap(lines, dir, { keep: lines.length });
       apply();
@@ -506,6 +518,7 @@
         // after they have read where it all stands (`reread`, below).
         flushSync(() => {
           plan = null;
+          relaying = false;
           swap.release();
         });
         // Done: every box is at its natural height; a closed one lets go.
@@ -767,7 +780,11 @@
 {/snippet}
 
 {#if waiting || home.working.length + home.finished.length > 0}
-  <section aria-label="Sessions" class="work" data-flip="box">
+  <section
+    aria-label="Sessions"
+    class="work"
+    data-flip={plan ? undefined : "box"}
+  >
     <div class="head">
       <!-- The session tabs' folder tabs, hosted: no shelf, the chosen
            sheet the only mark, the section's seam under the row. -->

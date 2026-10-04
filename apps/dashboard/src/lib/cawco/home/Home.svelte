@@ -41,6 +41,12 @@
 
   const stale = $derived(!home.live);
   /**
+   * The tabs are changing their rows and driving the list's height
+   * themselves (WorkTabs `relaying`): the home is not the rail's reflow's
+   * box to move until they are done.
+   */
+  let relaying = $state(false);
+  /**
    * Nothing anywhere yet: the one empty state the home keeps. Asked of the
    * home's `empty`, never of Recent: this home is in the rail on every page,
    * and reading the list here built it — every stored transcript on every
@@ -122,7 +128,7 @@
 <section
   aria-label="Home"
   class="home {variant}"
-  data-flip={variant === "rail" ? "box" : undefined}
+  data-flip={variant === "rail" && !relaying ? "box" : undefined}
   {@attach reflow()}
 >
   <div class="top" class:bare={bare}>
@@ -173,7 +179,12 @@
       </section>
     {/if}
 
-    <WorkTabs onstart={start} {stale} waiting={!home.ready} />
+    <WorkTabs
+      onstart={start}
+      {stale}
+      waiting={!home.ready}
+      bind:relayingrelaying
+    />
 
     {#if firstRun}
       <!-- Caw only on a fleet with nothing in it yet, or while a machine
