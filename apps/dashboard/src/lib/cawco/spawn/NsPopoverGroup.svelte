@@ -80,7 +80,6 @@
     {#if shown}
       <Popover.Content
         align={shown.align}
-        aria-label={shown.label}
         class="ns-theme ns-pop"
         collisionPadding={8}
         customAnchor={shown.trigger}
@@ -123,8 +122,14 @@
           wrapperProps,
         })}
           <div {...wrapperProps}>
+            <!-- The label names what the trigger holds, so it changes as the
+                 reader types or picks inside the surface. It is set here, on
+                 the element: as a prop of Popover.Content it re-mounts
+                 bits-ui's focus scope on every change, and focus leaves the
+                 field for the trigger. -->
             <div
               {...props}
+              aria-label={shown?.label}
               id={`${shown?.id}-popover`}
               role="presentation"
               {@attach shown?.rows
