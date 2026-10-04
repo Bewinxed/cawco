@@ -76,8 +76,8 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         self.hub = hub
         self.home = home
         rail = SidebarViewController(hub: hub, home: home, inSheet: false)
-        railHome = HomeViewController(hub: hub, home: home)
-        board = HomeViewController(hub: hub, home: home)
+        railHome = HomeViewController(hub: hub, home: home, variant: .rail)
+        board = HomeViewController(hub: hub, home: home, variant: .page)
         detail = FleetDetailController(hub: hub, home: home)
         panes = PaneHost(hub: hub)
         super.init(style: .doubleColumn)

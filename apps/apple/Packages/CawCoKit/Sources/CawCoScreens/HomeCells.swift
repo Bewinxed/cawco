@@ -9,15 +9,24 @@ import UIKit
 /// A cell whose content is one view pinned to its content view's edges. A
 /// list cell, so a finished row takes the list's own swipe to archive.
 class HomeCell: UICollectionViewListCell {
+    /// The home's own ground, which its variant names (the page's recess, the
+    /// rail's sidebar): a line that arrives or leaves beneath a cell is
+    /// uncovered or covered as it slides, never drawn through (HomeLayout).
+    var ground: UIColor = Palette.surfaceRecess {
+        didSet { if ground != oldValue { paintGround() } }
+    }
+
+    private func paintGround() {
+        var background = UIBackgroundConfiguration.clear()
+        background.backgroundColor = ground
+        backgroundConfiguration = background
+    }
+
     override init(frame: CGRect) {
         super.init(frame: frame)
         clipsToBounds = false
         contentView.clipsToBounds = false
-        // The page's own ground: a line that arrives or leaves beneath it is
-        // uncovered or covered as it slides, never drawn through (HomeLayout).
-        var ground = UIBackgroundConfiguration.clear()
-        ground.backgroundColor = Palette.surfaceRecess
-        backgroundConfiguration = ground
+        paintGround()
         indentationWidth = 0
         separatorLayoutGuide.leadingAnchor.constraint(equalTo: trailingAnchor).isActive = true
     }

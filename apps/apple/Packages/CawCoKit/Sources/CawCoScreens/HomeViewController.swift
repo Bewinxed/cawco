@@ -93,10 +93,25 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
     /// The landed list's rows flying in.
     private let flight = Frames()
 
-    init(hub: HubConnection, home: HomeModel) {
+    /// Where the home stands (Home.svelte `variant`): the page, or the rail's own copy.
+    enum Variant {
+        case page, rail
+
+        /// The page has a ground of its own; in the rail the home has none and stands on the sidebar's.
+        var ground: UIColor { self == .page ? Palette.surfaceRecess : Palette.sidebar }
+    }
+
+    private let variant: Variant
+
+    init(hub: HubConnection, home: HomeModel, variant: Variant) {
         self.hub = hub
         self.home = home
+        self.variant = variant
         super.init(nibName: nil, bundle: nil)
+    }
+
+    func collectionView(_: UICollectionView, willDisplay cell: UICollectionViewCell, forItemAt _: IndexPath) {
+        (cell as? HomeCell)?.ground = variant.ground
     }
 
     @available(*, unavailable)
@@ -106,10 +121,10 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = Palette.surfaceRecess
+        view.backgroundColor = variant.ground
         collectionView = BoardList(frame: view.bounds, collectionViewLayout: layout)
         collectionView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        collectionView.backgroundColor = Palette.surfaceRecess
+        collectionView.backgroundColor = variant.ground
         collectionView.delegate = self
         collectionView.keyboardDismissMode = .onDrag
         view.addSubview(collectionView)
@@ -220,6 +235,8 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
     private func makeDataSource() -> UICollectionViewDiffableDataSource<Section, Item> {
         let usage = UICollectionView.CellRegistration<UsageCell, Item> { [weak self] cell, _, _ in
             guard let self else { return }
+            // Its bar's ticks are cut in the ground it stands on.
+            cell.ground = variant.ground
             cell.configure(usageStrip ?? home.usage)
             cell.onOpen = { [weak self] in self?.openUsage() }
             cell.onPage = onUsagePage
@@ -851,7 +868,7 @@ extension HomeViewController: TabSwipeHost {
         collectionView.layoutIfNeeded()
         hold(resting)
         let arriving = UIView(frame: CGRect(origin: .zero, size: region.size))
-        arriving.backgroundColor = Palette.surfaceRecess
+        arriving.backgroundColor = variant.ground
         for cell in collectionView.visibleCells {
             guard let indexPath = collectionView.indexPath(for: cell), let item = dataSource.itemIdentifier(for: indexPath) else {
                 continue
@@ -867,7 +884,7 @@ extension HomeViewController: TabSwipeHost {
         }
         let cover = UIView(frame: region)
         cover.clipsToBounds = true
-        cover.backgroundColor = Palette.surfaceRecess
+        cover.backgroundColor = variant.ground
         cover.isUserInteractionEnabled = false
         cover.addSubview(leaving)
         cover.addSubview(arriving)

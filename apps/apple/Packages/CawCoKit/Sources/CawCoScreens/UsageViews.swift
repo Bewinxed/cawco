@@ -110,7 +110,7 @@ final class UsageCell: HomeCell {
             elapsed: meter.elapsed,
             tone: Self.tone(meter.state),
             reached: meter.state == .reached,
-            paint: Palette.surfaceRecess,
+            paint: ground,
             label: usage.name
         )
         strip.accessibilityLabel = "\(usage.name) \(Int(meter.used.rounded())) percent, \(usage.detail). Show every limit."
