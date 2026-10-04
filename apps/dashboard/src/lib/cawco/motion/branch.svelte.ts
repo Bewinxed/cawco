@@ -187,7 +187,7 @@ function nestOf(
   }
   // Across in layout (a glyph caught mid-flight is drawn off its place);
   // down in drawn boxes read against each other, to the subpixel (nothing
-  // here moves vertically on its own transform; see `topIn`).
+  // here moves vertically on its own transform; see `railsOf`).
   const mark = layoutBox(parent);
   const first =
     node.getBoundingClientRect().top +
@@ -328,6 +328,9 @@ interface Stretch {
   /** In the group's frame. */
   top: number;
   width: number;
+  /** Its box's left and top edges in the viewport, to the subpixel. */
+  x: number;
+  y: number;
 }
 
 /** An elbow's corner, its stroke's centre on it, and the run down to it. */
@@ -391,19 +394,31 @@ interface Line {
   base: number;
 }
 
-/** The stretches of line a list item draws, in the group's frame. */
-function railsOf(li: HTMLElement, top: number, line: Line): Stretch[] {
+/**
+ * The stretches of line a list item draws, in the group's frame. The fold's
+ * heights are read to the subpixel: drawn boxes, against the group's own.
+ * Nothing in or around a group moves vertically on its own transform while
+ * it is measured (a glyph flies only sideways, and a slide that carries the
+ * parent's box carries the group with it), so the differences are layout's,
+ * without the rounding offsets carry; a head a pixel off a glyph is a frame
+ * late at the slow end of the curve.
+ */
+function railsOf(li: HTMLElement, frame: DOMRect, line: Line): Stretch[] {
   const rails: Stretch[] = [];
+  const box = li.getBoundingClientRect();
   for (const pseudo of ["::before", "::after"] as const) {
     const style = getComputedStyle(li, pseudo);
     if (style.content === "none" || style.display === "none") {
       continue;
     }
-    const at = top + Number.parseFloat(style.top);
+    const y = box.top + Number.parseFloat(style.top);
+    const at = y - frame.top;
     rails.push({
       li,
       pseudo,
       top: at,
+      x: box.left + Number.parseFloat(style.left),
+      y,
       from: line.base + (at - line.at),
       height: Number.parseFloat(style.height),
       width: Number.parseFloat(style.width),
@@ -415,17 +430,6 @@ function railsOf(li: HTMLElement, top: number, line: Line): Stretch[] {
   }
   return rails;
 }
-
-/**
- * The fold's heights, to the subpixel: drawn boxes, read against the
- * group's own. Nothing in or around a group moves vertically on its own
- * transform while it is measured (a glyph flies only sideways, and a slide
- * that carries the parent's box carries the group with it), so the
- * differences are layout's, without the rounding offsets carry; a head a
- * pixel off a glyph is a frame late at the slow end of the curve.
- */
-const topIn = (frame: DOMRect, el: Element) =>
-  el.getBoundingClientRect().top - frame.top;
 
 /** A row, its glyph, and how far along its list's line the glyph is when the line runs straight down to it. */
 function itemOf(
@@ -500,7 +504,7 @@ function measure(group: HTMLElement, options: BranchOptions): Shape {
     const line = lineOf(list ?? group);
     const item = itemOf(el, options.glyph, frame, line);
     if (list && li) {
-      const drawn = railsOf(li, topIn(frame, li), line);
+      const drawn = railsOf(li, frame, line);
       stretches.push(...drawn);
       const elbow = drawn.find((stretch) => stretch.pseudo === "::before");
       if (elbow) {
@@ -710,64 +714,100 @@ const flown = (item: Item, v: number): Keyframe => ({
   zIndex: 2,
 });
 
+/** A stretch's two cuts (app.css `--nest-cut-r`, `--nest-cut-b`). */
+const CUT_RIGHT = "--nest-cut-r";
+const CUT_BELOW = "--nest-cut-b";
+/** No cut on that side: well clear of the stretch, as it is at rest. */
+const UNCUT = -9999;
 /**
- * A stretch of line cut where the head is, `s` along the whole line: a
- * straight stretch at the head's depth; an elbow down its rail, then round
- * its corner at the point the arc's length puts the head (the cut's corner
- * on the stroke's outer edge, a pixel wide where it leaves the rail and
- * none where it meets the arm), then out along its arm.
+ * The room a cut leaves beside the line it runs along, round a corner. A
+ * stretch stands on the half pixel its row starts on and is painted on the
+ * whole pixel it is snapped to: a cut a line's width from the stretch's edge
+ * took a slice off the line itself.
  */
-function clipAt(stretch: Stretch, s: number): string {
-  const { height, width } = stretch;
+const CLEAR = 2;
+
+/**
+ * A stretch of line cut where the head is, `s` along the whole line, as how
+ * far it is cut back from its right and from its foot: a straight stretch
+ * at the head's depth; an elbow down its rail, then round its corner at the
+ * point the arc's length puts the head, then out along its arm. A cut only
+ * ever ends the line: down the rail nothing cuts from the right, along the
+ * arm nothing cuts from below, and round the corner the cut from the right
+ * stands `CLEAR` of the rail, closing on the corner as the head turns. Each
+ * cut stands on the screen's pixel grid (`onGrid`), so the line ends on a
+ * whole pixel.
+ */
+function cutAt(stretch: Stretch, s: number): [right: number, below: number] {
+  const { height, width, x, y } = stretch;
   const along = s - stretch.from;
-  let right = 0;
-  let below = clamp(height - along, 0, height);
-  if (stretch.corner > 0) {
-    const { corner, centre, down, arc } = cornerOf(stretch);
-    if (along <= down) {
-      right = width - 1;
-    } else if (along <= down + arc) {
-      const turn = centre > 0 ? (along - down) / centre : Math.PI / 2;
-      right = width - (corner - corner * Math.cos(turn) + Math.cos(turn));
-      below = height - (down + corner * Math.sin(turn));
-    } else {
-      right = Math.max(0, width - corner - (along - down - arc));
-      below = 0;
+  // A stretch starts on a fraction of a pixel and is painted from the whole
+  // pixel that snaps to. Its cut is put on the grid, in the viewport; and
+  // until the head is a whole pixel into it, it is cut clear of its start:
+  // cut at its own edge, half its first pixel stood there at half the ink
+  // until the fold unmounted.
+  const cut = (size: number, edge: number, to: number) => {
+    const end = onGrid(edge + to);
+    if (to <= 0 || end <= onGrid(edge)) {
+      return size + CLEAR;
     }
+    return to >= size ? UNCUT : Math.max(0, size - (end - edge));
+  };
+  const below = (to: number) => cut(height, y, to);
+  const right = (to: number) => cut(width, x, to);
+  if (stretch.corner <= 0) {
+    return [UNCUT, below(along)];
   }
-  return `inset(0px ${px(onGrid(Math.max(0, right)))} ${px(onGrid(Math.max(0, below)))} 0px)`;
+  const { corner, centre, down, arc } = cornerOf(stretch);
+  if (along <= down) {
+    return [UNCUT, below(along)];
+  }
+  if (along <= down + arc) {
+    const turn = centre > 0 ? (along - down) / centre : Math.PI / 2;
+    return [
+      right(corner - corner * Math.cos(turn) + CLEAR * Math.cos(turn)),
+      below(down + corner * Math.sin(turn)),
+    ];
+  }
+  return [right(corner + (along - down - arc)), UNCUT];
 }
 
 /**
- * A length on the device's pixel grid. A line's cut lands between pixels
- * otherwise, and its last pixel is drawn at part of the ink while the head
- * passes: a line of two colours until the draw ends.
+ * A place in the viewport on the device's pixel grid. A line's cut lands
+ * between pixels otherwise (a row starts on a fraction of one), and its last
+ * pixel is drawn at part of the ink while the head passes.
  */
-function onGrid(length: number): number {
+function onGrid(place: number): number {
   const ratio = window.devicePixelRatio || 1;
-  return Math.round(length * ratio) / ratio;
+  return Math.round(place * ratio) / ratio;
 }
 
 /**
  * A stretch's keyframes: sampled where the head passes it, and only there; a
- * run of equal frames is two. Each sample's offset is its place in `times`
+ * run of equal frames is two. Each holds until the next (`step-end`): eased
+ * from one to the next, a cut passed between pixels on its way. Each
+ * sample's offset is its place in `times`
  * (evenly spaced over the plan), never its time over the plan's total: the
  * last one came to 1 and a rounding over, `animate` threw, and the throw
  * stopped the batch, every room and row after it held at its first frame.
  */
 function railFrames(plan: Plan, stretch: Stretch, times: number[]): Keyframe[] {
   const last = Math.max(1, times.length - 1);
-  const frames = times.map((t, k) => ({
-    offset: k / last,
-    clipPath: clipAt(stretch, plan.head(t)),
-  }));
-  return frames.filter(
-    (frame, k) =>
-      k === 0 ||
-      k === frames.length - 1 ||
-      frame.clipPath !== frames[k - 1].clipPath ||
-      frame.clipPath !== frames[k + 1].clipPath
-  );
+  const cuts = times.map((t) => cutAt(stretch, plan.head(t)));
+  const same = (a: number, b: number) =>
+    cuts[a][0] === cuts[b][0] && cuts[a][1] === cuts[b][1];
+  const frames: Keyframe[] = [];
+  cuts.forEach(([right, below], k) => {
+    if (k === 0 || k === last || !same(k, k - 1) || !same(k, k + 1)) {
+      frames.push({
+        offset: k / last,
+        easing: "step-end",
+        [CUT_RIGHT]: px(right),
+        [CUT_BELOW]: px(below),
+      });
+    }
+  });
+  return frames;
 }
 
 /**
@@ -1062,12 +1102,25 @@ function inFlow(group: HTMLElement): void {
   group.style.insetInlineStart = "";
   group.style.inlineSize = "";
 }
+/**
+ * Where it stood in the flow, to the subpixel. Placed by its whole-pixel
+ * offsets, a group whose rows start on a fraction of a pixel shifted by that
+ * fraction as its fold began, its line's cuts with it, off the pixel grid.
+ */
 function outOfFlow(group: HTMLElement): void {
-  const { offsetTop, offsetLeft, offsetWidth } = group;
+  const parent = group.offsetParent;
+  const box = group.getBoundingClientRect();
+  const frame = parent?.getBoundingClientRect();
+  const top = frame
+    ? box.top - frame.top - (parent?.clientTop ?? 0)
+    : group.offsetTop;
+  const left = frame
+    ? box.left - frame.left - (parent?.clientLeft ?? 0)
+    : group.offsetLeft;
   group.style.position = "absolute";
-  group.style.insetBlockStart = `${offsetTop}px`;
-  group.style.insetInlineStart = `${offsetLeft}px`;
-  group.style.inlineSize = `${offsetWidth}px`;
+  group.style.insetBlockStart = `${top}px`;
+  group.style.insetInlineStart = `${left}px`;
+  group.style.inlineSize = `${box.width}px`;
 }
 
 const itemsOf = (group: HTMLElement) => [
@@ -1082,6 +1135,12 @@ const itemsOf = (group: HTMLElement) => [
  * click its own long task.
  */
 const HELD = "data-branch-hold";
+/**
+ * A group whose line is drawing in or running back: its stretches take the
+ * cuts their pieces move (app.css `[data-branch-draw]`). Off at rest, where
+ * a stretch has no clip at all.
+ */
+const DRAWN = "data-branch-draw";
 
 /** A state read for `from`, for the rows a shape has measured. */
 const stateFor = (shape: Shape, from: HTMLElement[], now: State): State => {
@@ -1118,6 +1177,7 @@ function open(group: HTMLElement, options: BranchOptions): TransitionConfig {
   flights.set(group, flight);
   if (!motionOk.current) {
     group.removeAttribute(HELD);
+    group.removeAttribute(DRAWN);
     for (const animation of flight.animations) {
       animation.cancel();
     }
@@ -1131,6 +1191,7 @@ function open(group: HTMLElement, options: BranchOptions): TransitionConfig {
     );
     return { duration: dur("--dur-pop") };
   }
+  group.setAttribute(DRAWN, "");
   // Measured on the batch's frame, where every row and rail is placed, and
   // planned from where every piece is held. Its pace is asked for now, from
   // the room it takes and the glyphs in it (curves `glideSpeed`):
@@ -1204,6 +1265,7 @@ function open(group: HTMLElement, options: BranchOptions): TransitionConfig {
       shape.seen,
       () => {
         group.removeAttribute(HELD);
+        group.removeAttribute(DRAWN);
         for (const animation of flight.animations) {
           animation.cancel();
         }
@@ -1225,6 +1287,7 @@ function fold(group: HTMLElement, options: BranchOptions): TransitionConfig {
       animation.cancel();
     }
     group.removeAttribute(HELD);
+    group.removeAttribute(DRAWN);
     const fades = items.map((el) =>
       el.animate([{ opacity: 1 }, { opacity: 0 }], {
         duration: dur("--dur-exit"),
@@ -1241,6 +1304,7 @@ function fold(group: HTMLElement, options: BranchOptions): TransitionConfig {
     });
     return { duration: dur("--dur-exit") };
   }
+  group.setAttribute(DRAWN, "");
   const shape = measure(group, options);
   const state = stateFor(shape, items, now);
   const plan = planFold(shape, state, dur("--dur-exit"));

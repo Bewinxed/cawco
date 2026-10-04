@@ -39,6 +39,19 @@
   inherits: false;
   initial-value: 0turn;
 }
+/* How far a stretch of a nesting line is cut back from its right and from
+   its foot while the line draws (.kit-nest, motion/branch), registered so the
+   fold can move them. At rest neither cuts: well clear of the stretch. */
+@property --nest-cut-r {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: -9999px;
+}
+@property --nest-cut-b {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: -9999px;
+}
 
 @theme inline {
   --color-background: var(--background);
@@ -537,7 +550,10 @@
     /* From where the elbow starts to curve away, so the rail runs straight
        on past the joint instead of breaking at the curve. */
     top: calc(var(--nest-glyph-y) - var(--radius-sm));
-    bottom: 0;
+    /* On over the gap to the next child's row, under that child's elbow:
+       ending at this row's foot, on a fraction of a pixel, its last pixel
+       stood at half the ink wherever the next elbow was not yet drawn. */
+    bottom: calc(-1 * var(--nest-gap));
     border-left-width: var(--nest-line);
   }
   .kit-nest > li:last-child::after {
@@ -550,11 +566,28 @@
   [data-branch-hold] [data-branch-item] {
     clip-path: inset(0 100% 0 0);
   }
+  /* A line drawing in or running back: each stretch is cut where the line's
+     head is, by two lengths the fold moves (--nest-cut-r, --nest-cut-b). The
+     stretch itself is painted where it stands at rest, in every frame. With
+     the clip itself animated, the browser drew the stretch from a layer of
+     its own, at the half pixel its row starts on rather than on the pixel
+     it is snapped to at rest: across two columns at half the ink, until the
+     draw ended. Neither cut ever runs alongside the line (the other side is
+     left well clear), so a cut only ever ends it. */
+  [data-branch-draw].kit-nest > li::before,
+  [data-branch-draw].kit-nest > li::after,
+  [data-branch-draw] .kit-nest > li::before,
+  [data-branch-draw] .kit-nest > li::after {
+    clip-path: inset(-9999px var(--nest-cut-r) var(--nest-cut-b) -9999px);
+  }
+  /* Held: cut whole from below, until its piece is built and moves the cut.
+     A clip of the hold's own outranked the cut, and the line stood hidden
+     until the fold landed, then showed whole in one frame. */
   [data-branch-hold].kit-nest > li::before,
   [data-branch-hold].kit-nest > li::after,
   [data-branch-hold] .kit-nest > li::before,
   [data-branch-hold] .kit-nest > li::after {
-    clip-path: inset(0 0 100% 0);
+    --nest-cut-b: 9999px;
   }
 
   /* A session row's time, at the row's trailing edge or, on a parent, just
