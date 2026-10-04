@@ -6,7 +6,8 @@
  *
  * - src/lib/assets/brand/tab-icon-<state>.png, each state's still: what the
  *   icon shows whenever it is not moving, and `sleeping` the one every page
- *   is served with;
+ *   is served with. `working` is no drawing of Caw: it is the plain app icon
+ *   (cawco-icon.png) cut to the tile's rounded corners;
  * - src/lib/assets/brand/tab-icon-needs-you-wave.png, the needs-you wave's
  *   drawings side by side, which the icon steps through while it moves;
  * - .context/favicon/<state>-<side>.png at the repository's root, one strip
@@ -20,7 +21,8 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { chromium } from "playwright-core";
-import { NEEDS_YOU, type Shot, SLEEPING, WORKING } from "./tab-icon-shots";
+import { NEEDS_YOU, type Shot, SLEEPING } from "./tab-icon-shots";
+import { TAB_ICON } from "./tab-icon-tile";
 
 const here = (path: string) => join(import.meta.dir, "..", path);
 const RIVE = here("node_modules/@rive-app/canvas/");
@@ -160,9 +162,35 @@ const wave = Array.from(
 );
 const states = [
   { shot: NEEDS_YOU, moving: wave },
-  { shot: WORKING, moving: [WORKING.frame] },
   { shot: SLEEPING, moving: [SLEEPING.frame] },
 ];
+
+/** The plain app icon on the tile's shape: its corners rounded and clear. */
+async function plain(side: number): Promise<Buffer> {
+  const icon = readFileSync(join(STILLS, "cawco-icon.png")).toString("base64");
+  const url = await page.evaluate(
+    async ({ source, size, corner }) => {
+      const image = new Image();
+      image.src = source;
+      await image.decode();
+      const canvas = document.createElement("canvas");
+      canvas.width = size;
+      canvas.height = size;
+      const context = canvas.getContext("2d");
+      context?.beginPath();
+      context?.roundRect(0, 0, size, size, corner);
+      context?.clip();
+      context?.drawImage(image, 0, 0, size, size);
+      return canvas.toDataURL("image/png");
+    },
+    {
+      source: `data:image/png;base64,${icon}`,
+      size: side,
+      corner: (radius / TAB_ICON) * side,
+    }
+  );
+  return Buffer.from(url.slice(url.indexOf(",") + 1), "base64");
+}
 
 // Every state stands on the same butter tile.
 const colour = token("spark");
@@ -187,12 +215,24 @@ const art = states.flatMap(({ shot, moving }) => {
     })),
   ];
 });
-await Promise.all(
-  art.map(async ({ file, job }) => {
+const working = [
+  { file: join(STILLS, "tab-icon-working.png"), side: SIDE },
+  ...[32, SIDE].map((side) => ({
+    file: join(STRIPS, `working-${side}.png`),
+    side,
+  })),
+];
+await Promise.all([
+  ...art.map(async ({ file, job }) => {
     mkdirSync(dirname(file), { recursive: true });
     writeFileSync(file, await strip(job));
     console.log(file);
-  })
-);
+  }),
+  ...working.map(async ({ file, side }) => {
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, await plain(side));
+    console.log(file);
+  }),
+]);
 
 await browser.close();

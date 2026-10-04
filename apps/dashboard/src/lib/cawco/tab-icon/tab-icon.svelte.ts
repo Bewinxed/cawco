@@ -2,16 +2,17 @@
  * The tab's icon says whether the operator is needed, since it is what they
  * see of CawCo while another tab is in front (favicon.now/guides/
  * animated-favicon: "Short-lived progress, recording, or urgent-state
- * indicators can be useful when the tab is backgrounded"). It is Caw's head
- * on a rounded butter tile, and it moves only for what the operator has to
- * look at (owner: "it shouldn't animate if there's nothing the USER has to
- * pay attention to"):
+ * indicators can be useful when the tab is backgrounded"). It is a rounded
+ * butter tile, and it moves only for what the operator has to look at
+ * (owner: "it shouldn't animate if there's nothing the USER has to pay
+ * attention to"):
  *
  * - something needs the operator (the home's Needs you): Caw waves a wing at
  *   them beside his head (owner: "like hey pay attention"), the one state
  *   that moves;
- * - else something is working: his head, awake, still;
- * - else his head asleep, still: the icon the page is served with.
+ * - else something is working: the plain CawCo icon, still (owner: "just
+ *   have the plain cawco favicon for when the sessions are working");
+ * - else Caw's head asleep, still: the icon the page is served with.
  *
  * Every picture is drawn ahead from Caw's own files by `bun run tab-icon`,
  * so the page draws nothing and loads no Rive for its icon. A still runs

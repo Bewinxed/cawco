@@ -95,13 +95,13 @@ icon): his head, through a fixed box per state (`apps/dashboard/scripts/tab-icon
 names each state's loop, frames and box). Its pictures are drawn ahead by `bun run tab-icon` in
 apps/dashboard, which applies a loop's own animation at each frame through the runtime's
 low-level API, as `prove-viewmodel.mjs` renders a loop, and writes them to
-`apps/dashboard/src/lib/assets/brand/`: a still per state (`tab-icon-<state>.png`, from
-`needs-you.riv`, `working.riv` at frame 20 of `loop_working-idea`, and `sleeping.riv`) and
-`tab-icon-needs-you-wave.png`, frames 54 to 85 of `loop_needs-you-hey` side by side, seen
+`apps/dashboard/src/lib/assets/brand/`: a still for the two states that show him
+(`tab-icon-needs-you.png` from `needs-you.riv` and `tab-icon-sleeping.png` from `sleeping.riv`;
+while sessions work the icon is the plain app icon, not Caw) and `tab-icon-needs-you-wave.png`, frames 54 to 85 of `loop_needs-you-hey` side by side, seen
 through a box that holds his head and his right wing so the wing-beat reads as a wave. The
 icon moves in one state, while something needs the operator, by stepping through that strip; the
 page itself loads no Rive and draws nothing for its icon (drawn live, his head cost 4% of the
-main thread). Run `bun run tab-icon` again after `node build.mjs` changes any of the three files,
+main thread). Run `bun run tab-icon` again after `node build.mjs` changes either file,
 and move the boxes in `tab-icon-shots.ts` if a retraced loop moves his head.
 
 The state machine has no inputs. `Caw` has one instance, `Default` (every boolean off, `from`
