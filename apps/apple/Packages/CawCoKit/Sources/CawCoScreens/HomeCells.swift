@@ -683,7 +683,8 @@ final class SessionRowView: UIView, HoverSessionRow {
         fatalError("SessionRowView is built in code")
     }
 
-    struct Content {
+    /// Everything the row draws: two rows with equal content look the same.
+    nonisolated struct Content: Hashable, Sendable {
         var id: String
         var place: String
         var status: MarkStatus

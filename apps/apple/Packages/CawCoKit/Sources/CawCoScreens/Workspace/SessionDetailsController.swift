@@ -240,8 +240,8 @@ public final class SessionDetailsController: ObservedViewController {
         if row.isStale { return .unreachable }
         if row.status == .sleeping { return .sleeping }
         if row.status == .stopped { return .stopped }
-        if hub.needs.blocked(sessionId) || fleet.pulses[sessionId]?.activity == .blocked { return .needsYou }
-        if fleet.pulses[sessionId]?.activity == .working { return .working }
+        if hub.needs.blocked(sessionId) || fleet.activityPulse(sessionId)?.activity == .blocked { return .needsYou }
+        if fleet.activityPulse(sessionId)?.activity == .working { return .working }
         return .idle
     }
 

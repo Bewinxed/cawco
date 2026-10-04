@@ -314,7 +314,7 @@ final class ProjectViewController: ObservedViewController {
             let plan = plan(for: row.id)
             let unmeasured = plan == nil && !row.isFailed && !asleep && !row.isStale && activity == .working
             timing = timing || unmeasured
-            let tool = activity == .working ? fleet.pulses[row.id]?.currentTool : nil
+            let tool = activity == .working ? fleet.pulse(row.id)?.currentTool : nil
             liveRows.rows[row.id]?.configure(LiveRowModel(
                 id: row.id,
                 title: fleet.title(row),

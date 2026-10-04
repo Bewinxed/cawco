@@ -393,7 +393,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         case let .delegate(block):
             guard let id = block.string("delegateInstanceId") else { return "" }
             let row = fleet.byId[id]
-            let pulse = fleet.pulses[id]
+            let pulse = fleet.pulse(id)
             let open = env.isOpen(block.disclosureKey)
             let inner = open ? (hub?.sessions.transcripts[id]).map { "\($0.blockRevision)\($0.loading)\($0.tail?.streaming.count ?? 0)" } ?? "" : ""
             return "\(row?.status.rawValue ?? "")\(row?.lastError ?? "")\(pulse?.activity.rawValue ?? "")\(pulse?.currentTool?.glance ?? "")\(open)\(inner)\(blocks.count)"

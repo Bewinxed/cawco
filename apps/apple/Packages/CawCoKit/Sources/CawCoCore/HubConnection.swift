@@ -137,8 +137,7 @@ public final class HubConnection {
         fleet.hubBuild = nil
         fleet.adopt(rows: [])
         fleet.projects = []
-        fleet.pulses = [:]
-        fleet.turnSince = [:]
+        fleet.resetPulses()
         fleet.catalogs = [:]
         fleet.supervisorEvents = []
         fleet.catalogsTried = []

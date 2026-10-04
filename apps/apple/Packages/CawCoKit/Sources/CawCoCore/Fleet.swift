@@ -108,6 +108,18 @@ public struct BoardRun: Sendable {
     var since: Double? { status == .running || status == .waiting ? startedAt : nil }
 }
 
+/// One session's pulse, each part observed on its own.
+@MainActor
+@Observable
+final class PulseCell {
+    /// The latest pulse: the tool in flight, when it last moved.
+    var pulse: SessionPulse?
+    /// The pulse at which its activity last changed.
+    var settled: SessionPulse?
+    /// When its current turn began, ms epoch; nil while idle.
+    var turnSince: Double?
+}
+
 /// The hub's word on the fleet: machines, sessions, projects, each session's
 /// pulse, and every online machine's stored sessions. Only frames and reads
 /// from the hub write it.
@@ -136,9 +148,11 @@ public final class FleetStore {
     public internal(set) var projects: [Components.Schemas.GetApiProjects200Payload] = []
     /// The continuations the hub is carrying, settled ones for a few minutes after.
     public internal(set) var continuations: [Components.Schemas.ContinuationJob] = []
-    public internal(set) var pulses: [String: SessionPulse] = [:]
-    /// When each session's current turn began, ms epoch; absent while idle.
-    public internal(set) var turnSince: [String: Double] = [:]
+    /// Each session's pulse, observed on its own (`PulseCell`): pulses arrive
+    /// more than once a second across the fleet, and a screen must not be
+    /// redrawn by sessions it does not show. A cell is made the first time
+    /// its session is read or pulses, so a reader that found none hears the first.
+    @ObservationIgnored private var pulseCells: [String: PulseCell] = [:]
     public internal(set) var catalogs: [String: [StoredSession]] = [:]
     /// REST seeds and live pushes share one recorder: newest ids first, at most 200.
     public internal(set) var supervisorEvents: [Components.Schemas.SupervisorEvent] = []
@@ -282,24 +296,60 @@ public final class FleetStore {
     /// A board frame's pulses (frames.ts `mergePulses`): each kept unless the
     /// one already held is newer; then every session's turn clock follows.
     func merge(pulses incoming: [String: SessionPulse]) {
-        guard !incoming.isEmpty else {
-            return
-        }
-        for (id, pulse) in incoming where pulses[id].map({ pulse.at >= $0.at }) ?? true {
-            pulses[id] = pulse
-        }
-        for pulse in pulses.values {
+        for (id, pulse) in incoming where pulseCell(id).pulse.map({ pulse.at >= $0.at }) ?? true {
             adopt(pulse: pulse)
         }
     }
 
+    /// Takes a session's pulse. Its activity and its turn clock are written
+    /// only when they change, so what reads them (which list a session stands
+    /// in) is not woken by a pulse that only moved its tool or its time.
     func adopt(pulse: SessionPulse) {
-        pulses[pulse.instanceId] = pulse
-        if pulse.activity == .idle {
-            turnSince[pulse.instanceId] = nil
-        } else if turnSince[pulse.instanceId] == nil {
-            turnSince[pulse.instanceId] = pulse.at
+        let cell = pulseCell(pulse.instanceId)
+        if cell.pulse != pulse {
+            cell.pulse = pulse
         }
+        if cell.settled?.activity != pulse.activity {
+            cell.settled = pulse
+        }
+        if pulse.activity == .idle {
+            if cell.turnSince != nil {
+                cell.turnSince = nil
+            }
+        } else if cell.turnSince == nil {
+            cell.turnSince = pulse.at
+        }
+    }
+
+    /// Forgets every pulse (a new hub, a reconnect's fresh read).
+    func resetPulses() {
+        for cell in pulseCells.values {
+            cell.pulse = nil
+            cell.settled = nil
+            cell.turnSince = nil
+        }
+    }
+
+    private func pulseCell(_ id: String) -> PulseCell {
+        if let cell = pulseCells[id] {
+            return cell
+        }
+        let cell = PulseCell()
+        pulseCells[id] = cell
+        return cell
+    }
+
+    /// A session's latest pulse: its tool in flight and when it last moved.
+    /// Read where one session is drawn; it moves with every pulse of that session.
+    public func pulse(_ id: String) -> SessionPulse? {
+        pulseCell(id).pulse
+    }
+
+    /// The pulse at which a session's activity last changed: working, blocked
+    /// or idle. Read where sessions are sorted into lists; it moves only when
+    /// a session changes what it is doing.
+    public func activityPulse(_ id: String) -> SessionPulse? {
+        pulseCell(id).settled
     }
 
     public func machineName(_ machineId: String) -> String {
@@ -353,12 +403,12 @@ public final class FleetStore {
         if let run = run(row.id) {
             return run.movedAt
         }
-        return pulses[row.id]?.at ?? row.updatedMs
+        return pulse(row.id)?.at ?? row.updatedMs
     }
 
     /// When a session last pulsed, ms epoch; a run's is when it last moved.
     public func pulseAt(_ id: String) -> Double? {
-        run(id)?.movedAt ?? pulses[id]?.at
+        run(id)?.movedAt ?? pulse(id)?.at
     }
 
     /// When a session's current turn began; a run's turn is the run.
@@ -366,7 +416,7 @@ public final class FleetStore {
         if let run = run(id) {
             return run.since
         }
-        return turnSince[id]
+        return pulseCell(id).turnSince
     }
 
     /// The stored sessions a machine lists, side quests left out.

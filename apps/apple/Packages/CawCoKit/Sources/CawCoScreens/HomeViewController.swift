@@ -69,6 +69,14 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
     /// A cell is under the finger; `pending` is the snapshot waiting for it to lift.
     private var pressed = false
     private var pending: (snapshot: NSDiffableDataSourceSnapshot<Section, Item>, animated: Bool)?
+    /// A rows pass came while a finger was down; it runs once the finger lifts.
+    private var rowsWaiting = false
+    /// The board `refreshContent` read, for `drawContent` to apply.
+    private var built: NSDiffableDataSourceSnapshot<Section, Item>?
+    /// What each item last drew, and the count of board reads the items that
+    /// draw only what `build()` read are stamped with.
+    private var prints = RowPrints<Item>()
+    private var contentRevision = 0
     private var counts = (working: 0, finished: 0, finishedFailed: false)
     private var cawLine = ""
     /// Read in `build()`, so a change to either alone runs the update again.
@@ -286,23 +294,11 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
             }
         }
         let row = UICollectionView.CellRegistration<RowCell, Item> { [weak self] cell, _, item in
-            guard let self, case let .row(id) = item, let entry = rows[id] else { return }
+            guard let self, case let .row(id) = item, let entry = rows[id], let content = rowContent(id) else { return }
             let line = entry.line.line
-            let session = line.row
             cell.configure(depth: line.depth, first: line.first, last: line.last, through: entry.through)
-            cell.row.configure(SessionRowView.Content(
-                id: session.id,
-                place: session.cwd.isEmpty ? session.machineId : session.cwd,
-                status: Self.status(session, home: home, done: entry.tab == .finished),
-                title: home.fleetTitle(session),
-                line: line.context ? "" : home.meta(session, tab: entry.tab, group: entry.group),
-                trail: line.context ? "" : home.age(session, tab: entry.tab),
-                fold: entry.line.fold,
-                context: line.context,
-                stale: !home.live,
-                hover: session.id
-            ))
-            cell.row.count.onToggle = { [weak self] in self?.toggleTree(session.id) }
+            cell.row.configure(content)
+            cell.row.count.onToggle = { [weak self] in self?.toggleTree(id) }
         }
         let more = UICollectionView.CellRegistration<MoreCell, Item> { [weak self] cell, _, item in
             guard let self, case let .more(id) = item, let more = groups[id]?.group.more else { return }
@@ -337,17 +333,8 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
             }, for: .editingChanged)
         }
         let recentRow = UICollectionView.CellRegistration<RecentRowCell, Item> { [weak self] cell, _, item in
-            guard let self, case let .recent(id) = item, let recent = recentItems[id] else { return }
-            cell.row.configure(SessionRowView.Content(
-                id: recent.id,
-                place: recent.markPlace,
-                status: Self.status(recent.instance, home: home),
-                title: recent.title,
-                line: recent.place,
-                trail: recent.at > 0 ? Naming.span(ms: home.now - recent.at) : "",
-                stale: !home.live,
-                hover: recent.instance?.id
-            ))
+            guard let self, case let .recent(id) = item, let content = recentContent(id) else { return }
+            cell.row.configure(content)
         }
         let note = UICollectionView.CellRegistration<NoteCell, Item> { [weak self] cell, _, _ in
             cell.label.text = "No session matches “\(self?.search ?? "")”."
@@ -385,16 +372,108 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
 
     // MARK: Updates
 
+    /// A driven motion owns the list until it lands, and asks again then.
+    private var listIsFree: Bool {
+        dataSource != nil && !relay.running && !branch.running && swipe?.active != true && !flight.running
+    }
+
+    /// What the model says stands on the board now, read under observation.
     override func refreshContent() {
-        // A driven motion owns the list until it lands, and asks again then.
-        guard dataSource != nil, !relay.running, !branch.running, swipe?.active != true, !flight.running else {
+        built = listIsFree ? build() : nil
+    }
+
+    /// Applies it. Unobserved: the cells it configures read their own
+    /// sessions, which must not tie the whole board to them.
+    override func drawContent() {
+        guard let next = built else { return }
+        built = nil
+        commit(next, animated: true)
+    }
+
+    /// A session's pulse, the minute turning: the rows whose drawn state
+    /// moved are configured again in place, and nothing else is touched.
+    override func refreshRows() {
+        guard listIsFree else { return }
+        var snapshot = dataSource.snapshot()
+        // Read under observation even with a finger down, so the next change is still heard.
+        let next = Dictionary(snapshot.itemIdentifiers.map { ($0, print(of: $0)) }, uniquingKeysWith: { first, _ in first })
+        // A row under the finger holds the board still (see `commit`).
+        guard !pressed else {
+            rowsWaiting = true
             return
         }
-        commit(build(), animated: true)
+        let moved = prints.take(next)
+        guard !moved.isEmpty else { return }
+        snapshot.reconfigureItems(moved)
+        dataSource.apply(snapshot, animatingDifferences: false)
+    }
+
+    // MARK: What a row draws
+
+    /// A work row's content: what its cell draws, and what tells the rows pass it moved.
+    private func rowContent(_ id: String) -> SessionRowView.Content? {
+        guard let entry = rows[id] else { return nil }
+        let line = entry.line.line
+        let session = line.row
+        return SessionRowView.Content(
+            id: session.id,
+            place: session.cwd.isEmpty ? session.machineId : session.cwd,
+            status: Self.status(session, home: home, done: entry.tab == .finished),
+            title: home.fleetTitle(session),
+            line: line.context ? "" : home.meta(session, tab: entry.tab, group: entry.group),
+            trail: line.context ? "" : home.age(session, tab: entry.tab),
+            fold: entry.line.fold,
+            context: line.context,
+            stale: !home.live,
+            hover: session.id
+        )
+    }
+
+    private func recentContent(_ id: String) -> SessionRowView.Content? {
+        guard let recent = recentItems[id] else { return nil }
+        return SessionRowView.Content(
+            id: recent.id,
+            place: recent.markPlace,
+            status: Self.status(recent.instance, home: home),
+            title: recent.title,
+            line: recent.place,
+            trail: recent.at > 0 ? Naming.span(ms: home.now - recent.at) : "",
+            stale: !home.live,
+            hover: recent.instance?.id
+        )
+    }
+
+    /// What an item draws, as something two passes can compare. A session's
+    /// row and a needs card carry state of their own (a pulse, an age, an
+    /// answer on its way); every other item draws only what `build()` read,
+    /// so it moves when the board is read again and not otherwise.
+    private func print(of item: Item) -> AnyHashable {
+        switch item {
+        case let .row(id):
+            guard let entry = rows[id], let content = rowContent(id) else { return AnyHashable(contentRevision) }
+            let line = entry.line.line
+            return AnyHashable([AnyHashable(line.depth), AnyHashable(line.first), AnyHashable(line.last), AnyHashable(entry.through), AnyHashable(content)])
+        case let .recent(id):
+            return recentContent(id).map(AnyHashable.init) ?? AnyHashable(contentRevision)
+        case let .need(id):
+            guard let need = needs[id] else { return AnyHashable(contentRevision) }
+            var sent: Ledger.Command?
+            var asks = ""
+            if case let .ask(parked) = need.kind {
+                sent = hub.needs.answerSent(for: parked)
+                asks = "\(parked.summary)\u{1f}\(parked.isQuestion)"
+            }
+            let stage = NeedsCardCell.stageWords(sent)
+            let waited = need.raisedAt.map { Naming.span(ms: home.now - $0) } ?? ""
+            return AnyHashable([need.title, need.place, asks, waited, stage?.text ?? "", "\(stage?.failed ?? false)", "\(sent.map { $0.stage != .failed } ?? false)", "\(home.live)"])
+        default:
+            return AnyHashable(contentRevision)
+        }
     }
 
     /// The snapshot the model says now, and the lookups its cells read.
     private func build() -> NSDiffableDataSourceSnapshot<Section, Item> {
+        contentRevision += 1
         var snapshot = NSDiffableDataSourceSnapshot<Section, Item>()
         let live = home.live
         let ready = home.ready
@@ -492,8 +571,9 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
         return recentAll.filter { $0.title.lowercased().contains(needle) || $0.place.lowercased().contains(needle) }
     }
 
-    /// Applies `next`, the lines that stay reconfigured in place (their cells
-    /// keep their identity). A live change that moves lines travels
+    /// Applies `next`. Of the lines that stay, the ones whose drawn state
+    /// moved are reconfigured in place (their cells keep their identity) and
+    /// the rest are left as they are. A live change that moves lines travels
     /// (`Reflow.travel`); a driven motion applies its own unanimated.
     private func commit(_ next: NSDiffableDataSourceSnapshot<Section, Item>, animated: Bool) {
         // A row under the finger holds the board still: applying now would
@@ -509,9 +589,14 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
         let old = dataSource.snapshot()
         let before = Set(old.itemIdentifiers)
         let after = next.itemIdentifiers
-        next.reconfigureItems(after.filter { before.contains($0) })
+        let redrawn = prints.take(Dictionary(after.map { ($0, print(of: $0)) }, uniquingKeysWith: { first, _ in first }))
+        next.reconfigureItems(redrawn.filter { before.contains($0) })
         let moved = old.itemIdentifiers.filter { after.contains($0) } != after.filter { before.contains($0) }
         let structural = moved || before.count != after.count || !after.allSatisfy(before.contains)
+        // Nothing joined, left, moved or changed what it draws: the list stands as it is.
+        if !structural, redrawn.isEmpty, old.sectionIdentifiers == next.sectionIdentifiers {
+            return
+        }
         if !animated || !structural || old.numberOfItems == 0 {
             dataSource.apply(next, animatingDifferences: false)
         } else {
@@ -750,7 +835,12 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
         pressed = false
         if !collectionView.isDragging, !collectionView.isDecelerating { home.holding = false }
         DispatchQueue.main.async { [weak self] in
-            guard let self, !pressed, let waiting = pending else { return }
+            guard let self, !pressed else { return }
+            if rowsWaiting {
+                rowsWaiting = false
+                requestRows()
+            }
+            guard let waiting = pending else { return }
             pending = nil
             commit(waiting.snapshot, animated: waiting.animated)
         }

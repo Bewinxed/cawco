@@ -498,34 +498,57 @@ final class SidebarViewController: ObservedViewController {
         return unit
     }
 
-    /// Fills every drawn row from the fleet: mark, name, age, counts, which is in front.
+    /// Fills the drawn rows from the fleet: mark, name, age, counts, which is
+    /// in front. Only a row whose drawn state moved, or one just built, is
+    /// filled again: a session's pulse redraws its own row and no other.
     private func update(_ lists: [RailProjectList]) {
         let active = host?.activeSessionId
+        var prints: [String: AnyHashable] = [:]
+        var fills: [String: () -> Void] = [:]
         func walk(_ nodes: [RailBranch]) {
             for node in nodes {
                 guard let row = sessionRows[node.row.id] else { continue }
                 let at = hub.fleet.lastAt(node.row)
-                row.configure(
-                    title: hub.fleet.title(node.row),
-                    status: HomeViewController.status(node.row, home: home),
-                    place: node.row.cwd.isEmpty ? node.row.machineId : node.row.cwd,
-                    age: at == 0 ? "" : RailAge.short(at, now: home.now),
-                    count: node.count,
-                    failed: node.failed,
-                    open: openTrees.contains(node.row.id)
-                )
-                row.ageHint = at == 0 ? "No activity recorded" : "Last activity \(RailAge.ago(at, now: home.now))"
-                row.active = node.row.id == active
+                let title = hub.fleet.title(node.row)
+                let status = HomeViewController.status(node.row, home: home)
+                let place = node.row.cwd.isEmpty ? node.row.machineId : node.row.cwd
+                let age = at == 0 ? "" : RailAge.short(at, now: home.now)
+                let hint = at == 0 ? "No activity recorded" : "Last activity \(RailAge.ago(at, now: home.now))"
+                let open = openTrees.contains(node.row.id)
+                let front = node.row.id == active
+                let count = node.count
+                let failed = node.failed
+                // The row view itself is part of the print: a rebuilt row is filled whatever it last drew.
+                prints[node.row.id] = AnyHashable([
+                    AnyHashable(ObjectIdentifier(row)), AnyHashable(title), AnyHashable(status), AnyHashable(place), AnyHashable(age),
+                    AnyHashable(hint), AnyHashable(count), AnyHashable(failed), AnyHashable(open), AnyHashable(front),
+                ])
+                fills[node.row.id] = {
+                    row.configure(title: title, status: status, place: place, age: age, count: count, failed: failed, open: open)
+                    row.ageHint = hint
+                    row.active = front
+                }
                 walk(node.children)
             }
         }
         for list in lists {
             guard let block = blocks[list.project.id] else { continue }
-            block.configure(name: list.project.name, running: list.running, open: !prefs.collapsed(list.project.cwd))
+            let name = list.project.name
+            let running = list.running
+            let open = !prefs.collapsed(list.project.cwd)
+            let key = "project:\(list.project.id)"
+            prints[key] = AnyHashable([AnyHashable(ObjectIdentifier(block)), AnyHashable(name), AnyHashable(running), AnyHashable(open)])
+            fills[key] = { block.configure(name: name, running: running, open: open) }
             walk(list.recent)
             walk(list.older)
         }
+        for key in drawnRows.take(prints, new: true) {
+            fills[key]?()
+        }
     }
+
+    /// What each rail row and project block last drew.
+    private var drawnRows = RowPrints<String>()
 
     // MARK: Folding
 

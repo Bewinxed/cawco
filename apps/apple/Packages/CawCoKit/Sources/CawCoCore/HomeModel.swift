@@ -101,13 +101,13 @@ public final class HomeModel {
         if let run = fleet.run(id) {
             return run.activity
         }
-        if needsStore.blocked(id) || fleet.pulses[id]?.activity == .blocked {
+        if needsStore.blocked(id) || fleet.activityPulse(id)?.activity == .blocked {
             return .blocked
         }
         if let count = fleet.byId[id]?.runningDelegates, count > 0 {
             return .working
         }
-        switch fleet.pulses[id]?.activity {
+        switch fleet.activityPulse(id)?.activity {
         case .working: return .working
         case .blocked: return .blocked
         case .idle, nil: return .idle
@@ -464,7 +464,7 @@ public final class HomeModel {
         public let fold: Fold?
     }
 
-    public struct Fold {
+    public struct Fold: Hashable, Sendable {
         public let count: Int
         public let failed: Int
         public let open: Bool
@@ -545,7 +545,7 @@ public final class HomeModel {
         var said = [fleet.projectOf(row.machineId, row.cwd)]
         switch tab {
         case .working:
-            if let tool = fleet.pulses[row.id]?.currentTool {
+            if let tool = fleet.pulse(row.id)?.currentTool {
                 said.append("\(tool.name) \(tool.glance)".trimmingCharacters(in: .whitespaces))
             }
         case .finished:

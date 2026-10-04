@@ -550,7 +550,7 @@ final class DelegateView: RailRow, RowContent, Disclosing {
             }
         }
         let spawnFailed = id == nil && block.toolStatus == "error"
-        let activity = id.flatMap { env.hub?.fleet.pulses[$0]?.activity.rawValue } ?? "idle"
+        let activity = id.flatMap { env.hub?.fleet.activityPulse($0)?.activity.rawValue } ?? "idle"
         let live = row?.status == .running || row?.status == .starting
         let phase: Phase
         if spawnFailed || row?.status == .error { phase = .failed }
@@ -637,7 +637,7 @@ final class DelegateView: RailRow, RowContent, Disclosing {
         let f = facts(block)
         switch f.phase {
         case .working:
-            let tool = id.flatMap { env.hub?.fleet.pulses[$0]?.currentTool }
+            let tool = id.flatMap { env.hub?.fleet.pulse($0)?.currentTool }
             status.set(tool.map { "\($0.name) \($0.glance)".trimmingCharacters(in: .whitespaces) } ?? "working", beat: true)
             status.isHidden = false
         case .spawning:
