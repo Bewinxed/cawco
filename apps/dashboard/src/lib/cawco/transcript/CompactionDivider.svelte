@@ -83,14 +83,14 @@
     <svg aria-hidden="true" class="wave"><path d={WAVE} /></svg>
   </span>
   <span class="mid"
-    ><img
-      alt=""
-      aria-hidden="true"
-      class="caw"
-      height="18"
-      src={caw2x}
-      srcset="{caw2x} 2x, {caw3x} 3x"
-      width="19"
+    ><span aria-hidden="true" class="caw"
+      ><img
+        alt=""
+        height="18"
+        src={caw2x}
+        srcset="{caw2x} 2x, {caw3x} 3x"
+        width="19"
+      ></span
     >Compacted<span class="chev"><IconChevron aria-hidden="true" /></span></span
   >
   <span class="arm">
@@ -174,13 +174,29 @@
     white-space: nowrap;
     translate: calc(var(--chev) * var(--room) * -1) 0;
   }
-  /* Caw's head, 18px tall, its middle on the word's x-height. */
+  /* Caw's slot: a box 18px tall and as wide as his frame, its middle on the
+     word's x-height. The still stands in it; a play-once strip of the same
+     frame can run in it on a live arrival and change nothing around it.
+     He is drawn in near-black with a near-white note, so one or the other
+     melts into either page: a keyline one pixel wide, cast from whatever
+     frame is showing, gives both an edge. */
   .caw {
+    --key: max(var(--dpx, 1px), round(1px, var(--dpx, 1px)));
     display: inline-block;
     vertical-align: middle;
-    inline-size: auto;
     block-size: 18px;
+    aspect-ratio: 37 / 36;
     margin-inline-end: var(--c-pill-gap);
+    filter: drop-shadow(var(--key) 0 0 var(--ink-muted))
+      drop-shadow(calc(var(--key) * -1) 0 0 var(--ink-muted))
+      drop-shadow(0 var(--key) 0 var(--ink-muted))
+      drop-shadow(0 calc(var(--key) * -1) 0 var(--ink-muted));
+
+    & img {
+      display: block;
+      inline-size: 100%;
+      block-size: 100%;
+    }
   }
   /* A zero-width box on the word's line, `middle` setting its mark on the
      word's x-height; the mark hangs out of it after the gap. */
