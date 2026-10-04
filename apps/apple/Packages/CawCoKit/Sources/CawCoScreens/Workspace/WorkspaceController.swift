@@ -41,10 +41,13 @@ final class WorkspaceController: ObservedViewController, BackSwipeGate {
         view.backgroundColor = Palette.surfaceRecess
         surface.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(surface)
+        // The groups start where the sidebar ends: the detail column runs
+        // under the sidebar, and a group laid out from the view's own edge
+        // puts its first tabs behind it.
         NSLayoutConstraint.activate([
             surface.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
-            surface.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            surface.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            surface.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor),
+            surface.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor),
             surface.bottomAnchor.constraint(equalTo: view.bottomAnchor),
         ])
         registerForTraitChanges([UITraitHorizontalSizeClass.self, UITraitVerticalSizeClass.self]) { (controller: WorkspaceController, _: UITraitCollection) in

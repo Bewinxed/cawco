@@ -24,10 +24,9 @@ struct SessionMenuContext {
 @MainActor
 enum SessionMenus {
     /// A live (hub-held) session. Keep and Discard only on a side quest; Fork
-    /// needs a conversation and its machine, Stop a live process. `onGroup`
-    /// where the rail flattened the session's folder away; `onArchive` where
-    /// it is listed as finished.
-    static func live(_ row: InstanceRow, context: SessionMenuContext, onGroup: (() -> Void)? = nil, onArchive: (() -> Void)? = nil,
+    /// needs a conversation and its machine, Stop a live process. `onArchive`
+    /// where it is listed as finished.
+    static func live(_ row: InstanceRow, context: SessionMenuContext, onArchive: (() -> Void)? = nil,
                      copy: @escaping (String, String, String) -> UIAction) -> UIMenu {
         let hub = context.hub
         let id = row.id
@@ -58,7 +57,6 @@ enum SessionMenus {
                 Task { @MainActor in try? await hub.stopSession(instanceId: id, machineId: row.machineId) }
             })
         }
-        if let onGroup { first.append(UIAction(title: "Group into folder", image: Glyph.folder.image) { _ in onGroup() }) }
         if let onArchive { first.append(UIAction(title: "Archive", image: Glyph.archive.image) { _ in onArchive() }) }
         first.append(UIAction(title: "Rename…", image: Glyph.toolEdit.image) { _ in
             context.presenter().present(RenameDialog(current: title) { next in

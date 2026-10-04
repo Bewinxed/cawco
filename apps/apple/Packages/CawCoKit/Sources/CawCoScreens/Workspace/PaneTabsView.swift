@@ -428,9 +428,15 @@ final class TabView: UIView {
         row.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 0, leading: PaneTabsView.px, bottom: 0, trailing: (PaneTabsView.px - 6) + (coarse ? 8 : 0))
         row.translatesAutoresizingMaskIntoConstraints = false
         addSubview(row)
+        // The row stays inside the tab by truncating its label, so this gives
+        // way to the buttons' own widths: a tab is measured before it has any
+        // width, and a required edge there is unsatisfiable, which makes UIKit
+        // drop constraints for good and leaves the tab's content collapsed.
+        let inside = row.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor)
+        inside.priority = .required - 1
         NSLayoutConstraint.activate([
             row.leadingAnchor.constraint(equalTo: leadingAnchor),
-            row.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor),
+            inside,
             row.centerYAnchor.constraint(equalTo: centerYAnchor),
         ])
         addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(tapped)))

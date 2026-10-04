@@ -310,6 +310,8 @@ final class PaneGroupController: UIViewController, TabSwipeHost, UIDropInteracti
             let shown = id == active || (swipeable && delta.map { abs($0) <= 1 } == true)
             slot.isHidden = !shown
             slot.isUserInteractionEnabled = id == active
+            // A neighbour parked a width aside is drawn for the swipe, not read out.
+            slot.accessibilityElementsHidden = id != active
             if swipe?.active != true, let delta { slot.transform = swipeable ? CGAffineTransform(translationX: CGFloat(delta) * width, y: 0) : .identity }
         }
     }
