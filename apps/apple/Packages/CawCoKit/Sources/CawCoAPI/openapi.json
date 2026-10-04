@@ -10331,6 +10331,17 @@
             "description": "The model's context window in tokens, exactly as the harness reports it\n(opencode's provider `limit.context`, pi's `Model.contextWindow`, and for\nclaude the `modelUsage` window the hub last observed). Absent means\nunknown — never a guess.",
             "type": "number"
           },
+          "defaultEffort": {
+            "description": "The effort the CLI applies when a spawn omits effort, measured by the\nharness. Null when the model takes none; absent when not measured.",
+            "enum": [
+              "high",
+              "low",
+              "max",
+              "medium",
+              "xhigh"
+            ],
+            "type": "string"
+          },
           "description": {
             "type": "string"
           },
