@@ -472,7 +472,7 @@
         }
       };
       Promise.all([riveRuntime(), fileBytes(layer.status)])
-        .then(([{ Rive, Layout, Fit, Alignment, EventType }, buffer]) => {
+        .then(([{ Rive, Layout, Fit, Alignment }, buffer]) => {
           if (gone) {
             return;
           }
@@ -495,12 +495,6 @@
               write(rive, { dark, reducedMotion });
               layer.rests =
                 rive.viewModelInstance?.boolean("rests")?.value ?? false;
-              // Which clip or loop he is in, as performance marks beside the measures.
-              rive.on(EventType.StateChange, (event) => {
-                for (const name of event.data as string[]) {
-                  performance.mark(`caw state ${name}`);
-                }
-              });
               listen(layer, rive);
               layer.rive = rive;
               show(layer, canvas);
