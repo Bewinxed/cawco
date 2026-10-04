@@ -1,11 +1,14 @@
 /**
- * Draws the tab icon's art from Caw's status files, with the dashboard's own
- * tile and shots (src/lib/cawco/tab-icon/) on Rive's runtime in headless
- * Chromium, so what it writes is what a tab shows:
+ * Draws the tab icon's art from Caw's status files (tab-icon-tile.ts,
+ * tab-icon-shots.ts) on Rive's runtime in headless Chromium. A tab shows
+ * only these pictures, so the dashboard draws nothing and loads no Rive for
+ * its icon:
  *
  * - src/lib/assets/brand/tab-icon-<state>.png, each state's still: what the
  *   icon shows whenever it is not moving, and `sleeping` the one every page
  *   is served with;
+ * - src/lib/assets/brand/tab-icon-needs-you-bob.png, the needs-you bob's
+ *   drawings side by side, which the icon steps through while it moves;
  * - .context/favicon/<state>-<side>.png at the repository's root, one strip
  *   per state at 32 and 64 px (the needs-you bob a drawing at a time, the
  *   stills alone), for looking at.
@@ -17,12 +20,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { chromium } from "playwright-core";
-import {
-  NEEDS_YOU,
-  type Shot,
-  SLEEPING,
-  WORKING,
-} from "../src/lib/cawco/tab-icon/shots";
+import { NEEDS_YOU, type Shot, SLEEPING, WORKING } from "./tab-icon-shots";
 
 const here = (path: string) => join(import.meta.dir, "..", path);
 const RIVE = here("node_modules/@rive-app/canvas/");
@@ -72,7 +70,7 @@ function token(name: string): string {
 }
 
 const built = await Bun.build({
-  entrypoints: [here("src/lib/cawco/tab-icon/tile.ts")],
+  entrypoints: [here("scripts/tab-icon-tile.ts")],
   target: "browser",
   format: "esm",
 });
@@ -126,8 +124,9 @@ async function strip(job: Job): Promise<Buffer> {
     ).rive;
     RuntimeLoader.setWasmUrl("/rive.wasm");
     RuntimeLoader.setWasmFallbackUrl(null);
-    const { openTile }: typeof import("../src/lib/cawco/tab-icon/tile") =
-      await import("/tile.js" as string);
+    const { openTile }: typeof import("./tab-icon-tile") = await import(
+      "/tile.js" as string
+    );
     const bytes = await (
       await fetch(`/${asked.shot.status}.riv`)
     ).arrayBuffer();
@@ -172,6 +171,14 @@ const art = states.flatMap(({ shot, moving }) => {
       file: join(STILLS, `tab-icon-${shot.status}.png`),
       job: { ...job, side: SIDE, frames: [shot.frame] },
     },
+    ...(moving.length > 1
+      ? [
+          {
+            file: join(STILLS, `tab-icon-${shot.status}-bob.png`),
+            job: { ...job, side: SIDE, frames: moving },
+          },
+        ]
+      : []),
     ...[32, SIDE].map((side) => ({
       file: join(STRIPS, `${shot.status}-${side}.png`),
       job: { ...job, side, frames: moving },

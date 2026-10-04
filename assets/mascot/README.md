@@ -51,17 +51,17 @@ Apple: `CawWaiting`). The dashboard prefetches Rive's WASM and `loading.riv` fro
 and serves the `.riv` files Brotli-compressed as `application/octet-stream`.
 
 The dashboard's tab icon is Caw too (`apps/dashboard/src/lib/cawco/tab-icon/`, DESIGN.md's Tab
-icon): his head only, through a fixed box per state (`shots.ts` names each state's loop, frames
-and box). It moves in one state, while something needs the operator: frames 46 to 85 of
-`loop_needs-you-point-plead` in `needs-you.riv`, on the same runtime and the same bytes as
-`Caw.svelte`. That animation is applied at the frame the time gone by asks for, through the
-runtime's low-level API as `prove-viewmodel.mjs` renders a loop, because a tab in the background
-runs no `requestAnimationFrame` for the `Rive` class to draw on and the state machine picks its
-loops at random. Every other state is a still, drawn ahead by `bun run tab-icon` in
-apps/dashboard into `apps/dashboard/src/lib/assets/brand/tab-icon-<state>.png` from
-`needs-you.riv`, `working.riv` (`loop_working-idea`, frame 20) and `sleeping.riv`. Run that
-again after `node build.mjs` changes any of the three, and move the boxes in `shots.ts` if a
-retraced loop moves his head.
+icon): his head only, through a fixed box per state (`apps/dashboard/scripts/tab-icon-shots.ts`
+names each state's loop, frames and box). Its pictures are drawn ahead by `bun run tab-icon` in
+apps/dashboard, which applies a loop's own animation at each frame through the runtime's
+low-level API, as `prove-viewmodel.mjs` renders a loop, and writes them to
+`apps/dashboard/src/lib/assets/brand/`: a still per state (`tab-icon-<state>.png`, from
+`needs-you.riv`, `working.riv` at frame 20 of `loop_working-idea`, and `sleeping.riv`) and
+`tab-icon-needs-you-bob.png`, frames 46 to 85 of `loop_needs-you-point-plead` side by side. The
+icon moves in one state, while something needs the operator, by stepping through that strip; the
+page itself loads no Rive and draws nothing for its icon (drawn live, his head cost 4% of the
+main thread). Run `bun run tab-icon` again after `node build.mjs` changes any of the three files,
+and move the boxes in `tab-icon-shots.ts` if a retraced loop moves his head.
 
 The state machine has no inputs. `Caw` has one instance, `Default` (both booleans off), and the
 artboard points at `Caw`, so a runtime that auto-binds gets that instance.

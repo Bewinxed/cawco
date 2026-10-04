@@ -1,19 +1,17 @@
 /**
  * Caw's head on the tab icon's tile: a rounded square of one colour with
  * transparent corners, and Caw drawn over it by Rive from his status's file,
- * seen through a shot's head box (shots.ts). Nothing here draws him: the
- * file's own animation for the loop is applied at the frame asked for, the
- * way assets/mascot/scripts/prove-viewmodel.mjs renders each loop.
+ * seen through a shot's head box (tab-icon-shots.ts). Nothing here draws
+ * him: the file's own animation for the loop is applied at the frame asked
+ * for, the way assets/mascot/scripts/prove-viewmodel.mjs renders each loop.
  *
- * The technique is a canvas read back as a PNG for the icon's href
- * (css-tricks.com/the-making-of-an-animated-favicon: "once the drawing is
- * done in the canvas, it's quickly translated to a PNG image to be assigned
- * as the favicon").
+ * It runs in the page tab-icon-art.ts opens, ahead of time: a tab shows only
+ * the pictures made here.
  */
 import type { RuntimeLoader } from "@rive-app/canvas";
-import { FPS, HEAD, type Shot } from "./shots";
+import { FPS, HEAD, type Shot } from "./tab-icon-shots";
 
-/** Rive's low-level runtime, the one the dashboard's `Rive` instances run on. */
+/** Rive's low-level runtime, as the dashboard's own package loads it. */
 export type RiveRuntime = Awaited<
   ReturnType<typeof RuntimeLoader.awaitInstance>
 >;

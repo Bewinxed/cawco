@@ -27,9 +27,9 @@
   const fileUrl = (status: CawStatus): string =>
     FILES[`../../assets/caw/${status}.riv`];
 
-  /** Each status file's bytes, fetched once and shared by every Caw and the tab's icon. */
+  /** Each status file's bytes, fetched once and shared by every Caw. */
   const bytes = new Map<CawStatus, Promise<ArrayBuffer>>();
-  export function fileBytes(status: CawStatus): Promise<ArrayBuffer> {
+  function fileBytes(status: CawStatus): Promise<ArrayBuffer> {
     const cached = bytes.get(status);
     if (cached) {
       return cached;
@@ -52,7 +52,7 @@
    * runtime's default URL and its jsdelivr fallback are both off.
    */
   let runtime: Promise<typeof import("@rive-app/canvas")> | undefined;
-  export function riveRuntime() {
+  function riveRuntime() {
     runtime ??= import("@rive-app/canvas").then((module) => {
       module.RuntimeLoader.setWasmUrl(riveWasm);
       module.RuntimeLoader.setWasmFallbackUrl(null);
