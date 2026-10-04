@@ -1006,6 +1006,14 @@ export type GitChanges =
  */
 export const CONTROL_WORKSPACE_CREATE = "workspaceCreate";
 
+/** Total git budget for cutting a workspace, including its remote fetch and checkout. */
+export const WORKSPACE_GIT_TIMEOUT_MS = 300_000;
+/** How long a new boundary may take to announce readiness. */
+export const WORKSPACE_BOUNDARY_START_TIMEOUT_MS = 15_000;
+/** Git and boundary budgets, plus a minute for setup, teardown and control transport. */
+export const WORKSPACE_CREATE_TIMEOUT_MS =
+  WORKSPACE_GIT_TIMEOUT_MS + WORKSPACE_BOUNDARY_START_TIMEOUT_MS + 60_000;
+
 /** Where {@link CONTROL_WORKSPACE_CREATE} put a workspace. */
 export interface WorkspaceCheckout {
   /** The repository's default branch, which the clone was cut from and lands on. */
@@ -1034,7 +1042,8 @@ export const CONTROL_WORKSPACE_BOUNDARY = "workspaceBoundary";
 
 /**
  * Archives a workspace on its machine: its boundary is killed, with every
- * process in it, and its clone is deleted. Args `[WorkspaceRef]`.
+ * process in it, and its clone is deleted. Args `[WorkspaceRef]`, or `[{ id }]`
+ * for an unfiled create: the machine's create record names its clone.
  */
 export const CONTROL_WORKSPACE_ARCHIVE = "workspaceArchive";
 

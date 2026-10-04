@@ -42,6 +42,8 @@ import {
   CONTROL_RUN_COMMAND,
   CONTROL_SET_PERMISSION_MODE,
   CONTROL_SLEEP,
+  CONTROL_WORKSPACE_ARCHIVE,
+  CONTROL_WORKSPACE_CREATE,
   FLEET_STATUS,
   FLEET_SYNC,
   GENERATE_IMAGE,
@@ -591,6 +593,11 @@ export class SessionSupervisor {
       key = `image:${imageRequest}`;
     } else if (control?.method === CONTROL_RUN_COMMAND) {
       key = `command:${String(control.args?.[0])}`;
+    } else if (control?.method === CONTROL_WORKSPACE_CREATE) {
+      // A late create must finish before its discard; different workspace ids do not queue together.
+      key = `workspace:${String(control.args?.[1])}`;
+    } else if (control?.method === CONTROL_WORKSPACE_ARCHIVE) {
+      key = `workspace:${(control.args?.[0] as { id?: string } | undefined)?.id}`;
     } else if (control && !envelope.instanceId) {
       // Fleet convergence cannot serialize unrelated machine controls behind
       // its HTTP probes. Mutations of the same kind still retain their order.

@@ -104,6 +104,7 @@ import {
   workflowSteps,
   workflows,
   workItems,
+  workspaceCreates,
   workspaces,
 } from "./schema";
 
@@ -230,6 +231,8 @@ export interface DbShape {
   /** A machine's last-known tool status by id; empty for one that never reported. */
   readonly agentHarnesses: (machineId: string) => HarnessReport[] | undefined;
   readonly agentTools: (machineId: string) => Record<string, ToolStatus>;
+  /** Records ownership before sending a create; a restart discards anything still unfiled. */
+  readonly beginWorkspaceCreate: (id: string, machineId: string) => void;
   /** Whether nothing has been counted yet — the backfill's cue. */
   readonly capabilityUsageEmpty: () => boolean;
   /** Every usage row on or after `day` (`YYYY-MM-DD`). */
@@ -296,6 +299,7 @@ export interface DbShape {
   readonly expirePendingSessionIdentities: (machineId: string) => void;
   /** The agent reported the session dead: what killed it, kept for late readers. */
   readonly failInstance: (id: string, error: string) => void;
+  readonly finishWorkspaceCreate: (id: string) => void;
   /** The whole desired fleet state (NEW.md §11) — what a machine is sent to converge on. */
   /**
    * The fleet's desired state. Given a machine, the content-carrying rows it
@@ -1026,6 +1030,10 @@ export interface DbShape {
   readonly workItem: (id: string) => WorkItemRow | undefined;
   /** A workspace's items, newest first. */
   readonly workItemsIn: (workspaceId: string) => WorkItemRow[];
+  /** Unfiled creates to discard when this machine next registers. */
+  readonly workspaceCreatesOn: (
+    machineId: string
+  ) => (typeof workspaceCreates.$inferSelect)[];
   /** The workspaces an id names: itself exactly, else every one it prefixes. */
   readonly workspacesNamed: (idOrPrefix: string) => WorkspaceRow[];
 }
@@ -3139,8 +3147,26 @@ const make = (path: string): DbShape => {
         .where(eq(sentMessages.uuid, uuid))
         .returning()
         .get(),
+    beginWorkspaceCreate: (id, machineId) => {
+      db.insert(workspaceCreates).values({ id, machineId }).run();
+    },
+    finishWorkspaceCreate: (id) => {
+      db.delete(workspaceCreates).where(eq(workspaceCreates.id, id)).run();
+    },
+    workspaceCreatesOn: (machineId) =>
+      db
+        .select()
+        .from(workspaceCreates)
+        .where(eq(workspaceCreates.machineId, machineId))
+        .all(),
     createWorkspace: (workspace) =>
-      db.insert(workspaces).values(workspace).returning().get(),
+      db.transaction((tx) => {
+        const row = tx.insert(workspaces).values(workspace).returning().get();
+        tx.delete(workspaceCreates)
+          .where(eq(workspaceCreates.id, workspace.id))
+          .run();
+        return row;
+      }),
     workspacesNamed: (idOrPrefix) => {
       const exact = db
         .select()

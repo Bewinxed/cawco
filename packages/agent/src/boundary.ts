@@ -40,6 +40,7 @@ import {
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import type { WorkspaceRef } from "@cawco/core";
+import { WORKSPACE_BOUNDARY_START_TIMEOUT_MS } from "@cawco/core";
 import { sessionIdentityDir } from "@cawco/core/paths";
 import { type ProcSpec, sessiondEndpoint } from "@cawco/core/sessiond";
 import { cloneInPlace } from "./clone";
@@ -118,7 +119,6 @@ const WHITESPACE = /\s+/;
 
 /** The line a boundary prints once a command can join it. */
 const READY = "cawco-boundary-ready";
-const START_TIMEOUT_MS = 15_000;
 const STOP_TIMEOUT_MS = 2000;
 
 /** The package caches a command may write, so installs, builds and Playwright keep working. */
@@ -547,10 +547,10 @@ const ready = (client: SessiondClient, procId: string): Promise<void> =>
       () =>
         finish(
           new Error(
-            `the boundary did not start within ${START_TIMEOUT_MS / 1000}s${words()}`
+            `the boundary did not start within ${WORKSPACE_BOUNDARY_START_TIMEOUT_MS / 1000}s${words()}`
           )
         ),
-      START_TIMEOUT_MS
+      WORKSPACE_BOUNDARY_START_TIMEOUT_MS
     );
     client.subscribe(
       procId,

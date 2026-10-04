@@ -425,6 +425,12 @@ export const completedTurns = sqliteTable(
 /** A workspace's life: `active` while its checkout is kept; `archived` once its boundary and clone are gone. */
 export type WorkspaceState = "active" | "archived";
 
+/** Unfiled creates owned by the hub until filed, or acknowledged discarded by their machine. */
+export const workspaceCreates = sqliteTable("workspace_creates", {
+  id: text("id").primaryKey(),
+  machineId: text("machine_id").notNull(),
+});
+
 /**
  * Where delegated work lives: one shared clone on its own branch, on one
  * machine, with the boundary every shell command of its work items runs

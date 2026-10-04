@@ -79,10 +79,10 @@ export async function callDelegationTool(
         ...(credential ? { Authorization: `Bearer ${credential}` } : {}),
       },
       body: JSON.stringify({ name, arguments: args }),
-      // A continuation summarises a whole session, and finish_item runs a
-      // work item's checks: neither has a bound to give, and neither writes
-      // a byte until it is done.
-      ...(name === "continue_session" || name === "finish_item"
+      // Workspace creation, continuation and checks may take minutes without a response byte.
+      ...(name === "continue_session" ||
+      name === "finish_item" ||
+      name === "delegate"
         ? { timeout: false }
         : {
             signal: AbortSignal.timeout(

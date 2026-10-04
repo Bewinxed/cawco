@@ -470,6 +470,21 @@ export const createWorkItems = ({
   const quiet = new Map<string, number>();
   /** Items whose checks this hub process is running now: a resume leaves them to that run. */
   const finishing = new Set<string>();
+  /** Creates this hub is still waiting for; register recovery leaves those to their caller. */
+  const opening = new Set<string>();
+  const discarding = new Map<string, Promise<void>>();
+  /** The filed and unfiled cases use the same machine archive, acknowledged before forgetting it. */
+  const discardCreate = (id: string, machineId: string): Promise<void> => {
+    const pending = discarding.get(id);
+    if (pending) {
+      return pending;
+    }
+    const discarded = call(machineId, CONTROL_WORKSPACE_ARCHIVE, [{ id }])
+      .then(() => db.finishWorkspaceCreate(id))
+      .finally(() => discarding.delete(id));
+    discarding.set(id, discarded);
+    return discarded;
+  };
   /** Every write to an item goes out to the dashboards as it lands. */
   const published = (
     item: WorkItemRow | undefined
@@ -546,21 +561,48 @@ export const createWorkItems = ({
     machineId: string
   ): Promise<WorkspaceRow> => {
     const id = crypto.randomUUID();
-    const checkout = (await call(machineId, CONTROL_WORKSPACE_CREATE, [
-      cwd,
-      id,
-    ])) as WorkspaceCheckout;
-    return db.createWorkspace({
-      id,
-      machineId,
-      repoRoot: checkout.repoRoot,
-      path: checkout.path,
-      branch: checkout.branch,
-      base: checkout.base,
-      boundaryPid: checkout.boundaryPid,
-      state: "active",
-      createdByInstanceId: parent.id,
-    });
+    db.beginWorkspaceCreate(id, machineId);
+    opening.add(id);
+    const started = Date.now();
+    try {
+      const checkout = (await call(machineId, CONTROL_WORKSPACE_CREATE, [
+        cwd,
+        id,
+      ])) as WorkspaceCheckout;
+      return db.createWorkspace({
+        id,
+        machineId,
+        repoRoot: checkout.repoRoot,
+        path: checkout.path,
+        branch: checkout.branch,
+        base: checkout.base,
+        boundaryPid: checkout.boundaryPid,
+        state: "active",
+        createdByInstanceId: parent.id,
+      });
+    } catch (error) {
+      opening.delete(id);
+      const reason = error instanceof Error ? error.message : String(error);
+      const waited = ((Date.now() - started) / 1000).toFixed(1);
+      try {
+        await discardCreate(id, machineId);
+      } catch (discardError) {
+        const pending =
+          discardError instanceof Error
+            ? discardError.message
+            : String(discardError);
+        throw new Error(
+          `Workspace create on machine ${machineId} failed after ${waited}s: ${reason}. Discard of workspace ${id} is pending (${pending}); it will be retried when the machine next registers.`,
+          { cause: discardError }
+        );
+      }
+      throw new Error(
+        `Workspace create on machine ${machineId} failed after ${waited}s: ${reason}. Workspace ${id} was discarded; no clone or boundary was left.`,
+        { cause: error }
+      );
+    } finally {
+      opening.delete(id);
+    }
   };
 
   /** A new workspace's machine; a remote one needs its own repository and cannot fork. */
@@ -1073,6 +1115,20 @@ export const createWorkItems = ({
 
   return {
     start,
+
+    /** Replays durable discards, including creates whose reply a previous hub never received. */
+    discardUnfiled(machineId: string): void {
+      for (const { id } of db.workspaceCreatesOn(machineId)) {
+        if (opening.has(id)) {
+          continue;
+        }
+        discardCreate(id, machineId).catch((error: unknown) => {
+          console.warn(
+            `[workspaces] discard ${id} on ${machineId} is still pending: ${error instanceof Error ? error.message : String(error)}`
+          );
+        });
+      }
+    },
 
     /**
      * THE gate on input to a session: why a message from `origin` may not

@@ -14,6 +14,7 @@ type ToolFactory = typeof handoffTools;
 
 /** Tools that run for minutes, and what their progress heartbeat says meanwhile. */
 const LONG_CALLS: Record<string, string> = {
+  delegate: "Creating the delegate's workspace",
   generate_image: "Generating image through ChatGPT",
   continue_session: "Summarising the session",
   finish_item: "Running the work item's acceptance checks",

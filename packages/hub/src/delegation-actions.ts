@@ -1153,6 +1153,8 @@ export const handoffActions = ({
         parentInstanceId: instanceId,
         prompt,
       }),
+      // A fresh remote fetch and, on failure, its acknowledged discard take minutes.
+      timeout: false,
     });
     if (!response.ok) {
       throw new Error(await response.text());

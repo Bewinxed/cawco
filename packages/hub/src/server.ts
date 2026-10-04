@@ -85,7 +85,9 @@ import {
   CONTROL_SEARCH_TRANSCRIPTS,
   CONTROL_SET_PERMISSION_MODE,
   CONTROL_SLEEP,
+  CONTROL_WORKSPACE_ARCHIVE,
   CONTROL_WORKSPACE_BOUNDARY,
+  CONTROL_WORKSPACE_CREATE,
   contextFitRefusal,
   delegateAskText,
   deriveTitleFromFirstMessage,
@@ -133,6 +135,7 @@ import {
   UPDATE_CAWCO,
   validateWorkflow,
   WIRE_PROTOCOL,
+  WORKSPACE_CREATE_TIMEOUT_MS,
 } from "@cawco/core";
 import { Elysia, t, ValidationError } from "elysia";
 import { websocket } from "elysia/websocket";
@@ -292,10 +295,9 @@ const UPDATE_TIMEOUT_MS = 10 * 60_000;
 /** Reading one file off a machine: it answers about as fast as a disk does. */
 const READ_TIMEOUT_MS = 10_000;
 /**
- * Cutting a workspace's clone checks out the whole tree and starts its
- * boundary, which on a large repository takes seconds; reading its log is
- * faster. Ours: a minute covers both with room, and stays inside a tool
- * call's own deadline.
+ * Workspace controls other than create/archive: enough for their boundary work.
+ * Create and its discard share the longer git-plus-boundary budget; archive
+ * may be queued behind the create it must remove.
  */
 const WORKSPACE_TIMEOUT_MS = 60_000;
 /**
@@ -6450,18 +6452,18 @@ export const createServer = (
     spawn: issueSpawn,
     send: deliverSend,
     call: async (machineId, method, args) => {
-      const answer = await callAgent(
-        machineId,
-        method,
-        args,
-        WORKSPACE_TIMEOUT_MS
-      );
+      const timeout =
+        method === CONTROL_WORKSPACE_CREATE ||
+        method === CONTROL_WORKSPACE_ARCHIVE
+          ? WORKSPACE_CREATE_TIMEOUT_MS
+          : WORKSPACE_TIMEOUT_MS;
+      const answer = await callAgent(machineId, method, args, timeout);
       if (answer === "offline") {
         throw new Error(`machine ${machineId} is not connected`);
       }
       if (answer === "timeout") {
         throw new Error(
-          `machine ${machineId} did not answer ${method} within ${WORKSPACE_TIMEOUT_MS / 1000}s`
+          `machine ${machineId} did not answer ${method} within ${timeout / 1000}s`
         );
       }
       if (!answer.ok) {
@@ -7091,6 +7093,7 @@ export const createServer = (
           if (
             input.name === "generate_image" ||
             input.name === "continue_session" ||
+            input.name === "delegate" ||
             input.name === "finish_item"
           ) {
             server?.timeout(request, 0);
@@ -9476,7 +9479,8 @@ export const createServer = (
             }
           },
         },
-        async ({ body, request, status }) => {
+        async ({ body, request, status, server }) => {
+          server?.timeout(request, 0);
           const authorization = request.headers.get("authorization");
           const identity = identities.resolve(authorization);
           if (authorization !== null && !identity) {
@@ -9719,6 +9723,7 @@ export const createServer = (
                 }
               }
               registry.registerAgent(message.machineId, ws, ws.remoteAddress);
+              workItems.discardUnfiled(message.machineId);
               // Checks a stopped hub left running on this machine run again
               // the moment it can run commands — waiting on nothing else the
               // register asks of the agent.

@@ -18,12 +18,18 @@ import type { WorkspaceRef } from "@cawco/core";
 
 /** Runs git, answering its stdout; its stderr is the error. */
 export const git = async (dir: string, ...args: string[]): Promise<string> => {
-  const run = await Bun.$`git -C ${dir} ${args}`.quiet().nothrow();
+  const run = await Bun.$`git -C ${dir} ${args}`
+    .env({ ...process.env, GIT_TERMINAL_PROMPT: "0" })
+    .quiet()
+    .nothrow();
   if (run.exitCode !== 0) {
     throw new Error(`git ${args[0]} failed: ${run.stderr.toString().trim()}`);
   }
   return run.text().trim();
 };
+
+/** Workspace creation supplies its aggregate git deadline through this runner. */
+type GitRunner = typeof git;
 
 /** Git's answer, or nothing when it has none (a detached HEAD, an unset key). */
 const gitMaybe = async (
@@ -42,17 +48,9 @@ const SYMREF_HEAD = /^ref: refs\/heads\/(\S+)\tHEAD$/m;
  * the remote rather than read off a local ref that may never have been set or
  * may have gone stale.
  */
-const remoteDefault = async (dir: string): Promise<string> => {
-  const run = await Bun.$`git -C ${dir} ls-remote --symref origin HEAD`
-    .env({ ...process.env, GIT_TERMINAL_PROMPT: "0" })
-    .quiet()
-    .nothrow();
-  if (run.exitCode !== 0) {
-    throw new Error(
-      `git ls-remote origin failed: ${run.stderr.toString().trim()}`
-    );
-  }
-  const branch = SYMREF_HEAD.exec(run.text())?.[1];
+const remoteDefault = async (dir: string, run: GitRunner): Promise<string> => {
+  const remote = await run(dir, "ls-remote", "--symref", "origin", "HEAD");
+  const branch = SYMREF_HEAD.exec(remote)?.[1];
   if (!branch) {
     throw new Error("origin does not name a default branch for its HEAD");
   }
@@ -64,9 +62,12 @@ const remoteDefault = async (dir: string): Promise<string> => {
  * `origin/HEAD` naming it. Answers the branch's name: what a checkout is cut
  * from and where its work lands.
  */
-export const fetchDefaultBranch = async (dir: string): Promise<string> => {
-  const base = await remoteDefault(dir);
-  await git(
+export const fetchDefaultBranch = async (
+  dir: string,
+  run: GitRunner = git
+): Promise<string> => {
+  const base = await remoteDefault(dir, run);
+  await run(
     dir,
     "fetch",
     "--quiet",
@@ -74,7 +75,7 @@ export const fetchDefaultBranch = async (dir: string): Promise<string> => {
     "origin",
     `+refs/heads/${base}:refs/remotes/origin/${base}`
   );
-  await git(
+  await run(
     dir,
     "symbolic-ref",
     "refs/remotes/origin/HEAD",
@@ -94,10 +95,11 @@ export const fetchDefaultBranch = async (dir: string): Promise<string> => {
  */
 export const prepareClone = async (
   source: string,
-  dir: string
+  dir: string,
+  run: GitRunner = git
 ): Promise<string> => {
-  const remote = await git(source, "remote", "get-url", "origin");
-  await git(
+  const remote = await run(source, "remote", "get-url", "origin");
+  await run(
     source,
     "clone",
     "--quiet",
@@ -107,7 +109,7 @@ export const prepareClone = async (
     dir
   );
   try {
-    const copied = await git(
+    const copied = await run(
       dir,
       "for-each-ref",
       "--format=%(refname)",
@@ -116,10 +118,10 @@ export const prepareClone = async (
     );
     for (const ref of copied.split("\n").filter(Boolean)) {
       // biome-ignore lint/performance/noAwaitInLoops: a fresh clone holds a handful of refs, deleted one git call at a time
-      await git(dir, "update-ref", "-d", ref);
+      await run(dir, "update-ref", "-d", ref);
     }
-    await git(dir, "remote", "set-url", "origin", remote);
-    return await fetchDefaultBranch(dir);
+    await run(dir, "remote", "set-url", "origin", remote);
+    return await fetchDefaultBranch(dir, run);
   } catch (error) {
     await rm(dir, { recursive: true, force: true });
     throw error;
