@@ -189,6 +189,13 @@ public final class DelegateTailView: UIView {
             return
         }
         let known = Set(shown + queue)
+        // History that lands above what is on screen (the transcript read arriving under a
+        // note already shown) is simply there too, in the slots still free.
+        var earlier: [String] = []
+        if let top = shown.first.flatMap(keys.firstIndex(of:)), shown.count < Self.slots {
+            earlier = keys[max(0, top - (Self.slots - shown.count)) ..< top].filter { !known.contains($0) }
+            shown.insert(contentsOf: earlier, at: 0)
+        }
         var arrivals = keys[(from + 1)...].filter { !known.contains($0) }
         // A line being written that has just settled keeps its place: same row, new key.
         if let end = shown.last, end.hasPrefix("live:"), !present.contains(end), let next = arrivals.first,
@@ -198,6 +205,9 @@ public final class DelegateTailView: UIView {
         }
         queue.append(contentsOf: arrivals)
         render()
+        for key in earlier {
+            if let view = rowViews[key] { fadeIn(view) }
+        }
         if !arrivals.isEmpty { pump() }
     }
 
@@ -414,11 +424,17 @@ private final class TailRowView: UIView {
         .init(view: words, shrinks: true),
     ], gap: Space.space2)
 
+    /// Inline code's surfaces, under the words and clipped to their box.
+    private let surfaces = CALayer()
+
     init() {
         super.init(frame: .zero)
+        surfaces.masksToBounds = true
+        layer.addSublayer(surfaces)
         addSubview(line)
         isAccessibilityElement = true
         accessibilityTraits = .staticText
+        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (row: TailRowView, _: UITraitCollection) in row.setNeedsLayout() }
     }
 
     @available(*, unavailable)
@@ -429,6 +445,8 @@ private final class TailRowView: UIView {
     override func layoutSubviews() {
         super.layoutSubviews()
         line.frame = bounds
+        line.layoutIfNeeded()
+        drawSurfaces()
     }
 
     /// A row's text: the meta size in the body face or the mono. Each run is
@@ -479,9 +497,11 @@ private final class TailRowView: UIView {
         }
         verb.isHidden = lead == nil
         verb.attributedText = lead
-        words.isHidden = rest == nil || rest?.length == 0
+        // An empty argument or name is still the row's item, as its span is on the web: the gap before it stays.
+        words.isHidden = rest == nil
         words.attributedText = rest
         line.refit()
+        setNeedsLayout()
         accessibilityLabel = [lead?.string, rest?.string].compactMap(\.self).filter { !$0.isEmpty }.joined(separator: " ")
     }
 
@@ -509,10 +529,40 @@ private final class TailRowView: UIView {
             }
         }
         walk(Document(parsing: PartialSyntax.hide(source)), base)
-        // Inline code keeps its surface; a label draws it as the run's background.
-        out.enumerateAttribute(.inlineCode, in: NSRange(location: 0, length: out.length)) { surface, range, _ in
-            if let surface = surface as? UIColor { out.addAttribute(.backgroundColor, value: surface, range: range) }
-        }
+        let all = NSRange(location: 0, length: out.length)
+        // `.stream .text *` zeroes every padding: inline code stands flush in the line.
+        out.removeAttribute(.kern, range: all)
+        // Nothing in the tail is pressed: a link keeps its ink and underline only
+        // (a label would repaint a `.link` run in the system's tint).
+        out.removeAttribute(.link, range: all)
         return out
+    }
+
+    /// Inline code's surface (`code { background: --surface-recess; border-radius: --radius-xs }`,
+    /// its padding zeroed here): the run's own content box, rounded, clipped where the words are.
+    private func drawSurfaces() {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        defer { CATransaction.commit() }
+        surfaces.sublayers?.forEach { $0.removeFromSuperlayer() }
+        guard !words.isHidden, let text = words.attributedText, text.length > 0 else { return }
+        let all = NSRange(location: 0, length: text.length)
+        surfaces.frame = CGRect(x: words.frame.minX, y: 0, width: words.frame.width, height: bounds.height)
+        // The line's baseline: under the tallest ascent in it.
+        var ascent = 0.0
+        text.enumerateAttribute(.font, in: all) { font, _, _ in
+            ascent = max(ascent, (font as? UIFont)?.ascender ?? 0)
+        }
+        let baseline = words.frame.minY + ascent
+        text.enumerateAttribute(.inlineCode, in: all) { surface, range, _ in
+            guard let surface = surface as? UIColor, let font = text.attribute(.font, at: range.location, effectiveRange: nil) as? UIFont else { return }
+            let start = text.attributedSubstring(from: NSRange(location: 0, length: range.location)).size().width
+            let width = text.attributedSubstring(from: range).size().width
+            let box = CALayer()
+            box.frame = CGRect(x: start, y: baseline - font.ascender, width: width, height: font.ascender - font.descender)
+            box.cornerRadius = Radius.radiusXs
+            box.backgroundColor = surface.resolvedColor(with: traitCollection).cgColor
+            surfaces.addSublayer(box)
+        }
     }
 }

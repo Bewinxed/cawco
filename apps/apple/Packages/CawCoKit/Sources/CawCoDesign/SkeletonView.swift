@@ -19,7 +19,12 @@ public final class SkeletonView: UIView {
         layer.addSublayer(sheen)
         heightAnchor.constraint(equalToConstant: height).isActive = true
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (view: SkeletonView, _: UITraitCollection) in view.paint() }
+        NotificationCenter.default.addObserver(self, selector: #selector(motionChanged), name: UIAccessibility.reduceMotionStatusDidChangeNotification, object: nil)
         paint()
+    }
+
+    @objc private func motionChanged() {
+        setNeedsLayout()
     }
 
     @available(*, unavailable)
@@ -35,9 +40,14 @@ public final class SkeletonView: UIView {
 
     override public func layoutSubviews() {
         super.layoutSubviews()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
         sheen.frame = bounds
+        // With less motion there is no sheen at all (`kit-skeleton::after` exists only with motion allowed).
+        sheen.isHidden = UIAccessibility.isReduceMotionEnabled
+        CATransaction.commit()
         sheen.removeAnimation(forKey: "sweep")
-        guard !UIAccessibility.isReduceMotionEnabled, bounds.width > 0 else { return }
+        guard !sheen.isHidden, bounds.width > 0 else { return }
         let sweep = CABasicAnimation(keyPath: "transform.translation.x")
         sweep.fromValue = -bounds.width
         sweep.toValue = bounds.width
