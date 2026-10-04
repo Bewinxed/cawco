@@ -29,6 +29,8 @@ public enum CawStatus: String, CaseIterable, Sendable {
     case reconnecting
     /// Nothing is going on: no session working anywhere and nothing needing the operator.
     case sleeping
+    /// Beside "Compacted" in a transcript: his head alone, a folded note in his beak (`CawMark`).
+    case compacted
 }
 
 /// Caw at a brand moment: an empty board, first run, loading, reconnecting.
@@ -492,7 +494,7 @@ public final class CawWaiting: UIViewController {
 /// One status's Caw: its Rive view and the `Caw` instance bound to its state machine, kept
 /// together so the instance lives exactly as long as the view that draws it.
 @MainActor
-private final class CawLayer {
+final class CawLayer {
     let status: CawStatus
     let view: RiveUIView
     let caw: ViewModelInstance
@@ -511,7 +513,8 @@ private final class CawLayer {
         hearing?.cancel()
     }
 
-    static func load(_ status: CawStatus, dark: Bool, reducedMotion: Bool) async throws -> CawLayer {
+    /// `fit` is how the artboard stands in the view: contained by default; a mark gives its own.
+    static func load(_ status: CawStatus, dark: Bool, reducedMotion: Bool, fit: Fit? = nil) async throws -> CawLayer {
         let file = try await CawFiles.file(for: status)
         let artboard = try await file.createArtboard(CawContract.artboard)
         let stateMachine = try await artboard.createStateMachine(CawContract.stateMachine)
@@ -520,6 +523,7 @@ private final class CawLayer {
         CawContract.write(to: caw, dark: dark, reducedMotion: reducedMotion)
         try await stateMachine.bindViewModelInstances(main: caw)
         let rive = try await Rive(file: file, artboard: artboard, stateMachine: stateMachine)
+        if let fit { rive.fit = fit }
         let view = RiveUIView(rive: rive, delegate: nil, isPaused: false)
         view.isUserInteractionEnabled = false
         view.isAccessibilityElement = false
@@ -544,7 +548,7 @@ private final class CawLayer {
 
 /// Where the files draw Caw's still: a 512 × 512 box at (43, 40) in their 592 × 592 artboard. The
 /// room around the box is for his acting (assets/mascot/README.md, Contract).
-private enum CawGeometry {
+enum CawGeometry {
     static let artboard = CGSize(width: 592, height: 592)
     static let stillBox = CGRect(x: 43, y: 40, width: 512, height: 512)
 }
@@ -552,7 +556,7 @@ private enum CawGeometry {
 /// The `Caw` view model's names, as the files define them. Main-actor isolated: rive-ios's
 /// property descriptors are not Sendable, and every use of them is on the main actor.
 @MainActor
-private enum CawContract {
+enum CawContract {
     static let artboard = "Caw"
     static let stateMachine = "CawStates"
     static let viewModel = "Caw"
@@ -571,12 +575,18 @@ private enum CawContract {
 
 /// The one Worker every Caw shares, and each status file's bytes, read from the bundle once.
 @MainActor
-private enum CawFiles {
+enum CawFiles {
     private static var worker: Worker?
     private static var bytes: [CawStatus: Data] = [:]
 
     static func file(for status: CawStatus) async throws -> File {
         try await File(source: .data(cachedBytes(status)), worker: shared())
+    }
+
+    /// Reads `status`'s bytes and starts the Worker ahead of the first Caw that needs them.
+    static func warm(_ status: CawStatus) async throws {
+        _ = try await cachedBytes(status)
+        _ = try await shared()
     }
 
     private static func cachedBytes(_ status: CawStatus) async throws -> Data {
