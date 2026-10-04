@@ -53,6 +53,8 @@ public final class HubConnection {
     /// The delegates' work items their parents' trays read.
     public private(set) var workItems: WorkItemsStore!
     public private(set) var workflowRuns: WorkflowRunsStore!
+    /// Every workflow, as the Workflows page lists and launches them.
+    public private(set) var workflows: WorkflowsStore!
 
     @ObservationIgnored private var run: Task<Void, Never>?
     @ObservationIgnored private var outageTimer: Task<Void, Never>?
@@ -76,6 +78,7 @@ public final class HubConnection {
         tasks = TasksStore(hub: self)
         workItems = WorkItemsStore(hub: self)
         workflowRuns = WorkflowRunsStore(hub: self)
+        workflows = WorkflowsStore(hub: self)
         ledger.applyFrame = { [weak self] id, data in self?.sessions.apply(id, data: data) }
         ledger.rereadHistory = { [weak self] id in self?.sessions.read(id) }
         if address != nil {
@@ -155,6 +158,7 @@ public final class HubConnection {
         tasks.reset()
         workItems.reset()
         workflowRuns.reset()
+        workflows.reset()
     }
 
     private func start() {
@@ -340,8 +344,7 @@ public final class HubConnection {
         // fleet is read.
         let adopt = await Self.readFleet(client)
         guard adopt(self) else { return false }
-        let runs = await Self.readRuns(client)
-        runs(self)
+        await workflows.refresh()
         return true
     }
 
@@ -424,44 +427,6 @@ public final class HubConnection {
             }
             hub.fleet.fleetRead = true
             return true
-        }
-    }
-
-    /// Every workflow and its runs (workflow-state.svelte.ts `refreshWorkflows`);
-    /// `workflow` frames keep them current from then on. Read and shaped off
-    /// the main actor, as the registry is.
-    @concurrent
-    private nonisolated static func readRuns(_ client: Client) async -> Adoption<Void> {
-        do {
-            let workflows = try await client.getApiWorkflows().ok.body.json.workflows
-            var names: [String: String] = [:]
-            for workflow in workflows {
-                names[workflow.id] = workflow.name
-            }
-            let batches = try await withThrowingTaskGroup(of: [Components.Schemas.PublicRun].self) { group in
-                for workflow in workflows {
-                    group.addTask { try await client.getApiWorkflowsByIdRuns(path: .init(id: workflow.id)).ok.body.json.runs }
-                }
-                var all: [Components.Schemas.PublicRun] = []
-                for try await runs in group {
-                    all += runs
-                }
-                return all
-            }
-            var runs: [String: BoardRun] = [:]
-            for run in batches {
-                runs[run.value1.id] = BoardRun(run)
-            }
-            return { [names, runs] hub in
-                hub.fleet.adopt(workflowNames: names, runs: runs)
-                hub.fleet.runsRead = true
-            }
-        } catch {
-            let said = String(describing: error)
-            return { hub in
-                hub.log.error("workflow runs unreadable: \(said, privacy: .public)")
-                hub.fleet.runsRead = true
-            }
         }
     }
 

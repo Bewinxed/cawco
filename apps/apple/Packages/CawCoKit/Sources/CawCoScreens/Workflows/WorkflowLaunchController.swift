@@ -1,0 +1,244 @@
+import CawCoCore
+import CawCoDesign
+import Observation
+import UIKit
+
+/// The launch form (WorkflowLaunch.svelte): "Run <name>", the workflow's own
+/// inputs (the Start node's for a graph, the `inputs` export for a program),
+/// the workspace it runs in (a project fills the machine and the directory;
+/// either can be set by hand, the directory browsed on an online machine), an
+/// optional supervisor, and Cancel beside Start run. A required input left
+/// empty stops the start and takes the keyboard. Start run waits for an
+/// online machine, a directory and the hub; while it runs the dialog stays
+/// up, and what the hub refused is said above the buttons.
+final class WorkflowLaunchController: KitDialogController {
+    private let hub: HubConnection
+    private let workflow: WorkflowRow
+    private let onLaunched: (String) -> Void
+    private var machineId = ""
+    private var supervisor = ""
+    private var types: [String] = []
+    private var busy = false
+    /// Each input's control, in the order the workflow declares them.
+    private var inputs: [(field: WorkflowField, control: UIView)] = []
+    private let projectSelect = WorkflowSelect()
+    private let machineSelect = WorkflowSelect()
+    private let directory = WorkflowInput(mono: true)
+    private let supervisorSelect = WorkflowSelect()
+    private let failure = WorkflowError()
+    private var picker: DirectoryPickerView!
+    private var cancel: UIButton!
+    private var start: UIButton!
+    private var chosenProject = ""
+
+    init(hub: HubConnection, workflow: WorkflowRow, onLaunched: @escaping (String) -> Void) {
+        self.hub = hub
+        self.workflow = workflow
+        self.onLaunched = onLaunched
+        super.init(width: .xl)
+    }
+
+    @available(*, unavailable)
+    required init?(coder _: NSCoder) {
+        fatalError("WorkflowLaunchController is built in code")
+    }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        // The form's parts are 14pt apart (`.wf-stack`); the header stands
+        // directly on the form, with no gap of its own.
+        body.spacing = Space.space4
+        let header = KitDialogController.header(
+            title: "Run \(workflow.name)",
+            description: "Choose the inputs and workspace for this workflow run."
+        )
+        body.addArrangedSubview(header)
+        body.setCustomSpacing(0, after: header)
+
+        let defaults = workflow.graph?.settings
+        let project = defaults?.defaultProject.flatMap { id in hub.fleet.projects.first { $0.id == id } }
+        machineId = defaults?.defaultMachine ?? project?.machineId ?? ""
+        directory.text = project?.cwd ?? ""
+        supervisor = defaults?.defaultSupervisor?.delegateType ?? ""
+
+        for field in workflow.fields {
+            let control = control(for: field)
+            control.accessibilityIdentifier = "launch-\(field.name)"
+            inputs.append((field, control))
+            body.addArrangedSubview(WorkflowForm.labelled("\(field.label)\(field.required ? " (required)" : "")", control))
+        }
+
+        // `.wf-well`: the recess, 7pt in, its parts 11pt apart.
+        let heading = KitLabel(WorkflowForm.text(TypeScale.typeLabel), ink: Palette.inkStrong)
+        heading.text = "Workspace"
+        heading.accessibilityTraits = .header
+        projectSelect.onChange = { [weak self] id in self?.choose(project: id) }
+        machineSelect.onChange = { [weak self] id in
+            self?.machineId = id
+            self?.draw()
+        }
+        directory.addAction(UIAction { [weak self] _ in self?.draw() }, for: .editingChanged)
+        picker = DirectoryPickerView(hub: hub, machineId: { [weak self] in self?.machineId ?? "" }, value: { [weak self] in self?.directory.text ?? "" })
+        picker.onSelect = { [weak self] path in
+            self?.directory.text = path
+            self?.draw()
+        }
+        picker.onResize = { [weak self] in self?.morph {} }
+        let well = UIStackView(arrangedSubviews: [
+            heading,
+            WorkflowForm.labelled("Project", projectSelect),
+            WorkflowForm.labelled("Machine", machineSelect),
+            WorkflowForm.labelled("Directory", directory),
+            picker,
+        ])
+        well.axis = .vertical
+        well.spacing = Space.space3
+        well.isLayoutMarginsRelativeArrangement = true
+        well.directionalLayoutMargins = NSDirectionalEdgeInsets(top: Space.space2, leading: Space.space2, bottom: Space.space2, trailing: Space.space2)
+        well.backgroundColor = Palette.surfaceRecess
+        well.layer.cornerRadius = Radius.radiusSm
+        well.layer.cornerCurve = .continuous
+        body.addArrangedSubview(well)
+
+        supervisorSelect.onChange = { [weak self] name in self?.supervisor = name }
+        body.addArrangedSubview(WorkflowForm.labelled("Supervisor", supervisorSelect))
+        failure.isHidden = true
+        body.addArrangedSubview(failure)
+
+        cancel = KitButton.workflow("Cancel") { [weak self] in self?.requestClose() }
+        start = KitButton.workflow("Start run", primary: true) { [weak self] in self?.submit() }
+        // `.wf-launch button { min-height: 44px }`.
+        for button in [cancel, start] as [UIButton] {
+            button.heightAnchor.constraint(greaterThanOrEqualToConstant: Size.cBtnHLg).isActive = true
+        }
+        let foot = UIStackView(arrangedSubviews: [cancel, UIView(), start])
+        foot.spacing = Space.space2
+        foot.alignment = .center
+        body.addArrangedSubview(foot)
+
+        sync()
+        Task {
+            do {
+                types = try await hub.workflows.delegateTypes()
+                draw()
+            } catch {
+                say(error.localizedDescription)
+            }
+        }
+    }
+
+    /// An input's control by its type: a menu of its options, one line for a
+    /// path, and a text area for anything else; each starts at its default.
+    private func control(for field: WorkflowField) -> UIView {
+        let preset = field.preset ?? ""
+        switch field.type {
+        case .select:
+            let select = WorkflowSelect()
+            let options = [WorkflowSelect.Option(value: "", label: "Choose")] + (field.options ?? []).map { WorkflowSelect.Option(value: $0, label: $0) }
+            select.set(options, value: options.contains { $0.value == preset } ? preset : "")
+            return select
+        case .path:
+            let input = WorkflowInput()
+            input.text = preset
+            return input
+        case .text:
+            let area = WorkflowTextArea()
+            area.set(preset)
+            return area
+        }
+    }
+
+    private func value(of control: UIView) -> String {
+        switch control {
+        case let select as WorkflowSelect: select.value
+        case let input as WorkflowInput: input.text ?? ""
+        case let area as WorkflowTextArea: area.text ?? ""
+        default: ""
+        }
+    }
+
+    /// Choosing a project sets its machine and its directory.
+    private func choose(project id: String) {
+        chosenProject = id
+        guard let project = hub.fleet.projects.first(where: { $0.id == id }) else { return }
+        machineId = project.machineId
+        directory.text = project.cwd
+        draw()
+    }
+
+    /// Draws the form, and again whenever the fleet it reads moves: one
+    /// observation, renewed each time it fires.
+    private func sync() {
+        withObservationTracking {
+            draw()
+        } onChange: { [weak self] in
+            Task { @MainActor in self?.sync() }
+        }
+    }
+
+    private func draw() {
+        let machines = hub.fleet.machines
+        projectSelect.set(
+            [.init(value: "", label: "Choose a project or enter a directory")] + hub.fleet.projects.map { .init(value: $0.id, label: $0.name) },
+            value: chosenProject
+        )
+        machineSelect.set(
+            [.init(value: "", label: "Choose a machine", disabled: true)] + machines.map { machine in
+                let online = machine.status == "online"
+                return .init(value: machine.machineId, label: online ? machine.hostname : "\(machine.hostname) · offline", disabled: !online)
+            },
+            value: machines.contains { $0.machineId == machineId } ? machineId : ""
+        )
+        supervisorSelect.set([.init(value: "", label: "None")] + types.map { .init(value: $0, label: $0) }, value: types.contains(supervisor) ? supervisor : "")
+        let online = machines.contains { $0.machineId == machineId && $0.status == "online" }
+        if picker.isHidden == online {
+            morph { picker.isHidden = !online }
+        }
+        let path = directory.text ?? ""
+        cancel.isEnabled = !busy
+        start.isEnabled = online && !path.isEmpty && hub.state == .connected
+        holdsOpen = busy
+    }
+
+    private func say(_ text: String) {
+        morph {
+            failure.text = text
+            failure.isHidden = text.isEmpty
+        }
+        if !text.isEmpty { UIAccessibility.post(notification: .announcement, argument: text) }
+    }
+
+    private func submit() {
+        guard !busy else { return }
+        // A required input left empty stops the start where a form's own check would.
+        if let empty = inputs.first(where: { $0.field.required && value(of: $0.control).isEmpty }) {
+            switch empty.control {
+            case let select as WorkflowSelect: select.missing = true
+            case let input as WorkflowInput: input.missing = true; input.becomeFirstResponder()
+            case let area as WorkflowTextArea: area.missing = true; area.becomeFirstResponder()
+            default: break
+            }
+            UIAccessibility.post(notification: .announcement, argument: "\(empty.field.label) is required")
+            return
+        }
+        view.endEditing(true)
+        busy = true
+        say("")
+        PromptCardView.setPending(start, true, label: "Starting workflow run…")
+        draw()
+        let values = Dictionary(uniqueKeysWithValues: inputs.map { ($0.field.name, value(of: $0.control)) })
+        Task {
+            do {
+                let runId = try await hub.workflows.launch(workflow.id, inputs: values, machineId: machineId, path: directory.text ?? "", supervisor: supervisor)
+                busy = false
+                holdsOpen = false
+                dismiss(animated: true) { [onLaunched] in onLaunched(runId) }
+            } catch {
+                busy = false
+                PromptCardView.setPending(start, false, label: "Starting workflow run…")
+                draw()
+                say(error.localizedDescription)
+            }
+        }
+    }
+}

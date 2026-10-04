@@ -65,7 +65,7 @@ enum ShellScreens {
         case let .project(id):
             ProjectViewController(projectId: id, context: context)
         case .workflows:
-            PlaceholderViewController(destination: destination)
+            WorkflowsViewController(context: context)
         case .configure:
             PlaceholderViewController(destination: destination)
         case .usage:
