@@ -18,7 +18,11 @@
  * inside the line it just cut.
  */
 
-import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
+import {
+  type ChildProcessWithoutNullStreams,
+  spawn,
+  spawnSync,
+} from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { chmodSync, mkdirSync } from "node:fs";
 import { unlink } from "node:fs/promises";
@@ -75,6 +79,70 @@ export const RING_BYTES = 8 * 1024 * 1024;
  */
 export const DRAIN_TIMEOUT_MS = 8000;
 
+/**
+ * How long what a child started gets to end by itself once the child is gone,
+ * before it is killed. Our choice: an MCP server closes when its client does
+ * and a browser when its driver does, in well under a second; two is room for
+ * a loaded machine, and short enough that a stopped session's memory is back
+ * before anyone looks.
+ */
+export const SWEEP_GRACE_MS = 2000;
+
+/**
+ * How often every live child's tree is read, so a child that dies unasked
+ * (the kernel's OOM killer, a crash) still has its tree on record. Our
+ * choice: one `ps` for the whole machine every half minute costs nothing
+ * anyone can measure, and a process started and orphaned inside one interval
+ * is the only one a sweep can miss.
+ */
+export const SURVEY_INTERVAL_MS = 30_000;
+
+/**
+ * One process as the operating system lists it. `started` is its start time
+ * as `ps` prints it: with the pid, what says a pid seen later is still the
+ * same process and not another that was since given its number.
+ */
+interface Listed {
+  pgid: number;
+  pid: number;
+  ppid: number;
+  started: string;
+}
+
+const COLUMN_GAP = /\s+/;
+
+/**
+ * Every process on the machine. `ps` is the one reading Linux and macOS both
+ * give: neither has a call that lists a process's descendants, and `/proc` is
+ * Linux alone.
+ */
+const processTable = (): Listed[] => {
+  const listed = spawnSync("ps", ["-A", "-o", "pid=,ppid=,pgid=,lstart="], {
+    encoding: "utf8",
+  });
+  return (listed.stdout ?? "").split("\n").flatMap((line) => {
+    const [pid, ppid, pgid, ...started] = line.trim().split(COLUMN_GAP);
+    return pid && ppid && pgid
+      ? [
+          {
+            pid: Number(pid),
+            ppid: Number(ppid),
+            pgid: Number(pgid),
+            started: started.join(" "),
+          },
+        ]
+      : [];
+  });
+};
+
+const signalPid = (pid: number, sig: NodeJS.Signals): void => {
+  try {
+    process.kill(pid, sig);
+  } catch {
+    // already gone
+  }
+};
+
 /** A live (or recently dead) child, plus the ring nobody else may reach. */
 interface Proc {
   alive: boolean;
@@ -95,6 +163,13 @@ interface Proc {
    * replayable.
    */
   sizes: number[];
+  /**
+   * Every process this child was seen to have started, by pid, with its start
+   * time: read when the child is asked to end or signalled, while it is still
+   * their ancestor. Once it exits they are reparented, and nothing but this
+   * says they were its own.
+   */
+  tree: Map<number, string>;
 }
 
 /** One attached agent. Cursors are per-proc, because subscriptions are. */
@@ -135,6 +210,10 @@ export class SessiondServer {
   readonly #conns = new Set<Conn>();
   /** commandId → the ack it settled with. A re-delivery is re-acked, never re-run. */
   readonly #settled = new Map<string, Settled>();
+  /** The sweeps still giving an ended child's tree its grace ({@link #sweep}). */
+  readonly #sweeps = new Set<ReturnType<typeof setTimeout>>();
+  /** The clock every live child's tree is read on ({@link #survey}). */
+  #surveying: ReturnType<typeof setInterval> | undefined;
   readonly #build: BuildInfo;
   readonly #now: () => number;
   #server: Server | undefined;
@@ -176,6 +255,16 @@ export class SessiondServer {
     }
     chmodSync(endpoint, 0o600);
     this.#endpoint = endpoint;
+    this.#surveying = setInterval(() => {
+      const alive = [...this.#procs.values()].filter((proc) => proc.alive);
+      if (alive.length === 0) {
+        return;
+      }
+      const table = processTable();
+      for (const proc of alive) {
+        this.#survey(proc, table);
+      }
+    }, SURVEY_INTERVAL_MS);
   }
 
   #bind(endpoint: string): Promise<void> {
@@ -367,7 +456,7 @@ export class SessiondServer {
     // (the kill-and-replace semantics it has today); the dedup map above is
     // what keeps a mere retry from landing here.
     if (existing?.alive) {
-      existing.child.kill("SIGKILL");
+      this.#signalTree(existing, "SIGKILL");
     }
 
     // biome-ignore lint/suspicious/noUnnecessaryConditions: spec is agent-side and opaque (§3.2) — the ProcSpec type promises args, the wire does not
@@ -377,11 +466,15 @@ export class SessiondServer {
       // sessiond does not read, validate or enrich a single entry of it.
       env: spec.env ? { ...process.env, ...spec.env } : process.env,
       stdio: ["pipe", "pipe", "pipe"],
+      // Its own process group, which it leads: what it starts stays findable
+      // under its pid after it has exited ({@link #survey}).
+      detached: true,
     }) as ChildProcessWithoutNullStreams;
 
     const proc: Proc = {
       procId,
       child,
+      tree: new Map(),
       ring: new SessionRing<string>(SESSIOND_RING_LINES),
       sizes: [],
       bytes: 0,
@@ -423,7 +516,7 @@ export class SessiondServer {
     if (!proc?.alive) {
       return ack(commandId, "failed", `signal: ${procId} is not alive`);
     }
-    proc.child.kill(sig);
+    this.#signalTree(proc, sig);
     return ack(commandId, "applied");
   }
 
@@ -432,8 +525,95 @@ export class SessiondServer {
     if (!proc?.alive) {
       return ack(commandId, "failed", `stdin_end: ${procId} is not alive`);
     }
+    // Read before the child starts to go: what it started is its own only
+    // while it is still there to be their ancestor.
+    this.#survey(proc);
     proc.child.stdin.end();
     return ack(commandId, "applied");
+  }
+
+  // ---------------------------------------------------------------- the tree
+
+  /**
+   * Everything `proc` started that is running now, itself included while it
+   * lives: its descendants by parentage, the process group it leads, and what
+   * an earlier reading found that is still the same process, with the
+   * descendants of those. Recorded on the proc, so the next reading still
+   * knows them after the child has exited and they have been reparented.
+   *
+   * Parentage alone misses what was reparented before the reading, and the
+   * group alone misses what left it: a shell the child ran with job control,
+   * a browser its driver launched detached. Read together, at each moment the
+   * child is asked to end, they are the tree.
+   *
+   * Every live child is read on a clock as well ({@link SURVEY_INTERVAL_MS}):
+   * one the kernel kills for memory is asked nothing first, and what it had
+   * started is known only from the reading before.
+   */
+  #survey(proc: Proc, table: Listed[] = processTable()): number[] {
+    const root = proc.child.pid ?? -1;
+    const byParent = new Map<number, Listed[]>();
+    for (const row of table) {
+      const siblings = byParent.get(row.ppid);
+      if (siblings) {
+        siblings.push(row);
+      } else {
+        byParent.set(row.ppid, [row]);
+      }
+    }
+    const running = new Map<number, string>();
+    const take = (row: Listed): void => {
+      if (running.has(row.pid)) {
+        return;
+      }
+      running.set(row.pid, row.started);
+      for (const child of byParent.get(row.pid) ?? []) {
+        take(child);
+      }
+    };
+    for (const row of table) {
+      // The child's own pid is the child only while it lives: afterwards the
+      // number is the system's to hand out again.
+      const own =
+        row.pid === root
+          ? proc.alive
+          : row.pgid === root || proc.tree.get(row.pid) === row.started;
+      if (own) {
+        take(row);
+      }
+    }
+    proc.tree = running;
+    return [...running.keys()];
+  }
+
+  /** A signal for the child reaches everything it started. */
+  #signalTree(proc: Proc, sig: NodeJS.Signals): void {
+    for (const pid of this.#survey(proc)) {
+      signalPid(pid, sig);
+    }
+  }
+
+  /**
+   * WHAT A CHILD STARTED DOES NOT OUTLIVE IT. A harness that exits leaves its
+   * MCP servers to close themselves and their browsers to follow, and one
+   * killed outright leaves them running under init with nobody to end them:
+   * 136 MCP server sets and 569 browser processes were alive behind about a
+   * dozen working sessions the day this was written. Whatever is left is told
+   * to end now, and killed after {@link SWEEP_GRACE_MS}.
+   */
+  #sweep(proc: Proc): void {
+    const left = this.#survey(proc);
+    if (left.length === 0) {
+      return;
+    }
+    for (const pid of left) {
+      signalPid(pid, "SIGTERM");
+    }
+    const timer = setTimeout(() => {
+      this.#sweeps.delete(timer);
+      this.#signalTree(proc, "SIGKILL");
+    }, SWEEP_GRACE_MS);
+    this.#sweeps.add(timer);
   }
 
   #subscribe(conn: Conn, procId: string, afterSeq: number | undefined): void {
@@ -548,6 +728,7 @@ export class SessiondServer {
     proc.alive = false;
     proc.exitCode = code;
     proc.signal = signal;
+    this.#sweep(proc);
     // A proc `#spawn` has already replaced under its id is nobody's session
     // any more: its exit, announced under that id, would land on the
     // successor's subscriber as the successor's own death.
@@ -579,11 +760,12 @@ export class SessiondServer {
    * the same function without touching a line of this logic.
    *
    * stdin-EOF first (the harness's own graceful path), then the grace window,
-   * then SIGKILL. No child outlives the drain.
+   * then SIGKILL. No child outlives the drain, and nothing a child started.
    */
   async drain(graceMs = DRAIN_TIMEOUT_MS): Promise<void> {
     const alive = [...this.#procs.values()].filter((proc) => proc.alive);
     for (const proc of alive) {
+      this.#survey(proc);
       try {
         proc.child.stdin.end();
       } catch {
@@ -595,15 +777,19 @@ export class SessiondServer {
       // biome-ignore lint/performance/noAwaitInLoops: polls until every child exits or the grace window closes; each check depends on the previous sleep
       await new Promise((resolve) => setTimeout(resolve, 25));
     }
-    for (const proc of alive) {
-      if (proc.alive) {
-        proc.child.kill("SIGKILL");
-      }
+    // The grace is spent: the sweeps still waiting on theirs end here too.
+    for (const timer of this.#sweeps) {
+      clearTimeout(timer);
+    }
+    this.#sweeps.clear();
+    for (const proc of this.#procs.values()) {
+      this.#signalTree(proc, "SIGKILL");
     }
   }
 
   /** Stop listening and drop the socket file. Children are drain's business. */
   async close(): Promise<void> {
+    clearInterval(this.#surveying);
     for (const conn of this.#conns) {
       conn.socket.destroy();
     }
