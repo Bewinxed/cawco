@@ -106,13 +106,16 @@ interface Operation {
 const hub = await Effect.runPromise(
   Effect.provide(
     Effect.gen(function* () {
-      return createServer({
-        build: { version: HUB_VERSION, startedAt: 0 },
-        registry: yield* Registry,
-        db: yield* Db,
-        pending: yield* Pending,
-        telegram: undefined,
-      });
+      return createServer(
+        {
+          build: { version: HUB_VERSION, startedAt: 0 },
+          registry: yield* Registry,
+          db: yield* Db,
+          pending: yield* Pending,
+          telegram: undefined,
+        },
+        { resumeWorkflows: false }
+      );
     }),
     Layer.mergeAll(RegistryLayer, DbLayer, PendingLayer)
   )

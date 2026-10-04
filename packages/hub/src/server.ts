@@ -1511,13 +1511,10 @@ export const normalizeRelayMessage = (body: unknown): string | undefined => {
   sent.origin ??= { kind: "human" };
 };
 
-export const createServer = ({
-  build: hubBuild,
-  registry,
-  db,
-  pending,
-  telegram,
-}: HubServices) => {
+export const createServer = (
+  { build: hubBuild, registry, db, pending, telegram }: HubServices,
+  { resumeWorkflows = true }: { resumeWorkflows?: boolean } = {}
+) => {
   // Honest ground, before anything is served. A fresh process holds no agent
   // sockets, so every row still claiming `online` is a leftover from a hub that
   // was killed before its close handlers could run. The read-time overlay
@@ -6201,10 +6198,12 @@ export const createServer = ({
   onWorkflowAnswer(pending, (id, result) =>
     workflowRuntime.settleQuestion(id, result)
   );
-  // Runs that were live when the hub stopped: the engine resumes them itself;
-  // this puts back what only lived in memory — attempt timeouts, parked
-  // questions.
-  workflowRuntime.resume().catch(console.error);
+  // Schema generation needs the route types, not restored workflow attempts
+  // and parked questions accessing its scratch database after it is removed.
+  if (resumeWorkflows) {
+    // biome-ignore lint/complexity/noVoid: startup resumes asynchronously and reports its own failure
+    void workflowRuntime.resume().catch(console.error);
+  }
   const delegationMcp = createDelegationMcp({
     instances: () => db.listInstances(),
     instanceById: (id) => db.getInstancesByIds([id])[0],
@@ -7615,7 +7614,13 @@ export const createServer = ({
           });
           await fleetMcp.probe(params.name);
           announceMcp();
-          return db.fleetConfig().mcp.find((row) => row.name === params.name);
+          const saved = db
+            .fleetConfig()
+            .mcp.find((row) => row.name === params.name);
+          if (!saved) {
+            return status(404, "MCP server was removed while probing.");
+          }
+          return saved;
         }
       )
       .delete("/api/fleet/mcp/:name", ({ params }) => {

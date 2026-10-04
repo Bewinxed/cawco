@@ -2744,8 +2744,28 @@
         },
         "operationId": "putApiFleetMcpByName",
         "responses": {
+          "200": {
+            "description": "putApiFleetMcpByName 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FleetMcpServer"
+                }
+              }
+            }
+          },
           "400": {
             "description": "putApiFleetMcpByName 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "putApiFleetMcpByName 404",
             "content": {
               "text/plain": {
                 "schema": {
