@@ -430,6 +430,21 @@ function receiptsOf(messages: Message[]): (m: Message, i: number) => Receipt {
   };
 }
 
+/**
+ * Whether a read of a transcript holds a compaction: what a divider, and Caw
+ * beside its word, will be drawn for. Asked of a page as it arrives, before
+ * any of its rows is folded.
+ */
+export const holdsCompaction = (
+  blocks: readonly { type: string; metadata?: { noteKind?: string } }[]
+): boolean =>
+  blocks.some(
+    (block) =>
+      block.type === "system.compact_boundary" ||
+      (block.type === "ui.system_note" &&
+        block.metadata?.noteKind === COMPACT_SUMMARY_KIND)
+  );
+
 /** The harness's word that it compacted the conversation. */
 const isCompactBoundary = (m: Message | undefined): m is Message =>
   m?.type === "system.compact_boundary";

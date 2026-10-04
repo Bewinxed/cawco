@@ -26,6 +26,7 @@
   import { dur } from "../motion/curves.svelte";
   import { unfold } from "../motion/fold.svelte";
   import { morph } from "../motion/morph.svelte";
+  import { COMPACTION_MARK } from "./compaction-mark";
   import { disclosureAt } from "./disclosure.svelte";
   import MessageBody from "./MessageBody.svelte";
   import type { Row } from "./rows";
@@ -87,9 +88,10 @@
     ><span class="caw"
       ><CawMark
         arrival={lead === null ? null : `${row.session}:${row.key}`}
+        bleed={COMPACTION_MARK.bleed}
         delay={lead === null ? 0 : dur("--dur-rail") + lead}
-        size={18}
-        status="compacted"
+        size={COMPACTION_MARK.size}
+        status={COMPACTION_MARK.status}
       /></span
     >Compacted<span class="chev"><IconChevron aria-hidden="true" /></span></span
   >

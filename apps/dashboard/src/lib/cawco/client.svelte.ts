@@ -72,6 +72,7 @@ import {
   WS_RECONNECT_MAX_DELAY,
 } from "#lib/config.js";
 import type { SubagentState } from "#lib/utils/flow-types.js";
+import { browser } from "$app/env";
 import { goto } from "$app/navigation";
 import type { Activity } from "./activity";
 import { activityOf, runningSubagents } from "./activity";
@@ -116,8 +117,10 @@ import {
   refreshTasks,
   TASK_LEDGER_TOOLS,
 } from "./tasks.svelte";
+import { warmCompactionMark } from "./transcript/compaction-mark";
 import { errorMessage, localUserMessage } from "./transcript/local";
 import { routedToParent } from "./transcript/present";
+import { holdsCompaction } from "./transcript/rows";
 import type { DelegateAskEvent, Message } from "./types";
 import {
   onBoard,
@@ -1248,6 +1251,20 @@ function applyTranscript(
 }
 
 /**
+ * A page of a transcript has been read, the first or an older one. One that
+ * holds a compaction will draw Caw beside its divider, and his picture takes
+ * longer to load than the rows take to be folded and revealed: it starts
+ * here, with the data, so it is ready in the frame the list appears. A page
+ * with none asks for nothing. The server builds sessions from pages too
+ * (`seededSession`) and draws no pictures.
+ */
+function seesCompaction(page: TranscriptPage): void {
+  if (browser && holdsCompaction(page.blocks)) {
+    warmCompactionMark();
+  }
+}
+
+/**
  * The newest page of a session's transcript, as what this view shows: the
  * hub's blocks, branches, waiting sends, live tail and facts replace what the
  * view held. What only this tab holds survives it: its own sends the hub has
@@ -1263,6 +1280,7 @@ function adoptTranscriptPage(target: SessionState, page: TranscriptPage): void {
   if (where.sessionKey) {
     target.sessionId = where.sessionKey;
   }
+  seesCompaction(page);
   target.blocks = page.blocks.map((block) => take(target, block, "blocks"));
   target.queued = (page.queued ?? []).map((block) =>
     take(target, block, "queued")
@@ -1312,6 +1330,7 @@ function prependTranscriptPage(
   target: SessionState,
   page: TranscriptPage
 ): void {
+  seesCompaction(page);
   const known = new Set(target.blocks.map((block) => block.id));
   target.blocks = [
     ...page.blocks

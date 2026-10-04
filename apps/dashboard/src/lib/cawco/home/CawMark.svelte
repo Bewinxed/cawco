@@ -1,15 +1,19 @@
 <script lang="ts" module>
+  import { theme } from "#lib/theme.svelte.js";
   import { browser } from "$app/env";
   import { type CawStatus, stageCaw } from "./Caw.svelte";
 
   /**
    * The window's device pixel ratio, followed: a zoom, or a move to another
-   * display, changes it with the viewport.
+   * display, changes it with the viewport. `resized` counts those changes:
+   * each can move a mark off the device's pixel grid.
    */
   let ratio = $state(browser ? devicePixelRatio : 1);
+  let resized = $state(0);
   if (browser) {
     addEventListener("resize", () => {
       ratio = devicePixelRatio;
+      resized += 1;
     });
   }
 
@@ -28,6 +32,35 @@
     dark: boolean;
     key: string;
     status: CawStatus;
+  }
+
+  /** The look a mark of this status and size has now, in this scheme on this display. */
+  function lookOf(status: CawStatus, size: number, bleed: number): Look {
+    const dark = theme.resolved === "dark";
+    const span = size + 2 * bleed;
+    const backing = Math.round(span * ratio);
+    const scale = backing / span;
+    return {
+      status,
+      dark,
+      backing,
+      box: { x: bleed * scale, y: bleed * scale, side: size * scale },
+      key: `${status}:${size}:${bleed}:${dark}:${backing}`,
+    };
+  }
+
+  /**
+   * Draws a mark's rest ahead of the first mark that will show it: for a
+   * place that knows he is coming before his row is on screen.
+   */
+  export function warmCawMark(
+    status: CawStatus,
+    size: number,
+    bleed: number
+  ): void {
+    restPicture(lookOf(status, size, bleed)).catch((error: unknown) => {
+      console.error(`Caw ${status} did not draw`, error);
+    });
   }
 
   function restPicture(look: Look): Promise<HTMLCanvasElement> {
@@ -78,7 +111,6 @@
    */
   import { untrack } from "svelte";
   import { motionOk } from "#lib/cawco/motion/curves.svelte.js";
-  import { theme } from "#lib/theme.svelte.js";
 
   let {
     status,
@@ -98,19 +130,27 @@
     delay?: number;
   } = $props();
 
-  const look = $derived.by((): Look => {
-    const dark = theme.resolved === "dark";
-    const span = size + 2 * bleed;
-    const backing = Math.round(span * ratio);
-    const scale = backing / span;
-    return {
-      status,
-      dark,
-      backing,
-      box: { x: bleed * scale, y: bleed * scale, side: size * scale },
-      key: `${status}:${size}:${bleed}:${dark}:${backing}`,
-    };
-  });
+  const look = $derived(lookOf(status, size, bleed));
+
+  /**
+   * Puts his canvases on the device's pixel grid. The mark stands wherever
+   * its line of text puts it — a centred word, a row a list placed at a
+   * fraction of a pixel — and a canvas off the grid is resampled into a soft
+   * copy of itself. The layout box stays where it is; what is drawn in it
+   * moves by less than half a device pixel, measured once the row is laid
+   * out and again when the window or its display changes.
+   */
+  function snap(ink: HTMLElement) {
+    const scale = ratio;
+    // biome-ignore lint/complexity/noVoid: a resize re-runs this placement.
+    void resized;
+    const frame = requestAnimationFrame(() => {
+      const box = (ink.parentElement as HTMLElement).getBoundingClientRect();
+      const off = (at: number) => Math.round(at * scale) / scale - at;
+      ink.style.translate = `${off(box.left)}px ${off(box.top)}px`;
+    });
+    return () => cancelAnimationFrame(frame);
+  }
 
   /** Whether this mount is the arrival's one play. */
   let playing = $state(
@@ -192,10 +232,12 @@
   style:--bleed="{bleed}px"
   style:--side="{size}px"
 >
-  <canvas class:waiting={playing} {@attach rest}></canvas>
-  {#if playing}
-    <canvas {@attach enter}></canvas>
-  {/if}
+  <span class="ink" {@attach snap}>
+    <canvas class:waiting={playing} {@attach rest}></canvas>
+    {#if playing}
+      <canvas {@attach enter}></canvas>
+    {/if}
+  </span>
 </span>
 
 <style>
@@ -206,6 +248,10 @@
     block-size: var(--side);
     pointer-events: none;
     user-select: none;
+  }
+  .ink {
+    position: absolute;
+    inset: 0;
   }
   canvas {
     position: absolute;
