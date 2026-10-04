@@ -353,6 +353,9 @@ const QUIET_TURNS = 3;
 
 const QUIET_ERROR = "ended three turns in a row without finish_item";
 
+export const WAIT_ITEM_LIMIT =
+  "Wait not set. Use whole minutes from 1 to 120 and a non-empty reason for waiting on a command you started.";
+
 const WORD = /\s+/;
 
 /** Why a `delegate` call's checks cannot stand, or nothing when they can. */
@@ -446,6 +449,8 @@ export const summaryOf = (item: WorkItemRow): WorkItemSummary => ({
   createdAt: item.createdAt.getTime(),
   endedAt: item.endedAt?.getTime() ?? null,
   dismissedAt: item.dismissedAt?.getTime() ?? null,
+  waitUntil: item.waitUntil?.getTime() ?? null,
+  waitReason: item.waitReason,
   firstLines: {
     brief: firstLine(item.brief),
     result: firstLine(item.result),
@@ -468,6 +473,12 @@ export const createWorkItems = ({
 }: WorkItemDeps) => {
   /** Turns in a row each live item's session ended without `finish_item`, by item. */
   const quiet = new Map<string, number>();
+  const waitTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  const disarmWait = (id: string): void => {
+    clearTimeout(waitTimers.get(id));
+    waitTimers.delete(id);
+    quiet.delete(id);
+  };
   /** Items whose checks this hub process is running now: a resume leaves them to that run. */
   const finishing = new Set<string>();
   /** Creates this hub is still waiting for; register recovery leaves those to their caller. */
@@ -497,7 +508,21 @@ export const createWorkItems = ({
   const update = (
     id: string,
     change: Parameters<DbShape["updateWorkItem"]>[1]
-  ): WorkItemRow | undefined => published(db.updateWorkItem(id, change));
+  ): WorkItemRow | undefined => {
+    if (change.state && !LIVE.has(change.state)) {
+      disarmWait(id);
+      return published(
+        db.updateWorkItem(id, { ...change, waitUntil: null, waitReason: null })
+      );
+    }
+    return published(db.updateWorkItem(id, change));
+  };
+  const clearWait = (item: WorkItemRow): void => {
+    disarmWait(item.id);
+    if (item.waitUntil || item.waitReason !== null) {
+      update(item.id, { waitUntil: null, waitReason: null });
+    }
+  };
 
   /**
    * The workspace a follow-up names, and the item before it there. Refused
@@ -949,6 +974,48 @@ export const createWorkItems = ({
     });
   };
 
+  /** One expiry path for a live timer, an overdue startup wait, or a turn reaching its deadline. */
+  const endWait = (id: string): void => {
+    const item = db.workItem(id);
+    if (!item?.waitUntil) {
+      disarmWait(id);
+      return;
+    }
+    const reason = item.waitReason;
+    clearWait(item);
+    const [row] = db.getInstancesByIds([item.instanceId]);
+    if (row && LIVE.has(item.state)) {
+      tell(
+        row,
+        `Your wait is over: ${reason}. Continue, then call finish_item.`
+      );
+    }
+  };
+  const armWait = (item: WorkItemRow): void => {
+    disarmWait(item.id);
+    if (!item.waitUntil) {
+      return;
+    }
+    const remaining = item.waitUntil.getTime() - Date.now();
+    if (!LIVE.has(item.state) || remaining <= 0) {
+      endWait(item.id);
+      return;
+    }
+    const timer = setTimeout(() => endWait(item.id), remaining);
+    timer.unref?.();
+    waitTimers.set(item.id, timer);
+  };
+  const waitingTurn = (item: WorkItemRow): boolean => {
+    if (!item.waitUntil) {
+      return false;
+    }
+    quiet.delete(item.id);
+    if (item.waitUntil.getTime() <= Date.now()) {
+      endWait(item.id);
+    }
+    return true;
+  };
+
   /** The names of an item's checks, as its session is told them. */
   const checkNames = (checks: WorkItemCheck[]): string =>
     checks.map((check) => check.name).join(", ");
@@ -1116,6 +1183,67 @@ export const createWorkItems = ({
   return {
     start,
 
+    /** Called once startup has installed the hub's send path. */
+    resumeWaits(): void {
+      for (const item of db.waitingWorkItems()) {
+        armWait(item);
+      }
+    },
+
+    /** Declares a bounded wait; replacement starts a new window and tells the parent once. */
+    waitItem(instanceId: string, minutes: unknown, reason: unknown): string {
+      if (
+        typeof minutes !== "number" ||
+        !Number.isInteger(minutes) ||
+        minutes < 1 ||
+        minutes > 120 ||
+        typeof reason !== "string" ||
+        !reason.trim()
+      ) {
+        throw new WorkItemRefusal(400, WAIT_ITEM_LIMIT);
+      }
+      const [row] = db.getInstancesByIds([instanceId]);
+      const item = row ? itemOf(row) : undefined;
+      if (!(row && item)) {
+        throw new WorkItemRefusal(
+          409,
+          "No work item is open on this session. Start a delegate before calling wait_item."
+        );
+      }
+      if (!LIVE.has(item.state) || item.checkingSince) {
+        throw new WorkItemRefusal(
+          409,
+          `${item.title} (${item.id}) cannot wait while ${item.checkingSince ? "its checks run" : `it is ${item.state}`}. Continue a live item before calling wait_item.`
+        );
+      }
+      clearWait(item);
+      const waitUntil = new Date(Date.now() + minutes * 60_000);
+      const waitReason = reason.trim().replace(/\s+/g, " ");
+      const waiting = update(item.id, {
+        state: "running",
+        waitUntil,
+        waitReason,
+      }) as WorkItemRow;
+      armWait(waiting);
+      const clock = waitUntil.toLocaleTimeString("en-GB", {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      });
+      const line = `${item.title} is waiting until ${clock}: ${waitReason}`;
+      report(row, line, false);
+      return `${line}\n\nEnd your turn. The hub will wake you when the wait ends.`;
+    },
+
+    /** An interrupt cancels the declared wait without starting another turn. */
+    interrupted(instanceId: string): void {
+      const [row] = db.getInstancesByIds([instanceId]);
+      const item = row ? itemOf(row) : undefined;
+      if (item?.waitUntil) {
+        clearWait(item);
+      }
+    },
+
     /** Replays durable discards, including creates whose reply a previous hub never received. */
     discardUnfiled(machineId: string): void {
       for (const { id } of db.workspaceCreatesOn(machineId)) {
@@ -1217,6 +1345,9 @@ export const createWorkItems = ({
       if (!item) {
         return { body: turn.text, failed: turn.error !== undefined };
       }
+      if (waitingTurn(item)) {
+        return undefined;
+      }
       const busy = busyAfter(row, endedAt);
       if (!item.checks) {
         return uncheckedTurn(item, turn, busy);
@@ -1245,7 +1376,7 @@ export const createWorkItems = ({
       quiet.set(item.id, turns);
       tell(
         row,
-        `Your work item is still open. Its checks: ${checkNames(item.checks)}. Finish the work and call finish_item, or call it with \`blocked\` and the exact command and error.`
+        `Your work item is still open. Its checks: ${checkNames(item.checks)}. Finish the work and call finish_item, or call it with \`blocked\` and the exact command and error. Use wait_item for a bounded wait on a command you started.`
       );
       return undefined;
     },
@@ -1280,7 +1411,7 @@ export const createWorkItems = ({
         return open;
       }
       const { row, item, checks } = open;
-      quiet.delete(item.id);
+      clearWait(item);
 
       if (request.blocked) {
         const error = `Blocked: ${request.blocked.command}${fenced(request.blocked.error)}`;

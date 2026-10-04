@@ -6,7 +6,11 @@ import {
   handoffActions,
   SPAWNING_TOOLS,
 } from "./delegation-actions";
-import { SESSION_TITLE_DESCRIPTION, SESSION_TITLE_MAX } from "./work-items";
+import {
+  SESSION_TITLE_DESCRIPTION,
+  SESSION_TITLE_MAX,
+  WAIT_ITEM_LIMIT,
+} from "./work-items";
 
 /** The name the caller gives a session it starts or delegates to; never cut from the brief. */
 const sessionTitle = () =>
@@ -50,9 +54,12 @@ function tool<T extends z.ZodRawShape>(
   description: string,
   input: T,
   handler: (args: z.infer<z.ZodObject<T>>) => Promise<unknown>,
-  annotations?: ToolAnnotations
+  annotations?: ToolAnnotations,
+  inputError?: string
 ) {
-  const schema = z.object(input);
+  const schema = inputError
+    ? z.strictObject(input, { error: inputError })
+    : z.object(input);
   return {
     name,
     description,
@@ -632,6 +639,33 @@ export function handoffTools(deps: HandoffDeps) {
       }
     ),
     tool(
+      "wait_item",
+      "Declare a bounded wait on a command you started, then end your turn. The hub keeps your item running without quiet-turn reminders, tells your parent what you are waiting for, and wakes you when the wait ends. Call again to replace the wait. finish_item, closing, stopping or interrupting the item cancels the wait.",
+      {
+        minutes: z
+          .number({ error: WAIT_ITEM_LIMIT })
+          .int({ error: WAIT_ITEM_LIMIT })
+          .min(1, { error: WAIT_ITEM_LIMIT })
+          .max(120, { error: WAIT_ITEM_LIMIT })
+          .describe("Whole minutes to wait, from 1 to 120."),
+        reason: z
+          .string({ error: WAIT_ITEM_LIMIT })
+          .trim()
+          .min(1, { error: WAIT_ITEM_LIMIT })
+          .describe("What you are waiting for from a command you started."),
+      },
+      async ({ minutes, reason }) => ({
+        content: [
+          {
+            type: "text" as const,
+            text: await actions.waitItem(minutes, reason),
+          },
+        ],
+      }),
+      undefined,
+      WAIT_ITEM_LIMIT
+    ),
+    tool(
       "finish_item",
       "Finish your work item. The hub runs the item's acceptance checks in your worktree and returns each result. When all pass the item is done and your parent receives the results. When one fails you get its output back: fix the cause and call finish_item again. Pass `blocked` with the exact command and error text only when something outside your control stops the work; the item then fails with that reason. Anything you noticed outside your brief goes in `findings`, not in the work.",
       {
@@ -910,7 +944,7 @@ export function handoffTools(deps: HandoffDeps) {
     (entry) =>
       (!STEP_TOOLS.has(entry.name) || !!deps.workflowStepId) &&
       (deps.canDelegate !== false || !SPAWNING_TOOLS.has(entry.name)) &&
-      (entry.name !== "finish_item" || !!deps.workItem)
+      (!["finish_item", "wait_item"].includes(entry.name) || !!deps.workItem)
   );
 }
 
@@ -920,7 +954,7 @@ export function handoffInstructions(deps: HandoffDeps): string {
   const images =
     "CawCo can generate images regardless of your model: use generate_image (Claude: mcp__cawco__generate_image; OpenCode: cawco_generate_image). It uses the machine's ChatGPT subscription login only. Pass reference_images for edits or visual guidance, then show the returned path with show_image. Discover deferred tools before claiming image generation is unavailable. Do not delegate image generation to a different model.";
   if (deps.canDelegate === false) {
-    return `This session is a leaf delegate. Do the assigned work yourself and call finish_item when it is done; delegate and start_session are unavailable. Use mcp__cawco__handoff to reach your parent or a session that already owns related work.\n\n${naming}\n\n${images}`;
+    return `This session is a leaf delegate. Do the assigned work yourself and call finish_item when it is done; delegate and start_session are unavailable. Use wait_item for a bounded wait on a command you started. Use mcp__cawco__handoff to reach your parent or a session that already owns related work.\n\n${naming}\n\n${images}`;
   }
   let catalog = deps.delegateTypes?.length
     ? delegateTypeLine(deps.delegateTypes).trim()

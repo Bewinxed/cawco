@@ -543,6 +543,9 @@ export const workItems = sqliteTable(
      * the checks again from the first, on {@link submission}.
      */
     checkingSince: timestamp("checking_since"),
+    /** A declared wait on work the delegate started; the hub wakes it at this time. */
+    waitUntil: timestamp("wait_until"),
+    waitReason: text("wait_reason"),
     /** The `finish_item` the running checks answer, kept while they run. */
     submission: text("submission", {
       mode: "json",

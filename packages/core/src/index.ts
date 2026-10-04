@@ -735,6 +735,9 @@ export interface WorkItemSummary {
   parentInstanceId: string;
   state: "starting" | "running" | "done" | "failed" | "cancelled";
   title: string;
+  waitReason: string | null;
+  /** A declared wait's deadline in epoch ms. */
+  waitUntil: number | null;
 }
 
 /** An ask's life: parked on the parent, then allowed or refused by it. */

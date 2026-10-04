@@ -13886,6 +13886,19 @@
           },
           "title": {
             "type": "string"
+          },
+          "waitReason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "waitUntil": {
+            "description": "A declared wait's deadline in epoch ms.",
+            "type": [
+              "null",
+              "number"
+            ]
           }
         },
         "required": [
@@ -13897,7 +13910,9 @@
           "instanceId",
           "parentInstanceId",
           "state",
-          "title"
+          "title",
+          "waitReason",
+          "waitUntil"
         ]
       },
       "ToolSpec": {

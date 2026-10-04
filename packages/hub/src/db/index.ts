@@ -982,6 +982,8 @@ export interface DbShape {
         | "checks"
         | "checkingSince"
         | "submission"
+        | "waitUntil"
+        | "waitReason"
       >
     >
   ) => WorkItemRow | undefined;
@@ -1023,6 +1025,8 @@ export interface DbShape {
     machineId?: string;
     groupBy: UsageGroupBy;
   }) => UsageSummary;
+  /** Stored waits, including any that elapsed while the hub was stopped. */
+  readonly waitingWorkItems: () => WorkItemRow[];
   readonly workflowTransition: (
     run: typeof workflowRuns.$inferInsert,
     step?: typeof workflowSteps.$inferInsert,
@@ -3187,6 +3191,8 @@ const make = (path: string): DbShape => {
       db.insert(workItems).values(item).returning().get(),
     workItem: (id) =>
       db.select().from(workItems).where(eq(workItems.id, id)).get(),
+    waitingWorkItems: () =>
+      db.select().from(workItems).where(isNotNull(workItems.waitUntil)).all(),
     workItemsIn: (workspaceId) =>
       db
         .select()

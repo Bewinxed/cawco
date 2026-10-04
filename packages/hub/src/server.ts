@@ -207,6 +207,7 @@ import {
   LEAF_DELEGATE_REFUSAL,
   SESSION_TITLE_DESCRIPTION,
   titleProblem,
+  WAIT_ITEM_LIMIT,
   WorkItemRefusal,
 } from "./work-items";
 import { workflowRoutes } from "./workflows/routes";
@@ -2149,6 +2150,7 @@ export const createServer = (
    */
   const noteInterrupt = (instanceId: string): void => {
     unanswered.delete(instanceId);
+    workItems.interrupted(instanceId);
   };
 
   /**
@@ -6886,6 +6888,8 @@ export const createServer = (
   }, 30_000);
   keepAliveTimer.unref?.();
 
+  workItems.resumeWaits();
+
   return (
     new Elysia()
       .use(websocket())
@@ -9584,6 +9588,52 @@ export const createServer = (
             return status(
               error instanceof WorkItemRefusal ? error.status : 502,
               message
+            );
+          }
+        }
+      )
+      .post(
+        "/api/work-items/wait",
+        {
+          ...hidden,
+          body: t.Object(
+            {
+              instanceId: t.String({ minLength: 1 }),
+              minutes: t.Integer({ minimum: 1, maximum: 120 }),
+              reason: t.String({ minLength: 1 }),
+            },
+            { additionalProperties: false }
+          ),
+          error({ error, status }) {
+            if (error instanceof ValidationError) {
+              return status(400, WAIT_ITEM_LIMIT);
+            }
+          },
+        },
+        ({ body, request, status }) => {
+          const authorization = request.headers.get("authorization");
+          const identity = identities.resolve(authorization);
+          if (authorization !== null && !identity) {
+            return status(401, "Invalid session credential");
+          }
+          if (identity && identity.instanceId !== body.instanceId) {
+            return status(
+              403,
+              "Session credential does not belong to the waiting instanceId"
+            );
+          }
+          try {
+            return {
+              text: workItems.waitItem(
+                body.instanceId,
+                body.minutes,
+                body.reason
+              ),
+            };
+          } catch (error) {
+            return status(
+              error instanceof WorkItemRefusal ? error.status : 502,
+              error instanceof Error ? error.message : String(error)
             );
           }
         }

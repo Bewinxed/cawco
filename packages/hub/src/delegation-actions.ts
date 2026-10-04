@@ -587,6 +587,7 @@ export interface HandoffActions {
   stopDelegate(target: string): Promise<string>;
   readonly submitResult: (result: unknown) => Promise<string>;
   readonly updateWorkflow: (name: string, program: string) => Promise<unknown>;
+  readonly waitItem: (minutes: number, reason: string) => Promise<string>;
   readonly writeWorkflowState: (
     name: string,
     value: unknown
@@ -1213,6 +1214,21 @@ export const handoffActions = ({
       // The checks may run for hours between them; Bun's fetch would drop a
       // response silent for five minutes.
       timeout: false,
+    });
+    if (!response.ok) {
+      throw new Error(await response.text());
+    }
+    return ((await response.json()) as { text: string }).text;
+  },
+
+  async waitItem(minutes, reason) {
+    const response = await fetch(`${hubHttpUrl()}/api/work-items/wait`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        ...(authorization ? { Authorization: authorization } : {}),
+      },
+      body: JSON.stringify({ instanceId, minutes, reason }),
     });
     if (!response.ok) {
       throw new Error(await response.text());
