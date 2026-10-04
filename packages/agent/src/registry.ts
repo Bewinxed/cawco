@@ -135,15 +135,11 @@ export const registryUpdate = async ({
   installed,
   to,
   restartAgent = true,
-  force = false,
-  busy = 0,
 }: {
   installed: string;
   /** A version, or `latest`. */
   to?: string;
   restartAgent?: boolean;
-  force?: boolean;
-  busy?: number;
 }): Promise<UpdateReport> => {
   const target = to ?? "latest";
   const spec = `${PACKAGE_NAME}@${target}`;
@@ -182,7 +178,7 @@ export const registryUpdate = async ({
   const cli = await realpath(join(bin.said, PACKAGE_NAME));
   await installUnits(report.changed, cli, dirname(cli));
 
-  return restartStack(report, { restartAgent, force, busy }, [
+  return restartStack(report, { restartAgent }, [
     "the dashboard ships built, so nothing was compiled here",
   ]);
 };

@@ -1,5 +1,10 @@
 import { platform } from "node:os";
-import { CAWCO_ENV, CAWCO_MCP_CALLBACK_PORT } from "@cawco/core";
+import {
+  AGENT_NOT_STARTED,
+  CAWCO_ENV,
+  CAWCO_MCP_CALLBACK_PORT,
+} from "@cawco/core";
+import { holdRestart, isRetiring } from "./restart";
 import { resolveBin } from "./tools";
 
 export const canOpenDesktopBrowser = (): boolean => {
@@ -119,58 +124,106 @@ export const startMcpGateway = (hubUrl: () => string) => {
       port: CAWCO_MCP_CALLBACK_PORT,
       idleTimeout: 0,
       async fetch(request) {
-        const url = new URL(request.url);
-        if (
-          MCP_RELAY_PATH.test(url.pathname) ||
-          (request.method === "GET" && TOOL_READ_PATH.test(url.pathname)) ||
-          (request.method === "POST" && TOOL_WRITE_PATH.test(url.pathname))
-        ) {
-          return await relayMcp(request, hubUrl());
-        }
-        if (
-          request.method !== "GET" ||
-          url.pathname !== "/mcp-oauth/callback"
-        ) {
-          return new Response("Not found.", { status: 404 });
-        }
-        const code = url.searchParams.get("code");
-        const state = url.searchParams.get("state");
-        const headers = {
-          "Content-Type": "text/plain; charset=utf-8",
-          "Cache-Control": "no-store",
-          "Referrer-Policy": "no-referrer",
-        };
-        if (!(code && state) || url.searchParams.has("error")) {
-          return new Response(
-            "Sign-in was not completed. Start sign-in again from Configure → MCP servers.",
-            { status: 400, headers }
+        if (isRetiring()) {
+          return Response.json(
+            {
+              code: AGENT_NOT_STARTED,
+              started: false,
+              error:
+                "The agent is restarting. This request was not started. Retry after it reconnects.",
+            },
+            { status: 503 }
           );
         }
+        const release = holdRestart("mcp-relay", crypto.randomUUID());
         try {
-          const hub = new URL(hubUrl());
-          hub.protocol = hub.protocol === "wss:" ? "https:" : "http:";
-          hub.pathname = "/api/fleet/mcp/oauth/complete";
-          hub.search = "";
-          const response = await fetch(hub, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ code, state }),
-            signal: AbortSignal.timeout(30_000),
-          });
+          const response = await serve(request);
+          if (!response.body) {
+            release();
+            return response;
+          }
+          const reader = response.body.getReader();
           return new Response(
-            response.ok
-              ? "Signed in for the whole fleet. You can close this tab."
-              : await response.text(),
-            { status: response.status, headers }
+            new ReadableStream({
+              async pull(controller) {
+                try {
+                  const next = await reader.read();
+                  if (next.done) {
+                    release();
+                    controller.close();
+                  } else {
+                    controller.enqueue(next.value);
+                  }
+                } catch (error) {
+                  release();
+                  controller.error(error);
+                }
+              },
+              async cancel(reason) {
+                try {
+                  await reader.cancel(reason);
+                } finally {
+                  release();
+                }
+              },
+            }),
+            { status: response.status, headers: response.headers }
           );
-        } catch {
-          return new Response(
-            "The CawCo hub could not be reached. Start sign-in again once it reconnects.",
-            { status: 502, headers }
-          );
+        } catch (error) {
+          release();
+          throw error;
         }
       },
     });
+    async function serve(request: Request): Promise<Response> {
+      const url = new URL(request.url);
+      if (
+        MCP_RELAY_PATH.test(url.pathname) ||
+        (request.method === "GET" && TOOL_READ_PATH.test(url.pathname)) ||
+        (request.method === "POST" && TOOL_WRITE_PATH.test(url.pathname))
+      ) {
+        return await relayMcp(request, hubUrl());
+      }
+      if (request.method !== "GET" || url.pathname !== "/mcp-oauth/callback") {
+        return new Response("Not found.", { status: 404 });
+      }
+      const code = url.searchParams.get("code");
+      const state = url.searchParams.get("state");
+      const headers = {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Cache-Control": "no-store",
+        "Referrer-Policy": "no-referrer",
+      };
+      if (!(code && state) || url.searchParams.has("error")) {
+        return new Response(
+          "Sign-in was not completed. Start sign-in again from Configure → MCP servers.",
+          { status: 400, headers }
+        );
+      }
+      try {
+        const hub = new URL(hubUrl());
+        hub.protocol = hub.protocol === "wss:" ? "https:" : "http:";
+        hub.pathname = "/api/fleet/mcp/oauth/complete";
+        hub.search = "";
+        const response = await fetch(hub, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ code, state }),
+          signal: AbortSignal.timeout(30_000),
+        });
+        return new Response(
+          response.ok
+            ? "Signed in for the whole fleet. You can close this tab."
+            : await response.text(),
+          { status: response.status, headers }
+        );
+      } catch {
+        return new Response(
+          "The CawCo hub could not be reached. Start sign-in again once it reconnects.",
+          { status: 502, headers }
+        );
+      }
+    }
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "EADDRINUSE") {
       throw new Error(

@@ -56,6 +56,8 @@ export interface HarnessContext {
   /** Ship one neutral frame toward the hub. */
   // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
   frame(message: NeutralMessage): void;
+  /** The runtime has accepted this send; its turn may continue independently. */
+  readonly handed?: (uuid: string) => void;
   readonly instanceId: string;
   /** Park a permission request; the supervisor forwards it and tracks the reply. */
   // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
@@ -178,6 +180,8 @@ export interface Harness {
   ): Promise<HarnessSession | undefined>;
   // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
   renameSession(sessionKey: string, title: string, dir?: string): Promise<void>;
+  /** Agent-owned operations only, never server turn activity. */
+  readonly restartHolds?: () => string[];
   /** Lifecycle guards read the supervisor's one machine recovery barrier. */
   readonly setCustodyReadiness?: (read: () => boolean) => void;
   /** Start a session; resolves once the runtime handle is in place. */

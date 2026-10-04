@@ -11,6 +11,7 @@ import { mkdir, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
 import type {
   AgentBusyReport,
+  AgentRestartReadiness,
   ControlPayload,
   Envelope,
   FleetConfig,
@@ -35,6 +36,9 @@ import type {
 } from "@cawco/core";
 import {
   AGENT_BUSY,
+  AGENT_NOT_STARTED,
+  AGENT_RESTART_READINESS,
+  AGENT_RETIRE,
   alreadyIngested,
   CAWCO_SCRATCH_TAG,
   CONTROL_GIT_CHANGES,
@@ -63,9 +67,10 @@ import {
 import { sessiondEndpoint } from "@cawco/core/sessiond";
 import { Effect } from "effect";
 import { type Boundary, boundaryFor } from "./boundary";
+import { buildInfo } from "./build";
 import { fetchDefaultBranch } from "./clone";
 import { harnessMcpUrl } from "./delegation";
-import { DEPLOY_BRANCH } from "./deploy";
+import { DEPLOY_BRANCH, deployRoot } from "./deploy";
 import { expandHome, runFs } from "./fs";
 import type { Harness, HarnessContext, HarnessSession } from "./harness";
 import { harnesses, harness as harnessOf } from "./harnesses";
@@ -80,11 +85,18 @@ import {
   promptWriteReason,
   withPromptWrites,
 } from "./prompt-writes";
+import {
+  holdRestart,
+  isRetiring,
+  restartSnapshot,
+  retireAgent,
+  withRestartHold,
+} from "./restart";
 import { acknowledgeSessionCredential } from "./session-identity";
 import { endProc, procEpoch, SessiondClient } from "./sessiond-client";
 import { readHeldProcesses } from "./sessiond-custody";
 import { installTool, probeTools } from "./tools";
-import { type UpdateOptions, updateCheckout } from "./update";
+import { restartAgentNow, type UpdateOptions, updateCheckout } from "./update";
 
 /**
  * What {@link SessionSupervisor.reattach} needs of a sessiond-backed adapter, named
@@ -508,6 +520,10 @@ export class SessionSupervisor {
     this.sink({ kind: "cache_invalidated", reason, at });
   };
   readonly #imageRequests = new Map<string, string>();
+  readonly #unhanded = new Map<
+    string,
+    { instanceId: string; release: () => void }
+  >();
 
   /**
    * THE AGENT'S HALF OF THE INGEST LEDGER (design §7).
@@ -554,11 +570,22 @@ export class SessionSupervisor {
       startPreview(options as Parameters<typeof startPreview>[0]),
     [PREVIEW_STOP]: (options) => stopPreview(options as { instanceId: string }),
     [AGENT_BUSY]: () => this.busyNow(),
+    [AGENT_RESTART_READINESS]: () => this.restartReadiness(),
+    [AGENT_RETIRE]: async () =>
+      retireAgent(
+        () => this.restartReadiness(),
+        async () => {
+          const { commit } = await buildInfo();
+          if (!commit) {
+            throw new Error("The agent build commit is unavailable.");
+          }
+          return restartAgentNow(deployRoot(), commit);
+        }
+      ),
     [UPDATE_CAWCO]: async (options) =>
       updateCheckout({
         ...(options as Pick<UpdateOptions, "force" | "restartAgent">),
         branch: DEPLOY_BRANCH,
-        busy: (await this.busyNow()).busy,
       }),
   };
 
@@ -601,8 +628,48 @@ export class SessionSupervisor {
     }
   }
 
+  #admitRequest(envelope: Envelope): (() => void) | undefined {
+    const probe =
+      envelope.verb === "control" &&
+      [AGENT_BUSY, AGENT_RESTART_READINESS, AGENT_RETIRE].includes(
+        (envelope.payload as ControlPayload).method
+      );
+    if (isRetiring() && !probe) {
+      this.sink({
+        kind: "not_started",
+        code: AGENT_NOT_STARTED,
+        instanceId: envelope.instanceId ?? "",
+        request: envelope,
+      });
+      return undefined;
+    }
+    const id =
+      envelope.requestId ??
+      (envelope.payload as { requestId?: string }).requestId ??
+      envelope.instanceId ??
+      crypto.randomUUID();
+    if (probe) {
+      return () => undefined;
+    }
+    let reason = `request:${envelope.verb}`;
+    if (envelope.verb === "spawn") {
+      reason = "spawn";
+    }
+    if (envelope.verb === "send") {
+      reason = "delivery";
+    }
+    if (envelope.verb === "control") {
+      reason = `request:${(envelope.payload as ControlPayload).method}`;
+    }
+    return holdRestart(reason, id);
+  }
+
   /** Settles once the envelope has been handled, success or failure alike. */
   dispatch(envelope: Envelope): Promise<void> {
+    const release = this.#admitRequest(envelope);
+    if (!release) {
+      return Promise.resolve();
+    }
     const control =
       envelope.verb === "control"
         ? (envelope.payload as ControlPayload)
@@ -636,9 +703,9 @@ export class SessionSupervisor {
     // for its answer: a send behind one sat here until it came back.
     if (control && CONTROL_QUERIES.has(control.method)) {
       // #control sinks its own answer, success or failure.
-      return (this.#queues.get(key) ?? Promise.resolve()).then(() =>
-        this.#route(envelope)
-      );
+      return (this.#queues.get(key) ?? Promise.resolve())
+        .then(() => this.#route(envelope))
+        .finally(release);
     }
     const queue = (this.#queues.get(key) ?? Promise.resolve())
       .then(() => this.#route(envelope))
@@ -667,6 +734,7 @@ export class SessionSupervisor {
     this.#queues.set(key, queue);
     // biome-ignore lint/complexity/noVoid: fire-and-forget cleanup; dispatch() itself is synchronous and does not wait on the queue draining
     void queue.then(() => {
+      release();
       if (imageRequest) {
         this.#imageRequests.delete(imageRequest);
       }
@@ -752,6 +820,24 @@ export class SessionSupervisor {
       recovery: this.#custodyState,
       ...(this.#custodyError ? { error: this.#custodyError } : {}),
     };
+  }
+
+  restartReadiness(): Promise<AgentRestartReadiness> {
+    const extra: AgentRestartReadiness["holds"] = [];
+    if (!this.custodyReady) {
+      extra.push({
+        reason: `custody:${this.#custodyState}`,
+        ids: [...this.#custodyInstances, "agent"],
+      });
+    }
+    if (this.#adopting.size) {
+      extra.push({ reason: "adopt", ids: [...this.#adopting.keys()] });
+    }
+    const operations = this.#adapter("opencode").restartHolds?.() ?? [];
+    if (operations.length) {
+      extra.push({ reason: "opencode-operation", ids: operations });
+    }
+    return Promise.resolve(restartSnapshot(extra));
   }
 
   /** The pulse as it stands, computed from the parts rather than stored. */
@@ -1515,6 +1601,7 @@ export class SessionSupervisor {
         this.#line.set(instanceId, { srcEpoch, srcSeq });
       },
       frame: (message) => {
+        this.#observeHanded(message);
         const ping = this.#keepAlive.get(instanceId);
         if (
           ping &&
@@ -1597,8 +1684,14 @@ export class SessionSupervisor {
         this.#noteQuestSession(instanceId, sessionId, adapter.kind),
       failed: (error) => this.#fail(instanceId, error, processGeneration),
       rejected: (uuid, error) => this.#reject(instanceId, uuid, error),
+      handed: (uuid) => this.#handed(uuid),
       emit: (envelope) => this.emit(envelope),
       closed: () => {
+        for (const [uuid, held] of this.#unhanded) {
+          if (held.instanceId === instanceId) {
+            this.#handed(uuid);
+          }
+        }
         // A dead process is never going to answer anything it asked.
         for (const [requestId, body] of this.#openAsks) {
           if (
@@ -1942,12 +2035,14 @@ export class SessionSupervisor {
       undefined,
       row.sessionCredential
     );
-    const session = await claude.adopt(row.instanceId, ctx, {
-      ...(cursor === undefined ? {} : { afterSeq: cursor }),
-      head: proc.head,
-      sessionId: row.sessionId ?? null,
-      turnRunning: running,
-    });
+    const session = await withRestartHold("adopt", row.instanceId, () =>
+      claude.adopt(row.instanceId, ctx, {
+        ...(cursor === undefined ? {} : { afterSeq: cursor }),
+        head: proc.head,
+        sessionId: row.sessionId ?? null,
+        turnRunning: running,
+      })
+    );
     holder.session = session;
     this.#sessions.set(row.instanceId, session);
     // biome-ignore lint/complexity/noVoid: the catalog read dates a rest already under way; nothing waits on it
@@ -2056,6 +2151,7 @@ export class SessionSupervisor {
    * there is one, goes on.
    */
   #reject(instanceId: string, uuid: string, error: unknown): void {
+    this.#handed(uuid);
     this.sink({
       kind: "rejected",
       instanceId,
@@ -2127,7 +2223,30 @@ export class SessionSupervisor {
       }
       this.#touch(instanceId);
     }
-    session.send(message, { attachments, images, urgent });
+    this.#unhanded.set(message.uuid, {
+      instanceId,
+      release: holdRestart("send", `${instanceId}/${message.uuid}`),
+    });
+    try {
+      session.send(message, { attachments, images, urgent });
+    } catch (error) {
+      this.#handed(message.uuid);
+      throw error;
+    }
+  }
+
+  #handed(uuid: string): void {
+    this.#unhanded.get(uuid)?.release();
+    this.#unhanded.delete(uuid);
+  }
+
+  #observeHanded(message: NeutralMessage): void {
+    if (message.type !== "system") {
+      return;
+    }
+    for (const id of [...(message.held ?? []), ...(message.read ?? [])]) {
+      this.#handed(id);
+    }
   }
 
   async #endHeld(instanceId: string): Promise<boolean> {

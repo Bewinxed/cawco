@@ -1,6 +1,7 @@
 import { arch, hostname, platform } from "node:os";
 import type {
   AgentBusyReport,
+  AgentRestartReadiness,
   AuthState,
   BuildInfo,
   DeployInfo,
@@ -47,6 +48,7 @@ import {
 } from "./mcp-oauth";
 import { servingPreviews } from "./preview";
 import { parseProcId, SESSION_PROC_KINDS } from "./proc-id";
+import { restartSnapshot } from "./restart";
 import { TranscriptSearchService } from "./search";
 import { resumableSessions, SessionSupervisor } from "./session";
 import { SessiondClient } from "./sessiond-client";
@@ -230,6 +232,12 @@ export const currentBusy = async (): Promise<AgentBusyReport> =>
         ready: false,
         recovery: "recovering",
       };
+
+export const currentRestartReadiness =
+  async (): Promise<AgentRestartReadiness> =>
+    activeSupervisor
+      ? await activeSupervisor.restartReadiness()
+      : restartSnapshot([{ reason: "supervisor-unavailable", ids: ["agent"] }]);
 
 /**
  * How many consecutive failures against the pinned URL, and how much wall
@@ -1255,7 +1263,7 @@ export const startDaemon = (auth?: AuthState, rediscover = false) =>
     // The connection — and only the connection — is what the loop re-enters.
     // The supervisor above it keeps its sessions and the scanner keeps its
     // dedup set across every reconnect; an interrupt still unwinds through this
-    // to the supervisor's release, so a signalled daemon drains between turns.
+    // to the supervisor's release, so a signalled daemon detaches its handles.
     yield* reconnecting(
       (markLive) =>
         Effect.scoped(
@@ -1290,8 +1298,8 @@ export const startDaemon = (auth?: AuthState, rediscover = false) =>
 /**
  * Runs {@link startDaemon} until the process is signalled — how a daemon
  * normally ends, on a deliberate restart or a machine going down. Interrupting
- * the fiber runs the supervisor's drain first, so the sessions it owns stop
- * between turns instead of mid-tool. A second signal arrives with the handler
+ * the fiber detaches the supervisor; sessiond's harness processes and their
+ * turns keep running. Restarting sessiond itself ends them. A second signal arrives with the handler
  * already gone, and kills the daemon the usual way.
  */
 export const runDaemon = (auth?: AuthState, rediscover = false): void => {

@@ -32,6 +32,7 @@ export interface PiHostState {
   sessionId: string | null;
 }
 export type PiHostEvent =
+  | { type: "handed"; uuid: string }
   | { type: "frame"; message: NeutralMessage }
   | { type: "busy"; active: boolean }
   | { type: "session"; sessionId: string }
@@ -99,6 +100,9 @@ export class PiRemoteSession implements HarnessSession {
           this.#seq = line.seq;
           const event = JSON.parse(line.data) as PiHostEvent;
           switch (event.type) {
+            case "handed":
+              ctx.handed?.(event.uuid);
+              break;
             case "frame":
               // biome-ignore lint/suspicious/noUnnecessaryConditions: attached() changes this after the supervisor installs the handle
               if (this.#ready) {

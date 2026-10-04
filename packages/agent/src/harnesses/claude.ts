@@ -91,6 +91,7 @@ import {
   importCredentials,
 } from "../login";
 import { parseProcId, procIdFor } from "../proc-id";
+import { beginHarnessAnswer } from "../restart";
 // Type-only, and deliberately so: `session.ts` imports the harness registry
 // this file is part of, so a value import here would close a module cycle.
 import type { SessiondAwareContext } from "../session";
@@ -1420,6 +1421,9 @@ class ClaudeSession implements HarnessSession {
       throw new Error(`no permission request ${requestId}`);
     }
     this.#permissions.delete(requestId);
+    if (this.#sessiond) {
+      beginHarnessAnswer(`${this.#sessiond.procId}/${requestId}`);
+    }
     const question = this.#openQuestions.get(requestId);
     if (!question) {
       resolve(result);

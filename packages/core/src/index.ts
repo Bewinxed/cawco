@@ -886,6 +886,7 @@ export type FramePayload =
   | import("./frames").AsleepFrame
   | import("./frames").RecoveryUnavailableFrame
   | import("./frames").ControlResultFrame
+  | import("./frames").NotStartedFrame
   | import("./frames").ErrorFrame
   | import("./frames").UserMessageFrame
   | import("./frames").PulseFrame

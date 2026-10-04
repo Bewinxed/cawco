@@ -9,6 +9,7 @@ import type {
 import type {
   AgentRow,
   DelegateEvent,
+  Envelope,
   InstanceRow,
   PreviewSource,
   SessionPulse,
@@ -145,6 +146,14 @@ export interface ControlResultFrame {
   ok: boolean;
   requestId: string;
   result?: unknown;
+}
+
+/** The original request was refused before admission, so replay cannot duplicate work. */
+export interface NotStartedFrame {
+  code: "agent-retiring-not-started";
+  instanceId: string;
+  kind: "not_started";
+  request: Envelope;
 }
 
 export interface ErrorFrame {

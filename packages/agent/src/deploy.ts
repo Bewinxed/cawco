@@ -20,8 +20,13 @@
 
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { DeployInfo, UpdateReport } from "@cawco/core";
+import type {
+  AgentRestartReadiness,
+  DeployInfo,
+  UpdateReport,
+} from "@cawco/core";
 import { CAWCO_ENV, readEnv } from "@cawco/core";
+import { describeRestartHolds, retireAgent } from "./restart";
 
 /**
  * The marker file, relative to the clone's root. Its presence — and nothing
@@ -358,22 +363,19 @@ export const forgetLatestDeploy = (): void => {
 };
 
 export interface DeployWatcherOptions {
-  /**
-   * How many sessions this daemon is carrying mid-turn, once it knows (a
-   * restarted daemon knows only when custody of its sessions has said). Read
-   * once per tick — a pending agent restart is held for as long as busy is
-   * `> 0` and fired the very first tick it does not. Absent means "always
-   * idle": nothing is wired to restart, so there is never a restart to gate.
-   */
-  readonly busy?: () => Promise<{ busy: number; instances: string[] }>;
   readonly git?: GitRunner;
+  /**
+   * Agent-owned transactions that retirement would cut. Required: absence is
+   * never interpreted as safe. Provider turns do not participate in this read.
+   */
+  readonly readiness: () => Promise<AgentRestartReadiness>;
   /**
    * Where a tick goes. The default logs; the hub-facing surface (leaf C2)
    * subscribes here rather than reaching into this module.
    */
   readonly report?: (tick: DeployTick) => void;
   /**
-   * Fires the agent restart a prior pull left owed, once {@link busy} says it
+   * Fires the agent restart a prior pull left owed, once {@link readiness} says it
    * is safe to. Separate from {@link update} for the same reason `update` is
    * injectable at all: a test must be able to prove the retry-until-idle
    * decision without a real `systemctl restart` behind it. Returns whether
@@ -523,21 +525,14 @@ export class DeployWatcher {
   }
 
   /**
-   * The idle-gated half of the channel: an agent restart a pull left owed,
+   * The transaction-gated half of the channel: an agent restart a pull left owed,
    * retried every tick — forever, no timeout, because nobody is at a
-   * terminal waiting on this one — until the machine is idle enough to take
-   * it. Every held reason is logged at most once per minute, with the busy ids.
+   * terminal waiting on this one — until agent-owned work has settled.
+   * Every held reason is logged at most once per minute, with its operation ids.
    */
   async #drainPendingRestart(): Promise<void> {
     const commit = this.#agentRestartOwedFor;
     if (!commit) {
-      return;
-    }
-    const busy = await this.#options.busy?.();
-    if (busy && busy.busy > 0) {
-      this.#hold(
-        `agent restart to ${commit} held: busy=${busy.busy}; instances=${busy.instances.join(", ")}`
-      );
       return;
     }
     const restart = this.#options.restartAgent;
@@ -545,8 +540,19 @@ export class DeployWatcher {
       this.#hold(`agent restart to ${commit} owed: no restart handler`);
       return;
     }
-    if (await restart(this.#root, commit)) {
-      say(`agent restart to ${commit} scheduled (idle)`);
+    const decision = await retireAgent(this.#options.readiness, () =>
+      restart(this.#root, commit)
+    );
+    if (!decision.ready) {
+      this.#hold(
+        `agent restart to ${commit} held: ${describeRestartHolds(decision)}`
+      );
+      return;
+    }
+    if (decision.scheduled) {
+      say(
+        `agent restart to ${commit} scheduled (transactions settled; sessions retained)`
+      );
       this.#agentRestartOwedFor = undefined;
     } else {
       this.#hold(`agent restart to ${commit} owed: no installed agent service`);

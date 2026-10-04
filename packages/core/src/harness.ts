@@ -32,6 +32,16 @@ export interface AgentBusyReport {
   recovery: "recovering" | "ready" | "failed";
 }
 
+/** Agent-owned transactions, independent of provider/session turn activity. */
+export interface AgentRestartReadiness {
+  holds: { reason: string; ids: string[] }[];
+  ready: boolean;
+  retiring: boolean;
+}
+export const AGENT_RESTART_READINESS = "agentRestartReadiness";
+export const AGENT_RETIRE = "agentRetire";
+export const AGENT_NOT_STARTED = "agent-retiring-not-started";
+
 /** Reconfigure a retained harness in place; never stop or restart its session. */
 export const INSTALL_SESSION_CREDENTIAL = "installSessionCredential";
 export const LIVE_CREDENTIAL_ENROLLMENT_REFUSAL =

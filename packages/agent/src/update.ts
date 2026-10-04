@@ -22,6 +22,13 @@ import {
   describeDeploy,
   startDeployPoller,
 } from "./deploy";
+import {
+  AgentRetiring,
+  describeRestartHolds,
+  isRetiring,
+  retireAgent,
+  withRestartHold,
+} from "./restart";
 import { toolEnv } from "./tools";
 
 export interface UpdateOptions {
@@ -33,14 +40,9 @@ export interface UpdateOptions {
    * following something else.
    */
   branch: string;
-  /**
-   * How many turns this daemon is carrying. Filled in by the supervisor, which
-   * is the only thing that knows — never read off the wire.
-   */
-  busy?: number;
-  /** Pull onto a dirty checkout, and restart the agent mid-turn. Both are refusals. */
+  /** Allow pulling onto a dirty checkout. Never bypasses restart readiness. */
   force?: boolean;
-  /** Restart this daemon too, once everything else is up — and only when idle. */
+  /** Request fenced retirement after the other services are up. */
   restartAgent?: boolean;
   /**
    * Which checkout to update. Defaults to the one this daemon is running out of
@@ -290,8 +292,11 @@ const RESTART_DELAY_S = 1;
  * Handed to a shell that waits a second first — every argument is a unit name
  * or a launchd label, so joining them is safe.
  */
-const scheduleRestart = (id: "agent" | "hub"): void => {
-  const command = `sleep ${RESTART_DELAY_S}; exec ${restartCommand(id).join(" ")}`;
+const scheduleRestart = (
+  id: "agent" | "hub",
+  delay = RESTART_DELAY_S
+): void => {
+  const command = `sleep ${delay}; exec ${restartCommand(id).join(" ")}`;
   Bun.spawn(["sh", "-c", command], {
     stdio: ["ignore", "ignore", "ignore"],
   }).unref();
@@ -348,13 +353,9 @@ export const consumeRestartMarker = async (
 };
 
 /**
- * The idle-gated half of the deploy channel (unifying C8 with the CLI's own
- * `--when-idle` restart, `packages/cli/src/service.ts`): called by the deploy
- * poller only once IT has already established the machine is idle enough to
- * interrupt. This function itself never checks busy — it is exactly as safe,
- * and exactly as blunt, as `restartStack`'s own `scheduleRestart("agent")`
- * call — the busy gate is the caller's job precisely so it can be asked again
- * on the next tick instead of asked once and given up on.
+ * Called only through retireAgent's shared readiness/fence transaction.
+ * Recheck after the reply margin: a retained harness can emit a hook or control
+ * response meanwhile. A late hold cancels this attempt; no timeout overrides it.
  */
 export const restartAgentNow = async (
   root: string,
@@ -363,8 +364,15 @@ export const restartAgentNow = async (
   if (!(await isInstalled("agent"))) {
     return false;
   }
+  // The reply margin is fenced too. Internal hook/control writes may arise
+  // from a surviving turn after the first readiness snapshot.
+  await Bun.sleep(RESTART_DELAY_S * 1000);
   await writeRestartMarker(root, commit);
-  scheduleRestart("agent");
+  const { currentRestartReadiness } = await import("./daemon");
+  if (!(await currentRestartReadiness()).ready) {
+    return false;
+  }
+  scheduleRestart("agent", 0);
   return true;
 };
 
@@ -574,7 +582,12 @@ const installCheckout = async (
 export const updateCheckout = (
   options: UpdateOptions
 ): Promise<UpdateReport> => {
-  const update = updateQueue.then(() => pullAndRestart(options));
+  if (isRetiring()) {
+    return Promise.reject(new AgentRetiring());
+  }
+  const update = withRestartHold("deploy", options.root ?? REPO_ROOT, () =>
+    updateQueue.then(() => pullAndRestart(options))
+  );
   updateQueue = update.catch(() => undefined);
   return update;
 };
@@ -599,7 +612,7 @@ const includeDashboardDebt = async (
 };
 
 const pullAndRestart = async (
-  { restartAgent, force, busy = 0, root = REPO_ROOT, branch }: UpdateOptions,
+  { restartAgent, force, root = REPO_ROOT, branch }: UpdateOptions,
   deployment?: {
     state: Extract<DeployState, { kind: "behind" | "current" }>;
     dashboardUrl?: string;
@@ -711,11 +724,7 @@ const pullAndRestart = async (
     }
   }
 
-  const result = await restartStack(
-    report,
-    { restartAgent, force, busy },
-    skipped
-  );
+  const result = await restartStack(report, { restartAgent }, skipped);
   if (deployment && result.skipped && result.changed.length > 0) {
     console.error(`cawco deploy: skipped: ${result.skipped}`);
   }
@@ -733,11 +742,7 @@ const pullAndRestart = async (
  */
 export const restartStack = async (
   report: UpdateReport,
-  {
-    restartAgent,
-    force,
-    busy = 0,
-  }: { restartAgent?: boolean; force?: boolean; busy?: number },
+  { restartAgent }: { restartAgent?: boolean },
   skipped: string[]
 ): Promise<UpdateReport> => {
   // Only what `report.changed` names comes down: a service whose code the
@@ -777,23 +782,23 @@ export const restartStack = async (
     scheduleRestart("hub");
   }
 
-  // Last, and only when asked: this daemon is hosting the sessions the restart
-  // would cut in half. Reported as restarted rather than as scheduled — the
-  // second it waits is only there so this report can leave first.
+  // Last, and only when asked: agent transactions settle before retirement.
+  // Sessiond-held harness processes are retained rather than relaunched.
   if (restartAgent) {
-    if (!report.changed.includes("agent")) {
-      skipped.push("nothing the agent runs changed, so it was left running");
-    } else if (busy > 0 && !force) {
-      skipped.push(
-        `the agent is carrying ${busy} turn(s), so it was left running`
+    if (report.changed.includes("agent")) {
+      const { currentRestartReadiness } = await import("./daemon");
+      const decision = await retireAgent(currentRestartReadiness, () =>
+        restartAgentNow(REPO_ROOT, report.to ?? "")
       );
-    } else if (await isInstalled("agent")) {
-      report.restarted.push("agent");
-      scheduleRestart("agent");
+      if (decision.scheduled) {
+        report.restarted.push("agent");
+      } else {
+        skipped.push(
+          `agent restart held: ${describeRestartHolds(decision) || "no installed agent service"}`
+        );
+      }
     } else {
-      skipped.push(
-        "the agent runs no service here, so nothing could restart it"
-      );
+      skipped.push("nothing the agent runs changed, so it was left running");
     }
   }
 
@@ -810,19 +815,17 @@ export const restartStack = async (
  *
  * A daemon that pulled a new commit and kept running the old one has not
  * deployed — but `restartAgent: false`, always, is deliberate: this call
- * always ran with `restartAgent: true` and no busy count, so a push always
- * force-restarted the agent mid-turn, busy or not, and the comment here used
- * to call that "free by construction" because the harness children live in
- * sessiond's cgroup rather than the agent's. Free for the *session* — custody
- * survives it — is not free for whoever was mid-stream on it. `deploy.ts`
- * (`DeployWatcher#drainPendingRestart`) now owns that decision instead, with
- * the real busy count and a retry every tick until idle, rather than a
- * one-shot check against a number this call never even asked for.
+ * once restarted without protecting agent-owned work. DeployWatcher now owns
+ * the shared transaction readiness/fence decision and retries owed retirement
+ * each tick. Ordinary session turns keep running in sessiond.
  */
 export const deployUpdate = (
   state: DeployState,
   dashboardUrl?: string
 ): Promise<UpdateReport> => {
+  if (isRetiring()) {
+    return Promise.reject(new AgentRetiring());
+  }
   if (state.kind !== "behind" && state.kind !== "current") {
     throw new Error(
       `refusing to update a checkout that is ${state.kind}: ${describeDeploy(state)}`
@@ -838,13 +841,15 @@ export const deployUpdate = (
       { state, dashboardUrl }
     )
   );
-  updateQueue = update.catch(() => undefined);
-  return update;
+  const held = withRestartHold("deploy", state.root, () => update);
+  updateQueue = held.catch(() => undefined);
+  return held;
 };
 
 export type DeployWatchOptions = Partial<
-  Omit<DeployWatcherOptions, "update">
+  Omit<DeployWatcherOptions, "update" | "readiness">
 > & {
+  readonly readiness: DeployWatcherOptions["readiness"];
   readonly intervalMs?: number;
   readonly dashboardUrl?: string;
 };
@@ -856,9 +861,7 @@ export type DeployWatchOptions = Partial<
  * to, the very first thing every tick does is fail the marker check, so the
  * poller is a no-op in a dev tree by construction rather than by configuration.
  */
-export const watchDeployment = (
-  options: DeployWatchOptions = {}
-): DeployPoller =>
+export const watchDeployment = (options: DeployWatchOptions): DeployPoller =>
   startDeployPoller({
     // The real idle-gated restart, unless a caller (the tests) names its own.
     restartAgent: restartAgentNow,

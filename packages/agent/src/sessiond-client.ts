@@ -43,6 +43,11 @@ import {
   type SessiondServerMessage,
   sessiondEndpoint,
 } from "@cawco/core/sessiond";
+import {
+  beginHarnessAnswer,
+  endHarnessAnswer,
+  withRestartHold,
+} from "./restart";
 
 /**
  * How long a dial or a `welcome` may take before the agent calls the endpoint
@@ -454,9 +459,15 @@ export class SessiondClient {
     data: string,
     commandId = crypto.randomUUID()
   ): Promise<void> {
-    assertApplied(
-      await this.#command({ type: "write", commandId, procId, data }),
-      "write"
+    await withRestartHold(
+      "harness-write",
+      `${procId}/${commandId}`,
+      async () => {
+        assertApplied(
+          await this.#command({ type: "write", commandId, procId, data }),
+          "write"
+        );
+      }
     );
   }
 
@@ -672,12 +683,18 @@ export const sessiondBridge = (
   let consumed = attach?.afterSeq ?? 0;
   const stdin = new Writable({
     write(chunk: Buffer | string, _encoding, callback) {
+      const data = typeof chunk === "string" ? chunk : chunk.toString("utf8");
+      const response = parseRingLine(data) as
+        | { type?: string; response?: { request_id?: string } }
+        | undefined;
       client
-        .write(
-          procId,
-          typeof chunk === "string" ? chunk : chunk.toString("utf8")
-        )
-        .then(() => callback())
+        .write(procId, data)
+        .then(() => {
+          if (response?.response?.request_id) {
+            endHarnessAnswer(`${procId}/${response.response.request_id}`);
+          }
+          callback();
+        })
         // A write to a child that already died is the child's death, not a
         // stream error the SDK should throw on: the exit event is the truth.
         .catch(() => callback());
@@ -704,6 +721,16 @@ export const sessiondBridge = (
     line: (event) => {
       consumed = event.seq;
       const parsed = parseRingLine(event.data);
+      const control = parsed as
+        | { type?: string; request_id?: string; request?: { subtype?: string } }
+        | undefined;
+      if (
+        control?.type === "control_request" &&
+        control.request?.subtype === "hook_callback" &&
+        !(attach && event.seq <= attach.head)
+      ) {
+        beginHarnessAnswer(`${procId}/${control.request_id}`);
+      }
       // An attach replays what the hub has not yet framed, and in that
       // backlog the control traffic was the previous host's: its requests
       // were answered (or are handed over in the prelude), and its responses

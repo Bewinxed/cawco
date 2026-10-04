@@ -79,6 +79,7 @@ async function handle(command: PiHostCommand): Promise<void> {
         state.held.push(command.message.uuid);
         session.send(command.message, command.extras);
       }
+      output({ type: "handed", uuid: command.message.uuid });
       return;
     case "snapshot":
       output({ type: "reply", id: command.id, value: state });

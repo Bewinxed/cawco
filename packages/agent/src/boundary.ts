@@ -46,6 +46,7 @@ import { sessionIdentityDir } from "@cawco/core/paths";
 import { type ProcSpec, sessiondEndpoint } from "@cawco/core/sessiond";
 import { cloneInPlace } from "./clone";
 import { procIdFor } from "./proc-id";
+import { withRestartHold } from "./restart";
 import { ensureSessiond, SessiondClient } from "./sessiond-client";
 
 /** A running boundary, as a harness uses it. */
@@ -258,7 +259,9 @@ export const ensureBoundary = (ref: WorkspaceRef): Promise<Boundary> => {
   if (pending) {
     return pending;
   }
-  const started = ensure(ref).finally(() => starting.delete(ref.id));
+  const started = withRestartHold("boundary", ref.id, () =>
+    ensure(ref)
+  ).finally(() => starting.delete(ref.id));
   starting.set(ref.id, started);
   return started;
 };

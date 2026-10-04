@@ -5,6 +5,7 @@ export { type CliConfig, CONFIG_PATH, readConfig, writeConfig } from "./config";
 export {
   ConnectionLost,
   currentBusy,
+  currentRestartReadiness,
   type RegisterPayload,
   runDaemon,
   startDaemon,

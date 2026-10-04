@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import type { CommandResult, WorkspaceRef } from "@cawco/core";
 import { ensureBoundary } from "./boundary";
+import { withRestartHold } from "./restart";
 
 /** The most a command may write, stdout and stderr together, in bytes. */
 const OUTPUT_LIMIT = 8 * 1024 * 1024;
@@ -71,80 +72,85 @@ export async function runWorkflowCommand(
   const [file, args] = isWorkspaceRef(workspace)
     ? [(await ensureBoundary(workspace)).exec, [cmd]]
     : ["/bin/sh", ["-c", cmd]];
-  return new Promise((resolve, reject) => {
-    const child = spawn(file, args, {
-      cwd,
-      detached: true,
-      // The executor enters the boundary in `$PWD`: it names `cwd`.
-      env: { ...process.env, PWD: cwd },
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    const { pid } = child;
-    if (pid) {
-      live.add(pid);
-    }
-    const stdout: Buffer[] = [];
-    const stderr: Buffer[] = [];
-    let written = 0;
-    let expired = false;
-    let overflowed = false;
-    const killGroup = () => {
-      if (child.pid) {
-        try {
-          process.kill(-child.pid, "SIGKILL");
-        } catch (error) {
-          reject(error);
+  return withRestartHold(
+    "command",
+    String(cmd),
+    () =>
+      new Promise((resolve, reject) => {
+        const child = spawn(file, args, {
+          cwd,
+          detached: true,
+          // The executor enters the boundary in `$PWD`: it names `cwd`.
+          env: { ...process.env, PWD: cwd },
+          stdio: ["ignore", "pipe", "pipe"],
+        });
+        const { pid } = child;
+        if (pid) {
+          live.add(pid);
         }
-      }
-    };
-    const collect = (into: Buffer[]) => (chunk: Buffer) => {
-      if (overflowed) {
-        return;
-      }
-      written += chunk.length;
-      if (written > OUTPUT_LIMIT) {
-        overflowed = true;
-        stdout.length = 0;
-        stderr.length = 0;
-        killGroup();
-        reject(
-          new Error(
-            `Command output passed ${OUTPUT_LIMIT} bytes: ${cmd.slice(0, 200)}`
-          )
+        const stdout: Buffer[] = [];
+        const stderr: Buffer[] = [];
+        let written = 0;
+        let expired = false;
+        let overflowed = false;
+        const killGroup = () => {
+          if (child.pid) {
+            try {
+              process.kill(-child.pid, "SIGKILL");
+            } catch (error) {
+              reject(error);
+            }
+          }
+        };
+        const collect = (into: Buffer[]) => (chunk: Buffer) => {
+          if (overflowed) {
+            return;
+          }
+          written += chunk.length;
+          if (written > OUTPUT_LIMIT) {
+            overflowed = true;
+            stdout.length = 0;
+            stderr.length = 0;
+            killGroup();
+            reject(
+              new Error(
+                `Command output passed ${OUTPUT_LIMIT} bytes: ${cmd.slice(0, 200)}`
+              )
+            );
+            return;
+          }
+          into.push(chunk);
+        };
+        child.stdout.on("data", collect(stdout));
+        child.stderr.on("data", collect(stderr));
+        const timer = setTimeout(
+          () => {
+            expired = true;
+            killGroup();
+          },
+          typeof timeoutMs === "number" ? timeoutMs : DEFAULT_TIMEOUT_MS
         );
-        return;
-      }
-      into.push(chunk);
-    };
-    child.stdout.on("data", collect(stdout));
-    child.stderr.on("data", collect(stderr));
-    const timer = setTimeout(
-      () => {
-        expired = true;
-        killGroup();
-      },
-      typeof timeoutMs === "number" ? timeoutMs : DEFAULT_TIMEOUT_MS
-    );
-    child.on("error", (error) => {
-      clearTimeout(timer);
-      if (pid) {
-        live.delete(pid);
-      }
-      reject(error);
-    });
-    child.on("close", (code) => {
-      clearTimeout(timer);
-      if (pid) {
-        live.delete(pid);
-      }
-      if (overflowed) {
-        return;
-      }
-      resolve({
-        exitCode: expired ? 124 : (code ?? 1),
-        stdout: Buffer.concat(stdout).toString("utf8"),
-        stderr: Buffer.concat(stderr).toString("utf8"),
-      });
-    });
-  });
+        child.on("error", (error) => {
+          clearTimeout(timer);
+          if (pid) {
+            live.delete(pid);
+          }
+          reject(error);
+        });
+        child.on("close", (code) => {
+          clearTimeout(timer);
+          if (pid) {
+            live.delete(pid);
+          }
+          if (overflowed) {
+            return;
+          }
+          resolve({
+            exitCode: expired ? 124 : (code ?? 1),
+            stdout: Buffer.concat(stdout).toString("utf8"),
+            stderr: Buffer.concat(stderr).toString("utf8"),
+          });
+        });
+      })
+  );
 }

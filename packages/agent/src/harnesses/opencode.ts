@@ -100,6 +100,7 @@ import { delegationHubUrl, harnessMcpUrl } from "../delegation";
 import type { Harness, HarnessContext, HarnessSession } from "../harness";
 import { isMachineAgent } from "../machine-agent";
 import { OPENCODE_SERVER_PROC_ID } from "../proc-id";
+import { isRetiring, withRestartHold } from "../restart";
 import { ensureSessiond, SessiondClient } from "../sessiond-client";
 import { resolveBin } from "../tools";
 import {
@@ -2927,6 +2928,8 @@ export class OpencodeSession implements HarnessSession {
         if (res.error) {
           this.#ctx.rejected(uuid, new Error(errorText(res.error)));
           this.#drained(messageID);
+        } else {
+          this.#ctx.handed?.(uuid);
         }
       })
       .catch((error: unknown) => {
@@ -3050,6 +3053,8 @@ export class OpencodeSession implements HarnessSession {
       .then((res) => {
         if (res.error) {
           this.#ctx.rejected(uuid, new Error(errorText(res.error)));
+        } else {
+          this.#ctx.handed?.(uuid);
         }
       });
   }
@@ -3084,6 +3089,8 @@ export class OpencodeSession implements HarnessSession {
     });
     if (res.error) {
       this.#ctx.rejected(uuid, new Error(errorText(res.error)));
+    } else {
+      this.#ctx.handed?.(uuid);
     }
   }
 
@@ -3328,10 +3335,12 @@ export class OpencodeSession implements HarnessSession {
     this.#resolvedGates.add(requestId);
     this.#ctx.permissionResolved?.(requestId);
     // biome-ignore lint/complexity/noVoid: fire-and-forget: #replyPermission itself is not awaited by its callers
-    void reached(
-      this.#client.permission.reply(
-        { requestID: requestId, directory: this.#directory, reply: response },
-        { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
+    void withRestartHold("harness-answer", requestId, () =>
+      reached(
+        this.#client.permission.reply(
+          { requestID: requestId, directory: this.#directory, reply: response },
+          { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
+        )
       )
     ).catch((error: unknown) =>
       console.warn(`[opencode] permission reply failed: ${String(error)}`)
@@ -3340,10 +3349,12 @@ export class OpencodeSession implements HarnessSession {
 
   #replyQuestion(id: string, answers: string[][]): Promise<void> {
     return (
-      reached(
-        this.#client.question.reply(
-          { requestID: id, directory: this.#directory, answers },
-          { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
+      withRestartHold("harness-answer", id, () =>
+        reached(
+          this.#client.question.reply(
+            { requestID: id, directory: this.#directory, answers },
+            { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
+          )
         )
       )
         .then((res) => {
@@ -3362,10 +3373,12 @@ export class OpencodeSession implements HarnessSession {
 
   #rejectQuestion(id: string): Promise<void> {
     return (
-      reached(
-        this.#client.question.reject(
-          { requestID: id, directory: this.#directory },
-          { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
+      withRestartHold("harness-answer", id, () =>
+        reached(
+          this.#client.question.reject(
+            { requestID: id, directory: this.#directory },
+            { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
+          )
         )
       )
         .then((res) => {
@@ -3906,6 +3919,22 @@ export class OpencodeHarness implements Harness {
     );
   }
 
+  restartHolds(): string[] {
+    return [
+      // biome-ignore lint/suspicious/noUnnecessaryConditions: spawn() mutates this counter across calls.
+      ...(this.#opening ? ["opening"] : []),
+      // biome-ignore lint/suspicious/noUnnecessaryConditions: syncFleet() mutates this counter across calls.
+      ...(this.#mutatingMcp ? ["mcp-mutation"] : []),
+      ...(this.#applyGate || this.#checkingPublication ? ["publication"] : []),
+      ...[...this.#migrations.keys()].map((id) => `migration:${id}`),
+      ...[...this.#pendingRecoveries.keys()].map((id) => `recovery:${id}`),
+      // biome-ignore lint/suspicious/noUnnecessaryConditions: recovery slots mutate across async operations.
+      ...(this.#recovering || this.#recoveryWaiters.length
+        ? ["reconcile"]
+        : []),
+    ];
+  }
+
   /** No local turn maps participate in the server's idle decision. */
   // biome-ignore lint/suspicious/useAwait: the Harness contract returns a promise; activity reporting itself is deliberately synchronous
   async busyInstances(): Promise<string[]> {
@@ -4032,6 +4061,9 @@ export class OpencodeHarness implements Harness {
   }
 
   async #attemptConfigApply(): Promise<void> {
+    if (isRetiring()) {
+      return;
+    }
     if (
       this.#applyGate ||
       this.#checkingPublication ||
