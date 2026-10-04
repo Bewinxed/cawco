@@ -188,14 +188,15 @@ final class MachineInventoryView: UIStackView {
                 let config = try JSONDecoder().decode(Operations.PutApiFleetMcpByName.Input.Body.JsonPayload.self,
                                                       from: JSONEncoder().encode(Adoption(config: row.config, enabled: true)))
                 let response = try await hub.api.fleet.putMCP(.init(path: .init(name: row.name), body: .json(config)))
-                // The contract documents only the refusals; a save answers 2xx.
                 switch response {
-                case let .undocumented(code, _) where (200 ..< 300).contains(code):
+                case .ok:
                     break
                 case let .undocumented(code, _):
                     throw AdoptError(message: "Could not save \(row.name) — the hub answered \(code).")
                 case .badRequest:
                     throw AdoptError(message: "Could not save \(row.name) — the hub answered 400.")
+                case .notFound:
+                    throw AdoptError(message: "Could not save \(row.name) — the hub answered 404.")
                 case .unprocessableContent:
                     throw AdoptError(message: "Could not save \(row.name) — the hub answered 422.")
                 }
