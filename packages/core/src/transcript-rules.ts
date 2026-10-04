@@ -899,7 +899,7 @@ export function mapFrame(
         }
         case "compact_boundary":
           mapping.blocks.push(
-            systemLine(base, "system.compact_boundary", "Context compacted", {
+            systemLine(base, "system.compact_boundary", "Compacted", {
               subtype: "compact_boundary",
               preTokens: sdk.compact_metadata?.pre_tokens,
               trigger: sdk.compact_metadata?.trigger,
@@ -1330,7 +1330,7 @@ export const COMPACT_SUMMARY_KIND = "Session continued";
 
 const COMPACT_SUMMARY = {
   kind: COMPACT_SUMMARY_KIND,
-  title: "Compacted conversation summary",
+  title: "Compaction summary",
 };
 
 /**
