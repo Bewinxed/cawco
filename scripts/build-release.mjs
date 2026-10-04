@@ -161,24 +161,25 @@ await cp(
  * apart would get different libraries underneath it. The published manifest
  * pins what this build was actually tested against.
  */
-const PINNED_VERSION_RE = /^[\^~]?\d/;
+const NPM_ALIAS_RE = /^npm:(.+)@[^@]+$/;
 
 const resolved = async (name, asked) => {
-  if (PINNED_VERSION_RE.test(asked)) {
-    return asked;
-  }
-  // Asked of the resolver rather than looked for on disk, because a bun store
+  const alias = NPM_ALIAS_RE.exec(asked)?.[1];
+  const packageName = alias ?? name;
+  // Resolve the manifest, including packages with no root JavaScript export,
+  // rather than looking for it on disk, because a bun store
   // can hold several versions of the same package and the answer that matters
   // is the one the code actually loads.
   for (const from of [
     "packages/hub",
     "packages/agent",
     "packages/cli",
+    "packages/core",
     "apps/dashboard",
     ".",
   ]) {
     try {
-      const entry = Bun.resolveSync(name, join(ROOT, from));
+      const entry = Bun.resolveSync(`${name}/package.json`, join(ROOT, from));
       let dir = entry;
       for (let up = 0; up < 8; up += 1) {
         dir = join(dir, "..");
@@ -188,8 +189,8 @@ const resolved = async (name, asked) => {
         }
         // biome-ignore lint/performance/noAwaitInLoops: walks up from the resolved entry looking for the first matching manifest; must stop at the first hit
         const json = JSON.parse(await readFile(manifest, "utf8"));
-        if (json.name === name && typeof json.version === "string") {
-          return json.version;
+        if (json.name === packageName && typeof json.version === "string") {
+          return alias ? `npm:${alias}@${json.version}` : json.version;
         }
       }
     } catch {
