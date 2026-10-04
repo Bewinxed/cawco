@@ -124,6 +124,13 @@ interface RecoveryWave {
   round?: RecoveryRound;
 }
 
+interface McpRefresh {
+  applying?: Promise<void>;
+  given?: Record<string, unknown>;
+  owed: boolean;
+  waiting?: ReturnType<typeof Promise.withResolvers<void>>;
+}
+
 function withImageAttachments(
   output: string,
   attachments: FilePart[] = []
@@ -3432,6 +3439,8 @@ export class OpencodeHarness implements Harness {
   #verifiedProcId: string | null = null;
   #opening = 0;
   #mutatingMcp = 0;
+  #proxiedMcp: Record<string, McpLocalConfig | McpRemoteConfig> = {};
+  readonly #mcpRefreshes = new Map<string, McpRefresh>();
   readonly #activities = new Map<string, OpencodeActivity>();
   readonly #generationClients = new Map<string, OpencodeClient>();
   readonly #sessionOwners = new Map<string, ServerIdentity>();
@@ -3845,6 +3854,29 @@ export class OpencodeHarness implements Harness {
     if (!(identity && session.sessionId)) {
       throw new Error("OpenCode dispatch has no generation custody.");
     }
+    if (identity.procId === this.#serverOwner.active?.procId) {
+      await this.#refreshMcp(session.directory, identity);
+      const refresh = this.#mcpRefreshes.get(
+        this.#pumpKey(session.directory, identity)
+      );
+      const activity = this.#activity(identity);
+      if (refresh?.owed && activity.state(session.sessionId) === "unobserved") {
+        const observed = await activity.sessionState(
+          this.#clientForGeneration(identity),
+          session.sessionId,
+          session.directory
+        );
+        if (observed.kind === "unreachable") {
+          throw new Error(observed.reason);
+        }
+        await this.#refreshMcp(session.directory, identity);
+      }
+      if (refresh?.owed) {
+        refresh.waiting ??= Promise.withResolvers<void>();
+        await refresh.waiting.promise;
+        return this.#prepareDispatch(session);
+      }
+    }
     this.#activity(identity).observeBusy(session.sessionId, session.directory);
   }
 
@@ -4034,6 +4066,7 @@ export class OpencodeHarness implements Harness {
   async #attemptConfigApply(): Promise<void> {
     if (
       this.#applyGate ||
+      this.#mutatingMcp > 0 ||
       this.#checkingPublication ||
       Date.now() < this.#retryConfigAt
     ) {
@@ -4135,6 +4168,12 @@ export class OpencodeHarness implements Harness {
           this.#appliedHash = targetHash;
           this.#appliedVersion = targetVersion;
           this.#configError = null;
+          // Waiting dispatches re-enter their usual generation handoff after
+          // publication; the incumbent's MCP connections remain untouched.
+          for (const refresh of this.#mcpRefreshes.values()) {
+            refresh.waiting?.resolve();
+            refresh.waiting = undefined;
+          }
           // The incumbent's clients and pumps remain owned until its turns end.
           // biome-ignore lint/complexity/noVoid: publication does not wait for busy incumbent sessions to migrate
           void this.#handoffIdle().catch(console.warn);
@@ -4705,6 +4744,10 @@ export class OpencodeHarness implements Harness {
     this.#pumps.delete(key);
     this.#pumpReady.delete(key);
     this.#pumpConnected.delete(key);
+    this.#mcpRefreshes
+      .get(key)
+      ?.waiting?.reject(new Error(`OpenCode directory released: ${directory}`));
+    this.#mcpRefreshes.delete(key);
     const disposed = await client.instance.dispose(
       { directory },
       { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
@@ -4720,6 +4763,10 @@ export class OpencodeHarness implements Harness {
 
   /** Ends every directory's subscription loop; none reconnects. */
   #stopPumps(): void {
+    for (const refresh of this.#mcpRefreshes.values()) {
+      refresh.waiting?.reject(new Error("OpenCode adapter disposed"));
+    }
+    this.#mcpRefreshes.clear();
     for (const owner of this.#pumps.values()) {
       owner.abort();
     }
@@ -4836,6 +4883,16 @@ export class OpencodeHarness implements Harness {
               child.parent.handleChild(event, child.callID);
             }
           }
+          if (
+            event.type === "session.idle" ||
+            (event.type === "session.status" &&
+              event.properties.status.type === "idle")
+          ) {
+            // biome-ignore lint/complexity/noVoid: idle refresh must not block event consumption
+            void this.#refreshMcp(directory, identity, true).catch(
+              console.warn
+            );
+          }
         }
       } catch {
         // The stream ended or dropped; reconnect below unless stopped.
@@ -4950,6 +5007,10 @@ export class OpencodeHarness implements Harness {
         return;
       }
       await Promise.all([session.watchResumedTurn(), session.reconcileGates()]);
+      const identity = this.#sessionOwners.get(session.instanceId);
+      if (identity) {
+        await this.#refreshMcp(session.directory, identity, true);
+      }
     }).finally(() => {
       this.#reconcileJobs.delete(session);
       if (
@@ -5792,6 +5853,11 @@ export class OpencodeHarness implements Harness {
       await syncMemory(OPENCODE_MEMORY, null, sidecar.memory, report);
     }
     await writeJson(OPENCODE_SIDECAR, { mcp });
+    this.#proxiedMcp = Object.fromEntries(
+      config.mcp
+        .filter((server) => server.proxied && server.enabled)
+        .map((server) => [server.name, toOpencodeMcp(server.config)])
+    );
 
     // Poke the config watcher: syncFleet just wrote opencode.json, so the disk
     // hash will have changed. An immediate tick avoids the up-to-2s polling
@@ -5808,42 +5874,173 @@ export class OpencodeHarness implements Harness {
       );
       return report;
     }
-    const client = await this.#ensure();
-    for (const server of config.mcp.filter(
-      (row) => row.proxied && row.enabled
-    )) {
+    await this.#ensure();
+    const identity = this.#serverOwner.active;
+    if (identity) {
+      const prefix = `${identity.procId}\n`;
       const directories = new Set(
-        [...this.#pumps.keys()].map((key) => key.slice(key.indexOf("\n") + 1))
+        [...this.#pumps.keys()]
+          .filter((key) => key.startsWith(prefix))
+          .map((key) => key.slice(prefix.length))
       );
-      for (const directory of directories) {
-        // biome-ignore lint/performance/noAwaitInLoops: replace each directory's connection before reporting runtime state
-        const connected = await client.mcp.add({
-          name: server.name,
-          config: toOpencodeMcp(server.config),
-          directory,
-        });
-        if (connected.error) {
-          throw new Error(errorText(connected.error));
-        }
-        const removed = await client.mcp.auth.remove({
-          name: server.name,
-          directory,
-        });
-        if (removed.error) {
-          throw new Error(errorText(removed.error));
-        }
-        const reconnected = await client.mcp.connect({
-          name: server.name,
-          directory,
-        });
-        if (reconnected.error) {
-          throw new Error(errorText(reconnected.error));
-        }
-      }
+      await Promise.all(
+        [...directories].map((directory) =>
+          this.#refreshMcp(directory, identity)
+        )
+      );
     }
     Object.assign(report.mcp, await this.#readFleetMcp(mcp));
 
     return report;
+  }
+
+  /** One connection-replacement path, shared by sync, idle reconciliation and dispatch. */
+  #refreshMcp(
+    directory: string,
+    identity: ServerIdentity,
+    atIdle = false
+  ): Promise<void> {
+    if (
+      // biome-ignore lint/suspicious/noUnnecessaryConditions: dispose() changes this outside the refresh method
+      this.#disposed ||
+      this.#applyGate ||
+      identity.procId !== this.#serverOwner.active?.procId
+    ) {
+      return Promise.resolve();
+    }
+    const key = this.#pumpKey(directory, identity);
+    const refresh = this.#mcpRefreshes.get(key) ?? { owed: false };
+    this.#mcpRefreshes.set(key, refresh);
+    if (refresh.applying) {
+      return refresh.applying.then(() =>
+        this.#refreshMcp(directory, identity, atIdle)
+      );
+    }
+    const desired = this.#proxiedMcp;
+    if (
+      Object.entries(desired).every(
+        ([name, config]) =>
+          canonicalizeJson(config) === canonicalizeJson(refresh.given?.[name])
+      )
+    ) {
+      refresh.owed = false;
+      refresh.waiting?.resolve();
+      refresh.waiting = undefined;
+      return Promise.resolve();
+    }
+    this.#mutatingMcp += 1;
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one serialized transaction owns comparison, idle safety, replacement and waiter settlement
+    const applying = (async () => {
+      const client = this.#client;
+      if (!client) {
+        throw new Error("OpenCode MCP refresh has no active client.");
+      }
+      if (!refresh.given && Object.keys(desired).length > 0) {
+        // Adoption starts from the generation's resolved config, not an assumed
+        // empty record that would reconnect every directory on agent register.
+        const configured = await reached(client.config.get({ directory }));
+        if (configured.error || !configured.data) {
+          throw new Error(errorText(configured.error));
+        }
+        refresh.given = Object.fromEntries(
+          Object.entries(desired).map(([name, config]) => [
+            name,
+            containsJson(config, configured.data.mcp?.[name])
+              ? config
+              : configured.data.mcp?.[name],
+          ])
+        );
+      }
+      const changed = Object.entries(desired).filter(
+        ([name, config]) =>
+          canonicalizeJson(config) !== canonicalizeJson(refresh.given?.[name])
+      );
+      if (changed.length === 0) {
+        refresh.owed = false;
+        refresh.waiting?.resolve();
+        refresh.waiting = undefined;
+        return;
+      }
+      if (
+        !this.#activity(identity).directoryIdle(directory) ||
+        [...this.#sessions.values()].some(
+          (session) =>
+            session.directory === directory &&
+            this.#sessionOwners.get(session.instanceId)?.procId ===
+              identity.procId &&
+            session.turnInFlight
+        )
+      ) {
+        if (!refresh.owed) {
+          console.info(
+            `[opencode] refresh owed for ${directory} because a turn is running`
+          );
+        }
+        refresh.owed = true;
+        return;
+      }
+      const { owed } = refresh;
+      for (const [name, config] of changed) {
+        // biome-ignore lint/performance/noAwaitInLoops: finish one server's replacement before the next
+        const connected = await reached(
+          client.mcp.add({ name, config, directory })
+        );
+        if (connected.error) {
+          throw new Error(errorText(connected.error));
+        }
+        const removed = await reached(
+          client.mcp.auth.remove({ name, directory })
+        );
+        if (removed.error) {
+          throw new Error(errorText(removed.error));
+        }
+        const reconnected = await reached(
+          client.mcp.connect({ name, directory })
+        );
+        if (reconnected.error) {
+          throw new Error(errorText(reconnected.error));
+        }
+        const snapshot = await reached(client.mcp.status({ directory }));
+        if (snapshot.error) {
+          throw new Error(errorText(snapshot.error));
+        }
+        const status = snapshot.data?.[name];
+        if (status?.status !== "connected") {
+          throw new Error(
+            `MCP ${name} is not connected (${status?.status ?? "missing"}).`
+          );
+        }
+        refresh.given ??= {};
+        refresh.given[name] = config;
+      }
+      refresh.owed = false;
+      console.info(
+        owed && atIdle
+          ? `[opencode] owed refresh applied at idle for ${directory}`
+          : `[opencode] refresh applied for ${directory}`
+      );
+      refresh.waiting?.resolve();
+      refresh.waiting = undefined;
+    })()
+      .catch((error: unknown) => {
+        refresh.owed = true;
+        refresh.waiting?.reject(error);
+        refresh.waiting = undefined;
+        console.warn(
+          `[opencode] refresh failed for ${directory}: ${errorText(error)}`
+        );
+        throw error;
+      })
+      .finally(() => {
+        refresh.applying = undefined;
+        this.#mutatingMcp -= 1;
+      });
+    refresh.applying = applying;
+    return applying.then(() => {
+      if (desired !== this.#proxiedMcp) {
+        return this.#refreshMcp(directory, identity, atIdle);
+      }
+    });
   }
 
   async fleetStatus(): Promise<FleetSyncReport> {
