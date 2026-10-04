@@ -44,6 +44,7 @@ interface Evidence {
     archived: boolean;
   };
   baseline: Instance;
+  beforePing: { row: Instance };
   enabled: Instance;
   after: Instance;
   disabled: Instance;
@@ -62,10 +63,11 @@ assert.equal(evidence.probe.archived, true);
 for (const row of [evidence.baseline, evidence.enabled, evidence.after, evidence.disabled]) {
   assert.equal(row.id, evidence.probe.id);
   assert.equal(row.cwd, evidence.probe.directory);
-  assert.equal(row.title, evidence.baseline.title);
+  assert.equal(row.title ?? row.derivedTitle, evidence.baseline.title ?? evidence.baseline.derivedTitle);
   assert.equal(row.derivedTitle, evidence.baseline.derivedTitle);
-  assert.equal(row.updatedAt, evidence.baseline.updatedAt);
 }
+assert.equal(evidence.after.updatedAt, evidence.beforePing.row.updatedAt);
+assert.equal(evidence.disabled.updatedAt, evidence.after.updatedAt);
 assert.equal(evidence.enabled.keepAlive.on, true);
 assert.equal(evidence.enabled.keepAlive.state, "waiting");
 assert.equal(evidence.enabled.keepAlive.ttl, "1h");

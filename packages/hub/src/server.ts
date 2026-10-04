@@ -1,5 +1,6 @@
 import { generateCodeChallenge, generateCodeVerifier } from "@cawco/auth";
 import type {
+  AgentBusyReport,
   AgentRow,
   ArchiveView,
   BuildInfo,
@@ -170,11 +171,12 @@ import { FleetMcp } from "./fleet-mcp";
 import { hidden } from "./hidden";
 import { joinRoutes } from "./join";
 import {
+  createKeepAliveScheduler,
   isKeepAlive,
   type KeepAliveRow,
   keepAliveResult,
   keepAliveState,
-  tickKeepAlive,
+  keepAliveUsage,
 } from "./keep-alive";
 import { probe } from "./llm";
 import { MeaningJudge } from "./meaning";
@@ -6869,24 +6871,38 @@ export const createServer = (
     }
   };
 
-  const keepAliveTimer = setInterval(() => {
-    tickKeepAlive({
-      rows: db.listInstances,
-      usage: db.listUsageLimits,
-      idle: (row) =>
+  const keepAliveScheduler = createKeepAliveScheduler({
+    rows: db.listInstances,
+    usage: db.listUsageLimits,
+    idle: async (row) => {
+      if (!registry.agent(row.machineId)) {
+        return false;
+      }
+      const answer = await callAgent(
+        row.machineId,
+        AGENT_BUSY,
+        [],
+        BUSY_TIMEOUT_MS
+      );
+      if (typeof answer === "string" || !answer.ok) {
+        return false;
+      }
+      const reading = answer.result as AgentBusyReport | undefined;
+      return (
+        reading?.ready === true &&
+        Array.isArray(reading.instances) &&
+        !reading.instances.includes(row.id) &&
         !!registry.agent(row.machineId) &&
-        pulses.get(row.id)?.activity === "idle" &&
-        !pulses.get(row.id)?.busy &&
         db.sendsIn(row.id, ["pending"]).length === 0 &&
         !pending.list().some((ask) => ask.instanceId === row.id) &&
         ![...awaitingMachine.values()].some((sends) =>
           sends.some((send) => send.instanceId === row.id)
-        ),
-      send: deliverSend,
-    });
-    publishInstances("");
-  }, 30_000);
-  keepAliveTimer.unref?.();
+        )
+      );
+    },
+    send: deliverSend,
+    changed: () => publishInstances(""),
+  });
 
   workItems.resumeWaits();
 
@@ -7960,6 +7976,8 @@ export const createServer = (
             return status(404, `no session ${params.id}`);
           }
           publishInstances(row.machineId);
+          // biome-ignore lint/complexity/noVoid: the stored toggle re-arms through the scheduler's one path
+          void keepAliveScheduler.wake();
           return withKeepAlive([row])[0];
         }
       )
@@ -10126,6 +10144,8 @@ export const createServer = (
               // Behind the restores and the ack, so the agent reads each send
               // after the spawn it waits on.
               releaseAwaiting(message.machineId);
+              // biome-ignore lint/complexity/noVoid: reconnect immediately retries overdue stored schedules after the register ACK
+              void keepAliveScheduler.wake();
               workflowRuntime.recover(message.machineId);
               // Continuations waiting on this machine — for their summary, or
               // for their new session — go on from where their record says.
@@ -10142,6 +10162,8 @@ export const createServer = (
             }
             case "heartbeat": {
               db.touchAgent(message.machineId);
+              // biome-ignore lint/complexity/noVoid: a recovered machine can now answer an idle receipt for an overdue schedule
+              void keepAliveScheduler.wake();
               if ((message.payload as HeartbeatPayload).custody !== undefined) {
                 const custody = peekCustody(message.payload);
                 machineCustody.set(message.machineId, custody);
@@ -10506,6 +10528,12 @@ export const createServer = (
                         row.id,
                         keepAliveResult(row, neutral, true)
                       );
+                      const usage = keepAliveUsage(neutral);
+                      console.info(
+                        `[keepalive] ${row.id}: result ${neutral.uuid} input=${usage.input} read=${usage.read} write=${usage.write} at ${new Date().toISOString()}`
+                      );
+                      // biome-ignore lint/complexity/noVoid: a refreshed request establishes the next original deadline
+                      void keepAliveScheduler.wake();
                       publishInstances(row.machineId);
                     }
                     streams.sequence(row.id, { ...frame, keepAlive: true });
@@ -10835,6 +10863,8 @@ export const createServer = (
                       cacheRow.id,
                       keepAliveResult(cacheRow, neutral, false)
                     );
+                    // biome-ignore lint/complexity/noVoid: real turns re-arm from their own request clock
+                    void keepAliveScheduler.wake();
                     if (cacheRow.keepAliveEnabled) {
                       publishInstances(cacheRow.machineId);
                     }
@@ -11115,6 +11145,7 @@ export const createServer = (
                 kind === "control_result" && message.requestId
                   ? rewinds.get(message.requestId)
                   : undefined;
+              // biome-ignore lint/suspicious/noUnnecessaryConditions: rewinds.get is absent for controls that do not rewind a session
               if (rewound && message.requestId) {
                 rewinds.delete(message.requestId);
                 if (!(message.payload as ControlResult).ok) {

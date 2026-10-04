@@ -93,17 +93,26 @@ export const keepAliveState = (
 };
 
 /** Usage counts include uncached input plus cache reads and writes, as Claude reports them. */
+export const keepAliveUsage = (result: NeutralResultMessage) => {
+  const { cache = { read: 0, write: 0 } } = result;
+  const { usage } = result as NeutralResultMessage & {
+    usage?: { input_tokens?: number };
+  };
+  return {
+    input: (usage?.input_tokens ?? 0) + cache.read + cache.write,
+    read: cache.read,
+    write: cache.write,
+  };
+};
+
 export const keepAliveResult = (
   row: KeepAliveRow,
   result: NeutralResultMessage,
   ping: boolean
 ) => {
   const { cache = { read: 0, write: 0 } } = result;
-  const { usage } = result as NeutralResultMessage & {
-    usage?: { input_tokens?: number };
-  };
-  const input = (usage?.input_tokens ?? 0) + cache.read + cache.write;
-  const hit = input > 0 && cache.read >= input / 2;
+  const { input, read } = keepAliveUsage(result);
+  const hit = input > 0 && read >= input / 2;
   const misses = ping && !hit ? row.keepAliveMisses + 1 : 0;
   const sent = ping ? row.keepAliveSent + 1 : 0;
   // An unknown lifetime remains unknown. Cache reads retain the last observed write lifetime.
@@ -140,15 +149,18 @@ export const keepAliveResult = (
   } satisfies Parameters<DbShape["updateKeepAlive"]>[1];
 };
 
-export const tickKeepAlive = (
-  ports: {
-    rows: () => KeepAliveRow[];
-    usage: () => ReturnType<DbShape["listUsageLimits"]>;
-    idle: (row: KeepAliveRow) => boolean;
-    send: (envelope: Envelope<SendPayload>) => unknown;
-  },
+interface KeepAlivePorts {
+  changed: () => void;
+  idle: (row: KeepAliveRow) => boolean | Promise<boolean>;
+  rows: () => KeepAliveRow[];
+  send: (envelope: Envelope<SendPayload>) => unknown;
+  usage: () => ReturnType<DbShape["listUsageLimits"]>;
+}
+
+export const tickKeepAlive = async (
+  ports: KeepAlivePorts,
   now = Date.now()
-): void => {
+): Promise<void> => {
   const readings = new Map(
     ports.usage().map((reading) => [reading.machineId, reading.payload])
   );
@@ -158,12 +170,43 @@ export const tickKeepAlive = (
         row.keepAliveEnabled &&
         row.harness === "claude" &&
         row.status === "running" &&
-        !row.keepAliveTurn &&
-        ports.idle(row)
+        !row.keepAliveTurn
       )
     ) {
       continue;
     }
+    // A process reading can await a machine. Re-read the stored schedule after
+    // it answers: a real send, toggle or result may have moved it meanwhile.
+    // biome-ignore lint/performance/noAwaitInLoops: each due session needs its own fresh idle receipt before its send
+    if (!(await ports.idle(row))) {
+      continue;
+    }
+    const fresh = ports.rows().find((candidate) => candidate.id === row.id);
+    if (
+      !(
+        fresh?.keepAliveEnabled &&
+        fresh.status === "running" &&
+        !fresh.keepAliveTurn
+      )
+    ) {
+      continue;
+    }
+    const due = keepAliveState(
+      fresh,
+      ports.usage().find((reading) => reading.machineId === fresh.machineId)
+        ?.payload,
+      Date.now()
+    );
+    if (
+      due.state !== "waiting" ||
+      due.nextAt === null ||
+      Date.now() < due.nextAt
+    ) {
+      continue;
+    }
+    console.info(
+      `[keepalive] ${fresh.id}: send due ${new Date(due.nextAt).toISOString()} at ${new Date().toISOString()}`
+    );
     const state = keepAliveState(row, readings.get(row.machineId), now);
     if (
       state.state !== "waiting" ||
@@ -192,4 +235,75 @@ export const tickKeepAlive = (
       },
     });
   }
+};
+
+/** Timers are disposable; every deadline is re-derived from the stored request. */
+export const createKeepAliveScheduler = (ports: KeepAlivePorts) => {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let running = false;
+  let stopped = false;
+  const plan = () => {
+    if (timer) {
+      clearTimeout(timer);
+    }
+    if (stopped) {
+      return;
+    }
+    const now = Date.now();
+    const readings = new Map(
+      ports.usage().map((reading) => [reading.machineId, reading.payload])
+    );
+    // Retry due-but-busy/unreachable sessions, while a future due time gets an
+    // exact wake even when it falls between those retry ticks.
+    let at = now + 30_000;
+    for (const row of ports.rows()) {
+      const state = keepAliveState(row, readings.get(row.machineId), now);
+      if (
+        state.state === "waiting" &&
+        state.nextAt !== null &&
+        state.nextAt > now
+      ) {
+        at = Math.min(at, state.nextAt);
+      }
+    }
+    timer = setTimeout(
+      () => {
+        // biome-ignore lint/complexity/noVoid: wake catches and reports a failed machine read
+        void wake();
+      },
+      Math.max(0, at - now)
+    );
+    timer.unref?.();
+  };
+  const wake = async () => {
+    if (running || stopped) {
+      return;
+    }
+    running = true;
+    if (timer) {
+      clearTimeout(timer);
+    }
+    try {
+      await tickKeepAlive(ports);
+      ports.changed();
+    } catch (error) {
+      console.error("[keepalive] schedule wake failed:", error);
+    } finally {
+      running = false;
+      plan();
+    }
+  };
+  // Boot and reconnect use this same path: an overdue warm schedule runs as
+  // soon as its machine can supply an idle receipt, not after another margin.
+  // biome-ignore lint/complexity/noVoid: startup must not wait for machines to reconnect
+  void wake();
+  return {
+    wake,
+    stop: () => {
+      stopped = true;
+      if (timer) {
+        clearTimeout(timer);
+      }
+    },
+  };
 };

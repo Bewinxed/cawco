@@ -1,0 +1,122 @@
+[
+  {
+    "name": "hub restart inside window preserves original deadline",
+    "due": 1791137555017,
+    "sends": [
+      {
+        "at": 1791137555023,
+        "uuid": "e36b933f-f294-40e8-8293-2196415bd143"
+      }
+    ],
+    "logs": [
+      "[hub] boot sweep: 1 session(s) → unknown, 0 legacy restart error(s) → sleeping",
+      "PRIVATE_READY 37695",
+      "STANDIN_OPEN http://127.0.0.1:37695",
+      "STANDIN_FRAME {\"verb\":\"register\",\"machineId\":\"keepalive-standin\",\"payload\":{\"ok\":true,\"ingested\":{},\"rowIds\":[\"keepalive-hub restart inside window preserves original deadline",
+      "STANDIN_FRAME {\"verb\":\"control\",\"machineId\":\"keepalive-standin\",\"payload\":{\"requestId\":\"f187dd76-4d9f-42a8-829c-27e3a3728f6c\",\"method\":\"getSessionMessages\",\"args\":[\"keepalive",
+      "STANDIN_FRAME {\"verb\":\"control\",\"machineId\":\"keepalive-standin\",\"payload\":{\"requestId\":\"fd608621-7980-445d-af68-c34aeed8163e\",\"method\":\"agentBusy\",\"args\":[]}}",
+      "[hub] boot sweep: 1 session(s) → unknown, 0 legacy restart error(s) → sleeping",
+      "PRIVATE_READY 37465",
+      "STANDIN_OPEN http://127.0.0.1:37465",
+      "STANDIN_FRAME {\"verb\":\"register\",\"machineId\":\"keepalive-standin\",\"payload\":{\"ok\":true,\"ingested\":{},\"rowIds\":[\"keepalive-hub restart inside window preserves original deadline",
+      "STANDIN_FRAME {\"verb\":\"control\",\"machineId\":\"keepalive-standin\",\"payload\":{\"requestId\":\"237e9a27-e976-4d9f-8eb3-13d6a067c594\",\"method\":\"agentBusy\",\"args\":[]}}",
+      "STANDIN_FRAME {\"verb\":\"control\",\"machineId\":\"keepalive-standin\",\"payload\":{\"requestId\":\"7a150e1c-2258-410b-9e97-d669199a8c09\",\"method\":\"getSessionMessages\",\"args\":[\"keepalive",
+      "STANDIN_FRAME {\"verb\":\"control\",\"machineId\":\"keepalive-standin\",\"payload\":{\"requestId\":\"b0798928-2d35-4b35-9ef4-86babdbfa2e8\",\"method\":\"agentBusy\",\"args\":[]}}",
+      "[keepalive] keepalive-hub restart inside window preserves original deadline-b7c2b11c-5b8a-4578-983f-9d68ee72da24: send due 2026-10-04T18:12:35.017Z at 2026-10-04T18:12:35.020Z",
+      "STANDIN_FRAME {\"verb\":\"send\",\"machineId\":\"keepalive-standin\",\"instanceId\":\"keepalive-hub restart inside window preserves original deadline-b7c2b11c-5b8a-4578-983f-9d68ee72da2"
+    ]
+  },
+  {
+    "name": "hub returns overdue but warm and pings immediately",
+    "due": 1791137558039,
+    "sends": [
+      {
+        "at": 1791137559019,
+        "uuid": "967c2f9d-4ddb-4e31-b996-95516b71d01e"
+      }
+    ],
+    "logs": [
+      "[hub] boot sweep: 1 session(s) → unknown, 0 legacy restart error(s) → sleeping",
+      "PRIVATE_READY 39711",
+      "STANDIN_OPEN http://127.0.0.1:39711",
+      "STANDIN_FRAME {\"verb\":\"register\",\"machineId\":\"keepalive-standin\",\"payload\":{\"ok\":true,\"ingested\":{},\"rowIds\":[\"keepalive-hub returns overdue but warm and pings immediately-28",
+      "STANDIN_FRAME {\"verb\":\"control\",\"machineId\":\"keepalive-standin\",\"payload\":{\"requestId\":\"517c2399-d931-4764-8a77-414af97bb35e\",\"method\":\"getSessionMessages\",\"args\":[\"keepalive",
+      "STANDIN_FRAME {\"verb\":\"control\",\"machineId\":\"keepalive-standin\",\"payload\":{\"requestId\":\"c9a80d0e-b477-4110-a1b2-3aca15ede9c3\",\"method\":\"agentBusy\",\"args\":[]}}",
+      "[hub] boot sweep: 1 session(s) → unknown, 0 legacy restart error(s) → sleeping",
+      "PRIVATE_READY 37081",
+      "STANDIN_OPEN http://127.0.0.1:37081",
+      "STANDIN_FRAME {\"verb\":\"register\",\"machineId\":\"keepalive-standin\",\"payload\":{\"ok\":true,\"ingested\":{},\"rowIds\":[\"keepalive-hub returns overdue but warm and pings immediately-28",
+      "STANDIN_FRAME {\"verb\":\"control\",\"machineId\":\"keepalive-standin\",\"payload\":{\"requestId\":\"6895af4e-5353-410b-b48f-b3ad47a405c0\",\"method\":\"agentBusy\",\"args\":[]}}",
+      "STANDIN_FRAME {\"verb\":\"control\",\"machineId\":\"keepalive-standin\",\"payload\":{\"requestId\":\"35ff09b4-2ec5-481f-b447-764dea5fbedd\",\"method\":\"getSessionMessages\",\"args\":[\"keepalive",
+      "[keepalive] keepalive-hub returns overdue but warm and pings immediately-28e57cb4-392c-4104-aacc-4c0b221fa9a8: send due 2026-10-04T18:12:38.039Z at 2026-10-04T18:12:39.016Z",
+      "STANDIN_FRAME {\"verb\":\"send\",\"machineId\":\"keepalive-standin\",\"instanceId\":\"keepalive-hub returns overdue but warm and pings immediately-28e57cb4-392c-4104-aacc-4c0b221fa9a8\","
+    ]
+  },
+  {
+    "name": "hub returns past TTL and stays cold without ping",
+    "due": 1791137503036,
+    "sends": [],
+    "logs": [
+      "[hub] boot sweep: 1 session(s) → unknown, 0 legacy restart error(s) → sleeping",
+      "PRIVATE_READY 46287",
+      "STANDIN_OPEN http://127.0.0.1:46287",
+      "STANDIN_FRAME {\"verb\":\"register\",\"machineId\":\"keepalive-standin\",\"payload\":{\"ok\":true,\"ingested\":{},\"rowIds\":[\"keepalive-hub returns past TTL and stays cold without ping-f855",
+      "STANDIN_FRAME {\"verb\":\"control\",\"machineId\":\"keepalive-standin\",\"payload\":{\"requestId\":\"d241c0c2-d2fa-4605-b9bc-d2eb8295d33e\",\"method\":\"getSessionMessages\",\"args\":[\"keepalive",
+      "STANDIN_FRAME {\"verb\":\"control\",\"machineId\":\"keepalive-standin\",\"payload\":{\"requestId\":\"2c93dab6-2c4f-4a69-a03d-0f4d8abacac3\",\"method\":\"agentBusy\",\"args\":[]}}",
+      "[hub] boot sweep: 1 session(s) → unknown, 0 legacy restart error(s) → sleeping",
+      "PRIVATE_READY 41199",
+      "STANDIN_OPEN http://127.0.0.1:41199",
+      "STANDIN_FRAME {\"verb\":\"register\",\"machineId\":\"keepalive-standin\",\"payload\":{\"ok\":true,\"ingested\":{},\"rowIds\":[\"keepalive-hub returns past TTL and stays cold without ping-f855",
+      "STANDIN_FRAME {\"verb\":\"control\",\"machineId\":\"keepalive-standin\",\"payload\":{\"requestId\":\"abe7ff88-7b26-4a3f-a57f-9c45fa4166a2\",\"method\":\"agentBusy\",\"args\":[]}}",
+      "STANDIN_FRAME {\"verb\":\"control\",\"machineId\":\"keepalive-standin\",\"payload\":{\"requestId\":\"fdaa69b1-91f8-41ee-83f7-3439ddc60665\",\"method\":\"getSessionMessages\",\"args\":[\"keepalive"
+    ]
+  },
+  {
+    "name": "busy due time waits for turn end without firing into it",
+    "due": 1791137568002,
+    "sends": [
+      {
+        "at": 1791137568263,
+        "uuid": "1032c5fc-f7fd-4ee6-83a6-ec1033c63554"
+      }
+    ],
+    "logs": [
+      "[hub] boot sweep: 1 session(s) → unknown, 0 legacy restart error(s) → sleeping",
+      "PRIVATE_READY 37157",
+      "STANDIN_OPEN http://127.0.0.1:37157",
+      "STANDIN_FRAME {\"verb\":\"register\",\"machineId\":\"keepalive-standin\",\"payload\":{\"ok\":true,\"ingested\":{},\"rowIds\":[\"keepalive-busy due time waits for turn end without firing into ",
+      "STANDIN_FRAME {\"verb\":\"control\",\"machineId\":\"keepalive-standin\",\"payload\":{\"requestId\":\"c853c604-fd09-4b90-bbe9-f58e8efd48d8\",\"method\":\"getSessionMessages\",\"args\":[\"keepalive",
+      "STANDIN_FRAME {\"verb\":\"control\",\"machineId\":\"keepalive-standin\",\"payload\":{\"requestId\":\"2b2d99ba-8c0f-4d2d-aa36-8f15248536ae\",\"method\":\"agentBusy\",\"args\":[]}}",
+      "STANDIN_FRAME {\"verb\":\"control\",\"machineId\":\"keepalive-standin\",\"payload\":{\"requestId\":\"bcfabd9b-6dff-490e-b0f4-39e1144731dc\",\"method\":\"agentBusy\",\"args\":[]}}",
+      "STANDIN_FRAME {\"verb\":\"control\",\"machineId\":\"keepalive-standin\",\"payload\":{\"requestId\":\"6c693b8b-ef0e-4ebe-9964-5c340f9f4d8b\",\"method\":\"agentBusy\",\"args\":[]}}",
+      "[keepalive] keepalive-busy due time waits for turn end without firing into it-e5d8381a-0875-443f-8921-b7bccf2938d4: send due 2026-10-04T18:12:48.002Z at 2026-10-04T18:12:48.260Z",
+      "STANDIN_FRAME {\"verb\":\"send\",\"machineId\":\"keepalive-standin\",\"instanceId\":\"keepalive-busy due time waits for turn end without firing into it-e5d8381a-0875-443f-8921-b7bccf293"
+    ]
+  },
+  {
+    "name": "agent reconnect after hub restart fires with no pulse replay",
+    "due": 1791137571280,
+    "sends": [
+      {
+        "at": 1791137572252,
+        "uuid": "267478d3-c2a0-4b0c-b01c-3fa971f310ed"
+      }
+    ],
+    "logs": [
+      "[hub] boot sweep: 1 session(s) → unknown, 0 legacy restart error(s) → sleeping",
+      "PRIVATE_READY 33947",
+      "STANDIN_OPEN http://127.0.0.1:33947",
+      "STANDIN_FRAME {\"verb\":\"register\",\"machineId\":\"keepalive-standin\",\"payload\":{\"ok\":true,\"ingested\":{},\"rowIds\":[\"keepalive-agent reconnect after hub restart fires with no pulse",
+      "STANDIN_FRAME {\"verb\":\"control\",\"machineId\":\"keepalive-standin\",\"payload\":{\"requestId\":\"10837590-69c8-4e3c-bbf8-1718c8c35637\",\"method\":\"getSessionMessages\",\"args\":[\"keepalive",
+      "STANDIN_FRAME {\"verb\":\"control\",\"machineId\":\"keepalive-standin\",\"payload\":{\"requestId\":\"cbaa52fd-0774-4da5-acb4-4dde19d5c4ef\",\"method\":\"agentBusy\",\"args\":[]}}",
+      "[hub] boot sweep: 1 session(s) → unknown, 0 legacy restart error(s) → sleeping",
+      "PRIVATE_READY 32933",
+      "STANDIN_OPEN http://127.0.0.1:32933",
+      "STANDIN_FRAME {\"verb\":\"register\",\"machineId\":\"keepalive-standin\",\"payload\":{\"ok\":true,\"ingested\":{},\"rowIds\":[\"keepalive-agent reconnect after hub restart fires with no pulse",
+      "STANDIN_FRAME {\"verb\":\"control\",\"machineId\":\"keepalive-standin\",\"payload\":{\"requestId\":\"843a11bd-0dbd-470b-974d-ae1c2526cae9\",\"method\":\"agentBusy\",\"args\":[]}}",
+      "STANDIN_FRAME {\"verb\":\"control\",\"machineId\":\"keepalive-standin\",\"payload\":{\"requestId\":\"0a961ade-8566-475d-a828-ce74f556c7a3\",\"method\":\"getSessionMessages\",\"args\":[\"keepalive",
+      "[keepalive] keepalive-agent reconnect after hub restart fires with no pulse replay-db104976-f662-4164-b775-626378e08813: send due 2026-10-04T18:12:51.280Z at 2026-10-04T18:12:52.248Z",
+      "STANDIN_FRAME {\"verb\":\"send\",\"machineId\":\"keepalive-standin\",\"instanceId\":\"keepalive-agent reconnect after hub restart fires with no pulse replay-db104976-f662-4164-b775-6263"
+    ]
+  }
+]
