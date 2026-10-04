@@ -32,6 +32,7 @@ import {
   QUESTION_DISMISSED,
 } from "@cawco/core";
 import type { WorkItemCheck, WorkItemSubmission } from "./db/schema";
+import { type KeepAliveRow, promptCacheExpiresAt } from "./keep-alive";
 import { resolveSpawnType } from "./work-items";
 
 const WS_SCHEME = /^ws/;
@@ -506,6 +507,7 @@ export interface HandoffActions {
       canDelegate?: boolean;
       /** An existing workspace's id: the new item is its follow-up. */
       workspace?: string;
+      confirmCold?: boolean;
       /** The item's session forks this conversation, in a new workspace. */
       fork?: boolean;
       /** The item's acceptance checks, run by the hub at finish_item. */
@@ -521,7 +523,12 @@ export interface HandoffActions {
     request: ImageGenerationRequest
   ) => Promise<GeneratedImage>;
   // biome-ignore lint/style/useConsistentMethodSignatures: implemented below; property-style would change parameter variance against that implementation
-  handoff(target: string, message: string, urgent?: boolean): Promise<string>;
+  handoff(
+    target: string,
+    message: string,
+    urgent?: boolean,
+    confirmCold?: boolean
+  ): Promise<string>;
   // biome-ignore lint/style/useConsistentMethodSignatures: implemented below; property-style would change parameter variance against that implementation
   interruptDelegate(target: string): Promise<string>;
   readonly listDelegateTypes: () => Promise<{ types: DelegateType[] }>;
@@ -661,6 +668,46 @@ async function saveWorkflowProgram(
     throw new Error(text);
   }
   return response.json();
+}
+
+async function checkCold(
+  instanceId: string | undefined,
+  workspace: string | undefined,
+  confirmCold: boolean | undefined
+): Promise<void> {
+  if (confirmCold) {
+    return;
+  }
+  const response = await fetch(`${hubHttpUrl()}/api/followup-state`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ instanceId, workspace }),
+    signal: AbortSignal.timeout(5000),
+  });
+  if (!response.ok) {
+    throw new Error(await response.text());
+  }
+  const { row, midTurn, turns } = (await response.json()) as {
+    row: KeepAliveRow | null;
+    midTurn: boolean;
+    turns: number;
+  };
+  if (!row || midTurn) {
+    return;
+  }
+  row.lastRequestAt = row.lastRequestAt ? new Date(row.lastRequestAt) : null;
+  const expires = promptCacheExpiresAt(row);
+  const now = Date.now();
+  if (expires !== null && expires <= now) {
+    const title = row.title ?? row.derivedTitle ?? row.cwd;
+    const idle = Math.floor(
+      (now - (row.lastRequestAt as Date).getTime()) / 60_000
+    );
+    const lifetime = row.cacheTtl === "1h" ? "1 hour" : "5 minutes";
+    throw new Error(
+      `Cold session "${title}" (${row.id}) has been idle for ${idle} minutes; recorded model turns in its transcript: ${turns}. Its observed prompt-cache lifetime is ${lifetime} and its cache has expired, so waking it re-reads that whole transcript at full price. A fresh delegate with a tight brief is usually cheaper. Reuse this session only if it already holds context this task needs and rebuilding that context in a fresh brief would cost more than the transcript. To send anyway, repeat the same call with confirmCold: true.`
+    );
+  }
 }
 
 export const handoffActions = ({
@@ -908,12 +955,14 @@ export const handoffActions = ({
   async handoff(
     target: string,
     message: string,
-    urgent = false
+    urgent = false,
+    confirmCold = false
   ): Promise<string> {
     const { peers, asleep, own } = await roster(instanceId);
     const peer = urgent
       ? resolveDelegate(peers, target, instanceId)
       : resolveHandoff(peers, asleep, target, own);
+    await checkCold(peer.row.id, undefined, confirmCold);
     const woken = asleep.includes(peer);
     const whose =
       peer.row.id === own?.parentInstanceId ? ", your parent session" : "";
@@ -1049,6 +1098,9 @@ export const handoffActions = ({
   },
 
   async delegate(prompt, opts) {
+    if (opts.workspace) {
+      await checkCold(undefined, opts.workspace, opts.confirmCold);
+    }
     const response = await fetch(`${hubHttpUrl()}/api/work-items`, {
       method: "POST",
       headers: {

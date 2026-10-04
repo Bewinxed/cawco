@@ -7462,6 +7462,32 @@ export const createServer = (
         }
       )
       .get("/api/instances", () => boardRows())
+      .post(
+        "/api/followup-state",
+        {
+          ...hidden,
+          body: t.Object({
+            instanceId: t.Optional(t.String()),
+            workspace: t.Optional(t.String()),
+          }),
+        },
+        ({ body, status }) => {
+          let { instanceId } = body;
+          if (body.workspace) {
+            const workspaces = db.workspacesNamed(body.workspace.trim());
+            if (workspaces.length !== 1) {
+              return status(404, `No unique workspace "${body.workspace}".`);
+            }
+            instanceId = db.workItemsIn(workspaces[0].id)[0]?.instanceId;
+          }
+          const [row] = instanceId ? db.getInstancesByIds([instanceId]) : [];
+          return {
+            row: row ?? null,
+            midTurn: !!(row && pulses.get(row.id)?.busy),
+            turns: row ? db.recordedTurnCount(row.id) : 0,
+          };
+        }
+      )
       // What these conversations are called — *whether or not the board still
       // lists them*.
       //

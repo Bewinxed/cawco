@@ -703,6 +703,7 @@ export interface DbShape {
     payload: DelegateEventPayload;
     status?: DelegateAskStatus;
   }) => DelegateEvent;
+  readonly recordedTurnCount: (instanceId: string) => number;
   /**
    * Keeps a version that is about to be replaced or destroyed — a save, an
    * edit, or a delete, the same three moments a memory document is kept at.
@@ -3309,6 +3310,14 @@ const make = (path: string): DbShape => {
         .all();
       return inserted.length > 0 && !exact && !unkeyed;
     },
+    recordedTurnCount: (instanceId) =>
+      db
+        .select({
+          turns: sql<number>`count(*)`,
+        })
+        .from(completedTurns)
+        .where(eq(completedTurns.instanceId, instanceId))
+        .get()?.turns ?? 0,
     delegateAsk: (requestId) => {
       const row = db
         .select()
