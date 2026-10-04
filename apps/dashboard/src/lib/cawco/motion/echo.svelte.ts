@@ -30,25 +30,33 @@ const BEATS = 3;
 /**
  * One beat's keyframes, the first `share` of the cycle: the echo leaves the
  * tile at --echo-opacity and grows to --echo-scale as it fades, on
- * --ease-out; then it rests unseen. Transform and opacity, which the
- * browser runs off the page's own thread: a working row costs the page
- * nothing while it beats. That puts the echo on a layer of its own, which
- * is why its mark draws it last, in a box cut to the outside of the tile
- * (TreeMark `.echo-box`).
+ * --ease-out; then it waits, back at the tile's own size, where the cut in
+ * its box hides it whole (TreeMark `.echo-box`: the tile's square is a hole
+ * in it). Transform and opacity, which the browser runs off the page's own
+ * thread: a working row costs the page nothing while it beats. That puts
+ * the echo on a layer of its own, which is why its mark draws it last, in
+ * that cut box.
+ *
+ * It waits at the beat's first frame, not at nothing. The compositor does
+ * not draw a layer that is wholly transparent, so one resting at opacity 0
+ * was first drawn on the frame its beat began: two frames went out with
+ * its content missing, every time a working row was drawn again (a project
+ * opening). The jump back is a step: eased, it would pass through a
+ * half-grown, half-seen echo.
  */
-const beatFrames = (share: number): Keyframe[] => [
-  {
-    opacity: numberOf("--echo-opacity"),
-    transform: "scale(1)",
-    easing: CURVE.out,
-  },
-  {
-    opacity: 0,
-    transform: `scale(${numberOf("--echo-scale")})`,
-    offset: share,
-  },
-  { opacity: 0, transform: "scale(1)" },
-];
+const beatFrames = (share: number): Keyframe[] => {
+  const start = { opacity: numberOf("--echo-opacity"), transform: "scale(1)" };
+  return [
+    { ...start, easing: CURVE.out },
+    {
+      opacity: 0,
+      transform: `scale(${numberOf("--echo-scale")})`,
+      offset: share,
+      easing: "step-start",
+    },
+    start,
+  ];
+};
 
 interface Beat {
   animation: Animation;
