@@ -13149,6 +13149,10 @@
           "thinkingSignature": {
             "type": "string"
           },
+          "toolDiff": {
+            "description": "The unified file diff returned by an apply_patch call.",
+            "type": "string"
+          },
           "toolId": {
             "type": "string"
           },
