@@ -138,10 +138,6 @@
   style:--fill="var(--mark-{markHue(place)})"
   style:--n={Math.min(count, 3)}
 >
-  {#if status === "live"}
-    <!-- First, so it is drawn under the deck and the tile. -->
-    <span aria-hidden="true" class="echo tile" data-echo></span>
-  {/if}
   {#if has}
     <span aria-hidden="true" class="deck" data-deck={Math.min(count, 3)}>
       {#each [1, 2, 3] as i (i)}
@@ -151,6 +147,13 @@
   {/if}
   <span aria-hidden="true" class="face tile">{@render face()}</span>
   <span aria-hidden="true" class="skin" data-ride-skin></span>
+  {#if status === "live"}
+    <!-- Last of what the mark draws, in a box cut to the outside of the
+         tile and its deck (the style below says why). -->
+    <span aria-hidden="true" class="echo-box">
+      <span class="echo tile" data-echo></span>
+    </span>
+  {/if}
   {#if has && ontoggle}
     <!-- biome-ignore lint/a11y/useSemanticElements: it sits inside the row's link, and a <button> cannot nest in an <a>. -->
     <span
@@ -203,13 +206,70 @@
     inline-size: 12px;
     block-size: 12px;
   }
-  /* The echo rests unseen under the tile; its list beats it (motion/echo)
-     by two numbers, how much of it shows and how far it has grown
-     (app.css --beat-show, --beat-grow). */
-  .echo {
-    opacity: var(--beat-show);
-    scale: var(--beat-grow);
+  /* The echo: a copy of the tile that grows from it and fades, on its
+     list's beat (motion/echo), seen only outside the tile and its deck.
+     It is under them by shape, not by order. The browser runs the echo on
+     a layer of its own, and whatever is drawn after a moving layer and
+     might touch it is put on a layer too: drawn first, under the tile, the
+     echo took the tile onto one, every mark down the rail after it into
+     the same one, and the pane behind them. So it is the last thing the
+     mark draws, in a box as large as it ever grows (--echo-scale, to the
+     pixel above), and the box is cut: the tile's own rounded square is a
+     hole in it, and so is the band of each card that shows under the tile
+     (--n of them, none while the deck is away, --deck-away). The hole
+     stands still; only the echo inside moves. Last in order means over the
+     switch too (`.hit`, z-index 4), which takes the presses through it. */
+  .echo-box {
+    z-index: 5;
+    --reach: round(up, calc(var(--size) * (var(--echo-scale) - 1) / 2), 1px);
+    --r: var(--radius-xs);
+    --side: calc(var(--size) - 2 * var(--r));
+    --foot: calc(var(--reach) + var(--size));
+    --cards: calc(var(--n, 0) * (1 - var(--deck-away, 0)));
+    position: absolute;
+    inset: calc(-1 * var(--reach));
     pointer-events: none;
+    clip-path: shape(
+      evenodd from 0 0,
+      hline to 100%,
+      vline to 100%,
+      hline to 0,
+      close,
+      move to calc(var(--reach) + var(--r)) var(--reach),
+      hline by var(--side),
+      arc by var(--r) var(--r) of var(--r) cw,
+      vline by var(--side),
+      arc by calc(-1 * var(--r)) var(--r) of var(--r) cw,
+      hline by calc(-1 * var(--side)),
+      arc by calc(-1 * var(--r)) calc(-1 * var(--r)) of var(--r) cw,
+      vline by calc(-1 * var(--side)),
+      arc by var(--r) calc(-1 * var(--r)) of var(--r) cw,
+      close,
+      move to calc(var(--reach) + var(--size) * var(--deck-shrink) / 2)
+        var(--foot),
+      hline by calc(var(--size) * (1 - var(--deck-shrink))),
+      vline by calc(var(--deck-step) * min(1, var(--cards))),
+      hline by calc(-1 * var(--size) * (1 - var(--deck-shrink))),
+      close,
+      move to calc(var(--reach) + var(--size) * var(--deck-shrink))
+        calc(var(--foot) + var(--deck-step) * min(1, var(--cards))),
+      hline by calc(var(--size) * (1 - 2 * var(--deck-shrink))),
+      vline by
+        calc(var(--deck-step) * (min(2, var(--cards)) - min(1, var(--cards)))),
+      hline by calc(-1 * var(--size) * (1 - 2 * var(--deck-shrink))),
+      close,
+      move to calc(var(--reach) + var(--size) * var(--deck-shrink) * 1.5)
+        calc(var(--foot) + var(--deck-step) * min(2, var(--cards))),
+      hline by calc(var(--size) * (1 - 3 * var(--deck-shrink))),
+      vline by
+        calc(var(--deck-step) * (min(3, var(--cards)) - min(2, var(--cards)))),
+      hline by calc(-1 * var(--size) * (1 - 3 * var(--deck-shrink))),
+      close
+    );
+  }
+  .echo {
+    inset: var(--reach);
+    opacity: 0;
   }
 
   /* The deck: the tile's copies behind it. Card i stands i places back

@@ -87,18 +87,6 @@
   inherits: false;
   initial-value: 0;
 }
-/* A working session's echo (motion/echo): how much of it shows, and how
-   far it has grown from its tile. */
-@property --beat-show {
-  syntax: "<number>";
-  inherits: false;
-  initial-value: 0;
-}
-@property --beat-grow {
-  syntax: "<number>";
-  inherits: false;
-  initial-value: 1;
-}
 
 @theme inline {
   --color-background: var(--background);
@@ -623,9 +611,11 @@
       visibility: hidden;
     }
     /* The session mark reads its own level from this (its style is the
-       component's, which outranks this layer). */
+       component's, which outranks this layer), and that its deck is away:
+       its echo then shows where the cards stood. */
     .session-mark {
       --mark-level: 3;
+      --deck-away: 1;
     }
     .project-mark {
       position: relative;
