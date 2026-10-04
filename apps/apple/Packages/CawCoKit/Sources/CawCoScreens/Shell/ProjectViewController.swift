@@ -137,7 +137,8 @@ final class ProjectViewController: ObservedViewController {
         // The header's actions: Forget project… as the kit's ghost button in muted ink.
         var forgetStyle = UIButton.Configuration.plain()
         forgetStyle.attributedTitle = AttributedString("Forget project…", attributes: AttributeContainer(TypeScale.typeButton.attributes(color: Palette.mutedForeground, tracking: -0.01)))
-        forgetStyle.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: Space.space4, bottom: 0, trailing: Space.space4)
+        // The web button's 1px border is part of its box: the padding starts inside it, as in `KitButton`.
+        forgetStyle.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: Space.space4 + 1, bottom: 0, trailing: Space.space4 + 1)
         forgetStyle.background.cornerRadius = Radius.radiusMd
         let forget = UIButton(configuration: forgetStyle, primaryAction: UIAction { [weak self] _ in
             guard let self, let project = context.hub.fleet.projects.first(where: { $0.id == projectId }) else { return }
