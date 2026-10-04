@@ -176,9 +176,6 @@ final class MachineRowView: UIStackView {
         glyph.tintColor = hue
         name.text = text
         meta.text = line
-        // `.meta` is a flex row, so its text is cut at the box's edge with no
-        // ellipsis. Set after the text: the label's mode rides its string.
-        meta.lineBreakMode = .byClipping
         dot.backgroundColor = switch presence {
         case .online: Palette.hueGreen500
         case .away: Palette.hueOrange500
