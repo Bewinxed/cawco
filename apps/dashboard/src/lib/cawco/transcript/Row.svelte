@@ -120,6 +120,12 @@
    * no frame ever painted: the first time inside the pane's layout (it is a
    * size container), a 77ms frame each time a reply's reasoning landed
    * above its answer. Only a row's first measuring is virtua's to hide.
+   *
+   * What it waits for is virtua taking `visibility: hidden` off the item's
+   * inline style, so that write is what it listens for. Asked again every
+   * frame until then, a row virtua never measured (a pane out of view, a
+   * list held hidden) asked for ever: seven such rows made every frame of
+   * the page a main-thread frame, 435 callbacks a second at rest.
    */
   let drawn = $state(false);
   $effect(() => {
@@ -128,16 +134,27 @@
       return;
     }
     let frame = 0;
+    // Its item's style changed: looked at in the next frame's callbacks, as
+    // the first look is.
+    const styled = new MutationObserver(() => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(look);
+    });
     // Read in the frame's callbacks: an inline style, no layout.
     const look = (): void => {
-      if (row.parentElement?.style.visibility === "hidden") {
-        frame = requestAnimationFrame(look);
+      const item = row.parentElement;
+      if (item?.style.visibility === "hidden") {
+        styled.observe(item, { attributes: true, attributeFilter: ["style"] });
         return;
       }
+      styled.disconnect();
       drawn = true;
     };
     frame = requestAnimationFrame(look);
-    return () => cancelAnimationFrame(frame);
+    return () => {
+      cancelAnimationFrame(frame);
+      styled.disconnect();
+    };
   });
 
   /** The entrance has run: the ticket is spent. */
