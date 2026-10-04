@@ -201,7 +201,12 @@ const OPENCODE_PLUGINS = join(OPENCODE_DIR, "plugins");
  * a dispose reload.
  */
 const STATIC_POLICY = {
-  permission: { bash: "ask", edit: "ask", webfetch: "deny" },
+  permission: {
+    bash: "ask",
+    edit: "ask",
+    skill: { "wf-*": "deny" },
+    webfetch: "deny",
+  },
   tools: { websearch: false },
 } as const;
 
