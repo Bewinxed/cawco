@@ -9,8 +9,8 @@
 </script>
 
 <script lang="ts">
-  import caw2x from "#lib/assets/brand/caw-compacted@2x.webp";
-  import caw3x from "#lib/assets/brand/caw-compacted@3x.webp";
+  import caw2x from "#lib/assets/brand/caw-compacted@2x.png";
+  import caw3x from "#lib/assets/brand/caw-compacted@3x.png";
   /**
    * A compaction in the transcript: a wavy vermillion line across the column
    * with "Compacted" set in the middle of it. The whole divider is the button
@@ -89,7 +89,7 @@
         height="18"
         src={caw2x}
         srcset="{caw2x} 2x, {caw3x} 3x"
-        width="19"
+        width="18"
       ></span
     >Compacted<span class="chev"><IconChevron aria-hidden="true" /></span></span
   >
@@ -174,23 +174,27 @@
     white-space: nowrap;
     translate: calc(var(--chev) * var(--room) * -1) 0;
   }
-  /* Caw's slot: a box 18px tall and as wide as his frame, its middle on the
-     word's x-height. The still stands in it; a play-once strip of the same
-     frame can run in it on a live arrival and change nothing around it.
+  /* Caw's slot: his frame's 18px square, its middle on the word's x-height.
+     The still stands in it; the play-once arrival strip is cut to the same
+     square and ends on this still, so it can run here on a live arrival and
+     change nothing around it.
      He is drawn in near-black with a near-white note, so one or the other
-     melts into either page: a keyline one pixel wide, cast from whatever
-     frame is showing, gives both an edge. */
+     melts into either page. A keyline one pixel wide, cast from whatever
+     frame is showing, gives both an edge: the mascot kit's own cream rim
+     (Ivory, `--paper`) at night, muted ink by day, where the kit has no
+     line and the note would otherwise be lost. */
   .caw {
     --key: max(var(--dpx, 1px), round(1px, var(--dpx, 1px)));
+    --rim: light-dark(var(--ink-muted), var(--paper));
     display: inline-block;
     vertical-align: middle;
+    inline-size: 18px;
     block-size: 18px;
-    aspect-ratio: 37 / 36;
     margin-inline-end: var(--c-pill-gap);
-    filter: drop-shadow(var(--key) 0 0 var(--ink-muted))
-      drop-shadow(calc(var(--key) * -1) 0 0 var(--ink-muted))
-      drop-shadow(0 var(--key) 0 var(--ink-muted))
-      drop-shadow(0 calc(var(--key) * -1) 0 var(--ink-muted));
+    filter: drop-shadow(var(--key) 0 0 var(--rim))
+      drop-shadow(calc(var(--key) * -1) 0 0 var(--rim))
+      drop-shadow(0 var(--key) 0 var(--rim))
+      drop-shadow(0 calc(var(--key) * -1) 0 var(--rim));
 
     & img {
       display: block;
