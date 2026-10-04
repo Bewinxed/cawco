@@ -136,7 +136,7 @@ public final class HouseSheetController: UIViewController, UIViewControllerTrans
             NSLayoutConstraint.activate([
                 card.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: inset),
                 card.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor, constant: -inset),
-                card.heightAnchor.constraint(lessThanOrEqualTo: view.heightAnchor, multiplier: cap ?? (style == .card ? 0.8 : 0.88)),
+                card.heightAnchor.constraint(lessThanOrEqualTo: view.heightAnchor, multiplier: cap ?? (style == .card ? 0.8 : 0.88), constant: -inset * 2),
                 // The grabber's `mt-4`, under the content box's `p-4` on the drawer.
                 handle.topAnchor.constraint(equalTo: card.topAnchor, constant: style == .card ? 16 + 16 - inset : 16),
                 handle.centerXAnchor.constraint(equalTo: card.centerXAnchor),
