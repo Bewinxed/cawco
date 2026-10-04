@@ -131,7 +131,7 @@ them (the editor cannot import `.riv` files). From `assets/mascot/scripts` (`bun
   onto the still it lands on. It trims the take to the move itself (the holds at either end
   become one two-frame drawing), replaces the landing by the still's own drawing, and gates the
   result: the landing inked as its still on 98% of their pixels or more, the first drawing
-  empty or carrying 5% of the still's ink at most (he never appears at size), on twos, no white marks, no halo, every eye intact, and the safe area: on every
+  empty or carrying 5% of the still's ink at most (he never appears at size), on twos, no white marks, no halo, every eye intact, every ink in order (no drawing shows an ink his landing does not carry, and a status's own ink, the note, shows only where his eye whites are in or his black is at 90% of what he lands with; `--inks` runs this check alone), and the safe area: on every
   drawing his ink sits inside the line 3.5% in from each edge of the tighter of the take's
   frame and the artboard, so he is wholly visible or not there at all (EBU R95 and ITU-R
   BT.1848 give the 3.5% action-safe margin; SMPTE RP 218: "all significant action shall be

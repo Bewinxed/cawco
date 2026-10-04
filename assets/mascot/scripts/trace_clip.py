@@ -18,7 +18,8 @@ Gates: the landing inked as its still on 98% of their pixels or more; the first 
 carrying 5% of the still's ink at most, so he never appears at size;
 on twos; no white marks; halo 0 on every drawing; every eye intact (trace.py's cut_eyes); every
 ink in order (no drawing shows an ink his landing does not carry, and a status's own ink, the note,
-never shows before his eye whites have); and the
+shows only on a drawing where his eye whites are in or his black is at 90% of what he lands with);
+and the
 safe area: on every drawing his ink sits inside the line 3.5% in from each edge of the tighter of
 the take's frame and the artboard the apps draw, so he is wholly visible or not there at all (EBU
 R95 and ITU-R BT.1848 give the 3.5% action-safe margin; SMPTE RP 218: "all significant action
@@ -56,6 +57,7 @@ LANDING = 0.98  # share of a landing's inked pixels that carry its still's ink
 # him far off (a take that has him in its first frame at a ninth of his size measures 0.013).
 OPENS_SMALL = 0.05
 INK_SHOWS = 300  # px of one ink at the stills' scale from which a drawing visibly carries it
+HEAD_FORMED = 0.9  # share of his landed black from which a drawing reads as him at size
 SPECK = 200  # opaque px at 512: a drawing with less is dust traced off the take's paper
 INKS = np.array([[20, 20, 20], [230, 80, 50], [244, 240, 230], [245, 200, 40]])
 WHITE = np.array([244, 240, 230])
@@ -98,9 +100,13 @@ def unsafe_drawings(folder: Path) -> list[int]:
 def out_of_order(folder: Path, own: list[str]) -> dict[str, list[int]]:
     """The clip's drawings, counted from 1 in playing order, where an ink is out of place.
     `foreign`: an ink his landing does not carry (under INK_SHOWS px there) shows; a take once put
-    a vermilion patch on a head that has none. `ownEarly`: a status's own ink (the note) shows
-    before his eye whites have: it is the last thing to arrive, never part of the ink he grows
-    from. Pixels are counted over the take's whole frame at the stills' scale."""
+    a vermilion patch on a head that has none. `ownEarly`: a status's own ink (the note) shows on
+    a shape that does not read as him yet: neither are his eye whites in, nor has his black
+    reached HEAD_FORMED of what he lands with (a take once had the note's cream inside a blob).
+    Either is enough: a bird far off has his eyes long before his size, a head that swells from
+    a drop has its size before its eyes. `ownBy` says which of the two let each drawing that
+    shows his own ink through. Pixels are counted over the take's whole frame at the stills'
+    scale."""
     timing = json.loads((folder / "timing.json").read_text())
     names = ["black", "vermilion", "white", "yellow", *own]
     colours = np.array([T.INKS.get(n, T.EXTRA_INKS.get(n)) for n in names])
@@ -113,10 +119,15 @@ def out_of_order(folder: Path, own: list[str]) -> dict[str, list[int]]:
 
     per = [counts(slot["drawing"]) for slot in timing["drawings"]]
     carried = {n for n, px in per[-1].items() if px >= INK_SHOWS}
-    eyes_in = next((k for k, c in enumerate(per) if c["white"] >= INK_SHOWS), len(per))
+    shows = [k for k, c in enumerate(per) if any(c[n] >= INK_SHOWS for n in own)]
+    by = {
+        k + 1: "eyes" if per[k]["white"] >= INK_SHOWS else "head" if per[k]["black"] >= HEAD_FORMED * per[-1]["black"] else None
+        for k in shows
+    }
     return {
         "foreign": [k + 1 for k, c in enumerate(per) if any(px >= INK_SHOWS and n not in carried for n, px in c.items())],
-        "ownEarly": [k + 1 for k, c in enumerate(per) if k < eyes_in and any(c[n] >= INK_SHOWS for n in own)],
+        "ownEarly": [k for k, how in by.items() if how is None],
+        "ownBy": {str(k): how for k, how in by.items() if how},
     }
 
 
@@ -137,8 +148,14 @@ if sys.argv[1:2] in (["--safe"], ["--inks"]):
         else:
             own = own_of.get(clip.removesuffix("-enter").replace("-", "_"), {}).get("inks", [])
             order = out_of_order(folder / clip, own)
-            broken |= any(order.values())
-            print(f"{clip}: {slots} drawings, " + (f"inks out of order: {order}" if any(order.values()) else "every ink in order"))
+            bad = bool(order["foreign"] or order["ownEarly"])
+            broken |= bad
+            passed = f"; his own ink shows by {order['ownBy']}" if order["ownBy"] else ""
+            print(
+                f"{clip}: {slots} drawings, "
+                + (f"inks out of order: foreign {order['foreign']}, his own ink early {order['ownEarly']}" if bad else "every ink in order")
+                + passed
+            )
     sys.exit(1 if broken else 0)
 
 name, take = sys.argv[1:3]
@@ -415,7 +432,7 @@ report["gates"] = gates
 timing.update(frames=report["frames"], drawings=slots)
 (out / "timing.json").write_text(T.dump_json(timing))
 report["inksOutOfOrder"] = out_of_order(out, own_inks)
-gates["inkOrder"] = not any(report["inksOutOfOrder"].values())
+gates["inkOrder"] = not (report["inksOutOfOrder"]["foreign"] or report["inksOutOfOrder"]["ownEarly"])
 report["outsideSafe"] = unsafe_drawings(out)
 gates["safeArea"] = not report["outsideSafe"]
 timing.update(frames=report["frames"], drawings=slots, halo=halos, probe=report)
