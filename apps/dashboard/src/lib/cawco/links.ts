@@ -67,20 +67,17 @@ export function indexInstances<T extends SessionInstance>(
 export function instanceForSession<T extends SessionInstance>(
   index: InstanceIndex<T>,
   sessionId: string,
-  location?: SessionLocation,
-  requireLocation = false,
-  accept: (row: T) => boolean = () => true
+  location?: SessionLocation
 ): T | undefined {
-  const candidates = (index.bySession.get(sessionId) ?? []).filter(accept);
+  const candidates = index.bySession.get(sessionId) ?? [];
   const narrowed = location
     ? candidates.filter(
         (row) =>
           row.machineId === location.machineId && row.cwd === location.cwd
       )
     : [];
-  // Resume must not adopt an ambiguous session from another machine or checkout.
-  const ambiguous = requireLocation && candidates.length > 1;
-  const eligible = ambiguous || narrowed.length > 0 ? narrowed : candidates;
+  // Sorted as a copy: `candidates` is the index's own list.
+  const eligible = narrowed.length > 0 ? narrowed : [...candidates];
   return eligible.sort(
     (a, b) =>
       new Date(b.updatedAt ?? 0).getTime() -

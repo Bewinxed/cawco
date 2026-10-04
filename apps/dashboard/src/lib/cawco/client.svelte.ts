@@ -3715,69 +3715,21 @@ export async function spawnSession({
 }
 
 /**
- * Re-opens a stored session as a live one. The hub reads the conversation it
- * resumes into the new view's transcript, so it reads as one continuous thread.
- * A resume the hub refuses throws the hub's reason ({@link start}).
- */
-export async function resumeSession({
-  machineId,
-  cwd,
-  sessionId,
-  harness = "claude",
-}: {
-  machineId: string;
-  cwd: string;
-  sessionId: string;
-  harness?: HarnessKind;
-}): Promise<string> {
-  const live = instanceForSession(
-    instanceIndex,
-    sessionId,
-    { machineId, cwd },
-    true,
-    isLive
-  );
-  if (live) {
-    const existing = session(live.id);
-    existing.machineId ||= live.machineId;
-    existing.cwd ||= live.cwd;
-    existing.sessionId = sessionId;
-    existing.harness = (live.harness as HarnessKind | undefined) ?? harness;
-    return live.id;
-  }
-
-  const created = await start({
-    machineId,
-    cwd,
-    harness,
-    resume: { sessionKey: sessionId },
-  });
-  created.sessionId = sessionId;
-  // biome-ignore lint/complexity/noVoid: fire-and-forget — the session already started locally, this just resyncs the fleet list
-  void refresh();
-  return created.instanceId;
-}
-
-/**
  * Branches a side quest off a session (NEW.md §1): the same context carried into
  * a new SDK session, kept apart from mainline work until it is kept or
- * discarded. The hub reads the conversation it branches, up to the turn it
- * branches at, into the new view's transcript. A fork the hub refuses throws
- * the hub's reason ({@link start}).
+ * discarded. The hub reads the conversation it branches into the new view's
+ * transcript. A fork the hub refuses throws the hub's reason ({@link start}).
  */
 export async function forkSession({
   machineId,
   cwd,
   sessionId,
   harness = "claude",
-  at,
 }: {
   machineId: string;
   cwd: string;
   sessionId: string;
   harness?: HarnessKind;
-  /** Branch from this assistant turn rather than from the end — see {@link rewindPoint}. */
-  at?: string;
 }): Promise<string> {
   // The branch runs on what its source runs on, never on the machine's
   // defaults: the hub's row for the conversation says what that is.
@@ -3789,7 +3741,7 @@ export async function forkSession({
     machineId,
     cwd,
     harness,
-    resume: { sessionKey: sessionId, fork: true, ...(at && { atMessage: at }) },
+    resume: { sessionKey: sessionId, fork: true },
     scratch: {},
     ...(source?.model ? { model: source.model } : {}),
     ...(source?.permissionMode
@@ -4944,33 +4896,6 @@ export async function editAndResend(
     // biome-ignore lint/complexity/noVoid: fire-and-forget — the relaunch already landed, this just resyncs the fleet list
     void refresh();
   }
-}
-
-/**
- * A side quest that starts from the middle of a conversation rather than its
- * end: the fork the header offers, resumed at the turn the reader picked. The
- * session it branches from is left running and untouched.
- */
-export function forkFrom(instanceId: string, id: string): Promise<string> {
-  const target = session(instanceId);
-  if (!(target.sessionId && target.machineId)) {
-    throw new Error(
-      "This session has not named itself yet. Try again in a moment."
-    );
-  }
-  const point = rewindPoint(target, id);
-  if (!point) {
-    throw new Error(
-      "There is no answered turn behind this message to branch from."
-    );
-  }
-  return forkSession({
-    machineId: target.machineId,
-    cwd: target.cwd,
-    sessionId: target.sessionId,
-    harness: target.harness,
-    at: point,
-  });
 }
 
 /** The answers a permission card offers — the keyboard has one key for each. */
