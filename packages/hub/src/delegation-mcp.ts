@@ -1,29 +1,14 @@
-import {
-  createHmac,
-  randomBytes,
-  randomUUID,
-  timingSafeEqual,
-} from "node:crypto";
-import {
-  mkdirSync,
-  readFileSync,
-  unwatchFile,
-  watchFile,
-  writeFileSync,
-} from "node:fs";
-import { dirname } from "node:path";
+import { unwatchFile, watchFile } from "node:fs";
 import type { Envelope, InstanceRow } from "@cawco/core";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import {
   CallToolRequestSchema,
   type CallToolResult,
-  LATEST_PROTOCOL_VERSION,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { adminTools } from "./admin-tools";
 import { handoffInstructions, handoffTools } from "./delegation-tools";
-import { mcpSigningKeyPath } from "./session-identity";
 
 type ToolFactory = typeof handoffTools;
 
@@ -35,51 +20,56 @@ const LONG_CALLS: Record<string, string> = {
   start_session: "Waiting for the machine to start the session",
 };
 
-/**
- * Defined only in the published package's bundle (scripts/build-release.mjs),
- * where the tool modules are folded into `cli.js` and there is no source file
- * to reload.
- */
 declare const __CAWCO_RELEASE__: boolean | undefined;
-
-/**
- * The key MCP session ids are signed with, beside the hub's database so a
- * restart keeps it: made once, readable by the hub's user alone.
- */
-function sessionKey(path: string): Buffer {
-  try {
-    return readFileSync(path);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
-      throw error;
-    }
-  }
-  mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, randomBytes(32), { mode: 0o600, flag: "wx" });
-  return readFileSync(path);
-}
 
 export function createDelegationMcp(options: {
   instances: () => InstanceRow[];
   instanceById: (id: string) => InstanceRow | undefined;
-  /** Whether the session runs a work item with acceptance checks: it gets finish_item. */
-  checked: (row: InstanceRow) => boolean;
   forward: (envelope: Envelope, actor: InstanceRow) => Promise<void>;
   credentialActor: (authorization: string | null) => InstanceRow | undefined;
   tools?: ToolFactory;
 }) {
   let tools = options.tools ?? handoffTools;
-  const secret = sessionKey(mcpSigningKeyPath());
-  const sessions = new Map<
-    string,
-    {
-      transport: WebStandardStreamableHTTPServerTransport;
-      server: Server;
-      binding: string | null;
-    }
-  >();
   let admin = adminTools();
   let adminNames = new Set(admin.map((t) => t.name));
+  const moduleUrl = new URL("./delegation-tools.ts", import.meta.url);
+  const adminModuleUrl = new URL("./admin-tools.ts", import.meta.url);
+  if (typeof __CAWCO_RELEASE__ !== "boolean") {
+    // Reload source definitions for the next request, without client notifications.
+    watchFile(moduleUrl, { interval: 1000, persistent: false }, () => {
+      // biome-ignore lint/complexity/noVoid: the watcher reports a reload failure and preserves the registry.
+      void import(`${moduleUrl.href}?revision=${Date.now()}`)
+        .then((module) => {
+          const definitions = module.handoffTools({
+            instanceId: "",
+            instanceById: options.instanceById,
+            cwd: "",
+            emit: () => {
+              throw new Error("Discovery cannot execute tools");
+            },
+          });
+          const all = [...definitions, ...admin];
+          if (new Set(all.map((tool) => tool.name)).size !== all.length) {
+            throw new Error("Duplicate delegation tool names");
+          }
+          tools = module.handoffTools;
+        })
+        .catch((error) =>
+          console.error("[delegation-mcp] tool reload failed", error)
+        );
+    });
+    watchFile(adminModuleUrl, { interval: 1000, persistent: false }, () => {
+      // biome-ignore lint/complexity/noVoid: the watcher reports a reload failure and preserves the registry.
+      void import(`${adminModuleUrl.href}?revision=${Date.now()}`)
+        .then((module) => {
+          admin = module.adminTools();
+          adminNames = new Set(admin.map((tool) => tool.name));
+        })
+        .catch((error) =>
+          console.error("[delegation-mcp] admin reload failed", error)
+        );
+    });
+  }
 
   const describe = (
     canDelegate?: boolean,
@@ -100,74 +90,6 @@ export function createDelegationMcp(options: {
     }),
     ...admin,
   ];
-
-  const replaceTools = async (next: ToolFactory) => {
-    const definitions = next({
-      instanceId: "",
-      instanceById: options.instanceById,
-      cwd: "",
-      emit: () => {
-        throw new Error("Discovery cannot execute tools");
-      },
-    });
-    const all = [...definitions, ...admin];
-    if (new Set(all.map((tool) => tool.name)).size !== all.length) {
-      throw new Error("Duplicate delegation tool names");
-    }
-    tools = next;
-    await Promise.all(
-      [...sessions.values()].map(({ server }) =>
-        server
-          .notification({ method: "notifications/tools/list_changed" })
-          .catch((error) =>
-            console.warn("[delegation-mcp] notification failed", error)
-          )
-      )
-    );
-  };
-
-  const moduleUrl = new URL("./delegation-tools.ts", import.meta.url);
-  const adminModuleUrl = new URL("./admin-tools.ts", import.meta.url);
-  if (typeof __CAWCO_RELEASE__ !== "boolean") {
-    // Our choice: one-second polling keeps deployment updates responsive without a watcher per session.
-    watchFile(moduleUrl, { interval: 1000, persistent: false }, () => {
-      // biome-ignore lint/complexity/noVoid: file watcher callback cannot await; errors preserve the previous registry below
-      void import(`${moduleUrl.href}?revision=${Date.now()}`)
-        .then((module) => replaceTools(module.handoffTools))
-        .catch((error) =>
-          console.error(
-            "[delegation-mcp] keeping previous tool registry after reload failure",
-            error
-          )
-        );
-    });
-    watchFile(adminModuleUrl, { interval: 1000, persistent: false }, () => {
-      // biome-ignore lint/complexity/noVoid: file watcher callback cannot await; errors preserve the previous admin registry
-      void import(`${adminModuleUrl.href}?revision=${Date.now()}`)
-        .then((module) => {
-          admin = module.adminTools();
-          adminNames = new Set(admin.map((t: { name: string }) => t.name));
-        })
-        .then(() =>
-          Promise.all(
-            [...sessions.values()].map(({ server }) =>
-              server
-                .notification({ method: "notifications/tools/list_changed" })
-                // biome-ignore lint/suspicious/noNestedPromises: per-session notification errors are swallowed individually inside the map; the same pattern the handoff watcher uses above.
-                .catch((error) =>
-                  console.warn("[delegation-mcp] notification failed", error)
-                )
-            )
-          )
-        )
-        .catch((error) =>
-          console.error(
-            "[delegation-mcp] keeping previous admin tool registry after reload failure",
-            error
-          )
-        );
-    });
-  }
 
   // Temporary until Phase 2's per-session credentials replace this resolver.
   // PRODUCT.md trusts the network perimeter; here malformed/unknown identities
@@ -263,7 +185,7 @@ export function createDelegationMcp(options: {
         cwd: actor.cwd,
         harness: actor.harness as "claude" | "opencode" | "pi",
         canDelegate: actor.canDelegate ?? undefined,
-        workItem: options.checked(actor),
+        workItem: !!actor.parentInstanceId,
         workflowStepId: actor.workflowStepId ?? undefined,
         workflowRunId: actor.workflowRunId ?? undefined,
         emit: (envelope) => emitted.push(envelope),
@@ -302,33 +224,8 @@ export function createDelegationMcp(options: {
     }
   };
 
-  /**
-   * A session id names the instance its connection is bound to: a nonce and
-   * an HMAC of nonce and binding under the hub's key, which outlives the
-   * process. A restart forgets every connection, and the id a client still
-   * sends is enough to put its connection back — for the binding it was
-   * minted for and no other.
-   */
-  const signed = (nonce: string, binding: string | null) =>
-    createHmac("sha256", secret)
-      .update(`${nonce}:${binding ?? ""}`)
-      .digest("base64url");
-  const mint = (binding: string | null) => {
-    const nonce = randomUUID();
-    return `${nonce}.${signed(nonce, binding)}`;
-  };
-  const mintedFor = (id: string, binding: string | null): boolean => {
-    const [nonce, signature, extra] = id.split(".");
-    if (!(nonce && signature) || extra !== undefined) {
-      return false;
-    }
-    const expected = Buffer.from(signed(nonce, binding));
-    const given = Buffer.from(signature);
-    return expected.length === given.length && timingSafeEqual(expected, given);
-  };
-
-  /** One connection — its server and transport — bound to `binding`, under `id`. */
-  const open = async (binding: string | null, id: string) => {
+  /** Every request carries its own actor; no connection state outlives it. */
+  const open = async (binding: string | null) => {
     const bound = binding
       ? options.instances().find((row) => row.id === binding)
       : undefined;
@@ -336,7 +233,7 @@ export function createDelegationMcp(options: {
     const server = new Server(
       { name: "cawco", version: "1.0.0" },
       {
-        capabilities: { tools: { listChanged: true } },
+        capabilities: { tools: {} },
         instructions: handoffInstructions({
           instanceId: binding ?? "",
           instanceById: options.instanceById,
@@ -348,33 +245,17 @@ export function createDelegationMcp(options: {
       }
     );
     const transport = new WebStandardStreamableHTTPServerTransport({
-      sessionIdGenerator: () => id,
+      sessionIdGenerator: undefined,
       // Send headers immediately; image generation must not sit behind HTTP first-byte deadlines.
       enableJsonResponse: false,
-      onsessioninitialized: (sessionId) => {
-        sessions.set(sessionId, { transport, server, binding });
-      },
-      onsessionclosed: (sessionId) => {
-        sessions.delete(sessionId);
-      },
     });
-    // Read when the tools are listed, not when the connection opened: a
-    // session given a work item later lists finish_item once told to
-    // ({@link toolsChanged}). A connection bound to no session (OpenCode's,
-    // resolved per call) always offers it, and a call refuses it there for a
-    // session with no work item.
-    const workItem = (): boolean => {
-      if (!binding) {
-        return true;
-      }
-      const row = options.instances().find((r) => r.id === binding);
-      return row ? options.checked(row) : false;
-    };
+    // Delegate role is fixed across items/checks. Shared OpenCode discovery
+    // lists the superset; each invocation resolves its actor and enforces role.
     server.setRequestHandler(ListToolsRequestSchema, async () => ({
       tools: describe(
         canDelegate,
         bound?.workflowStepId ?? undefined,
-        workItem()
+        binding === null || !!bound?.parentInstanceId
       ).map(({ name, description, inputSchema, ...entry }) => ({
         name,
         description,
@@ -417,74 +298,8 @@ export function createDelegationMcp(options: {
       }
     });
     await server.connect(transport);
-    return transport;
+    return { transport, server };
   };
-
-  /**
-   * Puts back a connection this process never opened: the client holds an id
-   * a previous hub minted, and a restart is not its business. Only for the
-   * binding the id was signed for; the transport is brought to where the
-   * client believes it is through its own handshake, with the protocol
-   * version the client is speaking, before its request is served.
-   */
-  const restoring = new Map<
-    string,
-    Promise<WebStandardStreamableHTTPServerTransport>
-  >();
-  const restore = (
-    request: Request,
-    binding: string | null,
-    id: string
-  ): Promise<WebStandardStreamableHTTPServerTransport> => {
-    const pending = restoring.get(id);
-    if (pending) {
-      return pending;
-    }
-    const restored = (async () => {
-      const transport = await open(binding, id);
-      const version =
-        request.headers.get("mcp-protocol-version") ?? LATEST_PROTOCOL_VERSION;
-      const handshake = (message: object, session?: string) =>
-        transport
-          .handleRequest(
-            new Request(request.url, {
-              method: "POST",
-              headers: {
-                accept: "application/json, text/event-stream",
-                "content-type": "application/json",
-                "mcp-protocol-version": version,
-                ...(session ? { "mcp-session-id": session } : {}),
-              },
-              body: JSON.stringify({ jsonrpc: "2.0", ...message }),
-            })
-          )
-          .then((response) => response.text());
-      await handshake({
-        id: 0,
-        method: "initialize",
-        params: {
-          protocolVersion: version,
-          capabilities: {},
-          clientInfo: { name: "cawco-restored-session", version: "1" },
-        },
-      });
-      await handshake({ method: "notifications/initialized" }, id);
-      return transport;
-    })().finally(() => restoring.delete(id));
-    restoring.set(id, restored);
-    return restored;
-  };
-
-  /** The spec's answer to an id it does not know: the client starts a new session. */
-  const sessionNotFound = () =>
-    Response.json(
-      {
-        jsonrpc: "2.0",
-        error: { code: -32_001, message: "Session not found" },
-        id: null,
-      },
-      { status: 404 }
-    );
 
   const bindingProblem = (bindings: string[]): Response | undefined => {
     const [binding] = bindings;
@@ -526,45 +341,48 @@ export function createDelegationMcp(options: {
     request: Request,
     parsedBody?: unknown
   ): Promise<Response> => {
-    const id = request.headers.get("mcp-session-id");
     const binding = requestBinding(request);
     if (binding instanceof Response) {
       return binding;
     }
-    const live = id ? sessions.get(id) : undefined;
-    if (live) {
-      // A connection answers only on the URL it was opened on: its id names
-      // one instance, and another instance's URL does not borrow it.
-      return live.binding === binding
-        ? live.transport.handleRequest(request, { parsedBody })
-        : sessionNotFound();
-    }
-    // Opening a connection, or putting one back, binds it to the instance its
-    // URL names: one the hub has a row for.
-    if (id) {
-      if (!mintedFor(id, binding)) {
-        return sessionNotFound();
-      }
-      const transport = await restore(request, binding, id);
-      return transport.handleRequest(request, { parsedBody });
-    }
     if (request.method !== "POST") {
-      return new Response("Initialize MCP first", { status: 400 });
+      return new Response("CawCo MCP accepts POST requests only", {
+        status: 405,
+        headers: { Allow: "POST" },
+      });
     }
-    const body = parsedBody ?? (await request.json());
-    if ((body as { method?: string } | null)?.method !== "initialize") {
-      return new Response("Initialize MCP first", { status: 400 });
+    const { transport, server } = await open(binding);
+    // Stateless SDK validation ignores old Mcp-Session-Id headers. Keep the
+    // server alive until the POST SSE body completes, including long tools.
+    const response = await transport.handleRequest(request, { parsedBody });
+    if (!response.body) {
+      await server.close();
+      return response;
     }
-    const transport = await open(binding, mint(binding));
-    return transport.handleRequest(request, { parsedBody: body });
-  };
-  const close = async () => {
-    unwatchFile(moduleUrl);
-    unwatchFile(adminModuleUrl);
-    await Promise.all(
-      [...sessions.values()].map(({ server }) => server.close())
+    const reader = response.body.getReader();
+    return new Response(
+      new ReadableStream({
+        async pull(controller) {
+          try {
+            const { done, value } = await reader.read();
+            if (done) {
+              controller.close();
+              await server.close();
+            } else {
+              controller.enqueue(value);
+            }
+          } catch (error) {
+            controller.error(error);
+            await server.close();
+          }
+        },
+        async cancel(reason) {
+          await reader.cancel(reason);
+          await server.close();
+        },
+      }),
+      { status: response.status, headers: response.headers }
     );
-    sessions.clear();
   };
   const list = (instanceId?: string) => {
     const actor = instanceId
@@ -574,7 +392,7 @@ export function createDelegationMcp(options: {
       tools: describe(
         actor?.canDelegate ?? undefined,
         actor?.workflowStepId ?? undefined,
-        actor ? options.checked(actor) : false
+        instanceId === undefined || !!actor?.parentInstanceId
       ).map(({ name, description, inputSchema, ...entry }) => ({
         name,
         description,
@@ -583,17 +401,9 @@ export function createDelegationMcp(options: {
       })),
     };
   };
-  /** Tells the connections bound to one session that its tool list moved. */
-  const toolsChanged = (instanceId: string): void => {
-    for (const { server, binding } of sessions.values()) {
-      if (binding === instanceId) {
-        server
-          .notification({ method: "notifications/tools/list_changed" })
-          .catch((error) =>
-            console.warn("[delegation-mcp] notification failed", error)
-          );
-      }
-    }
+  const close = () => {
+    unwatchFile(moduleUrl);
+    unwatchFile(adminModuleUrl);
   };
-  return { handle, call, replaceTools, close, list, toolsChanged };
+  return { handle, call, list, close };
 }

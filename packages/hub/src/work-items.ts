@@ -890,11 +890,8 @@ export const createWorkItems = ({
     | string => {
     const [row] = db.getInstancesByIds([instanceId]);
     const item = row ? itemOf(row) : undefined;
-    if (!(row && item?.checks)) {
-      throw new WorkItemRefusal(
-        409,
-        "This session has no work item with acceptance checks."
-      );
+    if (!(row && item)) {
+      throw new WorkItemRefusal(409, "No work item is open on this session.");
     }
     if (item.state === "done") {
       return `The item is done.\n\n${item.result ?? ""}\n\nEnd your turn.`;
@@ -903,6 +900,12 @@ export const createWorkItems = ({
       throw new WorkItemRefusal(
         409,
         `${item.title} (${item.id}) is ${item.state}; finish_item finishes live work only.`
+      );
+    }
+    if (!item.checks?.length) {
+      throw new WorkItemRefusal(
+        409,
+        "This item has no acceptance checks yet; your parent sets them with set_item_checks."
       );
     }
     if (item.checkingSince) {

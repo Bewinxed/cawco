@@ -3303,27 +3303,6 @@ export class OpencodeHarness implements Harness {
   readonly capabilities = OPENCODE_CAPABILITIES;
   auth: import("@cawco/core").AuthState = "authenticated";
 
-  /** OpenCode holds one MCP client per server generation and directory. */
-  async reconnectCawco(): Promise<void> {
-    const clients = new Map<string, OpencodeSession>();
-    for (const session of this.#sessions.values()) {
-      const owner = this.#sessionOwners.get(session.instanceId);
-      clients.set(`${owner?.procId}\0${session.directory}`, session);
-    }
-    await Promise.all(
-      [...clients.values()].map(async (session) => {
-        try {
-          await session.control(CONTROL_MCP_RECONNECT, ["cawco"]);
-          console.info(`[opencode] CawCo MCP reconnected ${session.directory}`);
-        } catch (error) {
-          console.warn(
-            `[opencode] CawCo MCP reconnect failed ${session.directory}: ${error}`
-          );
-        }
-      })
-    );
-  }
-
   #client: OpencodeClient | null = null;
   #sessiond: Promise<SessiondClient> | undefined;
   #ready: Promise<OpencodeClient> | null = null;

@@ -863,10 +863,6 @@ const attach = (
           );
         }
         supervisor.completeCustody(epoch);
-        // The hub forgot every MCP session on restart. Include children adopted
-        // by a restarted agent; do not wait for an idle turn or block routing.
-        // biome-ignore lint/complexity/noVoid: each reconnect reports its own failure, independently of custody and message delivery
-        void supervisor.reconnectCawco();
         custodyIds.clear();
         for (const envelope of custodyWaiting.splice(0)) {
           supervisor.dispatch(envelope);

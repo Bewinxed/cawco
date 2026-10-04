@@ -6313,8 +6313,6 @@ export const createServer = (
   const delegationMcp = createDelegationMcp({
     instances: () => db.listInstances(),
     instanceById: (id) => db.getInstancesByIds([id])[0],
-    // finish_item is a tool of a session whose work item carries checks.
-    checked: (row) => !!(row.workItemId && db.workItem(row.workItemId)?.checks),
     credentialActor: (authorization) => {
       const identity = identities.resolve(authorization);
       return identity
@@ -9059,9 +9057,6 @@ export const createServer = (
           }
           try {
             const started = await workItems.start(body);
-            // A follow-up lands in a session whose tool list was read before
-            // this item existed: it re-reads it, and finds finish_item.
-            delegationMcp.toolsChanged(started.item.instanceId);
             return {
               workItemId: started.item.id,
               workspaceId: started.workspace.id,
@@ -9154,8 +9149,6 @@ export const createServer = (
               body.from,
               body.checks
             );
-            // An item from before checks gains finish_item with its first list.
-            delegationMcp.toolsChanged(body.instanceId);
             return { text };
           } catch (error) {
             const message =

@@ -441,7 +441,7 @@ export interface HandoffDeps {
   readonly instanceId: string;
   readonly workflowRunId?: string;
   readonly workflowStepId?: string;
-  /** Whether this session runs a work item with acceptance checks: it gets finish_item. */
+  /** Delegate role: finish_item is available even before an item has checks. */
   readonly workItem?: boolean;
 }
 
