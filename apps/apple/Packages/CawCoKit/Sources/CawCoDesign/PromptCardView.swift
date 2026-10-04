@@ -47,11 +47,13 @@ public final class PromptCardView: UIView {
         column.axis = .vertical
         column.translatesAutoresizingMaskIntoConstraints = false
         addSubview(column)
+        // `.hitl`: its padding starts inside its 1px border.
+        let inset = Space.space3 + 1
         NSLayoutConstraint.activate([
-            column.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Space.space3),
-            column.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Space.space3),
-            column.topAnchor.constraint(equalTo: topAnchor, constant: Space.space3),
-            column.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -Space.space3),
+            column.leadingAnchor.constraint(equalTo: leadingAnchor, constant: inset),
+            column.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -inset),
+            column.topAnchor.constraint(equalTo: topAnchor, constant: inset),
+            column.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -inset),
         ])
         if ask.isQuestion {
             buildQuestion(column)
@@ -136,7 +138,8 @@ public final class PromptCardView: UIView {
         for (qi, question) in ask.questions.enumerated() {
             let words = lede(question.question)
             column.addArrangedSubview(words)
-            column.setCustomSpacing(Space.space2 + 2, after: words)
+            // The lede's 7 and the options' 2 are adjoining margins: they collapse to 7.
+            column.setCustomSpacing(Space.space2, after: words)
             var row: [OptionChip] = []
             for (i, option) in question.options.enumerated() {
                 let chip = OptionChip(key: i + 1, label: option.label)
@@ -388,10 +391,11 @@ public final class PromptCardView: UIView {
         }
         let button = KitButton.make(title, glyph: glyph, glyphTint: ink, variant: variant, height: .lg, action: action)
         var config = button.configuration
-        config?.attributedTitle = AttributedString(title, attributes: AttributeContainer(TypeScale.typeLabel.attributes(color: ink)))
+        config?.attributedTitle = AttributedString(title, attributes: AttributeContainer(TypeScale.typeLabel.attributes(color: ink, tracking: -0.01)))
         config?.image = glyph?.image.resized(to: 12)
         config?.imagePadding = Space.space2
-        let pad = kind == .primary ? Space.space4 : Space.space3
+        // The web button's 1px border is part of its box, as in `KitButton`.
+        let pad = (kind == .primary ? Space.space4 : Space.space3) + 1
         config?.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: pad, bottom: 0, trailing: pad)
         config?.background.cornerRadius = Radius.radiusSm
         config?.background.customView?.layer.cornerRadius = Radius.radiusSm
@@ -476,6 +480,8 @@ final class OptionChip: UIControl {
         cap.layer.cornerCurve = .continuous
         cap.translatesAutoresizingMaskIntoConstraints = false
         cap.addSubview(keycap)
+        // The option's words keep the page's body leading (13px / 18.85px on the web).
+        title.role = TypeScale.typeLabel.with(leading: TypeScale.leadingBody)
         title.text = label
         let row = UIStackView(arrangedSubviews: [cap, title])
         row.spacing = Space.space2
@@ -489,10 +495,11 @@ final class OptionChip: UIControl {
             keycap.centerYAnchor.constraint(equalTo: cap.centerYAnchor),
             cap.heightAnchor.constraint(equalToConstant: 17),
             cap.widthAnchor.constraint(greaterThanOrEqualToConstant: 17),
-            row.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Space.space3),
-            row.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Space.space3),
-            row.topAnchor.constraint(equalTo: topAnchor, constant: Space.space2),
-            row.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -Space.space2),
+            // 7/11 in from inside its 1px border.
+            row.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Space.space3 + 1),
+            row.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Space.space3 - 1),
+            row.topAnchor.constraint(equalTo: topAnchor, constant: Space.space2 + 1),
+            row.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -Space.space2 - 1),
             heightAnchor.constraint(greaterThanOrEqualToConstant: 30),
         ])
         isAccessibilityElement = true
