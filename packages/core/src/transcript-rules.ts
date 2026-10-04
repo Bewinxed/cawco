@@ -669,6 +669,16 @@ export function mapFrame(
         mapping.clearsStream = true;
         break;
       }
+      // A compaction's summary in the assistant's role (opencode): the note,
+      // under the message's own id, as a stored read draws it.
+      if (sdk.compactSummary) {
+        const brief = transcriptUserText(sdk.message);
+        if (brief) {
+          mapping.blocks.push(compactSummaryNote(brief, base));
+        }
+        mapping.clearsStream = true;
+        break;
+      }
       sdk.message.content.forEach((block, index) => {
         const made = blockOf(block, {
           ...base,
@@ -707,6 +717,11 @@ export function mapFrame(
     case "user": {
       const { content } = sdk.message;
       const text = transcriptUserText(sdk.message);
+      // A compaction's summary the harness reported in the user's role (pi).
+      if (sdk.compactSummary && text) {
+        mapping.blocks.push(compactSummaryNote(text, base));
+        break;
+      }
       // A message sent to the session is not a frame at all: it is its
       // record's (`send` frames). The harness speaking in the user's role: its
       // line for a turn cut short, a subagent's prompt, or its own notice.
@@ -1343,10 +1358,15 @@ export function compactSummaryRow(
   entry: SessionMessage,
   base: BlockBase
 ): TranscriptBlock {
+  return compactSummaryNote(transcriptUserText(entry.message) ?? "", base);
+}
+
+/** A compaction's summary as its note, from the words alone. */
+function compactSummaryNote(content: string, base: BlockBase): TranscriptBlock {
   return {
     ...base,
     type: "ui.system_note",
-    content: transcriptUserText(entry.message) ?? "",
+    content,
     metadata: {
       noteKind: COMPACT_SUMMARY.kind,
       noteTitle: COMPACT_SUMMARY.title,

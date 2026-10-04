@@ -15659,6 +15659,11 @@
         "description": "A user-role message. Two things wear this shape: what the harness says in\nthe user's role (tool results, its own notices), and a message SENT to the\nsession — which always carries `origin` and `uuid` ({@link SentMessage}),\nand nothing else does.",
         "type": "object",
         "properties": {
+          "compactSummary": {
+            "description": "This message is a compaction's summary, in the harness's own words: pi\nreports one when a compaction ends. Claude's needs no flag — it opens\nwith words the transcript knows it by.",
+            "const": true,
+            "type": "boolean"
+          },
           "message": {
             "type": "object",
             "properties": {
@@ -16106,6 +16111,11 @@
       "NeutralAssistantMessage": {
         "type": "object",
         "properties": {
+          "compactSummary": {
+            "description": "This message is a compaction's summary, not an answer: opencode writes\nits summary in the assistant's role (`summary: true` on the message).\nIts text is the compaction's brief ({@link SessionMessage.compactSummary}).",
+            "const": true,
+            "type": "boolean"
+          },
           "contentOffset": {
             "description": "Blocks already published for this message, preserving row ids across incremental settlement.",
             "type": "number"

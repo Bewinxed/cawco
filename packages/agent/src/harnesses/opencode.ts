@@ -1251,6 +1251,11 @@ export class OpencodeSession implements HarnessSession {
   #effort: EffortLevel | undefined;
   #lastTokens = EMPTY_TOKENS;
   readonly #roles = new Map<string, "user" | "assistant">();
+  /**
+   * The assistant messages opencode wrote as a compaction's summary
+   * (`summary: true` on the message): their text is the brief, not an answer.
+   */
+  readonly #summaries = new Set<string>();
   readonly #costs = new Map<string, number>();
   #costBase = 0;
   readonly #pending = new Map<string, PendingMessage>();
@@ -1462,6 +1467,9 @@ export class OpencodeSession implements HarnessSession {
         this.#roles.set(info.id, info.role);
         this.#noteCreated(info);
         if (info.role === "assistant") {
+          if (info.summary) {
+            this.#summaries.add(info.id);
+          }
           this.#completion = {
             uuid: info.id,
             ...(info.time.completed
@@ -2203,6 +2211,9 @@ export class OpencodeSession implements HarnessSession {
           ...this.#createdOf(messageID),
           contentOffset: blockIndex(pending, partID),
           ...(parentToolUseId ? { parent_tool_use_id: parentToolUseId } : {}),
+          ...(this.#summaries.has(messageID)
+            ? { compactSummary: true as const }
+            : {}),
           message: {
             content: [
               part.kind === "text"
@@ -2266,6 +2277,7 @@ export class OpencodeSession implements HarnessSession {
     this.#costs.clear();
     for (const messageID of flushed) {
       this.#roles.delete(messageID);
+      this.#summaries.delete(messageID);
     }
     for (const [callID, state] of this.#toolsEmitted) {
       if (state === "resolved") {

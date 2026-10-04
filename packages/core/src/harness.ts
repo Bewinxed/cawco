@@ -475,6 +475,12 @@ export type NeutralOrigin =
   | { kind: "system"; name?: string };
 
 export interface NeutralAssistantMessage {
+  /**
+   * This message is a compaction's summary, not an answer: opencode writes
+   * its summary in the assistant's role (`summary: true` on the message).
+   * Its text is the compaction's brief ({@link SessionMessage.compactSummary}).
+   */
+  compactSummary?: true;
   /** Blocks already published for this message, preserving row ids across incremental settlement. */
   contentOffset?: number;
   /**
@@ -514,6 +520,12 @@ export interface NeutralAssistantMessage {
  * and nothing else does.
  */
 export interface NeutralUserMessage {
+  /**
+   * This message is a compaction's summary, in the harness's own words: pi
+   * reports one when a compaction ends. Claude's needs no flag — it opens
+   * with words the transcript knows it by.
+   */
+  compactSummary?: true;
   message: { role: "user"; content: string | NeutralContentBlock[] };
   origin?: NeutralOrigin;
   parent_tool_use_id?: string | null;

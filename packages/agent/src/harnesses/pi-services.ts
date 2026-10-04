@@ -41,6 +41,13 @@ const PI_SKILLS = join(PI_DIR, "skills");
 const PI_MEMORY = join(PI_DIR, "AGENTS.md");
 const PI_SIDECAR = join(PI_DIR, "cawco-fleet.json");
 
+/**
+ * The id a compaction's boundary goes by, live and read back alike: pi stores
+ * one entry per compaction, and its own id is the summary's.
+ */
+export const compactBoundaryId = (compaction: string): string =>
+  `${compaction}:boundary`;
+
 export const PI_CAPABILITIES: HarnessCapabilities = {
   interrupt: true,
   permissionModes: [],
@@ -381,7 +388,7 @@ export class PiProfile {
     const entries: SessionMessage[] = [];
     const summaries = new Map<
       string,
-      { id: string; summary: string; timestamp: string }
+      { id: string; summary: string; timestamp: string; tokensBefore: number }
     >();
     for (const entry of manager.getEntries()) {
       if (entry.type === "compaction") {
@@ -389,6 +396,7 @@ export class PiProfile {
           id: entry.id,
           summary: entry.summary,
           timestamp: entry.timestamp,
+          tokensBefore: entry.tokensBefore,
         });
       }
     }
@@ -405,6 +413,23 @@ export class PiProfile {
     for (const [index, entry] of stored.entries()) {
       const compacted = summaries.get(entry.id);
       if (compacted) {
+        // The boundary the live stream carried for it (pi-runtime), as far as
+        // pi stores it: how full the context was, not what triggered it.
+        entries.push({
+          type: "system",
+          uuid: compactBoundaryId(compacted.id),
+          session_id: sessionKey,
+          message: {
+            type: "system",
+            subtype: "compact_boundary",
+            uuid: compactBoundaryId(compacted.id),
+            session_id: sessionKey,
+            compact_metadata: { pre_tokens: compacted.tokensBefore },
+          },
+          parent_tool_use_id: null,
+          parent_agent_id: null,
+          timestamp: compacted.timestamp,
+        });
         entries.push({
           type: "user",
           uuid: compacted.id,

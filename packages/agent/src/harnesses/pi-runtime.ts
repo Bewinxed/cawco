@@ -30,6 +30,7 @@ import { callDelegationTool, delegationTools } from "../delegation";
 import type { HarnessContext, HarnessSession } from "../harness";
 import { acknowledgeSessionCredential } from "../session-identity";
 import {
+  compactBoundaryId,
   contentOf,
   modelCatalog,
   modelIdOf,
@@ -175,6 +176,35 @@ class PiSession implements HarnessSession {
           });
           this.#setBusy(true);
         }
+        break;
+      }
+      // A compaction that stored a summary: its boundary, with what triggered
+      // it and how full the context was, then the summary itself — under the
+      // ids a stored read gives them (pi-services). pi appends the compaction
+      // entry before it notifies, so the leaf is that entry. One that was
+      // aborted or failed carries no result and stored nothing.
+      case "compaction_end": {
+        if (!event.result) {
+          break;
+        }
+        const leaf = this.#leaf();
+        this.#ctx.frame({
+          type: "system",
+          subtype: "compact_boundary",
+          uuid: compactBoundaryId(leaf.uuid),
+          timestamp: leaf.timestamp,
+          session_id: this.sessionId ?? undefined,
+          compact_metadata: {
+            trigger: event.reason === "manual" ? "manual" : "auto",
+            pre_tokens: event.result.tokensBefore,
+          },
+        });
+        this.#ctx.frame({
+          type: "user",
+          ...leaf,
+          compactSummary: true,
+          message: { role: "user", content: event.result.summary },
+        });
         break;
       }
       case "tool_execution_end": {

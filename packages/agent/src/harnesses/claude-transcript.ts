@@ -73,6 +73,9 @@ interface CompactMetadata {
     headUuid: string;
     tailUuid: string;
   };
+  /** How full the context was when the compaction ran, in tokens. */
+  preTokens?: number;
+  trigger?: "manual" | "auto";
 }
 
 export interface RawRecord {
@@ -694,10 +697,45 @@ function keyHookFailures(messages: SDKSessionMessage[]): SDKSessionMessage[] {
   return messages;
 }
 
+/**
+ * A stored compaction boundary as the frame the live stream carried for it
+ * (`compact_boundary`, with what triggered it and how full the context was).
+ * The CLI writes it as the record its summary hangs from — the root of the
+ * chain a read walks back to — so a read that starts at a compaction starts
+ * here, and its divider says what the live one said.
+ */
+function compactBoundary(r: RawRecord): SDKSessionMessage | null {
+  if (r.subtype !== "compact_boundary" || r.isSidechain) {
+    return null;
+  }
+  const frame: NeutralSystemMessage = {
+    type: "system",
+    subtype: "compact_boundary",
+    uuid: r.uuid,
+    session_id: r.sessionId ?? "",
+    compact_metadata: {
+      trigger: r.compactMetadata?.trigger,
+      pre_tokens: r.compactMetadata?.preTokens,
+    },
+  };
+  return {
+    message: frame,
+    parent_agent_id: null,
+    parent_tool_use_id: null,
+    session_id: r.sessionId ?? "",
+    timestamp: typeof r.timestamp === "string" ? r.timestamp : "",
+    type: "system",
+    uuid: r.uuid,
+  };
+}
+
 /** Map a chain-walked record to the SDK's output shape. */
 function toSDKMessage(r: RawRecord): SDKSessionMessage | null {
   if (r.type === "attachment") {
     return absorbedMessage(r) ?? hookFailure(r);
+  }
+  if (r.type === "system") {
+    return compactBoundary(r);
   }
   if (r.type !== "user" && r.type !== "assistant") {
     return null;
