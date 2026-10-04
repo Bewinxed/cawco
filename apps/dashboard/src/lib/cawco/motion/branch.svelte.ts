@@ -23,7 +23,7 @@
  * Its place is a function of the head alone, sampled into keyframes as the
  * line's cuts are (`rideFrames`), `translate`, `scale` and `opacity` only.
  * It starts under the parent's glyph, which stands over it (app.css). Where
- * the parent stands on a deck (SessionMark `[data-deck]`), the first
+ * the parent stands on a deck (TreeMark `[data-deck]`), the first
  * children are its cards: each starts as its card, the parent's colour at
  * its card's size and place, and comes to its own colour and size on the
  * way (its `[data-ride-skin]` fades off it); the deck itself is away from
@@ -79,8 +79,8 @@
  *
  *   {#if open}
  *     <ul class="kit-nest" data-flip-anchor
- *         in:branch={{ glyph: ".session-mark" }} out:branch={{ glyph: ".session-mark" }}
- *         {@attach nestFrom(".session-mark")}>
+ *         in:branch={{ glyph: ".tree-mark" }} out:branch={{ glyph: ".tree-mark" }}
+ *         {@attach nestFrom(".tree-mark")}>
  */
 import type { Attachment } from "svelte/attachments";
 import type { TransitionConfig } from "svelte/transition";
@@ -173,7 +173,7 @@ function parentGlyph(group: HTMLElement, selector: string) {
  * first `glyph` in the nearest list item around the list (or the box marked
  * `data-nest-host`); a child's is the first `child` in the first row.
  *
- *   <ul class="kit-nest" {@attach nestFrom(".session-mark")}>
+ *   <ul class="kit-nest" {@attach nestFrom(".tree-mark")}>
  *
  * Measured in layout, transforms ignored: first just before motion/rows
  * reads where the rows are, after the update that drew the list
@@ -608,7 +608,7 @@ function rideOf(
 
 /**
  * A line from a parent's glyph, `selector` in `host`: from its centre, with
- * the deck it stands on (SessionMark `[data-deck]`: how many cards, each a
+ * the deck it stands on (TreeMark `[data-deck]`: how many cards, each a
  * place further under the centre, a tile shrunk about the deck's vanishing
  * point). With no glyph there, from `fallback` down the group.
  */

@@ -1,95 +1,64 @@
 <script lang="ts">
   /**
-   * A parent's count of what is folded under it, and the switch that opens
-   * and folds it: flush with the row's trailing edge, so every count in a
-   * list stands in one column at the edge (a run's steps, a project's
-   * running sessions). A session says its delegates on its own mark instead
-   * (SessionMark). Folded, what is under the row is this number and nothing
-   * else; open, it hangs under the row on its nesting rail (app.css
-   * .kit-nest, motion/branch). Failures among them are said beside the
-   * count in their own ink.
+   * A run step's count of what it folds (the lines of its result, its
+   * transcript, its actions), and the switch that opens and folds it: flush
+   * with the row's trailing edge, so every count in a run stands in one
+   * column at the edge (RunSteps). It counts text, not rows: a row with rows
+   * under it says so on its mark instead (TreeMark).
    *
-   * It sits inside the row's own link, so it is a button by role: a
-   * <button> cannot nest in an <a>. Its click is its own and never the
-   * link's: the row opens the session, the count opens the rows under it.
-   * On a row that is itself the switch (a project's), it is `passive`: the
-   * same chip, saying the count, and the row takes the click.
+   * Its click is its own and never the row's: the row's line opens the same
+   * fold, and the count stands beside it as a second, smaller target.
    */
-  import type { HTMLAttributes } from "svelte/elements";
-
   let {
     count,
-    failed = 0,
     open,
     ontoggle,
-    noun = "delegate",
-    passive = false,
-    ...rest
+    noun,
   }: {
-    /** What is folded under the parent, at every depth. */
+    /** How much the step folds. */
     count: number;
-    /** How many of them failed. */
-    failed?: number;
-    /** What one of them is, for its name ("3 delegates"). */
-    noun?: string;
+    /** What one of them is, for its name ("3 lines"). */
+    noun: string;
     open: boolean;
-    ontoggle?: () => void;
-    /** The row itself is the switch: this only says the count. */
-    passive?: boolean;
-  } & Omit<HTMLAttributes<HTMLSpanElement>, "role"> = $props();
+    ontoggle: () => void;
+  } = $props();
 
-  const label = $derived(
-    `${count} ${noun}${count === 1 ? "" : "s"}${failed ? `, ${failed} failed` : ""}`
-  );
+  const label = $derived(`${count} ${noun}${count === 1 ? "" : "s"}`);
 
   function toggle(event: Event): void {
     event.preventDefault();
     event.stopPropagation();
-    ontoggle?.();
+    ontoggle();
   }
 </script>
 
-{#if passive}
-  <span {...rest} class="count num" data-open={open || undefined}>
-    <span>{count}</span>
-    {#if failed}
-      <span class="failed">· {failed} failed</span>
-    {/if}
-  </span>
-{:else}
-  <!-- biome-ignore lint/a11y/useSemanticElements: it sits inside the row's link, and a <button> cannot nest in an <a>. -->
-  <span
-    {...rest}
-    aria-expanded={open}
-    aria-label={open ? `Hide ${label}` : `Show ${label}`}
-    class="count num pressable focus-inset pointer-hit touch-hit"
-    data-open={open || undefined}
-    onclick={toggle}
-    onkeydown={(event) => {
-      if (event.key === "Enter" || event.key === " ") {
-        toggle(event);
-      }
-    }}
-    role="button"
-    tabindex="0"
-  >
-    <span>{count}</span>
-    {#if failed}
-      <span class="failed">· {failed} failed</span>
-    {/if}
-  </span>
-{/if}
+<!-- biome-ignore lint/a11y/useSemanticElements: the chip's markup and press are the kit's span control (.pressable), as they were inside a row's link. -->
+<span
+  aria-expanded={open}
+  aria-label={open ? `Hide ${label}` : `Show ${label}`}
+  class="count num pressable focus-inset pointer-hit touch-hit"
+  data-open={open || undefined}
+  onclick={toggle}
+  onkeydown={(event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      toggle(event);
+    }
+  }}
+  role="button"
+  tabindex="0"
+>
+  {count}
+</span>
 
 <style>
   /* A plain filled chip: a step stronger under the pointer and while its
-     rows are open, the press every compact control takes (.pressable). It
+     fold is open, the press every compact control takes (.pressable). It
      never yields or truncates: a row's title gives up its room first. */
   .count {
     display: inline-flex;
     flex: none;
     align-items: center;
     justify-content: center;
-    gap: var(--space-1);
     block-size: var(--space-5);
     min-inline-size: var(--space-5);
     padding-inline: var(--space-1);
@@ -100,25 +69,20 @@
     font: var(--type-meta);
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
+    cursor: pointer;
     transition:
       background-color var(--dur-control) var(--ease-out),
       color var(--dur-control) var(--ease-out),
       transform var(--dur-toggle) var(--ease-out);
-  }
-  [role="button"].count {
-    cursor: pointer;
   }
   .count[data-open] {
     background: var(--surface-fill-strong);
     color: var(--ink-strong);
   }
   @media (hover: hover) and (pointer: fine) {
-    [role="button"].count:hover {
+    .count:hover {
       background: var(--surface-fill-strong);
       color: var(--ink-strong);
     }
-  }
-  .failed {
-    color: var(--status-fail-ink);
   }
 </style>

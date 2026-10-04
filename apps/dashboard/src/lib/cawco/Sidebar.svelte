@@ -73,7 +73,7 @@
     sessionStatus,
   } from "./SessionMark.svelte";
   import { newSession } from "./spawn/new-session.svelte";
-  import TreeCount from "./TreeCount.svelte";
+  import TreeMark from "./TreeMark.svelte";
   import { rooted, tree } from "./tree";
   import UsageMeter from "./UsageMeter.svelte";
   import { workflowState } from "./workflow-state.svelte";
@@ -155,17 +155,18 @@
    */
   const SUB_ROW = "h-[28px] gap-1.5 pl-1.5 pr-2";
   /** How a tree's rows open and fold (motion/branch): off each row's mark. */
-  const TREE: BranchOptions = { glyph: ".session-mark" };
+  const TREE: BranchOptions = { glyph: ".tree-mark" };
   /**
-   * What stands in a row's lead slot under a project: a session's mark, or
-   * the glyph of a row that is not a session ("N older", "No sessions").
-   * The rail's arm ends there.
+   * What stands in a row's lead slot under a project: a tree mark (a
+   * session's, the "N older" row's), or the glyph of a row that is neither
+   * ("No sessions"). The rail's arm ends there.
    */
-  const LEAD = ".session-mark, .row-lead";
-  /** A project's rows hang off the project's own mark. */
-  const PROJECT_TREE: BranchOptions = { glyph: LEAD, parent: ".project-mark" };
-  /** A project's older rows, opening under the row that lists them. */
-  const OLDER_TREE: BranchOptions = { glyph: LEAD, parent: ".older-lead" };
+  const LEAD = ".tree-mark, .row-lead";
+  /**
+   * A project's rows, and its older rows under the row that lists them:
+   * each hangs off its parent row's own tree mark, the first in that row.
+   */
+  const LEAD_TREE: BranchOptions = { glyph: LEAD };
   /** The height the loading rows stand at: a list row's. */
   const LIST_ROW_H = "h-[30px]";
   /** `Sidebar.Group`'s own `p-2` plus `Sidebar.Content`'s `gap-2` stacked to
@@ -836,7 +837,7 @@
         data-flip-anchor
         in:branch={TREE}
         out:branch={TREE}
-        {@attach nestFrom(".session-mark")}
+        {@attach nestFrom(".tree-mark")}
       >
         {#each node.children as child (child.row.id)}
           {@render subRow(child)}
@@ -1101,22 +1102,20 @@
                     class={LIST_ROW}
                     onclick={() => toggle(project)}
                   >
-                    <ProjectMark hue={markHue(project.cwd)} />
-                    <span class="min-w-0 flex-1 truncate">{project.name}</span>
-                    <!-- What is running in it, at the trailing edge where
-                         every row's count stands; the whole row is the
-                         switch, so the count only says it. -->
-                    {#if sessions.length > 0}
-                      {#key sessions.length}
-                        <TreeCount
-                          count={sessions.length}
-                          data-flip="pop"
-                          noun="running session"
-                          open={expanded}
-                          passive
-                        />
-                      {/key}
-                    {/if}
+                    <!-- Its mark says what is running in it, as a
+                         session's says its delegates; the whole row is the
+                         switch, so the mark only draws the morph. -->
+                    <ProjectMark
+                      count={sessions.length}
+                      hue={markHue(project.cwd)}
+                      open={expanded}
+                    />
+                    <span class="min-w-0 flex-1 truncate"
+                      >{project.name}
+                      {#if sessions.length > 0}
+                        <span class="sr-only">, {sessions.length} running</span>
+                      {/if}</span
+                    >
                   </Sidebar.MenuButton>
                 </FolderMenu>
 
@@ -1134,9 +1133,9 @@
                     data-flip-anchor
                     data-sidebar="menu-sub"
                     data-slot="sidebar-menu-sub"
-                    in:branch={PROJECT_TREE}
-                    out:branch={PROJECT_TREE}
-                    {@attach nestFrom(".project-mark", LEAD)}
+                    in:branch={LEAD_TREE}
+                    out:branch={LEAD_TREE}
+                    {@attach nestFrom(".tree-mark", LEAD)}
                   >
                     {#each branches(
                       lists.recent,
@@ -1160,13 +1159,14 @@
                           {#snippet child({
                             props,
                           })}
-                            <!-- A disclosure, so a button. Its lead is the
-                                   rail's 18px slot, on the session tiles'
-                                   axis (where the rail's arm ends), holding
-                                   the history glyph with no tile under it.
-                                   Busy from the press until its rows are
-                                   drawn: the glyph gives way to the kit's
-                                   spinner, as a pending Button's icon does. -->
+                            <!-- A disclosure, so a button. Its lead is a
+                                   tree mark on the session tiles' axis
+                                   (where the rail's arm ends), with the
+                                   history glyph as its face and no tile
+                                   under it; the row is the switch. Busy from
+                                   the press until its rows are drawn: the
+                                   glyph gives way to the kit's spinner, as a
+                                   pending Button's icon does. -->
                             <button
                               {...props}
                               aria-busy={olderBusy || undefined}
@@ -1174,27 +1174,26 @@
                               onclick={() => toggleOlder(project.id)}
                               type="button"
                             >
-                              <!-- The slot's 18px box as the icon swap's
-                                     grid (not `SLOT`, a flex row, which set
-                                     the glyph and the spinner side by side
-                                     and pushed the glyph off the axis). -->
-                              <span
-                                class="row-lead older-lead icon-swap size-[18px] shrink-0"
-                              >
-                                <span data-active={!olderBusy}
-                                  ><IconHistory class={SLOT_GLYPH} /></span
-                                >
-                                <!-- Out of the button's name: `aria-busy`
-                                       says it, and a status in here was read
-                                       into the name at rest ("Reading older
-                                       sessions 275 older"). -->
-                                <span aria-hidden="true" data-active={olderBusy}
-                                  ><Spinner
-                                    class="size-3"
-                                    role="presentation"
-                                  /></span
-                                >
-                              </span>
+                              <TreeMark open={olderVisible} rowToggles>
+                                {#snippet face()}
+                                  <!-- The glyph and the spinner stacked in
+                                         one cell (the kit's icon swap). Out
+                                         of the button's name: `aria-busy`
+                                         says it, and a status in here was
+                                         read into the name at rest. -->
+                                  <span class="older-face icon-swap">
+                                    <span data-active={!olderBusy}
+                                      ><IconHistory class={SLOT_GLYPH} /></span
+                                    >
+                                    <span data-active={olderBusy}
+                                      ><Spinner
+                                        class="size-3"
+                                        role="presentation"
+                                      /></span
+                                    >
+                                  </span>
+                                {/snippet}
+                              </TreeMark>
                               <span class="num">{olderLabel}</span>
                             </button>
                           {/snippet}
@@ -1218,8 +1217,8 @@
                             data-keep-scroll={project.id}
                             onintroend={() =>
                               fillOlder(project.id, lists.older.length)}
-                            in:branch={OLDER_TREE}
-                            out:branch={OLDER_TREE}
+                            in:branch={LEAD_TREE}
+                            out:branch={LEAD_TREE}
                             {@attach scrollEdges}
                           >
                             {#each olderTrees as node (node.row.id)}
@@ -1356,12 +1355,10 @@
   }
   /* A project's older sessions: six sub-rows (28px, 2px apart) at most,
      scrolling in place. The edges fade only while there is more past them. */
-  /* The disclosure's lead: the history glyph in the muted ink, and the
-     spinner it gives way to while its rows are read (the kit's icon swap, at
-     a control's pace). */
-  .older-lead {
+  /* The disclosure's face: the history glyph, and the spinner it gives way
+     to while its rows are read (the kit's icon swap, at a control's pace). */
+  .older-face {
     --icon-swap-dur: var(--dur-control);
-    color: var(--ink-muted);
   }
   /* The box is off the rail (it scrolls on its own): its rows draw no line,
      and the row that opens it, the project's last, is where the rail ends. */

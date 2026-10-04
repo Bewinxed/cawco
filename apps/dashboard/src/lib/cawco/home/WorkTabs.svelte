@@ -138,7 +138,7 @@
   /** Rows a tab lists before "N more". */
   const MORE_AT = 8;
   /** How a parent's rows open and fold (motion/branch): off each row's mark. */
-  const TREE: BranchOptions = { glyph: ".session-mark" };
+  const TREE: BranchOptions = { glyph: ".tree-mark" };
   /** The boxes whose heights a change drives: each group, its "N more" line in it. */
   const BOXES = ":scope > .group";
 
@@ -735,7 +735,7 @@
         data-flip-anchor
         in:branch={TREE}
         out:branch={TREE}
-        {@attach nestFrom(".session-mark")}
+        {@attach nestFrom(".tree-mark")}
       >
         {#each kids as kid (kid.id)}
           {@render treeNode(kid, rows, group)}
@@ -759,7 +759,7 @@
       {@render sessionRow(line.row as InstanceRow, line.tab, line.machineId)}
     </div>
     {#if kids.length > 0}
-      <ul class="kit-nest branch" {@attach nestFrom(".session-mark")}>
+      <ul class="kit-nest branch" {@attach nestFrom(".tree-mark")}>
         {#each kids as kid (kid.key)}
           {@render leavingTree(kid, lines)}
         {/each}

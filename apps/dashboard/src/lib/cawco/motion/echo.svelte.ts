@@ -1,6 +1,6 @@
 /**
  * A list's working rows, beating in turn. Each working session's mark holds
- * an echo, a copy of its tile seen only outside the tile (SessionMark
+ * an echo, a copy of its tile seen only outside the tile (TreeMark
  * `[data-echo]`). On its beat the copy grows from the tile and fades, over
  * one --dur-loop on --ease-out, transform and opacity only; the tile and its
  * deck never move. A session that needs you holds the same echo on its status
@@ -34,7 +34,7 @@ const BEATS = 3;
  * browser runs off the page's own thread: a working row costs the page
  * nothing while it beats. That puts the echo on a layer of its own, which
  * is why its mark draws it last, in a box cut to the outside of the tile
- * (SessionMark `.echo-box`).
+ * (TreeMark `.echo-box`).
  */
 const beatFrames = (share: number): Keyframe[] => [
   {

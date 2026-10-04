@@ -596,7 +596,7 @@
   [data-branch-draw] .kit-nest > li::after {
     clip-path: inset(-9999px var(--nest-cut-r) var(--nest-cut-b) -9999px);
   }
-  /* A session's deck (SessionMark) is the rows folded under it. While they
+  /* A parent's deck (TreeMark) is the rows folded under it. While they
      are out, from the frame their line sets off (a group just mounted
      waits a moment for it, `data-branch-wait`) to the frame their group
      unmounts, the deck is away: the children's icons left from it and come
@@ -611,24 +611,21 @@
   @scope (
     :is(li, [data-nest-host]):has(> [data-flip-anchor]:not([data-branch-wait]))
   ) to ([data-flip-anchor]) {
-    .session-mark .deck {
+    .tree-mark .deck {
       visibility: hidden;
     }
-    /* The session mark reads its own level from this (its style is the
+    /* The tree mark reads its own level from this (its style is the
        component's, which outranks this layer), and that its deck is away:
-       its echo then shows where the cards stood. */
-    .session-mark {
+       its echo then shows where the cards stood. Every parent's mark is
+       one (a session's, a project's, the "N older" row's). */
+    .tree-mark {
       --mark-level: 3;
       --deck-away: 1;
-    }
-    .project-mark {
-      position: relative;
-      z-index: 3;
     }
   }
   /* An icon on its way along its line takes no press: in flight it passes
      over its parent's mark, whose switch is under it. */
-  [data-branch-draw] .session-mark {
+  [data-branch-draw] .tree-mark {
     pointer-events: none;
   }
   /* A group folding away is out of the pointer's reach from the press that
@@ -648,11 +645,9 @@
     --nest-cut-b: 9999px;
   }
 
-  /* A session row's time, at the row's trailing edge or, on a parent, just
-     before its count (TreeCount), which is the row's last thing: every row
-     ends at the same right edge whatever its indent, so the counts stand in
-     one column at the edge. Right aligned, as wide as its longest word
-     ("59m"). */
+  /* A session row's time, at the row's trailing edge: every row ends at the
+     same right edge whatever its indent, so the times stand in one column.
+     Right aligned, as wide as its longest word ("59m"). */
   .kit-age-col {
     flex: none;
     inline-size: 3ch;
