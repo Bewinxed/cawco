@@ -4,6 +4,7 @@
  * to a JSON dump. Families the SDK actually emits get a hand-written sentence;
  * everything else lands on the params table, which is the dignity floor.
  */
+import { type FileDiffMetadata, parsePatchFiles } from "@pierre/diffs";
 import type { Component } from "svelte";
 import { rootDomain } from "#lib/cawco/mcp.js";
 import {
@@ -229,6 +230,7 @@ const FAMILIES: Record<FamilyId, Omit<ToolFamily, "id">> = {
 };
 
 const EDIT_TOOLS = new Set([
+  "apply_patch",
   "edit",
   "multiedit",
   "str_replace_editor",
@@ -341,6 +343,7 @@ export function isFileDiffTool(toolName: string | undefined): boolean {
 
 /** The old and new sides a diff view needs, or null when the input has none. */
 export interface FileChange {
+  fileDiff?: FileDiffMetadata;
   filePath: string;
   newContent: string;
   oldContent: string;
@@ -358,8 +361,21 @@ const textOf = (value: unknown): string =>
  */
 export function getDiffInfo(
   input: Record<string, unknown> | undefined,
-  toolName: string | undefined
+  toolName: string | undefined,
+  patch?: string
 ): FileChange[] {
+  if (toolName?.toLowerCase() === "apply_patch") {
+    return patch
+      ? parsePatchFiles(patch).flatMap((parsed) =>
+          parsed.files.map((fileDiff) => ({
+            filePath: fileDiff.name,
+            fileDiff,
+            oldContent: "",
+            newContent: "",
+          }))
+        )
+      : [];
+  }
   const filePath =
     str(input?.file_path) ??
     str(input?.filePath) ??
@@ -603,9 +619,10 @@ export function describeTool(
   result: string | undefined,
   status: ToolCallStatus,
   /** The configured URL's host for an MCP server segment, when the session knows it. */
-  serverHost?: (server: string) => string | undefined
+  serverHost?: (server: string) => string | undefined,
+  patch?: string
 ): ToolDescriptor {
-  const described = sentence(toolName, input, result, status);
+  const described = sentence(toolName, input, result, status, patch);
   const server = MCP_NAME.exec(toolName ?? "")?.[1];
   if (!server) {
     return described;
@@ -628,7 +645,8 @@ function sentence(
   toolName: string | undefined,
   input: Record<string, unknown> | undefined,
   result: string | undefined,
-  status: ToolCallStatus
+  status: ToolCallStatus,
+  patch?: string
 ): ToolDescriptor {
   const name = toolName ?? "Tool";
   const output = status === "success" ? result : undefined;
@@ -677,14 +695,27 @@ function sentence(
     case "edit":
     case "write": {
       const write = family === "write";
-      const changes = getDiffInfo(input, toolName);
+      const changes = getDiffInfo(input, toolName, patch);
       let added = 0;
       let removed = 0;
       for (const change of changes) {
-        added += spanLines(change.newContent);
-        removed += spanLines(change.oldContent);
+        if (change.fileDiff) {
+          for (const hunk of change.fileDiff.hunks) {
+            added += hunk.additionLines;
+            removed += hunk.deletionLines;
+          }
+        } else {
+          added += spanLines(change.newContent);
+          removed += spanLines(change.oldContent);
+        }
       }
       const path = changes[0]?.filePath;
+      const applyingPatch = name.toLowerCase() === "apply_patch";
+      let label = write ? "Wrote" : "Edited";
+      if (applyingPatch) {
+        label = status === "pending" ? "Applying patch" : "Applied patch";
+      }
+      const fact = write ? `+${added}` : `+${added} −${removed}`;
       // A failed call changed nothing: it says so, and carries no line count.
       if (status === "error") {
         return {
@@ -696,11 +727,15 @@ function sentence(
       }
       return {
         ...base,
-        label: write ? "Wrote" : "Edited",
+        label,
         object: path ? pathLeaf(path) : undefined,
-        fact: write ? `+${added}` : `+${added} −${removed}`,
+        detail:
+          applyingPatch && changes.length > 1
+            ? `and ${changes.length - 1} more files`
+            : undefined,
+        fact: changes.length ? fact : undefined,
         factTone: "diff",
-        expanded: "diff",
+        expanded: applyingPatch && !patch ? "params" : "diff",
       };
     }
 

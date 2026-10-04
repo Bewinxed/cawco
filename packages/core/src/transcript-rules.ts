@@ -1553,6 +1553,10 @@ export function applyToolResult(
   target.metadata = {
     ...target.metadata,
     toolResult: result,
+    ...(target.metadata?.toolName === "apply_patch" &&
+    typeof structuredContent?.diff === "string"
+      ? { toolDiff: structuredContent.diff }
+      : {}),
     ...(images ? { resultImages: images } : {}),
     toolStatus: isError ? "error" : "success",
     ...(questionResult ? { toolUseResult: questionResult } : {}),

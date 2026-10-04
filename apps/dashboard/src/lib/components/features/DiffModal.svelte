@@ -8,6 +8,7 @@
   import {
     type FileContents,
     FileDiff,
+    type FileDiffMetadata,
     parseDiffFromFile,
   } from "@pierre/diffs";
   import { crossIn, crossOut } from "#lib/cawco/motion/curves.svelte.js";
@@ -20,13 +21,14 @@
   import { fileName, languageOf } from "./diff-language";
 
   interface Props {
+    fileDiff?: FileDiffMetadata;
     filePath: string;
     newContent: string;
     oldContent: string;
     onClose: () => void;
   }
 
-  let { filePath, oldContent, newContent, onClose }: Props = $props();
+  let { filePath, oldContent, newContent, onClose, fileDiff }: Props = $props();
   // The parent unmounts us on `onClose`, so the close runs through the
   // dialog first and only hands back once its exit has finished.
   let open = $state(true);
@@ -39,12 +41,16 @@
     const diff = new FileDiff({
       disableFileHeader: true,
       diffStyle: style,
-      expandUnchanged: true,
+      expandUnchanged: !fileDiff?.isPartial,
       hunkSeparators: "line-info",
     });
     diff.render({
-      oldFile: { name, contents: oldContent, lang },
-      newFile: { name, contents: newContent, lang },
+      ...(fileDiff
+        ? { fileDiff }
+        : {
+            oldFile: { name, contents: oldContent, lang },
+            newFile: { name, contents: newContent, lang },
+          }),
       containerWrapper: layer,
     });
     return () => diff.cleanUp();
@@ -52,13 +58,15 @@
 
   const stats = $derived.by(() => {
     const name = fileName(filePath);
-    const fileDiff = parseDiffFromFile(
-      { name, contents: oldContent },
-      { name, contents: newContent }
-    );
+    const parsed =
+      fileDiff ??
+      parseDiffFromFile(
+        { name, contents: oldContent },
+        { name, contents: newContent }
+      );
     let additions = 0;
     let deletions = 0;
-    for (const hunk of fileDiff.hunks) {
+    for (const hunk of parsed.hunks) {
       additions += hunk.additionLines;
       deletions += hunk.deletionLines;
     }

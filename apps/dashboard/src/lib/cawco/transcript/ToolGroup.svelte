@@ -178,7 +178,8 @@
       (meta.toolStatus ?? "pending") as ToolCallStatus,
       (server) =>
         mcpServerHost(cawco.session(m.instanceId)?.mcp ?? null, server) ??
-        mcpServerHost(fleetMcpServers(), server)
+        mcpServerHost(fleetMcpServers(), server),
+      meta.toolDiff
     );
   }
 
@@ -328,7 +329,9 @@
       | Record<string, unknown>
       | undefined}
     {@const changes =
-      d.expanded === "diff" ? getDiffInfo(toolInput, m.metadata?.toolName) : []}
+      d.expanded === "diff"
+        ? getDiffInfo(toolInput, m.metadata?.toolName, m.metadata?.toolDiff)
+        : []}
     {@const refusal =
       d.expanded === "diff" && failed ? toolError(result) : undefined}
     {@const hasBody =
@@ -485,6 +488,7 @@
                         {/if}
                         {#each changes as change, i (i)}
                           <DiffView
+                            fileDiff={change.fileDiff}
                             filePath={change.filePath}
                             newContent={change.newContent}
                             oldContent={change.oldContent}

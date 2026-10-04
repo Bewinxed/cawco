@@ -116,6 +116,8 @@ export interface BlockMetadata {
    */
   thinkingDurationMs?: number;
   thinkingSignature?: string;
+  /** The unified file diff returned by an apply_patch call. */
+  toolDiff?: string;
   toolId?: string;
   toolInput?: Record<string, unknown>;
   /** `init` only: the MCP servers and tools behind the `/` palette. */

@@ -11,6 +11,7 @@
   import {
     type FileContents,
     FileDiff,
+    type FileDiffMetadata,
     isHighlighterLoaded,
     parseDiffFromFile,
   } from "@pierre/diffs";
@@ -29,12 +30,13 @@
   import { fileName, languageOf } from "./diff-language";
 
   interface Props {
+    fileDiff?: FileDiffMetadata;
     filePath: string;
     newContent: string;
     oldContent: string;
   }
 
-  let { filePath, oldContent, newContent }: Props = $props();
+  let { filePath, oldContent, newContent, fileDiff }: Props = $props();
   let showModal = $state(false);
   /**
    * The rows are in the box. With the highlighter loaded (every diff after
@@ -62,7 +64,8 @@
 
   /** The height the drawn rows will take. */
   const expected = $derived.by(() => {
-    const { hunks } = parseDiffFromFile(files.oldFile, files.newFile);
+    const { hunks } =
+      fileDiff ?? parseDiffFromFile(files.oldFile, files.newFile);
     const rows = hunks.reduce((sum, hunk) => sum + hunk.unifiedLineCount, 0);
     return Math.min(CAP, rows * ROW + hunks.length * BAR);
   });
@@ -77,7 +80,10 @@
       }
     });
     try {
-      diff.render({ ...files, containerWrapper: box });
+      diff.render({
+        ...(fileDiff ? { fileDiff } : files),
+        containerWrapper: box,
+      });
       sizes.observe(box);
     } catch (caught) {
       failure = caught instanceof Error ? caught.message : String(caught);
@@ -153,6 +159,7 @@
 
 {#if showModal}
   <DiffModal
+    {fileDiff}
     {filePath}
     {newContent}
     {oldContent}
