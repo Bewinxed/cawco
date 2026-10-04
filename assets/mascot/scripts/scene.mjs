@@ -15,6 +15,9 @@
 //   Scheme  — `dark` fades every drawing's cream rim in (dark) or out (light) over 200 ms.
 //   Motion  — `reducedMotion` holds the status's first variant on its first drawing, its still.
 //
+// A status that rests (loops/rests.json: `sleeping`) is one traced drawing and has no loops: its
+// Variant layer stays on `rest`.
+//
 // Transitions carry `when: { property, op, value }` instead of an input condition; build.mjs
 // turns each into a view-model condition. The spec itself declares no state-machine inputs.
 import { readFileSync } from "node:fs";
@@ -33,15 +36,26 @@ export const STATUS = [
   "trying",
   "loading",
   "reconnecting",
+  "sleeping",
 ];
 /** Each status's file name: assets/mascot/caw/<name>.riv. */
 export const fileName = (status) => status.replace("_", "-");
+
+/**
+ * The statuses that rest: one drawing, held, with no loop. loops/rests.json names each one's
+ * drawing among the traced loops (`sleeping` is the nod in idle-nod-off, eyes closed).
+ */
+export const RESTS = JSON.parse(readFileSync(`${LOOPS}rests.json`, "utf8"));
 
 /** Each status's variant loops, in order: the first is the one reduced motion holds. */
 export const VARIANTS = (() => {
   const takes = JSON.parse(readFileSync(`${LOOPS}takes.json`, "utf8"));
   const out = {};
   for (const status of STATUS) {
+    if (RESTS[status]) {
+      out[status] = [];
+      continue;
+    }
     if (!takes[status]?.length) {
       throw new Error(`loops/takes.json has no loop for status '${status}'`);
     }
@@ -120,30 +134,29 @@ function loopArt(name, parent, visible) {
   for (let i = 0; i < drawings; i += 1) {
     const n = pad(i);
     groups.push({ id: `${name}-d${n}`, x: 0, y: 0, parent: `${name}-body` });
-    const body = importSvg(readFileSync(`${dir}body-${n}.svg`, "utf8"), {
-      idPrefix: `${name}-d${n}-`,
-    });
-    // Fill order is ink order in the SVG: the black silhouette first, each ink above it.
-    const inks = [...new Set(body.shapes.map((s) => s.fill.color))];
-    for (const [k, color] of inks.entries()) {
-      const id = `${name}-d${n}-${k}`;
-      const base = k === 0;
-      shapes.push(
-        merge(
-          id,
-          `${name}-d${n}`,
-          body.shapes.filter((s) => s.fill.color === color),
-          base
-            ? { fill: { color }, stroke: RIM_LIGHT, strokeUnder: true }
-            : { fill: { color } }
-        )
-      );
-      if (base) {
-        bases.push(id);
-      }
-    }
+    const drawn = drawing(`${name}-d${n}`, `${dir}body-${n}.svg`);
+    shapes.push(...drawn.shapes);
+    bases.push(drawn.base);
   }
   return { groups, shapes, timing, bases };
+}
+
+/** One traced drawing's shapes under the group `id`, one per ink, and its base shape's id. */
+function drawing(id, svg) {
+  const body = importSvg(readFileSync(svg, "utf8"), { idPrefix: `${id}-` });
+  // Fill order is ink order in the SVG: the black silhouette first, each ink above it.
+  const inks = [...new Set(body.shapes.map((s) => s.fill.color))];
+  const shapes = inks.map((color, k) =>
+    merge(
+      `${id}-${k}`,
+      id,
+      body.shapes.filter((s) => s.fill.color === color),
+      k === 0
+        ? { fill: { color }, stroke: RIM_LIGHT, strokeUnder: true }
+        : { fill: { color } }
+    )
+  );
+  return { shapes, base: `${id}-0` };
 }
 
 /** Keys switching a loop to the drawing each slot shows, on the frame the take starts it. */
@@ -226,6 +239,17 @@ export function statusScene(status) {
     shapes.push(...l.shapes);
     bases.push(...l.bases);
     loops[name] = l.timing;
+  }
+  // A status that rests is its one drawing: the Variant layer stays on `rest` and nothing plays.
+  const rest = RESTS[status];
+  if (rest) {
+    groups.push({ id: "rest", x: 0, y: 0, parent: "caw" });
+    const drawn = drawing(
+      "rest",
+      `${LOOPS}${rest.loop}/body-${pad(rest.drawing)}.svg`
+    );
+    shapes.push(...drawn.shapes);
+    bases.push(drawn.base);
   }
   const variant = {
     name: "Variant",

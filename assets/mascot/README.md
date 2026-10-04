@@ -12,8 +12,17 @@ that is all they do with him.
 ## Contract
 
 - Files: `assets/mascot/caw/<status>.riv`, one per status: `ready`, `working`, `needs-you`,
-  `idle`, `done`, `trying`, `loading`, `reconnecting`. Each holds only its status's loops, so an
-  app loads and instances a few MB for what is on screen instead of every loop at once.
+  `idle`, `done`, `trying`, `loading`, `reconnecting`, `sleeping`. Each holds only its status's
+  loops, so an app loads and instances a few MB for what is on screen instead of every loop at
+  once.
+- `sleeping` is what Caw shows when nothing is going on: no session working anywhere on the
+  fleet and nothing needing the operator (owner: "it shouldn't animate if there's nothing going
+  on", "it should have a 'sleeping' look too"). It is a rest: one drawing, held, with no loop
+  and no beats, so a runtime that draws only on change draws it once. The drawing is the nod in
+  the owner's idle-nod-off take, eyes closed and head dropped
+  (`assets/mascot/loops/idle-nod-off/body-11.svg`, named in `assets/mascot/loops/rests.json`);
+  anything that needs the sleeping Caw as a picture renders that SVG (its 512 × 512 box is the
+  stills' box).
 - Artboard: `Caw`, 592 × 592, in every file. Caw's stills sit in the 512 × 512 box at (43, 40);
   the room around it is for his acting. Apps size that box, not the artboard, to the space they
   give Caw, and let the rest draw past it unclipped (`CawView` does).
@@ -76,11 +85,13 @@ them (the editor cannot import `.riv` files). From `assets/mascot/scripts` (`bun
     follows itself, and nothing moves under `reducedMotion`;
   - every drawing stays on screen two frames or more (on twos), read back from the file;
   - load plus instancing (parse, artboard, state machine, bind, first frame) must take 100 ms or
-    less, the median of five steady runs.
+    less, the median of five steady runs;
+  - a resting file (`sleeping`) must show its one drawing, in the scheme `dark` selects, and
+    nothing else, with motion on or reduced.
 
   The runtime's clocks and entropy are pinned so the random turns repeat across two runs. It
-  prints one line per file, the totals (`loops animate: 8/8`, `reducedMotion holds still: 8/8`,
-  `files proven: 8/8`) and, on success, `Caw view model drives the state machine in every status
+  prints one line per file, the totals (`loops animate: 8/8`, `reducedMotion holds still: 9/9`,
+  `stills rest: 1/1`, `files proven: 9/9`) and, on success, `Caw view model drives the state machine in every status
   file`.
 
 ## What the files hold today
@@ -101,6 +112,8 @@ reused rather than traced again.
   light Caw has none, as in the stills.
 - **Motion** layer: `full` lets the loops play; `reduced` holds the first loop on its first
   drawing, the status's still.
+- A resting status (`loops/rests.json`) has no loops: its file is the one drawing, the Variant
+  layer stays on `rest`, and only the Scheme layer ever moves.
 - The artboard is 592 square with Caw on the stills' scale and ground line, 43 px right and
   40 px down: the acting leaves the stills' 512 box, and every drawing fits whole.
 

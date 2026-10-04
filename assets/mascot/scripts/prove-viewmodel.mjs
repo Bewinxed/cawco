@@ -28,6 +28,7 @@ const STATUS = [
   "trying",
   "loading",
   "reconnecting",
+  "sleeping",
 ];
 const fileName = (status) => status.replace("_", "-");
 const ADVANCE_S = 0.5;
@@ -55,8 +56,12 @@ for (let i = 0; i < argv.length; i += 1) {
 const here = (p) => fileURLToPath(new URL(p, import.meta.url));
 const dir = args.dir ?? here("../caw");
 const takes = JSON.parse(readFileSync(here("../loops/takes.json"), "utf8"));
+/** The statuses that rest on one drawing and have no loops (loops/rests.json). */
+const rests = JSON.parse(readFileSync(here("../loops/rests.json"), "utf8"));
+/** What a resting file's one picture is called among the expected pictures. */
+const REST = "rest";
 const loopsOf = (status) =>
-  takes[status].map(({ loop: name }) => {
+  (rests[status] ? [] : takes[status]).map(({ loop: name }) => {
     const timing = JSON.parse(
       readFileSync(here(`../loops/${name}/timing.json`), "utf8")
     );
@@ -167,6 +172,15 @@ window.run = async (b64, job) => {
   };
   const expected = [];
   const timelines = {};
+  if (job.loops.length === 0) {
+    // A resting file: its one drawing, in each scheme.
+    for (const dark of [false, true]) {
+      play(dark ? "scheme_dark" : "scheme_light", 0);
+      play("motion_full", 0);
+      still.advance(0);
+      expected.push({ loop: job.rest, dark, slot: 0, frame: snap(still) });
+    }
+  }
   for (const loop of job.loops) {
     for (const dark of [false, true]) {
       loop.starts.forEach((start, slot) => {
@@ -306,7 +320,11 @@ async function run(bytes, loops) {
     hold: HOLD_S,
     settle: SETTLE_S,
     timingRuns: TIMING_RUNS,
-    watchFrames: WATCH_LOOPS * Math.max(...loops.map((l) => l.frames)),
+    // A resting file is watched as long as reduced motion is.
+    watchFrames: loops.length
+      ? WATCH_LOOPS * Math.max(...loops.map((l) => l.frames))
+      : Math.round(HOLD_S * FPS),
+    rest: REST,
     loops,
     steps: STEPS,
   };
@@ -353,7 +371,15 @@ const runtimeVersion = JSON.parse(
 console.log(
   `runtime: @rive-app/canvas-advanced ${runtimeVersion} on Chromium ${browser.version()}`
 );
-const totals = { files: 0, ok: 0, animate: 0, held: 0 };
+const totals = {
+  files: 0,
+  ok: 0,
+  looping: 0,
+  animate: 0,
+  stills: 0,
+  rested: 0,
+  held: 0,
+};
 const failures = [];
 for (const status of STATUS) {
   const name = fileName(status);
@@ -361,6 +387,9 @@ for (const status of STATUS) {
   const before = failures.length;
   const bytes = readFileSync(join(dir, `${name}.riv`));
   const loops = loopsOf(status);
+  const resting = loops.length === 0;
+  /** The picture reduced motion holds: the first loop's first drawing, or the rest drawing. */
+  const stillOf = loops[0]?.name ?? REST;
   // biome-ignore lint/performance/noAwaitInLoops: one file at a time, so no run's load timing shares the CPU with another
   const now = await run(bytes, loops);
   const again = await run(bytes, loops);
@@ -403,7 +432,7 @@ for (const status of STATUS) {
       f.readBack.reducedMotion === s.reducedMotion &&
       (pictures.get(f.frame) ?? []).some((d) =>
         s.reducedMotion
-          ? d.loop === loops[0].name && d.slot === 0 && d.dark === s.dark
+          ? d.loop === stillOf && d.slot === 0 && d.dark === s.dark
           : d.dark === s.dark
       );
     matched += ok ? 1 : 0;
@@ -418,9 +447,22 @@ for (const status of STATUS) {
   // its slots; with several loops, never the same one twice in a row.
   const [full, reduced] = now.watches;
   const beforeWatch = failures.length;
-  const seq = plays(loops, pictures, full.frames);
+  const seq = resting ? null : plays(loops, pictures, full.frames);
   let rotation = "one loop";
-  if (seq) {
+  if (resting) {
+    // A resting file holds its one drawing with motion on, as it does with motion reduced.
+    const rested =
+      new Set(full.frames).size === 1 &&
+      (pictures.get(full.frames[0]) ?? []).some(
+        (d) => d.loop === REST && !d.dark
+      );
+    rotation = rested ? "rests on its drawing" : "MOVES at rest";
+    totals.stills += 1;
+    totals.rested += rested ? 1 : 0;
+    if (!rested) {
+      fail(`at rest it shows ${new Set(full.frames).size} distinct frames`);
+    }
+  } else if (seq) {
     const complete = seq.slice(0, -1).filter((p) => p.first === 0);
     const whole = complete.every(
       (p) => p.slots.size === loops.find((l) => l.name === p.loop).starts.length
@@ -449,7 +491,10 @@ for (const status of STATUS) {
     fail("a watched frame matches none of its loops' slots");
   }
   // Every play showed all its drawings, and the loops took turns without repeating one.
-  totals.animate += failures.length === beforeWatch ? 1 : 0;
+  if (!resting) {
+    totals.looping += 1;
+    totals.animate += failures.length === beforeWatch ? 1 : 0;
+  }
   // On twos, read from the file: each loop's frames at 1/24 s, as runs of the same picture.
   let twos = 0;
   for (const loop of loops) {
@@ -471,7 +516,7 @@ for (const status of STATUS) {
   const held =
     new Set(reduced.frames).size === 1 &&
     (pictures.get(reduced.frames[0]) ?? []).some(
-      (d) => d.loop === loops[0].name && d.slot === 0 && !d.dark
+      (d) => d.loop === stillOf && d.slot === 0 && !d.dark
     );
   if (held) {
     totals.held += 1;
@@ -497,7 +542,8 @@ await browser.close();
 for (const f of failures) {
   console.log(`  FAIL ${f}`);
 }
-console.log(`loops animate: ${totals.animate}/${totals.files}`);
+console.log(`loops animate: ${totals.animate}/${totals.looping}`);
+console.log(`stills rest: ${totals.rested}/${totals.stills}`);
 console.log(`reducedMotion holds still: ${totals.held}/${totals.files}`);
 console.log(`files proven: ${totals.ok}/${totals.files}`);
 if (failures.length === 0 && totals.ok === STATUS.length) {
