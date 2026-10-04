@@ -9,11 +9,13 @@ import UIKit
 /// under it moves when the file answers: a skeleton while it is read, the
 /// summary once it is there, and the empty text when it is not, which is
 /// the way in to writing one on a machine that is up. A failed read says so
-/// in the header. Edit opens the house markdown editor in the card when one
-/// is given (`editor`).
+/// in the header. Edit opens the file's markdown in the card, with Cancel and
+/// Save in the header (Escape and ⌘Return); a draft left unsaved is there
+/// again when the page comes back.
 final class ProjectMemoryCard: TileView {
-    /// The house markdown editor, when the app has one: markdown in, edits out.
-    var editor: ((String, @escaping (String) -> Void) -> UIView)? { didSet { render() } }
+    /// Unsaved drafts by file path (`cawco:draft:<path>` in session storage):
+    /// kept while the app runs, dropped on Save and on Cancel.
+    private static var stash: [String: String] = [:]
 
     private let hub: HubConnection
     private var machineId = ""
@@ -98,6 +100,11 @@ final class ProjectMemoryCard: TileView {
                 if !error.localizedDescription.contains("does not exist") { self?.failure = error.localizedDescription }
             }
             self?.read = true
+            // A draft left unsaved opens the editor on it again.
+            if let self, let kept = Self.stash[path], kept != (content ?? ""), online {
+                draft = kept
+                editing = true
+            }
             self?.render()
         }
     }
@@ -114,10 +121,7 @@ final class ProjectMemoryCard: TileView {
             var ghost = UIButton.Configuration.plain()
             ghost.attributedTitle = AttributedString("Cancel", attributes: AttributeContainer(TypeScale.typeLabel.attributes(color: Palette.inkStrong)))
             ghost.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 8)
-            let cancel = UIButton(configuration: ghost, primaryAction: UIAction { [weak self] _ in
-                self?.editing = false
-                self?.render()
-            })
+            let cancel = UIButton(configuration: ghost, primaryAction: UIAction { [weak self] _ in self?.cancel() })
             cancel.isEnabled = !saving
             cancel.houseStyle()
             let save = KitButton.make(saving ? "Saving…" : "Save", variant: .outline, height: .xs) { [weak self] in self?.save() }
@@ -145,13 +149,20 @@ final class ProjectMemoryCard: TileView {
             lines.arrangedSubviews[1].widthAnchor.constraint(equalTo: lines.widthAnchor, multiplier: 2.0 / 3).isActive = true
             body.show(box(lines))
         case "editing":
-            guard let editor else { return }
-            let view = editor(draft) { [weak self] text in
-                self?.draft = text
-                self?.render()
+            let view = MemoryEditor(text: draft, label: "CLAUDE.md")
+            view.onChange = { [weak self] text in
+                guard let self else { return }
+                draft = text
+                if text != (content ?? "") { Self.stash[path] = text }
+                render()
             }
-            view.heightAnchor.constraint(lessThanOrEqualToConstant: UIScreen.main.bounds.height * 0.6).isActive = true
+            view.onCancel = { [weak self] in self?.cancel() }
+            view.onSave = { [weak self] in
+                guard let self, draft != (content ?? "") else { return }
+                save()
+            }
             body.show(view, holdHeight: true)
+            view.becomeFirstResponder()
         case "summary":
             body.show(box(line("Project memory — every session started here reads it.")))
         default:
@@ -184,8 +195,14 @@ final class ProjectMemoryCard: TileView {
         }
     }
 
-    /// Writing is offered while the machine is up and the app has an editor.
-    private var canEdit: Bool { online && editor != nil }
+    /// Writing is offered while the machine is up.
+    private var canEdit: Bool { online }
+
+    private func cancel() {
+        Self.stash[path] = nil
+        editing = false
+        render()
+    }
 
     private func line(_ text: String) -> KitLabel {
         let label = KitLabel(TypeScale.typeMeta, ink: Palette.mutedForeground, lines: 2)
@@ -218,6 +235,7 @@ final class ProjectMemoryCard: TileView {
         Task { @MainActor [weak self, hub, machineId, path, draft] in
             do {
                 _ = try await hub.writeFile(machineId: machineId, path: path, content: draft)
+                Self.stash[path] = nil
                 self?.content = draft
                 self?.editing = false
             } catch {
@@ -228,4 +246,59 @@ final class ProjectMemoryCard: TileView {
             self?.render()
         }
     }
+}
+
+/// The card's editor: the file's markdown in mono label type, as tall as its
+/// text between eight rows of `--space-8` and 60% of the screen
+/// (`max-h-[60vh]`), scrolling past that. Escape cancels; ⌘Return saves.
+private final class MemoryEditor: UITextView, UITextViewDelegate {
+    var onChange: (String) -> Void = { _ in }
+    var onCancel: () -> Void = {}
+    var onSave: () -> Void = {}
+    private var tall: NSLayoutConstraint!
+
+    init(text: String, label: String) {
+        super.init(frame: .zero, textContainer: nil)
+        self.text = text
+        font = TypeScale.typeCode.with(points: TypeScale.typeLabel.points).font
+        textColor = Palette.foreground
+        backgroundColor = .clear
+        autocorrectionType = .no
+        autocapitalizationType = .none
+        spellCheckingType = .no
+        smartQuotesType = .no
+        smartDashesType = .no
+        textContainerInset = UIEdgeInsets(top: Space.space4, left: Space.space4, bottom: Space.space4, right: Space.space4)
+        accessibilityLabel = label
+        delegate = self
+        tall = heightAnchor.constraint(equalToConstant: Space.space8 * 8)
+        tall.isActive = true
+    }
+
+    @available(*, unavailable)
+    required init?(coder _: NSCoder) {
+        fatalError("MemoryEditor is built in code")
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        let fits = sizeThatFits(CGSize(width: bounds.width, height: .greatestFiniteMagnitude)).height
+        let height = min(max(fits, Space.space8 * 8), UIScreen.main.bounds.height * 0.6)
+        if abs(tall.constant - height) > 0.5 { tall.constant = height }
+    }
+
+    func textViewDidChange(_: UITextView) {
+        onChange(text)
+        setNeedsLayout()
+    }
+
+    override var keyCommands: [UIKeyCommand]? {
+        let escape = UIKeyCommand(input: UIKeyCommand.inputEscape, modifierFlags: [], action: #selector(cancelEdit))
+        let commit = UIKeyCommand(input: "\r", modifierFlags: .command, action: #selector(saveEdit))
+        for command in [escape, commit] { command.wantsPriorityOverSystemBehavior = true }
+        return [escape, commit]
+    }
+
+    @objc private func cancelEdit() { onCancel() }
+    @objc private func saveEdit() { onSave() }
 }

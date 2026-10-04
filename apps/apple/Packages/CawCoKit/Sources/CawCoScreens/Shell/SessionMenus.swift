@@ -125,7 +125,7 @@ enum SessionMenus {
         let hub = context.hub
         let to = hub.fleet.conversationId(sessionKey: info.sessionId, machineId: machineId, cwd: info.cwd)
         let row = hub.fleet.rows.first { $0.id == to }
-        let title = hub.fleet.storedTitle(sessionKey: info.sessionId, machineId: machineId) ?? info.sessionId
+        let title = hub.fleet.storedTitle(info, machineId: machineId)
         let harness = info.harness.rawValue
         var first: [UIMenuElement] = [UIAction(title: "Open", image: Glyph.external.image) { _ in context.open(to) }]
         // StoredSessionMenu names its source itself: the stored session's id, machine, folder, harness and title.

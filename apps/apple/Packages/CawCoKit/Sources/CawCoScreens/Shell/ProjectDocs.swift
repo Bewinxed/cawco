@@ -81,7 +81,8 @@ final class ProjectDocsView: UIStackView {
         self.hub = hub
         super.init(frame: .zero)
         axis = .vertical
-        spacing = Space.space4
+        // `gap-4` between the picker and the card, beside it or under it.
+        spacing = 16
         picker.axis = .horizontal
         addArrangedSubview(picker)
         nameLabel.lineBreakMode = .byTruncatingTail
@@ -209,11 +210,14 @@ final class ProjectDocsView: UIStackView {
             alignment = pickerMode == .column ? .top : .fill
             pickerWidth.isActive = pickerMode == .column
             renderPicker()
+            if (oldValue == .select) != phone { renderBody() }
         }
     }
 
     private lazy var pickerWidth = picker.widthAnchor.constraint(equalToConstant: 192)
     private var phone: Bool { pickerMode == .select }
+    /// The body's side padding: `px-[--space-6] md:px-[--space-7]`.
+    private var side: Double { phone ? Space.space6 : Space.space7 }
 
     private func renderPicker() {
         picker.arrangedSubviews.forEach { $0.removeFromSuperview() }
@@ -348,8 +352,9 @@ final class ProjectDocsView: UIStackView {
     private var bodyKey = ""
 
     private func renderBody() {
-        let key: String
-        if docsError != nil { key = "unlisted" } else if docs?.isEmpty == true { key = "none" } else if shown == nil { key = "reading" } else { key = "\(shown ?? ""):\(draft == nil ? "read" : "edit"):\(expanded)" }
+        let state: String
+        if docsError != nil { state = "unlisted" } else if docs?.isEmpty == true { state = "none" } else if shown == nil { state = "reading" } else { state = "\(shown ?? ""):\(draft == nil ? "read" : "edit"):\(expanded)" }
+        let key = "\(state):\(phone)"
         if key == bodyKey, draft == nil, shown != nil {
             document.setSource(content)
             return
@@ -380,7 +385,7 @@ final class ProjectDocsView: UIStackView {
     private func padded(_ view: UIView) -> UIView {
         let box = UIStackView(arrangedSubviews: [view])
         box.isLayoutMarginsRelativeArrangement = true
-        box.directionalLayoutMargins = NSDirectionalEdgeInsets(top: Space.space4, leading: Space.space6, bottom: Space.space4, trailing: Space.space6)
+        box.directionalLayoutMargins = NSDirectionalEdgeInsets(top: Space.space4, leading: side, bottom: Space.space4, trailing: side)
         return box
     }
 
@@ -446,7 +451,7 @@ final class ProjectDocsView: UIStackView {
             inner.leadingAnchor.constraint(equalTo: scroll.frameLayoutGuide.leadingAnchor),
             inner.trailingAnchor.constraint(equalTo: scroll.frameLayoutGuide.trailingAnchor),
             natural, cap,
-            inner.widthAnchor.constraint(lessThanOrEqualToConstant: 72 * 7.5 + Space.space6 * 2),
+            inner.widthAnchor.constraint(lessThanOrEqualToConstant: 72 * 7.5 + side * 2),
         ])
         let column = UIStackView(arrangedSubviews: [scroll])
         column.axis = .vertical
@@ -495,7 +500,7 @@ final class ProjectDocsView: UIStackView {
         view.autocorrectionType = .no
         view.autocapitalizationType = .none
         view.spellCheckingType = .no
-        view.textContainerInset = UIEdgeInsets(top: Space.space4, left: Space.space6, bottom: Space.space4, right: Space.space6)
+        view.textContainerInset = UIEdgeInsets(top: Space.space4, left: side, bottom: Space.space4, right: side)
         view.accessibilityLabel = open?.name
         view.delegate = editorDelegate
         editorDelegate.onChange = { [weak self] value in self?.draft = value }

@@ -10,6 +10,8 @@ struct LiveRowModel: Equatable {
     var id: String
     var title: String
     var status: MarkStatus
+    /// The status's word for the row's name (`statusWord`): "Stopped" for one the operator ended.
+    var word: String
     /// Where it runs, for the mark's hue.
     var place: String
     /// Asleep or unreachable: the mark steps back.
@@ -50,7 +52,8 @@ final class LiveSessionRowView: RailRow, UIToolTipInteractionDelegate {
     private(set) var model: LiveRowModel?
 
     init() {
-        super.init(height: nil, leading: Space.space4, trailing: Space.space4, gap: 0)
+        // `px-4`.
+        super.init(height: nil, leading: 16, trailing: 16, gap: 0)
         title.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         title.setContentHuggingPriority(.defaultHigh, for: .horizontal)
         // The path yields before the title does, and gives up from the left: the leaf tells two checkouts apart.
@@ -72,8 +75,12 @@ final class LiveSessionRowView: RailRow, UIToolTipInteractionDelegate {
         }
         let rest = UIView()
         rest.setContentHuggingPriority(.init(1), for: .horizontal)
-        let first = UIStackView(arrangedSubviews: [mark, title, quest, leaf, path, rest, meter])
-        first.spacing = Space.space3
+        // `gap-3` between what the row says; the meter stands at its end (`ml-auto`), a gap clear of it.
+        let says = UIStackView(arrangedSubviews: [mark, title, quest, leaf, path])
+        says.spacing = Space.space3
+        says.alignment = .center
+        let first = UIStackView(arrangedSubviews: [says, rest, meter])
+        first.setCustomSpacing(Space.space3, after: rest)
         first.alignment = .center
 
         toolGlance.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
@@ -135,7 +142,7 @@ final class LiveSessionRowView: RailRow, UIToolTipInteractionDelegate {
         let tooled = next.toolName != nil
         toolName.text = next.toolName ?? toolName.text
         toolGlance.text = next.toolGlance ?? toolGlance.text
-        accessibilityLabel = "\(next.status.word): \(next.title)"
+        accessibilityLabel = "\(next.word): \(next.title)"
         // The meter and the tool's line fade in and out as a whole (`crossIn`).
         let wasMetered = old.map { $0.total != nil || $0.unmeasured } ?? false
         let wasTooled = old?.toolName != nil
@@ -214,7 +221,8 @@ final class StoredSessionRowView: RailRow, UIToolTipInteractionDelegate {
     private var model: StoredRowModel?
 
     init() {
-        super.init(height: nil, leading: Space.space4, trailing: Space.space4, gap: 0)
+        // `px-4`.
+        super.init(height: nil, leading: 16, trailing: 16, gap: 0)
         mark.alpha = 0.6
         title.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         title.setContentHuggingPriority(.defaultHigh, for: .horizontal)
@@ -228,8 +236,11 @@ final class StoredSessionRowView: RailRow, UIToolTipInteractionDelegate {
         age.setContentCompressionResistancePriority(.required, for: .horizontal)
         let rest = UIView()
         rest.setContentHuggingPriority(.init(1), for: .horizontal)
-        let line = UIStackView(arrangedSubviews: [mark, title, path, rest, age])
-        line.spacing = Space.space3
+        let says = UIStackView(arrangedSubviews: [mark, title, path])
+        says.spacing = Space.space3
+        says.alignment = .center
+        let line = UIStackView(arrangedSubviews: [says, rest, age])
+        line.setCustomSpacing(Space.space3, after: rest)
         line.alignment = .center
         let slack = UIView()
         slack.setContentHuggingPriority(.init(1), for: .horizontal)

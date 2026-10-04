@@ -100,7 +100,7 @@ final class ProjectViewController: ObservedViewController {
         }
         // `mt-6` between the docs and what follows them on one column.
         page.spacing = Self.edge
-        asideWidth = asideScroll.widthAnchor.constraint(equalToConstant: 342)
+        asideWidth = asideScroll.widthAnchor.constraint(equalToConstant: 340)
         // The page runs under the rail on a wide screen: everything keeps to the safe area.
         NSLayoutConstraint.activate([
             head.topAnchor.constraint(equalTo: safe.topAnchor, constant: Self.edge),
@@ -159,7 +159,8 @@ final class ProjectViewController: ObservedViewController {
         actions.addArrangedSubview(startButton)
         actions.addArrangedSubview(quest)
         actions.addArrangedSubview(forget)
-        actions.spacing = Space.space2
+        // `gap-2`.
+        actions.spacing = 8
         actions.alignment = .center
         for button in [startButton!, quest, forget] {
             button.setContentHuggingPriority(.required, for: .horizontal)
@@ -316,10 +317,14 @@ final class ProjectViewController: ObservedViewController {
             let unmeasured = plan == nil && !row.isFailed && !asleep && !row.isStale && activity == .working
             timing = timing || unmeasured
             let tool = activity == .working ? fleet.pulse(row.id)?.currentTool : nil
+            // LiveSessionRow's title: its stored transcript's, else what its spawn said it is for.
+            let info = row.sessionId.flatMap { key in fleet.catalog(row.machineId).first { $0.sessionId == key } }
+            let status = HomeViewController.status(row, home: home)
             liveRows.rows[row.id]?.configure(LiveRowModel(
                 id: row.id,
-                title: fleet.title(row),
-                status: HomeViewController.status(row, home: home),
+                title: info.map { fleet.storedTitle($0, machineId: row.machineId) } ?? row.title ?? "untitled session",
+                status: status,
+                word: row.status == .stopped ? "Stopped" : status.word,
                 place: row.cwd.isEmpty ? row.machineId : row.cwd,
                 dim: asleep || row.isStale,
                 quest: row.kind == "scratch",
@@ -374,7 +379,7 @@ final class ProjectViewController: ObservedViewController {
         for (key, info) in byKey {
             storedRows.rows[key]?.configure(StoredRowModel(
                 id: key,
-                title: fleet.storedTitle(info),
+                title: fleet.storedTitle(info, machineId: machineId),
                 place: (info.cwd ?? "").isEmpty ? machineId : info.cwd ?? machineId,
                 cwd: wide && info.cwd != project.cwd ? info.cwd : nil,
                 age: RailAge.ago(info.lastModified, now: home.now)
@@ -460,7 +465,8 @@ final class ProjectViewController: ObservedViewController {
         guard shape != arranged else { return }
         arranged = shape
         docsView.pickerMode = span >= 1280 ? .column : (span >= 768 ? .across : .select)
-        asideWidth.constant = (span >= 1280 ? 360 : 340) + 2
+        // `lg:w-[340px] xl:w-[360px]` is the scrollport, a point of padding inside it: the cards are 2pt narrower.
+        asideWidth.constant = span >= 1280 ? 360 : 340
         if columns {
             mainColumn.addArrangedSubview(docsView)
             asideHolder.addArrangedSubview(asideColumn)
