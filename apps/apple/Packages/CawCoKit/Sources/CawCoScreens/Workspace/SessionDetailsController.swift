@@ -226,10 +226,10 @@ public final class SessionDetailsController: ObservedViewController {
     /// This session's provider limit: the window that stops its provider first.
     private var providerLimit: Usage.Row? {
         let now = Date().timeIntervalSince1970 * 1000
-        let groups = Usage.strip(claude: fleet.claudeLimits, go: fleet.openCodeGoLimits, now: now).groups
-        if harness == "claude" { return Usage.firstToStop(groups.first { $0.name == "Claude" }?.rows ?? []) }
+        let cells = Usage.strip(claude: fleet.claudeLimits, go: fleet.openCodeGoLimits, read: fleet.limitsRead, now: now).cells
+        if harness == "claude" { return Usage.firstToStop(cells.first { $0.id == "Claude" }?.rows ?? []) }
         if harness == "opencode", model?.hasPrefix("opencode-go/") == true {
-            return Usage.firstToStop(groups.first { $0.name == "opencode" }?.rows ?? [])
+            return Usage.firstToStop(cells.first { $0.id == "opencode" }?.rows ?? [])
         }
         return nil
     }
@@ -337,10 +337,17 @@ public final class SessionDetailsController: ObservedViewController {
             Toast.success("Link copied", in: view)
         }, for: .primaryActionTriggered)
         harnessBox.translatesAutoresizingMaskIntoConstraints = false
-        let identity = UIStackView(arrangedSubviews: [titleWrap, copyLink, harnessBox])
+        // `.title` takes the row's room; inside it the title is as wide as its
+        // words and the link stands a step after them, not at the row's end.
+        titleWrap.setContentHuggingPriority(.required, for: .horizontal)
+        titleWrap.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        let room = UIView()
+        room.setContentHuggingPriority(.init(1), for: .horizontal)
+        let identity = UIStackView(arrangedSubviews: [titleWrap, copyLink, room, harnessBox])
         identity.alignment = .top
         identity.spacing = Space.space1
-        identity.setCustomSpacing(Space.space3, after: copyLink)
+        identity.setCustomSpacing(0, after: copyLink)
+        identity.setCustomSpacing(Space.space3, after: room)
         identity.isLayoutMarginsRelativeArrangement = true
         identity.directionalLayoutMargins = NSDirectionalEdgeInsets(top: Space.space4, leading: pad, bottom: Space.space1, trailing: pad)
 

@@ -68,6 +68,8 @@ public enum Usage {
         public let lasts: Bool
         /// How long until it runs out at this pace; nil when it lasts or cannot be told.
         public let runsOutIn: Double?
+        /// How far ahead of the reset it runs out; nil when it lasts or cannot be told.
+        public let margin: Double?
         public let state: State
     }
 
@@ -88,6 +90,7 @@ public enum Usage {
         }
         let early = elapsed.map { $0 < 0.03 } ?? false
         var runsOutIn: Double?
+        var margin: Double?
         var lasts = false
         if used < 100, let elapsed, !early, let span, let reset {
             let perMs = used / (elapsed * span)
@@ -96,6 +99,7 @@ public enum Usage {
                 lasts = true
             } else {
                 runsOutIn = left
+                margin = reset - (now + left)
             }
         }
         var state = fill(used)
@@ -104,7 +108,7 @@ public enum Usage {
         } else if state == .calm, let runsOutIn, runsOutIn < hour {
             state = .near
         }
-        return Meter(window: window, used: used, elapsed: elapsed, early: early, lasts: lasts, runsOutIn: runsOutIn, state: state)
+        return Meter(window: window, used: used, elapsed: elapsed, early: early, lasts: lasts, runsOutIn: runsOutIn, margin: margin, state: state)
     }
 
     public struct Row: Sendable {
@@ -189,7 +193,12 @@ public enum Usage {
         if left < day {
             return duration(left)
         }
-        return Date(timeIntervalSince1970: at).formatted(.dateTime.weekday(.abbreviated).hour(.twoDigits(amPM: .omitted)).minute(.twoDigits))
+        // The reader's own language and order, on a 24-hour clock whatever
+        // the device keeps (`hourCycle: "h23"`): "Fri 23:00", never "Fri 11:00".
+        var clock = Locale.Components(locale: .current)
+        clock.hourCycle = .zeroToTwentyThree
+        return Date(timeIntervalSince1970: at)
+            .formatted(.dateTime.weekday(.abbreviated).hour(.twoDigits(amPM: .omitted)).minute(.twoDigits).locale(Locale(components: clock)))
             .replacingOccurrences(of: ",", with: "")
     }
 
@@ -198,17 +207,43 @@ public enum Usage {
         now - fetchedAt < minute ? "read just now" : "read \(duration(now - fetchedAt)) ago"
     }
 
-    /// The strip's face: the window that stops you first, or why there is no bar.
-    public struct Strip: Sendable {
-        public let lead: Row?
-        /// The lead's name: the provider said only when it is not Claude ("Go Month").
+    /// What a cell says in place of its numbers, and the ink it says it in.
+    public struct Phrase: Sendable, Hashable {
+        public enum Tone: Sendable { case near, over, stale }
+
+        public let text: String
+        public let tone: Tone
+    }
+
+    /// One provider on the strip and in the list (UsageMeter.svelte `Cell`).
+    public struct Cell: Sendable {
+        /// "Claude" or "opencode".
+        public let id: String
+        /// "Claude", "opencode Go".
         public let name: String
-        /// The one fact that matters now: when it runs out, or when it resets.
-        public let detail: String
-        /// Why there is no bar: a normal state, never a fake 0%.
-        public let reason: String
-        /// Every window, grouped by provider, for the sheet.
-        public let groups: [(name: String, rows: [Row])]
+        public let rows: [Row]
+        /// Its session window.
+        public let short: Row
+        /// The window after the short one: its week, or the long one in trouble.
+        public let long: Row?
+        public let phrase: Phrase?
+        /// Under the first row in the list when the reading is stale.
+        public let staleAge: String?
+    }
+
+    /// A provider with no windows to show: why, and what to do about it.
+    public struct Note: Sendable {
+        public let id: String
+        public let text: String
+    }
+
+    /// The strip's face and the list it opens: a cell for each provider that
+    /// is set up (Claude, then opencode), or why there is none.
+    public struct Strip: Sendable {
+        public let cells: [Cell]
+        /// Why there are no cells: a normal state, never a fake 0%.
+        public let empty: String
+        public let notes: [Note]
     }
 
     /// The reading that speaks for a provider: the first good one, else one served stale with windows.
@@ -217,38 +252,69 @@ public enum Usage {
         return sorted.first { error($0) == nil } ?? sorted.first { stale($0) && !windows($0).isEmpty }
     }
 
-    public static func strip(claude: [String: Components.Schemas.ClaudeLimits], go: [String: Components.Schemas.OpenCodeGoLimits], now: Double) -> Strip {
+    /// The row a cell's phrase is about, and the phrase (`trouble`): a limit
+    /// reached, or the window that runs out soonest among those near their
+    /// limit that will not last to their reset. Nothing else is worth the
+    /// numbers' place.
+    private static func trouble(_ rows: [Row], now: Double) -> (row: Row, phrase: Phrase)? {
+        if let reached = rows.first(where: { $0.meter.used >= 100 }) {
+            let text = reached.meter.window.resetsAt.map { "limit · \(resetShort($0, now: now))" } ?? "limit"
+            return (reached, Phrase(text: text, tone: .over))
+        }
+        let soon = rows
+            .filter { ($0.meter.state == .near || $0.meter.state == .over) && $0.meter.runsOutIn != nil && ($0.meter.margin ?? 0) > 0 }
+            .min { ($0.meter.runsOutIn ?? 0) < ($1.meter.runsOutIn ?? 0) }
+        guard let soon, let runsOutIn = soon.meter.runsOutIn else { return nil }
+        return (soon, Phrase(text: "out in \(about(runsOutIn))", tone: soon.meter.state == .over ? .over : .near))
+    }
+
+    private static func cell(_ id: String, _ name: String, windows: [Window]?, stale: Bool, fetchedAt: Double, now: Double) -> Cell? {
+        guard let windows else { return nil }
+        let rows = rows(provider: id, windows: windows, stale: stale, now: now)
+        guard let first = rows.first else { return nil }
+        let short = rows.first { $0.meter.window.group == "session" } ?? first
+        let weeks = rows.filter { $0.meter.window.group == "weekly" }
+        // The week every model shares, before a week one model has to itself.
+        let week = weeks.first { $0.meter.window.scopeLabel == nil } ?? weeks.first
+        let staleAge = stale ? readAgo(fetchedAt, now: now) : nil
+        let worst = staleAge == nil ? trouble(rows, now: now) : nil
+        let longInTrouble = worst.flatMap { $0.row.key != short.key ? $0.row : nil }
+        return Cell(
+            id: id, name: name, rows: rows, short: short,
+            long: longInTrouble ?? week ?? rows.first { $0.key != short.key },
+            phrase: staleAge.map { Phrase(text: $0, tone: .stale) } ?? worst?.phrase,
+            staleAge: staleAge
+        )
+    }
+
+    /// What the list says of a provider with no windows to show (`noteOf`):
+    /// no machine is signed in to it, or every read failed before any
+    /// succeeded. Nothing before the first read, and nothing while a reading speaks.
+    private static func note(_ name: String, has: Bool, errors: [String?], read: Bool) -> String? {
+        guard read, !has else { return nil }
+        if errors.isEmpty { return "\(name) · sign in on a machine to see its limits" }
+        guard let error = errors.compactMap(\.self).first else { return nil }
+        if error == "not signed in" { return "\(name) · sign in on a machine to see its limits" }
+        if error == "token expired" { return "\(name) · login expired, sign in again on a machine" }
+        return error.hasPrefix("HTTP 401") || error.hasPrefix("HTTP 403")
+            ? "\(name) · key not accepted, sign in again on a machine"
+            : "\(name) · could not read limits: \(error)"
+    }
+
+    /// `read`: the hub's limits have been read once; before that nothing is claimed absent.
+    public static func strip(claude: [String: Components.Schemas.ClaudeLimits], go: [String: Components.Schemas.OpenCodeGoLimits],
+                             read: Bool, now: Double) -> Strip {
         let claudeReading = speaking(claude, error: \.error, stale: { $0.stale ?? false }, windows: \.windows)
         let goReading = speaking(go, error: \.error, stale: { $0.stale ?? false }, windows: \.windows)
-        let groups = [
-            ("Claude", claudeReading.map { rows(provider: "Claude", windows: $0.windows, stale: $0.stale ?? false, now: now) } ?? []),
-            ("opencode", goReading.map { rows(provider: "opencode", windows: $0.windows, stale: $0.stale ?? false, now: now) } ?? []),
-        ].filter { !$0.1.isEmpty }
-        let lead = firstToStop(groups.flatMap(\.1))
-        var detail = ""
-        if let lead {
-            let meter = lead.meter
-            if meter.state == .stale, let claudeReading {
-                detail = readAgo(claudeReading.fetchedAt, now: now)
-            } else if meter.used < 100, let runsOutIn = meter.runsOutIn {
-                detail = "out in \(about(runsOutIn))"
-            } else if let reset = meter.window.resetsAt {
-                detail = "resets \(resetShort(reset, now: now))"
-            }
-        }
-        let error = claude.sorted { $0.key < $1.key }.first?.value.error ?? claudeReading?.error
-        let reason = switch error {
-        case "not signed in": "No Claude reading · not signed in"
-        case "token expired": "No Claude reading · login expired"
-        case let error?: "No Claude reading · \(error)"
-        case nil: "No Claude reading yet"
-        }
-        return Strip(
-            lead: lead,
-            name: lead.map { $0.provider == "Claude" ? $0.label : "Go \($0.label)" } ?? "",
-            detail: detail,
-            reason: reason,
-            groups: groups.map { (name: $0.0, rows: $0.1) }
-        )
+        let cells = [
+            cell("Claude", "Claude", windows: claudeReading?.windows, stale: claudeReading?.stale ?? false, fetchedAt: claudeReading?.fetchedAt ?? 0, now: now),
+            cell("opencode", "opencode Go", windows: goReading?.windows, stale: goReading?.stale ?? false, fetchedAt: goReading?.fetchedAt ?? 0, now: now),
+        ].compactMap(\.self)
+        let byMachine = { (readings: [String: String?]) in readings.sorted { $0.key < $1.key }.map(\.value) }
+        let notes = [
+            note("Claude", has: claudeReading != nil, errors: byMachine(claude.mapValues(\.error)), read: read).map { Note(id: "Claude", text: $0) },
+            note("opencode Go", has: goReading != nil, errors: byMachine(go.mapValues(\.error)), read: read).map { Note(id: "opencode", text: $0) },
+        ].compactMap(\.self)
+        return Strip(cells: cells, empty: read ? "Sign in to see limits" : "Reading limits…", notes: notes)
     }
 }

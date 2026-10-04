@@ -111,10 +111,13 @@ public final class HouseSheetController: UIViewController, UIViewControllerTrans
         let inset = style == .edge ? 0 : 8.0
         let pad = style == .edge ? 0 : 16 - inset
         footPad = column.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -pad)
+        // The edge sheet's 1pt border is part of its box on the web: its
+        // content stands inside it at the sides (the foot's is open).
+        let side = style == .edge ? 1 : pad
         NSLayoutConstraint.activate([
             card.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -inset),
-            column.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: pad),
-            column.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -pad),
+            column.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: side),
+            column.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -side),
             footPad,
         ])
         if style == .side {

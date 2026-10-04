@@ -462,7 +462,13 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     }
 
     func showLimits() {
-        let sheet = UINavigationController(rootViewController: UsageSheetController(home: home))
+        let limits = UsageSheetController(home: home)
+        // The list's foot is the way to the Usage page.
+        limits.onPage = { [weak self] in
+            self?.dismiss(animated: true)
+            self?.go(.usage)
+        }
+        let sheet = UINavigationController(rootViewController: limits)
         sheet.sheetPresentationController?.detents = [.medium(), .large()]
         (railSheet ?? self).present(sheet, animated: true)
     }

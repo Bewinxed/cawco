@@ -207,7 +207,12 @@ public final class FleetStore {
         }
         claudeLimits = claude
         openCodeGoLimits = go
+        limitsRead = true
     }
+
+    /// The hub's limits have been read once (client.svelte.ts `usageLimitsRead`):
+    /// before that, no provider is claimed absent.
+    public internal(set) var limitsRead = false
     var catalogsTried: Set<String> = []
     /// The connect-time read of machines, sessions and projects landed.
     public internal(set) var fleetRead = false

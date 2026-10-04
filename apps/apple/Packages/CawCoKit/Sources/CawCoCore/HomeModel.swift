@@ -392,7 +392,7 @@ public final class HomeModel {
 
     /// The usage strip: the window that stops you first, from the readings the hub keeps current.
     public var usage: Usage.Strip {
-        Usage.strip(claude: fleet.claudeLimits, go: fleet.openCodeGoLimits, now: now)
+        Usage.strip(claude: fleet.claudeLimits, go: fleet.openCodeGoLimits, read: fleet.limitsRead, now: now)
     }
 
     public func fleetTitle(_ row: InstanceRow) -> String {

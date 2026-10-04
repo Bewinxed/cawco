@@ -2,50 +2,46 @@ import CawCoCore
 import CawCoDesign
 import UIKit
 
-/// The usage strip under the status line (UsageMeter.svelte, owner picks a,
-/// i): one strip, two lines, the window that will stop you first. Its name
-/// and percent, then what matters about it (when it runs out at this pace,
-/// or when it resets) over a 4pt bar with its pace tick. Near and over get a
-/// faint wash and a glyph, nothing else. The strip opens every window in a
-/// sheet, as the web does on touch.
+/// A provider's mark at 14pt (UsageMeter.svelte `.mark`): its own logo, on a 3pt corner.
+private func usageMark(_ provider: String) -> UIImageView {
+    let mark = UIImageView(image: (provider == "Claude" ? BrandLogo.claude : BrandLogo.opencode).image)
+    mark.contentMode = .scaleAspectFit
+    mark.layer.cornerRadius = 3
+    mark.clipsToBounds = true
+    mark.translatesAutoresizingMaskIntoConstraints = false
+    NSLayoutConstraint.activate([mark.widthAnchor.constraint(equalToConstant: 14), mark.heightAnchor.constraint(equalToConstant: 14)])
+    mark.isAccessibilityElement = false
+    return mark
+}
+
+private func usagePercent(_ row: Usage.Row) -> Int { Int(row.meter.used.rounded()) }
+
+/// The usage strip, in the rail's footer and, always, under the phone home's
+/// status line (UsageMeter.svelte): one cell for each provider that is set up
+/// (Claude, then opencode), equal in width. A cell is the provider's mark,
+/// two numbers (its short window's percent, then its long one's) and one 4pt
+/// bar split 1:2 between the two, each with its pace tick. A cell says a
+/// phrase in place of its numbers only when there is something to do about
+/// it. The whole strip is one control, 44pt in every state; it opens every
+/// window in the house sheet.
 final class UsageCell: HomeCell {
     private let strip = UIControl()
-    private let glyph = GlyphView(.attention, size: 14)
-    private let name = KitLabel(TypeScale.typeMeta, ink: Palette.inkStrong)
-    private let percent = KitLabel(TypeScale.typeMeta, ink: Palette.inkStrong)
-    private let detail = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
-    private let bar = LimitBar(height: 4)
-    private let link = UIButton(type: .custom)
-    private let line = UIStackView()
+    private let cells = UIStackView()
+    private let noline = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
     var onOpen: () -> Void = {}
-    /// The Usage page (`.usage-link`): the strip shows its corner link only
-    /// where a page can be opened from it.
-    var onPage: (() -> Void)? {
-        didSet {
-            link.isHidden = onPage == nil
-            // The first line leaves the link its corner (`.line` 2.5rem).
-            line.directionalLayoutMargins.trailing = onPage == nil ? 0 : 40
-        }
-    }
+    /// The Usage page: reached from the foot of the list the strip opens.
+    var onPage: (() -> Void)?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        percent.tabular = true
-        detail.tabular = true
-        detail.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        for view in [glyph, name, percent, detail, UIView()] { line.addArrangedSubview(view) }
-        line.spacing = Space.space1
-        line.alignment = .center
-        line.isLayoutMarginsRelativeArrangement = true
-        line.directionalLayoutMargins = .zero
-        line.isUserInteractionEnabled = false
-        bar.isUserInteractionEnabled = false
-        let column = UIStackView(arrangedSubviews: [line, bar])
-        column.axis = .vertical
-        column.spacing = 6
-        column.isUserInteractionEnabled = false
-        column.translatesAutoresizingMaskIntoConstraints = false
-        strip.addSubview(column)
+        cells.spacing = Space.space2
+        cells.distribution = .fillEqually
+        cells.isUserInteractionEnabled = false
+        cells.translatesAutoresizingMaskIntoConstraints = false
+        noline.isUserInteractionEnabled = false
+        noline.translatesAutoresizingMaskIntoConstraints = false
+        strip.addSubview(cells)
+        strip.addSubview(noline)
         strip.layer.cornerRadius = Radius.radiusSm
         strip.layer.cornerCurve = .continuous
         strip.addAction(UIAction { [weak self] _ in self?.onOpen() }, for: .touchUpInside)
@@ -53,67 +49,35 @@ final class UsageCell: HomeCell {
         strip.accessibilityTraits = .button
         // The strip's edges line up with the status line's text.
         pin(strip, insets: NSDirectionalEdgeInsets(top: 0, leading: -8, bottom: 0, trailing: -8))
-        // Plain meta text in the corner; on touch there is no hover, so a
-        // press shows the coral the web's hover does.
-        link.translatesAutoresizingMaskIntoConstraints = false
-        link.setAttributedTitle(NSAttributedString(string: "Usage", attributes: TypeScale.typeMeta.attributes(color: Palette.inkMuted)), for: .normal)
-        link.setAttributedTitle(NSAttributedString(string: "Usage", attributes: TypeScale.typeMeta.attributes(color: Palette.meterCalm)), for: .highlighted)
-        link.accessibilityTraits = .link
-        link.isHidden = true
-        link.addAction(UIAction { [weak self] _ in self?.onPage?() }, for: .touchUpInside)
-        strip.addSubview(link)
         NSLayoutConstraint.activate([
-            column.leadingAnchor.constraint(equalTo: strip.leadingAnchor, constant: 8),
-            column.trailingAnchor.constraint(equalTo: strip.trailingAnchor, constant: -8),
-            column.centerYAnchor.constraint(equalTo: strip.centerYAnchor),
+            cells.leadingAnchor.constraint(equalTo: strip.leadingAnchor, constant: 8),
+            cells.trailingAnchor.constraint(equalTo: strip.trailingAnchor, constant: -8),
+            cells.centerYAnchor.constraint(equalTo: strip.centerYAnchor),
+            noline.leadingAnchor.constraint(equalTo: strip.leadingAnchor, constant: 8),
+            noline.trailingAnchor.constraint(lessThanOrEqualTo: strip.trailingAnchor, constant: -8),
+            noline.centerYAnchor.constraint(equalTo: strip.centerYAnchor),
             strip.heightAnchor.constraint(equalToConstant: 44),
-            link.topAnchor.constraint(equalTo: strip.topAnchor, constant: 6),
-            link.trailingAnchor.constraint(equalTo: strip.trailingAnchor, constant: -8),
         ])
+        pressTarget = strip
     }
 
     func configure(_ usage: Usage.Strip) {
-        guard let lead = usage.lead else {
-            glyph.isHidden = true
-            name.isHidden = true
-            percent.isHidden = true
-            bar.isHidden = true
-            detail.text = usage.reason
-            strip.backgroundColor = .clear
-            strip.accessibilityLabel = "\(usage.reason). Show every limit."
+        cells.arrangedSubviews.forEach { $0.removeFromSuperview() }
+        noline.isHidden = !usage.cells.isEmpty
+        noline.text = usage.empty
+        guard !usage.cells.isEmpty else {
+            strip.accessibilityLabel = "\(usage.empty). Show every limit."
             return
         }
-        let meter = lead.meter
-        glyph.isHidden = !(meter.state == .near || meter.state == .over || meter.state == .reached)
-        glyph.glyph = meter.state == .near ? .attention : .failed
-        glyph.tintColor = meter.state == .near ? Palette.meterNear : Palette.meterOver
-        name.isHidden = false
-        bar.isHidden = false
-        if meter.state == .reached {
-            name.text = "\(usage.name) limit"
-            percent.isHidden = true
-        } else {
-            name.text = usage.name
-            percent.isHidden = false
-            percent.text = "\(Int(meter.used.rounded()))%"
+        for cell in usage.cells {
+            cells.addArrangedSubview(UsageStripCell(cell, ground: ground))
         }
-        detail.isHidden = usage.detail.isEmpty
-        detail.text = "· \(usage.detail)"
-        let wash: UIColor = switch meter.state {
-        case .near: Palette.meterWashNear
-        case .over, .reached: Palette.meterWashOver
-        case .calm, .stale: .clear
+        // Every cell, read out: what the strip's one control is called.
+        let said = usage.cells.map { cell in
+            let windows = [cell.short, cell.long].compactMap(\.self).map { "\($0.label) \(usagePercent($0)) percent" }.joined(separator: ", ")
+            return "\(cell.name): \(windows)\(cell.phrase.map { ", \($0.text)" } ?? "")"
         }
-        strip.backgroundColor = wash
-        bar.configure(
-            used: meter.used,
-            elapsed: meter.elapsed,
-            tone: Self.tone(meter.state),
-            reached: meter.state == .reached,
-            paint: ground,
-            label: usage.name
-        )
-        strip.accessibilityLabel = "\(usage.name) \(Int(meter.used.rounded())) percent, \(usage.detail). Show every limit."
+        strip.accessibilityLabel = "\(said.joined(separator: ". ")). Show every limit."
     }
 
     static func tone(_ state: Usage.State) -> LimitBar.Tone {
@@ -126,12 +90,123 @@ final class UsageCell: HomeCell {
     }
 }
 
-/// Every limit window, grouped by provider (UsageMeter.svelte `limits`):
-/// the content of the house sheet the strip opens, titled "Usage limits".
+/// One provider on the strip (`.cell`): its mark and its numbers or its
+/// phrase over one bar, split 1:2 between the short window and the long one.
+/// With something to do about it, it stands on a faint wash of its own.
+private final class UsageStripCell: UIView {
+    init(_ cell: Usage.Cell, ground: UIColor) {
+        super.init(frame: .zero)
+        let wash: UIColor? = switch cell.phrase?.tone {
+        case .near: Palette.meterWashNear
+        case .over: Palette.meterWashOver
+        default: nil
+        }
+        if let wash {
+            // `inset: -5px -4px`: the wash reaches past the cell's words and bar.
+            let back = UIView()
+            back.backgroundColor = wash
+            back.layer.cornerRadius = Radius.radiusSm
+            back.layer.cornerCurve = .continuous
+            back.translatesAutoresizingMaskIntoConstraints = false
+            addSubview(back)
+            NSLayoutConstraint.activate([
+                back.topAnchor.constraint(equalTo: topAnchor, constant: -5),
+                back.bottomAnchor.constraint(equalTo: bottomAnchor, constant: 5),
+                back.leadingAnchor.constraint(equalTo: leadingAnchor, constant: -4),
+                back.trailingAnchor.constraint(equalTo: trailingAnchor, constant: 4),
+            ])
+        }
+        let top = UIStackView(arrangedSubviews: [usageMark(cell.id)])
+        top.spacing = Space.space1
+        top.alignment = .center
+        if let phrase = cell.phrase {
+            let ink: UIColor = switch phrase.tone {
+            case .near: Palette.statusAttnInk
+            case .over: Palette.statusFailInk
+            case .stale: Palette.inkMuted
+            }
+            let words = KitLabel(TypeScale.typeMeta.with(leading: 16.0 / 12), ink: ink)
+            words.tabular = true
+            words.text = phrase.text
+            words.lineBreakMode = .byTruncatingTail
+            words.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+            top.addArrangedSubview(words)
+        } else {
+            top.addArrangedSubview(Self.figure("\(usagePercent(cell.short))%", Palette.inkStrong))
+            if let long = cell.long {
+                top.addArrangedSubview(Self.figure("·", Palette.inkMuted))
+                top.addArrangedSubview(Self.figure("\(usagePercent(long))%", Palette.inkStrong))
+            }
+        }
+        top.addArrangedSubview(UIView())
+        // The pace tick is a gap that shows the paint the bar stands on: the wash over the ground.
+        let paint = wash.map { wash in
+            UIColor { traits in Self.over(wash.resolvedColor(with: traits), ground.resolvedColor(with: traits)) }
+        } ?? ground
+        let bars = UIStackView()
+        bars.spacing = Space.space1
+        bars.alignment = .center
+        let short = Self.bar(cell.short, name: cell.name, paint: paint)
+        bars.addArrangedSubview(short)
+        if let long = cell.long {
+            let second = Self.bar(long, name: cell.name, paint: paint)
+            bars.addArrangedSubview(second)
+            second.widthAnchor.constraint(equalTo: short.widthAnchor, multiplier: 2).isActive = true
+        }
+        let column = UIStackView(arrangedSubviews: [top, bars])
+        column.axis = .vertical
+        column.spacing = 6
+        column.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(column)
+        NSLayoutConstraint.activate([
+            top.heightAnchor.constraint(equalToConstant: 16),
+            column.topAnchor.constraint(equalTo: topAnchor),
+            column.bottomAnchor.constraint(equalTo: bottomAnchor),
+            column.leadingAnchor.constraint(equalTo: leadingAnchor),
+            column.trailingAnchor.constraint(equalTo: trailingAnchor),
+        ])
+    }
+
+    @available(*, unavailable)
+    required init?(coder _: NSCoder) {
+        fatalError("UsageStripCell is built in code")
+    }
+
+    private static func figure(_ text: String, _ ink: UIColor) -> KitLabel {
+        let label = KitLabel(TypeScale.typeMeta.with(leading: 16.0 / 12), ink: ink)
+        label.tabular = true
+        label.text = text
+        label.setContentHuggingPriority(.required, for: .horizontal)
+        label.setContentCompressionResistancePriority(.required, for: .horizontal)
+        return label
+    }
+
+    private static func bar(_ row: Usage.Row, name: String, paint: UIColor) -> LimitBar {
+        let bar = LimitBar(height: 4)
+        bar.configure(used: row.meter.used, elapsed: row.meter.elapsed, tone: UsageCell.tone(row.meter.state),
+                      reached: row.meter.state == .reached, paint: paint, label: "\(name) \(row.label)")
+        return bar
+    }
+
+    /// `top` drawn over `bottom`, as one opaque colour.
+    private static func over(_ top: UIColor, _ bottom: UIColor) -> UIColor {
+        var (tr, tg, tb, ta): (CGFloat, CGFloat, CGFloat, CGFloat) = (0, 0, 0, 0)
+        var (br, bg, bb, ba): (CGFloat, CGFloat, CGFloat, CGFloat) = (0, 0, 0, 0)
+        top.getRed(&tr, green: &tg, blue: &tb, alpha: &ta)
+        bottom.getRed(&br, green: &bg, blue: &bb, alpha: &ba)
+        return UIColor(red: tr * ta + br * (1 - ta), green: tg * ta + bg * (1 - ta), blue: tb * ta + bb * (1 - ta), alpha: 1)
+    }
+}
+
+/// Every limit window, grouped by provider, and the way to the Usage page
+/// (UsageMeter.svelte `limits`): the content of the house sheet the strip
+/// opens, titled "Usage limits".
 final class UsageSheetController: ObservedViewController {
     private let home: HomeModel
     private let stack = UIStackView()
     let scroll = UIScrollView()
+    /// Opens the Usage page (`.pop-foot`); the foot shows only where a page can be opened.
+    var onPage: (() -> Void)?
 
     init(home: HomeModel) {
         self.home = home
@@ -171,92 +246,172 @@ final class UsageSheetController: ObservedViewController {
         let usage = home.usage
         let now = home.now
         stack.arrangedSubviews.forEach { $0.removeFromSuperview() }
-        if usage.groups.isEmpty {
-            let empty = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted, lines: 0)
-            empty.text = usage.reason
-            let box = UIView()
-            box.addSubview(empty)
-            NSLayoutConstraint.activate([
-                empty.leadingAnchor.constraint(equalTo: box.leadingAnchor, constant: 12),
-                empty.trailingAnchor.constraint(equalTo: box.trailingAnchor, constant: -12),
-                empty.topAnchor.constraint(equalTo: box.topAnchor, constant: 10),
-                empty.bottomAnchor.constraint(equalTo: box.bottomAnchor, constant: -10),
-            ])
-            stack.addArrangedSubview(box)
+        if usage.cells.isEmpty, usage.notes.isEmpty {
+            stack.addArrangedSubview(Self.line(usage.empty, mark: nil, ruled: false))
         }
-        for (index, group) in usage.groups.enumerated() {
-            stack.addArrangedSubview(Self.group(group, now: now, ruled: index > 0))
+        for (index, cell) in usage.cells.enumerated() {
+            stack.addArrangedSubview(Self.group(cell, now: now, ruled: index > 0))
         }
+        for (index, note) in usage.notes.enumerated() {
+            // A provider with no windows to show: why, and what to do about it.
+            stack.addArrangedSubview(Self.line(note.text, mark: note.id, ruled: index > 0 || !usage.cells.isEmpty))
+        }
+        if let onPage {
+            let foot = UsageFoot()
+            foot.addAction(UIAction { _ in onPage() }, for: .touchUpInside)
+            stack.addArrangedSubview(foot)
+        }
+    }
+
+    private static func rule(in box: UIView) {
+        let rule = UIView()
+        rule.backgroundColor = Palette.borderHairline
+        rule.translatesAutoresizingMaskIntoConstraints = false
+        box.addSubview(rule)
+        NSLayoutConstraint.activate([
+            rule.leadingAnchor.constraint(equalTo: box.leadingAnchor),
+            rule.trailingAnchor.constraint(equalTo: box.trailingAnchor),
+            rule.topAnchor.constraint(equalTo: box.topAnchor),
+            rule.heightAnchor.constraint(equalToConstant: 1),
+        ])
+    }
+
+    /// A line of muted meta text (`.pop-empty`, `.pop-note`): 10pt and 12pt in, led by its provider's mark where it has one.
+    private static func line(_ text: String, mark: String?, ruled: Bool) -> UIView {
+        let label = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted, lines: 0)
+        label.text = text
+        let row = UIStackView(arrangedSubviews: (mark.map { [usageMark($0)] } ?? []) + [label])
+        row.spacing = 6
+        row.alignment = .center
+        row.translatesAutoresizingMaskIntoConstraints = false
+        let box = UIView()
+        box.addSubview(row)
+        NSLayoutConstraint.activate([
+            row.leadingAnchor.constraint(equalTo: box.leadingAnchor, constant: 12),
+            row.trailingAnchor.constraint(equalTo: box.trailingAnchor, constant: -12),
+            row.topAnchor.constraint(equalTo: box.topAnchor, constant: 10 + (ruled ? 1 : 0)),
+            row.bottomAnchor.constraint(equalTo: box.bottomAnchor, constant: -10),
+        ])
+        if ruled { rule(in: box) }
+        return box
     }
 
     /// One provider (`.pop-group`): 12pt in, its rows 10pt apart, a
     /// hairline above every group after the first.
-    private static func group(_ group: (name: String, rows: [Usage.Row]), now: Double, ruled: Bool) -> UIView {
+    private static func group(_ cell: Usage.Cell, now: Double, ruled: Bool) -> UIView {
         let column = UIStackView()
         column.axis = .vertical
         column.spacing = 10
         column.translatesAutoresizingMaskIntoConstraints = false
-        let provider = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong)
-        provider.text = group.name
-        provider.accessibilityTraits = .header
+        let name = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong)
+        name.text = cell.name
+        name.accessibilityTraits = .header
+        let provider = UIStackView(arrangedSubviews: [usageMark(cell.id), name, UIView()])
+        provider.spacing = 6
+        provider.alignment = .center
         column.addArrangedSubview(provider)
-        for row in group.rows {
-            column.addArrangedSubview(Self.row(row, now: now))
+        for (index, row) in cell.rows.enumerated() {
+            let under = index == 0 ? cell.staleAge ?? resetLine(row, now: now) : resetLine(row, now: now)
+            column.addArrangedSubview(Self.row(row, under: under))
         }
         let box = UIView()
         box.addSubview(column)
         NSLayoutConstraint.activate([
             column.leadingAnchor.constraint(equalTo: box.leadingAnchor, constant: 12),
             column.trailingAnchor.constraint(equalTo: box.trailingAnchor, constant: -12),
-            column.topAnchor.constraint(equalTo: box.topAnchor, constant: 12),
+            column.topAnchor.constraint(equalTo: box.topAnchor, constant: 12 + (ruled ? 1 : 0)),
             column.bottomAnchor.constraint(equalTo: box.bottomAnchor, constant: -12),
         ])
-        if ruled {
-            let rule = UIView()
-            rule.backgroundColor = Palette.borderHairline
-            rule.translatesAutoresizingMaskIntoConstraints = false
-            box.addSubview(rule)
-            NSLayoutConstraint.activate([
-                rule.leadingAnchor.constraint(equalTo: box.leadingAnchor),
-                rule.trailingAnchor.constraint(equalTo: box.trailingAnchor),
-                rule.topAnchor.constraint(equalTo: box.topAnchor),
-                rule.heightAnchor.constraint(equalToConstant: 1),
-            ])
-        }
+        if ruled { rule(in: box) }
         return box
     }
 
-    private static func row(_ row: Usage.Row, now: Double) -> UIView {
+    /// Under a window's name in the list: when it resets, or that it is spent.
+    private static func resetLine(_ row: Usage.Row, now: Double) -> String {
+        guard let reset = row.meter.window.resetsAt else {
+            return row.meter.used >= 100 ? "Limit reached" : ""
+        }
+        let when = "resets \(Usage.resetShort(reset, now: now))"
+        return row.meter.used >= 100 ? "Limit reached · \(when)" : when
+    }
+
+    /// A window (`.pop-row`): its name over when it resets, its bar, its
+    /// percent, in a 104pt | rest | 32pt grid 8pt apart. A session's bar is
+    /// half a longer window's: the short window reads as the short one
+    /// before its name is read.
+    private static func row(_ row: Usage.Row, under: String) -> UIView {
         let meter = row.meter
         let name = KitLabel(TypeScale.typeMeta, ink: Palette.inkStrong)
+        name.tabular = true
         name.text = row.label
+        let names = UIStackView(arrangedSubviews: [name])
+        names.axis = .vertical
+        if !under.isEmpty {
+            let sub = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
+            sub.tabular = true
+            sub.text = under
+            names.addArrangedSubview(sub)
+        }
+        let bar = LimitBar(height: 4)
+        bar.configure(used: meter.used, elapsed: meter.elapsed, tone: UsageCell.tone(meter.state), reached: meter.state == .reached,
+                      paint: Palette.surfaceRaised, label: row.label)
+        let track = UIView()
+        bar.translatesAutoresizingMaskIntoConstraints = false
+        track.addSubview(bar)
         let percent = KitLabel(TypeScale.typeMeta, ink: Palette.inkStrong)
         percent.tabular = true
-        percent.text = "\(Int(meter.used.rounded()))%"
-        percent.setContentHuggingPriority(.required, for: .horizontal)
-        let named = UIStackView(arrangedSubviews: [name])
-        named.spacing = Space.space1
-        named.alignment = .center
-        if meter.state == .near || meter.state == .over || meter.state == .reached {
-            let near = meter.state == .near
-            let glyph = GlyphView(near ? .attention : .failed, size: 14, tint: near ? Palette.meterNear : Palette.meterOver)
-            glyph.isAccessibilityElement = true
-            glyph.accessibilityLabel = near ? "Near the limit" : meter.state == .reached ? "Limit reached" : "Nearly at the limit"
-            named.insertArrangedSubview(glyph, at: 0)
-        }
-        let head = UIStackView(arrangedSubviews: [named, percent])
-        head.alignment = .firstBaseline
-        let bar = LimitBar(height: 4)
-        bar.configure(used: meter.used, elapsed: meter.elapsed, tone: UsageCell.tone(meter.state), reached: meter.state == .reached, paint: Palette.surfaceRaised, label: row.label)
-        let column = UIStackView(arrangedSubviews: [head, bar])
-        column.axis = .vertical
-        column.spacing = 6
-        if let reset = meter.window.resetsAt {
-            let resets = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
-            resets.tabular = true
-            resets.text = "\(meter.used >= 100 ? "Limit reached · " : "")resets \(Usage.resetShort(reset, now: now))"
-            column.addArrangedSubview(resets)
-        }
-        return column
+        percent.textAlignment = .right
+        percent.text = "\(usagePercent(row))%"
+        let line = UIStackView(arrangedSubviews: [names, track, percent])
+        line.spacing = 8
+        line.alignment = .center
+        NSLayoutConstraint.activate([
+            names.widthAnchor.constraint(equalToConstant: 104),
+            percent.widthAnchor.constraint(equalToConstant: 32),
+            track.heightAnchor.constraint(equalToConstant: 4),
+            bar.leadingAnchor.constraint(equalTo: track.leadingAnchor),
+            bar.centerYAnchor.constraint(equalTo: track.centerYAnchor),
+            bar.widthAnchor.constraint(equalTo: track.widthAnchor, multiplier: meter.window.group == "session" ? 0.5 : 1),
+        ])
+        return line
+    }
+}
+
+/// The way to the page (`.pop-foot`): plain meta text on a hairline, coral while pressed.
+private final class UsageFoot: UIControl {
+    private let label = KitLabel(TypeScale.typeMeta, ink: Palette.inkStrong)
+
+    init() {
+        super.init(frame: .zero)
+        label.text = "Open Usage"
+        label.isUserInteractionEnabled = false
+        label.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(label)
+        let rule = UIView()
+        rule.backgroundColor = Palette.borderHairline
+        rule.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(rule)
+        NSLayoutConstraint.activate([
+            rule.topAnchor.constraint(equalTo: topAnchor),
+            rule.leadingAnchor.constraint(equalTo: leadingAnchor),
+            rule.trailingAnchor.constraint(equalTo: trailingAnchor),
+            rule.heightAnchor.constraint(equalToConstant: 1),
+            label.topAnchor.constraint(equalTo: topAnchor, constant: 11),
+            label.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -10),
+            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
+            label.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -12),
+        ])
+        isAccessibilityElement = true
+        accessibilityTraits = .link
+        accessibilityLabel = "Open Usage"
+    }
+
+    @available(*, unavailable)
+    required init?(coder _: NSCoder) {
+        fatalError("UsageFoot is built in code")
+    }
+
+    override var isHighlighted: Bool {
+        didSet { label.ink = isHighlighted ? Palette.meterCalm : Palette.inkStrong }
     }
 }

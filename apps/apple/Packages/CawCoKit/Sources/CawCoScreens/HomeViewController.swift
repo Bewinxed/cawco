@@ -834,6 +834,12 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
     /// Every window, in the house bottom sheet.
     private func openUsage() {
         let limits = UsageSheetController(home: home)
+        if let page = onUsagePage {
+            limits.onPage = { [weak self] in
+                self?.dismiss(animated: true)
+                page()
+            }
+        }
         limits.loadViewIfNeeded()
         present(HouseSheetController(limits, title: "Usage limits", scroller: limits.scroll), animated: true)
     }

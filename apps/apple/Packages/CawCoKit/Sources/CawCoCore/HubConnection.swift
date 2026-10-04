@@ -149,6 +149,7 @@ public final class HubConnection {
         fleet.liveRead = false
         fleet.spend = nil
         fleet.spendFailed = false
+        fleet.limitsRead = false
         needs.parked = [:]
         sessions.reset()
         tasks.reset()
