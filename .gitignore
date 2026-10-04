@@ -44,6 +44,7 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 .idea
 
 # scratch / backup files
+/.hv-snap*.txt
 *.bak
 *.new
 
