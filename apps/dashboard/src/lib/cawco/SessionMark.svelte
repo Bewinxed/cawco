@@ -27,11 +27,12 @@
     if (isFailed(instance)) {
       return "fail";
     }
-    if (isStale(instance) || instance.status === "sleeping") {
+    if (isStale(instance)) {
       return "idle";
     }
-    // A workflow run that ended has stopped; listed as finished, it is done.
-    if (instance.status === "stopped") {
+    // At rest with no process: a session put to sleep, or a workflow run
+    // that ended and stopped. Listed as finished, it is done.
+    if (instance.status === "sleeping" || instance.status === "stopped") {
       return done ? "done" : "idle";
     }
     const activity = cawco.activityOf(instance.id);

@@ -231,13 +231,15 @@
     if (live && activity === "working") {
       return "working";
     }
-    if (row?.status === "sleeping") {
-      return "sleeping";
-    }
     if (row?.status === "stopped") {
       return "stopped";
     }
-    return report ? "reported" : "idle";
+    // At rest, what it reported is what the card says, whether or not its
+    // processes are still held: a finished delegate is put to sleep at once.
+    if (report) {
+      return "reported";
+    }
+    return row?.status === "sleeping" ? "sleeping" : "idle";
   });
   const inFlight = $derived(phase === "spawning" || phase === "working");
   const tone = $derived.by(() => {
