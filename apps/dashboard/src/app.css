@@ -388,25 +388,28 @@
      front, and a swap slot that is not the one showing (a button's spinner
      waits there between presses) all hold every loop they carry still. A
      list swap's leaving layer (`data-leaving`) is inert so nobody clicks a
-     row on its way out, but its rows still play their exit. */
+     row on its way out, but its rows still play their exit. The swap slot
+     is named as one (`.icon-swap`'s child): `data-active="false"` alone is
+     also every rail row that is not the open one, and a working session's
+     rim under it stood still. */
   :where(
     :root[data-at-rest],
     [data-offscreen],
     [inert]:not([data-leaving]),
-    [data-active="false"]
+    .icon-swap > [data-active="false"]
   ) *,
   :where(
       :root[data-at-rest],
       [data-offscreen],
       [inert]:not([data-leaving]),
-      [data-active="false"]
+      .icon-swap > [data-active="false"]
     )
     *::before,
   :where(
       :root[data-at-rest],
       [data-offscreen],
       [inert]:not([data-leaving]),
-      [data-active="false"]
+      .icon-swap > [data-active="false"]
     )
     *::after,
   :where([data-offscreen]) {
@@ -1351,17 +1354,15 @@
   }
 }
 
-/* ---- The theme switch (theme.svelte.ts). The new theme is drawn at once,
-   under a wash of the old page's background that fades off it in one
-   --dur-fade on --ease-out: one composited layer, with no snapshot taken of
-   the page and none torn down after. The wash covers everything above the
-   app chrome and under the toasts (their layer is 1000), and takes no taps. */
-.theme-wash {
-  position: fixed;
-  inset: 0;
-  z-index: 999;
-  pointer-events: none;
-  animation: kit-fade-out var(--dur-fade) var(--ease-out) forwards;
+/* ---- The theme switch (theme.svelte.ts): a view transition of the root
+   alone. The old page fades out as the new one fades in, one --dur-fade on
+   --ease-out: the platform's own cross-fade at the product's pace, with no
+   shape and no blur. Nothing else on the page carries a
+   view-transition-name, so the root is the only thing taken. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: var(--dur-fade);
+  animation-timing-function: var(--ease-out);
 }
 
 /* The flip itself starts no element transitions (theme.svelte.ts). The

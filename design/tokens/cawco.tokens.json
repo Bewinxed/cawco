@@ -1513,6 +1513,16 @@
       "$value": "oklch(from {color.background} l c h / 0.72)",
       "$description": "What a dialog's backdrop paints: the page itself, translucent."
     },
+    "image-outline": {
+      "$type": "color",
+      "$value": "oklch(0 0 0 / 0.1)",
+      "$description": "The 1px edge drawn inside a raster image (the brand row's icon), so it keeps its shape on any surface. Pure black by day and pure white at night, never a tinted neutral: a tint picks up the surface under it and reads as dirt on the image's edge.",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(1 0 0 / 0.1)"
+        }
+      }
+    },
     "shadow-tint": {
       "$type": "color",
       "$value": "oklch(from {color.neutral-12} l c h / 0.09)",

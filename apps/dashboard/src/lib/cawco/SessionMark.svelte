@@ -107,13 +107,24 @@
   }
   /* The rim: a 1.5px ring 1px clear of the tile, on the tile's own curve
      (its radius grown by the ring's offset). The ring is a filled box with
-     its middle masked out, so its paint can be a sweep. */
+     its middle masked out, so its paint can be a sweep.
+     Both lengths are whole device pixels (--dpx, device-pixel.ts). The
+     browser draws the tile and the ring each on the pixel grid, edge by
+     edge: a ring 2.5px out on a 1x screen was drawn 3px out on one side and
+     2px on the other, off the tile's centre and against its far edges. A
+     whole number of device pixels out lands every edge the same distance
+     from the tile's. */
   .session-mark[data-rim]::before {
-    --rim-out: 2.5px;
+    --rim-gap: max(var(--dpx, 1px), round(1px, var(--dpx, 1px)));
+    --rim-ring: max(var(--dpx, 1px), round(1.5px, var(--dpx, 1px)));
+    --rim-out: calc(var(--rim-gap) + var(--rim-ring));
     content: "";
     position: absolute;
+    /* Over the nesting arm that ends at the tile (.kit-nest, z-index 1):
+       the arm runs under the ring, never across it. */
+    z-index: 2;
     inset: calc(-1 * var(--rim-out));
-    padding: 1.5px;
+    padding: var(--rim-ring);
     border-radius: calc(var(--radius-xs) + var(--rim-out));
     background: var(--rim);
     mask:

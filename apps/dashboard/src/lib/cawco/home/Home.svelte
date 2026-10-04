@@ -14,7 +14,6 @@
   import { untrack } from "svelte";
   import { TextMorph } from "torph/svelte";
   import { Button } from "#lib/components/ui/button/index.js";
-  import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { IconPlus } from "#lib/icons.js";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
@@ -48,9 +47,18 @@
    * machine, mapped and sorted — on every turn that ended anywhere.
    */
   const firstRun = $derived(
-    home.live &&
+    home.ready &&
+      home.live &&
       home.needs.length + home.working.length + home.finished.length === 0 &&
       home.empty
+  );
+  /**
+   * In the rail, the block over the groups with nothing in it: the hub is
+   * live and read (no status line) and nothing needs the reader (no
+   * headline). It takes no room then, not its padding either.
+   */
+  const bare = $derived(
+    variant === "rail" && home.status === "connected" && home.needs.length === 0
   );
   /**
    * What Caw's line says. "No sessions" is a claim, so it waits on the data:
@@ -117,8 +125,9 @@
   data-flip={variant === "rail" ? "box" : undefined}
   {@attach reflow()}
 >
-  <div class="top">
-    <!-- The line every other line on this screen is believed by. -->
+  <div class="top" class:bare={bare}>
+    <!-- The line every other line on this screen is believed by; live and
+         read, it says nothing and takes no room. -->
     <StatusLine />
     {#if variant === "page"}
       <!-- The phone has no rail: the rail's usage strip stands here, always
@@ -141,61 +150,50 @@
     {/if}
   </div>
 
-  <!-- The skeleton stands at the list's place until the first read is in,
-       then the list cross-fades in over it as it leaves. -->
-  {#if !home.ready}
-    <div
-      aria-busy="true"
-      aria-label="Reading the fleet"
-      class="loading"
-      role="status"
-      out:crossOut
-    >
-      {#each [0, 1, 2, 3] as row (row)}
-        <Skeleton class="h-11 w-full" />
-      {/each}
-    </div>
-  {:else}
-    <div class="groups" in:crossIn>
-      {#if home.needs.length > 0}
-        <!-- The headline above names this group and counts it; a header
-             here would say the same twice. -->
-        <section
-          aria-label="Needs you"
-          class="group"
-          data-flip="box"
-          in:crossIn
-          out:crossOut
-        >
-          <div class="cards">
-            {#each home.needs as item (item.key)}
-              <NeedsCard {item} {stale} />
-            {/each}
-          </div>
-        </section>
-      {/if}
+  <!-- The groups stand from the first frame. Until the first read is in,
+       the Working and Finished tabs stand over rows that wait (WorkTabs
+       `waiting`), so the tab row is where it will be and the list
+       cross-fades in under it; nothing else here is claimed before then. -->
+  <div class="groups">
+    {#if home.ready && home.needs.length > 0}
+      <!-- The headline above names this group and counts it; a header
+           here would say the same twice. -->
+      <section
+        aria-label="Needs you"
+        class="group"
+        data-flip="box"
+        in:crossIn
+        out:crossOut
+      >
+        <div class="cards">
+          {#each home.needs as item (item.key)}
+            <NeedsCard {item} {stale} />
+          {/each}
+        </div>
+      </section>
+    {/if}
 
-      <WorkTabs {stale} />
+    <WorkTabs onstart={start} {stale} waiting={!home.ready} />
 
-      {#if firstRun}
-        <!-- Caw only on a fleet with nothing in it yet, or while a machine
-             has not answered: an empty group is otherwise just absent. -->
-        <figure class="caw" data-flip in:crossIn out:crossOut>
-          <Caw size={variant === "rail" ? 112 : 160} status="ready" />
-          <!-- The line's states share one cell and cross-fade (§8). -->
-          <figcaption>
-            {#key cawLine}
-              <span in:crossIn out:crossOut>{cawLine}</span>
-            {/key}
-          </figcaption>
-        </figure>
-      {/if}
+    {#if firstRun}
+      <!-- Caw only on a fleet with nothing in it yet, or while a machine
+           has not answered: the one empty state then. With sessions
+           somewhere, a tab with none says so itself (WorkTabs). -->
+      <figure class="caw" data-flip in:crossIn out:crossOut>
+        <Caw size={variant === "rail" ? 112 : 160} status="ready" />
+        <!-- The line's states share one cell and cross-fade (§8). -->
+        <figcaption>
+          {#key cawLine}
+            <span in:crossIn out:crossOut>{cawLine}</span>
+          {/key}
+        </figcaption>
+      </figure>
+    {/if}
 
-      {#if variant === "page"}
-        <HomeRecent />
-      {/if}
-    </div>
-  {/if}
+    {#if variant === "page"}
+      <HomeRecent />
+    {/if}
+  </div>
 
   {#if variant === "page"}
     <!-- The phone's thumb reaches the bottom; Start session lives there. -->
@@ -265,6 +263,9 @@
   .rail .top {
     padding: var(--space-2) var(--space-3) var(--space-1);
   }
+  .rail .top.bare {
+    padding: 0;
+  }
   /* The strip's edges line up with the status line's text. */
   .usage {
     --strip-ground: var(--surface-recess);
@@ -302,17 +303,14 @@
     width: 16px;
     height: 16px;
   }
-  .loading,
   .groups {
     display: flex;
     flex-direction: column;
     gap: var(--space-5);
   }
-  .page .loading,
   .page .groups {
     padding: var(--space-2) var(--space-5) var(--space-7);
   }
-  .rail .loading,
   .rail .groups {
     gap: var(--space-3);
     padding: var(--space-1) var(--space-2) var(--space-2);

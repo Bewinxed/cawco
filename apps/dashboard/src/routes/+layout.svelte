@@ -4,8 +4,10 @@
   import type { Snippet } from "svelte";
   import { onMount } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
+  import cawcoIcon from "#lib/assets/brand/cawco-icon.png";
   import { ensureConnected } from "#lib/cawco/client.svelte.js";
   import { GROUPS } from "#lib/cawco/config/sections.js";
+  import { trackDevicePixel } from "#lib/cawco/device-pixel.js";
   import { PREFETCHES as CAW_PREFETCHES } from "#lib/cawco/home/Caw.svelte";
   import { restWhenHidden } from "#lib/cawco/motion/rest.js";
   import { leaving, plan, route } from "#lib/cawco/motion/route.svelte.js";
@@ -55,6 +57,8 @@
   onMount(() => window.releaseHeldTaps());
   // A hidden tab runs no loop at all.
   onMount(restWhenHidden);
+  // Hairlines drawn outside a box stand on whole device pixels.
+  onMount(trackDevicePixel);
 
   /** Configure's sections in the rail's order, top to bottom. */
   const SECTION_ORDER = GROUPS.flatMap(({ sections }) =>
@@ -93,6 +97,9 @@
 </script>
 
 <svelte:head>
+  <!-- The tab's icon is the app's: in the server-rendered head, so the
+       browser never asks for /favicon.ico. -->
+  <link href={cawcoIcon} rel="icon" type="image/png">
   <!-- Caw's runtime and his waiting file go to the HTTP cache at idle
        priority, so a wait that outlasts its grace shows him without fetching. -->
   {#each CAW_PREFETCHES as href (href)}

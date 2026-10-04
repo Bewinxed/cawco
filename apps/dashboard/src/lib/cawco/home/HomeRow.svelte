@@ -16,8 +16,9 @@
    * tile the rail draws for it, its rim saying what it is doing
    * (SessionMark); the status word is read out with the title, so colour is
    * never the only signal. Under the title, the project and what it is doing
-   * now; at the end, the count of the rows under it and the age, each in a
-   * column of its own so they line up down the list. Where it runs is said
+   * now; at the end, one column: the age and, under it, the count of the
+   * rows under the session, both at the row's trailing edge so they line up
+   * down the list. Where it runs is said
    * once by the machine header above it, never per row; only a flat list
    * (Recent) names the machine.
    *
@@ -26,9 +27,9 @@
    * pane's edge to split, or into a group's tabs. On a wide screen a click
    * opens it in the focused pane.
    *
-   * A parent folds the rows under it (`fold`): their count, the last thing
-   * on the title line, flush with the row's trailing edge and the age just
-   * before it, is what opens and folds them (motion/branch). A finished row
+   * A parent folds the rows under it (`fold`): their count, under the age
+   * at the row's trailing edge, is what opens and folds them
+   * (motion/branch). A finished row
    * can be archived (`onarchive`): a pointer has a button left of Peek, a
    * finger swipes the row away, and both have it in the menu.
    */
@@ -105,16 +106,17 @@
     instance?.cwd || info?.cwd || instance?.machineId || machineId
   );
   /**
-   * The count's width, on its row as `--fold-w`: what rises over the row's
-   * end on hover stops short of it. Written from a size observer, after
-   * layout: read where the row renders (`bind:offsetWidth`), it laid the
-   * page out in the middle of the update that opened a tree, once a row.
+   * The trailing column's width (the wider of the age and the count), on its
+   * row as `--trail-w`: what rises over the row's end on hover stands left
+   * of it. Written from a size observer, after layout: read where the row
+   * renders (`bind:offsetWidth`), it laid the page out in the middle of the
+   * update that opened a tree, once a row.
    */
-  const foldWidth: Attachment<HTMLElement> = (node) => {
+  const trailWidth: Attachment<HTMLElement> = (node) => {
     const item = node.closest<HTMLElement>(".item");
     const sizes = new ResizeObserver(([entry]) => {
       const [box] = entry.borderBoxSize;
-      item?.style.setProperty("--fold-w", `${box.inlineSize}px`);
+      item?.style.setProperty("--trail-w", `${box.inlineSize}px`);
     });
     sizes.observe(node);
     return () => sizes.disconnect();
@@ -131,7 +133,6 @@
     data-branch-item
     data-context={context || undefined}
     data-flip
-    data-folds={fold ? true : undefined}
     data-stale={stale || undefined}
     {@attach onarchive ? swipeToArchive(onarchive) : undefined}
   >
@@ -166,23 +167,23 @@
       }}
     >
       <SessionMark id={sessionId} {place} {status} />
-      <!-- Two lines: the title, its age and, on a parent, the count of the
-           rows under it, flush with the row's trailing edge so every count in
-           the list stands in one column at the edge; then what it is doing. -->
-      <span class="text">
-        <span class="first">
-          <span class="title"
-            ><span class="sr-only">{STATUS_WORD[status]}: </span>{title}</span
-          >
-          <span class="num trail">{trail}</span>
+      <!-- Two lines of words (the title, then what it is doing), and at the
+           row's end one column for what trails them: the age on the title's
+           line and, on a parent, the count of the rows under it on the line
+           below, both flush with the row's trailing edge. Every row's age
+           ends at that edge, with a count or without one. -->
+      <span class="words">
+        <span class="cell title"
+          ><span class="sr-only">{STATUS_WORD[status]}: </span>{title}</span
+        >
+        <span class="cell line">{line}</span>
+      </span>
+      <span class="end" {@attach trailWidth}>
+        <span class="cell num trail">{trail}</span>
+        <span class="cell">
           {#if fold}
-            <span class="fold" {@attach foldWidth}>
-              <TreeCount compact {...fold} />
-            </span>
+            <TreeCount compact {...fold} />
           {/if}
-        </span>
-        <span class="second">
-          <span class="line">{line}</span>
         </span>
       </span>
     </a>
@@ -276,8 +277,8 @@
     display: inline-grid;
     flex: none;
     place-items: center;
-    width: 28px;
-    height: 28px;
+    width: var(--peek-size);
+    height: var(--peek-size);
     margin-right: var(--space-2);
     border: 0;
     border-radius: var(--radius-xs);
@@ -290,20 +291,22 @@
     width: 16px;
     height: 16px;
   }
-  /* At a desk it takes no room until wanted: it rises over the row's end,
-     short of the count where the row has one, so the count is never under
-     it. */
+  /* At a desk they take no room until wanted: they rise over the row's
+     words, block-centred on the row, a step left of the trailing column
+     (the row's end padding, then the column's measured width), so neither
+     the age nor the count is ever under them. The row's corner is
+     --radius-sm; they stand further in from its edges than that, so they
+     keep the small control's own radius. */
   .item {
-    --peek-end: var(--space-1);
-  }
-  .item[data-folds] {
-    --peek-end: calc(var(--space-3) + var(--fold-w, 0px) + var(--space-1));
+    --peek-size: 28px;
+    --peek-end: calc(var(--space-3) + var(--trail-w, 0px) + var(--space-1));
   }
   @media (hover: hover) and (pointer: fine) {
     .peek {
       position: absolute;
+      inset-block: 0;
       right: var(--peek-end);
-      margin: 0;
+      margin: auto 0;
       background: var(--surface-hover);
       opacity: 0;
     }
@@ -318,9 +321,9 @@
       background: var(--surface-fill);
       color: var(--ink-strong);
     }
-    /* Archive rises beside Peek, left of it. */
+    /* Archive rises beside Peek, a step left of it. */
     .archive {
-      right: calc(var(--peek-end) + 30px);
+      right: calc(var(--peek-end) + var(--peek-size) + var(--space-1));
     }
   }
   /* A finger swipes the row away instead: no button for it. */
@@ -366,35 +369,35 @@
       block-size: 16px;
     }
   }
-  .text {
+  /* The words take the room; the trailing column is as wide as the wider
+     of its two cells and never yields. */
+  .words,
+  .end {
     display: flex;
-    flex: 1 1 auto;
     flex-direction: column;
     min-width: 0;
   }
-  /* Each line: its words, then what trails them. */
-  .first,
-  .second {
-    display: flex;
-    align-items: center;
-    gap: var(--space-1);
-    min-width: 0;
+  .words {
+    flex: 1 1 auto;
+  }
+  .end {
+    flex: none;
+    align-items: flex-end;
+    /* The row's gap is a mark's; words and what trails them sit closer. */
+    margin-inline-start: calc(var(--space-1) - var(--space-2));
   }
   /* Both lines stand at the count's height with or without one (a context
      row says nothing on its second), so every row in a list is one height
      and the nesting lines meet each glyph alike. */
-  .first,
-  .second {
+  .cell {
+    display: flex;
+    align-items: center;
     min-block-size: var(--space-5);
-  }
-  /* The count: the row's last thing, at its trailing edge. */
-  .fold {
-    display: inline-flex;
-    flex: none;
   }
   .title,
   .line {
-    flex: 1 1 auto;
+    display: block;
+    align-content: center;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -410,7 +413,6 @@
   /* The age, at the title line's end: only as wide as it is, so the title
      keeps the rest; its right edge is the row's, the same down the list. */
   .trail {
-    flex: none;
     white-space: nowrap;
     font: var(--type-meta);
     font-variant-numeric: tabular-nums;

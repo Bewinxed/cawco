@@ -17,6 +17,7 @@ import { archiveRefusal, machineLabel } from "@cawco/core";
 import {
   type BlockedRequest,
   cawco,
+  type HubState,
   type InstanceRow,
   isFailed,
   isResumable,
@@ -504,6 +505,18 @@ class Home {
   #ready = $state(false);
   get ready(): boolean {
     return this.#ready;
+  }
+
+  /**
+   * What the home's status line has to say (StatusLine): the hub's state
+   * and, once it is there, whether the first read is in. `connected` is the
+   * quiet one: live and read, there is no line at all.
+   */
+  get status(): HubState | "reading" {
+    if (cawco.hub !== "connected") {
+      return cawco.hub;
+    }
+    return this.#ready ? "connected" : "reading";
   }
 
   constructor() {

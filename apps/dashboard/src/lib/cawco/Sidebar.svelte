@@ -4,7 +4,7 @@
    * Fleet sidebar — reimplemented on top of the shadcn-svelte sidebar primitives
    * (ui/sidebar/*), following the Fluid Functionalism inset preset pattern:
    *
-   *   • Header: brand tile + workspace name, search input, "+ New" row
+   *   • Header: the CawCo icon + workspace name, search input, "+ New" row
    *   • Content: Fleet nav group, Machines group, Projects (collapsible groups
    *     with sub-items for sessions), Running-now and Not-running sections
    *   • Footer: user avatar + machine count
@@ -19,6 +19,7 @@
   import type { Attachment } from "svelte/attachments";
   import { SvelteSet } from "svelte/reactivity";
   import { TextMorph } from "torph/svelte";
+  import cawcoIcon from "#lib/assets/brand/cawco-icon.png";
   import { Button } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
@@ -193,15 +194,13 @@
   const PILL = { rows: ROWS, selected: '[data-active="true"]', ghost: false };
   /**
    * The lead column, 18px, on EVERY row in the rail — nav, machines, projects,
-   * sessions, the brand tile and the footer avatar alike. What sits in it
+   * sessions, the brand icon and the footer avatar alike. What sits in it
    * varies; the column does not, which is the only reason every label in the
    * rail starts at the same x (10px of row padding + 18 + 10 of gap = 38px).
    */
   const SLOT = "inline-flex size-[18px] shrink-0 items-center justify-center";
   /** A line glyph in the slot: 16px, 1px of air. */
   const SLOT_GLYPH = "size-4";
-  /** The brand tile's glyph: 12px in the 18px slot, 3px of inset. */
-  const MARK_GLYPH = "size-3";
 
   /* ---- spawn ---------------------------------------------------------- */
 
@@ -820,23 +819,15 @@
               props,
             })}
               <a href="/session" {...props} class="{props.class} no-underline">
-                <span
-                  aria-hidden="true"
-                  class="{SLOT} rounded-[var(--radius-xs)]"
-                  style="background: var(--brand-solid); color: var(--on-brand);"
+                <!-- The app's own icon (the crow on spark), in the lead
+                     column every row's mark stands in. -->
+                <img
+                  alt=""
+                  class="brand-icon"
+                  height="18"
+                  src={cawcoIcon}
+                  width="18"
                 >
-                  <svg
-                    aria-hidden="true"
-                    class={MARK_GLYPH}
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="1.7"
-                    viewBox="0 0 24 24"
-                  >
-                    <path d="M4 4h16v16H4z" />
-                    <path d="M4 4h8v16H4z" fill="currentColor" />
-                  </svg>
-                </span>
                 <span
                   class="min-w-0 truncate text-[length:var(--text-body)] font-medium text-foreground"
                   >CawCo</span
@@ -1211,6 +1202,17 @@
 />
 
 <style>
+  /* The brand row's icon: the lead column's 18px tile, on the tile's radius.
+     Its edge is drawn inside it (a negative offset), so the box stays 18px
+     and the icon keeps its shape on the rail in either theme. */
+  .brand-icon {
+    flex: none;
+    inline-size: 18px;
+    block-size: 18px;
+    border-radius: var(--radius-xs);
+    outline: 1px solid var(--image-outline);
+    outline-offset: -1px;
+  }
   /* The header's corner actions: icon buttons on the nav row's height. */
   .head-action {
     display: inline-grid;

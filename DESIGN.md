@@ -513,7 +513,7 @@ Warm low-chroma paper and roost neutrals, one coral that means "you act here", a
 - **Ink-solid** (`ink-solid`, text `on-ink`): tooltips and inverted tiles (a chosen icon tile, an ink machine tile) stay ink in both schemes and never turn coral. 13.62 / 15.40:1.
 
 ### Brand moments
-- **Spark yellow, paper and crow ink** (`spark` #F2D36B, `paper` #F4F0E6, `crow-ink` #171715): the wordmark, the crow mascot and brand art only. They never appear in product chrome; spark's product role is carried by `status-attn-*`.
+- **Spark yellow, paper and crow ink** (`spark` #F2D36B, `paper` #F4F0E6, `crow-ink` #171715): the wordmark, the crow mascot and brand art only. They never appear in product chrome, with two exceptions: the brand row's icon and the favicon, both the app icon itself; spark's product role is carried by `status-attn-*`.
 
 ### Tertiary: status
 Four functional hues, each with a 3 / 9 / 11 step: info (blue), warning (yellow), success (olive green) and error. Error sits on crimson (hue 15) so failed never reads as the coral action. Status chips are drawn from them:

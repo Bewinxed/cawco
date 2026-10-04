@@ -1,3 +1,4 @@
+import { flushSync } from "svelte";
 import { motionOk } from "#lib/cawco/motion/curves.svelte.js";
 import { browser } from "$app/env";
 
@@ -48,49 +49,45 @@ class ThemeState {
     }
   }
 
+  /** The switch in flight: a later one takes `theme-flip` over from it. */
+  #flips = 0;
+
   /**
-   * A switch the reader makes draws the new theme at once under a wash of the
-   * old page's background, and fades the wash off it (app.css .theme-wash,
-   * --dur-fade on --ease-out): one composited layer, nothing captured. With
-   * reduced motion the theme flips at once, with no wash.
+   * A switch the reader makes cross-fades the whole page as one: a view
+   * transition takes the old page, flips the theme, and fades the new page
+   * in as the old one fades out (app.css, --dur-fade on --ease-out). With
+   * reduced motion the theme flips at once, with no transition.
    */
   set(value: Theme) {
-    const flip = () => {
-      this.current = value;
-      localStorage.setItem("cawco-theme", value);
-      this.resolved = applyTheme(value);
-    };
+    // Flushed, so everything the theme draws (the switch's own icon) is in
+    // the new page the transition takes, not a frame behind it.
+    const flip = () =>
+      flushSync(() => {
+        this.current = value;
+        localStorage.setItem("cawco-theme", value);
+        this.resolved = applyTheme(value);
+      });
     // The page's own colour transitions (a button's hover ink, a row's pill)
-    // would start from the old theme: a second fade under the wash's, a fade
-    // the reduced-motion switch promises not to have, and a style pass for
-    // those elements every frame until they end. They are off for the flip,
-    // and back once the new page is drawn (with the wash, once it has gone).
+    // would start from the old theme: a second fade under the cross-fade, a
+    // fade the reduced-motion switch promises not to have, and a style pass
+    // for those elements every frame until they end. They are off from
+    // before the flip until the switch is over.
     const root = document.documentElement;
+    this.#flips += 1;
+    const mine = this.#flips;
+    const done = () => {
+      if (mine === this.#flips) {
+        root.classList.remove("theme-flip");
+      }
+    };
+    root.classList.add("theme-flip");
     if (!motionOk.current) {
-      root.classList.add("theme-flip");
       flip();
       // The flip's frame is drawn with them off; the one after gets them back.
-      requestAnimationFrame(() =>
-        requestAnimationFrame(() => root.classList.remove("theme-flip"))
-      );
+      requestAnimationFrame(() => requestAnimationFrame(done));
       return;
     }
-    const wash = document.createElement("div");
-    wash.className = "theme-wash";
-    wash.style.backgroundColor = getComputedStyle(
-      document.body
-    ).backgroundColor;
-    wash.addEventListener(
-      "animationend",
-      () => {
-        wash.remove();
-        root.classList.remove("theme-flip");
-      },
-      { once: true }
-    );
-    document.body.append(wash);
-    root.classList.add("theme-flip");
-    flip();
+    document.startViewTransition(flip).finished.finally(done);
   }
 
   /** Flips the scheme on screen, so the first press always changes it. */

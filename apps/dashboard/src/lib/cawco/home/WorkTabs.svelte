@@ -36,21 +36,28 @@
    * With nothing changing, the list's own `reflow` carries live changes: a
    * row arriving, a held re-sort.
    *
-   * A tab with nothing in it shows nothing; with nothing in either, there is
-   * no switch at all. The delegates button lists work other sessions started,
+   * Under the tab row there is always something. Until the first read is in
+   * (`waiting`) the tabs stand, without counts, over rows that wait: the row
+   * is where it will be when the list lands. Read, a tab with nothing in it
+   * says so, and Working names the next thing to do; that claim waits on the
+   * data and on a live hub, so a lost hub says only what was last known.
+   * With nothing in either tab there is no switch at all: the home's own
+   * empty state (Caw) stands then. The delegates button lists work other sessions started,
    * each under the session that started it; a parent the tab does not list
    * stands in as a quiet context line, not counted and taking no room.
    */
   import { flushSync, untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
+  import { Button } from "#lib/components/ui/button/index.js";
   import {
     TabItem,
     Tabs,
     TabsList,
   } from "#lib/components/ui/fluid-tabs/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
+  import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
-  import { IconArchive } from "#lib/icons.js";
+  import { IconArchive, IconPlus } from "#lib/icons.js";
   import { page } from "$app/state";
   import StructureOn from "~icons/solar/structure-bold";
   import Structure from "~icons/solar/structure-bold-duotone";
@@ -61,7 +68,7 @@
     branch,
     nestFrom,
   } from "../motion/branch.svelte";
-  import { dur, motionOk } from "../motion/curves.svelte";
+  import { crossIn, crossOut, dur, motionOk } from "../motion/curves.svelte";
   import { holdWhileInside } from "../motion/held-order.svelte";
   import { IN_MS, ListSwap } from "../motion/list-swap.svelte";
   import {
@@ -92,7 +99,21 @@
   import { type Arrival, planRelay, type RelayLine } from "./relay-plan";
   import { type WorkTab, workTab } from "./work-tab.svelte";
 
-  let { stale }: { stale: boolean } = $props();
+  let {
+    stale,
+    waiting,
+    onstart,
+  }: {
+    /** The hub is not live: the rows are what was last known. */
+    stale: boolean;
+    /** The first read is not in: the tabs stand over rows that wait. */
+    waiting: boolean;
+    /** Opens the home's Start session dialog (a Working tab with no rows). */
+    onstart: () => void;
+  } = $props();
+
+  /** The rows standing in for the list while it is read. */
+  const WAITING_ROWS = [0, 1, 2];
 
   const current = $derived(
     page.url.pathname.startsWith("/session") ? workspace.activeSessionId : null
@@ -733,7 +754,7 @@
   </div>
 {/snippet}
 
-{#if home.working.length + home.finished.length > 0}
+{#if waiting || home.working.length + home.finished.length > 0}
   <section aria-label="Sessions" class="work" data-flip="box">
     <div class="head">
       <!-- The session tabs' folder tabs, hosted: no shelf, the chosen
@@ -749,16 +770,19 @@
             {@const count = rowsOf(tab.id).length}
             <TabItem label={tab.label} value={tab.id}>
               {#snippet trail()}
-                {#key count}
-                  <span
-                    class="num count"
-                    data-failed={(tab.id === "finished" && finishedFailed) ||
-                      undefined}
-                    data-flip="pop"
-                    data-tab={tab.id}
-                    >{count}</span
-                  >
-                {/key}
+                <!-- No count until it is read: a 0 here would be a claim. -->
+                {#if !waiting}
+                  {#key count}
+                    <span
+                      class="num count"
+                      data-failed={(tab.id === "finished" && finishedFailed) ||
+                        undefined}
+                      data-flip="pop"
+                      data-tab={tab.id}
+                      >{count}</span
+                    >
+                  {/key}
+                {/if}
               {/snippet}
             </TabItem>
           {/each}
@@ -789,73 +813,118 @@
         {/snippet}
       </Tip>
     </div>
-    <div
-      class="list"
-      bind:this={listEl}
-      {@attach reflow()}
-      {@attach highlight(ROW_PILL)}
-      {@attach holdWhileInside("home:")}
-      {@attach arrowKeys}
-    >
-      {#each drawn as entry (entry.group.machineId)}
-        {@const id = entry.group.machineId}
-        <div
-          class="group"
-          data-flip={plan ? undefined : "box"}
-          data-kind={entry.kind}
-          data-machine={id}
-          class:filled={entry.rows.length > 0 || entry.kind === "gone"}
-        >
-          <hr class="kit-seam">
-          {@render header(entry.group, headStyle(entry.kind, id))}
-          <div class="rows">
-            {#if plan?.layered.has(id) && entry.gone.length}
-              <!-- The rows this machine had, leaving in the places the new
+    {#if waiting}
+      <!-- The list is being read: rows at a session row's height stand in
+           its place, and leave as it cross-fades in over them. -->
+      <div
+        aria-busy="true"
+        aria-label="Reading the fleet"
+        class="waiting"
+        role="status"
+        out:crossOut
+      >
+        {#each WAITING_ROWS as row (row)}
+          <Skeleton class="h-11 w-full" />
+        {/each}
+      </div>
+    {:else}
+      <div
+        class="list"
+        bind:this={listEl}
+        in:crossIn
+        {@attach reflow()}
+        {@attach highlight(ROW_PILL)}
+        {@attach holdWhileInside("home:")}
+        {@attach arrowKeys}
+      >
+        {#each drawn as entry (entry.group.machineId)}
+          {@const id = entry.group.machineId}
+          <div
+            class="group"
+            data-flip={plan ? undefined : "box"}
+            data-kind={entry.kind}
+            data-machine={id}
+            class:filled={entry.rows.length > 0 || entry.kind === "gone"}
+          >
+            <hr class="kit-seam">
+            {@render header(entry.group, headStyle(entry.kind, id))}
+            <div class="rows">
+              {#if plan?.layered.has(id) && entry.gone.length}
+                <!-- The rows this machine had, leaving in the places the new
                    ones take, each new one arriving as its place clears. -->
-              {@render leaving(entry.gone, true)}
-            {/if}
-            <ul class="tree">
-              {#each under(
-                shown,
-                entry.rows,
-                null
-              ) as row (`${swap.gen}:${row.id}`)}
-                {@render treeNode(row, entry.rows, id)}
-              {/each}
-            </ul>
-            {#if !plan?.layered.has(id) && entry.gone.length}
-              {@render leaving(entry.gone, false)}
-            {/if}
-          </div>
-          <!-- The machine's last line: the rest of its trees, or back to
+                {@render leaving(entry.gone, true)}
+              {/if}
+              <ul class="tree">
+                {#each under(
+                  shown,
+                  entry.rows,
+                  null
+                ) as row (`${swap.gen}:${row.id}`)}
+                  {@render treeNode(row, entry.rows, id)}
+                {/each}
+              </ul>
+              {#if !plan?.layered.has(id) && entry.gone.length}
+                {@render leaving(entry.gone, false)}
+              {/if}
+            </div>
+            <!-- The machine's last line: the rest of its trees, or back to
                its first few. It comes and goes in the relay like any other
                line, inside its machine's box. -->
-          {#if entry.kind !== "gone" && more.get(id)}
-            {@const line = more.get(id) as More}
-            <!-- A line of the list like the rows above it (`data-flip`): when
+            {#if entry.kind !== "gone" && more.get(id)}
+              {@const line = more.get(id) as More}
+              <!-- A line of the list like the rows above it (`data-flip`): when
                  a tree over it opens or folds, it slides with them. -->
-            <button
-              class="more focus-inset touch-hit press-tint"
-              data-flip={plan ? undefined : ""}
-              data-key={moreKey(id)}
-              data-rail-row
-              onclick={() => fold(id)}
-              style={enterAnim(moreKey(id))}
-              type="button"
-            >
-              {line.words}
-              {#if line.failed > 0}
-                <span class="more-failed">· {line.failed} failed</span>
-              {/if}
-            </button>
-          {:else if plan?.more.get(id)}
-            <span aria-hidden="true" class="more" style={leaveAnim(moreKey(id))}
-              >{plan.more.get(id)}</span
-            >
-          {/if}
-        </div>
-      {/each}
-    </div>
+              <button
+                class="more focus-inset touch-hit press-tint"
+                data-flip={plan ? undefined : ""}
+                data-key={moreKey(id)}
+                data-rail-row
+                onclick={() => fold(id)}
+                style={enterAnim(moreKey(id))}
+                type="button"
+              >
+                {line.words}
+                {#if line.failed > 0}
+                  <span class="more-failed">· {line.failed} failed</span>
+                {/if}
+              </button>
+            {:else if plan?.more.get(id)}
+              <span
+                aria-hidden="true"
+                class="more"
+                style={leaveAnim(moreKey(id))}
+                >{plan.more.get(id)}</span
+              >
+            {/if}
+          </div>
+        {/each}
+        {#if groups.length === 0}
+          <!-- The tab is read and lists nothing. A line of the list like any
+             other: it arrives as the last row leaves and slides with what
+             is above it. Working names the next thing to do; with the hub
+             lost nothing is claimed about now, only what was last known. -->
+          <div
+            class="vacant"
+            data-flip={plan ? undefined : ""}
+            data-stale={stale || undefined}
+            in:crossIn
+            out:crossOut
+          >
+            {#if stale}
+              <p>None listed when the hub was last reached.</p>
+            {:else if shown === "working"}
+              <p>Nothing is working right now.</p>
+              <Button onclick={onstart} size="xs" variant="outline">
+                <IconPlus />
+                Start session
+              </Button>
+            {:else}
+              <p>Finished sessions land here.</p>
+            {/if}
+          </div>
+        {/if}
+      </div>
+    {/if}
   </section>
 {/if}
 
@@ -964,6 +1033,30 @@
     display: flex;
     flex-direction: column;
     overflow-x: clip;
+  }
+  /* The rows that wait: a session row's height each, as far apart as the
+     rows they stand for. */
+  .waiting {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-row);
+  }
+  /* A tab with nothing in it: its line on the rows' own text column, and
+     under it, on Working, the one thing to do next. */
+  .vacant {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    font: var(--type-meta);
+    color: var(--ink-muted);
+  }
+  .vacant p {
+    margin: 0;
+  }
+  .vacant[data-stale] {
+    opacity: 0.55;
   }
   /* Every group keeps the room a seam would take; the seam itself is drawn
      in it, only after a group with rows, so groups coming and going never

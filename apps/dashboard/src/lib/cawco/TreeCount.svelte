@@ -1,9 +1,10 @@
 <script lang="ts">
   /**
    * A parent's count of what is folded under it (tree.ts), and the switch
-   * that opens and folds it: the last thing on its row, flush with the
-   * row's trailing edge, the row's time just before it, so every count in a
-   * list stands in one column at the edge. Folded, what is under the row is
+   * that opens and folds it: flush with the row's trailing edge, so every
+   * count in a list stands in one column at the edge. On a one-line row
+   * (the projects list) the row's time stands just before it; on a two-line
+   * row (the home's) it stands under the time. Folded, what is under the row is
    * this number and nothing else; open, it hangs under the row on its
    * nesting rail (app.css .kit-nest, motion/branch). Failures among them are
    * said beside the count in their own ink.
