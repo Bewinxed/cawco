@@ -10,7 +10,11 @@
    * timings: it opens after a 350ms rest, and closes 300ms after the
    * pointer leaves both the row and the card, so crossing the 4px gap to
    * the card (bridged) keeps it. A fine pointer only; touch has no hover.
+   *
+   * The card is portalled to the body: the rail isolates its stacking
+   * (kit-highlight), so a card drawn inside it would paint under the panes.
    */
+  import { Portal } from "bits-ui";
   import { IconAsk, IconSuccess, IconWarningTriangle } from "#lib/icons.js";
   import { cawco, isFailed, readTranscript } from "./client.svelte";
   import HoverPanel from "./HoverPanel.svelte";
@@ -191,57 +195,59 @@
   };
 </script>
 
-<HoverPanel
-  aria-hidden="true"
-  {gliding}
-  key={openId}
-  onpointerenter={hold}
-  onpointerleave={release}
-  side="right"
-  style="--x: {place.x}px; --y: {place.y}px; --origin: {place.origin}px; --room: 360px"
-  watch={openId && runIdOf(openId) ? runningStep(openId) : openId}
->
-  {#snippet children(
-    id
-  )}
-    {@const row = cawco.instanceIndex.byId.get(id)}
-    {@const tone = toneOf(id)}
-    {@const Sprite = sessionSprite(id)}
-    {@const runId = runIdOf(id)}
-    <div data-nest-host>
-      <div class="head">
-        <span aria-hidden="true" class="mark m{markHue(row?.cwd || id)}"
-          ><Sprite /></span
-        >
-        <span class="title">{row ? instanceTitle(row) : "Session"}</span>
-        <span aria-label={WORD[tone]} class="state {tone}" role="img">
-          {#if tone === "live"}
-            <span class="dot"></span>
-          {:else if tone === "needs"}
-            <IconAsk />
-          {:else if tone === "done"}
-            <IconSuccess />
-          {:else if tone === "failed"}
-            <IconWarningTriangle />
-          {/if}
-        </span>
-      </div>
-      {#if runId}
-        <!-- A workflow run's card: its steps under it, then the live tail of
+<Portal>
+  <HoverPanel
+    aria-hidden="true"
+    {gliding}
+    key={openId}
+    onpointerenter={hold}
+    onpointerleave={release}
+    side="right"
+    style="--x: {place.x}px; --y: {place.y}px; --origin: {place.origin}px; --room: 360px"
+    watch={openId && runIdOf(openId) ? runningStep(openId) : openId}
+  >
+    {#snippet children(
+      id
+    )}
+      {@const row = cawco.instanceIndex.byId.get(id)}
+      {@const tone = toneOf(id)}
+      {@const Sprite = sessionSprite(id)}
+      {@const runId = runIdOf(id)}
+      <div data-nest-host>
+        <div class="head">
+          <span aria-hidden="true" class="mark m{markHue(row?.cwd || id)}"
+            ><Sprite /></span
+          >
+          <span class="title">{row ? instanceTitle(row) : "Session"}</span>
+          <span aria-label={WORD[tone]} class="state {tone}" role="img">
+            {#if tone === "live"}
+              <span class="dot"></span>
+            {:else if tone === "needs"}
+              <IconAsk />
+            {:else if tone === "done"}
+              <IconSuccess />
+            {:else if tone === "failed"}
+              <IconWarningTriangle />
+            {/if}
+          </span>
+        </div>
+        {#if runId}
+          <!-- A workflow run's card: its steps under it, then the live tail of
              the one running, the way a session's card ends on its own. -->
-        {@const step = runningStep(id)}
-        <RunSteps glyph=".mark" interactive={false} {runId} />
-        {#if step}
-          <DelegateTail instanceId={step} note={null} />
-        {:else if tone === "failed"}
-          <DelegateTail instanceId="" note={noteOf(id, tone)} />
+          {@const step = runningStep(id)}
+          <RunSteps glyph=".mark" interactive={false} {runId} />
+          {#if step}
+            <DelegateTail instanceId={step} note={null} />
+          {:else if tone === "failed"}
+            <DelegateTail instanceId="" note={noteOf(id, tone)} />
+          {/if}
+        {:else}
+          <DelegateTail instanceId={id} note={noteOf(id, tone)} />
         {/if}
-      {:else}
-        <DelegateTail instanceId={id} note={noteOf(id, tone)} />
-      {/if}
-    </div>
-  {/snippet}
-</HoverPanel>
+      </div>
+    {/snippet}
+  </HoverPanel>
+</Portal>
 
 <style>
   .head {
