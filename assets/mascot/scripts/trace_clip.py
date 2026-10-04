@@ -55,6 +55,9 @@ LANDING = 0.98  # share of a landing's inked pixels that carry its still's ink
 SPECK = 200  # opaque px at 512: a drawing with less is dust traced off the take's paper
 INKS = np.array([[20, 20, 20], [230, 80, 50], [244, 240, 230], [245, 200, 40]])
 WHITE = np.array([244, 240, 230])
+# Summed |RGB| under which a rendered pixel is a status's own ink's fill, not an eye white (the
+# cream fill sits 20 from the eye white's; a fill renders exactly, its soft edge is see-through).
+OWN_INK = 8
 
 name, take = sys.argv[1:3]
 variants = json.loads((LOOPS_REPO / "takes.json").read_text())
@@ -75,6 +78,10 @@ elif name.endswith("-exit"):
 else:
     a, b = name.split("-to-")
     kind, start, end = "change", first[a], first[b]
+# A status's own inks (rests.json "inks": the compacted Caw's cream note) are traced in every clip
+# that starts or lands on it.
+own_inks = sorted({ink for v in (start, end) if v for ink in rests.get(v["still"].replace("-", "_"), {}).get("inks", [])})
+T.use_inks(own_inks)
 out = CLIPS / name
 if out.exists():
     shutil.rmtree(out)
@@ -141,6 +148,15 @@ def body_without_white_marks(label: np.ndarray) -> str:
 
 T.trace_body = body_without_white_marks
 original, grouped, decided = T.frames_of, T.drawings_of, T.decide
+picture_stills = [v["still"] for v in (start, end) if v and v["loop"] not in {x["loop"] for vs in variants.values() for x in vs}]
+if picture_stills:
+    # trace.py's refine() sizes a take by the extent of its traced outline against the still's.
+    # That holds when the still was traced from a take too: the tracer rounds both the same. A
+    # still traced from its picture (trace_still.py: the compacted Caw) keeps its tips where the
+    # picture has them, while a take's tuft tip came out 1.75 units higher, and refine() shrank
+    # the whole landing by 0.5% to fit it (scale 0.6213 where the frame's is 0.625): a ring of
+    # black missing all round. So such a clip keeps placement()'s whole-pixel registration.
+    T.refine = lambda silhouette, place, still: place
 if kind != "change":
     # trace.py tells an eye white from a see-through gap by where the stills have paper. A bird
     # crossing the page is nowhere near his still, and that evidence cut the eyes out of a flying
@@ -339,6 +355,9 @@ for d in sorted(used):
     ).astype(int)
     opaque = p[..., 3] > 127
     white = opaque & (np.abs(p[..., :3] - WHITE).sum(-1) < 60)
+    # A status's own light ink (the note) is meant to touch the page: only eye white is a mark.
+    for ink in own_inks:
+        white &= np.abs(p[..., :3] - np.array(T.INKS[ink])).sum(-1) >= OWN_INK
     regions, n = ndimage.label(white)
     touching = [
         int((regions == r).sum())
@@ -355,7 +374,12 @@ T.frames_of, T.drawings_of, T.decide = original, grouped, decided
 takes = {v["loop"]: v["take"] for vs in variants.values() for v in vs}
 halos = {f"{d:02d}": timing["halo"][f"{d:02d}"] for d in sorted(used) if d not in snapped}
 for d, v in snapped.items():
-    halos[f"{d:02d}"] = T.measure_halo(v["loop"], takes[v["loop"]])[f"{v['drawing']:02d}"]
+    # A rest traced from its picture (trace_still.py) has no take: its halo was measured there.
+    halos[f"{d:02d}"] = (
+        T.measure_halo(v["loop"], takes[v["loop"]])[f"{v['drawing']:02d}"]
+        if v["loop"] in takes
+        else json.loads((LOOPS_REPO / v["loop"] / "timing.json").read_text())["halo"][f"{v['drawing']:02d}"]
+    )
 eyes = {k: v for k, v in eyes_cut.items() if int(k) in used and v >= T.CUT_EYE}
 
 report.update(

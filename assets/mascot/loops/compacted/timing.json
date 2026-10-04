@@ -1,0 +1,26 @@
+{
+  "still": "light-compacted.png",
+  "frames": 2,
+  "fps": 24,
+  "drawings": [
+    {
+      "start": 0,
+      "length": 2,
+      "drawing": 0
+    }
+  ],
+  "placement": {
+    "scale": 0.6251526251526252,
+    "x": 0.0,
+    "y": 0.0
+  },
+  "stillOverlap": 0.9953,
+  "inks": {
+    "black": 87519,
+    "white": 11923,
+    "cream": 4161
+  },
+  "halo": {
+    "00": 0
+  }
+}

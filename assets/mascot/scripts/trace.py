@@ -51,6 +51,18 @@ INKS = {
     "yellow": (242, 204, 107),
 }
 PAPER = (255, 255, 255)
+# Inks only some statuses carry; a status names its own in loops/rests.json ("inks") and
+# use_inks() adds them, so every other take is traced with the four above, as it always was.
+#   cream: the paper note in the compacted Caw's beak, measured from the owner's pick (median of
+#          the note's opaque pixels). It is the one light ink that touches the page around him.
+EXTRA_INKS = {
+    "cream": (251, 244, 229),
+}
+# Red minus blue a pixel needs to read as cream, and the darkest channel it may have. The note
+# measures 22 (its fold's shadow 20); the page and his eye whites, neutral, under 3. Without the
+# gate the soft edge of an eye white, a grey, lands nearer cream than white.
+CREAM_WARM = 10
+CREAM_LIGHT = 180
 # Two frames are the same drawing when they differ by less than this mean absolute RGB difference
 # (held pairs measure <= 0.7, a new drawing >= 6).
 SAME_DRAWING = 1.5
@@ -96,6 +108,12 @@ LID_LINE = 90
 # beside vermilion over 40).
 NEUTRAL = 30
 ARTBOARD = 512
+
+
+def use_inks(names: list[str]) -> None:
+    """Adds the extra inks a status names (loops/rests.json "inks") to the ones traced."""
+    for name in names:
+        INKS[name] = EXTRA_INKS[name]
 
 
 def frames_of(state: str, take: str) -> np.ndarray:
@@ -210,6 +228,16 @@ def inks(rgb: np.ndarray, centres: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         px[..., 1] - px[..., 2] >= YELLOW_CHROMA
     )
     distance[..., yellow] = np.where(is_yellow, distance[..., yellow], np.inf)
+    if "cream" in INKS:
+        # Cream sits a few levels from the page and from an eye white, so it is told by its
+        # warmth, as yellow is: a warm, light pixel is the note, and nothing neutral is.
+        cream = list(INKS).index("cream") + 1
+        is_cream = (px[..., 0] - px[..., 2] >= CREAM_WARM) & (
+            px.min(-1) >= CREAM_LIGHT
+        )
+        distance[..., cream] = np.where(is_cream, distance[..., cream], np.inf)
+        distance[..., 0] = np.where(is_cream, np.inf, distance[..., 0])
+        distance[..., WHITE] = np.where(is_cream, np.inf, distance[..., WHITE])
     label = distance.argmin(-1)
     light = (label == 0) | (label == WHITE)
     regions, _ = ndimage.label(light)

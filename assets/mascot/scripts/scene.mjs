@@ -47,6 +47,8 @@ export const STATUS = [
   "loading",
   "reconnecting",
   "sleeping",
+  // His head with a folded note in his beak, beside "Compacted" in a transcript: a rest.
+  "compacted",
 ];
 /** Each status's file name: assets/mascot/caw/<name>.riv. */
 export const fileName = (status) => status.replace("_", "-");
@@ -54,7 +56,8 @@ export const fileName = (status) => status.replace("_", "-");
 /**
  * The statuses that rest: one drawing, held, with no loop. loops/rests.json names each one's
  * drawing among the traced loops (`ready` is ready-attention's first drawing, `sleeping` the
- * nod in idle-nod-off, eyes closed).
+ * nod in idle-nod-off, eyes closed), or the drawing trace_still.py traced from its still picture
+ * (`compacted`, which was never a loop).
  */
 export const RESTS = JSON.parse(readFileSync(`${LOOPS}rests.json`, "utf8"));
 

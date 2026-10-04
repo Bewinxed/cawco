@@ -12,13 +12,20 @@ that is all they do with him.
 ## Contract
 
 - Files: `assets/mascot/caw/<status>.riv`, one per status: `ready`, `working`, `needs-you`,
-  `idle`, `done`, `trying`, `loading`, `reconnecting`, `sleeping`. Each holds only its own
-  status, so an app loads and instances a few MB for what is on screen instead of everything at
-  once.
+  `idle`, `done`, `trying`, `loading`, `reconnecting`, `sleeping`, `compacted`. Each holds only
+  its own status, so an app loads and instances a few MB for what is on screen instead of
+  everything at once.
 - A status **waits** or **rests** (owner: "it shouldn't animate if there's nothing going on").
   A wait is something going on, so a waiting status plays its loops. A rest is one drawing,
-  held, with no loop and no beats: `ready` and `sleeping`, named in
+  held, with no loop and no beats: `ready`, `sleeping` and `compacted`, named in
   `assets/mascot/loops/rests.json`. A runtime that draws only on change draws a rest once.
+- `compacted` is the Caw beside "Compacted" in a transcript: his head alone, a folded note in
+  his beak (the owner's pick, `assets/mascot/stills/light-compacted.png`). His head fills the
+  512 box, so a place that gives him 18 px gets an 18 px head. He was never a loop, so his
+  drawing is traced from that picture (`trace_still.py`) into `loops/compacted/body-00.svg`,
+  and the note is an ink of its own, cream, that only he carries (`rests.json` names it under
+  `inks`). He comes in once by `compacted-enter` (he rises from below with a long strip of
+  paper and folds it into the note) and then rests; he has no exit and no arrivals.
 - `sleeping` is what Caw shows when nothing is going on: no session working anywhere on the
   fleet and nothing needing the operator (owner: "it should have a 'sleeping' look too"). The
   drawing is the nod in the owner's idle-nod-off take, eyes closed and head dropped
@@ -123,7 +130,14 @@ them (the editor cannot import `.riv` files). From `assets/mascot/scripts` (`bun
   own drawings, and gates the result: a landing inked as its still on 98% of their pixels or
   more, a start within 4 px (outline p99) of its still, empty ends empty, on twos, no white
   marks, no halo, every eye intact. A clip that passes is listed in `clips/takes.json`, which is
-  what `scene.mjs` builds from; one that fails is not.
+  what `scene.mjs` builds from; one that fails is not. A clip of a status with inks of its own
+  is traced in them, and its note is not a white mark. A clip that lands on a still traced from
+  a picture keeps the take's whole-pixel placement: `trace.py`'s finer fit sizes a take by its
+  traced outline's extent, and one tuft tip traced 1.75 units high drew those landings 0.5%
+  small.
+- `uv run trace_still.py <status>` traces a resting status's picture
+  (`stills/light-<status>.png`) into `loops/<status>/body-00.svg`, for a status that was never
+  a loop (`compacted`). Same tracer, the status's own inks, at the takes' 1.6 px a unit.
 - `node build.mjs` writes `caw/<status>.riv` from `scene.mjs` and the traced drawings in
   `assets/mascot/loops/`, and the same bytes to each app's copies:
   `apps/apple/Packages/CawCoKit/Sources/CawCoMascot/Resources/caw/`, which `CawView` loads, and
@@ -150,7 +164,7 @@ them (the editor cannot import `.riv` files). From `assets/mascot/scripts` (`bun
   - every drawing stays on screen two frames or more (on twos), read back from the file;
   - load plus instancing (parse, artboard, state machine, bind, first frame) must take 100 ms or
     less, the median of five steady runs;
-  - a resting file (`ready`, `sleeping`) must show its one drawing, in the scheme `dark`
+  - a resting file (`ready`, `sleeping`, `compacted`) must show its one drawing, in the scheme `dark`
     selects, and nothing else, with motion on or reduced;
   - nothing is drawn before `from` is set;
   - for a first appearance and for every status he can arrive from by a clip, on a fresh state
@@ -160,8 +174,8 @@ them (the editor cannot import `.riv` files). From `assets/mascot/scripts` (`bun
   - every arrival's first picture is, pixel for pixel, the still of the file he arrives from.
 
   The runtime's clocks and entropy are pinned so the random turns repeat across two runs. It
-  prints one line per file, the totals (`loops animate: 7/7`, `stills rest: 2/2`, `reducedMotion holds still: 9/9`,
-  `ways in and out`, `handovers on one picture`, `files proven: 9/9`) and, on success, `Caw view model drives the state machine in every status
+  prints one line per file, the totals (`loops animate: 7/7`, `stills rest: 3/3`, `reducedMotion holds still: 10/10`,
+  `ways in and out`, `handovers on one picture`, `files proven: 10/10`) and, on success, `Caw view model drives the state machine in every status
   file`.
 
 ## What the files hold today
@@ -198,7 +212,7 @@ reused rather than traced again.
 2. **Trace.** `trace.py` reads each take's frames and holds them on twos: each frame pair shows
    its first frame's drawing, and pairs showing the same drawing are one longer hold. It cuts Caw
    from the paper, snapping every pixel to his inks as measured across the take's drawings (black,
-   vermilion, eye white, yellow). Thin fringes go, closed eyes' lid lines stay, and gaps in his
+   vermilion, eye white, yellow; and cream, the note, where a status names it). Thin fringes go, closed eyes' lid lines stay, and gaps in his
    silhouette (between a raised wing and his beak) are told from eye whites from both ends of the
    take: forward from the opening still and backward from the closing one, evidence over guesses,
    and where neither end has evidence, by shape (a pupil always bites into an eye white). It

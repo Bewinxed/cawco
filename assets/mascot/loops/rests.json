@@ -6,5 +6,12 @@
   "sleeping": {
     "loop": "idle-nod-off",
     "drawing": 11
+  },
+  "compacted": {
+    "loop": "compacted",
+    "drawing": 0,
+    "inks": [
+      "cream"
+    ]
   }
 }
