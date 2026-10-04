@@ -12,7 +12,8 @@
 # sharing it lock its build.db. -skipPackagePluginValidation lets the
 # OpenAPIGenerator build plugin (CawCoAPI) run without Xcode's trust prompt.
 # Each workspace owns ~/build/cawco-apple/<workspace>, including DerivedData
-# and logs. A Mac-side lock covers retirement, rsync and both builds.
+# and logs. Mac-side locks cover retirement, rsync and both builds;
+# builds from different workspaces wait their turn.
 # Only processes this script starts are stopped, by PID.
 set -euo pipefail
 
@@ -49,9 +50,42 @@ mkdir -p "$ROOT/.locks"
 LOCK="$ROOT/.locks/$BUILD"
 command -v shlock >/dev/null || { echo "shlock is required for Apple workspace builds" >&2; exit 2; }
 shlock -p $$ -f "$LOCK" || { echo "workspace $BUILD is already building (lock: $LOCK)" >&2; exit 3; }
-trap 'rm -f "$LOCK"' EXIT
+MACHINE_LOCK="$ROOT/.locks/.machine"
+MACHINE_OWNER="$ROOT/.locks/.machine.owner"
+WAIT_PID=
+release_locks() {
+  if [[ -n $WAIT_PID ]]; then kill "$WAIT_PID" 2>/dev/null || true; fi
+  rm -f "$LOCK"
+  if [[ -f $MACHINE_LOCK && $(<"$MACHINE_LOCK") == $$ ]]; then
+    rm -f "$MACHINE_OWNER" "$MACHINE_LOCK"
+  fi
+}
+trap release_locks EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM HUP
+
+# No build input arrives before READY; EOF means the caller has left.
+( read -r waiting_input || kill -TERM "$$" ) <&0 &
+WAIT_PID=$!
+next_notice=0
+until shlock -p $$ -f "$MACHINE_LOCK"; do
+  now=$(date +%s)
+  if (( now >= next_notice )); then
+    holder=unknown
+    held_since=$now
+    if [[ -f $MACHINE_OWNER ]]; then
+      read -r holder held_since <"$MACHINE_OWNER" || true
+    fi
+    [[ $held_since =~ ^[0-9]+$ ]] || held_since=$now
+    echo "WAITING for the Mac build slot: $holder has held it for $((now - held_since)) s"
+    next_notice=$((now + 60))
+  fi
+  sleep 5
+done
+kill "$WAIT_PID" 2>/dev/null || true
+wait "$WAIT_PID" 2>/dev/null || true
+WAIT_PID=
+printf '%s %s\n' "$BUILD" "$(date +%s)" >"$MACHINE_OWNER"
 
 retire() {
   local directory=$1 lock=$2 size
