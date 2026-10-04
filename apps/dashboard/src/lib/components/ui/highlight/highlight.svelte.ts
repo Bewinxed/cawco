@@ -5,8 +5,9 @@
  *
  *   <nav {@attach highlight({ rows: "a", selected: '[aria-current="page"]' })}>
  *
- * - The ghost slides to whichever row is nearest the pointer (80ms,
- *   --ease-in-out) and fades in place when the pointer leaves, or, with
+ * - The ghost slides to the row the pointer is on, or between rows the
+ *   nearest one (80ms, --ease-in-out), and fades in place when the pointer
+ *   leaves, or, with
  *   `hovered`, follows the row carrying that attribute (a menu's
  *   `data-highlighted`, set by pointer and arrow keys alike). Keyboard focus
  *   on a row is the focus ring's (app.css), never the ghost's. Where
@@ -256,12 +257,7 @@ export function highlight(options: HighlightOptions) {
     const shownBoxOf = (row: HTMLElement) =>
       row.offsetParent === null ? undefined : boxOf(row);
     const rowsNow = () =>
-      [...container.querySelectorAll<HTMLElement>(rows)].filter(
-        (row) =>
-          !(row as HTMLButtonElement).disabled &&
-          row.offsetParent !== null &&
-          (!laidOut || laidOut().has(row))
-      );
+      [...container.querySelectorAll<HTMLElement>(rows)].filter(isRow);
     /** The list is not rendered (`watchRendered`): nothing measures it. */
     let skipped = false;
     let ghostBox: Box | null = null;
@@ -357,18 +353,73 @@ export function highlight(options: HighlightOptions) {
       );
     };
 
+    /** Whether a row is one of the list's own, shown and in reach. */
+    const isRow = (row: HTMLElement) =>
+      container.contains(row) &&
+      !(row as HTMLButtonElement).disabled &&
+      row.offsetParent !== null &&
+      (!laidOut || laidOut().has(row));
     /**
-     * The row under a point on screen, of those the pointer can reach: a row
-     * counts only when its box, grown by REACH along the list's axis (enough
-     * to bridge the gaps between rows), holds the point; of those, the
-     * nearest. Over a header, a seam or the list's own chrome there is none,
-     * and the ghost fades rather than jumping to whatever row is closest.
+     * Whether a row is drawn where the pointer could reach it: what is on
+     * screen at the row's own point nearest the pointer is the row's. A row
+     * scrolled out under the list's edge, or under another surface, has a
+     * box there and nothing drawn.
+     */
+    const drawnNear = (row: HTMLElement, x: number, y: number): boolean => {
+      const rect = row.getBoundingClientRect();
+      const inX = Math.min(REACH, rect.width / 2);
+      const inY = Math.min(1, rect.height / 2);
+      const seen = document.elementFromPoint(
+        Math.min(rect.right - inX, Math.max(rect.left + inX, x)),
+        Math.min(rect.bottom - inY, Math.max(rect.top + inY, y))
+      );
+      return seen !== null && row.contains(seen);
+    };
+
+    /**
+     * The row a point on screen is on. What is drawn under the point says
+     * so first: a row whose anything is under it (its mark, a control that
+     * hangs outside its box) is that row, whatever boxes lie there. Measured
+     * by boxes alone, a pointer on the rail's footer was on the session row
+     * scrolled out of sight behind it, nearer by its centre. A row a slide
+     * is still carrying is not counted this way: the ghost is aimed at where
+     * rows land. Between rows, the nearest of those the pointer can reach: a
+     * row counts only when its box, grown by REACH along the list's axis
+     * (enough to bridge the gaps between rows), holds the point, and it is
+     * drawn there. Over a header, a seam, the list's own chrome or anything
+     * that lies over the list there is none, and the ghost fades rather than
+     * jumping to whatever row is closest.
      */
     const nearest = (clientX: number, clientY: number) => {
-      const at = toLocal(clientX, clientY);
-      let best: HTMLElement | null = null;
-      let bestDistance = Number.POSITIVE_INFINITY;
+      const under = document.elementFromPoint(clientX, clientY);
+      if (!(under && container.contains(under))) {
+        return null;
+      }
       const shares = new Map<HTMLElement, { x: number; y: number }>();
+      return standingRow(under, shares) ?? reachedRow(clientX, clientY, shares);
+    };
+    /** The row an element is in, if it stands where it is laid out. */
+    const standingRow = (
+      under: Element,
+      shares: Map<HTMLElement, { x: number; y: number }>
+    ) => {
+      const on = under.closest<HTMLElement>(rows);
+      if (!(on && isRow(on))) {
+        return null;
+      }
+      const slid = slideOf(on, container, shares);
+      return Math.abs(slid.x) <= CARRIED && Math.abs(slid.y) <= CARRIED
+        ? on
+        : null;
+    };
+    /** The nearest row whose grown box holds the point, drawn there. */
+    const reachedRow = (
+      clientX: number,
+      clientY: number,
+      shares: Map<HTMLElement, { x: number; y: number }>
+    ) => {
+      const at = toLocal(clientX, clientY);
+      const reached: { distance: number; row: HTMLElement }[] = [];
       for (const row of rowsNow()) {
         // A row the pointer cannot reach — one on its way out — is not
         // under it, wherever it is still drawn.
@@ -386,12 +437,12 @@ export function highlight(options: HighlightOptions) {
           y: Math.abs(dy),
           xy: Math.hypot(dx, dy),
         }[axis];
-        if (distance < bestDistance) {
-          bestDistance = distance;
-          best = row;
-        }
+        reached.push({ distance, row });
       }
-      return best;
+      reached.sort((a, b) => a.distance - b.distance);
+      return (
+        reached.find(({ row }) => drawnNear(row, clientX, clientY))?.row ?? null
+      );
     };
 
     /** Where the pointer last was, to re-aim when a list scrolls under it. */

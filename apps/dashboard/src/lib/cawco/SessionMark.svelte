@@ -275,51 +275,54 @@
     font-variant-numeric: tabular-nums;
     line-height: 1;
   }
+  /* Which of the two shows (--away: 1 for the one that has given way). The
+     swap is by opacity; the shrink and the blur are motion, and ride on it
+     only where motion is welcome. */
+  .num,
   .chev {
+    opacity: calc(1 - var(--away));
+    transition: opacity var(--dur-control) var(--ease-out);
+  }
+  .num {
+    --away: 0;
+  }
+  .chev {
+    --away: 1;
     display: inline-flex;
     inline-size: 12px;
     block-size: 12px;
-    opacity: 0;
-    scale: 0.25;
-    filter: blur(4px);
 
     & :global(svg) {
       inline-size: 100%;
       block-size: 100%;
     }
   }
-  .session-mark[data-open] .chev :global(svg) {
-    rotate: 90deg;
-  }
   .session-mark[data-open] {
     & .num {
-      opacity: 0;
-      scale: 0.25;
-      filter: blur(4px);
+      --away: 1;
     }
     & .chev {
-      opacity: 1;
-      scale: 1;
-      filter: blur(0);
+      --away: 0;
+    }
+    & .chev :global(svg) {
+      rotate: 90deg;
     }
   }
   @media (hover: hover) and (pointer: fine) {
     .session-mark[data-has]:has(.hit:hover) {
       & .num {
-        opacity: 0;
-        scale: 0.25;
-        filter: blur(4px);
+        --away: 1;
       }
       & .chev {
-        opacity: 1;
-        scale: 1;
-        filter: blur(0);
+        --away: 0;
       }
     }
   }
   @media (prefers-reduced-motion: no-preference) {
     .num,
     .chev {
+      scale: calc(1 - 0.75 * var(--away));
+      filter: blur(calc(4px * var(--away)));
       transition:
         opacity var(--dur-control) var(--ease-out),
         scale var(--dur-control) var(--ease-out),
@@ -334,15 +337,6 @@
     /* The press: the tile gives a little under it. */
     .session-mark:has(.hit:active) .face {
       scale: var(--press-scale);
-    }
-  }
-  /* Still: the two swap by opacity alone. */
-  @media (prefers-reduced-motion: reduce) {
-    .num,
-    .chev {
-      scale: 1 !important;
-      filter: none !important;
-      transition: opacity var(--dur-control) var(--ease-out);
     }
   }
 
@@ -394,7 +388,7 @@
     pointer-events: none;
     transition: background-color var(--dur-fade) var(--ease-out);
   }
-  .session-mark:is([data-rim="attn"], [data-rim="fail"])::before {
+  .session-mark[data-rim]::before {
     content: "";
   }
   .session-mark[data-rim="attn"] {
@@ -403,15 +397,17 @@
   .session-mark[data-rim="fail"] {
     --rim: var(--status-fail-glyph);
   }
-  /* Working, with reduced motion: no echo, a still hairline in the live ink
-     in the ring's place. */
-  @media (prefers-reduced-motion: reduce) {
-    .session-mark[data-rim="live"] {
-      --rim: var(--status-live-glyph);
-    }
+  /* Working: a still hairline in the live ink in the ring's place, which
+     the echo stands in for wherever motion is welcome. */
+  .session-mark[data-rim="live"] {
+    --rim: var(--status-live-glyph);
+  }
+  .session-mark[data-rim="live"]::before {
+    --rim-ring: max(var(--dpx, 1px), round(1px, var(--dpx, 1px)));
+  }
+  @media (prefers-reduced-motion: no-preference) {
     .session-mark[data-rim="live"]::before {
-      --rim-ring: max(var(--dpx, 1px), round(1px, var(--dpx, 1px)));
-      content: "";
+      content: none;
     }
   }
 </style>
