@@ -142,6 +142,12 @@ public enum KitButton {
         config.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: height.padding + 1, bottom: 0, trailing: height.padding + 1)
         config.background.cornerRadius = Radius.radiusMd
         config.background.backgroundColor = background(variant, pressed: false)
+        // Where that border is transparent the fill stops inside it
+        // (`background-clip: padding-box`): the paint is a point in from the box on every side.
+        if variant == .action || variant == .ghost {
+            config.background.backgroundInsets = NSDirectionalEdgeInsets(top: 1, leading: 1, bottom: 1, trailing: 1)
+            config.background.cornerRadius = Radius.radiusMd - 1
+        }
         switch variant {
         case .action:
             config.background.strokeWidth = 0
