@@ -50,8 +50,17 @@ export function enableLongPressMenus(): () => void {
     const target = event.target as HTMLElement;
     // Only where a menu actually is — a long press on a paragraph should keep
     // meaning what the platform says it means (text selection).
-    // The trigger is `display: contents`; the row is its child the finger is on.
-    const row = target.closest('[data-slot="context-menu-trigger"] > *');
+    // A trigger that draws its own box is the row (a work row is the trigger
+    // itself). One that is `display: contents` wraps the row, which is its
+    // child the finger is on.
+    const trigger = target.closest('[data-slot="context-menu-trigger"]');
+    if (!trigger) {
+      return;
+    }
+    const row =
+      getComputedStyle(trigger).display === "contents"
+        ? target.closest('[data-slot="context-menu-trigger"] > *')
+        : trigger;
     if (!row) {
       return;
     }
