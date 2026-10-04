@@ -1344,24 +1344,51 @@ final class NsFlow: UIView {
         setNeedsLayout()
     }
 
+    /// The item that takes what its line has spare, up to `stretchBy` more (`flex: auto`).
+    weak var stretch: UIView?
+    var stretchBy = 0.0
+    /// The item held at its line's end (`margin-left: auto`).
+    weak var end: UIView?
+
     override func layoutSubviews() {
         super.layoutSubviews()
+        // Break into lines by each item's own width, then place each line.
+        var lines: [[(view: UIView, size: CGSize)]] = [[]]
         var x = 0.0
-        var y = 0.0
-        var row = 0.0
         for item in items where !item.isHidden {
+            // A view sized by its constraints answers with them; one that only has an intrinsic size answers with that.
             var size = item.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize)
+            let own = item.intrinsicContentSize
+            if own.width > 0 { size.width = max(size.width, own.width) }
+            if own.height > 0 { size.height = max(size.height, own.height) }
             size.width = min(size.width, bounds.width)
             if x > 0, x + size.width > bounds.width {
+                lines.append([])
                 x = 0
-                y += row + rowGap
-                row = 0
             }
-            item.frame = CGRect(x: x, y: y, width: size.width, height: size.height)
+            lines[lines.count - 1].append((item, size))
             x += size.width + gap
-            row = max(row, size.height)
         }
-        let height = y + row
+        var y = 0.0
+        for line in lines where !line.isEmpty {
+            let row = line.map(\.size.height).max() ?? 0
+            let used = line.reduce(0) { $0 + $1.size.width } + gap * Double(line.count - 1)
+            var spare = max(0, bounds.width - used)
+            var at = 0.0
+            for (view, size) in line {
+                var width = size.width
+                if view === stretch {
+                    let more = min(spare, stretchBy)
+                    width += more
+                    spare -= more
+                }
+                if view === end { at += spare }
+                view.frame = CGRect(x: at, y: y + (row - size.height) / 2, width: width, height: size.height)
+                at += width + gap
+            }
+            y += row + rowGap
+        }
+        let height = max(0, y - rowGap)
         if abs(tall.constant - height) > 0.5 {
             tall.constant = height
             superview?.setNeedsLayout()

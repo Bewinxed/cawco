@@ -112,12 +112,27 @@ final class NsChip: UIControl {
         didSet {
             alpha = off ? 0.55 : 1
             isEnabled = !off
-            chevron.isHidden = off || trailing != nil
+            chevron.isHidden = off || plain || !showsChevron || trailing != nil
         }
     }
 
-    /// `height`: 30pt, or 28 for a tool chip riding a model row (`.ns-chip-btn.tool`).
-    init(height: Double = 30) {
+    /// The same chip as plain text, where the setting cannot be changed
+    /// (`.ns-chip-btn.static`): no surface, no edge, no chevron.
+    var plain = false {
+        didSet {
+            chevron.isHidden = off || plain || !showsChevron || trailing != nil
+            paint()
+        }
+    }
+
+    private let showsChevron: Bool
+
+    /// `height`: 30pt, or 28 for a tool chip riding a model row
+    /// (`.ns-chip-btn.tool`). `inset` and `gap`: 8 and 6, drawn in to 6 and 4
+    /// where three chips share a phone's row. `chevron`: a bordered chip
+    /// already reads as tappable there, and its chevron is room a name needs.
+    init(height: Double = 30, inset: Double = 8, gap: Double = 6, chevron showsChevron: Bool = true) {
+        self.showsChevron = showsChevron
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         layer.cornerRadius = Radius.radiusSm
@@ -127,18 +142,19 @@ final class NsChip: UIControl {
         lead.translatesAutoresizingMaskIntoConstraints = false
         label.lineBreakMode = .byTruncatingTail
         label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        row.spacing = 6
+        row.spacing = gap
         row.alignment = .center
         row.isUserInteractionEnabled = false
         row.translatesAutoresizingMaskIntoConstraints = false
+        chevron.isHidden = !showsChevron
         for view in [lead, label, chevron] as [UIView] { row.addArrangedSubview(view) }
         addSubview(row)
         NSLayoutConstraint.activate([
             heightAnchor.constraint(equalToConstant: height),
             lead.widthAnchor.constraint(equalToConstant: 16),
             lead.heightAnchor.constraint(equalToConstant: 16),
-            row.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
-            row.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
+            row.leadingAnchor.constraint(equalTo: leadingAnchor, constant: inset),
+            row.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -inset),
             row.centerYAnchor.constraint(equalTo: centerYAnchor),
         ])
         isAccessibilityElement = true
@@ -162,7 +178,7 @@ final class NsChip: UIControl {
     func setTrailing(_ view: UIView?) {
         trailing?.removeFromSuperview()
         trailing = view
-        chevron.isHidden = view != nil
+        chevron.isHidden = view != nil || !showsChevron || plain || off
         if let view { row.addArrangedSubview(view) }
         row.isUserInteractionEnabled = view != nil
     }
@@ -180,8 +196,8 @@ final class NsChip: UIControl {
 
     private func paint() {
         let traits = traitCollection
-        backgroundColor = open ? Palette.surfaceFill : Palette.surfaceRaised
-        layer.borderColor = (warn ? Palette.statusFailInk : Palette.borderControl).resolvedColor(with: traits).cgColor
+        backgroundColor = plain ? .clear : (open ? Palette.surfaceFill : Palette.surfaceRaised)
+        layer.borderColor = plain ? UIColor.clear.cgColor : (warn ? Palette.statusFailInk : Palette.borderControl).resolvedColor(with: traits).cgColor
         label.ink = warn ? Palette.statusFailInk : (empty ? Palette.inkMuted : Palette.inkStrong)
     }
 }
@@ -199,7 +215,8 @@ final class NsButton: UIControl {
     private var title: String
     private(set) var pending = false
 
-    init(_ title: String, primary: Bool = false, size: Size = .md, action: @escaping () -> Void) {
+    /// `height`: its size's own (36, 30, 28) unless a place gives it another (44 under a finger).
+    init(_ title: String, primary: Bool = false, size: Size = .md, height: Double? = nil, action: @escaping () -> Void) {
         self.primary = primary
         self.title = title
         let ink = primary ? Palette.onBrand : Palette.inkStrong
@@ -213,6 +230,8 @@ final class NsButton: UIControl {
         clipsToBounds = true
         if primary { layer.insertSublayer(gradient, at: 0) }
         label.text = title
+        // Stretched wide, the button keeps its label its own width, in the middle.
+        label.setContentHuggingPriority(.required, for: .horizontal)
         spinner.isHidden = true
         let row = UIStackView(arrangedSubviews: [spinner, label])
         row.spacing = 6
@@ -222,7 +241,7 @@ final class NsButton: UIControl {
         addSubview(row)
         let side: Double = size == .md ? 14 : size == .sm ? 11 : 8
         NSLayoutConstraint.activate([
-            heightAnchor.constraint(equalToConstant: size == .md ? 36 : size == .sm ? 30 : 28),
+            heightAnchor.constraint(equalToConstant: height ?? (size == .md ? 36 : size == .sm ? 30 : 28)),
             row.centerXAnchor.constraint(equalTo: centerXAnchor),
             row.centerYAnchor.constraint(equalTo: centerYAnchor),
             row.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor, constant: side),

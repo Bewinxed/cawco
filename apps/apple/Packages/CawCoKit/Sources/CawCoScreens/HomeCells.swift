@@ -630,7 +630,7 @@ struct NestShape {
 /// is doing, the status word read out with the title; under the title, the
 /// project and what it is doing now; at the end its age and, on a parent,
 /// the count of the rows under it. A finger keeps its 44pt.
-final class SessionRowView: UIView {
+final class SessionRowView: UIView, HoverSessionRow {
     private var pointer: PointerSurface?
     let mark = SessionMarkView()
     private let title = KitLabel(TypeScale.typeLabel)
@@ -694,9 +694,16 @@ final class SessionRowView: UIView {
         /// The parent of delegates the list shows, drawn so they hang off it.
         var context = false
         var stale = false
+        /// The instance the row stands for, where it stands for one: the
+        /// session a hover card opens from it (`data-hover-session={instance?.id}`).
+        var hover: String?
     }
 
+    /// HomeRow.svelte's `data-hover-session`: the rail's session card opens over the home's rows too.
+    private(set) var hoverSessionId: String?
+
     func configure(_ content: Content) {
+        hoverSessionId = content.hover
         mark.configure(id: content.id, place: content.place, status: content.status)
         title.text = content.title
         title.ink = content.context ? Palette.inkMuted : Palette.inkStrong

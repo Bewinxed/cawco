@@ -637,7 +637,11 @@ final class EffortPopover: NsPopoverController {
         pips = EffortPips(efforts: efforts, value: value)
         super.init(width: 300)
         pips.onChange = onChange
+        pips.onCommit = { [weak self] level in self?.onCommit(level) }
     }
+
+    /// The finger let go on a level.
+    var onCommit: (String) -> Void = { _ in }
 
     override func viewDidLoad() {
         super.viewDidLoad()

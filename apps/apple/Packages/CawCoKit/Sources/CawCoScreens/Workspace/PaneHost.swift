@@ -69,32 +69,40 @@ final class PaneHost {
         hub.address?.appendingPathComponent("session").appendingPathComponent(id)
     }
 
-    /// Session details in the house sheet on its edge (PaneTabs.svelte's drawer).
-    func showDetails(_ id: String, from presenter: UIViewController?) {
+    /// The session details card for `id` (SessionDetails.svelte), wired to
+    /// this host: its Continue button, and the name its tab shows.
+    func details(for id: String) -> SessionDetailsController {
+        let details = SessionDetailsController(hub: hub, sessionId: id, title: detailsTitle(id), link: link(id))
+        details.onContinue = { [weak self] id in self?.continueInNewSession(id) }
+        details.onOpenMcp = { [weak self] in self?.onOpenMcp() }
+        return details
+    }
+
+    func detailsTitle(_ id: String) -> String {
+        hub.fleet.byId[id].map(hub.fleet.title) ?? title(id) ?? String(id.prefix(8))
+    }
+
+    /// The details' MCP count leads to the fleet's MCP configuration.
+    var onOpenMcp: () -> Void = {}
+
+    /// Session details as PaneTabs.svelte hosts them: the house sheet on its
+    /// edge where a finger drives, the kit popover hung from the tab where a
+    /// pointer does. A workflow run's tab is its own details: it has no card.
+    func showDetails(_ id: String, from presenter: UIViewController?, source: UIView? = nil) {
         guard let presenter, BoardRun.runId(of: id) == nil else { return }
-        let fleet = hub.fleet
-        let row = fleet.byId[id]
-        let title = row.map(fleet.title) ?? self.title(id) ?? String(id.prefix(8))
-        let details = SessionIdentityController(
-            title: title,
-            face: face(row, id),
-            host: row.map { fleet.machineName($0.machineId) } ?? "",
-            cwd: row?.cwd ?? ""
-        )
-        presenter.present(HouseSheetController(details, style: .edge), animated: true)
+        let details = details(for: id)
+        if presenter.traitCollection.horizontalSizeClass == .compact || source == nil {
+            let sheet = HouseSheetController(details, style: .edge, scroller: details.scroller)
+            details.onClose = { [weak sheet] in sheet?.dismiss(animated: true) }
+            presenter.present(sheet, animated: true)
+        } else if let source {
+            let popover = SessionDetailsPopover(details)
+            details.onClose = { [weak popover] in popover?.dismiss(animated: true) }
+            KitPopover.present(popover, from: source, in: presenter)
+        }
     }
 
     func continueInNewSession(_ id: String) {
         continueHandler?(id)
-    }
-
-    private func face(_ row: InstanceRow?, _ id: String) -> SessionStatusView.Face {
-        guard let row else { return .stored }
-        if row.isFailed { return .failed }
-        if row.isStale || hub.state != .connected { return .unreachable }
-        if row.status == .sleeping { return .sleeping }
-        if row.status == .stopped { return .stopped }
-        if hub.needs.blocked(id) { return .needsYou }
-        return .idle
     }
 }

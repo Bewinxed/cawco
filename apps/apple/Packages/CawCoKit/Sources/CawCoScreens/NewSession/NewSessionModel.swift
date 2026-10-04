@@ -27,13 +27,23 @@ struct ModelTools {
 
 /// Effort and permission as chips that open their pickers (ToolChips.svelte).
 final class ToolChipsView: UIStackView {
-    private let effort = NsChip(height: 28)
-    private let permission = NsChip(height: 28)
+    private let effort: NsChip
+    private let permission: NsChip
     private var tools: ModelTools?
     weak var presenter: UIViewController?
     private weak var popover: UIViewController?
+    /// Read-only, they are the same chips as plain text.
+    var readonly = false
+    /// Apply the effort once the level is let go, then close the picker
+    /// (a running session's effort is a command, not a form value).
+    var closeOnCommit = false
+    private var closing: Task<Void, Never>?
 
-    init() {
+    /// `height`, `inset` and `chevrons`: the session details draw the chips
+    /// 44pt tall, 6pt in and without chevrons on a phone.
+    init(height: Double = 28, inset: Double = 8, chevrons: Bool = true) {
+        effort = NsChip(height: height, inset: inset, gap: inset < 8 ? 4 : 6, chevron: chevrons)
+        permission = NsChip(height: height, inset: inset, gap: inset < 8 ? 4 : 6, chevron: chevrons)
         super.init(frame: .zero)
         spacing = 4
         alignment = .center
@@ -52,9 +62,12 @@ final class ToolChipsView: UIStackView {
         self.tools = tools
         // The effort chip is always there; when it has no level, it says why.
         let off = tools.effortOff ?? (tools.efforts.isEmpty && tools.effort == nil ? ("No effort", "This model has no effort setting") : nil)
-        let picker = off == nil && !tools.efforts.isEmpty
+        let picker = !readonly && off == nil && !tools.efforts.isEmpty
         effort.show(Glyph.tuning.image, tint: Palette.hueOrange500, label: off?.label ?? tools.effort?.capitalized ?? "Default")
         effort.off = off != nil
+        effort.plain = readonly || (off == nil && !picker)
+        permission.plain = readonly
+        permission.isUserInteractionEnabled = !readonly
         effort.isUserInteractionEnabled = picker
         effort.accessibilityLabel = "Effort"
         effort.accessibilityValue = off.map { "\($0.label): \($0.reason)" } ?? tools.effort?.capitalized ?? "Default"
@@ -72,7 +85,22 @@ final class ToolChipsView: UIStackView {
 
     private func openEffort() {
         guard let tools, let presenter else { return }
-        let picker = EffortPopover(efforts: tools.efforts, value: tools.effort) { [weak self] level in self?.tools?.onEffort(level) }
+        let picker = EffortPopover(efforts: tools.efforts, value: tools.effort) { [weak self] level in
+            guard let self, !closeOnCommit else { return }
+            self.tools?.onEffort(level)
+        }
+        if closeOnCommit {
+            // Apply the level now, but keep the picker open while its chip settles on it.
+            picker.onCommit = { [weak self, weak picker] level in
+                self?.tools?.onEffort(level)
+                self?.closing?.cancel()
+                self?.closing = Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(260))
+                    guard !Task.isCancelled else { return }
+                    picker?.dismiss(animated: true)
+                }
+            }
+        }
         present(picker, from: effort, in: presenter)
     }
 
@@ -330,26 +358,36 @@ final class ModelSectionView: UIView, UITextFieldDelegate {
     private let rail = HarnessRail()
     private let search = UITextField()
     private let clear = UIButton(type: .custom)
-    private let scroll = UIScrollView()
+    private let scroll = ListScroll()
     private let rows = UIStackView()
     private let fill = UIView()
     private let chips = ToolChipsView()
     private let leaving = UIView()
 
-    init(hub: HubConnection, label: String, state: State, presenter: UIViewController) {
+    private let runtime: Bool
+    private var listHeight: NSLayoutConstraint!
+
+    /// `runtime`: a running session's model list (the session details'
+    /// picker): no heading and no harness rail, since a running session keeps
+    /// its harness; no panel of its own; five whole rows at most, hugging fewer.
+    init(hub: HubConnection, label: String, state: State, presenter: UIViewController?, runtime: Bool = false) {
         self.hub = hub
         self.state = state
+        self.runtime = runtime
         listHarness = state.harness
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         chips.presenter = presenter
         let phone = traitCollection.horizontalSizeClass == .compact
 
-        picker.backgroundColor = Palette.surfaceRaised
         picker.layer.cornerRadius = Radius.radiusMd
         picker.layer.cornerCurve = .continuous
-        picker.layer.borderWidth = 1
-        picker.boxShadow = Shadow.shadowXs
+        if !runtime {
+            picker.backgroundColor = Palette.surfaceRaised
+            picker.layer.borderWidth = 1
+            picker.boxShadow = Shadow.shadowXs
+        }
+        rail.isHidden = runtime
         rail.layer.cornerRadius = Radius.radiusMd
         rail.layer.cornerCurve = .continuous
         rail.layer.maskedCorners = [.layerMinXMinYCorner, .layerMinXMaxYCorner]
@@ -395,6 +433,7 @@ final class ModelSectionView: UIView, UITextFieldDelegate {
         rows.spacing = 2
         rows.translatesAutoresizingMaskIntoConstraints = false
         leaving.isUserInteractionEnabled = false
+        scroll.onWidth = { [weak self] in self?.reflow() }
         scroll.alwaysBounceVertical = true
         scroll.addSubview(fill)
         scroll.addSubview(rows)
@@ -411,6 +450,8 @@ final class ModelSectionView: UIView, UITextFieldDelegate {
         picker.addSubview(panel)
 
         let header = nsSectionHeader(.cpuBolt, hue: Palette.hueCyan500, label)
+        header.isHidden = runtime
+        listHeight = scroll.heightAnchor.constraint(equalToConstant: 300)
         let column = UIStackView(arrangedSubviews: [header, picker])
         column.axis = .vertical
         column.spacing = 8
@@ -429,7 +470,7 @@ final class ModelSectionView: UIView, UITextFieldDelegate {
             seam.heightAnchor.constraint(equalToConstant: 1),
             clear.widthAnchor.constraint(equalToConstant: 22),
             clear.heightAnchor.constraint(equalToConstant: 22),
-            scroll.heightAnchor.constraint(equalToConstant: 300),
+            listHeight,
             rows.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor, constant: 4),
             rows.bottomAnchor.constraint(equalTo: scroll.contentLayoutGuide.bottomAnchor, constant: -4),
             rows.leadingAnchor.constraint(equalTo: scroll.frameLayoutGuide.leadingAnchor, constant: 4),
@@ -438,9 +479,18 @@ final class ModelSectionView: UIView, UITextFieldDelegate {
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (view: ModelSectionView, _: UITraitCollection) in view.paint() }
         paint()
         built = true
-        // The first list staggers in too, rather than standing there.
-        render(swap: 1)
+        // The first list staggers in too, rather than standing there; a running session's list just stands.
+        render(swap: runtime ? nil : 1)
         ensure()
+    }
+
+    /// The list changed its own height (a runtime list hugs its rows).
+    var onResize: () -> Void = {}
+
+    /// How tall the whole section stands: for a host that sizes itself to it.
+    var fittingHeight: Double {
+        systemLayoutSizeFitting(CGSize(width: bounds.width > 0 ? bounds.width : 360, height: UIView.layoutFittingCompressedSize.height),
+                                withHorizontalFittingPriority: .required, verticalFittingPriority: .fittingSizeLevel).height
     }
 
     @available(*, unavailable)
@@ -568,6 +618,16 @@ final class ModelSectionView: UIView, UITextFieldDelegate {
             }
         }
 
+        if runtime {
+            // Five whole rows: 4pt in, five 44pt rows, four 2pt gaps.
+            let count = Double(max(1, rows.arrangedSubviews.count))
+            let wanted = shown.isEmpty && !custom ? 4 + 62 + 4 : 8 + count * 44 + (count - 1) * 2
+            let height = min(232, wanted)
+            if listHeight.constant != height {
+                listHeight.constant = height
+                onResize()
+            }
+        }
         // The fill and the chips slide to the chosen row.
         let index = Double((picked ?? 0) + (custom ? 1 : 0))
         layoutIfNeeded()
@@ -591,15 +651,13 @@ final class ModelSectionView: UIView, UITextFieldDelegate {
         scroll.bringSubviewToFront(chips)
     }
 
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        // The fill and chips are placed by frame: a width change re-places them.
-        if abs(fill.frame.width - (scroll.bounds.width - 8)) > 0.5, scroll.bounds.width > 0 {
-            let y = fill.frame.minY
-            let chipsWidth = chips.frame.width
-            fill.frame = CGRect(x: 4, y: y, width: scroll.bounds.width - 8, height: 44)
-            chips.frame = CGRect(x: scroll.bounds.width - 10 - chipsWidth, y: y, width: chipsWidth, height: 44)
-        }
+    /// The fill and chips are placed by frame: when the list's own width changes, they follow it.
+    private func reflow() {
+        guard scroll.bounds.width > 0 else { return }
+        let y = fill.frame.minY
+        let chipsWidth = chips.frame.width
+        fill.frame = CGRect(x: 4, y: y, width: scroll.bounds.width - 8, height: 44)
+        chips.frame = CGRect(x: scroll.bounds.width - 10 - chipsWidth, y: y, width: chipsWidth, height: 44)
     }
 
     private func customRow() -> UIControl {
@@ -627,6 +685,19 @@ final class ModelSectionView: UIView, UITextFieldDelegate {
     func textFieldShouldReturn(_ textField: UITextField) -> Bool {
         if custom { pickCustom() } else { textField.resignFirstResponder() }
         return false
+    }
+}
+
+/// The list's scroll view, which says when its own width changes.
+private final class ListScroll: UIScrollView {
+    var onWidth: () -> Void = {}
+    private var width = 0.0
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        guard bounds.width != width else { return }
+        width = bounds.width
+        onWidth()
     }
 }
 

@@ -145,7 +145,7 @@ final class PaneGroupController: UIViewController, TabSwipeHost, UIDropInteracti
             workspace.activate(id, in: leafId)
         }
         strip.onClose = { [weak self] id in self?.workspace.close(id) }
-        strip.onDetails = { [weak self] id, _ in self?.panes.showDetails(id, from: self) }
+        strip.onDetails = { [weak self] id, tab in self?.panes.showDetails(id, from: self, source: tab) }
         strip.menu = { [weak self] id in self?.menu(for: id) }
         strip.dragFor = { [weak self] id, _ in self?.dragItem(id) }
         view.addInteraction(UIDropInteraction(delegate: self))

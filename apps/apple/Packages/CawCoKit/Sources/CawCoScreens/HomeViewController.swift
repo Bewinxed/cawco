@@ -299,7 +299,8 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
                 trail: line.context ? "" : home.age(session, tab: entry.tab),
                 fold: entry.line.fold,
                 context: line.context,
-                stale: !home.live
+                stale: !home.live,
+                hover: session.id
             ))
             cell.row.count.onToggle = { [weak self] in self?.toggleTree(session.id) }
         }
@@ -344,7 +345,8 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
                 title: recent.title,
                 line: recent.place,
                 trail: recent.at > 0 ? Naming.span(ms: home.now - recent.at) : "",
-                stale: !home.live
+                stale: !home.live,
+                hover: recent.instance?.id
             ))
         }
         let note = UICollectionView.CellRegistration<NoteCell, Item> { [weak self] cell, _, _ in

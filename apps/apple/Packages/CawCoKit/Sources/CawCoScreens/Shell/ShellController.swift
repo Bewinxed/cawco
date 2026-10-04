@@ -84,6 +84,11 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         panes.onReturnToFleet = { [weak self] id in self?.returnToFleet(id) }
         panes.onOpen = { [weak self] id in self?.openSession(id) }
         panes.continueHandler = { [weak self] id in self?.newSession.continueSession(id) }
+        // The details' "N MCP" leads to the fleet's MCP configuration (`/config/mcp`).
+        panes.onOpenMcp = { [weak self] in
+            self?.dialogPresenter.dismiss(animated: true)
+            self?.go(.configure)
+        }
         rail.host = self
         rail.homeController = railHome
         for home in [railHome, board] {

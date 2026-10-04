@@ -72,7 +72,7 @@ public enum Usage {
     }
 
     /// A share's colour step by how full it is: spark from 70%, crimson from 90%, reached at 100%.
-    static func fill(_ used: Double) -> State {
+    public static func fill(_ used: Double) -> State {
         used >= 100 ? .reached : used >= 90 ? .over : used >= 70 ? .near : .calm
     }
 

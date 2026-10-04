@@ -111,6 +111,7 @@ public enum Glyph: String, CaseIterable, Sendable {
     case arrowLeft = "arrow-left-linear"
     case stars = "stars-bold-duotone"
     case bookOpen = "book-2-bold-duotone"
+    case link = "link-bold-duotone"
     /// PiLogo.svelte: one ink, drawn in the text colour.
     case logoPi = "logo-pi"
 

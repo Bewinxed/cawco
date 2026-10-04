@@ -123,6 +123,7 @@ const SOLAR_ICONS = [
   "arrow-left-linear", // LocationSection: Parent folder
   "stars-bold-duotone", // the / menu: skills
   "book-2-bold-duotone", // the / menu: plugins
+  "link-bold-duotone", // SessionDetails: Copy link
 ];
 
 /**
