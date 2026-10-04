@@ -1,17 +1,21 @@
 import UIKit
 
 public extension KitButton {
-    /// The workflow tab's button (workflows.css `.wf-btn`): raised on the
-    /// control border, radius 8, the label role, 7/11pt in, 44pt for a
-    /// finger, pressing to `pressScale`.
-    static func workflow(_ title: String, action: @escaping () -> Void) -> UIButton {
-        let button = make(title, variant: .outline, height: .lg, action: action)
+    /// The workflows pages' button (workflows.css `.wf-btn`): raised on the
+    /// control border, radius 8, the label role, 7/11pt in from its 1pt
+    /// border, 36pt under a pointer and 44pt square at the least under a
+    /// finger, pressing to `pressScale`. `primary` is `.wf-primary`: the
+    /// action surface under the on-brand ink, no edge.
+    static func workflow(_ title: String, primary: Bool = false, action: @escaping () -> Void) -> UIButton {
+        let coarse = UITraitCollection.current.userInterfaceIdiom != .mac
+        let button = make(title, variant: primary ? .action : .outline, height: coarse ? .lg : .standard, action: action)
         var config = button.configuration
-        config?.attributedTitle = AttributedString(title, attributes: AttributeContainer(TypeScale.typeLabel.attributes(color: Palette.inkStrong)))
-        config?.contentInsets = NSDirectionalEdgeInsets(top: Space.space2, leading: Space.space3, bottom: Space.space2, trailing: Space.space3)
+        config?.attributedTitle = AttributedString(title, attributes: AttributeContainer(TypeScale.typeLabel.attributes(color: primary ? Palette.onBrand : Palette.inkStrong)))
+        config?.contentInsets = NSDirectionalEdgeInsets(top: Space.space2 + 1, leading: Space.space3 + 1, bottom: Space.space2 + 1, trailing: Space.space3 + 1)
         config?.background.cornerRadius = Radius.radiusSm
+        config?.background.customView?.layer.cornerRadius = Radius.radiusSm
         button.configuration = config
-        button.widthAnchor.constraint(greaterThanOrEqualToConstant: Size.cBtnHLg).isActive = true
+        if coarse { button.widthAnchor.constraint(greaterThanOrEqualToConstant: Size.cBtnHLg).isActive = true }
         return button
     }
 

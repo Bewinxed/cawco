@@ -11,14 +11,15 @@ import UIKit
 /// over `durPanel`, and leaves over `durExit`. A tap on the scrim, Escape
 /// or the close button closes it, unless `holdsOpen`.
 open class KitDialogController: UIViewController, UIViewControllerTransitioningDelegate {
-    /// `sm:max-w-md`, `-lg`, `-2xl`.
+    /// `sm:max-w-md`, `-lg`, `-xl`, `-2xl`.
     public enum Width: Sendable {
-        case md, lg, xl2
+        case md, lg, xl, xl2
 
         var points: Double {
             switch self {
             case .md: 448
             case .lg: 512
+            case .xl: 576
             case .xl2: 672
             }
         }
@@ -28,6 +29,12 @@ open class KitDialogController: UIViewController, UIViewControllerTransitioningD
     public let body = UIStackView()
     /// While true the scrim, Escape and the close button leave it up.
     public var holdsOpen = false
+    /// The control that opened it: the dialog grows out of it over `durPanel`
+    /// on the drawer curve and shrinks back into it over `durExit`
+    /// (WorkflowLaunch.svelte). Without one it rises 6pt as it fades in.
+    public weak var origin: UIView?
+    /// Where the card stands in the dialog's view.
+    var cardFrame: CGRect { frameView.frame }
     private let width: Width
     private let closable: Bool
     private let frameView = UIView()
@@ -139,11 +146,11 @@ open class KitDialogController: UIViewController, UIViewControllerTransitioningD
     }
 
     public func animationController(forPresented _: UIViewController, presenting _: UIViewController, source _: UIViewController) -> (any UIViewControllerAnimatedTransitioning)? {
-        DialogAnimator(presenting: true)
+        DialogAnimator(presenting: true, origin: origin)
     }
 
     public func animationController(forDismissed _: UIViewController) -> (any UIViewControllerAnimatedTransitioning)? {
-        DialogAnimator(presenting: false)
+        DialogAnimator(presenting: false, origin: origin)
     }
 
     override open func accessibilityPerformEscape() -> Bool {

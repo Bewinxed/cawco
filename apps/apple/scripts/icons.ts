@@ -62,6 +62,7 @@ const SOLAR_ICONS = [
   "sledgehammer-bold-duotone", // IconToolGeneric
   "info-circle-bold-duotone", // IconInfo
   "stop-bold-duotone", // IconStop
+  "record-circle-bold-duotone", // IconDot
   "window-frame-bold-duotone", // IconWindow
   "shield-check-bold-duotone", // IconRules
   "clipboard-check-bold-duotone", // IconReport

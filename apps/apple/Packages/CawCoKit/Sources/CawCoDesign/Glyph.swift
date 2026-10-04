@@ -46,6 +46,7 @@ public enum Glyph: String, CaseIterable, Sendable {
     case toolGeneric = "sledgehammer-bold-duotone"
     case info = "info-circle-bold-duotone"
     case stop = "stop-bold-duotone"
+    case dot = "record-circle-bold-duotone"
     case window = "window-frame-bold-duotone"
     case rules = "shield-check-bold-duotone"
     case report = "clipboard-check-bold-duotone"

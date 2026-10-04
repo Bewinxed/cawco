@@ -267,9 +267,12 @@ public final class ScrimPresentation: UIPresentationController, UIGestureRecogni
 /// `kit-dialog-in` / `-out`: 6pt of rise and a fade.
 final class DialogAnimator: NSObject, UIViewControllerAnimatedTransitioning {
     private let presenting: Bool
+    /// The control the dialog grows from and goes back into (WorkflowLaunch.svelte `fromButton`).
+    private weak var origin: UIView?
 
-    init(presenting: Bool) {
+    init(presenting: Bool, origin: UIView? = nil) {
         self.presenting = presenting
+        self.origin = origin
     }
 
     func transitionDuration(using _: (any UIViewControllerContextTransitioning)?) -> TimeInterval {
@@ -282,16 +285,33 @@ final class DialogAnimator: NSObject, UIViewControllerAnimatedTransitioning {
             context.completeTransition(true)
             return
         }
-        let rise = UIAccessibility.isReduceMotionEnabled ? CGAffineTransform.identity : CGAffineTransform(translationX: 0, y: 6)
+        let still = UIAccessibility.isReduceMotionEnabled
         if presenting {
             view.frame = context.containerView.bounds
             context.containerView.addSubview(view)
-            view.alpha = 0
-            view.transform = rise
+            view.layoutIfNeeded()
         }
-        let animator = Motion.easeOut.animator(transitionDuration(using: context)) { [presenting] in
+        var away = still ? CGAffineTransform.identity : CGAffineTransform(translationX: 0, y: 6)
+        var curve = Motion.easeOut
+        let dialog = context.viewController(forKey: presenting ? .to : .from) as? KitDialogController
+        if !still, let origin, origin.window != nil, let box = dialog?.cardFrame, box.width > 0 {
+            // The card's centre on the button's, scaled toward the button's
+            // width and no smaller than half, about the card's own centre.
+            let at = origin.convert(origin.bounds, to: context.containerView)
+            let scale = max(0.5, at.width / box.width)
+            let offset = CGPoint(x: box.midX - view.bounds.midX, y: box.midY - view.bounds.midY)
+            away = CGAffineTransform(translationX: at.midX - view.bounds.midX, y: at.midY - view.bounds.midY)
+                .scaledBy(x: scale, y: scale)
+                .translatedBy(x: -offset.x, y: -offset.y)
+            curve = presenting ? Motion.easeDrawer : Motion.easeOut
+        }
+        if presenting {
+            view.alpha = 0
+            view.transform = away
+        }
+        let animator = curve.animator(transitionDuration(using: context)) { [presenting] in
             view.alpha = presenting ? 1 : 0
-            view.transform = presenting ? .identity : rise
+            view.transform = presenting ? .identity : away
         }
         animator.addCompletion { _ in context.completeTransition(!context.transitionWasCancelled) }
         animator.startAnimation()
