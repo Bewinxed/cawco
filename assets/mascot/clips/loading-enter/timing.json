@@ -1,5 +1,5 @@
 {
-  "take": "tk_9Ynkh4j2QA8_dTi0Q_Qym",
+  "take": "tk_mVvWNJEuR5BYHAl7VccnT",
   "frames": 20,
   "fps": 24,
   "drawings": [
@@ -55,11 +55,11 @@
     }
   ],
   "placement": {
-    "scale": 0.6252285191956124,
-    "x": -63.857632541133455,
-    "y": -83.33180987202923
+    "scale": 0.6245447982674259,
+    "x": -63.72287238309133,
+    "y": -83.08740408010476
   },
-  "stillOverlap": 0.9913,
+  "stillOverlap": 0.9915,
   "halo": {
     "01": 0,
     "02": 0,
@@ -73,46 +73,46 @@
     "10": 0
   },
   "probe": {
-    "take": "tk_9Ynkh4j2QA8_dTi0Q_Qym",
+    "take": "tk_mVvWNJEuR5BYHAl7VccnT",
     "specksCleared": {},
     "whiteMarksRemovedAtTrace": [],
     "tracedFrames": 22,
     "traced": [
-      [0, 2, 0],
-      [2, 2, 14618],
-      [4, 2, 59625],
-      [6, 2, 82502],
-      [8, 2, 84635],
-      [10, 2, 67967],
-      [12, 2, 70964],
-      [14, 2, 71603],
-      [16, 2, 71256],
-      [18, 4, 71312]
+      [0, 4, 951],
+      [4, 2, 4811],
+      [6, 2, 43289],
+      [8, 2, 74329],
+      [10, 2, 84669],
+      [12, 2, 65450],
+      [14, 2, 62474],
+      [16, 2, 77522],
+      [18, 2, 70676],
+      [20, 2, 71166]
     ],
     "trimmedLeadingFrames": 0,
-    "trimmedTrailingFrames": 2,
+    "trimmedTrailingFrames": 0,
     "last": {
       "against": "loading-feather/body-00",
       "iou": 0.9878,
-      "sameInks": 0.9816,
-      "outlineMaxPx": 11.18,
-      "outlineP99Px": 5.59,
+      "sameInks": 0.981,
+      "outlineMaxPx": 10.82,
+      "outlineP99Px": 4.0,
       "largestDiffs": [
         {
-          "px": 33,
-          "at": [383, 396]
+          "px": 86,
+          "at": [371, 194]
         },
         {
-          "px": 29,
-          "at": [243, 218]
+          "px": 83,
+          "at": [142, 477]
         },
         {
-          "px": 29,
-          "at": [268, 239]
+          "px": 45,
+          "at": [375, 371]
         }
       ]
     },
-    "firstInkPx": 0,
+    "firstInkPx": 951,
     "frames": 20,
     "slots": 10,
     "drawings": 10,
@@ -133,11 +133,13 @@
     "eyesCut": {},
     "gates": {
       "landing": true,
-      "firstEmpty": true,
+      "opensSmall": true,
       "onTwos": true,
       "whiteMarks": true,
       "halo": true,
-      "eyes": true
-    }
+      "eyes": true,
+      "safeArea": true
+    },
+    "outsideSafe": []
   }
 }

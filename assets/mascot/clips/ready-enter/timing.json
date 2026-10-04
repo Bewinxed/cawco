@@ -1,63 +1,58 @@
 {
-  "take": "tk_J1BpLkJv5QKN6OVbMN7US",
-  "frames": 20,
+  "take": "tk_d7c0lS3AYhU5uNL97IjFu",
+  "frames": 18,
   "fps": 24,
   "drawings": [
     {
       "start": 0,
       "length": 2,
-      "drawing": 9
+      "drawing": 8
     },
     {
       "start": 2,
       "length": 2,
-      "drawing": 8
+      "drawing": 7
     },
     {
       "start": 4,
       "length": 2,
-      "drawing": 7
+      "drawing": 6
     },
     {
       "start": 6,
       "length": 2,
-      "drawing": 6
+      "drawing": 5
     },
     {
       "start": 8,
       "length": 2,
-      "drawing": 5
+      "drawing": 4
     },
     {
       "start": 10,
       "length": 2,
-      "drawing": 4
+      "drawing": 3
     },
     {
       "start": 12,
       "length": 2,
-      "drawing": 3
+      "drawing": 2
     },
     {
       "start": 14,
       "length": 2,
-      "drawing": 2
+      "drawing": 1
     },
     {
       "start": 16,
       "length": 2,
-      "drawing": 1
-    },
-    {
-      "start": 18,
-      "length": 2,
-      "drawing": 11
+      "drawing": 9
     }
   ],
   "placement": {
-    "scale": 0.6250004953771405,
-    "x": -64.06275388078456,
-    "y": -83.3751332564508
+    "scale": 0.6240193329040209,
+    "x": -63.37305597678943,
+    "y": -82.48718121827756
   },
   "stillOverlap": 0.9918,
   "halo": {
@@ -69,54 +64,51 @@
     "06": 0,
     "07": 0,
     "08": 0,
-    "09": 0,
-    "11": 0
+    "09": 0
   },
   "probe": {
-    "take": "tk_J1BpLkJv5QKN6OVbMN7US",
+    "take": "tk_d7c0lS3AYhU5uNL97IjFu",
     "specksCleared": {},
     "whiteMarksRemovedAtTrace": [],
     "tracedFrames": 22,
     "traced": [
-      [0, 2, 0],
-      [2, 2, 0],
-      [4, 2, 17975],
-      [6, 2, 56659],
-      [8, 2, 72696],
-      [10, 2, 85270],
-      [12, 2, 91635],
-      [14, 2, 80321],
-      [16, 2, 79336],
-      [18, 2, 87531],
-      [20, 2, 88696]
+      [0, 6, 0],
+      [6, 2, 5384],
+      [8, 2, 25165],
+      [10, 2, 59357],
+      [12, 2, 75860],
+      [14, 2, 82974],
+      [16, 2, 79940],
+      [18, 2, 83962],
+      [20, 2, 88447]
     ],
-    "trimmedLeadingFrames": 2,
+    "trimmedLeadingFrames": 0,
     "trimmedTrailingFrames": 0,
     "last": {
       "against": "ready-attention/body-00",
-      "iou": 0.989,
-      "sameInks": 0.9843,
-      "outlineMaxPx": 4.12,
+      "iou": 0.9903,
+      "sameInks": 0.9852,
+      "outlineMaxPx": 3.61,
       "outlineP99Px": 1.41,
       "largestDiffs": [
         {
-          "px": 29,
-          "at": [379, 164]
+          "px": 15,
+          "at": [338, 148]
         },
         {
-          "px": 17,
-          "at": [338, 149]
+          "px": 14,
+          "at": [98, 318]
         },
         {
-          "px": 16,
-          "at": [81, 272]
+          "px": 12,
+          "at": [356, 268]
         }
       ]
     },
     "firstInkPx": 0,
-    "frames": 20,
-    "slots": 10,
-    "drawings": 10,
+    "frames": 18,
+    "slots": 9,
+    "drawings": 9,
     "onTwos": true,
     "whiteMarks": {},
     "halo": {
@@ -128,8 +120,7 @@
       "06": 0,
       "07": 0,
       "08": 0,
-      "09": 0,
-      "11": 0
+      "09": 0
     },
     "eyesCut": {},
     "gates": {
@@ -138,7 +129,9 @@
       "onTwos": true,
       "whiteMarks": true,
       "halo": true,
-      "eyes": true
-    }
+      "eyes": true,
+      "safeArea": true
+    },
+    "outsideSafe": []
   }
 }
