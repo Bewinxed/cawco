@@ -67,7 +67,6 @@ function clip(name: string): Clip {
   const holds = read('holds')
     .split(' ')
     .map((hold) => hold.split(':').map(Number) as [drawing: number, length: number]);
-  const first = holds[0]?.[0];
   const last = holds.at(-1)?.[0];
 
   let at = 0;
@@ -92,7 +91,6 @@ function clip(name: string): Clip {
 
   const svg = source
     .replace(/<svg[^>]*>/, `<svg class="caw" viewBox="0 0 512 512" data-clip="${name}"__REST__>`)
-    .replace(`data-drawing="${first}"`, `data-drawing="${first}" data-first`)
     .replace(`data-drawing="${last}"`, `data-drawing="${last}" data-last`)
     .trim();
   return {

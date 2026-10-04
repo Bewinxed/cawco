@@ -15,7 +15,7 @@
  * working when the product retires a clip and deletes its folder. Run this
  * only to add a clip or to pick up one that was retraced:
  *
- *   node scripts/import-caw.mjs needs-you-to-ready assets/mascot/clips/needs-you-to-ready
+ *   node scripts/import-caw.mjs ready-enter-distance assets/mascot/clips/ready-enter-distance
  */
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';

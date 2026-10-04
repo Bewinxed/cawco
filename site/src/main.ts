@@ -11,7 +11,7 @@ gsap.matchMedia().add('(prefers-reduced-motion: no-preference)', () => {
   return () => stage.setMotion(false);
 });
 
-// Further down the page Caw stands on the edge of a block, and his clip plays
+// Further down the page Caw peers over the edge of a block, and his clip plays
 // once, when a good part of that block has scrolled into view. The clip itself
 // is CSS (see `.caw` in styles.css); this only says when.
 const arrivals = new IntersectionObserver(

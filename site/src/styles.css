@@ -154,8 +154,8 @@ code {
  * Caw. Every picture of him is one of the product's own drawn clips: a stack
  * of drawings, one visible at a time. At rest a clip shows its last drawing.
  * Where motion is welcome the build's keyframes step through the drawings in
- * the take's own timing, and a clip marked `data-wait` holds its first drawing
- * until its section arrives. Nothing here moves or fades him.
+ * the take's own timing, and a clip marked `data-wait` shows nothing until its
+ * section arrives. Nothing here moves or fades him.
  */
 
 .caw {
@@ -183,10 +183,6 @@ code {
 
   .caw[data-wait]:not(.is-playing) g {
     visibility: hidden;
-  }
-
-  .caw[data-wait]:not(.is-playing) g[data-first] {
-    visibility: visible;
   }
 }
 
@@ -460,38 +456,26 @@ h1 {
   color: var(--paper);
 }
 
-/* Caw stands on the stage's top edge. His feet are 9% up from the bottom of his box. */
-.perch {
+/*
+ * Caw peers over the top edge of the stage and of the price cards. Both clips
+ * are drawn against that edge: it crosses his box 291 of 512 units down, his
+ * body ends on it and his wing tips hang over it for a little under a tenth
+ * of the box. So the box sits in front of the surface, with that line on the
+ * surface's top edge. It is out of the flow, so nothing shifts when he shows.
+ */
+.perch,
+.cost-caw {
   position: absolute;
-  --caw-size: clamp(96px, 12.5vw, 164px);
-  --caw-delay: 500ms;
-  right: clamp(14px, 6%, 80px);
+  z-index: 3;
   bottom: 100%;
   width: var(--caw-size);
-  margin-bottom: calc(var(--caw-size) * -0.075);
+  margin-bottom: calc(var(--caw-size) * (291 / 512 - 1));
   pointer-events: none;
 }
 
-/*
- * A ledge clip is drawn peering over an edge. The edge runs through his box
- * 57% of the way down and his wing tips hang over it for a little under a
- * tenth of the box, so the box sits in front of the surface with that line on
- * the surface's top edge. He shows less of himself than when he stands, so
- * his box is larger.
- */
-.perch[data-ledge],
-.cost-caw[data-ledge] {
-  --ledge: 0.57;
-  z-index: 3;
-  margin-bottom: calc(var(--caw-size) * (var(--ledge) - 1));
-}
-
-.perch[data-ledge] {
-  --caw-size: clamp(120px, 15vw, 200px);
-}
-
-.cost-caw[data-ledge] {
-  --caw-size: clamp(110px, 13vw, 170px);
+.perch {
+  --caw-size: clamp(120px, 72px + 10vw, 220px);
+  right: clamp(14px, 6%, 80px);
 }
 
 .tabs {
@@ -1811,16 +1795,10 @@ mark {
   gap: clamp(12px, 1.6vw, 20px);
 }
 
-/* Caw stands on the cards' top edge, as he does on the stage's. */
+/* Caw climbs up to the cards' top edge and peers over it, as he does on the stage's. */
 .cost-caw {
-  position: absolute;
-  --caw-size: clamp(88px, 10.5vw, 136px);
-  --caw-delay: 500ms;
+  --caw-size: clamp(110px, 12vw, 164px);
   right: clamp(12px, 4%, 48px);
-  bottom: 100%;
-  width: var(--caw-size);
-  margin-bottom: calc(var(--caw-size) * -0.075);
-  pointer-events: none;
 }
 
 .card {

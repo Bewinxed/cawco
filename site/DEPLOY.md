@@ -49,8 +49,8 @@ set of traced drawings and the frames each one is held for. Nothing slides,
 scales or fades him. The build writes every drawing into the page as a group
 and generates the steps that show one at a time, so there is no player to load.
 A clip plays once and rests on its last drawing; with reduced motion the page
-shows that last drawing and plays nothing. A clip marked `data-wait` holds its
-first drawing until the nearest `data-arrives` block scrolls into view.
+shows that last drawing and plays nothing. A clip marked `data-wait` shows
+nothing until the nearest `data-arrives` block scrolls into view.
 
 The clips are copies, so the page keeps working when the product retires one.
 To add a clip or pick up a retraced one:
