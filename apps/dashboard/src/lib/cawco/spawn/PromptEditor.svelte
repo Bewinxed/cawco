@@ -424,10 +424,16 @@
     inline-size: 12px;
     block-size: 12px;
   }
-  @media (max-width: 640px) {
+  /* iOS Safari zooms into a field whose text is under 16px and stays zoomed
+     after the keyboard goes; app.css holds every input, textarea and select
+     to that floor under this same condition, and the prompt is the one
+     field that is none of those. */
+  @media (max-width: 640px), (pointer: coarse) {
     .editor-wrap {
       --prompt-fs: 1rem;
     }
+  }
+  @media (max-width: 640px) {
     .editor {
       height: 120px;
       overscroll-behavior: contain;
