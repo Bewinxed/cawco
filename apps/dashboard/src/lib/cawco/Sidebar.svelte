@@ -13,8 +13,8 @@
    * SidebarMenuSub / SidebarMenuSubButton rather than hand-rolled CSS, inheriting
    * built-in hover, active, focus, and spacing from the component library.
    *
-   * A session says what it is doing on its mark's rim (SessionMark) rather
-   * than in a text pill or a dot of its own.
+   * A session says what it is doing on its mark (SessionMark: an echo, or a
+   * dot on its corner) rather than in a text pill.
    */
   import { untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
@@ -34,7 +34,7 @@
   import {
     IconAssistant,
     IconBox,
-    IconChevronRight,
+    IconHistory,
     IconPlus,
     IconSettings,
     IconSort,
@@ -149,8 +149,8 @@
   /**
    * A session under its project: the name has the least room in the rail,
    * so the gaps between its four parts (mark, name, age, delegate count) are
-   * the tight ones, wide enough that the mark's rim (SessionMark, up to 3px
-   * out) clears the name; its nesting arm ends at its mark (`--nest-reach`,
+   * the tight ones, wide enough that the mark's status dot (SessionMark, 3px
+   * out of the tile) clears the name; its nesting arm ends at its mark (`--nest-reach`,
    * measured: this row's left inset).
    */
   const SUB_ROW = "h-[28px] gap-1.5 pl-1.5 pr-2";
@@ -1160,11 +1160,13 @@
                           {#snippet child({
                             props,
                           })}
-                            <!-- A disclosure, so a button. Busy from the
-                                   press until its rows are drawn: the chevron
-                                   in the lead slot (where the rail's arm
-                                   ends) gives way to the kit's spinner, as a
-                                   pending Button's icon does. -->
+                            <!-- A disclosure, so a button. Its lead is the
+                                   rail's 18px slot, on the session tiles'
+                                   axis (where the rail's arm ends), holding
+                                   the history glyph with no tile under it.
+                                   Busy from the press until its rows are
+                                   drawn: the glyph gives way to the kit's
+                                   spinner, as a pending Button's icon does. -->
                             <button
                               {...props}
                               aria-busy={olderBusy || undefined}
@@ -1173,12 +1175,10 @@
                               type="button"
                             >
                               <span
-                                class="{SLOT} row-lead older-lead icon-swap kit-slot"
+                                class="{SLOT} row-lead older-lead icon-swap"
                               >
-                                <span
-                                  class="older-chev"
-                                  data-active={!olderBusy}
-                                  ><IconChevronRight class="size-3" /></span
+                                <span data-active={!olderBusy}
+                                  ><IconHistory class={SLOT_GLYPH} /></span
                                 >
                                 <!-- Out of the button's name: `aria-busy`
                                        says it, and a status in here was read
@@ -1352,23 +1352,12 @@
   }
   /* A project's older sessions: six sub-rows (28px, 2px apart) at most,
      scrolling in place. The edges fade only while there is more past them. */
-  /* The disclosure's lead: its chevron, which turns as its rows open, and the
-     spinner it gives way to while they are read (the kit's icon swap, at a
-     control's pace). */
+  /* The disclosure's lead: the history glyph in the muted ink, and the
+     spinner it gives way to while its rows are read (the kit's icon swap, at
+     a control's pace). */
   .older-lead {
     --icon-swap-dur: var(--dur-control);
     color: var(--ink-muted);
-  }
-  .older-chev :global(svg) {
-    rotate: var(--swap-turn);
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    .older-chev :global(svg) {
-      transition: --swap-turn var(--dur-control) var(--ease-out);
-    }
-  }
-  :global([aria-expanded="true"]) .older-chev :global(svg) {
-    --swap-turn: 90deg;
   }
   /* The box is off the rail (it scrolls on its own): its rows draw no line,
      and the row that opens it, the project's last, is where the rail ends. */

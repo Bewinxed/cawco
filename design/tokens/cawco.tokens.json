@@ -2340,6 +2340,16 @@
     "tx-preview-thumb-h": {
       "$type": "dimension",
       "$value": "64px"
+    },
+    "status-dot-size": {
+      "$type": "dimension",
+      "$value": "6px",
+      "$description": "A session mark's status dot, centred on the tile's top-right corner (SessionMark)."
+    },
+    "status-dot-cut": {
+      "$type": "dimension",
+      "$value": "1.5px",
+      "$description": "How much of the tile is cut away round its status dot, so the dot reads on any tile hue."
     }
   },
   "effect": {

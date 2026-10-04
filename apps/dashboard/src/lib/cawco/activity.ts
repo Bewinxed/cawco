@@ -59,7 +59,7 @@ export const SLEEPING_LABEL = "Sleeping";
 
 /**
  * The sixth word, for a session whose process exited badly (`isFailed`). A row
- * carries it on its mark's rim (SessionMark), the word as its accessible name
+ * carries it as its mark's dot (SessionMark), the word as its accessible name
  * and tooltip.
  */
 export const FAILED_LABEL = "Failed";

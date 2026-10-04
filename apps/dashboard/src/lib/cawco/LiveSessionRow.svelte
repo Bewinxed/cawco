@@ -70,7 +70,7 @@
   /**
    * No state word on screen: "Working" and "Needs you" are long, and in a
    * pill they shoved the title into an ellipsis on every row of a card of
-   * thirty. The state is the rim round the session's mark (SessionMark), the
+   * thirty. The state is on the session's mark (SessionMark: its echo or dot), the
    * same in every list, with the word read out before the title and the row's
    * tooltip saying the rest (asleep, unreachable).
    */

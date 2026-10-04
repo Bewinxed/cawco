@@ -3,7 +3,8 @@
  * an echo, a copy of its tile seen only outside the tile (SessionMark
  * `[data-echo]`). On its beat the copy grows from the tile and fades, over
  * one --dur-loop on --ease-out, transform and opacity only; the tile and its
- * deck never move.
+ * deck never move. A session that needs you holds the same echo on its status
+ * dot (`.ping`), and takes its place in the same order.
  * The rows beat top to bottom, a third of a loop apart, and the list's cycle
  * is long enough for every one of them: two loops, or the rows times the gap.
  *
@@ -18,7 +19,7 @@
  * restarts for the others, and a row that joins is already in step. Rows
  * under an open parent take their place in the order as they are drawn.
  *
- * With reduced motion nothing runs here: the mark draws a still line.
+ * With reduced motion nothing runs here: the mark draws a still dot.
  */
 import type { Attachment } from "svelte/attachments";
 import { CURVE, dur, motionOk, numberOf } from "./curves.svelte";

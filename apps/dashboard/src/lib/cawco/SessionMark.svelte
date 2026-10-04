@@ -63,12 +63,15 @@
    * - Working: the tile echoes. A copy of it grows from under the tile and
    *   fades, each working row in its list a beat after the one above
    *   (motion/echo `echoBeat`, on the list). With reduced motion, a still
-   *   hairline round the tile instead.
-   * - Needs you, failed: a ring round the tile in that status's ink, behind
-   *   the deck. Idle or finished: nothing.
+   *   dot in the live ink instead.
+   * - Needs you, failed: a dot on the tile's top-right corner in that
+   *   status's ink, the tile cut away round it so it reads on any hue. The
+   *   failed dot is still; the needs-you dot echoes as a working tile does,
+   *   on the same beat. Idle or finished: nothing.
    *
-   * Everything stands outside the tile, so the tile, the row and the nesting
-   * lines that meet it never move for it.
+   * The dot is decoration: the row says the status in its name
+   * (`STATUS_WORD`). Nothing here moves the tile, the row or the nesting
+   * lines that meet it.
    */
   import ChevronIcon from "~icons/solar/alt-arrow-right-bold-duotone";
   import { markHue, sessionSprite } from "./mark";
@@ -95,7 +98,8 @@
   } = $props();
 
   const Sprite = $derived(sessionSprite(id));
-  const rim = $derived(
+  /** The statuses that can show a dot (working: only with reduced motion). */
+  const dot = $derived(
     status === "live" || status === "attn" || status === "fail"
       ? status
       : undefined
@@ -132,9 +136,9 @@
 
 <span
   class="session-mark"
+  data-dot={dot}
   data-has={has || undefined}
   data-open={(has && open) || undefined}
-  data-rim={rim}
   style:--fill="var(--mark-{markHue(place)})"
   style:--n={Math.min(count, 3)}
 >
@@ -147,12 +151,19 @@
   {/if}
   <span aria-hidden="true" class="face tile">{@render face()}</span>
   <span aria-hidden="true" class="skin" data-ride-skin></span>
+  {#if dot}
+    <span aria-hidden="true" class="dot"></span>
+  {/if}
   {#if status === "live"}
     <!-- Last of what the mark draws, in a box cut to the outside of the
          tile and its deck (the style below says why). -->
     <span aria-hidden="true" class="echo-box">
       <span class="echo tile" data-echo></span>
     </span>
+  {:else if status === "attn"}
+    <!-- The dot's echo, on its list's beat with the working tiles. Over the
+         dot it is the dot's own colour, so it needs no cut. -->
+    <span aria-hidden="true" class="dot ping" data-echo></span>
   {/if}
   {#if has && ontoggle}
     <!-- biome-ignore lint/a11y/useSemanticElements: it sits inside the row's link, and a <button> cannot nest in an <a>. -->
@@ -415,13 +426,13 @@
     }
   }
 
-  /* The switch: over the tile, the ring's place round it and the deck under
-     it, and never past the gap to the next row (--mark-hit-max, the room a
-     row leaves under its mark plus the gap between rows), so it takes no
-     press meant for the row below. */
+  /* The switch: over the tile, the dot's overhang round it and the deck
+     under it, and never past the gap to the next row (--mark-hit-max, the
+     room a row leaves under its mark plus the gap between rows), so it takes
+     no press meant for the row below. */
   .hit {
-    /* The ring's reach round the tile, in whole pixels. */
-    --reach: 3px;
+    /* How far the dot stands out of the tile. */
+    --reach: calc(var(--status-dot-size) / 2);
     position: absolute;
     z-index: 4;
     inset: calc(-1 * var(--reach));
@@ -438,50 +449,56 @@
     cursor: pointer;
   }
 
-  /* The ring, for a session that needs you or has failed: 1.5px, 1px clear
-     of the tile, on the tile's own curve (its radius grown by the ring's
-     offset), drawn first so it stands behind the deck, whose cards cover it
-     where they hang under the tile.
-     It is the shadow of a box that stands the gap out from the tile, spread
-     by the ring's weight: the box is placed by layout, the weight is only
-     painted. Both lengths are whole device pixels (--dpx, device-pixel.ts).
-     The browser draws the tile and the ring each on the pixel grid, edge by
-     edge: a ring 2.5px out on a 1x screen was drawn 3px out on one side and
-     2px on the other, off the tile's centre and against its far edges. And
-     as a filled box with its middle masked out, where a half pixel is not a
-     place layout can put an edge, the box and its hole each took the next
-     whole pixel: the ring stood half a pixel down and right of the tile, a
-     weight too thick, against the tile at its top and left. */
-  .session-mark[data-rim]::before {
-    --rim-gap: max(var(--dpx, 1px), round(1px, var(--dpx, 1px)));
-    --rim-ring: max(var(--dpx, 1px), round(1.5px, var(--dpx, 1px)));
+  /* The status dot, for a session that needs you or has failed: a circle
+     centred on the tile's top-right corner, half of it out of the tile, over
+     the tile, its count and its deck. The tile is cut away round it
+     (--status-dot-cut wide) rather than ringed in a surface colour: what
+     shows in the cut is whatever the row stands on, so the dot reads on
+     every tile hue and over the hover and selected washes alike. The cut is
+     a hole in the face's mask; the tile's box and what it holds stay where
+     they are. */
+  .dot {
     position: absolute;
-    inset: calc(-1 * var(--rim-gap));
-    border-radius: calc(var(--radius-xs) + var(--rim-gap));
-    box-shadow: 0 0 0 var(--rim-ring) var(--rim);
+    z-index: 5;
+    top: calc(var(--status-dot-size) / -2);
+    right: calc(var(--status-dot-size) / -2);
+    inline-size: var(--status-dot-size);
+    block-size: var(--status-dot-size);
+    border-radius: var(--radius-pill);
+    background-color: var(--dot);
     pointer-events: none;
-    transition: box-shadow var(--dur-fade) var(--ease-out);
   }
-  .session-mark[data-rim]::before {
-    content: "";
+  /* The needs-you dot's echo: unseen until its beat (motion/echo). */
+  .ping {
+    opacity: 0;
   }
-  .session-mark[data-rim="attn"] {
-    --rim: var(--status-attn-glyph);
+  .session-mark[data-dot] .face {
+    --hole: calc(var(--status-dot-size) / 2 + var(--status-dot-cut));
+    mask-image: radial-gradient(
+      circle at 100% 0,
+      transparent calc(var(--hole) - 0.25px),
+      #000 calc(var(--hole) + 0.25px)
+    );
   }
-  .session-mark[data-rim="fail"] {
-    --rim: var(--status-fail-glyph);
+  .session-mark[data-dot="attn"] {
+    --dot: var(--status-attn-glyph);
   }
-  /* Working: a still hairline in the live ink in the ring's place, which
-     the echo stands in for wherever motion is welcome. */
-  .session-mark[data-rim="live"] {
-    --rim: var(--status-live-glyph);
+  .session-mark[data-dot="fail"] {
+    --dot: var(--status-fail-glyph);
   }
-  .session-mark[data-rim="live"]::before {
-    --rim-ring: max(var(--dpx, 1px), round(1px, var(--dpx, 1px)));
+  /* Working: a still dot in the live ink, only where the echo that says it
+     does not run. */
+  .session-mark[data-dot="live"] {
+    --dot: var(--status-live-glyph);
   }
   @media (prefers-reduced-motion: no-preference) {
-    .session-mark[data-rim="live"]::before {
-      content: none;
+    .session-mark[data-dot="live"] {
+      & .dot {
+        display: none;
+      }
+      & .face {
+        mask-image: none;
+      }
     }
   }
 </style>

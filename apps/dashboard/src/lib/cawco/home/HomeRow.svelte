@@ -13,7 +13,7 @@
 <script lang="ts">
   /**
    * One session in a home group. It leads with the session's mark, the same
-   * tile the rail draws for it, its rim saying what it is doing
+   * tile the rail draws for it, its echo or dot saying what it is doing
    * (SessionMark); the status word is read out with the title, so colour is
    * never the only signal. Under the title, the project and what it is doing
    * now; at the end, one column: the age and, under it, the count of the
