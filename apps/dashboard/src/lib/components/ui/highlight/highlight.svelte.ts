@@ -21,7 +21,7 @@
  *
  * All three layers are drawn under the rows (the container isolates, they
  * sit at z-index -1), measured from the rows' own rects and radii, and move
- * on transform, width and height only.
+ * by their place (`place`), width and height only.
  *
  * Rows can move under a pointer that stays still — one closes and the rest
  * slide over. The browser says so with a `pointerover` on whatever is under
@@ -96,11 +96,24 @@ const layer = (name: string) => {
   return span;
 };
 
+/**
+ * A layer's place and whether it shows are three numbers its style is
+ * worked out from (app.css `--hl-x`, `--hl-y`, `--hl-show`), and those are
+ * what glide and fade. With `transform` and `opacity` transitioned
+ * themselves, each glide and each fade lifted the layer onto the
+ * compositor, and with it every row drawn over it: the rows over the ghost
+ * were absent for a frame each time it moved.
+ */
 const place = (span: HTMLElement, box: Box) => {
-  span.style.transform = `translate(${box.x}px, ${box.y}px)`;
+  span.style.setProperty("--hl-x", `${box.x}px`);
+  span.style.setProperty("--hl-y", `${box.y}px`);
   span.style.width = `${box.w}px`;
   span.style.height = `${box.h}px`;
   span.style.borderRadius = box.r;
+};
+
+const show = (span: HTMLElement, on: boolean) => {
+  span.style.setProperty("--hl-show", on ? "1" : "0");
 };
 
 /**
@@ -267,7 +280,7 @@ export function highlight(options: HighlightOptions) {
     let pillRow: HTMLElement | null = null;
 
     const showOrCover = () => {
-      ghost.style.opacity = covered && ghostRow?.matches(covered) ? "0" : "1";
+      show(ghost, !(covered && ghostRow?.matches(covered)));
     };
     const showGhost = (row: HTMLElement | null) => {
       if (!withGhost || skipped) {
@@ -282,7 +295,7 @@ export function highlight(options: HighlightOptions) {
       const box = row && boxOf(row);
       if (!(row && box)) {
         row?.removeAttribute("data-ghosted");
-        ghost.style.opacity = "0";
+        show(ghost, false);
         ghostRow = null;
         return;
       }
@@ -303,7 +316,7 @@ export function highlight(options: HighlightOptions) {
       const row = container.querySelector<HTMLElement>(selected);
       const box = row && shownBoxOf(row);
       if (!(row && box)) {
-        pill.style.opacity = "0";
+        show(pill, false);
         pillBox = null;
         pillRow = null;
         return;
@@ -319,16 +332,16 @@ export function highlight(options: HighlightOptions) {
         // Hover becomes selection: the old selection fades where it was.
         trail.classList.remove("kit-fade");
         place(trail, pillBox);
-        trail.style.opacity = "1";
+        show(trail, true);
         requestAnimationFrame(() => {
           trail.classList.add("kit-fade");
-          trail.style.opacity = "0";
+          show(trail, false);
         });
       }
       const move = glide && !fromGhost && pillBox !== null && row !== pillRow;
       setGlide(pill, move);
       place(pill, box);
-      pill.style.opacity = "1";
+      show(pill, true);
       pillBox = box;
       pillRow = row;
     };

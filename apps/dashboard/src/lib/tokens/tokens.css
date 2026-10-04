@@ -718,8 +718,6 @@
     --deck-step: 1.25px;
     /* How much smaller each deck card is than the one in front: card i is the tile scaled by 1 - 0.11 x i. */
     --deck-shrink: 0.11;
-    /* The deck's perspective: its cards recede in z from this far. */
-    --deck-depth: 40px;
     /* How much more of the deck's shade each card behind takes. */
     --deck-shade-step: 0.2;
     /* How far a working session's echo grows from its tile before it has faded (motion/echo). */

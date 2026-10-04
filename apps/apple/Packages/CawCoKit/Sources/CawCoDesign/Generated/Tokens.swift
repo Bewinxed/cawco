@@ -600,8 +600,6 @@ public enum Motion {
     public static let deckStep: Double = 1.25
     /// How much smaller each deck card is than the one in front: card i is the tile scaled by 1 - 0.11 x i.
     public static let deckShrink: Double = 0.11
-    /// The deck's perspective: its cards recede in z from this far.
-    public static let deckDepth: Double = 40
     /// How much more of the deck's shade each card behind takes.
     public static let deckShadeStep: Double = 0.2
     /// How far a working session's echo grows from its tile before it has faded (motion/echo).

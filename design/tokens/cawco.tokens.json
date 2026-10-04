@@ -2502,11 +2502,6 @@
       "$value": "0.11",
       "$description": "How much smaller each deck card is than the one in front: card i is the tile scaled by 1 - 0.11 x i."
     },
-    "deck-depth": {
-      "$type": "dimension",
-      "$value": "40px",
-      "$description": "The deck's perspective: its cards recede in z from this far."
-    },
     "deck-shade-step": {
       "$type": "number",
       "$value": "0.2",

@@ -119,7 +119,8 @@
 </script>
 
 <!-- What the tile shows: the sprite, or the count and the chevron it gives
-     way to. Drawn in the tile and in its echo. -->
+     way to. The echo is the bare tile: only what grows past the tile is ever
+     seen of it. -->
 {#snippet face()}
   {#if has}
     <span class="num">{shown}</span>
@@ -139,7 +140,7 @@
 >
   {#if status === "live"}
     <!-- First, so it is drawn under the deck and the tile. -->
-    <span aria-hidden="true" class="echo tile" data-echo>{@render face()}</span>
+    <span aria-hidden="true" class="echo tile" data-echo></span>
   {/if}
   {#if has}
     <span aria-hidden="true" class="deck" data-deck={Math.min(count, 3)}>
@@ -183,9 +184,6 @@
     inline-size: var(--size);
     block-size: var(--size);
     color: var(--mark-glyph);
-    perspective: var(--deck-depth);
-    perspective-origin: calc(var(--size) / 2)
-      calc(var(--size) + var(--deck-step) / var(--deck-shrink));
   }
   /* The tile, and its copy that echoes. */
   .tile {
@@ -205,20 +203,26 @@
     inline-size: 12px;
     block-size: 12px;
   }
-  /* The echo rests unseen under the tile; its list beats it (motion/echo). */
+  /* The echo rests unseen under the tile; its list beats it (motion/echo)
+     by two numbers, how much of it shows and how far it has grown
+     (app.css --beat-show, --beat-grow). */
   .echo {
-    opacity: 0;
+    opacity: var(--beat-show);
+    scale: var(--beat-grow);
     pointer-events: none;
   }
 
   /* The deck: the tile's copies behind it. Card i stands i places back
-     (1 nearest), the tile scaled by 1 - --deck-shrink x its place through
-     the scene's perspective, so it shows --deck-step below the one in
-     front; a card with no delegate to stand for is not drawn. */
+     (1 nearest), the tile scaled by 1 - --deck-shrink x its place about a
+     point under the tile (the deck's vanishing point), so it shows
+     --deck-step below the one in front; a card with no delegate to stand
+     for is not drawn. A plain scale, drawn with the row: receding in z
+     through a perspective put the same card in the same place, but each
+     card, each deck and each mark was then a layer of its own on the
+     compositor, and every tile over them one more. */
   .deck {
     position: absolute;
     inset: 0;
-    transform-style: preserve-3d;
     pointer-events: none;
   }
   .card,
@@ -233,13 +237,9 @@
   .card {
     --p: max(0, calc(var(--n) - var(--i) + 1));
     opacity: clamp(0, calc(var(--n) - var(--i) + 1), 1);
-    transform: translateZ(
-      calc(
-        -1 *
-        var(--deck-depth) *
-        (1 / (1 - var(--deck-shrink) * var(--p)) - 1)
-      )
-    );
+    transform-origin: 50%
+      calc(var(--size) + var(--deck-step) / var(--deck-shrink));
+    transform: scale(calc(1 - var(--deck-shrink) * var(--p)));
   }
   /* The skin: a delegate's tile wears its parent's card (--p its place,
      --pfill the parent's colour) as it leaves the deck, and sheds it on its
@@ -293,19 +293,18 @@
     font-variant-numeric: tabular-nums;
     line-height: 1;
   }
-  /* Which of the two shows (--away: 1 for the one that has given way). The
-     swap is by opacity; the shrink and the blur are motion, and ride on it
-     only where motion is welcome. */
+  /* Which of the two shows (--swap-away: 1 for the one that has given way).
+     That number is what transitions (app.css): the swap is by opacity; the
+     shrink and the blur are motion, and ride on it only where motion is
+     welcome. The chevron's turn and the tile's press are numbers of the
+     same kind. */
   .num,
   .chev {
-    opacity: calc(1 - var(--away));
-    transition: opacity var(--dur-control) var(--ease-out);
-  }
-  .num {
-    --away: 0;
+    opacity: calc(1 - var(--swap-away));
+    transition: --swap-away var(--dur-control) var(--ease-out);
   }
   .chev {
-    --away: 1;
+    --swap-away: 1;
     display: inline-flex;
     inline-size: 12px;
     block-size: 12px;
@@ -313,48 +312,46 @@
     & :global(svg) {
       inline-size: 100%;
       block-size: 100%;
+      rotate: var(--swap-turn);
     }
   }
   .session-mark[data-open] {
     & .num {
-      --away: 1;
+      --swap-away: 1;
     }
     & .chev {
-      --away: 0;
+      --swap-away: 0;
     }
     & .chev :global(svg) {
-      rotate: 90deg;
+      --swap-turn: 90deg;
     }
   }
   @media (hover: hover) and (pointer: fine) {
     .session-mark[data-has]:has(.hit:hover) {
       & .num {
-        --away: 1;
+        --swap-away: 1;
       }
       & .chev {
-        --away: 0;
+        --swap-away: 0;
       }
     }
   }
   @media (prefers-reduced-motion: no-preference) {
     .num,
     .chev {
-      scale: calc(1 - 0.75 * var(--away));
-      filter: blur(calc(4px * var(--away)));
-      transition:
-        opacity var(--dur-control) var(--ease-out),
-        scale var(--dur-control) var(--ease-out),
-        filter var(--dur-control) var(--ease-out);
+      scale: calc(1 - 0.75 * var(--swap-away));
+      filter: blur(calc(4px * var(--swap-away)));
     }
     .chev :global(svg) {
-      transition: rotate var(--dur-toggle) var(--ease-out);
+      transition: --swap-turn var(--dur-toggle) var(--ease-out);
     }
     .face {
-      transition: scale var(--dur-toggle) var(--ease-out);
+      scale: var(--press-by);
+      transition: --press-by var(--dur-toggle) var(--ease-out);
     }
     /* The press: the tile gives a little under it. */
     .session-mark:has(.hit:active) .face {
-      scale: var(--press-scale);
+      --press-by: var(--press-scale);
     }
   }
 

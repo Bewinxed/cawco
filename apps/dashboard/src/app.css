@@ -45,6 +45,60 @@
   inherits: false;
   initial-value: -9999px;
 }
+/* A swap between two things in one slot (`.icon-swap`, a tree mark's count
+   and its chevron), a turn and a press, each as one number the transition
+   moves, registered so it can be moved. What is drawn (opacity, scale, blur,
+   rotate) is worked out from the number every frame, with the rest of the
+   page. Transitioned directly, each of those properties is animated by the
+   compositor, which first lifts the element onto a layer of its own, and
+   the frame the lift lands on is drawn before the new layer has been
+   painted: the icon was absent for one frame on every press. */
+@property --swap-away {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 0;
+}
+@property --swap-turn {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+@property --press-by {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 1;
+}
+/* Where a list's hover ghost or selection pill stands, and whether it
+   shows (components/ui/highlight), for the same reason: they sit under the
+   rows, and lifted onto the compositor to glide or fade they took the rows
+   over them along. */
+@property --hl-x {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+@property --hl-y {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+@property --hl-show {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 0;
+}
+/* A working session's echo (motion/echo): how much of it shows, and how
+   far it has grown from its tile. */
+@property --beat-show {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 0;
+}
+@property --beat-grow {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 1;
+}
 
 @theme inline {
   --color-background: var(--background);
@@ -397,33 +451,14 @@
   }
 
   /* Nothing animates that nobody can see (motion/rest.ts): a hidden tab, an
-     element scrolled out of view, an inert surface parked behind the one in
-     front, and a swap slot that is not the one showing (a button's spinner
-     waits there between presses) all hold every loop they carry still. A
-     list swap's leaving layer (`data-leaving`) is inert so nobody clicks a
-     row on its way out, but its rows still play their exit. The swap slot
-     is named as one (`.icon-swap`'s child): `data-active="false"` alone is
-     also every rail row that is not the open one, and a working session's
-     rim under it stood still. */
-  :where(
-    :root[data-at-rest],
-    [data-offscreen],
-    [inert]:not([data-leaving]),
-    .icon-swap > [data-active="false"]
-  ) *,
-  :where(
-      :root[data-at-rest],
-      [data-offscreen],
-      [inert]:not([data-leaving]),
-      .icon-swap > [data-active="false"]
-    )
+     element scrolled out of view and an inert surface parked behind the one
+     in front all hold every loop they carry still. A list swap's leaving
+     layer (`data-leaving`) is inert so nobody clicks a row on its way out,
+     but its rows still play their exit. */
+  :where(:root[data-at-rest], [data-offscreen], [inert]:not([data-leaving])) *,
+  :where(:root[data-at-rest], [data-offscreen], [inert]:not([data-leaving]))
     *::before,
-  :where(
-      :root[data-at-rest],
-      [data-offscreen],
-      [inert]:not([data-leaving]),
-      .icon-swap > [data-active="false"]
-    )
+  :where(:root[data-at-rest], [data-offscreen], [inert]:not([data-leaving]))
     *::after,
   :where([data-offscreen]) {
     animation-play-state: paused !important;
@@ -992,35 +1027,36 @@
     display: inline-grid;
     place-items: center;
 
+    /* How far each has given way (--swap-away, 0 shown to 1 gone) is the one
+       thing that transitions; it fades and blurs by it, and where motion is
+       welcome shrinks by it too. */
     > * {
       display: inline-flex;
       grid-area: 1 / 1;
-      transition:
-        opacity var(--icon-swap-dur, var(--dur-pop)) var(--ease-out),
-        filter var(--icon-swap-dur, var(--dur-pop)) var(--ease-out);
+      opacity: calc(1 - var(--swap-away));
+      filter: blur(calc(4px * var(--swap-away)));
+      transition: --swap-away var(--icon-swap-dur, var(--dur-pop))
+        var(--ease-out);
 
       @media (prefers-reduced-motion: no-preference) {
-        transition:
-          opacity var(--icon-swap-dur, var(--dur-pop)) var(--ease-out),
-          scale var(--icon-swap-dur, var(--dur-pop)) var(--ease-out),
-          filter var(--icon-swap-dur, var(--dur-pop)) var(--ease-out);
+        scale: calc(1 - 0.75 * var(--swap-away));
       }
     }
-    > [data-active="true"] {
-      opacity: 1;
-      scale: 1;
-      filter: blur(0);
-    }
     > [data-active="false"] {
-      opacity: 0;
-      scale: 0.25;
-      filter: blur(4px);
+      --swap-away: 1;
       pointer-events: none;
     }
   }
-
-  .kit-slot > [data-active="false"] * {
-    animation-play-state: paused;
+  /* A swap slot that is not the one showing (a button's spinner waits there
+     between presses) carries no loop at all. Held still instead, a paused
+     spinner stayed on the compositor as a moving layer, and the browser,
+     which cannot tell how far a moving layer reaches, put everything drawn
+     after it on layers too: one hidden spinner in the rail took the rail's
+     rows and the whole pane with it. The slot is named as one
+     (`.icon-swap`'s child, `.kit-slot`'s): `data-active="false"` alone is
+     also every rail row that is not the open one. */
+  :is(.icon-swap, .kit-slot) > [data-active="false"] * {
+    animation: none !important;
   }
 
   /* One hover ghost and one selection pill per list
@@ -1043,13 +1079,14 @@
     inset: 0 auto auto 0;
     z-index: -1;
     pointer-events: none;
-    opacity: 0;
+    translate: var(--hl-x) var(--hl-y);
+    opacity: var(--hl-show);
   }
 
   :where(.kit-highlight) .kit-ghost {
     display: none;
     background: var(--surface-hover);
-    transition: opacity var(--dur-control) var(--ease-out);
+    transition: --hl-show var(--dur-control) var(--ease-out);
 
     &[data-follow] {
       display: block;
@@ -1060,10 +1097,11 @@
     &.kit-glide {
       @media (prefers-reduced-motion: no-preference) {
         transition:
-          transform var(--dur-ghost) var(--ease-in-out),
+          --hl-x var(--dur-ghost) var(--ease-in-out),
+          --hl-y var(--dur-ghost) var(--ease-in-out),
           width var(--dur-ghost) var(--ease-in-out),
           height var(--dur-ghost) var(--ease-in-out),
-          opacity var(--dur-control) var(--ease-out);
+          --hl-show var(--dur-control) var(--ease-out);
       }
     }
   }
@@ -1077,14 +1115,15 @@
   :where(.kit-highlight) .kit-pill.kit-glide {
     @media (prefers-reduced-motion: no-preference) {
       transition:
-        transform var(--dur-control) var(--ease-drawer),
+        --hl-x var(--dur-control) var(--ease-drawer),
+        --hl-y var(--dur-control) var(--ease-drawer),
         width var(--dur-control) var(--ease-drawer),
         height var(--dur-control) var(--ease-drawer);
     }
   }
 
   :where(.kit-highlight) .kit-pill-trail.kit-fade {
-    transition: opacity var(--dur-control) var(--ease-out);
+    transition: --hl-show var(--dur-control) var(--ease-out);
   }
 
   /* ---- The transcript's columns. Every row kind lays out on these four

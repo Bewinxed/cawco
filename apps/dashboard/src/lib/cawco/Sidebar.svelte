@@ -1359,13 +1359,16 @@
     --icon-swap-dur: var(--dur-control);
     color: var(--ink-muted);
   }
+  .older-chev :global(svg) {
+    rotate: var(--swap-turn);
+  }
   @media (prefers-reduced-motion: no-preference) {
     .older-chev :global(svg) {
-      transition: rotate var(--dur-control) var(--ease-out);
+      transition: --swap-turn var(--dur-control) var(--ease-out);
     }
   }
   :global([aria-expanded="true"]) .older-chev :global(svg) {
-    rotate: 90deg;
+    --swap-turn: 90deg;
   }
   /* The box is off the rail (it scrolls on its own): its rows draw no line,
      and the row that opens it, the project's last, is where the rail ends. */
