@@ -1016,18 +1016,9 @@
      otherwise. The sheet carries the visible viewport as --visible-top and
      --visible-height (ui/drawer/drawer-content); a sheet names its own cap
      in --drawer-max-height. Neither value transitions, so the sheet steps
-     with the keyboard instead of animating against it.
-     Its foot is placed from the top of the layout viewport and the sheet
-     hangs above that line by its own height. `bottom` cannot place it: with
-     a keyboard up, iOS Safari measures `bottom` from a layout viewport
-     shorter than the one it resolves 100% against (658px against 714px on
-     an iPhone 17), which left the sheet 56px above the screen. `translate`
-     is separate from `transform`, which is vaul's for the slide and the
-     drag. */
+     with the keyboard instead of animating against it. */
   [data-slot="drawer-content"][data-vaul-drawer-direction="bottom"] {
-    top: calc(var(--visible-top) + var(--visible-height));
-    bottom: auto;
-    translate: 0 -100%;
+    bottom: calc(100% - var(--visible-top) - var(--visible-height));
     max-height: min(var(--drawer-max-height, 80vh), var(--visible-height));
   }
 
