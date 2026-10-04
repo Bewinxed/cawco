@@ -116,7 +116,9 @@ function fillDescendants<T extends TreeRow>(lines: TreeLine<T>[]): void {
  * places a row by its tree (the tree itself, a project's recent and older
  * split, which projects a row lists in).
  */
-export function topsIn<T extends TreeRow>(byId: Map<string, T>): (row: T) => T {
+export function topsIn<T extends TreeRow>(
+  byId: ReadonlyMap<string, T>
+): (row: T) => T {
   return (row) => {
     const seen = new Set<string>([row.id]);
     let at = row;
