@@ -46,8 +46,14 @@
     row: Snippet<[T]>;
   } = $props();
 
-  /** Rows drawn a frame, once the opening has landed. */
-  const CHUNK = 8;
+  /**
+   * Rows drawn a frame, once the opening has landed. Any row put into the
+   * rail costs one pass over its styles, 18 to 22ms whatever is added (one
+   * hidden item, timed in an open tree of 134), and a row about 1ms more:
+   * eight a frame was fourteen frames of 25 to 45ms for a tree of 134,
+   * 450ms of it; this many is five.
+   */
+  const CHUNK = 24;
   /** Six frames at 60Hz past an opening's own length, ms. */
   const SETTLE = (1000 / 60) * 6;
 
