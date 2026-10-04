@@ -97,7 +97,44 @@ Dashboard: built in 5.38s; adapter-node done; exited with code 0.
 All declared package builds exited with code 0.
 ```
 
-Deployed after results will be appended after landing and the poller's hub restart.
+Landed implementation commit: `87c77d89`. The poller deployed it and restarted the hub automatically. One bounded `/health` wait returned:
+
+```json
+{"ok":true,"version":"0.1.0","build":{"version":"0.1.0","commit":"87c77d89","dirty":false,"startedAt":1791151077796}}
+```
+
+After that restart, the dashboard was reloaded with cache bypass. Two new persistent Sonnet sessions were started from its New session modal, with their panes open. Both completed exactly five sequential `pwd` calls on the first turn and one on the second. The same metadata counting command above, using these after-session paths, returned:
+
+```text
+d7ee91ff-25ec-4ca7-a8c9-433076073dbc lists 1 tools 6 chars [30010] hashes 1 models ['claude-sonnet-5-5']
+b7a8a6cf-e1db-49ac-9efc-fae84515cc22 lists 1 tools 6 chars [30010] hashes 1 models ['claude-sonnet-5-5']
+```
+
+The first after session ran in `/tmp/skill-listing-sonnet-after`; the second in `/home/bewinxed/cockpit`. The original before and after probe sessions were all subsequently deleted; their counts above were collected before deletion.
+
+Stale dashboard control proof, on each own after-probe websocket, between the first and second turns:
+
+```js
+socket.send(JSON.stringify({
+  verb: "control", machineId, instanceId, requestId,
+  payload: { instanceId, requestId, method: "reloadSkills", args: [] }
+}));
+```
+
+Both received the same correlated reply:
+
+```json
+{"kind":"control_result","requestId":"58a930e5-8406-493c-9ff8-23b4c07e4f09","ok":false,"error":"Skills reload when synced fleet content changes."}
+{"kind":"control_result","requestId":"3ad8610d-ba29-45d6-abc0-a7a04ccca279","ok":false,"error":"Skills reload when synced fleet content changes."}
+```
+
+Neither next turn added a listing. The scratch probe also requested machine `fleetStatus` between its turns; it returned `ok:true`, 66 persisted skill hashes and 5 persisted plugin hashes. This unchanged report passed through the same report handler without resetting the probe's sent-skills record.
+
+Command-menu preservation: typing `/pony` in the cockpit after-probe composer showed `/ponytail` with its full description. Captured automatic pane/menu controls included three `supportedCommands` reads and zero `reloadSkills` requests. Nothing was submitted to the model by that menu check.
+
+Cleanup proof: the live `/api/instances` read returned `remainingOwnProbeInstances: []` for all six probe IDs. A filename-only scan of the transcript directories returned `remaining own probe transcripts []`. The own raw debug log and its `latest` symlink were removed from the workspace.
+
+Already-open old dashboards need no reload to stop this burn: their websocket reconnects to the restarted hub, which refuses the old reload controls before forwarding. An old session may make one final announcement because a pre-deploy control already emptied its sent-name set; that existing reset cannot be undone by the hub. Metadata-only observations after the hub restart saw 6 assistant lines / 1 listing in `999900de` and 1 assistant line / 1 listing in `60a374a0`. The new-session proofs above establish that subsequent discovery and repeated stale controls do not create additional lists.
 
 ## Saving
 
@@ -105,6 +142,8 @@ The supplied orchestrator measurement was about 60 redundant lists per hour, eac
 
 The own Sonnet before probes added three and two redundant lists respectively: approximately 22,500 and 15,000 avoidable newly appended tokens across six tool calls and two turns.
 
+The deployed after probes added zero redundant lists in either cwd. Across the two before/after pairs, five full listings, approximately 37,500 newly appended tokens, were avoided.
+
 ## Not done
 
-Deployed after probes are pending the code landing and automatic hub restart. No dependency patch, skill-budget setting, live fleet configuration mutation, unit test, service restart, or sessiond change was made. Compaction and real skill/plugin changes were not artificially provoked; their existing CLI and hub paths remain in place.
+No dependency patch, skill-budget setting, live fleet configuration mutation, unit test, manual service restart, or sessiond change was made. Compaction and real skill/plugin changes were not artificially provoked; their existing CLI and hub paths remain in place. The measured deployment and both required live probe scenarios passed. Empty probe folders under `/tmp` contain no transcript or credential copies.
