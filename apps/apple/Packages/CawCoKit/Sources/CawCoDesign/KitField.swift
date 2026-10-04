@@ -53,14 +53,15 @@ public final class KitField: UITextField {
 }
 
 /// The kit's Select trigger at `sm` (ui/select): the field's surface and
-/// border at 30pt, its value in label type, a chevron at the end; its
+/// border at 30pt, its value in label type, the unfold mark at the end; its
 /// options are a menu.
 public final class KitSelect: UIButton {
     public init() {
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         var config = UIButton.Configuration.plain()
-        config.image = Glyph.chevronDown.image.resized(to: Size.iconMd)
+        // select-trigger.svelte's `IconUnfold`.
+        config.image = Glyph.unfold.image.resized(to: Size.iconMd)
         config.imagePlacement = .trailing
         config.imageColorTransformer = UIConfigurationColorTransformer { _ in Palette.inkMuted }
         config.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: 12, bottom: 0, trailing: 10)

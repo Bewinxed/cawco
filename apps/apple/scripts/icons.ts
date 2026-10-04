@@ -102,6 +102,7 @@ const SOLAR_ICONS = [
   "shield-bold-duotone", // IconShield
   "sidebar-minimalistic-bold-duotone", // IconSidebar
   "sort-bold-duotone", // IconSort
+  "sort-vertical-bold-duotone", // IconUnfold
   "trash-bin-minimalistic-bold-duotone", // IconTrash
   "download-bold-duotone", // IconDownload
   "menu-dots-bold-duotone", // IconMore
