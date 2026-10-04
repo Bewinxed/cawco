@@ -10861,6 +10861,9 @@ export const createServer = (
                     .listInstances()
                     .find((r) => r.id === message.instanceId);
                   const parentId = row?.parentInstanceId;
+                  if (row && neutral.subtype === "aborted") {
+                    workItems.interrupted(row.id);
+                  }
                   if (row?.workflowStepId) {
                     const workflowFailure = neutral.errors?.length
                       ? neutral.errors.join("\n")
