@@ -32,11 +32,21 @@ export const keepAliveCap = (row: KeepAliveRow): number => {
   );
 };
 
-export const promptCacheExpiresAt = (row: KeepAliveRow): number | null =>
-  row.cacheTtl && row.lastRequestAt
-    ? row.lastRequestAt.getTime() +
+export const promptCacheExpiresAt = (
+  row: KeepAliveRow,
+  lastTurnAt?: Date
+): number | null => {
+  if (row.cacheTtl && row.lastRequestAt) {
+    return (
+      row.lastRequestAt.getTime() +
       (row.cacheTtl === "1h" ? 3_600_000 : 300_000)
+    );
+  }
+  // Without a measurement, only the longest Claude lifetime proves expiry.
+  return row.harness === "claude" && lastTurnAt
+    ? lastTurnAt.getTime() + 3_600_000
     : null;
+};
 
 /** Clock and account reading are explicit: this function sends and writes nothing. */
 export const keepAliveState = (

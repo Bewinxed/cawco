@@ -7484,7 +7484,9 @@ export const createServer = (
           return {
             row: row ?? null,
             midTurn: !!(row && pulses.get(row.id)?.busy),
-            turns: row ? db.recordedTurnCount(row.id) : 0,
+            ...(row
+              ? db.recordedTurns(row.id)
+              : { turns: 0, lastTurnAt: null }),
           };
         }
       )

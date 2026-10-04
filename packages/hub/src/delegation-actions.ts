@@ -687,25 +687,35 @@ async function checkCold(
   if (!response.ok) {
     throw new Error(await response.text());
   }
-  const { row, midTurn, turns } = (await response.json()) as {
+  const { row, midTurn, turns, lastTurnAt } = (await response.json()) as {
     row: KeepAliveRow | null;
     midTurn: boolean;
     turns: number;
+    lastTurnAt: string | null;
   };
   if (!row || midTurn) {
     return;
   }
   row.lastRequestAt = row.lastRequestAt ? new Date(row.lastRequestAt) : null;
-  const expires = promptCacheExpiresAt(row);
+  const lastTurn = lastTurnAt ? new Date(lastTurnAt) : undefined;
+  const expires = promptCacheExpiresAt(row, lastTurn);
   const now = Date.now();
   if (expires !== null && expires <= now) {
     const title = row.title ?? row.derivedTitle ?? row.cwd;
+    const measured = !!(row.cacheTtl && row.lastRequestAt);
     const idle = Math.floor(
-      (now - (row.lastRequestAt as Date).getTime()) / 60_000
+      (now - ((measured ? row.lastRequestAt : lastTurn) as Date).getTime()) /
+        60_000
     );
     const lifetime = row.cacheTtl === "1h" ? "1 hour" : "5 minutes";
+    const age = measured
+      ? `has been idle for ${idle} minutes`
+      : `ended its last recorded turn ${idle} minutes ago`;
+    const cache = measured
+      ? `Its observed prompt-cache lifetime is ${lifetime} and its cache has expired`
+      : "Its prompt-cache lifetime was not measured and is at most 1 hour. Its cache has expired";
     throw new Error(
-      `Cold session "${title}" (${row.id}) has been idle for ${idle} minutes; recorded model turns in its transcript: ${turns}. Its observed prompt-cache lifetime is ${lifetime} and its cache has expired, so waking it re-reads that whole transcript at full price. A fresh delegate with a tight brief is usually cheaper. Reuse this session only if it already holds context this task needs and rebuilding that context in a fresh brief would cost more than the transcript. To send anyway, repeat the same call with confirmCold: true.`
+      `Cold session "${title}" (${row.id}) ${age}; recorded model turns in its transcript: ${turns}. ${cache}, so waking it re-reads that whole transcript at full price. A fresh delegate with a tight brief is usually cheaper. Reuse this session only if it already holds context this task needs and rebuilding that context in a fresh brief would cost more than the transcript. To send anyway, repeat the same call with confirmCold: true.`
     );
   }
 }
