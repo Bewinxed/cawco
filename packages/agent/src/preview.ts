@@ -199,6 +199,15 @@ export async function startPreview(options: {
       ]) {
         headers.delete(name);
       }
+      // A preview is work in progress, so nothing in it is kept: the page the
+      // operator reloads is the page on disk now. A dev server's own
+      // `no-cache` does not say that to a CDN in front of the dashboard —
+      // Cloudflare rewrites it, and a missing header, to `max-age=14400` and
+      // caches the file at its edge, so a module stayed four hours stale in
+      // the browser and a fix to the proxy never reached it. `no-store` is the
+      // one value it passes through untouched.
+      headers.set("cache-control", "no-store");
+      headers.delete("expires");
       if ("port" in source) {
         const location = headers.get("location");
         if (location) {

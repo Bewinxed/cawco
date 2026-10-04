@@ -95,10 +95,15 @@ function previewMatch(req) {
 function proxyPreviewHttp(req, res, info) {
   // A Referer-routed read gets a 302 back under the prefix, so the URL the
   // browser holds for it carries the prefix and so does the Referer of
-  // whatever it loads in turn.
+  // whatever it loads in turn. Where it points depends on the Referer, so it
+  // is never stored: a CDN keeping it would send one preview's file to
+  // another's.
   if (info.viaReferer && (req.method === "GET" || req.method === "HEAD")) {
     const prefix = `/preview/${encodeURIComponent(info.id)}`;
-    res.writeHead(302, { location: `${prefix}${req.url}` });
+    res.writeHead(302, {
+      location: `${prefix}${req.url}`,
+      "cache-control": "no-store",
+    });
     res.end();
     return;
   }
