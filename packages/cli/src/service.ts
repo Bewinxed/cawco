@@ -543,11 +543,12 @@ export interface ServiceSpec {
   readonly launchAgentNote?: readonly string[];
   readonly mode: ServiceMode;
   /**
-   * systemd `OOMPolicy=`, for a service whose processes are not one piece of
-   * work. Absent, systemd's default `stop` ends every process of the unit when
-   * the kernel kills one of them for memory. launchd has no counterpart.
+   * Writes systemd's `OOMPolicy=continue`, for a service whose processes are
+   * not one piece of work. Absent, systemd's default `stop` ends every process
+   * of the unit when the kernel kills one of them for memory. launchd has no
+   * counterpart.
    */
-  readonly oomPolicy?: "continue";
+  readonly oomContinue?: true;
   /** Whether the service is really up, which the init system does not know. */
   readonly probe: () => Promise<string | undefined>;
   /**
@@ -707,7 +708,7 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
       // manual, systemd.service(5): "If set to continue and a process in the
       // unit is killed by the OOM killer, this is logged but the unit
       // continues running."
-      oomPolicy: "continue",
+      oomContinue: true,
       check: needs(layout.sessiond, "sessiond"),
       probe: probeSessiond,
     },
@@ -963,7 +964,7 @@ ${environment(spec)
   .map(([key, value]) => `Environment=${key}=${value}`)
   .join("\n")}
 Restart=${spec.restartOnSuccess ? "always" : "on-failure"}
-RestartSec=${spec.restartSec}${spec.oomPolicy ? `\nOOMPolicy=${spec.oomPolicy}` : ""}
+RestartSec=${spec.restartSec}${spec.oomContinue ? "\nOOMPolicy=continue" : ""}
 
 [Install]
 WantedBy=default.target
