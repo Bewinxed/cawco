@@ -472,6 +472,28 @@ h1 {
   pointer-events: none;
 }
 
+/*
+ * A ledge clip is drawn peering over an edge. The edge runs through his box
+ * 57% of the way down and his wing tips hang over it for a little under a
+ * tenth of the box, so the box sits in front of the surface with that line on
+ * the surface's top edge. He shows less of himself than when he stands, so
+ * his box is larger.
+ */
+.perch[data-ledge],
+.cost-caw[data-ledge] {
+  --ledge: 0.57;
+  z-index: 3;
+  margin-bottom: calc(var(--caw-size) * (var(--ledge) - 1));
+}
+
+.perch[data-ledge] {
+  --caw-size: clamp(120px, 15vw, 200px);
+}
+
+.cost-caw[data-ledge] {
+  --caw-size: clamp(110px, 13vw, 170px);
+}
+
 .tabs {
   grid-area: 1 / 1;
   z-index: 2;
