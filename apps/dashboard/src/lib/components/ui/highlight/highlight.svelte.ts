@@ -24,9 +24,12 @@
  *
  * Rows can move under a pointer that stays still — one closes and the rest
  * slide over. The browser says so with a `pointerover` on whatever is under
- * the pointer now, and a list that measures its own rows (`laidOut`) says
- * so every time it re-measures; either way the ghost goes to the row that
- * is under the pointer now.
+ * the pointer now, a scroll the reader did not make (a list that got shorter
+ * at its scroll end) says so too, and a list that measures its own rows
+ * (`laidOut`) says so every time it re-measures. The ghost never travels to
+ * a row that is still on its way: it steps aside while the rows move, and
+ * once they stand still it shows, in place, on the row the pointer is on
+ * (`settle`).
  */
 import { untrack } from "svelte";
 import { watchRendered } from "#lib/utils/rendered.js";
@@ -35,6 +38,12 @@ type Axis = "x" | "y" | "xy";
 
 /** How far past a row's edge, along the list's axis, the pointer still counts as on it. */
 const REACH = 8;
+/** How far a row is drawn from where it lands before it counts as on its way. */
+const CARRIED = 0.5;
+/** Frames the rows stand still before a pointer that never moved is aimed again. */
+const STILL = 3;
+/** A scroll this soon (ms) after a wheel, a key or a touch is the reader's own. */
+const OWN_SCROLL = 200;
 
 /** A row's box in the container's own coordinates. */
 export interface LaidOut {
@@ -387,6 +396,8 @@ export function highlight(options: HighlightOptions) {
 
     /** Where the pointer last was, to re-aim when a list scrolls under it. */
     let pointer: { x: number; y: number } | null = null;
+    /** The frame a still pointer is next aimed on (`settle`). */
+    let settling = 0;
     const onMove = (
       event: { clientX: number; clientY: number },
       again = false
@@ -394,12 +405,63 @@ export function highlight(options: HighlightOptions) {
       if (hovered) {
         return;
       }
+      cancelAnimationFrame(settling);
       pointer = { x: event.clientX, y: event.clientY };
       const best = nearest(event.clientX, event.clientY);
       if (again || best !== ghostRow) {
         showGhost(best);
       }
     };
+
+    /** Whether any row is drawn off its place: a slide is carrying it. */
+    const rowsMoving = (): boolean => {
+      const shares = new Map<HTMLElement, { x: number; y: number }>();
+      return rowsNow().some((row) => {
+        const slid = slideOf(row, container, shares);
+        return Math.abs(slid.x) > CARRIED || Math.abs(slid.y) > CARRIED;
+      });
+    };
+    /**
+     * The rows moved and the pointer did not: a tree folded and the rows
+     * under it slid up, or the list got shorter at its scroll end and
+     * everything stepped down. The row the ghost was on is on its way
+     * somewhere else, and so is whatever will end up under the pointer. The
+     * ghost steps aside, and once every row has stood still for `STILL`
+     * frames it shows on the row the pointer is on, in place. Aimed at once,
+     * at where the rows would land, it glided to a row still sliding in: a
+     * project folded at the rail's end sent it to the "N older" row of the
+     * project above, a row the pointer was not on yet.
+     */
+    const settle = () => {
+      const at = pointer;
+      if (hovered || !at) {
+        return;
+      }
+      cancelAnimationFrame(settling);
+      if (nearest(at.x, at.y) === ghostRow && !rowsMoving()) {
+        // Nothing left its place: the ghost follows its own row.
+        if (ghostRow) {
+          showGhost(ghostRow);
+        }
+        return;
+      }
+      showGhost(null);
+      let still = 0;
+      const check = () => {
+        if (pointer !== at) {
+          return;
+        }
+        still = rowsMoving() ? 0 : still + 1;
+        if (still < STILL) {
+          settling = requestAnimationFrame(check);
+          return;
+        }
+        // From out of view, so it lands without a glide.
+        showGhost(nearest(at.x, at.y));
+      };
+      settling = requestAnimationFrame(check);
+    };
+
     /**
      * A hovering pointer only. A touch has nothing to hover, and a tap's
      * compatibility mousemove would leave the ghost aimed at the tapped row
@@ -412,25 +474,50 @@ export function highlight(options: HighlightOptions) {
         onMove(event);
       }
     };
+    /** Sent with a move, and with none when the rows shift under a still pointer. */
+    const onOver = (event: PointerEvent) => {
+      if (event.pointerType === "touch") {
+        return;
+      }
+      if (pointer?.x === event.clientX && pointer.y === event.clientY) {
+        settle();
+      } else {
+        onMove(event);
+      }
+    };
     const onLeave = () => {
+      cancelAnimationFrame(settling);
       pointer = null;
       if (!hovered) {
         showGhost(null);
       }
     };
+    /** When the reader last scrolled by hand: a wheel, a key, a touch. */
+    let lastInput = Number.NEGATIVE_INFINITY;
+    const onInput = () => {
+      lastInput = performance.now();
+    };
     const onScroll = () => {
-      if (pointer && ghostRow) {
-        onMove({ clientX: pointer.x, clientY: pointer.y }, true);
+      if (!pointer) {
+        return;
       }
+      if (performance.now() - lastInput < OWN_SCROLL) {
+        if (ghostRow) {
+          onMove({ clientX: pointer.x, clientY: pointer.y }, true);
+        }
+        return;
+      }
+      // Nobody scrolled: the list moved itself under the pointer.
+      settle();
     };
     container.addEventListener("pointermove", onPointer);
-    // Also sent, with no move, when the rows shift under a still pointer.
-    container.addEventListener("pointerover", onPointer);
+    container.addEventListener("pointerover", onOver);
     container.addEventListener("pointerleave", onLeave);
-    container.addEventListener("scroll", onScroll, {
-      capture: true,
-      passive: true,
-    });
+    const passive = { capture: true, passive: true } as const;
+    container.addEventListener("wheel", onInput, passive);
+    container.addEventListener("touchmove", onInput, passive);
+    container.addEventListener("keydown", onInput, passive);
+    container.addEventListener("scroll", onScroll, passive);
 
     const watch = new MutationObserver(() => {
       // A row under the ghost can come to cover it (a tab chosen under
@@ -534,9 +621,13 @@ export function highlight(options: HighlightOptions) {
       cancelAnimationFrame(pendingResize);
       cancelAnimationFrame(pendingHide);
       cancelAnimationFrame(pendingSync);
+      cancelAnimationFrame(settling);
       container.removeEventListener("pointermove", onPointer);
-      container.removeEventListener("pointerover", onPointer);
+      container.removeEventListener("pointerover", onOver);
       container.removeEventListener("pointerleave", onLeave);
+      container.removeEventListener("wheel", onInput, { capture: true });
+      container.removeEventListener("touchmove", onInput, { capture: true });
+      container.removeEventListener("keydown", onInput, { capture: true });
       container.removeEventListener("scroll", onScroll, { capture: true });
       watch.disconnect();
       sizes.disconnect();

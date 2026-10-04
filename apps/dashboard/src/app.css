@@ -580,6 +580,13 @@
   [data-branch-draw] .kit-nest > li::after {
     clip-path: inset(-9999px var(--nest-cut-r) var(--nest-cut-b) -9999px);
   }
+  /* A group folding away is out of the pointer's reach from the press that
+     folds it: its rows are still drawn until they have gone, and one of
+     them under the pointer took the hover highlight, or a click meant for
+     the row sliding in beneath it. Turned back, it is in reach again. */
+  [data-flip-anchor][data-state="closing"] {
+    pointer-events: none;
+  }
   /* Held: cut whole from below, until its piece is built and moves the cut.
      A clip of the hold's own outranked the cut, and the line stood hidden
      until the fold landed, then showed whole in one frame. */
