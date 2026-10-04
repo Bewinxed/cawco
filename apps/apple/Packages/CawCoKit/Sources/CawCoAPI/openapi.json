@@ -1801,6 +1801,9 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "keepAlive": {
+                    "type": "boolean"
+                  },
                   "kind": {
                     "type": "string",
                     "enum": [
@@ -1846,6 +1849,16 @@
           },
           "404": {
             "description": "patchApiInstancesById 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "patchApiInstancesById 409",
             "content": {
               "text/plain": {
                 "schema": {
@@ -6942,200 +6955,219 @@
         ]
       },
       "patchApiInstancesById200": {
-        "type": "object",
-        "properties": {
-          "sessionId": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "status": {
-            "enum": [
-              "discarded",
-              "error",
-              "running",
-              "sleeping",
-              "starting",
-              "stopped",
-              "unknown"
-            ],
-            "type": "string"
-          },
-          "machineId": {
-            "type": "string"
-          },
-          "harness": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "model": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "effort": {
-            "enum": [
-              "high",
-              "low",
-              "max",
-              "medium",
-              "none",
-              "xhigh"
-            ],
-            "type": "string"
-          },
-          "canDelegate": {
-            "type": [
-              "null",
-              "boolean"
-            ]
-          },
-          "id": {
-            "type": "string"
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "updatedAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "seenAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "workflowRunId": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "workflowStepId": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "cwd": {
-            "type": "string"
-          },
-          "projectId": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "parentInstanceId": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "parentToolUseId": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "title": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "titleSource": {
-            "enum": [
-              "agent",
-              "owner"
-            ],
-            "type": "string"
-          },
-          "tooling": {
-            "$ref": "#/components/schemas/SessionTooling"
-          },
-          "derivedTitle": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "kind": {
-            "enum": [
-              "mainline",
-              "scratch",
-              "summariser"
-            ],
-            "type": "string"
-          },
-          "permissionMode": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "lastError": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "autopilot": {
+        "allOf": [
+          {
             "type": "object",
             "properties": {
-              "enabled": {
-                "type": "boolean"
+              "sessionId": {
+                "type": [
+                  "null",
+                  "string"
+                ]
               },
-              "prompt": {
+              "status": {
+                "enum": [
+                  "discarded",
+                  "error",
+                  "running",
+                  "sleeping",
+                  "starting",
+                  "stopped",
+                  "unknown"
+                ],
                 "type": "string"
               },
+              "machineId": {
+                "type": "string"
+              },
+              "harness": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "model": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "effort": {
+                "enum": [
+                  "high",
+                  "low",
+                  "max",
+                  "medium",
+                  "none",
+                  "xhigh"
+                ],
+                "type": "string"
+              },
+              "canDelegate": {
+                "type": [
+                  "null",
+                  "boolean"
+                ]
+              },
+              "id": {
+                "type": "string"
+              },
+              "createdAt": {
+                "type": "string",
+                "format": "date-time"
+              },
               "updatedAt": {
-                "type": "number"
+                "type": "string",
+                "format": "date-time"
+              },
+              "seenAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "lastRequestAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "workflowRunId": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "workflowStepId": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "cwd": {
+                "type": "string"
+              },
+              "projectId": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "parentInstanceId": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "parentToolUseId": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "title": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "titleSource": {
+                "enum": [
+                  "agent",
+                  "owner"
+                ],
+                "type": "string"
+              },
+              "tooling": {
+                "$ref": "#/components/schemas/SessionTooling"
+              },
+              "derivedTitle": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "kind": {
+                "enum": [
+                  "mainline",
+                  "scratch",
+                  "summariser"
+                ],
+                "type": "string"
+              },
+              "permissionMode": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "lastError": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "autopilot": {
+                "type": "object",
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "prompt": {
+                    "type": "string"
+                  },
+                  "updatedAt": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "enabled",
+                  "prompt",
+                  "updatedAt"
+                ]
+              },
+              "spawnedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "workItemId": {
+                "type": [
+                  "null",
+                  "string"
+                ]
               }
             },
             "required": [
-              "enabled",
-              "prompt",
-              "updatedAt"
+              "canDelegate",
+              "createdAt",
+              "cwd",
+              "derivedTitle",
+              "harness",
+              "id",
+              "kind",
+              "lastError",
+              "machineId",
+              "model",
+              "parentInstanceId",
+              "parentToolUseId",
+              "permissionMode",
+              "projectId",
+              "sessionId",
+              "status",
+              "title",
+              "updatedAt",
+              "workItemId",
+              "workflowRunId",
+              "workflowStepId"
             ]
           },
-          "spawnedAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "workItemId": {
-            "type": [
-              "null",
-              "string"
+          {
+            "type": "object",
+            "properties": {
+              "keepAlive": {
+                "$ref": "#/components/schemas/KeepAlive"
+              }
+            },
+            "required": [
+              "keepAlive"
             ]
           }
-        },
-        "required": [
-          "canDelegate",
-          "createdAt",
-          "cwd",
-          "derivedTitle",
-          "harness",
-          "id",
-          "kind",
-          "lastError",
-          "machineId",
-          "model",
-          "parentInstanceId",
-          "parentToolUseId",
-          "permissionMode",
-          "projectId",
-          "sessionId",
-          "status",
-          "title",
-          "updatedAt",
-          "workItemId",
-          "workflowRunId",
-          "workflowStepId"
         ]
       },
       "getApiAgentsByMachineIdBusy200": {
@@ -7161,17 +7193,216 @@
         "items": {
           "allOf": [
             {
-              "$ref": "#/components/schemas/BoardInstanceRow"
-            },
-            {
               "type": "object",
               "properties": {
+                "sessionId": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "status": {
+                  "enum": [
+                    "discarded",
+                    "error",
+                    "running",
+                    "sleeping",
+                    "starting",
+                    "stopped",
+                    "unknown"
+                  ],
+                  "type": "string"
+                },
+                "machineId": {
+                  "type": "string"
+                },
+                "harness": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "model": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "effort": {
+                  "enum": [
+                    "high",
+                    "low",
+                    "max",
+                    "medium",
+                    "none",
+                    "xhigh"
+                  ],
+                  "type": "string"
+                },
+                "canDelegate": {
+                  "type": [
+                    "null",
+                    "boolean"
+                  ]
+                },
+                "id": {
+                  "type": "string"
+                },
+                "createdAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "updatedAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "seenAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "lastRequestAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "workflowRunId": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "workflowStepId": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "cwd": {
+                  "type": "string"
+                },
+                "projectId": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "parentInstanceId": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "parentToolUseId": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "title": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "titleSource": {
+                  "enum": [
+                    "agent",
+                    "owner"
+                  ],
+                  "type": "string"
+                },
+                "derivedTitle": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "kind": {
+                  "enum": [
+                    "mainline",
+                    "scratch",
+                    "summariser"
+                  ],
+                  "type": "string"
+                },
+                "permissionMode": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "lastError": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "autopilot": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "prompt": {
+                      "type": "string"
+                    },
+                    "updatedAt": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "enabled",
+                    "prompt",
+                    "updatedAt"
+                  ]
+                },
+                "spawnedAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "workItemId": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
                 "runningDelegates": {
                   "type": "number"
                 }
               },
               "required": [
-                "runningDelegates"
+                "canDelegate",
+                "createdAt",
+                "cwd",
+                "derivedTitle",
+                "harness",
+                "id",
+                "kind",
+                "lastError",
+                "machineId",
+                "model",
+                "parentInstanceId",
+                "parentToolUseId",
+                "permissionMode",
+                "projectId",
+                "runningDelegates",
+                "sessionId",
+                "status",
+                "title",
+                "updatedAt",
+                "workItemId",
+                "workflowRunId",
+                "workflowStepId"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "keepAlive": {
+                  "$ref": "#/components/schemas/KeepAlive"
+                }
+              },
+              "required": [
+                "keepAlive"
               ]
             }
           ]
@@ -8494,6 +8725,10 @@
             "kind": {
               "type": "string"
             },
+            "fetchedAt": {
+              "type": "string",
+              "format": "date-time"
+            },
             "scopeLabel": {
               "type": [
                 "null",
@@ -8511,10 +8746,6 @@
                 "null",
                 "string"
               ]
-            },
-            "fetchedAt": {
-              "type": "string",
-              "format": "date-time"
             }
           },
           "required": [
@@ -9282,6 +9513,10 @@
                   "frame"
                 ]
               },
+              "keepAlive": {
+                "const": true,
+                "type": "boolean"
+              },
               "instanceId": {
                 "type": "string"
               },
@@ -9308,6 +9543,10 @@
                 "enum": [
                   "send"
                 ]
+              },
+              "keepAlive": {
+                "const": true,
+                "type": "boolean"
               },
               "instanceId": {
                 "type": "string"
@@ -9976,6 +10215,10 @@
           "instanceId": {
             "type": "string"
           },
+          "keepAliveTurn": {
+            "description": "The in-flight maintenance send a surviving Claude process is answering.",
+            "type": "string"
+          },
           "model": {
             "description": "Which model answers, from the session's first turn. Hoisted for the same\nreason as `permissionMode`. Absent leaves the choice to the harness.",
             "type": "string"
@@ -10384,22 +10627,100 @@
       "NeutralMessage": {
         "anyOf": [
           {
-            "$ref": "#/components/schemas/NeutralAssistantMessage"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/NeutralAssistantMessage"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "keepAlive": {
+                    "const": true,
+                    "type": "boolean"
+                  }
+                }
+              }
+            ]
           },
           {
-            "$ref": "#/components/schemas/NeutralUserMessage"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/NeutralUserMessage"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "keepAlive": {
+                    "const": true,
+                    "type": "boolean"
+                  }
+                }
+              }
+            ]
           },
           {
-            "$ref": "#/components/schemas/NeutralStreamMessage"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/NeutralStreamMessage"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "keepAlive": {
+                    "const": true,
+                    "type": "boolean"
+                  }
+                }
+              }
+            ]
           },
           {
-            "$ref": "#/components/schemas/NeutralResultMessage"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/NeutralResultMessage"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "keepAlive": {
+                    "const": true,
+                    "type": "boolean"
+                  }
+                }
+              }
+            ]
           },
           {
-            "$ref": "#/components/schemas/NeutralSystemMessage"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/NeutralSystemMessage"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "keepAlive": {
+                    "const": true,
+                    "type": "boolean"
+                  }
+                }
+              }
+            ]
           },
           {
-            "$ref": "#/components/schemas/NeutralRawMessage"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/NeutralRawMessage"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "keepAlive": {
+                    "const": true,
+                    "type": "boolean"
+                  }
+                }
+              }
+            ]
           }
         ]
       },
@@ -12550,6 +12871,52 @@
           "tools"
         ]
       },
+      "KeepAlive": {
+        "type": "object",
+        "properties": {
+          "cap": {
+            "type": "number"
+          },
+          "nextAt": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "on": {
+            "type": "boolean"
+          },
+          "sent": {
+            "type": "number"
+          },
+          "state": {
+            "enum": [
+              "asleep",
+              "cold",
+              "off",
+              "paused-usage",
+              "stopped-cap",
+              "stopped-miss",
+              "waiting"
+            ],
+            "type": "string"
+          },
+          "ttl": {
+            "enum": [
+              "1h",
+              "5m"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "cap",
+          "nextAt",
+          "on",
+          "sent",
+          "state"
+        ]
+      },
       "ConfigInspection": {
         "description": "What a session started in `cwd` would actually see, and what a machine has\noutside any project when `cwd` is absent. The answer to two questions the\ndashboard asks: \"what is on this machine that cawco does not manage?\" and\n\"what will this folder give me?\" — asked the moment a folder is chosen.",
         "type": "object",
@@ -12817,200 +13184,6 @@
           "name",
           "path",
           "scope"
-        ]
-      },
-      "BoardInstanceRow": {
-        "type": "object",
-        "properties": {
-          "sessionId": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "status": {
-            "enum": [
-              "discarded",
-              "error",
-              "running",
-              "sleeping",
-              "starting",
-              "stopped",
-              "unknown"
-            ],
-            "type": "string"
-          },
-          "machineId": {
-            "type": "string"
-          },
-          "harness": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "model": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "effort": {
-            "enum": [
-              "high",
-              "low",
-              "max",
-              "medium",
-              "none",
-              "xhigh"
-            ],
-            "type": "string"
-          },
-          "canDelegate": {
-            "type": [
-              "null",
-              "boolean"
-            ]
-          },
-          "id": {
-            "type": "string"
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "updatedAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "seenAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "workflowRunId": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "workflowStepId": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "cwd": {
-            "type": "string"
-          },
-          "projectId": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "parentInstanceId": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "parentToolUseId": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "title": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "titleSource": {
-            "enum": [
-              "agent",
-              "owner"
-            ],
-            "type": "string"
-          },
-          "derivedTitle": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "kind": {
-            "enum": [
-              "mainline",
-              "scratch",
-              "summariser"
-            ],
-            "type": "string"
-          },
-          "permissionMode": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "lastError": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "autopilot": {
-            "type": "object",
-            "properties": {
-              "enabled": {
-                "type": "boolean"
-              },
-              "prompt": {
-                "type": "string"
-              },
-              "updatedAt": {
-                "type": "number"
-              }
-            },
-            "required": [
-              "enabled",
-              "prompt",
-              "updatedAt"
-            ]
-          },
-          "spawnedAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "workItemId": {
-            "type": [
-              "null",
-              "string"
-            ]
-          }
-        },
-        "required": [
-          "canDelegate",
-          "createdAt",
-          "cwd",
-          "derivedTitle",
-          "harness",
-          "id",
-          "kind",
-          "lastError",
-          "machineId",
-          "model",
-          "parentInstanceId",
-          "parentToolUseId",
-          "permissionMode",
-          "projectId",
-          "sessionId",
-          "status",
-          "title",
-          "updatedAt",
-          "workItemId",
-          "workflowRunId",
-          "workflowStepId"
         ]
       },
       "BlockMetadata": {
@@ -15691,6 +15864,99 @@
           },
           {
             "$ref": "#/components/schemas/TranscriptStreamFrame"
+          },
+          {
+            "allOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "frame"
+                    ]
+                  },
+                  "keepAlive": {
+                    "const": true,
+                    "type": "boolean"
+                  },
+                  "instanceId": {
+                    "type": "string"
+                  },
+                  "harness": {
+                    "$ref": "#/components/schemas/HarnessKind"
+                  },
+                  "message": {
+                    "$ref": "#/components/schemas/NeutralMessage"
+                  }
+                },
+                "required": [
+                  "harness",
+                  "instanceId",
+                  "kind",
+                  "message"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "keepAlive": {
+                    "type": "boolean",
+                    "enum": [
+                      true
+                    ]
+                  }
+                },
+                "required": [
+                  "keepAlive"
+                ]
+              }
+            ]
+          },
+          {
+            "allOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "description": "Hub-originated: a send's record, as it stands after its latest change\n— accepted, read, failed or replaced. Sequenced into the session's\nstream at the moment of the change, which is where a read send's row\nsits.",
+                    "type": "string",
+                    "enum": [
+                      "send"
+                    ]
+                  },
+                  "keepAlive": {
+                    "const": true,
+                    "type": "boolean"
+                  },
+                  "instanceId": {
+                    "type": "string"
+                  },
+                  "record": {
+                    "$ref": "#/components/schemas/SendRecord"
+                  }
+                },
+                "required": [
+                  "instanceId",
+                  "kind",
+                  "record"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "keepAlive": {
+                    "type": "boolean",
+                    "enum": [
+                      true
+                    ]
+                  }
+                },
+                "required": [
+                  "keepAlive"
+                ]
+              }
+            ]
           }
         ]
       },
@@ -15716,6 +15982,10 @@
           },
           "instanceId": {
             "type": "string"
+          },
+          "keepAlive": {
+            "const": true,
+            "type": "boolean"
           },
           "mode": {
             "$ref": "#/components/schemas/SendMode"
@@ -15754,6 +16024,10 @@
         "properties": {
           "compactSummary": {
             "description": "This message is a compaction's summary, in the harness's own words: pi\nreports one when a compaction ends. Claude's needs no flag — it opens\nwith words the transcript knows it by.",
+            "const": true,
+            "type": "boolean"
+          },
+          "keepAlive": {
             "const": true,
             "type": "boolean"
           },
@@ -16058,157 +16332,6 @@
           "replaced"
         ],
         "type": "string"
-      },
-      "StreamReset": {
-        "description": "Hub → client when the gap is unrecoverable (older than the ring holds):\nan honest refusal, never a partial replay. The client reads the newest\ntranscript page again and resumes from the `seq` it carries.",
-        "type": "object",
-        "properties": {
-          "nextSeq": {
-            "type": "number"
-          },
-          "sessionId": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string",
-            "enum": [
-              "stream.reset"
-            ]
-          }
-        },
-        "required": [
-          "nextSeq",
-          "sessionId",
-          "type"
-        ]
-      },
-      "StreamDelta": {
-        "description": "Hub → client, live fan-out of one sequenced event.",
-        "type": "object",
-        "properties": {
-          "event": {
-            "$ref": "#/components/schemas/SessionStreamEvent"
-          },
-          "type": {
-            "type": "string",
-            "enum": [
-              "stream.event"
-            ]
-          }
-        },
-        "required": [
-          "event",
-          "type"
-        ]
-      },
-      "CommandAck": {
-        "description": "Hub → client, the command's lifecycle:\n- `accepted` — validated, the target daemon reachable, dispatched;\n- `applied`  — the daemon confirmed, where its protocol carries a\n  confirmation today; where it does not, the hub stops at `accepted` and\n  the stream event reflecting the change is the proof of application;\n- `failed`   — terminal, with the reason a human can read.",
-        "type": "object",
-        "properties": {
-          "commandId": {
-            "type": "string"
-          },
-          "outcome": {
-            "enum": [
-              "started",
-              "withdrawn"
-            ],
-            "type": "string"
-          },
-          "reason": {
-            "type": "string"
-          },
-          "stage": {
-            "enum": [
-              "accepted",
-              "applied",
-              "failed"
-            ],
-            "type": "string"
-          },
-          "type": {
-            "type": "string",
-            "enum": [
-              "command.ack"
-            ]
-          }
-        },
-        "required": [
-          "commandId",
-          "stage",
-          "type"
-        ]
-      },
-      "StreamSubscribe": {
-        "description": "Client → hub. `afterSeq` present is a resume (\"I have up to here — replay the\nrest\"): a client sends it with the `seq` its transcript page was read at, and\nagain after a reconnect. Absent is a fresh join (\"start me from now\").",
-        "type": "object",
-        "properties": {
-          "afterSeq": {
-            "type": "number"
-          },
-          "sessionId": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string",
-            "enum": [
-              "stream.subscribe"
-            ]
-          }
-        },
-        "required": [
-          "sessionId",
-          "type"
-        ]
-      },
-      "CommandEnvelope": {
-        "description": "Client → hub: an operator action as a durable, trackable object rather than\na fire-and-forget call. `commandId` is client-generated and unique per\nsubmission; `payload` is exactly what the corresponding legacy relay\noperation takes today.",
-        "type": "object",
-        "properties": {
-          "commandId": {
-            "type": "string"
-          },
-          "kind": {
-            "$ref": "#/components/schemas/CommandKind"
-          },
-          "machineId": {
-            "type": "string"
-          },
-          "payload": {},
-          "sessionId": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string",
-            "enum": [
-              "command"
-            ]
-          }
-        },
-        "required": [
-          "commandId",
-          "kind",
-          "machineId",
-          "payload",
-          "sessionId",
-          "type"
-        ]
-      },
-      "CommandKind": {
-        "description": "The operations a command envelope can carry — 1:1 with existing relay ops.",
-        "enum": [
-          "interrupt",
-          "permission.answer",
-          "send",
-          "send.withdraw",
-          "set-effort",
-          "set-model",
-          "set-permission-mode"
-        ],
-        "type": "string"
-      },
-      "T_1": {
-        "type": "object"
       },
       "NeutralAssistantMessage": {
         "type": "object",
@@ -16535,6 +16658,12 @@
               },
               "write": {
                 "type": "number"
+              },
+              "write5m": {
+                "type": "number"
+              },
+              "write1h": {
+                "type": "number"
               }
             },
             "required": [
@@ -16557,6 +16686,10 @@
           },
           "is_error": {
             "type": "boolean"
+          },
+          "lastRequestAt": {
+            "description": "Agent receive time of the last main-loop requesting status, epoch ms.",
+            "type": "number"
           },
           "num_turns": {
             "type": "number"
@@ -16859,6 +16992,157 @@
           "type"
         ]
       },
+      "StreamReset": {
+        "description": "Hub → client when the gap is unrecoverable (older than the ring holds):\nan honest refusal, never a partial replay. The client reads the newest\ntranscript page again and resumes from the `seq` it carries.",
+        "type": "object",
+        "properties": {
+          "nextSeq": {
+            "type": "number"
+          },
+          "sessionId": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "stream.reset"
+            ]
+          }
+        },
+        "required": [
+          "nextSeq",
+          "sessionId",
+          "type"
+        ]
+      },
+      "StreamDelta": {
+        "description": "Hub → client, live fan-out of one sequenced event.",
+        "type": "object",
+        "properties": {
+          "event": {
+            "$ref": "#/components/schemas/SessionStreamEvent"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "stream.event"
+            ]
+          }
+        },
+        "required": [
+          "event",
+          "type"
+        ]
+      },
+      "CommandAck": {
+        "description": "Hub → client, the command's lifecycle:\n- `accepted` — validated, the target daemon reachable, dispatched;\n- `applied`  — the daemon confirmed, where its protocol carries a\n  confirmation today; where it does not, the hub stops at `accepted` and\n  the stream event reflecting the change is the proof of application;\n- `failed`   — terminal, with the reason a human can read.",
+        "type": "object",
+        "properties": {
+          "commandId": {
+            "type": "string"
+          },
+          "outcome": {
+            "enum": [
+              "started",
+              "withdrawn"
+            ],
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "stage": {
+            "enum": [
+              "accepted",
+              "applied",
+              "failed"
+            ],
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "command.ack"
+            ]
+          }
+        },
+        "required": [
+          "commandId",
+          "stage",
+          "type"
+        ]
+      },
+      "StreamSubscribe": {
+        "description": "Client → hub. `afterSeq` present is a resume (\"I have up to here — replay the\nrest\"): a client sends it with the `seq` its transcript page was read at, and\nagain after a reconnect. Absent is a fresh join (\"start me from now\").",
+        "type": "object",
+        "properties": {
+          "afterSeq": {
+            "type": "number"
+          },
+          "sessionId": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "stream.subscribe"
+            ]
+          }
+        },
+        "required": [
+          "sessionId",
+          "type"
+        ]
+      },
+      "CommandEnvelope": {
+        "description": "Client → hub: an operator action as a durable, trackable object rather than\na fire-and-forget call. `commandId` is client-generated and unique per\nsubmission; `payload` is exactly what the corresponding legacy relay\noperation takes today.",
+        "type": "object",
+        "properties": {
+          "commandId": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/CommandKind"
+          },
+          "machineId": {
+            "type": "string"
+          },
+          "payload": {},
+          "sessionId": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "command"
+            ]
+          }
+        },
+        "required": [
+          "commandId",
+          "kind",
+          "machineId",
+          "payload",
+          "sessionId",
+          "type"
+        ]
+      },
+      "CommandKind": {
+        "description": "The operations a command envelope can carry — 1:1 with existing relay ops.",
+        "enum": [
+          "interrupt",
+          "permission.answer",
+          "send",
+          "send.withdraw",
+          "set-effort",
+          "set-model",
+          "set-permission-mode"
+        ],
+        "type": "string"
+      },
+      "T_1": {
+        "type": "object"
+      },
       "InstanceRow": {
         "type": "object",
         "properties": {
@@ -16937,6 +17221,9 @@
           "id": {
             "type": "string"
           },
+          "keepAlive": {
+            "$ref": "#/components/schemas/KeepAlive"
+          },
           "kind": {
             "description": "`scratch` for a side quest; absent from a hub that predates the column.",
             "type": "string"
@@ -16946,6 +17233,21 @@
             "type": [
               "null",
               "string"
+            ]
+          },
+          "lastRequestAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": [
+                  "null",
+                  "string",
+                  "number"
+                ]
+              }
             ]
           },
           "machineId": {

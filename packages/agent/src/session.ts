@@ -43,6 +43,7 @@ import {
   FLEET_SYNC,
   GENERATE_IMAGE,
   INSTALL_SESSION_CREDENTIAL,
+  MESSAGES_READ,
   PREVIEW_START,
   PREVIEW_STOP,
   RESOLVE_PERMISSION,
@@ -120,6 +121,7 @@ interface Claimed {
     sessionId?: string | null;
     sessionCredential?: string;
     processGeneration?: string;
+    keepAliveTurn?: string;
   };
   /** Whether its turn was running when its ring was read. */
   running: boolean;
@@ -432,6 +434,7 @@ export class SessionSupervisor {
   readonly #queues = new Map<string, Promise<void>>();
   /** The sessions with a turn in flight — from the `send` that starts one until the turn ends. */
   readonly #busy = new Set<string>();
+  readonly #keepAlive = new Map<string, string>();
   readonly #imageRequests = new Map<string, string>();
 
   /**
@@ -710,7 +713,7 @@ export class SessionSupervisor {
    * else waits for the trailing edge of the window.
    */
   #emitPulse(instanceId: string, important: boolean): void {
-    if (!this.#speaksFor(instanceId)) {
+    if (!this.#speaksFor(instanceId) || this.#keepAlive.has(instanceId)) {
       return;
     }
     const now = Date.now();
@@ -759,6 +762,7 @@ export class SessionSupervisor {
    * explicit close or a stop.
    */
   #forgetPulse(instanceId: string): void {
+    this.#keepAlive.delete(instanceId);
     this.#busy.delete(instanceId);
     this.#line.delete(instanceId);
     // The process this mark counted in is over — a relaunch or a death.
@@ -1155,15 +1159,30 @@ export class SessionSupervisor {
         this.#line.set(instanceId, { srcEpoch, srcSeq });
       },
       frame: (message) => {
+        const ping = this.#keepAlive.get(instanceId);
+        if (
+          ping &&
+          message.type === "system" &&
+          message.subtype === MESSAGES_READ &&
+          message.read?.some((id) => id !== ping)
+        ) {
+          this.#keepAlive.delete(instanceId);
+        }
+        const keepAlive = this.#keepAlive.has(instanceId);
+        if (keepAlive) {
+          message.keepAlive = true;
+        }
         const src = this.#line.get(instanceId);
         this.#line.delete(instanceId);
-        if (message.type === "result") {
+        if (message.type === "result" && !keepAlive) {
           this.#tagQuest(instanceId, adapter);
         }
         // Folded before the forward decision: the pulse is local state being
         // rebuilt from a replay, and a line the hub already has still tells
         // this agent what its own session is doing.
-        this.#foldPulse(instanceId, message);
+        if (!keepAlive) {
+          this.#foldPulse(instanceId, message);
+        }
         // AT MOST ONCE. The hub's mark is the hub's word, so a line at or below
         // it has already become a frame there — replaying it would double what
         // a dashboard shows. Above it, or under a different epoch, or with no
@@ -1175,9 +1194,13 @@ export class SessionSupervisor {
           kind: "frame",
           instanceId,
           harness: adapter.kind,
+          ...(keepAlive ? { keepAlive: true } : {}),
           message,
           ...(src ?? {}),
         });
+        if (message.type === "result") {
+          this.#keepAlive.delete(instanceId);
+        }
       },
       permission: (request) => {
         if (this.#openAsks.has(request.requestId)) {
@@ -1320,6 +1343,7 @@ export class SessionSupervisor {
     ).flat();
   }
 
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one custody transaction claims, decides and adopts sessions, restoring maintenance identity before any pulse
   async #reattachHarness(
     kind: HarnessKind,
     rows: Claimed["row"][],
@@ -1371,6 +1395,9 @@ export class SessionSupervisor {
         const proc = held.get(row.instanceId);
         if (!proc) {
           continue;
+        }
+        if (row.keepAliveTurn) {
+          this.#keepAlive.set(row.instanceId, row.keepAliveTurn);
         }
         if (this.#adopting.has(row.instanceId)) {
           elsewhere.push(row);
@@ -1665,9 +1692,11 @@ export class SessionSupervisor {
     images,
     urgent,
   }: SendPayload): Promise<void> {
+    const keepAlive =
+      message.origin.kind === "system" && message.origin.name === "keepalive";
     const worktree = this.#worktrees.get(instanceId);
     const { content } = message.message;
-    if (worktree?.announce && typeof content === "string") {
+    if (!keepAlive && worktree?.announce && typeof content === "string") {
       message = {
         ...message,
         message: {
@@ -1687,6 +1716,18 @@ export class SessionSupervisor {
         this.#failures.get(instanceId) ??
           "This session is not live. Resume it before sending a message."
       );
+    }
+    if (keepAlive) {
+      if (
+        session.harness !== "claude" ||
+        this.#busy.has(instanceId) ||
+        [...this.#openAsks.values()].some(
+          (ask) => "instanceId" in ask && ask.instanceId === instanceId
+        )
+      ) {
+        throw new Error("Keep-alive requires an idle Claude session.");
+      }
+      this.#keepAlive.set(instanceId, message.uuid);
     }
     session.send(message, { attachments, images, urgent });
   }

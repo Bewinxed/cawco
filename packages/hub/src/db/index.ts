@@ -919,6 +919,22 @@ export interface DbShape {
       >
     >
   ) => ContinuationRow | undefined;
+  /** Cache bookkeeping never changes the session's activity timestamp. */
+  readonly updateKeepAlive: (
+    id: string,
+    patch: Partial<
+      Pick<
+        ReturnType<DbShape["getInstancesByIds"]>[number],
+        | "keepAliveEnabled"
+        | "keepAliveSent"
+        | "keepAliveStopped"
+        | "cacheTtl"
+        | "lastRequestAt"
+        | "keepAliveMisses"
+        | "keepAliveTurn"
+      >
+    >
+  ) => void;
   /** One change to a send's record — the hub's only kind of write to one. */
   readonly updateSend: (
     uuid: string,
@@ -1431,6 +1447,20 @@ const make = (path: string): DbShape => {
       )
       .all();
     for (const row of dated) {
+      const latest = db
+        .select({ body: sentMessages.body })
+        .from(sentMessages)
+        .where(eq(sentMessages.instanceId, row.id))
+        .orderBy(desc(sentMessages.acceptedAt))
+        .limit(1)
+        .get()?.body;
+      if (
+        latest?.origin?.kind === "system" &&
+        latest.origin.name === "keepalive"
+      ) {
+        // The transcript's mtime includes maintenance; it is not real activity.
+        continue;
+      }
       const at = row.sessionId ? resumableAt[row.sessionId] : undefined;
       if (at === undefined || at === row.updatedAt.getTime()) {
         continue;
@@ -1443,6 +1473,19 @@ const make = (path: string): DbShape => {
   };
 
   return {
+    updateKeepAlive: (id, patch) => {
+      db.update(instances)
+        .set({
+          ...patch,
+          ...(patch.keepAliveEnabled === true
+            ? {
+                keepAliveEnabled: sql`CASE WHEN ${instances.status} IN ('stopped', 'discarded', 'error') THEN 0 ELSE 1 END`,
+              }
+            : {}),
+        })
+        .where(eq(instances.id, id))
+        .run();
+    },
     agentHarnesses: (machineId) =>
       db
         .select({ harnesses: agents.harnesses })

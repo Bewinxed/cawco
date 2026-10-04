@@ -10,6 +10,7 @@ import type { UsageTokens } from "./types";
 export interface ModelRates {
   cacheRead: number;
   cacheWrite: number;
+  cacheWrite1h: number;
   input: number;
   output: number;
 }
@@ -17,6 +18,7 @@ export interface ModelRates {
 interface SnapshotModel {
   cacheRead?: number;
   cacheWrite?: number;
+  cacheWrite1h?: number;
   input: number;
   output: number;
 }
@@ -52,6 +54,8 @@ function loadFromSnapshot(json: PricingSnapshot): void {
     RATES.set(id, {
       input,
       output,
+      cacheWrite1h:
+        m.cacheWrite1h === undefined ? input * 2 : m.cacheWrite1h / PER_MILLION,
       cacheWrite:
         m.cacheWrite === undefined ? input * 1.25 : m.cacheWrite / PER_MILLION,
       cacheRead:
@@ -170,6 +174,7 @@ function filterModelsDev(raw: unknown): PricingSnapshot {
           input?: number;
           output?: number;
           cache_write?: number;
+          cache_write_1h?: number;
           cache_read?: number;
         };
       }
@@ -189,6 +194,9 @@ function filterModelsDev(raw: unknown): PricingSnapshot {
         continue;
       }
       const entry: SnapshotModel = { input: cost.input, output: cost.output };
+      if (cost.cache_write_1h !== undefined) {
+        entry.cacheWrite1h = cost.cache_write_1h;
+      }
       if (cost.cache_write !== undefined) {
         entry.cacheWrite = cost.cache_write;
       }

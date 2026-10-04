@@ -354,6 +354,7 @@ export interface SessionMessage {
    * one send.
    */
   joined?: number;
+  keepAlive?: true;
   /**
    * On a compaction summary whose harness kept entries from before it in
    * context: the uuid of the first entry it kept. pi stores its compaction
@@ -535,6 +536,7 @@ export interface NeutralUserMessage {
    * with words the transcript knows it by.
    */
   compactSummary?: true;
+  keepAlive?: true;
   message: { role: "user"; content: string | NeutralContentBlock[] };
   origin?: NeutralOrigin;
   parent_tool_use_id?: string | null;
@@ -613,6 +615,7 @@ export interface SendRecord {
    */
   harnessId?: string;
   instanceId: string;
+  keepAlive?: true;
   mode: SendMode;
   /** Why it failed, in the harness's words or the hub's. */
   reason?: string;
@@ -678,7 +681,7 @@ export interface NeutralStreamMessage {
 
 export interface NeutralResultMessage {
   /** Prompt-cache tokens the turn read from / wrote to, when the harness reports them. */
-  cache?: { read: number; write: number };
+  cache?: { read: number; write: number; write5m?: number; write1h?: number };
   errors?: string[];
   /**
    * The sends this error failed, set by the hub: read, and answered by nothing
@@ -686,6 +689,8 @@ export interface NeutralResultMessage {
    */
   failedSends?: string[];
   is_error: boolean;
+  /** Agent receive time of the last main-loop requesting status, epoch ms. */
+  lastRequestAt?: number;
   num_turns?: number;
   raw?: unknown;
   /** Read from stored history during recovery, rather than a newly completed turn. */
@@ -791,13 +796,14 @@ export interface NeutralRawMessage {
   uuid?: string;
 }
 
-export type NeutralMessage =
+export type NeutralMessage = (
   | NeutralAssistantMessage
   | NeutralUserMessage
   | NeutralStreamMessage
   | NeutralResultMessage
   | NeutralSystemMessage
-  | NeutralRawMessage;
+  | NeutralRawMessage
+) & { keepAlive?: true };
 
 /* ---------------------------------------------------------- capabilities — */
 

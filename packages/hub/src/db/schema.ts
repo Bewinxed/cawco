@@ -247,6 +247,18 @@ export const projects = sqliteTable("projects", {
 
 /** A running or resumable `query()`. Messages live in SDK session storage, not here. */
 export const instances = sqliteTable("instances", {
+  keepAliveEnabled: integer("keep_alive", { mode: "boolean" })
+    .notNull()
+    .default(false),
+  keepAliveSent: integer("keep_alive_sent").notNull().default(0),
+  keepAliveStopped: text("keep_alive_stopped").$type<
+    "stopped-cap" | "stopped-miss"
+  >(),
+  cacheTtl: text("cache_ttl").$type<"5m" | "1h">(),
+  lastRequestAt: timestamp("last_request_at"),
+  keepAliveMisses: integer("keep_alive_misses").notNull().default(0),
+  /** In-flight ping identity survives a hub or agent restart. */
+  keepAliveTurn: text("keep_alive_turn"),
   workflowRunId: text("workflow_run_id"),
   workflowStepId: text("workflow_step_id"),
   id: text("id").primaryKey(),

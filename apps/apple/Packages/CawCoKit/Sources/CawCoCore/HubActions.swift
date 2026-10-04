@@ -175,6 +175,7 @@ extension HubConnection {
         case .ok: return
         case .badRequest: statusCode = 400
         case .notFound: statusCode = 404
+        case .conflict: statusCode = 409
         case .unprocessableContent: statusCode = 422
         case .internalServerError: statusCode = 500
         case .serviceUnavailable: statusCode = 503

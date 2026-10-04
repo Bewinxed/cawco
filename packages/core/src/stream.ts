@@ -34,6 +34,9 @@ export const WIRE_PROTOCOL = 3;
  * state. Raw frames never reach a dashboard; the hub folds them.
  */
 export type SessionStreamFrame =
+  | (Extract<import("./index").FramePayload, { kind: "frame" | "send" }> & {
+      keepAlive: true;
+    })
   | import("./transcript-types").TranscriptStreamFrame
   | Extract<import("./index").FramePayload, { kind: "preview" }>;
 

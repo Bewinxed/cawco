@@ -453,11 +453,13 @@ export const custodyRow = (
   sessionId: string | null;
   sessionCredential?: string;
   processGeneration?: string;
+  keepAliveTurn?: string;
 } => ({
   instanceId: payload.instanceId,
   cwd: payload.cwd,
   sessionId: payload.resume?.sessionKey ?? null,
   processGeneration: payload.processGeneration,
+  ...(payload.keepAliveTurn ? { keepAliveTurn: payload.keepAliveTurn } : {}),
   ...(payload.sessionCredential
     ? { sessionCredential: payload.sessionCredential }
     : {}),

@@ -159,6 +159,13 @@ import { createDelegationMcp } from "./delegation-mcp";
 import { FleetMcp } from "./fleet-mcp";
 import { hidden } from "./hidden";
 import { joinRoutes } from "./join";
+import {
+  isKeepAlive,
+  type KeepAliveRow,
+  keepAliveResult,
+  keepAliveState,
+  tickKeepAlive,
+} from "./keep-alive";
 import { probe } from "./llm";
 import { MeaningJudge } from "./meaning";
 import { externalizeImages, mediaContentType, mediaFilePath } from "./media";
@@ -1262,6 +1269,7 @@ const sendMode = ({ urgent, message }: SendPayload): SendMode => {
 
 /** A record as it goes out: on the stream, and with a history read. */
 const toSendRecord = (row: SentMessageRow): SendRecord => ({
+  ...(isKeepAlive(row.body) ? { keepAlive: true } : {}),
   uuid: row.uuid,
   instanceId: row.instanceId,
   acceptedAt: row.acceptedAt.toISOString(),
@@ -2053,6 +2061,15 @@ export const createServer = (
 
   /** A record's latest state onto its session's stream: where every screen hears it. */
   const publishSend = (row: SentMessageRow): void => {
+    if (isKeepAlive(row.body)) {
+      streams.sequence(row.instanceId, {
+        kind: "send",
+        instanceId: row.instanceId,
+        keepAlive: true,
+        record: toSendRecord(row),
+      });
+      return;
+    }
     transcripts.ingest(row.instanceId, {
       kind: "send",
       instanceId: row.instanceId,
@@ -2088,6 +2105,9 @@ export const createServer = (
     row: SentMessageRow,
     answering: boolean
   ): SentMessageRow => {
+    if (isKeepAlive(row.body)) {
+      return changeSend(row, { state: "read" });
+    }
     if (answering) {
       const waiting = unanswered.get(row.instanceId) ?? new Map();
       waiting.set(row.uuid, anchors.get(row.instanceId));
@@ -2320,6 +2340,9 @@ export const createServer = (
     if (signal.kind === "rejected") {
       const row = db.sendRecord(signal.uuid);
       if (row?.state === "pending" || row?.state === "read") {
+        if (isKeepAlive(row.body)) {
+          db.updateKeepAlive(instanceId, { keepAliveTurn: null });
+        }
         rejectSend(row, signal.error);
       }
       return;
@@ -2391,6 +2414,9 @@ export const createServer = (
       .filter((row) => row.instanceId === instanceId && row.state === "pending")
       .sort((a, b) => order(a) - order(b));
     for (const row of read) {
+      if (!isKeepAlive(row.body)) {
+        db.updateKeepAlive(instanceId, { keepAliveTurn: null });
+      }
       readSend(row, true);
     }
     const latest = Math.max(
@@ -2788,6 +2814,7 @@ export const createServer = (
     return {
       ...asked,
       processGeneration: processGeneration(stored),
+      ...(stored.keepAliveTurn ? { keepAliveTurn: stored.keepAliveTurn } : {}),
       ...(workspace ? { workspace } : {}),
       ...(sessionCredential ? { sessionCredential } : {}),
     };
@@ -2988,6 +3015,9 @@ export const createServer = (
     mode: SendMode
   ): void => {
     const { instanceId, message } = payload;
+    if (isKeepAlive(message)) {
+      return;
+    }
     if (mode === "urgent") {
       noteInterrupt(instanceId);
     }
@@ -3027,12 +3057,15 @@ export const createServer = (
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: the single send transaction orders refusal, recovery, delivery and persistence.
   const deliverSend = (envelope: Envelope<SendPayload>): SentMessageRow => {
     const { instanceId, message } = envelope.payload;
+    const keepAlive = isKeepAlive(message);
     const known = db.sendRecord(message.uuid);
     if (known) {
       publishSend(known);
       return known;
     }
-    const refused = inputRefusal(instanceId, message.origin);
+    const refused = keepAlive
+      ? undefined
+      : inputRefusal(instanceId, message.origin);
     if (refused === CLAUDE_CONVERSATION_GONE) {
       throw new WorkItemRefusal(409, refused);
     }
@@ -3042,7 +3075,11 @@ export const createServer = (
     // register settles what its sessions held, and a record already pending
     // would be settled as a send the restart lost.
     const reconnecting = awaitingMachine.get(envelope.machineId);
-    if (!refused && reconnecting && !registry.agent(envelope.machineId)) {
+    if (
+      !(keepAlive || refused) &&
+      reconnecting &&
+      !registry.agent(envelope.machineId)
+    ) {
       reconnecting.push(envelope);
       return {
         uuid: message.uuid,
@@ -3061,8 +3098,12 @@ export const createServer = (
     }
     const agent = refused ? undefined : registry.agent(envelope.machineId);
     if (agent) {
-      workItems.reopen(instanceId);
-      wakeForSend(agent, envelope.machineId, instanceId);
+      if (keepAlive) {
+        db.updateKeepAlive(instanceId, { keepAliveTurn: message.uuid });
+      } else {
+        workItems.reopen(instanceId);
+        wakeForSend(agent, envelope.machineId, instanceId);
+      }
       agent.send(envelope);
     }
     // Built after the send has gone: the machine is handed the image bytes,
@@ -4792,10 +4833,45 @@ export const createServer = (
       runningDelegates: counts.get(row.id) ?? 0,
     }));
   };
+  const withKeepAlive = <
+    Row extends
+      | KeepAliveRow
+      | ReturnType<DbShape["listBoardInstances"]>[number],
+  >(
+    rows: Row[]
+  ) => {
+    const readings = new Map(
+      db
+        .listUsageLimits()
+        .map((reading) => [reading.machineId, reading.payload])
+    );
+    const now = Date.now();
+    return rows.map((row) => {
+      const {
+        keepAliveEnabled: _enabled,
+        keepAliveSent: _sent,
+        keepAliveStopped: _stopped,
+        keepAliveMisses: _misses,
+        keepAliveTurn: _turn,
+        cacheTtl: _ttl,
+        ...visible
+      } = row;
+      return {
+        ...visible,
+        keepAlive: keepAliveState(
+          row as KeepAliveRow,
+          readings.get(row.machineId),
+          now
+        ),
+      };
+    });
+  };
   const boardRows = () =>
-    withDelegates(
-      withSessionPresence(
-        db.listBoardInstances().filter((row) => row.kind !== "summariser")
+    withKeepAlive(
+      withDelegates(
+        withSessionPresence(
+          db.listBoardInstances().filter((row) => row.kind !== "summariser")
+        )
       )
     );
 
@@ -5978,6 +6054,7 @@ export const createServer = (
     const fork = row.sessionId ? undefined : forkSeeds.get(row.id);
     const where = {
       machineId: row.machineId,
+      // biome-ignore lint/suspicious/noUnnecessaryConditions: forkSeeds.get can be absent for a row that never named a session
       sessionKey: row.sessionId ?? fork?.sessionKey ?? "",
       cwd: row.cwd || "",
       harness: row.harness || "claude",
@@ -6064,6 +6141,26 @@ export const createServer = (
     // filled from one of these entries.
     externalizeImages(transcript);
     const records = recordMap(sendLines(row?.id, transcript, true, true));
+    // A stored ping and its answer are hidden together, also after hub restart.
+    // A new main-loop user prompt closes that range; tool results do not.
+    let quiet = false;
+    transcript = transcript.filter((entry) => {
+      if (
+        entry.type === "user" &&
+        !entry.parent_tool_use_id &&
+        userTurnText(entry)
+      ) {
+        quiet = (entry.sends ?? []).some(
+          (id) => records[id]?.keepAlive === true
+        );
+      }
+      return !quiet;
+    });
+    for (const [id, record] of Object.entries(records)) {
+      if (record.keepAlive) {
+        delete records[id];
+      }
+    }
     if (row) {
       readRowHistory(row, transcript);
     }
@@ -6360,7 +6457,7 @@ export const createServer = (
     void workflowRuntime.resume().catch(console.error);
   }
   const delegationMcp = createDelegationMcp({
-    instances: () => db.listInstances(),
+    instances: () => withKeepAlive(db.listInstances()),
     instanceById: (id) => db.getInstancesByIds([id])[0],
     credentialActor: (authorization) => {
       const identity = identities.resolve(authorization);
@@ -6600,6 +6697,25 @@ export const createServer = (
       return failedSessionIdentity(instanceId, problem);
     }
   };
+
+  const keepAliveTimer = setInterval(() => {
+    tickKeepAlive({
+      rows: db.listInstances,
+      usage: db.listUsageLimits,
+      idle: (row) =>
+        !!registry.agent(row.machineId) &&
+        pulses.get(row.id)?.activity === "idle" &&
+        !pulses.get(row.id)?.busy &&
+        db.sendsIn(row.id, ["pending"]).length === 0 &&
+        !pending.list().some((ask) => ask.instanceId === row.id) &&
+        ![...awaitingMachine.values()].some((sends) =>
+          sends.some((send) => send.instanceId === row.id)
+        ),
+      send: deliverSend,
+    });
+    publishInstances("");
+  }, 30_000);
+  keepAliveTimer.unref?.();
 
   return (
     new Elysia()
@@ -7452,6 +7568,7 @@ export const createServer = (
         "/api/instances/:id",
         {
           body: t.Object({
+            keepAlive: t.Optional(t.Boolean()),
             kind: t.Optional(
               t.Union([t.Literal("mainline"), t.Literal("scratch")])
             ),
@@ -7474,13 +7591,26 @@ export const createServer = (
             kind === undefined &&
             permissionMode === undefined &&
             model === undefined &&
-            title === undefined
+            title === undefined &&
+            body.keepAlive === undefined
           ) {
             return status(400, "name a field to change");
           }
           const [current] = db.getInstancesByIds([params.id]);
           if (!current) {
             return status(404, `no session ${params.id}`);
+          }
+          if (body.keepAlive !== undefined && current.harness !== "claude") {
+            return status(409, "Keep-alive is for Claude sessions");
+          }
+          if (body.keepAlive !== undefined) {
+            db.updateKeepAlive(params.id, {
+              keepAliveEnabled: body.keepAlive,
+              keepAliveStopped: null,
+              ...(body.keepAlive
+                ? { keepAliveSent: 0, keepAliveMisses: 0 }
+                : {}),
+            });
           }
           if (permissionMode !== undefined) {
             const refused = await applyPermissionMode(current, permissionMode);
@@ -7503,7 +7633,7 @@ export const createServer = (
             return status(404, `no session ${params.id}`);
           }
           publishInstances(row.machineId);
-          return row;
+          return withKeepAlive([row])[0];
         }
       )
       // The owner looked at these (a tab in front, after it ended) or
@@ -7542,6 +7672,14 @@ export const createServer = (
             id.startsWith("run:") ? [id.slice(4)] : []
           );
           const instanceIds = body.ids.filter((id) => !id.startsWith("run:"));
+          if (body.kind === "archive") {
+            for (const id of instanceIds) {
+              db.updateKeepAlive(id, {
+                keepAliveEnabled: false,
+                keepAliveStopped: null,
+              });
+            }
+          }
           const at = new Date();
           const seen = db.markSeen(instanceIds, runIds, at);
           for (const machineId of new Set(
@@ -9834,6 +9972,60 @@ export const createServer = (
               ) {
                 break;
               }
+              // Pings share admission and send receipts, then leave before every
+              // consumer that makes a turn into work, attention or activity.
+              if (
+                message.instanceId &&
+                (kind === "frame" || kind === "pulse")
+              ) {
+                const [row] = db.getInstancesByIds([message.instanceId]);
+                const frame =
+                  kind === "frame"
+                    ? (message.payload as FramePayload & { kind: "frame" })
+                    : undefined;
+                const signal = frame ? peekSendSignal(frame) : undefined;
+                const quiet = !!row?.keepAliveTurn || frame?.keepAlive === true;
+                if (quiet && row) {
+                  // biome-ignore lint/suspicious/noUnnecessaryConditions: peekSendSignal returns undefined for ordinary reply frames
+                  if (signal) {
+                    takeSendSignal(row.id, signal);
+                    if (
+                      signal.kind !== "read" ||
+                      db.getInstancesByIds([row.id])[0]?.keepAliveTurn
+                    ) {
+                      break;
+                    }
+                  } else if (frame) {
+                    frame.keepAlive = true;
+                    frame.message.keepAlive = true;
+                    const neutral = frame.message;
+                    if (neutral.type === "result") {
+                      if (
+                        !(
+                          neutral.uuid &&
+                          db.claimCompletedTurn(
+                            row.id,
+                            neutral.uuid,
+                            neutral.timestamp,
+                            neutral.recovered === true
+                          )
+                        )
+                      ) {
+                        break;
+                      }
+                      db.updateKeepAlive(
+                        row.id,
+                        keepAliveResult(row, neutral, true)
+                      );
+                      publishInstances(row.machineId);
+                    }
+                    streams.sequence(row.id, { ...frame, keepAlive: true });
+                    break;
+                  } else {
+                    break;
+                  }
+                }
+              }
               // The conversation the session is writing, whenever it names one —
               // read before anything below can consume the frame, since a
               // `held` naming it is also a send signal.
@@ -10142,6 +10334,16 @@ export const createServer = (
                     }
                   }
                 } else if (neutral.type === "result") {
+                  const [cacheRow] = db.getInstancesByIds([message.instanceId]);
+                  if (cacheRow?.harness === "claude") {
+                    db.updateKeepAlive(
+                      cacheRow.id,
+                      keepAliveResult(cacheRow, neutral, false)
+                    );
+                    if (cacheRow.keepAliveEnabled) {
+                      publishInstances(cacheRow.machineId);
+                    }
+                  }
                   // Claude reports each model's window only here; kept so a
                   // picker can say whether a model fits (claude's catalog
                   // carries no window of its own).

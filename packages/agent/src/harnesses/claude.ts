@@ -170,6 +170,10 @@ export const toNeutral = (sdk: SDKMessage): NeutralMessage | null => {
       usage?: {
         cache_creation_input_tokens?: number;
         cache_read_input_tokens?: number;
+        cache_creation?: {
+          ephemeral_5m_input_tokens?: number;
+          ephemeral_1h_input_tokens?: number;
+        };
       };
     };
     return {
@@ -180,6 +184,8 @@ export const toNeutral = (sdk: SDKMessage): NeutralMessage | null => {
             cache: {
               read: usage.cache_read_input_tokens ?? 0,
               write: usage.cache_creation_input_tokens ?? 0,
+              write5m: usage.cache_creation?.ephemeral_5m_input_tokens ?? 0,
+              write1h: usage.cache_creation?.ephemeral_1h_input_tokens ?? 0,
             },
           }
         : {}),
@@ -634,6 +640,7 @@ class ClaudeSession implements HarnessSession {
   /** The ring seq of each line the SDK was handed that carries a uuid. */
   readonly #seqs = new Map<string, number>();
   readonly instanceId: string;
+  #lastRequestAt: number | undefined;
 
   constructor(
     instanceId: string,
@@ -890,6 +897,15 @@ class ClaudeSession implements HarnessSession {
   ): Promise<void> {
     try {
       for await (const message of handle) {
+        if (
+          message.type === "system" &&
+          message.subtype === "status" &&
+          message.status === "requesting" &&
+          !(message as { parent_tool_use_id?: string | null })
+            .parent_tool_use_id
+        ) {
+          this.#lastRequestAt = Date.now();
+        }
         if ((message as { type: string }).type === "command_lifecycle") {
           const lifecycle = message as unknown as CommandLifecycle;
           const uuid = lifecycle.command_uuid;
@@ -994,6 +1010,10 @@ class ClaudeSession implements HarnessSession {
         // `db/index.ts` and `server.ts` are mid-edit in another session's
         // working tree and a migration on top of that is unsafe right now.
         if (message.type === "result") {
+          if (neutral.type === "result" && this.#lastRequestAt !== undefined) {
+            neutral.lastRequestAt = this.#lastRequestAt;
+          }
+          this.#lastRequestAt = undefined;
           turn.end();
           ctx.busy(false);
           // Cheap, and what catches a `/effort` or `/model` run in the turn.

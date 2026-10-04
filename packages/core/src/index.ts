@@ -134,6 +134,8 @@ export interface SpawnPayload {
   /** Which harness runs the session. Absent = `claude`. */
   harness?: import("./harness").HarnessKind;
   instanceId: string;
+  /** The in-flight maintenance send a surviving Claude process is answering. */
+  keepAliveTurn?: string;
   /**
    * Which model answers, from the session's first turn. Hoisted for the same
    * reason as `permissionMode`. Absent leaves the choice to the harness.
@@ -604,10 +606,12 @@ export interface InstanceRow {
   /** First-hand custody on the current agent connection, never stored liveness. */
   held?: { since: number; reason: string };
   id: string;
+  keepAlive?: KeepAlive;
   /** `scratch` for a side quest; absent from a hub that predates the column. */
   kind?: string;
   /** What killed the session, on a row the agent reported as `error`. */
   lastError?: string | null;
+  lastRequestAt?: string | number | Date | null;
   machineId: string;
   model?: string | null;
   /** The instance this one is a delegate of; absent for a mainline session. */
@@ -651,6 +655,22 @@ export interface InstanceRow {
    * delegate from before work items existed.
    */
   workItemId?: string | null;
+}
+
+export interface KeepAlive {
+  cap: number;
+  nextAt: number | null;
+  on: boolean;
+  sent: number;
+  state:
+    | "off"
+    | "waiting"
+    | "cold"
+    | "paused-usage"
+    | "asleep"
+    | "stopped-cap"
+    | "stopped-miss";
+  ttl: "5m" | "1h" | null;
 }
 
 /**
@@ -814,6 +834,7 @@ export type FramePayload =
     }
   | {
       kind: "frame";
+      keepAlive?: true;
       instanceId: string;
       harness: import("./harness").HarnessKind;
       message: import("./harness").NeutralMessage;
@@ -826,6 +847,7 @@ export type FramePayload =
        * sits.
        */
       kind: "send";
+      keepAlive?: true;
       instanceId: string;
       record: import("./harness").SendRecord;
     }
