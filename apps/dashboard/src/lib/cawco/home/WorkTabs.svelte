@@ -69,13 +69,7 @@
     branch,
     nestFrom,
   } from "../motion/branch.svelte";
-  import {
-    crossIn,
-    crossOut,
-    dur,
-    motionOk,
-    numberOf,
-  } from "../motion/curves.svelte";
+  import { crossIn, crossOut, dur, motionOk } from "../motion/curves.svelte";
   import { echoBeat } from "../motion/echo.svelte";
   import { holdWhileInside } from "../motion/held-order.svelte";
   import { IN_MS, ListSwap } from "../motion/list-swap.svelte";
@@ -90,7 +84,6 @@
   import { openTrees } from "../open-trees.svelte";
   import { rail } from "../rail.svelte";
   import SessionRow, { ROW_PILL } from "../SessionRow.svelte";
-  import TreeRows from "../TreeRows.svelte";
   import { collapse, rooted, type TreeLine, tree } from "../tree";
   import { workspace } from "../workspace/workspace.svelte";
   import {
@@ -216,22 +209,6 @@
     parent: string | null
   ): InstanceRow[] =>
     rows.filter((row) => (shapeOf(tab, row.id)?.parent ?? null) === parent);
-
-  /**
-   * A row's height in its tree, px, by its own tokens (SessionRow: two
-   * lines of --space-5 in --space-1 of padding), with the rows open under
-   * it, --tree-gap down and --tree-gap apart: what TreeRows holds the room
-   * of a row not drawn yet by.
-   */
-  const treeGap = () => numberOf("--tree-gap");
-  const rowKey = (row: InstanceRow): string => row.id;
-  function treeSize(row: InstanceRow, rows: InstanceRow[]): number {
-    let height = 2 * (numberOf("--space-5") + numberOf("--space-1"));
-    for (const kid of under(shown, rows, row.id)) {
-      height += treeGap() + treeSize(kid, rows);
-    }
-    return height;
-  }
 
   /** A parent's folded rows, for its row's count; null otherwise. */
   function foldOf(tab: WorkTab, id: string) {
@@ -759,20 +736,9 @@
         out:branch={TREE}
         {@attach nestFrom(".tree-mark")}
       >
-        {#snippet kidRow(
-          kid: InstanceRow
-        )}
+        {#each kids as kid (kid.id)}
           {@render treeNode(kid, rows, group)}
-        {/snippet}
-        <!-- Drawn as far as the reader can see; the rest stand as one empty
-             item of their height until they are (TreeRows). -->
-        <TreeRows
-          gap={treeGap()}
-          items={kids}
-          key={rowKey}
-          row={kidRow}
-          size={(kid) => treeSize(kid, rows)}
-        />
+        {/each}
       </ul>
     {/if}
   </li>

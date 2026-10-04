@@ -575,17 +575,6 @@
   .kit-nest > li:last-child::after {
     content: none;
   }
-  /* The rows of a tree not drawn yet (TreeRows): one empty item of their
-     height, out of sight until they are. It draws no line of its own, and
-     the row above it, not the last, runs its rail on. */
-  .tree-rest {
-    flex: none;
-    pointer-events: none;
-  }
-  .kit-nest > li.tree-rest::before,
-  .kit-nest > li.tree-rest::after {
-    content: none;
-  }
   /* A tree's rows just mounted, and their line, held hidden until each is
      built as the line reaches it; the hold goes as the fold lands
      (motion/branch). A row is held by the clip its title wipes in by, which
