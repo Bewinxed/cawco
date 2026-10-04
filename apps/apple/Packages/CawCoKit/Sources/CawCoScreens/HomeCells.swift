@@ -176,7 +176,8 @@ final class NeedsCardCell: HomeCell {
         waited.setContentCompressionResistancePriority(.required, for: .horizontal)
         let head = UIStackView(arrangedSubviews: [title, waited, peekRoom])
         head.spacing = Space.space2
-        head.alignment = .firstBaseline
+        // The web's head starts its title and its wait on one top edge.
+        head.alignment = .top
         actions.addArrangedSubview(deny)
         actions.addArrangedSubview(UIView())
         actions.addArrangedSubview(approve)
@@ -190,7 +191,8 @@ final class NeedsCardCell: HomeCell {
         headBox.addSubview(head)
         headTall = headBox.heightAnchor.constraint(greaterThanOrEqualToConstant: RowActionButton.side - 8)
         let hugs = headBox.bottomAnchor.constraint(equalTo: head.bottomAnchor)
-        hugs.priority = .defaultHigh
+        // Weaker than the labels' own hugging: the head keeps its text's height at the top of the taller line.
+        hugs.priority = UILayoutPriority(100)
         NSLayoutConstraint.activate([
             head.topAnchor.constraint(equalTo: headBox.topAnchor),
             head.leadingAnchor.constraint(equalTo: headBox.leadingAnchor),
