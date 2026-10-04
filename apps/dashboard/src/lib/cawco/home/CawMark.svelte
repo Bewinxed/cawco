@@ -4,16 +4,23 @@
   import { type CawStatus, stageCaw } from "./Caw.svelte";
 
   /**
-   * The window's device pixel ratio, followed: a zoom, or a move to another
-   * display, changes it with the viewport. `resized` counts those changes:
-   * each can move a mark off the device's pixel grid.
+   * The window's device pixel ratio, followed. A zoom changes it with the
+   * viewport's size; a move to another display changes it alone, and the
+   * resolution query that matched the old ratio says so once.
    */
-  let ratio = $state(browser ? devicePixelRatio : 1);
-  let resized = $state(0);
+  let ratio = $state(1);
+  function follow(): void {
+    ratio = devicePixelRatio;
+    matchMedia(`(resolution: ${ratio}dppx)`).addEventListener(
+      "change",
+      follow,
+      { once: true }
+    );
+  }
   if (browser) {
+    follow();
     addEventListener("resize", () => {
       ratio = devicePixelRatio;
-      resized += 1;
     });
   }
 
@@ -85,19 +92,6 @@
     return made;
   }
 
-  /** The nearest thing a mark scrolls in, if it stands in one. */
-  function scrollerOf(mark: HTMLElement): HTMLElement | null {
-    for (let up = mark.parentElement; up; up = up.parentElement) {
-      if (
-        up.scrollHeight > up.clientHeight &&
-        getComputedStyle(up).overflowY !== "visible"
-      ) {
-        return up;
-      }
-    }
-    return null;
-  }
-
   /** The arrivals already played, by their id: one never plays twice. */
   const played = new Set<string>();
 </script>
@@ -144,39 +138,6 @@
   } = $props();
 
   const look = $derived(lookOf(status, size, bleed));
-
-  /**
-   * Puts his canvases on the device's pixel grid. The mark stands wherever
-   * its line of text puts it — a centred word, a row a list placed at a
-   * fraction of a pixel — and a canvas off the grid is resampled into a soft
-   * copy of itself. The layout box stays where it is; what is drawn in it
-   * moves by less than half a device pixel. It is placed once the mark is
-   * laid out, and again whenever what scrolls around it changes size (a
-   * row above it grew, a page of history landed in front) or the window or
-   * its display changes. The observer reports after layout and before
-   * paint, so each placement reads a layout that is already done and is on
-   * screen in the same frame.
-   */
-  function snap(ink: HTMLElement) {
-    const scale = ratio;
-    // biome-ignore lint/complexity/noVoid: a resize re-runs this placement.
-    void resized;
-    const mark = ink.parentElement as HTMLElement;
-    let scrolled = false;
-    const moved = new ResizeObserver(() => {
-      if (!scrolled) {
-        scrolled = true;
-        for (const content of scrollerOf(mark)?.children ?? []) {
-          moved.observe(content);
-        }
-      }
-      const box = mark.getBoundingClientRect();
-      const off = (at: number) => Math.round(at * scale) / scale - at;
-      ink.style.translate = `${off(box.left)}px ${off(box.top)}px`;
-    });
-    moved.observe(mark);
-    return () => moved.disconnect();
-  }
 
   /** Whether this mount is the arrival's one play. */
   let playing = $state(
@@ -258,12 +219,10 @@
   style:--bleed="{bleed}px"
   style:--side="{size}px"
 >
-  <span class="ink" {@attach snap}>
-    <canvas class:waiting={playing} {@attach rest}></canvas>
-    {#if playing}
-      <canvas {@attach enter}></canvas>
-    {/if}
-  </span>
+  <canvas class:waiting={playing} {@attach rest}></canvas>
+  {#if playing}
+    <canvas {@attach enter}></canvas>
+  {/if}
 </span>
 
 <style>
@@ -275,10 +234,11 @@
     pointer-events: none;
     user-select: none;
   }
-  .ink {
-    position: absolute;
-    inset: 0;
-  }
+  /* A canvas is painted on whole device pixels wherever its row's layout
+     puts it: the browser snaps a replaced box's painted rectangle to the
+     grid, and the picture is copied one to one. So nothing moves it here: a
+     sub-pixel translate to "align" it is a transform, which is not snapped,
+     and it resamples the picture it was meant to sharpen. */
   canvas {
     position: absolute;
     inset: calc(var(--bleed) * -1);
