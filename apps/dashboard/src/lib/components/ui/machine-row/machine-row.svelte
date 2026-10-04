@@ -36,7 +36,7 @@
       class="dot"
       class:away={presence === "away"}
       class:online={presence === "online"}
-    ></span>{meta}</span
+    ></span><span class="line">{meta}</span></span
   >
 </span>
 {#if trailing}
@@ -81,11 +81,16 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    overflow: hidden;
     font: var(--type-meta);
     color: var(--ink-subtle);
-    white-space: nowrap;
+  }
+  /* The status text is its own box: an ellipsis is drawn by the element
+     that overflows, never by the flex row holding it. */
+  .line {
+    min-width: 0;
+    overflow: hidden;
     text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .dot {
     flex: none;
