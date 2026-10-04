@@ -315,6 +315,17 @@ nonisolated enum LineWrap {
         var widths: [Int: Double] = [:]
         var codeStarts: [Int: Double] = [:]
 
+        /// As wide as its view and as tall as its text: the height is never
+        /// the view's. A view takes its text's exact height, a fraction of a
+        /// point, and its frame is then snapped to whole pixels, sometimes
+        /// down; a container that short lays out every line but the last, and
+        /// the text's final line was not painted (a reader's six-line message
+        /// showed five in a well 132.33 tall, six in one 132.67 tall).
+        override var size: CGSize {
+            get { super.size }
+            set { super.size = CGSize(width: newValue.width, height: 0) }
+        }
+
         override var isSimpleRectangularTextContainer: Bool { widths.isEmpty && codeStarts.isEmpty && exclusionPaths.isEmpty }
 
         override func lineFragmentRect(forProposedRect proposedRect: CGRect, at characterIndex: Int,

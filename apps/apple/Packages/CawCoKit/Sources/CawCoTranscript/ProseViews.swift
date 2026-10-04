@@ -1,4 +1,5 @@
 import CawCoDesign
+import OSLog
 import UIKit
 
 /// A paragraph of rendered Markdown with what the browser paints that text
@@ -131,6 +132,7 @@ class ProseView: UITextView, NSTextLayoutManagerDelegate {
         guard size.height != UIView.noIntrinsicMetric, textStorage.length > 0, let manager = textLayoutManager else { return size }
         manager.ensureLayout(for: manager.documentRange)
         let used = manager.usageBoundsForTextContainer.height + textContainerInset.top + textContainerInset.bottom
+        fitted = used
         // Only the round-up is taken off: where the two disagree by a point or
         // more, the container has not been laid out at this width yet.
         let over = size.height - used
@@ -151,7 +153,19 @@ class ProseView: UITextView, NSTextLayoutManagerDelegate {
             invalidateIntrinsicContentSize()
         }
         rewrap()
+        // The frame is snapped to whole pixels and can come out a fraction
+        // shorter than the text (LineWrap.Container `size`): said once a text.
+        if bounds.height > 0, fitted - bounds.height > 0.01, shortFor != version {
+            shortFor = version
+            Self.log.info("text \(self.fitted, format: .fixed(precision: 2)) tall in a view \(Double(self.bounds.height), format: .fixed(precision: 2)) tall, \(self.textStorage.length) characters ending \(String(self.textStorage.string.suffix(12)), privacy: .public)")
+        }
     }
+
+    /// The text's own height, as last measured for the view's size.
+    private var fitted = 0.0
+    /// The text version a short view was last logged for.
+    private var shortFor = -1
+    private static let log = Logger(subsystem: "dev.cawco.app", category: "Prose")
 
     /// Chooses the constrained paragraphs' line widths for the width the text
     /// has, when the width or the text changed since they were last chosen.
