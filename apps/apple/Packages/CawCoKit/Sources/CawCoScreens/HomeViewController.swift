@@ -134,11 +134,15 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
         super.viewDidLoad()
         view.backgroundColor = variant.ground
         collectionView = BoardList(frame: view.bounds, collectionViewLayout: layout)
-        collectionView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        collectionView.autoresizingMask = [.flexibleWidth]
         collectionView.backgroundColor = variant.ground
         collectionView.delegate = self
         collectionView.keyboardDismissMode = .onDrag
         view.addSubview(collectionView)
+        // The list ends at the view's foot, or at a docked keyboard's top while it
+        // is up: the search field and its results stay above it and scroll to the
+        // last. Sized by frame: the rail lays this view out by its own constraints.
+        NotificationCenter.default.addObserver(self, selector: #selector(keyboardMoved(_:)), name: UIResponder.keyboardWillChangeFrameNotification, object: nil)
         dataSource = makeDataSource()
         swipe = TabSwipe(host: self, in: view)
         if onStart != nil { installDock() }
@@ -170,6 +174,45 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
     }
 
     private var dockFoot: NSLayoutConstraint?
+
+    /// A docked keyboard's frame on the screen, while one is up.
+    private var keyboard: CGRect?
+    /// The list's height when the search row was last brought up.
+    private var searchedAt = 0.0
+
+    @objc private func keyboardMoved(_ note: Notification) {
+        let end = (note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue
+        let time = (note.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? NSNumber)?.doubleValue ?? 0
+        // Docked means it reaches the screen's foot; a floating keyboard covers nothing to make room for.
+        let screen = view.window?.screen.bounds ?? .zero
+        keyboard = end.flatMap { $0.height > 0 && $0.maxY >= screen.maxY - 1 && $0.minY < screen.maxY ? $0 : nil }
+        view.setNeedsLayout()
+        UIView.animate(withDuration: time) { self.view.layoutIfNeeded() }
+    }
+
+    /// While the search field has the keyboard, its row stands at the top of
+    /// what the keyboard leaves, with its results under it.
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        var tall = view.bounds.height
+        if let keyboard, let window = view.window {
+            let top = view.convert(window.convert(keyboard, from: window.screen.coordinateSpace), from: window).minY
+            tall = max(0, min(tall, top))
+        }
+        if collectionView.frame.height != tall || collectionView.frame.width != view.bounds.width {
+            collectionView.frame = CGRect(x: 0, y: 0, width: view.bounds.width, height: tall)
+        }
+        guard tall != searchedAt else { return }
+        searchedAt = tall
+        raiseSearch()
+    }
+
+    private func raiseSearch() {
+        guard let at = dataSource?.indexPath(for: .recentSearch),
+              let cell = collectionView.cellForItem(at: at) as? SearchCell, cell.field.isFirstResponder
+        else { return }
+        collectionView.scrollToItem(at: at, at: .top, animated: true)
+    }
 
     /// The dock's foot clears the home indicator: the screen's own inset, without the room the dock adds.
     override func viewSafeAreaInsetsDidChange() {
@@ -337,7 +380,8 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
             if cell.field.text != search {
                 cell.field.text = search
             }
-            cell.field.removeTarget(nil, action: nil, for: .editingChanged)
+            cell.field.removeTarget(nil, action: nil, for: [.editingChanged, .editingDidBegin])
+            cell.field.addAction(UIAction { [weak self] _ in self?.raiseSearch() }, for: .editingDidBegin)
             cell.field.addAction(UIAction { [weak self, weak cell] _ in
                 guard let self, let cell else { return }
                 search = cell.field.text ?? ""
