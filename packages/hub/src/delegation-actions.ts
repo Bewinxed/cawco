@@ -962,7 +962,9 @@ export const handoffActions = ({
     const peer = urgent
       ? resolveDelegate(peers, target, instanceId)
       : resolveHandoff(peers, asleep, target, own);
-    await checkCold(peer.row.id, undefined, confirmCold);
+    if (peer.row.id !== own?.parentInstanceId) {
+      await checkCold(peer.row.id, undefined, confirmCold);
+    }
     const woken = asleep.includes(peer);
     const whose =
       peer.row.id === own?.parentInstanceId ? ", your parent session" : "";

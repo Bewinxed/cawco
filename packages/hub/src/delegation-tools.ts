@@ -377,7 +377,7 @@ export function handoffTools(deps: HandoffDeps) {
         "and line), and what you are asking them to do. For new standalone work, use delegate instead. " +
         "To follow up on your own delegate after it reports (done, failed or cancelled), hand off to it: " +
         "the message reopens its work item in the same session, on its cached transcript. " +
-        "Prefer a fresh delegate unless the existing session is warm and holds context this task needs. A cold target is refused before delivery; repeat with confirmCold: true only after weighing the refusal's cost considerations.",
+        "Prefer a fresh delegate unless the existing session is warm and holds context this task needs. A cold target other than your own parent is refused before delivery; repeat with confirmCold: true only after weighing the refusal's cost considerations.",
       {
         target: z
           .string()
