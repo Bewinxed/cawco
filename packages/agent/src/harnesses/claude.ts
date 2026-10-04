@@ -96,6 +96,7 @@ import type { SessiondAwareContext } from "../session";
 import { acknowledgeSessionCredential } from "../session-identity";
 import {
   type BridgeRing,
+  endProc,
   ensureSessiond,
   procEpoch,
   SessiondClient,
@@ -561,6 +562,26 @@ class Turn {
 
 const SETTLE_TIMEOUT_MS = 5000;
 
+/** How long the CLI waits on the `Stop` hook this adapter registers, in seconds. */
+const STOP_HOOK_TIMEOUT_S = 5;
+
+/**
+ * How many wake-ups a `Stop` hook's input says the session has scheduled
+ * (`session_crons`: "Session-scoped cron tasks (CronCreate, ScheduleWakeup,
+ * /loop) that will wake this session later. Empty array when none are
+ * scheduled", sdk.d.ts). `undefined` when the input is not a `Stop` hook's or
+ * carries no list.
+ */
+const scheduledWakeups = (input: unknown): number | undefined => {
+  const { hook_event_name, session_crons } = (input ?? {}) as {
+    hook_event_name?: unknown;
+    session_crons?: unknown;
+  };
+  return hook_event_name === "Stop" && Array.isArray(session_crons)
+    ? session_crons.length
+    : undefined;
+};
+
 /**
  * The CLI child's environment: the agent's own, the spec's over it, and the
  * session's model as `CAWCO_MODEL`.
@@ -639,6 +660,24 @@ class ClaudeSession implements HarnessSession {
     | undefined;
   /** The ring seq of each line the SDK was handed that carries a uuid. */
   readonly #seqs = new Map<string, number>();
+  /**
+   * The background work the CLI is running in this process, by task id:
+   * shells, subagents, monitors, workflows. The CLI says the whole set each
+   * time it changes (`background_tasks_changed`) and to a host that attaches
+   * to it, and nothing at start, when there is none.
+   */
+  #background = new Set<string>();
+  /**
+   * How many wake-ups the session has scheduled for itself (a cron, a loop's
+   * next tick), as the CLI listed them when its last turn ended: its `Stop`
+   * hook carries them (`session_crons`). Their timers live in the CLI
+   * process. None for a child this host started; `undefined` for one it
+   * attached to whose ring no longer holds a turn's end
+   * ({@link adoptWakeups}): not known until its next turn ends.
+   */
+  #crons: number | undefined = 0;
+  /** Whether the CLI writes this conversation down (`persistSession`). */
+  readonly #stored: boolean;
   readonly instanceId: string;
   #lastRequestAt: number | undefined;
 
@@ -681,6 +720,7 @@ class ClaudeSession implements HarnessSession {
       [MCP_SERVER_NAME]: delegationMcp(instanceId, ctx.sessionCredential),
     };
     this.#sessiond = sessiond;
+    this.#stored = persistSession !== false;
     const seqs = this.#seqs;
     const input = new InputStream();
     this.#input = input;
@@ -714,6 +754,27 @@ class ClaudeSession implements HarnessSession {
         ...(options as Record<string, unknown> | undefined),
         extraArgs,
         mcpServers,
+        // What the CLI holds for later, said at each turn's end: the SDK's
+        // `Stop` hook input lists the wake-ups the session has scheduled
+        // ("Lets hooks distinguish 'session is done' from 'session is paused
+        // waiting for background work to wake it'", sdk.d.ts). The CLI waits
+        // for the answer before it ends the turn, so the wait is bounded: a
+        // turn that ends while no agent is attached ends five seconds late,
+        // and the agent that attaches reads the list off the ring.
+        hooks: {
+          Stop: [
+            {
+              timeout: STOP_HOOK_TIMEOUT_S,
+              hooks: [
+                // biome-ignore lint/suspicious/useAwait: the SDK's HookCallback returns a promise
+                async (stopping: unknown) => {
+                  this.#crons = scheduledWakeups(stopping) ?? this.#crons;
+                  return {};
+                },
+              ],
+            },
+          ],
+        },
         // Fleet baseline (from supervisor_config.denied_tools, cached in the
         // sidecar) + delegate-type denials + any the caller itself carried.
         // All three layers union: every layer can only add, never remove
@@ -937,6 +998,20 @@ class ClaudeSession implements HarnessSession {
         if (this.#hookFailure(message)) {
           continue;
         }
+        // The CLI's whole list each time, so it replaces what was held.
+        // Ambient entries are its own watchers, which run for as long as the
+        // process does ("hosts should exclude them from activity
+        // indicators", sdk.d.ts).
+        if (
+          message.type === "system" &&
+          message.subtype === "background_tasks_changed"
+        ) {
+          this.#background = new Set(
+            message.tasks
+              .filter((task) => !task.ambient)
+              .map((task) => task.task_id)
+          );
+        }
         const neutral = toNeutral(message);
         if (!neutral) {
           continue;
@@ -1127,6 +1202,30 @@ class ClaudeSession implements HarnessSession {
     this.#turn.running = true;
     this.#turn.start();
     this.#ctx.busy(true);
+  }
+
+  /**
+   * What an attach read off the child's ring: how many wake-ups the session
+   * had scheduled as its last turn there ended, or `undefined` when the ring
+   * holds no turn's end.
+   */
+  adoptWakeups(count: number | undefined): void {
+    this.#crons = count;
+  }
+
+  holding(): string | undefined {
+    if (!this.#stored) {
+      return "its conversation is not stored, so nothing could wake it";
+    }
+    if (this.#background.size > 0) {
+      return `${this.#background.size} background task(s) it started are still running`;
+    }
+    if (this.#crons === undefined) {
+      return "its scheduled wake-ups are not known until its next turn ends";
+    }
+    return this.#crons > 0
+      ? `it has scheduled itself ${this.#crons} wake-up(s)`
+      : undefined;
   }
 
   send(
@@ -1429,7 +1528,8 @@ const endsTurn = (message: unknown): boolean => {
 interface RingLine {
   /** A `command_lifecycle` line's command: the uuid of the send it is. */
   command_uuid?: unknown;
-  request?: { subtype?: unknown };
+  /** A control request's body; `input` is a `hook_callback`'s hook input. */
+  request?: { subtype?: unknown; input?: unknown };
   request_id?: unknown;
   session_id?: unknown;
   skip_transcript?: unknown;
@@ -1955,6 +2055,9 @@ export class ClaudeHarness implements Harness {
     // Every send the CLI has been handed: each command it names in a
     // lifecycle line, queued or begun.
     const handed = new Set<string>();
+    // The wake-ups the session had scheduled as its last turn in the ring
+    // ended: what its `Stop` hook was told ({@link scheduledWakeups}).
+    let wakeups: number | undefined;
     let { sessionId } = options;
     // `head` is the listing's, taken before every earlier row was adopted; a
     // ring that has since dropped past it ends the read rather than stalling
@@ -1972,6 +2075,12 @@ export class ClaudeHarness implements Harness {
           typeof parsed.command_uuid === "string"
         ) {
           handed.add(parsed.command_uuid);
+        }
+        if (
+          parsed?.type === "control_request" &&
+          parsed.request?.subtype === "hook_callback"
+        ) {
+          wakeups = scheduledWakeups(parsed.request.input) ?? wakeups;
         }
         if (typeof parsed?.session_id === "string") {
           sessionId = parsed.session_id;
@@ -2033,7 +2142,13 @@ export class ClaudeHarness implements Harness {
     if (turnRunning) {
       session.adoptTurn();
     }
+    session.adoptWakeups(wakeups);
     return session;
+  }
+
+  /** Ends the held child of an instance nobody owns (`SessionSupervisor.stopUnowned`). */
+  async abandon(instanceId: string): Promise<void> {
+    await endProc(await this.sessiond(), procIdFor("claude", instanceId));
   }
 
   /** What sessiond is still holding for this machine — the reattach's first read. */

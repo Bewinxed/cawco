@@ -932,6 +932,16 @@ export const CONTROL_RELOAD_SKILLS = "reloadSkills";
 export const CONTROL_MCP_STATUS = "mcpServerStatus";
 export const CONTROL_MCP_RECONNECT = "reconnectMcpServer";
 export const CONTROL_MCP_TOGGLE = "toggleMcpServer";
+/**
+ * Puts a session to sleep now if it is at rest: its machine stops everything
+ * the session runs (the harness, the MCP servers it started, their browsers)
+ * and says so with an `asleep` frame; its conversation stays, and its next
+ * message wakes it. The machine does nothing while stopping would lose
+ * something (see `SessionSupervisor.sleep` in the agent). No harness answers
+ * this one: the machine's supervisor does. Answers
+ * `{ asleep: boolean; awake?: string }`, `awake` being what kept it up.
+ */
+export const CONTROL_SLEEP = "sleep";
 
 /**
  * The live-session controls that only answer a question: nothing sent after

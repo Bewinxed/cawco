@@ -97,6 +97,13 @@ export interface HarnessSession {
   // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
   dispose(): Promise<void>;
   readonly harness: HarnessKind;
+  /**
+   * What stopping this session's processes now would lose, in words, beyond
+   * what the supervisor sees for itself (a running turn, a parked ask): work
+   * the runtime holds in its own process. Nothing when it holds nothing.
+   */
+  // biome-ignore lint/style/useConsistentMethodSignatures: matches the session methods
+  holding?(): string | undefined;
   /** Interrupt the current turn. */
   // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
   interrupt(): Promise<void>;

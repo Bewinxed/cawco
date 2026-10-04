@@ -22,6 +22,7 @@ import type {
   GitChanges,
   HarnessKind,
   HarnessReport,
+  HeartbeatAckPayload,
   HeartbeatPayload,
   HookDraft,
   IngestMark,
@@ -80,6 +81,7 @@ import {
   CONTROL_RUN_COMMAND,
   CONTROL_SEARCH_TRANSCRIPTS,
   CONTROL_SET_PERMISSION_MODE,
+  CONTROL_SLEEP,
   CONTROL_WORKSPACE_BOUNDARY,
   contextFitRefusal,
   delegateAskText,
@@ -497,7 +499,7 @@ const registerAck = (
 ): Envelope<RegisterAckPayload> => ({
   verb: envelope.verb,
   machineId: envelope.machineId,
-  payload: { ok: true, ingested },
+  payload: { ok: true, ingested, namesHeld: true },
 });
 
 /** Sent back as a frame, the only verb a dashboard renders. */
@@ -2946,11 +2948,16 @@ export const createServer = (
    * out first, and the machine runs one instance's envelopes in order, so the
    * message that follows lands in the process this starts. It comes back on
    * the settings it last ran with, as a revive always has.
+   *
+   * `crossed` is the wake for sends that were already on their way when the
+   * machine put the session to sleep ({@link sessionAsleep}): those are held
+   * by the machine for this very process, so they stay pending.
    */
   const wakeForSend = (
     agent: NonNullable<ReturnType<typeof registry.agent>>,
     machineId: string,
-    instanceId: string
+    instanceId: string,
+    crossed = false
   ): void => {
     const [row] = db.getInstancesByIds([instanceId]);
     if (
@@ -2982,7 +2989,9 @@ export const createServer = (
     }
     const revive = settled.payload;
     // A relaunch replaces the process; what the old one had parked is over.
-    forgetPending(instanceId, UNREAD.restarted);
+    if (!crossed) {
+      forgetPending(instanceId, UNREAD.restarted);
+    }
     db.openInstance({
       id: instanceId,
       machineId,
@@ -3000,6 +3009,106 @@ export const createServer = (
       payload: bounded(revive),
     });
     publishInstances(machineId);
+  };
+
+  /**
+   * A machine put a session to sleep: it was at rest, and its machine stopped
+   * everything it ran (`asleep`, see `SessionSupervisor.sleep` in the agent).
+   * The row is filed `sleeping`, which every screen already draws, and the
+   * next send wakes it through {@link wakeForSend} like any sleeping session.
+   *
+   * Nothing it was sent is failed, as a process that died would have it: the
+   * machine put it to sleep only with every earlier send read, so a send
+   * still pending here is one that crossed the stop on its way. The machine
+   * holds those, and the process this wakes for them reads them.
+   */
+  const sessionAsleep = (machineId: string, instanceId: string): void => {
+    if (!db.sleepInstance(instanceId)) {
+      return;
+    }
+    console.log(
+      `[hub] ${instanceId} is asleep: its machine stopped it at rest`
+    );
+    pending.forget(instanceId);
+    forgetPending(instanceId, UNREAD.ended, true);
+    // Asks its delegates had routed to it and it never answered are the
+    // reader's from here, as when any parent's process goes.
+    escalateRoutedAsks(instanceId);
+    // Nothing wakes a session for a keep-alive ping: its machine refuses one
+    // that crossed, and the record fails as any refused ping's does.
+    const agent = registry.agent(machineId);
+    if (
+      agent &&
+      db
+        .sendsIn(instanceId, ["pending"])
+        .some((send) => !isKeepAlive(send.body))
+    ) {
+      wakeForSend(agent, machineId, instanceId, true);
+    }
+    publishInstances(machineId);
+  };
+
+  /**
+   * The sessions among `ids` whose prompt cache this hub is keeping warm
+   * ({@link tickKeepAlive}): keep-alive is on and has a cache to ping for, or
+   * is waiting out a usage limit to. A ping needs the session's process and is
+   * never sent to a sleeping one, so its machine keeps these awake
+   * (`HeartbeatAckPayload.keepAwake`). One whose cache has gone cold, or whose
+   * keep-alive reached its cap, sleeps like any other.
+   */
+  const keptWarm = (machineId: string, ids: string[]): string[] => {
+    if (ids.length === 0) {
+      return [];
+    }
+    const usage = db
+      .listUsageLimits()
+      .find((reading) => reading.machineId === machineId)?.payload;
+    const now = Date.now();
+    return db
+      .getInstancesByIds(ids)
+      .filter((row) => {
+        const { state } = keepAliveState(row, usage, now);
+        return (
+          row.machineId === machineId &&
+          (state === "waiting" || state === "paused-usage")
+        );
+      })
+      .map((row) => row.id);
+  };
+
+  /**
+   * How long a machine gets to put a session to sleep: the harness's own stop
+   * (an interrupt, a settle, the process's exit) takes seconds.
+   */
+  const SLEEP_TIMEOUT_MS = 60_000;
+
+  /**
+   * A delegate whose work item is over (done, failed or cancelled) and
+   * reported has nothing left to run for: its machine is asked to put it to
+   * sleep now, rather than at the end of an idle half hour. Asked when the
+   * item ends and again as each later turn of its session ends, because a
+   * machine does it only for a session at rest ({@link CONTROL_SLEEP}), and
+   * the turn that called `finish_item` is still running when the item ends.
+   * The machine's `asleep` frame is what files the row.
+   */
+  const sleepFinished = (instanceId: string): void => {
+    const [row] = db.getInstancesByIds([instanceId]);
+    if (
+      !(row && workItems.over(row)) ||
+      (row.status !== "running" && row.status !== "starting") ||
+      keptWarm(row.machineId, [row.id]).length > 0
+    ) {
+      return;
+    }
+    // biome-ignore lint/complexity/noVoid: the machine's `asleep` frame carries the outcome; a refusal means the session is not at rest
+    void callAgent(
+      row.machineId,
+      CONTROL_SLEEP,
+      [],
+      SLEEP_TIMEOUT_MS,
+      undefined,
+      row.id
+    );
   };
 
   /**
@@ -6281,7 +6390,12 @@ export const createServer = (
   const workItems = createWorkItems({
     db,
     command: runOnMachine,
-    report: (row, body, failed) => reportToParent(row, body, failed),
+    report: (row, body, failed) => {
+      reportToParent(row, body, failed);
+      // An item that ends while its session is at rest (checks a restarted
+      // hub ran again) has no turn's end left to stop it at.
+      sleepFinished(row.id);
+    },
     // To every dashboard, as delegate events go: the parent's tray may be open
     // on any of them.
     publish: (item) => {
@@ -9602,7 +9716,29 @@ export const createServer = (
               // A surviving child is not a fresh spawn. OpenCode's one held
               // server owns its sessions; the adapter verifies each key with
               // session.get before publishing an init frame and subscribing.
-              const held = settled.filter(outlived);
+              //
+              // A row filed asleep or failed whose process the machine still
+              // holds is one too. A register this hub did not live to finish
+              // settles its rows `sleeping` and dies before the restores go
+              // out; its successor then found nothing to settle, named none
+              // of them, and their processes ran on with nobody attached
+              // (sixteen of them, 2026-10-04). Whatever sessiond holds that a
+              // row here could run again is named in this register's
+              // restores; what no restore names, the machine stops
+              // (`stopUnowned`).
+              const justSettled = new Set(settled.map(({ row }) => row.id));
+              const listedLive = new Set(peekInstances(message.payload));
+              const filedAway = db
+                .getInstancesByIds([...heldIds])
+                .filter(
+                  (row) =>
+                    row.machineId === message.machineId &&
+                    !justSettled.has(row.id) &&
+                    !listedLive.has(row.id) &&
+                    (row.status === "sleeping" || row.status === "error")
+                )
+                .map((row) => ({ row, resumes: true }));
+              const held = [...settled.filter(outlived), ...filedAway];
               const heldRows = new Set(held.map(({ row }) => row.id));
               const fresh = settled
                 .filter(({ row }) => !heldRows.has(row.id))
@@ -9805,7 +9941,13 @@ export const createServer = (
               ) {
                 publishInstances(message.machineId);
               }
-              ws.send(ack(message));
+              ws.send({
+                ...ack(message),
+                payload: {
+                  ok: true,
+                  keepAwake: keptWarm(message.machineId, beatIds),
+                } satisfies HeartbeatAckPayload,
+              });
               break;
             }
             // The per-machine scanner's usage report (USAGE-SPEC.md §6.4): store
@@ -9902,6 +10044,17 @@ export const createServer = (
                 forgetPending(message.instanceId, UNREAD.stopped);
                 escalateRoutedAsks(message.instanceId);
                 publishInstances(message.machineId);
+                break;
+              }
+              if (kind === "asleep" && message.instanceId) {
+                const [process] = db.getInstancesByIds([message.instanceId]);
+                if (
+                  process &&
+                  peek(message.payload, "processGeneration") ===
+                    processGeneration(process)
+                ) {
+                  sessionAsleep(message.machineId, message.instanceId);
+                }
                 break;
               }
               if (kind === "recovery_unavailable" && message.instanceId) {
@@ -10157,8 +10310,12 @@ export const createServer = (
                   break;
                 }
                 // A delegate's ask routes to its parent; the user is only the
-                // fallback. The parent must be live — otherwise the ask is the
-                // user's exactly as it was before this feature.
+                // fallback. The parent must be live, or asleep with a
+                // conversation to wake from: a parent waiting on its
+                // delegates is put to sleep after half an hour at rest, and
+                // the ask wakes it as its delegate's report does
+                // (`deliverSend`). Otherwise the ask is the user's exactly as
+                // it was before this feature.
                 const sender = message.instanceId
                   ? db.listInstances().find((r) => r.id === message.instanceId)
                   : undefined;
@@ -10196,7 +10353,9 @@ export const createServer = (
                   sender !== undefined &&
                   parent !== undefined &&
                   (parent.status === "running" ||
-                    parent.status === "starting") &&
+                    parent.status === "starting" ||
+                    (parent.status === "sleeping" &&
+                      parent.sessionId !== null)) &&
                   !workItems.refusal(parent, {
                     kind: "peer",
                     fromSession: sender.id,
@@ -10427,6 +10586,9 @@ export const createServer = (
                           : {}),
                       });
                     }
+                    // Its item is over and its parent has the report: the
+                    // turn that just ended was its last word.
+                    sleepFinished(from.id);
                   };
                   if (delegate?.workItemId && !failed) {
                     // A work item's turn is answered before it is handed

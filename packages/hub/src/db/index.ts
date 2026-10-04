@@ -851,6 +851,12 @@ export interface DbShape {
   readonly settleUnavailableRecovery: (id: string) => boolean;
   /** Names of fleet skills installed at or after `since`. */
   readonly skillsInstalledSince: (since: Date) => string[];
+  /**
+   * Files a session its machine put to sleep: `sleeping`, from any state that
+   * claims a process. False when the row claimed none, or has no conversation
+   * to wake from.
+   */
+  readonly sleepInstance: (id: string) => boolean;
   readonly stageSessionIdentity: (instanceId: string, hash: string) => void;
   readonly stopInstance: (id: string) => void;
   /**
@@ -1960,6 +1966,21 @@ const make = (path: string): DbShape => {
         .where(eq(instances.id, id))
         .run();
     },
+    // `updatedAt` untouched, as wherever the hub files a process as gone: the
+    // session did nothing, and that column says when it last did.
+    sleepInstance: (id) =>
+      db
+        .update(instances)
+        .set({ status: "sleeping", lastError: null })
+        .where(
+          and(
+            eq(instances.id, id),
+            isNotNull(instances.sessionId),
+            inArray(instances.status, ["running", "starting", "unknown"])
+          )
+        )
+        .returning({ id: instances.id })
+        .all().length > 0,
     touchInstanceActivity: (id) => {
       db.update(instances)
         .set({ updatedAt: new Date() })

@@ -6,7 +6,9 @@ import type {
   DeployInfo,
   Envelope,
   HarnessReport,
+  HeartbeatAckPayload,
   HeartbeatPayload,
+  RegisterAckPayload,
   SpawnPayload,
 } from "@cawco/core";
 import {
@@ -830,16 +832,9 @@ const attach = (
       );
       const otherRecoveries = reattaching.splice(0);
       const recoverAttempt = async (signal: AbortSignal) => {
-        const surviving = await supervisor.survivors(signal);
-        signal.throwIfAborted();
-        const claimed = new Set(named.map((row) => row.instanceId));
-        const rows = [
-          ...named,
-          ...surviving.filter((row) => !claimed.has(row.instanceId)),
-        ];
         const { attached, failed } = await supervisor.reattachFrom(
           ackPayload,
-          rows,
+          named,
           signal
         );
         signal.throwIfAborted();
@@ -854,6 +849,23 @@ const attach = (
             : [supervisor.dispatch(envelope)];
         });
         await Promise.all(outcomes);
+        signal.throwIfAborted();
+        // The hub has named every row it has for what sessiond holds, and
+        // each is attached, started, or failed by now: what is left alive has
+        // no row behind it. Only on the word of a hub that says it names them
+        // all (`RegisterAckPayload.namesHeld`): one from before that names
+        // fewer, and its unnamed are not this agent's to stop.
+        const unowned = (ackPayload as Partial<RegisterAckPayload> | undefined)
+          ?.namesHeld
+          ? await supervisor.stopUnowned()
+          : [];
+        if (unowned.length > 0) {
+          Effect.runFork(
+            Effect.logWarning(
+              `stopped ${unowned.length} session process(es) no hub row owns: ${unowned.join(", ")}`
+            )
+          );
+        }
         return attached;
       };
       const custodyRecovered = (epoch: number, adopted: string[]) => {
@@ -942,6 +954,14 @@ const attach = (
     socket.addEventListener("message", (event) => {
       const envelope = JSON.parse(String(event.data)) as Envelope;
       if (awaitingRegisterAck && beforeAck(envelope)) {
+        return;
+      }
+      // The hub's answer to a beat: the sessions it keeps awake.
+      if (envelope.verb === "heartbeat") {
+        supervisor.keepAwake(
+          (envelope.payload as Partial<HeartbeatAckPayload> | undefined)
+            ?.keepAwake
+        );
         return;
       }
       if (

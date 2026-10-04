@@ -312,6 +312,9 @@ export const SERVER_ANNOUNCE_TIMEOUT_MS = 30_000;
 /** Recovery cancels the actual HTTP operation, never races an abandoned promise. */
 export const RECOVERY_TIMEOUT_MS = 10_000;
 
+/** How long before a directory's deferred release is tried again. Ours: a held turn or a recovery is over in minutes, not seconds. */
+const DIRECTORY_RELEASE_RETRY_MS = 30_000;
+
 /**
  * How long a turn may go with no server event at all before the wait itself
  * is framed as a `provider_stalled` system note. Our choice: the hangs seen
@@ -1427,6 +1430,29 @@ export class OpencodeSession implements HarnessSession {
   get turnInFlight(): boolean {
     // biome-ignore lint/suspicious/noUnnecessaryConditions: server events and dispatch methods update these fields outside this getter
     return this.#busy || this.#turnOpen;
+  }
+
+  /**
+   * What this handle still owes or holds: a turn it opened or is reading
+   * back, and the sends it has yet to hand the server or the model.
+   */
+  holding(): string | undefined {
+    if (
+      this.turnInFlight ||
+      this.#reattachedBusy ||
+      this.#recoveringTurn ||
+      this.#answering
+    ) {
+      return "a turn is running";
+    }
+    if (
+      this.#queue.length > 0 ||
+      this.#draining ||
+      this.#readAfter.length > 0
+    ) {
+      return "a send is waiting to be read";
+    }
+    return undefined;
   }
 
   /** Routes one opencode event into neutral frames for this session. */
@@ -4555,6 +4581,99 @@ export class OpencodeHarness implements Harness {
     return this.#pumpReady.get(key)!;
   }
 
+  /**
+   * A DIRECTORY NO ATTACHED SESSION IS IN HOLDS NOTHING. Its subscription
+   * ends and its instance is disposed, which is what stops the MCP servers
+   * opencode started for the directory and whatever those launched. The
+   * subscription used to stay up until the agent exited, and the instance
+   * with it: one MCP server set per directory any opencode session had ever
+   * run in, for as long as the server lived.
+   *
+   * Measured on opencode 1.18.34: `instance.dispose` ended a stdio MCP server
+   * and its detached child within three seconds, and a `session.status` for
+   * the directory afterwards (what the activity sampler sends) started
+   * neither again; the first request that uses MCP there does. So a session
+   * woken in the directory finds what it had, and nothing else brings it back.
+   *
+   * Deferred, and tried again, while the adapter is opening, migrating or
+   * recovering anything, and while the server reports any session of the
+   * directory busy or cannot say: a turn nobody here is attached to may be
+   * running in it.
+   */
+  #releaseDirectory(directory: string, identity: ServerIdentity): void {
+    this.#disposeUnused(directory, identity)
+      .then((settled) => {
+        if (!settled) {
+          setTimeout(
+            () => this.#releaseDirectory(directory, identity),
+            DIRECTORY_RELEASE_RETRY_MS
+          ).unref();
+        }
+      })
+      .catch((error: unknown) =>
+        console.warn(
+          `[opencode] ${directory}: releasing its instance failed: ${errorText(error)}`
+        )
+      );
+  }
+
+  /** Whether the directory is settled: disposed, or in use again and not this call's to dispose. */
+  async #disposeUnused(
+    directory: string,
+    identity: ServerIdentity
+  ): Promise<boolean> {
+    const used = (): boolean =>
+      // biome-ignore lint/suspicious/noUnnecessaryConditions: #disposed is set true by dispose(), a different method biome's per-method inference doesn't see
+      this.#disposed ||
+      !this.#serverOwner.generations.some(
+        (generation) => generation.procId === identity.procId
+      ) ||
+      [...this.#sessions.values()].some(
+        (session) =>
+          session.directory === directory &&
+          this.#sessionOwners.get(session.instanceId)?.procId ===
+            identity.procId
+      );
+    if (used()) {
+      return true;
+    }
+    if (this.#operationsPending()) {
+      return false;
+    }
+    const client = this.#clientForGeneration(identity);
+    const status = await client.session.status(
+      { directory },
+      { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
+    );
+    if (used()) {
+      return true;
+    }
+    if (
+      status.error ||
+      !status.data ||
+      this.#operationsPending() ||
+      Object.values(status.data).some((state) => state.type !== "idle")
+    ) {
+      return false;
+    }
+    const key = this.#pumpKey(directory, identity);
+    this.#pumps.get(key)?.abort();
+    this.#pumps.delete(key);
+    this.#pumpReady.delete(key);
+    this.#pumpConnected.delete(key);
+    const disposed = await client.instance.dispose(
+      { directory },
+      { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
+    );
+    if (disposed.error) {
+      throw new Error(errorText(disposed.error));
+    }
+    console.info(
+      `[opencode] ${directory}: instance disposed, nothing attached`
+    );
+    return true;
+  }
+
   /** Ends every directory's subscription loop; none reconnects. */
   #stopPumps(): void {
     for (const owner of this.#pumps.values()) {
@@ -5180,6 +5299,7 @@ export class OpencodeHarness implements Harness {
         });
       },
       () => {
+        const held = this.#sessionOwners.get(ctx.instanceId) ?? identity;
         if (this.#sessions.get(ctx.instanceId) === session) {
           this.#sessions.delete(ctx.instanceId);
           const owner = this.#sessionOwners.get(ctx.instanceId);
@@ -5194,6 +5314,7 @@ export class OpencodeHarness implements Harness {
             this.#children.delete(childId);
           }
         }
+        this.#releaseDirectory(ctx.cwd, held);
       },
       (urgent) =>
         this.#applyGate !== null ||

@@ -9919,6 +9919,25 @@
             "type": "object",
             "properties": {
               "kind": {
+                "description": "The machine stopped the processes of a session that was at rest: no\ndecision of anyone's, and nothing lost. The row is `sleeping` from\nhere, and its next message starts it again from its conversation.",
+                "type": "string",
+                "enum": [
+                  "asleep"
+                ]
+              },
+              "instanceId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "instanceId",
+              "kind"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
                 "description": "Recovery found no live handle; stored conversations remain resumable.",
                 "type": "string",
                 "enum": [

@@ -1324,6 +1324,12 @@ export const createWorkItems = ({
     /** One item, as `stop_delegate` and its callers read it. */
     item: (id: string): WorkItemRow | undefined => db.workItem(id),
 
+    /** Whether the session's work item is over: done, failed or cancelled. */
+    over(row: InstanceRow): boolean {
+      const item = itemOf(row);
+      return item !== undefined && !LIVE.has(item.state);
+    },
+
     /**
      * The workspace a session's spawn is bounded to: every spawn of a work
      * item's session — a restore, a revive, a relaunch — carries it, so no

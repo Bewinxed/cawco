@@ -534,6 +534,49 @@ const assertApplied = (ack: SessiondAck, verb: string): void => {
 };
 
 /**
+ * How long a child told to end gets before it is killed. Ours: the harness's
+ * own exit on a closed stdin takes a second or two; five is room for one that
+ * is mid-write.
+ */
+const END_GRACE_MS = 5000;
+
+/**
+ * Ends a held child nobody is driving, with everything it started (sessiond
+ * signals its whole tree): its stdin is closed, which is a harness's own way
+ * out, it is told to terminate, and if that same process is still there after
+ * {@link END_GRACE_MS} it is killed. Every step is a no-op on a child already
+ * gone, and the kill is refused to a process since started under the same id.
+ */
+export const endProc = async (
+  client: SessiondClient,
+  procId: string
+): Promise<void> => {
+  const held = (await client.list()).procs.find(
+    (proc) => proc.procId === procId && proc.alive
+  );
+  if (!held) {
+    return;
+  }
+  const quietly = (step: Promise<void>): Promise<void> =>
+    step.catch(() => undefined);
+  await quietly(client.stdinEnd(procId));
+  await quietly(client.signal(procId, "SIGTERM"));
+  setTimeout(() => {
+    client
+      .list()
+      .then(({ procs }) =>
+        procs.some(
+          (proc) =>
+            proc.procId === procId && proc.alive && proc.pid === held.pid
+        )
+          ? quietly(client.signal(procId, "SIGKILL"))
+          : undefined
+      )
+      .catch(() => undefined);
+  }, END_GRACE_MS).unref();
+};
+
+/**
  * The sequence space a ring line's seq belongs to: one child process, under
  * one sessiond boot. sessiond's own epoch spans every child it runs, and a
  * relaunch starts a new ring at seq 1 under the same procId — so a mark kept

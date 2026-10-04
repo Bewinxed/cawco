@@ -146,6 +146,29 @@ stampede a machine that's been down for a while), and everything outside that bo
 respawned.
 The cap and horizon bound fresh respawns, not reattachment to custody the daemon has verified first-hand; a sleeping or errored turn older than the horizon that the server still holds is reported, not resumed, until the operator asks.
 
+### A session at rest holds no processes
+
+`sleeping` is also where the daemon puts a session on purpose. A session that has been at rest
+for half an hour (`IDLE_SLEEP_MS`, `packages/agent/src/session.ts`), and a delegate whose work
+item is over and reported (asked for by the hub, `CONTROL_SLEEP`), has everything it runs
+stopped: the harness process, the MCP servers it started, their browsers. The daemon says so
+with an `asleep` frame, the hub files the row `sleeping`, and the next message wakes it through
+the one send path (`wakeForSend`), from its stored conversation. The daemon decides, because
+what would be lost is process truth: it refuses while a turn runs, an ask is parked, a
+background task or a subagent is running, the session has scheduled itself a wake-up, or it
+has no stored conversation yet. The one thing only the hub knows rides its heartbeat ack: the
+sessions whose prompt cache its keep-alive is keeping warm, which are kept awake too
+(`HeartbeatAckPayload.keepAwake`). For OpenCode the processes belong to a directory's
+instance, which is disposed when its last attached session leaves.
+
+sessiond is what makes "everything it runs" true: each child leads its own process group, a
+signal reaches the child's whole tree, and what a child leaves behind when it exits is swept.
+
+The same rule holds across a restart. At register the hub names, in its restores, every row it
+has for a process the machine still holds — a row a dying hub filed `sleeping` included — and
+the daemon attaches to each. A session process no restore names has no row behind it, and the
+machine's own agent stops it (`stopUnowned`).
+
 ## Who writes what
 
 The table below is the single source for which component is allowed to assert a fact, and

@@ -39,6 +39,7 @@ import {
   CONTROL_QUERIES,
   CONTROL_RUN_COMMAND,
   CONTROL_SET_PERMISSION_MODE,
+  CONTROL_SLEEP,
   FLEET_STATUS,
   FLEET_SYNC,
   GENERATE_IMAGE,
@@ -79,6 +80,9 @@ import { type UpdateOptions, updateCheckout } from "./update";
  * satisfy this shape. Claude and pi share custody; OpenCode owns its server.
  */
 interface SessiondAdoption {
+  /** Ends the held child of an instance nobody owns, with everything it started. */
+  // biome-ignore lint/style/useConsistentMethodSignatures: a property signature changes parameter variance here and would break the claude adapter's implementation
+  abandon(instanceId: string): Promise<void>;
   // biome-ignore lint/style/useConsistentMethodSignatures: a property signature changes parameter variance here and would break the claude adapter's implementation
   adopt(
     instanceId: string,
@@ -229,6 +233,28 @@ const tail = (output: string): string =>
 
 /** At most one pulse per instance per this long, unless busy/blocked moves. */
 const PULSE_THROTTLE_MS = 1000;
+
+/**
+ * How long a session stays at rest before its processes are stopped: no turn
+ * running, nothing it asked still open, nothing it runs in the background,
+ * nothing it scheduled. Ours: half an hour is past any pause inside a piece of
+ * work, and short enough that a day's finished sessions do not add up. A
+ * session's harness, its MCP servers and their browsers stayed up for as long
+ * as sessiond did; with about a dozen sessions working, 103 harness processes
+ * and 136 MCP server sets were alive when the machine ran out of memory
+ * (2026-10-04).
+ */
+export const IDLE_SLEEP_MS = 30 * 60_000;
+
+/** How often the sessions at rest are looked at. Ours: a minute is as fine as half an hour is read. */
+const IDLE_SWEEP_MS = 60_000;
+
+/**
+ * How long a send that crossed a session's sleep is held for the process the
+ * hub's wake starts. Ours: the hub wakes it on hearing of the sleep, one
+ * socket round trip later; a minute is past any ordering of the two.
+ */
+const CROSSED_HOLD_MS = 60_000;
 
 /** The one readable field of a tool call, for the rail's glance line. */
 const glanceOf = (input: Record<string, unknown> | undefined): string => {
@@ -420,8 +446,26 @@ export class SessionSupervisor {
 
   constructor() {
     this.#adapter("opencode").setCustodyReadiness?.(() => this.custodyReady);
+    setInterval(() => {
+      this.#sweepIdle().catch((error: unknown) =>
+        warn(`the idle sweep failed: ${error}`)
+      );
+    }, IDLE_SWEEP_MS).unref();
   }
   readonly #sessions = new Map<string, HarnessSession>();
+  /**
+   * When each carried session was last seen doing, or holding, anything: the
+   * moment its rest is counted from ({@link IDLE_SLEEP_MS}). Moved by every
+   * turn starting or ending, every ask parked or settled and every send, and
+   * by each sweep that finds the session not at rest.
+   */
+  readonly #activeAt = new Map<string, number>();
+  /**
+   * The sessions this daemon put to sleep, each with the sends that reached
+   * it after: the hub sent them before it heard, and they go to the process
+   * its wake starts ({@link sleep}).
+   */
+  readonly #asleep = new Map<string, SendPayload[]>();
   readonly #generations = new Map<string, string>();
   readonly #failures = new Map<string, string>();
   /** Reattaches in flight, by instance id: see {@link reattach}. */
@@ -756,6 +800,235 @@ export class SessionSupervisor {
   }
 
   /**
+   * The carried sessions the hub wants kept awake, as its last heartbeat ack
+   * listed them (`HeartbeatAckPayload.keepAwake`): what only the hub knows of
+   * and only the session's process can serve, today a keep-alive's pings.
+   * Not known until a hub has said, and no session sleeps before then.
+   */
+  #keptAwake: ReadonlySet<string> | undefined;
+
+  /** The hub's heartbeat ack: the whole list, replacing the last. */
+  keepAwake(ids: unknown): void {
+    if (Array.isArray(ids)) {
+      this.#keptAwake = new Set(
+        ids.filter((id): id is string => typeof id === "string")
+      );
+    }
+  }
+
+  /** A carried session did something: its rest is counted from now. */
+  #touch(instanceId: string): void {
+    if (this.#sessions.has(instanceId)) {
+      this.#activeAt.set(instanceId, Date.now());
+    }
+  }
+
+  /**
+   * A session taken over from the agent before this one has been at rest
+   * since it last wrote, not since this agent met it, and its harness's own
+   * catalog dates that. Counted from the meeting instead, every agent restart
+   * (which every deploy is) would start each idle session's half hour again.
+   */
+  async #dateActivity(
+    instanceId: string,
+    adapter: Harness,
+    session: HarnessSession,
+    cwd: string
+  ): Promise<void> {
+    const met = Date.now();
+    this.#activeAt.set(instanceId, met);
+    if (!session.sessionId) {
+      return;
+    }
+    const info = await adapter
+      .getSessionInfo(session.sessionId, cwd)
+      .catch(() => undefined);
+    // Unless it has done something since, or is no longer this session.
+    if (
+      info?.lastModified &&
+      this.#sessions.get(instanceId) === session &&
+      this.#activeAt.get(instanceId) === met
+    ) {
+      this.#activeAt.set(instanceId, Math.min(met, info.lastModified));
+    }
+  }
+
+  /**
+   * Why a carried session cannot be put to sleep now, in words; nothing when
+   * it is at rest. THE list of what stopping its processes would lose:
+   *
+   *  - a turn that is running, a send still on its way into one included (a
+   *    harness is busy from the moment it is handed a send);
+   *  - an ask or a permission it parked: the answer goes to the process that
+   *    asked, and no other;
+   *  - a subagent, a background command, a monitor or a workflow it started
+   *    and that is still running;
+   *  - a wake-up it scheduled for itself (a cron, a loop's next tick): the
+   *    timer lives in its process;
+   *  - a prompt cache the hub's keep-alive is pinging to keep warm: a ping is
+   *    a turn of this process, and the hub sends none to a sleeping session
+   *    ({@link keepAwake});
+   *  - a conversation not stored yet: a session that has never taken a turn
+   *    has nothing to wake from.
+   *
+   * `serverBusy` is opencode's own word on its turns ({@link Harness.busyInstances}),
+   * which no local set can stand in for; a sweep reads it once for every
+   * session it looks at.
+   *
+   * `unsure` marks the answers that are not the session doing or holding
+   * anything, only this daemon unable to tell yet: its custody still being
+   * decided, opencode's server not saying. They keep it up for now and leave
+   * its rest counted from where it was.
+   */
+  async #awake(
+    instanceId: string,
+    session: HarnessSession,
+    serverBusy?: string[]
+  ): Promise<{ why: string; unsure?: true } | undefined> {
+    if (this.#adopting.has(instanceId)) {
+      return { why: "its custody is still being decided", unsure: true };
+    }
+    for (const ask of this.#openAsks.values()) {
+      if ("instanceId" in ask && ask.instanceId === instanceId) {
+        return { why: "an ask is waiting for its answer" };
+      }
+    }
+    if (this.#busy.has(instanceId)) {
+      return { why: "a turn is running" };
+    }
+    if ((this.#pulseSubagents.get(instanceId)?.size ?? 0) > 0) {
+      return { why: "a subagent is running" };
+    }
+    if (!session.sessionId) {
+      return { why: "it has no conversation to wake from yet" };
+    }
+    if (!this.#keptAwake) {
+      return {
+        why: "the hub has not yet said which sessions it keeps awake",
+        unsure: true,
+      };
+    }
+    if (this.#keptAwake.has(instanceId)) {
+      return { why: "the hub is keeping its prompt cache warm" };
+    }
+    const held = session.holding?.();
+    if (held) {
+      return { why: held };
+    }
+    if (session.harness === "opencode") {
+      const busy =
+        serverBusy ?? (await this.#adapter("opencode").busyInstances?.()) ?? [];
+      if (busy.includes(instanceId)) {
+        return { why: "the opencode server reports its turn running" };
+      }
+      // `opencode:…` is the server's activity not known, or an operation of
+      // the adapter's own in flight: no word on this session either way.
+      if (busy.some((id) => id.startsWith("opencode:"))) {
+        return {
+          why: "the opencode server cannot say whether a turn is running",
+          unsure: true,
+        };
+      }
+    }
+    return undefined;
+  }
+
+  /**
+   * PUTS A SESSION TO SLEEP when it is at rest ({@link #awake}): everything
+   * it runs is stopped — the harness, the MCP servers it started and their
+   * browsers, through the adapter's own stop — and the hub is told, which
+   * files the row `sleeping`. Its conversation stays where its harness stores
+   * it, and the hub's wake starts it again from there on its next message.
+   *
+   * Run on the session's own queue, behind whatever was already on its way to
+   * it and ahead of whatever follows, so it is decided against the sends that
+   * came before and the ones after find it asleep. A send the hub sent before
+   * it heard is held here and handed to the process the hub's wake starts:
+   * the hub starts one as soon as it hears, for exactly those.
+   */
+  async sleep(
+    instanceId: string
+  ): Promise<{ asleep: boolean; awake?: string }> {
+    const session = this.#sessions.get(instanceId);
+    if (!session) {
+      return { asleep: this.#asleep.has(instanceId) };
+    }
+    const awake = await this.#awake(instanceId, session);
+    if (awake) {
+      return { asleep: false, awake: awake.why };
+    }
+    const processGeneration = this.#generations.get(instanceId);
+    // Carried, and listed on every beat, until it has stopped: a beat that no
+    // longer listed it first would have the hub settle it as ended, and fail
+    // what it was sent.
+    await session.stop();
+    this.#sessions.delete(instanceId);
+    this.#forgetPulse(instanceId);
+    const crossed: SendPayload[] = [];
+    this.#asleep.set(instanceId, crossed);
+    // The hub wakes it for a crossed send the moment it hears. One nothing
+    // woke for by then (the hub was away as this was said) did not go.
+    setTimeout(() => {
+      if (this.#asleep.get(instanceId) !== crossed) {
+        return;
+      }
+      this.#asleep.delete(instanceId);
+      for (const held of crossed) {
+        this.#reject(
+          instanceId,
+          held.message.uuid,
+          "The session was put to sleep as this was sent, and nothing woke it."
+        );
+      }
+    }, CROSSED_HOLD_MS).unref();
+    this.sink({ kind: "asleep", instanceId, processGeneration });
+    Effect.runFork(
+      Effect.logInfo(
+        `put ${instanceId} to sleep: at rest, its ${session.harness} processes are stopped`
+      )
+    );
+    return { asleep: true };
+  }
+
+  /** Every carried session at rest for {@link IDLE_SLEEP_MS} is put to sleep. */
+  async #sweepIdle(): Promise<void> {
+    const carried = [...this.#sessions];
+    if (carried.length === 0) {
+      return;
+    }
+    const serverBusy =
+      (await this.#adapter("opencode").busyInstances?.()) ?? [];
+    const now = Date.now();
+    for (const [instanceId, session] of carried) {
+      // biome-ignore lint/performance/noAwaitInLoops: one session at a time; only opencode's read is awaited, and it was taken above
+      const awake = await this.#awake(instanceId, session, serverBusy);
+      if (awake) {
+        if (!awake.unsure) {
+          this.#touch(instanceId);
+        }
+        continue;
+      }
+      if (now - (this.#activeAt.get(instanceId) ?? now) < IDLE_SLEEP_MS) {
+        continue;
+      }
+      const queue = (this.#queues.get(instanceId) ?? Promise.resolve())
+        .then(async () => {
+          await this.sleep(instanceId);
+        })
+        .catch((error: unknown) =>
+          warn(`putting ${instanceId} to sleep failed: ${error}`)
+        );
+      this.#queues.set(instanceId, queue);
+      // biome-ignore lint/complexity/noVoid: fire-and-forget cleanup, as in dispatch
+      void queue.then(() => {
+        if (this.#queues.get(instanceId) === queue) {
+          this.#queues.delete(instanceId);
+        }
+      });
+    }
+  }
+
+  /**
    * Drops every trace of an instance's pulse — its process is gone. Not its
    * preview: a relaunch comes through here too, and the session it continues
    * still has the preview open. The hub owns that lifetime and ends it on an
@@ -764,6 +1037,7 @@ export class SessionSupervisor {
   #forgetPulse(instanceId: string): void {
     this.#keepAlive.delete(instanceId);
     this.#busy.delete(instanceId);
+    this.#activeAt.delete(instanceId);
     this.#line.delete(instanceId);
     // The process this mark counted in is over — a relaunch or a death.
     // Whatever produces frames next is not replaying the hub's own past.
@@ -1083,6 +1357,12 @@ export class SessionSupervisor {
       holder.session = session;
       this.#sessions.set(instanceId, session);
       session.attached?.();
+      if (payload.reattachOnly) {
+        // biome-ignore lint/complexity/noVoid: the catalog read dates a rest already under way; nothing waits on it
+        void this.#dateActivity(instanceId, adapter, session, workdir);
+      } else {
+        this.#activeAt.set(instanceId, Date.now());
+      }
       if (payload.sessionCredential) {
         await this.#installCredential(
           session,
@@ -1090,6 +1370,13 @@ export class SessionSupervisor {
           payload.sessionCredential,
           payload.reattachOnly ? undefined : "initial"
         );
+      }
+      // What reached this session while it slept is its first work awake.
+      const crossed = this.#asleep.get(instanceId) ?? [];
+      this.#asleep.delete(instanceId);
+      for (const held of crossed) {
+        // biome-ignore lint/performance/noAwaitInLoops: handed over in the order they were sent
+        await this.#send(held);
       }
       // A reattach that met a running turn said so before there was a session
       // to carry the pulse ({@link #emitPulse} drops it): said now.
@@ -1112,6 +1399,11 @@ export class SessionSupervisor {
       // this process, and a diagnosis on the machine itself was once blind to
       // why a resume died.
       warn(`spawn ${instanceId} failed: ${message}`);
+      // The sends that waited for this process have nowhere to go.
+      for (const held of this.#asleep.get(instanceId) ?? []) {
+        this.#reject(instanceId, held.message.uuid, error);
+      }
+      this.#asleep.delete(instanceId);
       if (ack) {
         this.sink({
           kind: "control_result",
@@ -1206,6 +1498,7 @@ export class SessionSupervisor {
         if (this.#openAsks.has(request.requestId)) {
           return;
         }
+        this.#touch(instanceId);
         this.#pulseBlocked.set(
           instanceId,
           (this.#pulseBlocked.get(instanceId) ?? 0) + 1
@@ -1227,6 +1520,11 @@ export class SessionSupervisor {
           this.#busy.add(instanceId);
         } else {
           this.#busy.delete(instanceId);
+        }
+        // A keep-alive ping is the hub's maintenance, not the session doing
+        // anything: its rest is still counted from its own last turn.
+        if (!this.#keepAlive.has(instanceId)) {
+          this.#touch(instanceId);
         }
         this.#emitPulse(instanceId, true);
       },
@@ -1259,44 +1557,52 @@ export class SessionSupervisor {
   }
 
   /**
-   * What sessiond is still holding that this daemon is not carrying.
+   * NO PROCESS STAYS IN SESSIOND WITHOUT AN OWNER. Run once a register's
+   * custody has been taken: the hub has named, in its restores, every row it
+   * has for a process this machine holds, and each of those is attached by
+   * now, failed to attach, or was never named. A session process that is
+   * alive and that this daemon neither carries nor is attaching or starting
+   * has no row behind it: it is stopped, with everything it started.
    *
-   * The hub names the sessions it wants restored, and for a while that was the
-   * only list a reattach consulted — so a child sessiond had faithfully kept
-   * alive, but whose row the hub had already written off, stayed running with
-   * nobody pumping its output and no way back onto the board. The machine's
-   * own truth is what sessiond holds, so it is read directly and merged with
-   * whatever the hub asked for.
+   * Sixteen such processes ran their turns unseen for hours (2026-10-04): the
+   * hub had filed their rows asleep in a register it did not live to finish,
+   * its successor named none of them, and nothing could attach to one the hub
+   * had not named. Before that, such a process was attached to on sessiond's
+   * word alone, with no row's settings to run it under.
    *
-   * `cwd` comes back from the child's own spec. A proc reported without one
-   * cannot be adopted — a reattach needs a directory — and is left alone
-   * rather than adopted into the wrong place.
+   * Only the machine's own agent does this. One started from a worktree
+   * against another hub shares the machine's sessiond, and what that hub does
+   * not name is not its to stop.
+   *
+   * Answers the instances whose processes were stopped.
    */
-  async survivors(
-    signal?: AbortSignal
-  ): Promise<{ instanceId: string; cwd: string; sessionId: null }[]> {
-    const welcomes = await custodyProbe(
-      Promise.all(
-        SESSION_PROC_KINDS.map(async (kind) => {
-          const adapter = this.#adapter(kind) as Harness &
-            Partial<SessiondAdoption>;
-          return await adapter.custodyCandidates?.();
-        })
-      ),
-      signal
-    );
-    signal?.throwIfAborted();
-    return welcomes
-      .flatMap((welcome) => welcome?.procs ?? [])
-      .flatMap((proc) => {
+  async stopUnowned(): Promise<string[]> {
+    if (!(await isMachineAgent())) {
+      return [];
+    }
+    const stopped: string[] = [];
+    for (const kind of SESSION_PROC_KINDS) {
+      const adapter = this.#adapter(kind) as Harness &
+        Partial<SessiondAdoption>;
+      // biome-ignore lint/performance/noAwaitInLoops: one harness's listing at a time
+      const held = await adapter.custodyCandidates?.();
+      for (const proc of held?.procs ?? []) {
         const id = parseProcId(proc.procId);
-        return (id.kind === "claude" || id.kind === "pi") &&
-          proc.alive &&
-          proc.cwd !== undefined &&
-          !this.#sessions.has(id.instanceId)
-          ? [{ instanceId: id.instanceId, cwd: proc.cwd, sessionId: null }]
-          : [];
-      });
+        if (
+          !((id.kind === "claude" || id.kind === "pi") && proc.alive) ||
+          this.#sessions.has(id.instanceId) ||
+          this.#adopting.has(id.instanceId) ||
+          // Something is on its way to it: a spawn starting it, a stop.
+          this.#queues.has(id.instanceId)
+        ) {
+          continue;
+        }
+        // biome-ignore lint/performance/noAwaitInLoops: one process at a time; each stop is a few socket round trips
+        await adapter.abandon?.(id.instanceId);
+        stopped.push(id.instanceId);
+      }
+    }
+    return stopped;
   }
 
   /**
@@ -1572,6 +1878,8 @@ export class SessionSupervisor {
     });
     holder.session = session;
     this.#sessions.set(row.instanceId, session);
+    // biome-ignore lint/complexity/noVoid: the catalog read dates a rest already under way; nothing waits on it
+    void this.#dateActivity(row.instanceId, claude, session, row.cwd);
     this.#installAdoptedCredential(row, session);
     session.attached?.();
     this.#adopting.delete(row.instanceId);
@@ -1685,15 +1993,23 @@ export class SessionSupervisor {
   }
 
   // biome-ignore lint/suspicious/useAwait: must stay async to match #route()'s Promise<void>-returning verb handlers
-  async #send({
-    instanceId,
-    message,
-    attachments,
-    images,
-    urgent,
-  }: SendPayload): Promise<void> {
+  async #send(payload: SendPayload): Promise<void> {
+    const { instanceId, attachments, images, urgent } = payload;
+    let { message } = payload;
     const keepAlive =
       message.origin.kind === "system" && message.origin.name === "keepalive";
+    // Sent before the hub heard this session was put to sleep: it waits for
+    // the process the hub's wake starts ({@link sleep}). A keep-alive ping is
+    // not held: nothing wakes a session to keep its cache warm, and it is
+    // refused below like any ping to a session that is not there.
+    const crossed =
+      this.#sessions.has(instanceId) || keepAlive
+        ? undefined
+        : this.#asleep.get(instanceId);
+    if (crossed) {
+      crossed.push(payload);
+      return;
+    }
     const worktree = this.#worktrees.get(instanceId);
     const { content } = message.message;
     if (!keepAlive && worktree?.announce && typeof content === "string") {
@@ -1728,12 +2044,20 @@ export class SessionSupervisor {
         throw new Error("Keep-alive requires an idle Claude session.");
       }
       this.#keepAlive.set(instanceId, message.uuid);
+    } else {
+      this.#touch(instanceId);
     }
     session.send(message, { attachments, images, urgent });
   }
 
   async #stop({ instanceId, discard, requestId }: StopPayload): Promise<void> {
     const processGeneration = this.#generations.get(instanceId);
+    // A stop is a decision about the session: nothing waits for its wake now.
+    const crossed = this.#asleep.get(instanceId) ?? [];
+    this.#asleep.delete(instanceId);
+    for (const held of crossed) {
+      this.#reject(instanceId, held.message.uuid, "The session was stopped.");
+    }
     try {
       const session = this.#sessions.get(instanceId);
       if (session) {
@@ -2301,6 +2625,9 @@ export class SessionSupervisor {
       this.#settleAsk(instanceId, args[0] as string);
       return undefined;
     }
+    if (method === CONTROL_SLEEP) {
+      return await this.sleep(instanceId);
+    }
     const session = this.#session(instanceId);
     if (method === "withdrawSend" && session.harness !== "claude") {
       return "started";
@@ -2335,6 +2662,7 @@ export class SessionSupervisor {
       processGeneration: ask.processGeneration,
       outcome,
     });
+    this.#touch(instanceId);
     const left = (this.#pulseBlocked.get(instanceId) ?? 1) - 1;
     if (left === 0) {
       this.#pulseBlocked.delete(instanceId);

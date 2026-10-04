@@ -303,6 +303,18 @@ export interface HeartbeatPayload {
   tools?: ToolStatus[];
 }
 
+/**
+ * The hub's answer to a `heartbeat`. `keepAwake` is every session the beat
+ * listed that the hub holds something for which only the hub knows of and
+ * which needs the session's process: today, a prompt cache its keep-alive is
+ * pinging to keep warm. The whole list on every beat, so the machine replaces
+ * what it held; it puts none of them to sleep.
+ */
+export interface HeartbeatAckPayload {
+  keepAwake: string[];
+  ok: true;
+}
+
 /** `stop`: interrupt and close a live session. */
 export interface StopPayload {
   /** Explicitly abort unadopted custody too, then tear down side-quest resources. */
@@ -942,6 +954,15 @@ export type FramePayload =
       kind: "stopped";
       instanceId: string;
       discard: boolean;
+    }
+  | {
+      /**
+       * The machine stopped the processes of a session that was at rest: no
+       * decision of anyone's, and nothing lost. The row is `sleeping` from
+       * here, and its next message starts it again from its conversation.
+       */
+      kind: "asleep";
+      instanceId: string;
     }
   | {
       /** Recovery found no live handle; stored conversations remain resumable. */
