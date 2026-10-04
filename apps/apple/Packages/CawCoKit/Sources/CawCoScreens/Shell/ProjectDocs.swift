@@ -103,7 +103,11 @@ final class ProjectDocsView: UIStackView {
         column.axis = .vertical
         column.translatesAutoresizingMaskIntoConstraints = false
         card.addSubview(column)
-        card.clipsToBounds = true
+        // `shadow-md` on the card; its content is what the corners clip.
+        card.boxShadow = Shadow.shadowMd
+        column.layer.cornerRadius = Radius.radiusLg
+        column.layer.cornerCurve = .continuous
+        column.clipsToBounds = true
         NSLayoutConstraint.activate([
             column.topAnchor.constraint(equalTo: card.topAnchor),
             column.bottomAnchor.constraint(equalTo: card.bottomAnchor),
@@ -151,7 +155,7 @@ final class ProjectDocsView: UIStackView {
         docError = nil
         draft = nil
         renderHeader()
-        renderPicker()
+        if let segmented, let index = docs?.firstIndex(of: doc) { segmented.select(index) } else { renderPicker() }
         Task { @MainActor [weak self, hub, machineId] in
             var next = ""
             do {
@@ -193,12 +197,41 @@ final class ProjectDocsView: UIStackView {
         renderBody()
     }
 
-    private var phone: Bool { traitCollection.horizontalSizeClass == .compact }
+    /// How the docs are picked, by the window's width: a select on a phone,
+    /// the segmented control across the reader from 768pt, and down a 192pt
+    /// column beside it from 1280pt.
+    enum Picker: Sendable { case select, across, column }
+
+    var pickerMode = Picker.select {
+        didSet {
+            guard pickerMode != oldValue else { return }
+            axis = pickerMode == .column ? .horizontal : .vertical
+            alignment = pickerMode == .column ? .top : .fill
+            pickerWidth.isActive = pickerMode == .column
+            renderPicker()
+        }
+    }
+
+    private lazy var pickerWidth = picker.widthAnchor.constraint(equalToConstant: 192)
+    private var phone: Bool { pickerMode == .select }
 
     private func renderPicker() {
         picker.arrangedSubviews.forEach { $0.removeFromSuperview() }
+        picker.axis = pickerMode == .column ? .vertical : .horizontal
         guard let docs else {
-            if docsError == nil {
+            if docsError == nil, pickerMode == .column {
+                // The well the list will stand in, five rows of it.
+                let well = UIStackView()
+                well.axis = .vertical
+                well.spacing = 2
+                well.isLayoutMarginsRelativeArrangement = true
+                well.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 3, leading: 3, bottom: 3, trailing: 3)
+                well.backgroundColor = Palette.surfaceRecessDeep
+                well.layer.cornerRadius = Radius.radiusMd
+                well.layer.cornerCurve = .continuous
+                for _ in 0 ..< 5 { well.addArrangedSubview(SkeletonView(height: 30)) }
+                picker.addArrangedSubview(well)
+            } else if docsError == nil {
                 let bar = SkeletonView(height: phone ? 36 : 30)
                 if !phone { bar.widthAnchor.constraint(equalToConstant: 320).isActive = true }
                 picker.addArrangedSubview(bar)
@@ -225,12 +258,18 @@ final class ProjectDocsView: UIStackView {
             select.accessibilityLabel = "Project docs"
             picker.addArrangedSubview(select)
         } else {
-            let tabs = SegmentedTabs(docs.map { .init($0.name) }, selected: docs.firstIndex { $0 == open } ?? 0)
+            // `Tabs.List`: the kit's segmented group, its names in the mono face.
+            let tabs = KitSegmented(docs.map(\.name), selected: docs.firstIndex { $0 == open }, axis: pickerMode == .column ? .down : .across, mono: true)
             tabs.accessibilityLabel = "Project docs"
             tabs.addAction(UIAction { [weak self, weak tabs] _ in
-                guard let self, let tabs, docs.indices.contains(tabs.selectedIndex) else { return }
-                choose(docs[tabs.selectedIndex])
+                guard let self, let index = tabs?.selectedIndex, docs.indices.contains(index) else { return }
+                choose(docs[index])
             }, for: .valueChanged)
+            segmented = tabs
+            if pickerMode == .column {
+                picker.addArrangedSubview(tabs)
+                return
+            }
             let scroller = UIScrollView()
             scroller.showsHorizontalScrollIndicator = false
             tabs.translatesAutoresizingMaskIntoConstraints = false
@@ -245,6 +284,9 @@ final class ProjectDocsView: UIStackView {
             picker.addArrangedSubview(scroller)
         }
     }
+
+    /// The list on screen: a choice moves its thumb rather than rebuilding it.
+    private weak var segmented: KitSegmented?
 
     private func statusLine(_ text: String) -> UIView {
         let label = KitLabel(TypeScale.typeLabel.withWeight(.regular), ink: Palette.mutedForeground)
@@ -409,7 +451,8 @@ final class ProjectDocsView: UIStackView {
         let column = UIStackView(arrangedSubviews: [scroll])
         column.axis = .vertical
         column.layoutIfNeeded()
-        let width = max(1, (window?.bounds.width ?? UIScreen.main.bounds.width) - 48)
+        // Measured at the card's own width: beside the list and the rail it is far narrower than the window.
+        let width = max(1, card.bounds.width > 0 ? card.bounds.width : (window?.bounds.width ?? UIScreen.main.bounds.width) - 48)
         let full = inner.systemLayoutSizeFitting(CGSize(width: width, height: 0), withHorizontalFittingPriority: .required, verticalFittingPriority: .fittingSizeLevel).height
         let clipped = full > Self.clamp + 4
         if clipped || expanded {

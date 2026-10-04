@@ -1,0 +1,81 @@
+import CawCoDesign
+import UIKit
+
+/// The project page's "New session" popover (project/[id]/+page.svelte):
+/// an optional first prompt, then Start, or Start empty without one. 320pt
+/// wide, 16pt in, its rows 12pt apart; Return in the field starts.
+final class ProjectStartController: KitPopoverController, UITextFieldDelegate {
+    private let field = KitField(placeholder: "What should this session do?")
+    private let onStart: (String?) -> Void
+    private let stack = UIStackView()
+
+    /// `onStart`: the prompt as typed, or nil for an empty start.
+    init(onStart: @escaping (String?) -> Void) {
+        self.onStart = onStart
+        super.init()
+    }
+
+    @available(*, unavailable)
+    required init?(coder _: NSCoder) {
+        fatalError("ProjectStartController is built in code")
+    }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        let label = KitLabel(TypeScale.typeMeta, ink: Palette.mutedForeground)
+        label.text = "First prompt (optional)"
+        field.font = TypeScale.typeLabel.withWeight(.regular).font
+        field.autocorrectionType = .no
+        field.spellCheckingType = .no
+        field.returnKeyType = .go
+        field.delegate = self
+        field.accessibilityLabel = "First prompt (optional)"
+        let prompt = UIStackView(arrangedSubviews: [label, field])
+        prompt.axis = .vertical
+        prompt.spacing = Space.space1
+        var ghost = UIButton.Configuration.plain()
+        ghost.attributedTitle = AttributedString("Start empty", attributes: AttributeContainer(TypeScale.typeLabel.attributes(color: Palette.inkStrong, tracking: -0.01)))
+        ghost.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: Space.space3, bottom: 0, trailing: Space.space3)
+        ghost.background.cornerRadius = Radius.radiusMd
+        let empty = UIButton(configuration: ghost, primaryAction: UIAction { [weak self] _ in self?.start(nil) })
+        empty.configurationUpdateHandler = { button in
+            button.configuration?.background.backgroundColor = button.isHighlighted ? Palette.surfaceFill : (button.isHovered ? Palette.surfaceHover : .clear)
+        }
+        empty.houseStyle()
+        empty.heightAnchor.constraint(equalToConstant: Size.cBtnHSm).isActive = true
+        let go = KitButton.make("Start", variant: .action, height: .sm) { [weak self] in self?.start(self?.field.text) }
+        let actions = UIStackView(arrangedSubviews: [UIView(), empty, go])
+        actions.spacing = Space.space2
+        actions.alignment = .center
+        stack.addArrangedSubview(prompt)
+        stack.addArrangedSubview(actions)
+        stack.axis = .vertical
+        stack.spacing = Space.space3
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        card.addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.topAnchor.constraint(equalTo: card.topAnchor, constant: 16),
+            stack.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 16),
+            stack.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -16),
+        ])
+        let width = min(320, (view.window?.bounds.width ?? UIScreen.main.bounds.width) - 32)
+        let height = stack.systemLayoutSizeFitting(CGSize(width: width - 32, height: 0), withHorizontalFittingPriority: .required, verticalFittingPriority: .fittingSizeLevel).height + 32
+        preferredContentSize = CGSize(width: width, height: height)
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        field.becomeFirstResponder()
+    }
+
+    private func start(_ prompt: String?) {
+        let text = prompt?.trimmingCharacters(in: .whitespacesAndNewlines)
+        dismiss(animated: true)
+        onStart(text?.isEmpty == false ? text : nil)
+    }
+
+    func textFieldShouldReturn(_: UITextField) -> Bool {
+        start(field.text)
+        return true
+    }
+}

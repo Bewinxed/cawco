@@ -8,8 +8,22 @@ import UIKit
 final class ProjectViewController: ObservedViewController {
     private let projectId: String
     private let context: ShellContext
+    /// `px-6`, `pt-6`, `pb-6`, and the gap between the two columns.
+    private static let edge = 24.0
+    private let head = UIStackView()
+    private let actions = UIStackView()
+    private var startButton: UIButton!
+    /// One column: the docs, then the rail's cards under them.
     private let scroll = UIScrollView()
     private let page = UIStackView()
+    /// Two: the docs, and the rail beside them.
+    private let mainScroll = UIScrollView()
+    private let mainColumn = UIStackView()
+    private let asideScroll = UIScrollView()
+    private let asideHolder = UIStackView()
+    private let asideColumn = UIStackView()
+    private var asideWidth: NSLayoutConstraint!
+    private var arranged: String?
     private let name = KitLabel(TypeScale.typeTitle, ink: Palette.inkStrong)
     private let folder = KitLabel(TypeScale.typeCode.withWeight(.regular), ink: Palette.inkMuted)
     private let machineGlyph = GlyphView(.server, tint: Palette.inkMuted)
@@ -55,23 +69,49 @@ final class ProjectViewController: ObservedViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = Palette.surfaceRecess
-        scroll.translatesAutoresizingMaskIntoConstraints = false
-        scroll.alwaysBounceVertical = true
-        view.addSubview(scroll)
-        page.axis = .vertical
-        page.spacing = Space.space6
-        page.translatesAutoresizingMaskIntoConstraints = false
-        scroll.addSubview(page)
+        // The header stays; under it the body scrolls as one column, or from
+        // 1024pt as two that scroll apart: the docs, and a 340pt rail (360
+        // from 1280) holding CLAUDE.md, the machine and the sessions.
+        let safe = view.safeAreaLayoutGuide
+        head.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(head)
+        asideColumn.axis = .vertical
+        asideColumn.spacing = 16
+        // The one column carries the page's 24pt inside its scrollport, so a
+        // card's shadow shows in it; each of the two is a scrollport a point
+        // larger than its cards (`-m-px p-px`), which keeps their ring.
+        for (scroller, column, pad) in [(scroll, page, Self.edge), (mainScroll, mainColumn, 1.0), (asideScroll, asideHolder, 1.0)] {
+            scroller.translatesAutoresizingMaskIntoConstraints = false
+            scroller.alwaysBounceVertical = true
+            scroller.contentInset.bottom = Self.edge
+            view.addSubview(scroller)
+            column.axis = .vertical
+            column.translatesAutoresizingMaskIntoConstraints = false
+            scroller.addSubview(column)
+            let top = pad == Self.edge ? 0 : pad
+            NSLayoutConstraint.activate([
+                scroller.topAnchor.constraint(equalTo: head.bottomAnchor, constant: -top),
+                scroller.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+                column.topAnchor.constraint(equalTo: scroller.contentLayoutGuide.topAnchor, constant: top),
+                column.bottomAnchor.constraint(equalTo: scroller.contentLayoutGuide.bottomAnchor),
+                column.leadingAnchor.constraint(equalTo: scroller.frameLayoutGuide.leadingAnchor, constant: pad),
+                column.trailingAnchor.constraint(equalTo: scroller.frameLayoutGuide.trailingAnchor, constant: -pad),
+            ])
+        }
+        // `mt-6` between the docs and what follows them on one column.
+        page.spacing = Self.edge
+        asideWidth = asideScroll.widthAnchor.constraint(equalToConstant: 342)
+        // The page runs under the rail on a wide screen: everything keeps to the safe area.
         NSLayoutConstraint.activate([
-            scroll.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
-            scroll.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-            scroll.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            scroll.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            page.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor, constant: Space.space6),
-            page.bottomAnchor.constraint(equalTo: scroll.contentLayoutGuide.bottomAnchor, constant: -Space.space6),
-            // The page runs under the rail on a wide screen: its content keeps to the safe area.
-            page.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: Space.space6),
-            page.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -Space.space6),
+            head.topAnchor.constraint(equalTo: safe.topAnchor, constant: Self.edge),
+            head.leadingAnchor.constraint(equalTo: safe.leadingAnchor, constant: Self.edge),
+            head.trailingAnchor.constraint(equalTo: safe.trailingAnchor, constant: -Self.edge),
+            scroll.leadingAnchor.constraint(equalTo: safe.leadingAnchor),
+            scroll.trailingAnchor.constraint(equalTo: safe.trailingAnchor),
+            mainScroll.leadingAnchor.constraint(equalTo: safe.leadingAnchor, constant: Self.edge - 1),
+            mainScroll.trailingAnchor.constraint(equalTo: asideScroll.leadingAnchor, constant: -(Self.edge - 2)),
+            asideScroll.trailingAnchor.constraint(equalTo: safe.trailingAnchor, constant: -(Self.edge - 1)),
+            asideWidth,
         ])
 
         // Header: the name, then the folder and the machine it lives on.
@@ -92,6 +132,8 @@ final class ProjectViewController: ObservedViewController {
         let titles = UIStackView(arrangedSubviews: [name, meta])
         titles.axis = .vertical
         titles.spacing = Space.space1
+        // The machine follows the folder; neither stretches to the actions.
+        titles.alignment = .leading
         // The header's actions: Forget project… as the kit's ghost button in muted ink.
         var forgetStyle = UIButton.Configuration.plain()
         forgetStyle.attributedTitle = AttributedString("Forget project…", attributes: AttributeContainer(TypeScale.typeButton.attributes(color: Palette.mutedForeground, tracking: -0.01)))
@@ -106,28 +148,46 @@ final class ProjectViewController: ObservedViewController {
         }
         forget.houseStyle()
         forget.heightAnchor.constraint(equalToConstant: Size.cBtnH).isActive = true
-        let head = UIStackView(arrangedSubviews: [titles, forget])
+        // New session opens its popover from the button's end; Side quest starts one at once.
+        startButton = KitButton.make("New session", variant: .action) { [weak self] in
+            guard let self else { return }
+            KitPopover.present(ProjectStartController { [weak self] prompt in self?.start(scratch: false, prompt: prompt) },
+                               from: startButton, in: self, align: .end)
+        }
+        let quest = KitButton.make("Side quest", variant: .outline) { [weak self] in self?.start(scratch: true, prompt: nil) }
+        actions.addArrangedSubview(startButton)
+        actions.addArrangedSubview(quest)
+        actions.addArrangedSubview(forget)
+        actions.spacing = Space.space2
+        actions.alignment = .center
+        for button in [startButton!, quest, forget] {
+            button.setContentHuggingPriority(.required, for: .horizontal)
+            button.setContentCompressionResistancePriority(.required, for: .horizontal)
+        }
+        actions.setContentHuggingPriority(.required, for: .horizontal)
+        titles.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        // `flex-wrap`, `gap-x-4 gap-y-2`, `pb-4`: the actions drop under the titles where they cannot stand beside them.
+        head.addArrangedSubview(titles)
+        head.addArrangedSubview(actions)
         head.alignment = .center
         head.spacing = Space.space4
-        titles.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        forget.setContentHuggingPriority(.required, for: .horizontal)
-        forget.setContentCompressionResistancePriority(.required, for: .horizontal)
-        page.addArrangedSubview(head)
+        head.isLayoutMarginsRelativeArrangement = true
+        head.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 0, leading: 0, bottom: Space.space4, trailing: 0)
 
         // The repo's own markdown.
         docsView = ProjectDocsView(hub: context.hub)
-        page.addArrangedSubview(docsView)
 
         // Its CLAUDE.md, summarised: the docs card is where it is read.
         memory = ProjectMemoryCard(hub: context.hub)
-        page.addArrangedSubview(memory)
+        asideColumn.addArrangedSubview(memory)
 
         // What its machine has (MachineInventory, MCP servers).
         inventory = MachineInventoryView(hub: context.hub)
-        page.addArrangedSubview(inventory)
+        asideColumn.addArrangedSubview(inventory)
 
         // Sessions, in a card.
         let card = TileView(radius: Radius.radiusLg)
+        card.boxShadow = Shadow.shadowMd
         let title = KitLabel(TypeScale.typeTitle, ink: Palette.inkStrong)
         title.text = "Sessions"
         // The header (`px-4 py-3`), then the rows 6pt apart (`px-3 pb-3`).
@@ -172,7 +232,8 @@ final class ProjectViewController: ObservedViewController {
             body.leadingAnchor.constraint(equalTo: card.leadingAnchor),
             body.trailingAnchor.constraint(equalTo: card.trailingAnchor),
         ])
-        page.addArrangedSubview(card)
+        asideColumn.addArrangedSubview(card)
+        arrange()
 
         missing.text = "No such project."
         missing.translatesAutoresizingMaskIntoConstraints = false
@@ -186,11 +247,15 @@ final class ProjectViewController: ObservedViewController {
     override func refreshContent() {
         let fleet = context.hub.fleet
         guard let project = fleet.projects.first(where: { $0.id == projectId }) else {
-            scroll.isHidden = fleet.fleetRead
+            for part in [head, scroll, mainScroll, asideScroll] as [UIView] { part.isHidden = true }
             missing.isHidden = !fleet.fleetRead
             return
         }
-        scroll.isHidden = false
+        if head.isHidden {
+            head.isHidden = false
+            arranged = nil
+        }
+        arrange()
         missing.isHidden = true
         name.text = project.name
         folder.text = project.cwd
@@ -224,12 +289,9 @@ final class ProjectViewController: ObservedViewController {
             for part in [storedSkeleton, storedRows, empty, moreRow] as [UIView] { part.isHidden = true }
             return
         }
-        // `liveIn`: started from this project, or running in its checkout.
+        // `liveIn`: started from this project, or running in its checkout, in the hub's own order.
         let under = { (cwd: String?) in cwd == project.cwd || (cwd ?? "").hasPrefix(project.cwd + "/") }
-        let live = RailModel.sorted(
-            fleet.rows.filter { $0.isListed && ($0.projectId == project.id || ($0.machineId == project.machineId && under($0.cwd))) },
-            hub: context.hub, home: home, by: .recent
-        )
+        let live = fleet.rows.filter { $0.isListed && ($0.projectId == project.id || ($0.machineId == project.machineId && under($0.cwd))) }
         let mounted = liveFollowed ? live : Array(live.prefix(liveMounted))
         // The path shows on a window 640pt wide or more (`sm:block`), where it is not the card's own.
         let wide = isWide
@@ -359,13 +421,63 @@ final class ProjectViewController: ObservedViewController {
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
-        // The path comes and goes with the page's width.
+        arrange()
+        // The path comes and goes with the window's width.
         if isWide != wasWide {
             wasWide = isWide
             requestRefresh()
         }
     }
 
-    private var isWide: Bool { (view.window?.bounds.width ?? view.bounds.width) >= 640 }
+    /// The window's width, which is what the web's breakpoints read.
+    private var span: Double { Double(view.window?.bounds.width ?? view.bounds.width) }
+    private var isWide: Bool { span >= 640 }
     private var wasWide = false
+
+    /// Puts the page in the shape its width asks for: one column under 1024pt,
+    /// two from there; the docs picked from a select under 768, across the
+    /// reader from 768, down a column beside it from 1280; the header's
+    /// actions beside its titles, or under them where they do not fit.
+    private func arrange() {
+        guard isViewLoaded, !head.isHidden else { return }
+        let span = span
+        let columns = span >= 1024
+        let room = view.bounds.inset(by: view.safeAreaInsets).width - Self.edge * 2
+        let actionsWidth = actions.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize).width
+        let stacked = room - actionsWidth - Space.space4 < 240
+        let shape = "\(columns):\(span >= 1280):\(span >= 768):\(stacked)"
+        guard shape != arranged else { return }
+        arranged = shape
+        docsView.pickerMode = span >= 1280 ? .column : (span >= 768 ? .across : .select)
+        asideWidth.constant = (span >= 1280 ? 360 : 340) + 2
+        if columns {
+            mainColumn.addArrangedSubview(docsView)
+            asideHolder.addArrangedSubview(asideColumn)
+        } else {
+            page.addArrangedSubview(docsView)
+            page.addArrangedSubview(asideColumn)
+        }
+        scroll.isHidden = columns
+        mainScroll.isHidden = !columns
+        asideScroll.isHidden = !columns
+        head.axis = stacked ? .vertical : .horizontal
+        head.alignment = stacked ? .leading : .center
+        head.spacing = stacked ? Space.space2 : Space.space4
+    }
+
+    // MARK: Starts
+
+    /// "New session" and "Side quest": a session here on what the new-session
+    /// form was last set to, opened in its tab as soon as the hub has it.
+    private func start(scratch: Bool, prompt: String?) {
+        guard let project = context.hub.fleet.projects.first(where: { $0.id == projectId }) else { return }
+        Task { @MainActor [weak self, context] in
+            do {
+                let id = try await context.hub.spawnSession(machineId: project.machineId, cwd: project.cwd, projectId: project.id, prompt: prompt, scratch: scratch)
+                context.openSession(id)
+            } catch {
+                Toast.error(error.localizedDescription, in: self?.view)
+            }
+        }
+    }
 }

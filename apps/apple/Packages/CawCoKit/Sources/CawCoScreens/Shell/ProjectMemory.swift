@@ -40,7 +40,7 @@ final class ProjectMemoryCard: TileView {
     init(hub: HubConnection) {
         self.hub = hub
         super.init(radius: Radius.radiusLg)
-        clipsToBounds = true
+        boxShadow = Shadow.shadowMd
         name.text = "CLAUDE.md"
         meta.isHidden = true
         actions.spacing = Space.space2
@@ -64,6 +64,9 @@ final class ProjectMemoryCard: TileView {
         let column = UIStackView(arrangedSubviews: [header, rule, body, footerBox])
         column.axis = .vertical
         column.translatesAutoresizingMaskIntoConstraints = false
+        column.layer.cornerRadius = Radius.radiusLg
+        column.layer.cornerCurve = .continuous
+        column.clipsToBounds = true
         addSubview(column)
         NSLayoutConstraint.activate([
             column.topAnchor.constraint(equalTo: topAnchor),
