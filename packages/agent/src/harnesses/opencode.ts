@@ -1260,6 +1260,8 @@ export class OpencodeSession implements HarnessSession {
   readonly #summaries = new Set<string>();
   /** The compaction parts whose boundary has gone out: a part is updated more than once. */
   readonly #boundaries = new Set<string>();
+  /** A compaction is under way: the session has said so and not yet said otherwise. */
+  #compacting: boolean;
   readonly #costs = new Map<string, number>();
   #costBase = 0;
   readonly #pending = new Map<string, PendingMessage>();
@@ -1376,6 +1378,7 @@ export class OpencodeSession implements HarnessSession {
     this.#client = client;
     this.sessionId = sessionId;
     this.#directory = directory;
+    this.#compacting = false;
     this.#model = model;
     this.#effort = effort;
     this.#permissionMode = permissionMode;
@@ -1473,6 +1476,19 @@ export class OpencodeSession implements HarnessSession {
         if (info.role === "assistant") {
           if (info.summary) {
             this.#summaries.add(info.id);
+          } else if (this.#compacting) {
+            // The model is answering again: the compaction is behind it. A
+            // compaction that ends its turn needs no word here — the turn's
+            // end clears the status — and saying "done" when the summary
+            // landed left the session busy with nothing to show for it, so
+            // the working indicator flashed under the divider.
+            this.#compacting = false;
+            this.#ctx.frame({
+              type: "system",
+              subtype: "status",
+              status: null,
+              session_id: this.sessionId ?? undefined,
+            });
           }
           this.#completion = {
             uuid: info.id,
@@ -1489,15 +1505,6 @@ export class OpencodeSession implements HarnessSession {
             // written while it was being written — the order opencode keeps.
             this.#answering = undefined;
             this.#flushMessages(this.#pending, this.#roles);
-            // The summary is in: the compaction it closes is over.
-            if (info.summary) {
-              this.#ctx.frame({
-                type: "system",
-                subtype: "status",
-                status: null,
-                session_id: this.sessionId ?? undefined,
-              });
-            }
             this.#releaseReads();
           }
         }
@@ -1760,6 +1767,7 @@ export class OpencodeSession implements HarnessSession {
           return;
         }
         this.#boundaries.add(part.id);
+        this.#compacting = true;
         this.#ctx.frame(
           compactBoundary(part, this.#createdOf(part.messageID).timestamp)
         );
@@ -2316,6 +2324,7 @@ export class OpencodeSession implements HarnessSession {
       this.#roles.delete(messageID);
       this.#summaries.delete(messageID);
     }
+    this.#compacting = false;
     for (const [callID, state] of this.#toolsEmitted) {
       if (state === "resolved") {
         this.#toolsEmitted.delete(callID);
