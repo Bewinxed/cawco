@@ -72,7 +72,8 @@ How the apps drive it (one code path each: the dashboard's `Caw.svelte`, Apple's
   file with `from` set to the old status: its arrival opens on the very drawing the old file is
   holding, so the old file goes once the new one has drawn and no frame is empty. At most two
   files are alive. The change starts when he is back on his still, as an exit-time wait, never a
-  cut or a blend.
+  cut or a blend. Every loop ends by holding its first drawing for 6 to 28 frames, and
+  the wait ends as that hold begins: at most 4.0 to 4.9 s into a loop, depending on the loop.
 - **Leaving.** Set `leave` and `exit`. What replaces him lands at once under its own 200 ms
   cross-fade and is never delayed by him; he plays his exit over it and is removed on `gone`.
 
