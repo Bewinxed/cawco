@@ -107,9 +107,8 @@ public enum Palette {
     public static let surfaceFill = Palette.named("surface-fill")
     /// A filled control a step over surface-fill: its hover, and its on state (a parent's child count when its children are open).
     public static let surfaceFillStrong = Palette.named("surface-fill-strong")
+    /// Hover on any control or row, the hover ghost under a list's row (highlight), and what rises over a hovered row. By day two steps past the field, so it shows on the field, the recess and a raised surface alike.
     public static let surfaceHover = Palette.named("surface-hover")
-    /// The hover ghost under a list's row (highlight), and what rises over a hovered row. By day one step past surface-hover, which is the field's own step: on the rail a ghost in it did not show.
-    public static let surfaceGhost = Palette.named("surface-ghost")
     /// The reader's well edge: darker than the well by day, the ink at 8% at night.
     public static let wellEdge = Palette.named("well-edge")
     /// Every divider: the transcript's user-message seam, section rules, the seams between machines and lists. The coral ramp at a subtle strength.

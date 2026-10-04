@@ -1016,13 +1016,15 @@
      bar with room, with the component's own text size and a tighter
      horizontal pad. The shape and the sheet are the component's. The
      data-slot outranks the component's defaults by specificity, not by
-     which stylesheet comes last. */
+     which stylesheet comes last. The hover ghost lifts an unchosen tab's
+     card (surface-recess-deep, by day surface-hover's own step) toward
+     the chosen sheet's surface; by night it is the hover step. */
   :global(.session-tabs[data-slot="tabs"] .ff-tabs-list) {
     --px: 10px;
     --text: var(--text-label);
     --item: 32px;
     --sheet: var(--surface-recess);
-    --tab-hover: var(--surface-hover);
+    --tab-hover: light-dark(var(--surface-recess), var(--surface-hover));
   }
 
   .tab {

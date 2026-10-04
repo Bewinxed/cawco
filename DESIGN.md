@@ -70,8 +70,7 @@ colors:
   surface-shelf: "light-dark(oklch(0.89 0.013 82), oklch(0.156 0.004 70))"
   surface-lift: "light-dark(oklch(0.993 0.004 85), oklch(0.352 0.009 70))"
   surface-fill: "light-dark(oklch(0.92 0.011 83), oklch(0.314 0.008 70))"
-  surface-hover: "light-dark(oklch(0.966 0.008 85), oklch(0.282 0.007 70))"
-  surface-ghost: "light-dark(oklch(0.944 0.01 84), oklch(0.282 0.007 70))"
+  surface-hover: "light-dark(oklch(0.92 0.011 83), oklch(0.282 0.007 70))"
   code-bg: "light-dark(oklch(0.944 0.01 84), oklch(0.156 0.004 70))"
   border-hairline: "light-dark(oklab(0.93584 0.00114568 0.010276), oklab(0.2948 0.00253095 0.00695373))"
   border-control: "light-dark(oklch(0.89 0.013 82), oklch(0.352 0.009 70))"
@@ -691,7 +690,7 @@ Tactile and quiet: a hairline-edged raised block that dips under the hand.
 - **Popover, dropdown, select, context menu, toast** (`kit-pop`): 12px radius, 1px control edge, overlay shadow, 6px padding, raised surface. A popover whose content changes size tweens to the new height over 180ms on the drawer curve.
 - **Motion (origin-aware):** opens from its trigger's side over 260ms on the drawer curve, rising 8px and growing from 0.92 as it fades in. It leaves the same way over 160ms. These are transitions on `data-state`, so a close caught mid-open turns back from where it is. With reduced motion only the fade runs.
 - **Menu item:** 8px radius, 32px tall (44px on a coarse pointer), label role, 10px padding, 16px icons.
-- **Hover ghost and selection pill:** each list has one hover ghost and one selection pill drawn under its rows (`highlight.svelte.ts`). The ghost is filled `surface-ghost`: by day one step past `surface-hover`, which is the field's own step and does not show on the rail. It glides to the row the pointer is on (its mark, its switch and the controls beside it count as the row; between rows, the nearest) over 80ms on ease-in-out and fades in place when the pointer leaves. A menu's ghost follows the highlighted item under arrow keys too. The pill glides to a new selection over 120ms on the drawer curve. A row picked under the ghost becomes the pill at once while the old selection fades where it was, so no frame shows both or neither. On a touch screen a pointer-driven ghost never shows.
+- **Hover ghost and selection pill:** each list has one hover ghost and one selection pill drawn under its rows (`highlight.svelte.ts`). The ghost is filled `surface-hover`, the one hover fill: by day two steps past the field, so it shows on the field, the recess and a raised surface alike. Where the surface under it is already that step (a session tab's card, `surface-recess-deep`), the ghost lifts to `surface-recess` instead. It glides to the row the pointer is on (its mark, its switch and the controls beside it count as the row; between rows, the nearest) over 80ms on ease-in-out and fades in place when the pointer leaves. A menu's ghost follows the highlighted item under arrow keys too. The pill glides to a new selection over 120ms on the drawer curve. A row picked under the ghost becomes the pill at once while the old selection fades where it was, so no frame shows both or neither. On a touch screen a pointer-driven ghost never shows.
 - **Ticks and dots:** a checkbox tick draws itself along its stroke over 160ms (120ms in a menu). A radio dot grows from 0.6 as it fades in. With reduced motion both only fade.
 
 ### Segmented controls and tabs

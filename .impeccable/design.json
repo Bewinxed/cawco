@@ -1128,35 +1128,18 @@
       "surface-hover": {
         "role": "neutral",
         "displayName": "Surface Hover",
-        "canonical": "light-dark(oklch(0.966 0.008 85), oklch(0.282 0.007 70))",
-        "hex": "#f6f3ee",
-        "hexDark": "#2c2926",
-        "tonalRamp": [
-          "#0d0b08",
-          "#272521",
-          "#44423e",
-          "#63615d",
-          "#85827d",
-          "#a7a5a0",
-          "#ccc9c4",
-          "#f1eee9"
-        ]
-      },
-      "surface-ghost": {
-        "role": "neutral",
-        "displayName": "Surface Ghost",
-        "canonical": "light-dark(oklch(0.944 0.01 84), oklch(0.282 0.007 70))",
-        "hex": "#f0ece5",
+        "canonical": "light-dark(oklch(0.92 0.011 83), oklch(0.282 0.007 70))",
+        "hex": "#e8e4dd",
         "hexDark": "#2c2926",
         "tonalRamp": [
           "#0d0b07",
-          "#272521",
-          "#44423e",
-          "#63615d",
-          "#85827d",
-          "#a7a5a0",
-          "#ccc9c4",
-          "#f1eee9"
+          "#28251f",
+          "#45423c",
+          "#64615b",
+          "#85827b",
+          "#a8a49e",
+          "#ccc9c2",
+          "#f2eee7"
         ]
       },
       "code-bg": {

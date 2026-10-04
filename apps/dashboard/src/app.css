@@ -1048,7 +1048,7 @@
 
   :where(.kit-highlight) .kit-ghost {
     display: none;
-    background: var(--surface-ghost);
+    background: var(--surface-hover);
     transition: opacity var(--dur-control) var(--ease-out);
 
     &[data-follow] {

@@ -780,17 +780,8 @@
     },
     "surface-hover": {
       "$type": "color",
-      "$value": "{color.neutral-2}",
-      "$extensions": {
-        "dev.cawco": {
-          "dark": "{color.neutral-4}"
-        }
-      }
-    },
-    "surface-ghost": {
-      "$type": "color",
-      "$value": "{color.neutral-3}",
-      "$description": "The hover ghost under a list's row (highlight), and what rises over a hovered row. By day one step past surface-hover, which is the field's own step: on the rail a ghost in it did not show.",
+      "$value": "{color.neutral-4}",
+      "$description": "Hover on any control or row, the hover ghost under a list's row (highlight), and what rises over a hovered row. By day two steps past the field, so it shows on the field, the recess and a raised surface alike.",
       "$extensions": {
         "dev.cawco": {
           "dark": "{color.neutral-4}"

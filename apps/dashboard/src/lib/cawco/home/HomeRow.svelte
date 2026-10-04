@@ -312,7 +312,7 @@
       inset-block: 0;
       right: var(--peek-end);
       margin: auto 0;
-      background: var(--surface-ghost);
+      background: var(--surface-hover);
       opacity: 0;
     }
     .item[data-active] .peek {

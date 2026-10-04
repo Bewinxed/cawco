@@ -512,11 +512,8 @@
     display: none;
   }
   /* The hover ghost is the kit's (app.css .kit-ghost), cut to the tab's
-     own shape; in a well it sits one register down from the segment. */
-  .ff-tabs-list > :global(.kit-ghost) {
-    background: color-mix(in oklch, var(--surface-hover) 40%, transparent);
-  }
-  /* Folder tabs: the ghost glides over the unchosen tabs' tints and under
+     own shape and filled as the kit fills it: surface-hover, whole.
+     Folder tabs: the ghost glides over the unchosen tabs' tints and under
      the chosen sheet (TabItem: tint 0, ghost 1, sheet 2, contents 3), in
      the tabs' own hover tint. Clicking the tab under it, the sheet wipes
      in over the ghost, so the hover becomes the selection. */
