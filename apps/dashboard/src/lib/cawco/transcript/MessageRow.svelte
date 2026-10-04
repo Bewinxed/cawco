@@ -488,6 +488,14 @@
     border-end-start-radius: 0;
     border-end-end-radius: 0;
   }
+  /* A theme switch is one cross-fade of the whole page (theme.svelte.ts):
+     the well's edge does not fade on its own under it. The page's rule
+     (app.css `theme-flip`) leaves pseudo-elements out for what a universal
+     pseudo-element selector costs, so the well's two are named here. */
+  :global(:root.theme-flip) .well::before,
+  :global(:root.theme-flip) .well::after {
+    transition: none !important;
+  }
   /* Holds the grouped row's clock, floated into the first line. */
   .words {
     display: flow-root;

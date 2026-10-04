@@ -984,6 +984,13 @@
 
 <style>
   .work {
+    /* How far under 260px the rail is: none there and wider, 33px at the
+       narrowest rail (227px). The header's own spacing gives that room back
+       (the gap to the Delegates switch, a tab's inset, the room round a
+       count), so both labels stand whole beside their counts at any width
+       the rail takes: at 227px "Working" and "Finished" were each cut by a
+       pixel beside two-digit counts, and read "Worki…" and "Finish…". */
+    --tight: clamp(0px, 260px - var(--rail-w, 260px), 33px);
     display: flex;
     flex-direction: column;
   }
@@ -994,7 +1001,7 @@
     display: flex;
     align-items: flex-end;
     justify-content: space-between;
-    gap: var(--space-2);
+    gap: calc(var(--space-2) - var(--tight) * 0.09);
     padding: var(--space-1) var(--space-2) 0 0;
     margin-bottom: var(--space-1);
     border-bottom: 1px solid var(--seam);
@@ -1008,7 +1015,7 @@
      rail, lit on the dark one), and hovering an unchosen tab is a lighter
      tint than choosing it. */
   :global(.work-tabs[data-slot="tabs"] .ff-tabs-list) {
-    --px: 6px;
+    --px: calc(6px - var(--tight) * 0.09);
     --text: var(--text-label);
     --item: 32px;
     --sheet: light-dark(var(--surface-raised), var(--surface-hover));
@@ -1019,6 +1026,14 @@
   :global(.work-tabs[data-slot="tabs"] .ff-tabs-list .ff-tab::before) {
     background: none;
   }
+  /* A label to its count (the kit's --gap + 4px), closer on a narrow rail. */
+  :global(.work-tabs[data-slot="tabs"] .ff-tabs-list .ff-tab) {
+    --gap: max(0px, 2px - var(--tight) * 0.06);
+  }
+  /* A label never gives way: the header's spacing does. */
+  :global(.work-tabs[data-slot="tabs"] .ff-tabs-list .hit) {
+    flex-shrink: 0;
+  }
   /* The count, washed in its tab's status ink (the usage tints' strength),
      on the chosen tab only; the other's is a plain numeral. */
   .count {
@@ -1028,8 +1043,8 @@
     place-items: center;
     min-inline-size: 18px;
     block-size: 18px;
-    padding-inline: 3px;
-    margin-inline-end: 2px;
+    padding-inline: calc(3px - var(--tight) * 0.03);
+    margin-inline-end: max(0px, 2px - var(--tight) * 0.06);
     border-radius: var(--radius-xs);
     background: var(--wash);
     color: var(--ink);

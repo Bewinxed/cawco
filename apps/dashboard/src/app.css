@@ -1433,7 +1433,8 @@
 }
 
 /* The flip itself starts no element transitions (theme.svelte.ts). The
-   elements only: no pseudo-element's transition is on a colour, and naming
+   elements only: a pseudo-element whose transition is on a colour names
+   itself where it is styled (the transcript's wells, MessageRow), and naming
    ::before/::after made WebKit resolve both pseudo-elements of every element
    on the page to add the class and again to remove it (a ~20ms longer flip
    frame at 1440). */
