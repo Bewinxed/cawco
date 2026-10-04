@@ -753,24 +753,45 @@ final class MoreCell: HomeCell {
 /// Caw on a fleet with nothing in it yet, or while a machine has not
 /// answered, and the line that says which.
 final class CawCell: HomeCell {
-    private let caw = CawView(status: .ready)
+    /// His place in the column; he is made when the cell is first configured, and again after
+    /// he has left it (`leave(over:)`).
+    private let place = UIView()
+    private var caw: CawView?
     private let line = KitLabel(TypeScale.typeBody, ink: Palette.inkMuted, lines: 0)
 
     override init(frame: CGRect) {
         super.init(frame: frame)
         line.textAlignment = .center
-        let column = UIStackView(arrangedSubviews: [caw, line])
+        place.translatesAutoresizingMaskIntoConstraints = false
+        let column = UIStackView(arrangedSubviews: [place, line])
         column.axis = .vertical
         column.alignment = .center
         column.spacing = Space.space2
         pin(column, insets: NSDirectionalEdgeInsets(top: Space.space4, leading: 0, bottom: Space.space4, trailing: 0))
         NSLayoutConstraint.activate([
-            caw.widthAnchor.constraint(equalToConstant: HomeViewController.cawSide),
-            caw.heightAnchor.constraint(equalToConstant: HomeViewController.cawSide),
+            place.widthAnchor.constraint(equalToConstant: HomeViewController.cawSide),
+            place.heightAnchor.constraint(equalToConstant: HomeViewController.cawSide),
         ])
     }
 
-    func configure(line text: String) {
+    /// The fleet has something in it now and this cell is going: he plays his exit over
+    /// `container`, where the rows that arrive slide in under him.
+    func leave(over container: UIView) {
+        caw?.leave(over: container)
+        caw = nil
+    }
+
+    func configure(line text: String, status: CawStatus) {
+        if let caw {
+            caw.status = status
+        } else {
+            let caw = CawView(status: status)
+            caw.translatesAutoresizingMaskIntoConstraints = true
+            caw.frame = place.bounds
+            caw.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            place.addSubview(caw)
+            self.caw = caw
+        }
         guard text != line.text else {
             return
         }

@@ -1,5 +1,6 @@
 import CawCoCore
 import CawCoDesign
+import CawCoMascot
 import UIKit
 
 /// The home (home/Home.svelte, its phone page): a status line, a headline,
@@ -79,6 +80,8 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
     private var contentRevision = 0
     private var counts = (working: 0, finished: 0, finishedFailed: false)
     private var cawLine = ""
+    /// Nothing is going on, so he sleeps; while a machine is awaited he is awake.
+    private var cawStatus = CawStatus.sleeping
     /// Read in `build()`, so a change to either alone runs the update again.
     private var spendWords = ""
     private var usageStrip: Usage.Strip?
@@ -313,7 +316,7 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
             }, for: .primaryActionTriggered)
         }
         let caw = UICollectionView.CellRegistration<CawCell, Item> { [weak self] cell, _, _ in
-            cell.configure(line: self?.cawLine ?? "")
+            cell.configure(line: self?.cawLine ?? "", status: self?.cawStatus ?? .sleeping)
         }
         let recentHead = UICollectionView.CellRegistration<RecentHeadCell, Item> { [weak self] cell, _, _ in
             guard let self else { return }
@@ -466,6 +469,8 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
             let stage = NeedsCardCell.stageWords(sent)
             let waited = need.raisedAt.map { Naming.span(ms: home.now - $0) } ?? ""
             return AnyHashable([need.title, need.place, asks, waited, stage?.text ?? "", "\(stage?.failed ?? false)", "\(sent.map { $0.stage != .failed } ?? false)", "\(home.live)"])
+        case .caw:
+            return AnyHashable([cawLine, cawStatus.rawValue])
         default:
             return AnyHashable(contentRevision)
         }
@@ -529,6 +534,7 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
         if live, needList.isEmpty, working.isEmpty, finished.isEmpty, recent.isEmpty {
             // Caw only on a fleet with nothing in it yet, or while a machine has not answered.
             let waiting = home.waitingOn
+            cawStatus = waiting.isEmpty ? .sleeping : .ready
             if let first = waiting.first {
                 cawLine = waiting.count > 1
                     ? "Waiting for \(waiting.count) machines to answer."
@@ -596,6 +602,10 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
         // Nothing joined, left, moved or changed what it draws: the list stands as it is.
         if !structural, redrawn.isEmpty, old.sectionIdentifiers == next.sectionIdentifiers {
             return
+        }
+        // The fleet has something in it now: Caw's cell goes, and he plays his exit over the list.
+        if before.contains(.caw), !after.contains(.caw), let at = dataSource.indexPath(for: .caw) {
+            (collectionView.cellForItem(at: at) as? CawCell)?.leave(over: view)
         }
         if !animated || !structural || old.numberOfItems == 0 {
             dataSource.apply(next, animatingDifferences: false)

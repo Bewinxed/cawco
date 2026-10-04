@@ -751,7 +751,7 @@ final class FleetDetailController: ObservedViewController {
     private let home: HomeModel
     private(set) var shown: UIViewController?
     private let empty = UIStackView()
-    private let caw = CawView(status: .ready)
+    private let caw = CawView(status: .loading)
     private let line = KitLabel(TypeScale.typeBody, ink: Palette.inkMuted)
 
     init(hub: HubConnection, home: HomeModel) {
@@ -777,6 +777,12 @@ final class FleetDetailController: ObservedViewController {
         empty.addArrangedSubview(caw)
         empty.addArrangedSubview(line)
         empty.translatesAutoresizingMaskIntoConstraints = false
+        // He plays his exit over the conversation that lands, so he never takes its touches.
+        empty.isUserInteractionEnabled = false
+        caw.onGone = { [weak self] in
+            guard let self else { return }
+            empty.isHidden = shown != nil
+        }
         view.addSubview(empty)
         NSLayoutConstraint.activate([
             empty.centerXAnchor.constraint(equalTo: view.centerXAnchor),
@@ -785,14 +791,38 @@ final class FleetDetailController: ObservedViewController {
     }
 
     override func refreshContent() {
-        let state: CawStatus = hub.state == .unreachable ? .reconnecting : (home.ready ? .ready : .loading)
+        // He moves only while something needs the reader. With sessions merely working he is
+        // awake and still; with nothing going on he sleeps.
+        let state: CawStatus = if hub.state == .unreachable {
+            .reconnecting
+        } else if !home.ready {
+            .loading
+        } else if !home.needs.isEmpty {
+            .needsYou
+        } else if home.working.isEmpty {
+            .sleeping
+        } else {
+            .ready
+        }
         caw.status = state
         line.text = switch state {
         case .reconnecting: "Reaching the hub again…"
         case .loading: "Reading the fleet…"
         default: "Open a session from the list, or start one."
         }
-        empty.isHidden = shown != nil
+        standIn()
+    }
+
+    /// With nothing open, Caw and his line stand in the detail area. Once a conversation is in
+    /// front the line goes and he plays his exit over it; `onGone` then puts the area away.
+    private func standIn() {
+        let open = shown != nil
+        line.isHidden = open
+        if !open {
+            empty.isHidden = false
+        }
+        view.bringSubviewToFront(empty)
+        caw.present = !open
     }
 
     /// The conversation in front, cross-fading over `durControl`.
@@ -807,7 +837,7 @@ final class FleetDetailController: ObservedViewController {
             next.didMove(toParent: self)
             next.view.alpha = old == nil ? 1 : 0
         }
-        empty.isHidden = next != nil
+        standIn()
         guard let old else { return }
         old.willMove(toParent: nil)
         let fade = Motion.easeOut.animator(Motion.durControl) {

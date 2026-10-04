@@ -28,6 +28,8 @@ final class ConnectViewController: ObservedViewController, UITextFieldDelegate {
     private let found = UIStackView()
     private let foundHead = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
     private var connectButton: UIButton!
+    /// Caw on this screen; when the screen goes, Root lets him play his exit over the next one.
+    private(set) var caw: CawView?
     private var shownFound: [HubDiscovery.Found] = []
 
     init(hub: HubConnection, mode: Mode, done: @escaping () -> Void = {}) {
@@ -52,7 +54,9 @@ final class ConnectViewController: ObservedViewController, UITextFieldDelegate {
         column.translatesAutoresizingMaskIntoConstraints = false
 
         if mode != .change {
-            let caw = CawView(status: mode == .firstRun ? .ready : .reconnecting)
+            // First run: no hub yet, so nothing is going on and he sleeps.
+            let caw = CawView(status: mode == .firstRun ? .sleeping : .reconnecting)
+            self.caw = caw
             let box = UIView()
             box.addSubview(caw)
             column.addArrangedSubview(box)
