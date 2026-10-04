@@ -9,8 +9,6 @@
 </script>
 
 <script lang="ts">
-  import caw2x from "#lib/assets/brand/caw-compacted@2x.png";
-  import caw3x from "#lib/assets/brand/caw-compacted@3x.png";
   /**
    * A compaction in the transcript: a wavy vermillion line across the column
    * with "Compacted" set in the middle of it. The whole divider is the button
@@ -18,11 +16,14 @@
    * there is nothing to open, and the button waits disabled. A chevron comes
    * in beside the word under the pointer or keyboard focus, and stays, turned
    * down, while the brief is open; a finger has no hover, so there it is
-   * always shown. Caw, a folded note in his beak, sits before the word: he
-   * is decoration and he is still — a compaction is nothing to attend to —
-   * but for coming in once with the line when one lands live.
+   * always shown. Caw, a folded note in his beak, sits before the word,
+   * drawn from his `compacted` file: he is decoration and he rests — a
+   * compaction is nothing to attend to — but for coming in once, by that
+   * file's own clip, with the line when one lands live.
    */
   import IconChevron from "~icons/solar/alt-arrow-right-bold-duotone";
+  import CawMark from "../home/CawMark.svelte";
+  import { dur } from "../motion/curves.svelte";
   import { unfold } from "../motion/fold.svelte";
   import { morph } from "../motion/morph.svelte";
   import { disclosureAt } from "./disclosure.svelte";
@@ -83,14 +84,13 @@
     <svg aria-hidden="true" class="wave"><path d={WAVE} /></svg>
   </span>
   <span class="mid"
-    ><span aria-hidden="true" class="caw"
-      ><img
-        alt=""
-        height="18"
-        src={caw2x}
-        srcset="{caw2x} 2x, {caw3x} 3x"
-        width="18"
-      ></span
+    ><span class="caw"
+      ><CawMark
+        arrival={lead === null ? null : `${row.session}:${row.key}`}
+        delay={lead === null ? 0 : dur("--dur-rail") + lead}
+        size={18}
+        status="compacted"
+      /></span
     >Compacted<span class="chev"><IconChevron aria-hidden="true" /></span></span
   >
   <span class="arm">
@@ -174,33 +174,14 @@
     white-space: nowrap;
     translate: calc(var(--chev) * var(--room) * -1) 0;
   }
-  /* Caw's slot: his frame's 18px square, its middle on the word's x-height.
-     The still stands in it; the play-once arrival strip is cut to the same
-     square and ends on this still, so it can run here on a live arrival and
-     change nothing around it.
-     He is drawn in near-black with a near-white note, so one or the other
-     melts into either page. A keyline one pixel wide, cast from whatever
-     frame is showing, gives both an edge: the mascot kit's own cream rim
-     (Ivory, `--paper`) at night, muted ink by day, where the kit has no
-     line and the note would otherwise be lost. */
+  /* Caw's slot: his still's 18px box, its middle on the word's x-height.
+     His rim and his coming in draw a little past it and take no room. */
   .caw {
-    --key: max(var(--dpx, 1px), round(1px, var(--dpx, 1px)));
-    --rim: light-dark(var(--ink-muted), var(--paper));
     display: inline-block;
     vertical-align: middle;
     inline-size: 18px;
     block-size: 18px;
     margin-inline-end: var(--c-pill-gap);
-    filter: drop-shadow(var(--key) 0 0 var(--rim))
-      drop-shadow(calc(var(--key) * -1) 0 0 var(--rim))
-      drop-shadow(0 var(--key) 0 var(--rim))
-      drop-shadow(0 calc(var(--key) * -1) 0 var(--rim));
-
-    & img {
-      display: block;
-      inline-size: 100%;
-      block-size: 100%;
-    }
   }
   /* A zero-width box on the word's line, `middle` setting its mark on the
      word's x-height; the mark hangs out of it after the gap. */
@@ -252,11 +233,6 @@
         filter var(--chev-dur) var(--chev-ease),
         rotate var(--dur-toggle) var(--ease-in-out);
     }
-    /* Landed live, Caw comes in once with the line. */
-    .arriving .caw {
-      animation: caw-in var(--dur-pop) var(--ease-out)
-        calc(var(--dur-rail) + var(--lead)) backwards;
-    }
     /* Pressed: the centre gives, the line holds. A divider is as wide as the
        column, and scaling all of it would move its ends by pixels. */
     .divider:active:not(:disabled) .mid {
@@ -299,12 +275,6 @@
   @keyframes wave-draw {
     from {
       stroke-dashoffset: var(--run);
-    }
-  }
-  @keyframes caw-in {
-    from {
-      opacity: 0;
-      scale: 0.9;
     }
   }
 

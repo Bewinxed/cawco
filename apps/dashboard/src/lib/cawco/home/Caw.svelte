@@ -12,7 +12,8 @@
     | "trying"
     | "loading"
     | "reconnecting"
-    | "sleeping";
+    | "sleeping"
+    | "compacted";
 
   /**
    * The status files, as the build emits them: URLs only, so a file is
@@ -69,6 +70,118 @@
    * immutable, and they are the very ones the runtime and fileBytes fetch.
    */
   export const PREFETCHES = [riveWasm, fileUrl("loading")];
+
+  /** The files' 592 px artboard and the 512 px still box in it, at (43, 40). */
+  const ARTBOARD = 592;
+  const BOX = { x: 43, y: 40, side: 512 };
+
+  /** Where his still's box goes on a canvas, in that canvas's own pixels. */
+  export interface CawBox {
+    side: number;
+    x: number;
+    y: number;
+  }
+
+  /**
+   * Caw on a canvas the caller owns, for a place too small or too many for
+   * a Caw of its own (a mark beside a word, on every row of a list): the
+   * same runtime, WASM and file bytes as the component, driven through the
+   * runtime's low-level API so the caller decides when he moves and when he
+   * is drawn. His still's box is put at `box`; the rest of the artboard
+   * draws past it as far as the canvas reaches.
+   */
+  export interface CawStage {
+    dispose: () => void;
+    /**
+     * His coming in, played once on the runtime's frames. `landed` is called
+     * in the frame he reaches his still, already drawn. Returns its stop.
+     */
+    enter: (landed: () => void) => () => void;
+    /** His still, drawn once: the scheme's rim settled, nothing left to play. */
+    rest: () => void;
+  }
+
+  export async function stageCaw(
+    status: CawStatus,
+    canvas: HTMLCanvasElement,
+    box: CawBox,
+    dark: boolean
+  ): Promise<CawStage> {
+    const [module, buffer] = await Promise.all([
+      riveRuntime(),
+      fileBytes(status),
+    ]);
+    const rive = await module.RuntimeLoader.awaitInstance();
+    const file = await rive.load(new Uint8Array(buffer));
+    const artboard = file.artboardByName("Caw");
+    const machine = new rive.StateMachineInstance(
+      artboard.stateMachineByName("CawStates"),
+      artboard
+    );
+    const caw = file.defaultArtboardViewModel(artboard).defaultInstance();
+    machine.bindViewModelInstance(caw);
+    caw.boolean("dark").value = dark;
+    const entered = caw.trigger("entered");
+    const renderer = rive.makeRenderer(canvas);
+    // Counted on the page's own timeline: how many are alive is a mark's
+    // open count less its gone count.
+    performance.mark(`caw stage ${status}`);
+    const unit = box.side / BOX.side;
+    const frame = {
+      minX: box.x - BOX.x * unit,
+      minY: box.y - BOX.y * unit,
+      maxX: box.x + (ARTBOARD - BOX.x) * unit,
+      maxY: box.y + (ARTBOARD - BOX.y) * unit,
+    };
+    const draw = () => {
+      renderer.clear();
+      renderer.save();
+      renderer.align(
+        rive.Fit.contain,
+        rive.Alignment.center,
+        frame,
+        artboard.bounds
+      );
+      artboard.draw(renderer);
+      renderer.restore();
+      renderer.flush();
+    };
+    return {
+      rest() {
+        // With less motion the file holds his still; a second of its clock
+        // lets the scheme's rim, which fades in over 200ms, settle.
+        caw.boolean("reducedMotion").value = true;
+        caw.enum("from").value = "none";
+        for (let step = 0; step < 60; step += 1) {
+          machine.advanceAndApply(1 / 60);
+        }
+        draw();
+        rive.resolveAnimationFrame();
+      },
+      enter(landed) {
+        caw.enum("from").value = "none";
+        let last: number | undefined;
+        let request = rive.requestAnimationFrame(function tick(now) {
+          machine.advanceAndApply(last === undefined ? 0 : (now - last) / 1000);
+          last = now;
+          draw();
+          if (entered.hasChanged) {
+            landed();
+            return;
+          }
+          request = rive.requestAnimationFrame(tick);
+        });
+        return () => rive.cancelAnimationFrame(request);
+      },
+      dispose() {
+        performance.mark(`caw stage ${status} gone`);
+        renderer.delete();
+        machine.delete();
+        artboard.delete();
+        file.unref();
+      },
+    };
+  }
 </script>
 
 <script lang="ts">
@@ -125,10 +238,6 @@
     /** Side of Caw's still in px; the artboard around it draws past it. */
     size?: number;
   } = $props();
-
-  /** The files' 592 px artboard and the 512 px still box in it, at (43, 40). */
-  const ARTBOARD = 592;
-  const BOX = { x: 43, y: 40, side: 512 };
 
   interface Layer {
     /** When the status was asked for, for the performance marks. */
