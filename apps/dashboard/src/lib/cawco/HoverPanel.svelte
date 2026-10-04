@@ -211,10 +211,11 @@
       position: absolute;
     }
   }
-  /* Over a row of chips: at its chip, pulled back inside the row's end. */
+  /* Over a row of chips: at its chip, pulled back inside the row's end, and
+     raised by --rise over whatever stands on the row between them. */
   .panel.above {
     position: absolute;
-    inset-block-end: calc(100% + 4px);
+    inset-block-end: calc(100% + 4px + var(--rise, 0px));
     inset-inline-start: 0;
     translate: max(0px, min(var(--x), calc(var(--span) - 100%))) 0;
     transform-origin: var(--origin) 100%;

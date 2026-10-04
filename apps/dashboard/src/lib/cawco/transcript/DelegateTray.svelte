@@ -7,6 +7,11 @@
    * doing in words and one mark, opens a panel with the detail on hover or
    * press, and leaves on its own once the work is done. Failed work stays
    * until it is dismissed, on every screen at once.
+   *
+   * Chips that do not fit the row stand behind a "+N" chip, and come out of
+   * it as a fan: the same chips, in a column over "+N", unfolding from its
+   * box and folding back into it. A delegate is drawn one way, in the row
+   * or in the fan.
    */
   import type { WorkItemSummary } from "@cawco/core";
   import { untrack } from "svelte";
@@ -83,6 +88,7 @@
   }
 
   const panelId = $props.id();
+  const fanId = `${panelId}-fan`;
   /** Delegates that existed before this tray: their chips are simply there. */
   const mountedAt = Date.now();
 
@@ -152,6 +158,9 @@
   let hovering = $state(false);
   let focusedKey = $state<string | null>(null);
   let openKey = $state<string | null>(null);
+  /** The fan over "+N" is out; `fanPinned`, by a press, until the next one. */
+  let fanOpen = $state(false);
+  let fanPinned = $state(false);
 
   const TICK = 250;
 
@@ -180,7 +189,7 @@
    * is in view; otherwise it stays out its hold and goes.
    */
   function holdFinished(now: number): void {
-    const paused = document.hidden || hovering || openKey !== null;
+    const paused = document.hidden || hovering || openKey !== null || fanOpen;
     for (const { item, tone, entry } of chips) {
       if (!(tone === "done" || tone === "cancelled")) {
         continue;
@@ -254,7 +263,9 @@
    */
   function fly(item: WorkItemSummary, target: HTMLElement): void {
     const chip = chipEl(item.id);
-    if (!(chip && motionOk.current)) {
+    // A chip folded away behind "+N" has nowhere to lift off from.
+    const seen = chip?.checkVisibility({ visibilityProperty: true });
+    if (!(chip && seen && motionOk.current)) {
       left.add(item.id);
       target.animate([{ opacity: 0 }, { opacity: 1 }], {
         duration: dur("--dur-menu"),
@@ -353,9 +364,11 @@
   });
   const shown = $derived(chips.slice(0, fit));
   const hidden = $derived(chips.slice(fit));
+  /** Every chip that can be reached, in order: the row, "+N", then the open fan from "+N" up. */
   const keys = $derived([
     ...shown.map((chip) => chip.item.id),
     ...(hidden.length ? ["more"] : []),
+    ...(fanOpen ? hidden.map((chip) => chip.item.id) : []),
   ]);
 
   /* ---- words ---------------------------------------------------------- */
@@ -455,13 +468,20 @@
   let row = $state<HTMLElement>();
   let pinned = $state(false);
   let gliding = $state(false);
-  let place = $state({ x: 0, span: 0, origin: 0, room: 320 });
+  let place = $state({ x: 0, span: 0, origin: 0, room: 320, rise: 0 });
   let dwell: ReturnType<typeof setTimeout> | undefined;
   let closing: ReturnType<typeof setTimeout> | undefined;
 
   const fine = () => matchMedia("(hover: hover) and (pointer: fine)").matches;
   const chipEl = (key: string) =>
-    row?.querySelector<HTMLElement>(`[data-key="${CSS.escape(key)}"]`) ?? null;
+    root?.querySelector<HTMLElement>(`[data-key="${CSS.escape(key)}"]`) ?? null;
+  /** The room over the tray, up to the top of the composer's dock. */
+  const roomOver = (tray: HTMLElement): number => {
+    const dock = tray.closest(".dock") ?? document.documentElement;
+    return (
+      tray.getBoundingClientRect().top - dock.getBoundingClientRect().top - 16
+    );
+  };
 
   function open(key: string, pin: boolean): void {
     clearTimeout(dwell);
@@ -471,17 +491,17 @@
       return;
     }
     // The panel stands at its chip; its own width (it sizes to its content)
-    // pulls it back inside the row's right edge, in CSS.
-    const x = Math.max(0, chip.offsetLeft);
-    const dock = root.closest(".dock") ?? document.documentElement;
-    const room =
-      root.getBoundingClientRect().top - dock.getBoundingClientRect().top;
+    // pulls it back inside the row's right edge, in CSS. A chip in the fan
+    // has the fan's place, and its panel stands over the whole fan.
+    const fanned = fan?.contains(chip) ?? false;
+    const rise = fanned ? (fan?.offsetHeight ?? 0) : 0;
     gliding = openKey !== null && openKey !== key;
     place = {
-      x,
+      x: fanned ? fanBox.x : Math.max(0, chip.offsetLeft),
       span: row.clientWidth,
       origin: chip.offsetWidth / 2,
-      room: Math.min(320, room - 16),
+      room: Math.min(320, roomOver(root) - rise),
+      rise,
     };
     openKey = key;
     pinned = pin || pinned;
@@ -494,6 +514,102 @@
     gliding = false;
   }
 
+  /* ---- the fan: what "+N" holds, unfolded over it --------------------- */
+
+  let fan = $state<HTMLElement>();
+  /**
+   * Where the fan stands: at "+N" (`x`), pulled back inside the row's end
+   * by its widest chip (`w`), which leaves "+N" `dx` to the side of it; and
+   * the room over the tray, past which it scrolls (`tall`).
+   */
+  let fanBox = $state({ x: 0, dx: 0, w: 0, room: 320, tall: false });
+
+  function measureFan(): void {
+    const more = chipEl("more");
+    if (!(more && fan && root)) {
+      return;
+    }
+    const leaves = [...fan.querySelectorAll<HTMLElement>(".leaf")];
+    const w = Math.max(0, ...leaves.map((leaf) => leaf.offsetWidth));
+    const x = Math.max(0, Math.min(more.offsetLeft, root.clientWidth - w));
+    const room = roomOver(root);
+    fanBox = {
+      x,
+      w,
+      room,
+      dx: more.offsetLeft - x,
+      tall: fan.scrollHeight > room,
+    };
+  }
+  // The row changed (a chip came or went, the window resized): "+N" stands
+  // somewhere else, and holds other chips.
+  $effect(() => {
+    // biome-ignore lint/complexity/noVoid: the row's chips and width place the fan.
+    void [keys, rowWidth, hidden.length];
+    untrack(measureFan);
+  });
+
+  function openFan(pin: boolean): void {
+    clearTimeout(dwell);
+    clearTimeout(closing);
+    measureFan();
+    fanOpen = true;
+    fanPinned = pin || fanPinned;
+    // A fan taller than its room opens at "+N", its nearest chips.
+    if (fan && fanBox.tall) {
+      fan.scrollTop = fan.scrollHeight;
+    }
+  }
+  function closeFan(): void {
+    // Focus inside the fan goes back to "+N" as the fan folds into it.
+    if (fan?.contains(document.activeElement)) {
+      chipEl("more")?.focus();
+    }
+    fanOpen = false;
+    fanPinned = false;
+  }
+  /** The panel and the fan, both. */
+  function shut(): void {
+    close();
+    closeFan();
+  }
+  // Nothing left behind "+N": the fan is over.
+  $effect(() => {
+    if (hidden.length === 0 && fanOpen) {
+      untrack(closeFan);
+    }
+  });
+
+  /**
+   * A chip leaving the open fan (its delegate finished, the row made room
+   * for it) goes the way the fan closes: back into "+N", fading as it gets
+   * there. The chips over it step down by their own transition.
+   */
+  function fanOut(node: HTMLElement): TransitionConfig {
+    if (!fanOpen) {
+      return { duration: 0 };
+    }
+    if (!motionOk.current) {
+      return {
+        duration: dur("--dur-exit"),
+        easing: easeOut,
+        css: (t) => `opacity: ${t}`,
+      };
+    }
+    const up = Number.parseFloat(
+      getComputedStyle(node).translate.split(" ")[1]
+    );
+    const down = node.offsetHeight;
+    const cut = node.offsetWidth - (chipEl("more")?.offsetWidth ?? 0);
+    const { dx } = fanBox;
+    return {
+      duration: dur("--dur-exit"),
+      easing: easeOut,
+      css: (t, u) =>
+        `pointer-events: none; opacity: ${t}; translate: ${(u * dx).toFixed(2)}px ${(t * up + u * down).toFixed(2)}px; clip-path: inset(0 ${(u * cut).toFixed(2)}px 0 0 round var(--radius-sm))`,
+    };
+  }
+
   // A chip that leaves takes its panel with it.
   $effect(() => {
     if (openKey && !keys.includes(openKey)) {
@@ -501,19 +617,22 @@
     }
   });
 
-  // An outside press closes a pinned panel.
+  // An outside press closes a pinned panel, and a pinned fan.
   $effect(() => {
-    if (!(openKey && pinned)) {
+    if (!((openKey && pinned) || (fanOpen && fanPinned))) {
       return;
     }
     const press = (event: PointerEvent) => {
       if (!root?.contains(event.target as Node)) {
-        close();
+        shut();
       }
     };
     document.addEventListener("pointerdown", press, true);
     return () => document.removeEventListener("pointerdown", press, true);
   });
+
+  /** How long the pointer rests on a chip before what it opens opens. */
+  const DWELL = 350;
 
   function onchipenter(key: string): void {
     if (!fine()) {
@@ -521,10 +640,35 @@
     }
     clearTimeout(closing);
     clearTimeout(dwell);
-    if (openKey !== null && !pinned) {
+    if (key === "more") {
+      // From a chip to "+N": that chip's panel goes, the fan comes.
+      if (openKey !== null && !pinned) {
+        close();
+        openFan(false);
+      } else if (!fanOpen) {
+        dwell = setTimeout(() => openFan(false), DWELL);
+      }
+      return;
+    }
+    const fanned = hidden.some((chip) => chip.item.id === key);
+    if (fanOpen && !(fanPinned || fanned)) {
+      closeFan();
+    }
+    // A panel already open moves along the row with the pointer. In the fan
+    // it waits for the pointer to rest: the panel stands over the fan, and
+    // the way up to it crosses the chips above.
+    if (openKey !== null && !(pinned || fanned)) {
       open(key, false);
-    } else if (openKey === null) {
-      dwell = setTimeout(() => open(key, false), 350);
+    } else if (openKey === null || (fanned && !pinned)) {
+      dwell = setTimeout(() => open(key, false), DWELL);
+    }
+  }
+  function onmorepress(): void {
+    close();
+    if (fanOpen && fanPinned) {
+      closeFan();
+    } else {
+      openFan(true);
     }
   }
   function onpress(key: string): void {
@@ -534,7 +678,7 @@
     );
     const report = done ? reportOf(done.item)?.id : undefined;
     if (report) {
-      close();
+      shut();
       trayReveal.set(parentId, report);
       return;
     }
@@ -547,8 +691,20 @@
   function onrootleave(): void {
     hovering = false;
     clearTimeout(dwell);
-    if (fine() && !pinned && openKey !== null) {
-      closing = setTimeout(close, 300);
+    if (!fine()) {
+      return;
+    }
+    const panel = openKey !== null && !pinned;
+    const fanned = fanOpen && !fanPinned;
+    if (panel || fanned) {
+      closing = setTimeout(() => {
+        if (panel) {
+          close();
+        }
+        if (fanned) {
+          closeFan();
+        }
+      }, 300);
     }
   }
 
@@ -561,11 +717,18 @@
     }
   });
   function onkeydown(event: KeyboardEvent): void {
+    // Escape closes the panel, then the fan.
     if (event.key === "Escape" && openKey) {
       event.preventDefault();
       const key = openKey;
       close();
       chipEl(key)?.focus();
+      return;
+    }
+    if (event.key === "Escape" && fanOpen) {
+      event.preventDefault();
+      closeFan();
+      chipEl("more")?.focus();
       return;
     }
     const at = keys.indexOf(
@@ -578,6 +741,9 @@
     const to = {
       ArrowRight: Math.min(keys.length - 1, at + 1),
       ArrowLeft: Math.max(0, at - 1),
+      // The fan runs up from "+N".
+      ArrowUp: Math.min(keys.length - 1, at + 1),
+      ArrowDown: Math.max(0, at - 1),
       Home: 0,
       End: keys.length - 1,
     }[event.key];
@@ -685,6 +851,78 @@
   >
 {/snippet}
 
+<!-- A delegate's chip, in the row or in the fan: `at` is its place in the
+     keyboard's order. A chip in the fan is moved by the fan, not by the
+     row's reflow, and a mark never flies to one folded away. -->
+{#snippet chipButton(
+  chip: Chip,
+  at: number,
+  fanned: boolean
+)}
+  {@const { item, tone, entry } = chip}
+  {@const flies = entry === "fly" && !fanned}
+  <button
+    aria-controls={panelId}
+    aria-expanded={openKey === item.id}
+    aria-label="{item.title}, {stateWords(chip)}"
+    class="chip touch-hit {tone}"
+    data-flip={fanned ? undefined : "pop box"}
+    data-flip-enter={fanned || entry === "fade" ? undefined : "own"}
+    data-key={item.id}
+    onblur={() => {
+      focusedKey = null;
+    }}
+    onclick={() => onpress(item.id)}
+    onfocus={() => {
+      focusedKey = item.id;
+      current = at;
+    }}
+    onkeydown={fanned ? onkeydown : undefined}
+    onmousedown={(event) => event.preventDefault()}
+    onpointerenter={() => onchipenter(item.id)}
+    tabindex={current === at ? 0 : -1}
+    type="button"
+    class:finished={tone === "done" && (item.endedAt ?? 0) > mountedAt}
+    class:fly={flies}
+  >
+    {@render mark(item, flies)}
+    <span aria-hidden="true" class="words">
+      <span class="title">{item.title}</span>
+      {#if tone === "needs"}
+        <span class="note">{questionWords(chip.questions)}</span>
+      {:else if tone === "failed" || tone === "cancelled"}
+        <span class="note">{tone}</span>
+      {/if}
+    </span>
+    <span aria-hidden="true" class="slot">
+      {#key slotOf(tone)}
+        <span
+          class="glyph"
+          in:slotIn={tone === "done" || tone === "failed"}
+          out:slotOut
+        >
+          {#if tone === "starting"}
+            <Spinner aria-hidden="true" role="presentation" />
+          {:else if tone === "running"}
+            <span
+              class="dot"
+              style:animation-delay="-{Date.now() % 2000}ms"
+            ></span>
+          {:else if tone === "asked" || tone === "needs"}
+            <IconAsk />
+          {:else if tone === "done"}
+            <IconSuccess />
+          {:else if tone === "failed"}
+            <IconWarningTriangle />
+          {:else}
+            <IconStop />
+          {/if}
+        </span>
+      {/key}
+    </span>
+  </button>
+{/snippet}
+
 <div class="host" bind:clientWidth={rowWidth}>
   {#if chips.length}
     <div
@@ -709,76 +947,17 @@
         {@attach reflow()}
       >
         {#each shown as chip, i (chip.item.id)}
-          {@const { item, tone, entry } = chip}
-          <button
-            aria-controls={panelId}
-            aria-expanded={openKey === item.id}
-            aria-label="{item.title}, {stateWords(chip)}"
-            class="chip touch-hit {tone}"
-            data-flip="pop box"
-            data-flip-enter={entry === "fade" ? undefined : "own"}
-            data-key={item.id}
-            onblur={() => {
-              focusedKey = null;
-            }}
-            onclick={() => onpress(item.id)}
-            onfocus={() => {
-              focusedKey = item.id;
-              current = i;
-            }}
-            onmousedown={(event) => event.preventDefault()}
-            onpointerenter={() => onchipenter(item.id)}
-            tabindex={current === i ? 0 : -1}
-            type="button"
-            class:finished={tone === "done" && (item.endedAt ?? 0) > mountedAt}
-            class:fly={entry === "fly"}
-          >
-            {@render mark(item, entry === "fly")}
-            <span aria-hidden="true" class="words">
-              <span class="title">{item.title}</span>
-              {#if tone === "needs"}
-                <span class="note">{questionWords(chip.questions)}</span>
-              {:else if tone === "failed" || tone === "cancelled"}
-                <span class="note">{tone}</span>
-              {/if}
-            </span>
-            <span aria-hidden="true" class="slot">
-              {#key slotOf(tone)}
-                <span
-                  class="glyph"
-                  in:slotIn={tone === "done" || tone === "failed"}
-                  out:slotOut
-                >
-                  {#if tone === "starting"}
-                    <Spinner aria-hidden="true" role="presentation" />
-                  {:else if tone === "running"}
-                    <span
-                      class="dot"
-                      style:animation-delay="-{Date.now() % 2000}ms"
-                    ></span>
-                  {:else if tone === "asked" || tone === "needs"}
-                    <IconAsk />
-                  {:else if tone === "done"}
-                    <IconSuccess />
-                  {:else if tone === "failed"}
-                    <IconWarningTriangle />
-                  {:else}
-                    <IconStop />
-                  {/if}
-                </span>
-              {/key}
-            </span>
-          </button>
+          {@render chipButton(chip, i, false)}
         {/each}
         {#if hidden.length}
           <button
-            aria-controls={panelId}
-            aria-expanded={openKey === "more"}
+            aria-controls={fanId}
+            aria-expanded={fanOpen}
             aria-label="{hidden.length} more delegates"
             class="chip more touch-hit"
             data-flip="pop"
             data-key="more"
-            onclick={() => onpress("more")}
+            onclick={onmorepress}
             onfocus={() => {
               current = shown.length;
             }}
@@ -793,6 +972,31 @@
         {/if}
       </div>
 
+      <!-- The fan: what "+N" holds, as chips, in a column over it. Always
+           laid out, folded into "+N" until it opens, so opening and closing
+           are one transition a pointer can turn round half-way. -->
+      <div
+        class="fan"
+        id={fanId}
+        inert={held || !fanOpen}
+        bind:this={fan}
+        style:--dx="{fanBox.dx}px"
+        style:--fan-w="{fanBox.w}px"
+        style:--fan-x="{fanBox.x}px"
+        style:--n={hidden.length}
+        style:--room="{fanBox.room}px"
+        class:open={fanOpen}
+        class:tall={fanBox.tall}
+      >
+        <ul aria-label="More delegates" class="stack">
+          {#each hidden as chip, j (chip.item.id)}
+            <li class="leaf" style:--i={j} out:fanOut>
+              {@render chipButton(chip, shown.length + 1 + j, true)}
+            </li>
+          {/each}
+        </ul>
+      </div>
+
       <!-- The house hover panel; its mousedown is swallowed so a phone's
            keyboard stays up (its controls are links and buttons). -->
       <HoverPanel
@@ -800,27 +1004,14 @@
         id={panelId}
         key={openKey}
         onmousedown={(event) => event.preventDefault()}
+        onpointerenter={() => clearTimeout(dwell)}
         role="presentation"
         side="above"
-        style="--origin: {place.origin}px; --room: {place.room}px; --span: {place.span}px; --x: {place.x}px"
+        style="--origin: {place.origin}px; --rise: {place.rise}px; --room: {place.room}px; --span: {place.span}px; --x: {place.x}px"
         watch={openInstance}
       >
-        {#snippet children(
-          key
-        )}
-          {#if key === "more"}
-            <ul class="list">
-              {#each hidden as chip (chip.item.id)}
-                <li>
-                  <a class="prow" href={hrefOf(chip.item)}>
-                    {@render mark(chip.item, false)}
-                    <span class="ptitle">{chip.item.title}</span>
-                    <span class="pstate">{stateWords(chip)}</span>
-                  </a>
-                </li>
-              {/each}
-            </ul>
-          {:else if openChip}
+        {#snippet children()}
+          {#if openChip}
             {@const { item, tone } = openChip}
             <div class="phead">
               {@render mark(item, false)}
@@ -892,6 +1083,8 @@
      surface of its own, one line, never wrapping or scrolling sideways. Its
      chip and step are the app's tray tokens, the row the composer keeps. */
   .tray {
+    /* "+N"'s width: the chip's, and the box the fan folds into. */
+    --more: 52px;
     position: relative;
     padding-block-end: var(--c-tray-gap);
   }
@@ -1059,7 +1252,7 @@
   .more {
     flex: none;
     min-inline-size: 0;
-    inline-size: 52px;
+    inline-size: var(--more);
     justify-content: center;
     font-variant-numeric: tabular-nums;
   }
@@ -1184,38 +1377,109 @@
     display: flex;
     gap: var(--space-2);
   }
-  .list {
-    list-style: none;
+
+  /* The fan. It stands on the row's top edge at "+N" (--fan-x: pulled back
+     inside the row's end by its widest chip) and is as tall as its chips,
+     each a step (a chip and the row's gap) over the last. A leaf is placed
+     by translate alone, from the stack's foot: folded, on "+N"'s own box
+     and clipped to its width, so the stack reads as "+N" itself; open, in
+     its slot. Open, close, a turn half-way and a chip joining or leaving
+     are therefore one transition each, picked up from wherever it is. */
+  .fan {
+    --step: calc(var(--c-tray-chip) + var(--space-2));
+    position: absolute;
+    z-index: 1;
+    inset-block-end: 100%;
+    inset-inline-start: 0;
+    inline-size: var(--fan-w);
+    block-size: min(calc(var(--n) * var(--step)), var(--room));
+    translate: var(--fan-x) 0;
+    pointer-events: none;
+  }
+  /* Taller than the room over the tray: it scrolls there, from "+N" up. */
+  .fan.tall.open {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    pointer-events: auto;
+  }
+  .stack {
+    position: relative;
+    block-size: calc(var(--n) * var(--step));
     margin: 0;
     padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
+    list-style: none;
   }
-  .prow {
+  .leaf {
+    /* How far it waits its turn: the nearest chip leaves "+N" first and is
+       the last back in. Five deep, like every cascade here. */
+    --out: min(var(--i), 4);
+    --back: min(calc(var(--n) - 1 - var(--i)), 4);
+    position: absolute;
+    inset-block-end: 0;
+    inset-inline-start: 0;
     display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    min-block-size: 30px;
-    padding-inline: var(--space-2);
-    margin-inline: calc(var(--space-2) * -1);
-    border-radius: var(--radius-sm);
-    color: var(--ink-strong);
-    text-decoration: none;
-    font-size: var(--text-label);
+    inline-size: max-content;
+    opacity: 0;
+    visibility: hidden;
+    translate: var(--dx) var(--c-tray-chip);
+    clip-path: inset(0 calc(100% - var(--more)) 0 0 round var(--radius-sm));
+    transition:
+      opacity var(--dur-exit) var(--ease-out)
+      calc(var(--back) * var(--dur-stagger)),
+      visibility 0s linear
+      calc(var(--dur-exit) + var(--back) * var(--dur-stagger));
 
-    @media (pointer: coarse) {
-      min-block-size: 44px;
+    & > .chip {
+      flex: 0 1 auto;
     }
   }
-  @media (hover: hover) and (pointer: fine) {
-    .prow:hover {
-      background: var(--surface-hover);
+  .fan.open .leaf {
+    opacity: 1;
+    visibility: visible;
+    translate: 0 calc((var(--i) * var(--step) + var(--space-2)) * -1);
+    /* Past its own edge, so the chip's shadow is drawn whole. */
+    clip-path: inset(calc(var(--space-2) * -1) round var(--radius-sm));
+    transition:
+      opacity var(--dur-morph) var(--ease-out)
+      calc(var(--out) * var(--dur-stagger)),
+      visibility 0s;
+
+    /* A chip that joins the open fan comes out of "+N" like the rest. */
+    @starting-style {
+      opacity: 0;
+      translate: var(--dx) var(--c-tray-chip);
+      clip-path: inset(0 calc(100% - var(--more)) 0 0 round var(--radius-sm));
     }
   }
-  .pstate {
-    flex: none;
-    font-size: var(--text-meta);
-    color: var(--ink-muted);
+  @media (prefers-reduced-motion: no-preference) {
+    .leaf {
+      transition:
+        opacity var(--dur-exit) var(--ease-out)
+        calc(var(--back) * var(--dur-stagger)),
+        translate var(--dur-exit) var(--ease-out)
+        calc(var(--back) * var(--dur-stagger)),
+        clip-path var(--dur-exit) var(--ease-out)
+        calc(var(--back) * var(--dur-stagger)),
+        visibility 0s linear
+        calc(var(--dur-exit) + var(--back) * var(--dur-stagger));
+    }
+    .fan.open .leaf {
+      transition:
+        opacity var(--dur-morph) var(--ease-out)
+        calc(var(--out) * var(--dur-stagger)),
+        translate var(--dur-morph) var(--ease-out)
+        calc(var(--out) * var(--dur-stagger)),
+        clip-path var(--dur-morph) var(--ease-out)
+        calc(var(--out) * var(--dur-stagger)),
+        visibility 0s;
+    }
+  }
+  /* Less motion: the chips are in their places and only fade. */
+  @media (prefers-reduced-motion: reduce) {
+    .leaf,
+    .fan.open .leaf {
+      translate: 0 calc((var(--i) * var(--step) + var(--space-2)) * -1);
+      clip-path: none;
+    }
   }
 </style>
