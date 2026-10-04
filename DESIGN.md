@@ -824,3 +824,4 @@ A 34px raised control. Armed, its glyph and edge take `brand-ink`. While the sup
 - **Don't** use pill-shaped buttons; full rounding is for state pills, switches and dots.
 - **Don't** put a third control between Approve and Deny, or make one more salient than the other.
 - **Don't** show an empty state while data is loading, or claim zero while the hub connection is not live.
+- **Don't** use a `group-has-*` utility anywhere in the dashboard: one such rule in the sheet makes every element put into the page restyle the whole rail, 20ms and more, whether its group is on the page or not. Style from a state the component sets on itself or its group (`group-data-*`), or from a sibling. `grep -rn "group-has-" apps/dashboard/src` finds none.
