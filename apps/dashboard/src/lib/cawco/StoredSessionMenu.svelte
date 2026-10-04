@@ -120,10 +120,13 @@
   }
 </script>
 
-<ContextMenu.Root>
-  <ContextMenu.Trigger class="contents">
-    {@render children()}
-  </ContextMenu.Trigger>
+<!-- Built on the row's first hover or focus, as LiveSessionMenu's is. -->
+<ContextMenu.Lazy class="contents">
+  {#snippet trigger(
+    props
+  )}
+    <div {...props}>{@render children()}</div>
+  {/snippet}
 
   <ContextMenu.Content>
     <ContextMenu.Item onSelect={() => goto(href)}>
@@ -186,7 +189,7 @@
       Delete transcript
     </ContextMenu.Item>
   </ContextMenu.Content>
-</ContextMenu.Root>
+</ContextMenu.Lazy>
 
 {#if renameAsked}
   <RenameDialog current={title} onrename={rename} bind:open={renaming} />

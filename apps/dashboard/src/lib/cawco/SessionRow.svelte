@@ -8,6 +8,24 @@
     selected: '[aria-current="page"]',
     ghost: false,
   };
+
+  /**
+   * One size observer for every row's trailing column: each writes its
+   * width on its row as `--trail-w` (`trailWidth`).
+   */
+  let trailSizes: ResizeObserver | undefined;
+  const watchTrail = (node: HTMLElement): (() => void) => {
+    trailSizes ??= new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const [box] = entry.borderBoxSize;
+        entry.target
+          .closest<HTMLElement>(".item")
+          ?.style.setProperty("--trail-w", `${box.inlineSize}px`);
+      }
+    });
+    trailSizes.observe(node);
+    return () => trailSizes?.unobserve(node);
+  };
 </script>
 
 <script lang="ts">
@@ -118,22 +136,20 @@
   const place = $derived(
     instance?.cwd || info?.cwd || instance?.machineId || machineId
   );
+  /** Peek rises at the row's end: a live session's, not a workflow run's. */
+  const peeks = $derived(peek && instance !== null && !run);
   /**
    * The trailing column's width (the wider of the age and the count), on its
-   * row as `--trail-w`: what rises over the row's end on hover stands left
-   * of it. Written from a size observer, after layout: read where the row
-   * renders (`bind:offsetWidth`), it laid the page out in the middle of the
-   * update that opened a tree, once a row.
+   * row as `--trail-w`: what rises over the row's end on hover (Peek,
+   * Archive) stands left of it, so a row with neither is not measured: a
+   * tree in the rail wrote the width on every row it drew, and each write
+   * restyled its row. Written from a size observer, after layout: read
+   * where the row renders (`bind:offsetWidth`), it laid the page out in the
+   * middle of the update that opened a tree, once a row.
    */
-  const trailWidth: Attachment<HTMLElement> = (node) => {
-    const item = node.closest<HTMLElement>(".item");
-    const sizes = new ResizeObserver(([entry]) => {
-      const [box] = entry.borderBoxSize;
-      item?.style.setProperty("--trail-w", `${box.inlineSize}px`);
-    });
-    sizes.observe(node);
-    return () => sizes.disconnect();
-  };
+  const trailWidth: Attachment<HTMLElement> | undefined = $derived(
+    peeks || onarchive ? watchTrail : undefined
+  );
 </script>
 
 {#snippet body(
@@ -226,7 +242,7 @@
         {/snippet}
       </Tip>
     {/if}
-    {#if peek && instance && !run}
+    {#if peeks && instance}
       {@const live = instance}
       <!-- Glance → peek → dive: the tail of this one, without leaving the
            list. A workflow run has no tail of its own: its card is its

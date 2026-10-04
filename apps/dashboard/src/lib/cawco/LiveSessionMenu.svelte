@@ -160,14 +160,14 @@
   }
 </script>
 
-<ContextMenu.Root>
-  <ContextMenu.Trigger>
-    {#snippet child({
-      props,
-    })}
-      {@render children(props)}
-    {/snippet}
-  </ContextMenu.Trigger>
+<!-- Built on the row's first hover or focus (ContextMenu.Lazy): a list
+     draws a row per session, and the menu was half of each. -->
+<ContextMenu.Lazy>
+  {#snippet trigger(
+    props
+  )}
+    {@render children(props)}
+  {/snippet}
 
   <ContextMenu.Content>
     <ContextMenu.Item onSelect={() => goto(href)}>
@@ -259,7 +259,7 @@
       Copy id
     </ContextMenu.CopyItem>
   </ContextMenu.Content>
-</ContextMenu.Root>
+</ContextMenu.Lazy>
 
 {#if renameAsked}
   <RenameDialog
