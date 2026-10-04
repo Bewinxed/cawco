@@ -238,6 +238,7 @@ window.run = async (b64, job) => {
   };
   seek(0);
   report.unset = snap(ab);
+  report.rests = vmi.boolean("rests").value;
   // A first appearance: his enter plays, and the steps begin once it has ended.
   vmi.enum("from").value = "none";
   const entered = vmi.trigger("entered");
@@ -506,10 +507,16 @@ for (const status of STATUS) {
         ["entered", "trigger"],
         ["still", "trigger"],
         ["gone", "trigger"],
+        ["rests", "boolean"],
       ])
   ) {
     fail(
       `contract: view model ${now.viewModel} ${props}, enums ${JSON.stringify(now.enums)}, ${now.inputs} inputs`
+    );
+  }
+  if (now.rests !== Boolean(rests[status])) {
+    fail(
+      `\`rests\` reads ${now.rests} in a file that ${rests[status] ? "rests" : "waits"}`
     );
   }
   if (now.unset !== now.hidden) {

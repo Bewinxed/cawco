@@ -62,6 +62,7 @@ that is all they do with him.
 | `entered` | trigger | file | his coming in (enter or arrival) has ended and he is on his still |
 | `still` | trigger | file | he is on his still because `leave` asked |
 | `gone` | trigger | file | his exit has ended; nothing is drawn |
+| `rests` | boolean | file | on in a file whose status rests on one drawing; apps read it, never write it |
 
 Wherever Caw appears, leaves or changes status he does it through a clip, never a fade (owner:
 "use adapter for all"); the one exception is Reduce Motion, where the apps fade him over 200 ms
@@ -87,10 +88,16 @@ How the apps drive it (one code path each: the dashboard's `Caw.svelte`, Apple's
   file with `from` set to the old status: its arrival opens on the very drawing the old file is
   holding, so the old file goes once the new one has drawn and no frame is empty. At most two
   files are alive. The change starts when he is back on his still, as an exit-time wait, never a
-  cut or a blend. Every loop ends by holding its first drawing for 6 to 28 frames, and
-  the wait ends as that hold begins: at most 4.0 to 4.9 s into a loop, depending on the loop.
-- **Leaving.** Set `leave` and `exit`. What replaces him lands at once under its own 200 ms
-  cross-fade and is never delayed by him; he plays his exit over it and is removed on `gone`.
+  cut or a blend.
+- **Leaving.** What replaces him lands at once under its own 200 ms cross-fade and is never
+  delayed by him, and he is gone within 200 ms from any drawing (Material 3, Easing and
+  duration: "Exit transitions are faster"; Apple HIG, Loading: placeholders are replaced as
+  content becomes available). On his still (a file whose `rests` is on, once `entered` has
+  fired; or any file after `still`) the app sets `leave` and `exit`: his exit clip plays over
+  what landed and he is removed on `gone`. Anywhere else, mid-loop or mid-clip, no exit clip
+  plays, since it would start from a pose it was not drawn from: the app pauses the file on
+  the drawing he is on and fades him out over `motion.dur-fade` on `motion.ease-out`, opacity
+  to 0 and scale to `motion.leave-scale`.
 
 Apps use Rive's current runtimes, which drive state machines only through data binding
 (rive.app/docs/runtimes/apple/migrating-from-legacy: "The new runtime does not expose equivalent
@@ -120,7 +127,7 @@ page itself loads no Rive and draws nothing for its icon (drawn live, his head c
 main thread). Run `bun run tab-icon` again after `node build.mjs` changes either file,
 and move the boxes in `tab-icon-shots.ts` if a retraced loop moves his head.
 
-The state machine has no inputs. `Caw` has one instance, `Default` (every boolean off, `from`
+The state machine has no inputs. `Caw` has one instance, `Default` (every boolean off but `rests` in a resting file, `from`
 unset), and the artboard points at `Caw`, so a runtime that auto-binds gets that instance.
 
 ## Building and proving them

@@ -27,7 +27,7 @@ import {
   parseColor,
   writeRiv,
 } from "rive-mcp-server/dist/rivWriter.js";
-import { FROM, fileName, STATUS, statusScene } from "./scene.mjs";
+import { FROM, fileName, RESTS, STATUS, statusScene } from "./scene.mjs";
 
 const outDirs = process.argv[2]
   ? [process.argv[2]]
@@ -55,6 +55,8 @@ const PROPERTIES = [
   { name: "entered", type: "trigger" },
   { name: "still", type: "trigger" },
   { name: "gone", type: "trigger" },
+  // Read by the apps, never written: on in a file whose status rests on one drawing.
+  { name: "rests", type: "boolean" },
 ];
 /** `from`'s enum, the file's only one (a ViewModelPropertyEnumCustom names it by index). */
 const FROM_ENUM = { name: "CawFrom", index: 0 };
@@ -119,7 +121,7 @@ function pathIds(ids) {
   return new Uint8Array(bytes);
 }
 
-function viewModelObjects() {
+function viewModelObjects(status) {
   return [
     // The enum comes first: a property names it by its index among the file's enums.
     { type: "DataEnumCustom", props: { name: FROM_ENUM.name } },
@@ -132,14 +134,18 @@ function viewModelObjects() {
       type: TYPES[type].property,
       props: { name, ...TYPES[type].propertyProps },
     })),
-    // The default instance: every boolean off, `from` unset.
+    // The default instance: every boolean off but `rests` in a resting file, `from` unset.
     {
       type: "ViewModelInstance",
       props: { name: "Default", viewModelId: VIEW_MODEL.index },
     },
-    ...PROPERTIES.map(({ type }, i) => ({
+    ...PROPERTIES.map(({ name, type }, i) => ({
       type: TYPES[type].value.type,
-      props: { viewModelPropertyId: i, ...TYPES[type].value.props },
+      props: {
+        viewModelPropertyId: i,
+        ...TYPES[type].value.props,
+        ...(name === "rests" ? { propertyValue: Boolean(RESTS[status]) } : {}),
+      },
     })),
   ];
 }
@@ -310,7 +316,7 @@ function build(status) {
     new Set(spec.shapes.filter((s) => s.strokeUnder).map((s) => s.id))
   );
   writeStrokeKeys(objects, strokeKeys, strokeColour);
-  const result = complete(objects, spec.stateMachine.layers);
+  const result = complete(objects, spec.stateMachine.layers, status);
   const inputs = result.filter((o) => INPUT_TYPE.test(o.type)).length;
   if (inputs !== 0) {
     throw new Error(
@@ -325,7 +331,7 @@ function build(status) {
  * artboard's view model and default state machine, Random flags and weights, and each
  * transition's view-model condition.
  */
-function complete(objects, layers) {
+function complete(objects, layers, status) {
   const result = [];
   /** The layer being written: its spec, its states seen so far, and its spec transitions not yet
    * matched to an emitted StateTransition. */
@@ -354,7 +360,7 @@ function complete(objects, layers) {
       result.push(...fireObjects(state.fire));
     }
     if (object.type === "Backboard") {
-      result.push(...viewModelObjects());
+      result.push(...viewModelObjects(status));
     }
     if (object.type === "StateTransition") {
       result.push(...completeTransition(object, at));

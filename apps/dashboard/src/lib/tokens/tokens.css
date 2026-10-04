@@ -712,6 +712,8 @@
     --c-500: 500ms;
     --breath: calc(var(--c-500) * 4);
     --press-scale: 0.97;
+    /* How far Caw shrinks as he fades out mid-loop, over dur-fade on ease-out, when what he stood in for has arrived. Material 3, Easing and duration: exit transitions are faster than enters, 200ms. */
+    --leave-scale: 0.97;
     --pop-scale: 0.92;
     /* How far each card of a session mark's deck shows below the one in front (SessionMark). */
     --deck-step: 1.25px;

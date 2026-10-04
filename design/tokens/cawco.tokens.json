@@ -2492,6 +2492,11 @@
       "$type": "number",
       "$value": "0.97"
     },
+    "leave-scale": {
+      "$type": "number",
+      "$value": "0.97",
+      "$description": "How far Caw shrinks as he fades out mid-loop, over dur-fade on ease-out, when what he stood in for has arrived. Material 3, Easing and duration: exit transitions are faster than enters, 200ms."
+    },
     "pop-scale": {
       "$type": "number",
       "$value": "0.92"

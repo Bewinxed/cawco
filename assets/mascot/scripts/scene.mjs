@@ -354,11 +354,7 @@ export function statusScene(status) {
   if (rest) {
     groups.push({ id: REST, x: 0, y: 0, parent: "caw", opacity: 0 });
     add(
-      drawing(
-        REST,
-        `${LOOPS}${rest.loop}/body-${pad(rest.drawing)}.svg`,
-        look
-      )
+      drawing(REST, `${LOOPS}${rest.loop}/body-${pad(rest.drawing)}.svg`, look)
     );
   }
   const ways = clipsOf(status);
@@ -416,20 +412,6 @@ export function statusScene(status) {
       layers: [variantLayer(status, loops, clips, ways), scheme, motion],
     },
   };
-}
-
-/**
- * When a loop is back on its first drawing for good: every loop ends holding it (6 to 28
- * frames), so a leave starts as that hold begins instead of waiting it out. Whole milliseconds,
- * rounded up, so the drawing's key has been applied.
- */
-function backOnStillMs(timing) {
-  const last = timing.drawings.at(-1);
-  const frame = last.drawing === 0 ? last.start : timing.frames;
-  return Math.min(
-    Math.ceil((frame / FPS) * 1000),
-    Math.floor((timing.frames / FPS) * 1000)
-  );
 }
 
 /** The Variant layer: the way in, the loops or the rest, his still, the way out. */
@@ -518,7 +500,7 @@ function variantLayer(status, loops, clips, { enter, exit, arrivals }) {
       {
         from: `loop_${name}`,
         to: "still",
-        exitTimeMs: backOnStillMs(loops[name]),
+        exitTimeMs: endMs(loops[name]),
         when: flag("leave", true),
       }
     );

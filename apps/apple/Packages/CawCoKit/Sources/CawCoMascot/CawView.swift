@@ -41,9 +41,11 @@ public enum CawStatus: String, CaseIterable, Sendable {
 /// fails to load, so a place can keep him until then (`CawWaiting` does). On a status change the
 /// shown file is told to `leave`; once it says he is back on his `still`, the new status's file
 /// takes over with `from` naming the old one and plays his arrival from that very drawing, so no
-/// frame is ever empty and at most two files are alive. With `present` off he plays his exit and
-/// `onGone` is called once the page is empty. Under Reduce Motion there are no clips: he fades
-/// (`Motion.durFade` on `Motion.easeOut`) in, across and out.
+/// frame is ever empty and at most two files are alive. With `present` off he is gone within
+/// `Motion.durFade` and `onGone` is called: on his still he plays his exit clip; anywhere else he
+/// holds the drawing he is on and fades out, so what he stood in for is never under a looping
+/// Caw. Under Reduce Motion there are no clips: he fades (`Motion.durFade` on `Motion.easeOut`)
+/// in, across and out.
 ///
 /// The view's bounds hold Caw's still: the largest centred square in them is the files' still
 /// box. His acting reaches past that box, so he draws past the bounds there; nothing here clips
@@ -57,8 +59,9 @@ public final class CawView: UIView {
         }
     }
 
-    /// Off once the place is done with him: he goes back to his still, plays his exit, and
-    /// `onGone` is called. The place keeps him in its hierarchy until then.
+    /// Off once the place is done with him: he leaves at once, by his exit clip from his still or
+    /// a fade from anywhere else, and `onGone` is called. The place keeps him in its hierarchy
+    /// until then.
     public var present = true {
         didSet {
             guard present != oldValue else {
@@ -174,28 +177,35 @@ public final class CawView: UIView {
         load(status, from: shown.status)
     }
 
-    /// `present` went off: his exit, then `onGone`. With no Caw yet, at once; under Reduce
-    /// Motion, a fade.
+    /// `present` went off. On his still (a rest, or held there by a change) he plays his exit
+    /// clip. Anywhere else, mid-loop or mid-clip, he holds the drawing he is on and fades out over
+    /// `Motion.durFade`, shrinking to `Motion.leaveScale`: no exit clip can start from a pose it
+    /// was not drawn from, and what has arrived is never left under him. Under Reduce Motion the
+    /// fade alone. With no Caw yet, he is gone at once.
     private func leave() {
         cancelLoading()
         guard let shown else {
             onGone?()
             return
         }
-        if reducedMotion {
-            fade?.stopAnimation(true)
-            let animator = Motion.easeOut.animator(Motion.durFade) {
-                shown.view.alpha = 0
-            }
-            animator.addCompletion { [weak self] _ in
-                self?.gone(shown)
-            }
-            fade = animator
-            animator.startAnimation()
+        CawContract.log.info("Caw \(shown.status.rawValue, privacy: .public) leaves")
+        if !reducedMotion, shown.still || (shown.landed && shown.rests) {
+            shown.set(CawContract.leave, true)
+            shown.set(CawContract.exit, true)
             return
         }
-        shown.set(CawContract.leave, true)
-        shown.set(CawContract.exit, true)
+        fade?.stopAnimation(true)
+        shown.view.isPaused = true
+        let scale = reducedMotion ? 1 : Motion.leaveScale
+        let animator = Motion.easeOut.animator(Motion.durFade) {
+            shown.view.alpha = 0
+            shown.view.transform = CGAffineTransform(scaleX: scale, y: scale)
+        }
+        animator.addCompletion { [weak self] _ in
+            self?.gone(shown)
+        }
+        fade = animator
+        animator.startAnimation()
     }
 
     private func cancelLoading() {
@@ -241,7 +251,10 @@ public final class CawView: UIView {
     private func start(_ incoming: CawLayer, asked: ContinuousClock.Instant) async {
         let below = shown
         incoming.hear(
-            entered: { [weak self] in self?.reportEntered() },
+            entered: { [weak self, weak incoming] in
+                incoming?.landed = true
+                self?.reportEntered()
+            },
             still: { [weak self, weak incoming] in
                 incoming?.still = true
                 self?.settle()
@@ -326,8 +339,10 @@ public final class CawView: UIView {
             width: CawGeometry.artboard.width * scale,
             height: CawGeometry.artboard.height * scale
         )
+        // By bounds and centre: a Caw fading out is scaled, and a frame is undefined then.
         for view in subviews {
-            view.frame = frame
+            view.bounds = CGRect(origin: .zero, size: frame.size)
+            view.center = CGPoint(x: frame.midX, y: frame.midY)
         }
     }
 }
@@ -490,12 +505,17 @@ private final class CawLayer {
     let caw: ViewModelInstance
     /// Told to leave and back on his still: the next file may take over.
     var still = false
+    /// His coming in has ended (`entered`): he is in his loops, or at rest.
+    var landed = false
+    /// The file's `rests`: its status is one held drawing, his still.
+    let rests: Bool
     private var hearing: [Task<Void, Never>] = []
 
-    private init(status: CawStatus, view: RiveUIView, caw: ViewModelInstance) {
+    private init(status: CawStatus, view: RiveUIView, caw: ViewModelInstance, rests: Bool) {
         self.status = status
         self.view = view
         self.caw = caw
+        self.rests = rests
     }
 
     isolated deinit {
@@ -519,7 +539,7 @@ private final class CawLayer {
         view.isUserInteractionEnabled = false
         view.isAccessibilityElement = false
         view.backgroundColor = .clear
-        return CawLayer(status: status, view: view, caw: caw)
+        return try await CawLayer(status: status, view: view, caw: caw, rests: caw.value(of: CawContract.rests))
     }
 
     func set(_ property: BoolProperty, _ value: Bool) {
@@ -564,6 +584,8 @@ private enum CawContract {
     static let fromNone = "none"
     static let leave = BoolProperty(path: "leave")
     static let exit = BoolProperty(path: "exit")
+    /// Read, never written: on in a file whose status rests on one drawing.
+    static let rests = BoolProperty(path: "rests")
     static let entered = TriggerProperty(path: "entered")
     static let still = TriggerProperty(path: "still")
     static let gone = TriggerProperty(path: "gone")

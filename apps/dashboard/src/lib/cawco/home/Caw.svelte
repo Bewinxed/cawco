@@ -198,15 +198,22 @@
    * it says he is back on his `still`, the new status's file takes over
    * with `from` naming the old one and plays his arrival from that very
    * drawing, so no frame is empty and at most two files are alive. With
-   * `present` off he plays his exit and `ongone` says when the page is
-   * empty. With less motion there are no clips: he fades (--dur-fade on
-   * --ease-out) in, across and out.
+   * `present` off he is gone within --dur-fade, and `ongone` says when:
+   * on his still he plays his exit clip; anywhere else he holds the drawing
+   * he is on and fades out, so what he stood in for is never under a
+   * looping Caw. With less motion there are no clips: he fades (--dur-fade
+   * on --ease-out) in, across and out.
    *
    * `size` is the side of his still in px. His acting reaches past it, so
    * the canvases spill over the box unclipped and never take a pointer.
    */
   import { untrack } from "svelte";
-  import { dur, ease, motionOk } from "#lib/cawco/motion/curves.svelte.js";
+  import {
+    dur,
+    ease,
+    motionOk,
+    numberOf,
+  } from "#lib/cawco/motion/curves.svelte.js";
   import { theme } from "#lib/theme.svelte.js";
 
   let {
@@ -219,8 +226,9 @@
   }: {
     status: CawStatus;
     /**
-     * Off once the place is done with him: he goes back to his still, plays
-     * his exit, and `ongone` is called. The place keeps him mounted till then.
+     * Off once the place is done with him: he leaves at once, by his exit
+     * clip from his still or a fade from anywhere else, and `ongone` is
+     * called. The place keeps him mounted till then.
      */
     present?: boolean;
     /**
@@ -243,11 +251,15 @@
     /** When the status was asked for, for the performance marks. */
     asked: number;
     canvas?: HTMLCanvasElement;
-    /** Its fade, while one runs (less motion only). */
+    /** Its fade, while one runs: a leave mid-loop, or any move with less motion. */
     fade?: Animation;
     /** `none` on a first appearance, else the status he was showing. */
     from: "none" | CawStatus;
     id: number;
+    /** His coming in has ended (`entered`): he is in his loops, or at rest. */
+    landed: boolean;
+    /** The file's `rests`: its status is one held drawing, his still. */
+    rests: boolean;
     rive?: Rive;
     shown: boolean;
     status: CawStatus;
@@ -286,6 +298,8 @@
       status: incoming,
       from,
       asked: performance.now(),
+      landed: false,
+      rests: false,
       shown: false,
       still: false,
     };
@@ -310,6 +324,10 @@
       if (current?.status !== incoming) {
         layers = [layerFor(incoming, "none")];
       }
+      return;
+    }
+    if (current.fade && !reducedMotion) {
+      // Asked back while he fades out: he comes in afresh once the fade ends.
       return;
     }
     if (reducedMotion) {
@@ -345,7 +363,14 @@
     }
   }
 
-  /** `present` went off: his exit, then `ongone`. Unloaded or with less motion, at once or a fade. */
+  /**
+   * `present` went off. On his still (a rest, or held there by a change) he
+   * plays his exit clip. Anywhere else, mid-loop or mid-clip, he holds the
+   * drawing he is on and fades out over --dur-fade, shrinking to
+   * --leave-scale: no exit clip can start from a pose it was not drawn
+   * from, and what has arrived is never left under him. With less motion
+   * the fade alone.
+   */
   function leave() {
     const [current] = layers;
     if (!current?.shown) {
@@ -354,21 +379,35 @@
       return;
     }
     layers = [current];
-    if (reducedMotion) {
-      current.fade = current.canvas?.animate([{ opacity: 1 }, { opacity: 0 }], {
-        duration: dur("--dur-fade"),
-        easing: ease("--ease-out"),
-        fill: "forwards",
-      });
-      (current.fade?.finished ?? Promise.resolve())
-        .then(() => ongone?.())
-        .catch(() => {
-          // Cancelled: the canvas left the page before its fade ended.
-        });
+    if (
+      !reducedMotion &&
+      (current.still || (current.landed && current.rests))
+    ) {
+      flag(current, "leave", true);
+      flag(current, "exit", true);
       return;
     }
-    flag(current, "leave", true);
-    flag(current, "exit", true);
+    current.rive?.pause();
+    const end = reducedMotion
+      ? { opacity: 0 }
+      : { opacity: 0, transform: `scale(${numberOf("--leave-scale")})` };
+    current.fade = current.canvas?.animate([{ opacity: 1 }, end], {
+      duration: dur("--dur-fade"),
+      easing: ease("--ease-out"),
+      fill: "forwards",
+    });
+    (current.fade?.finished ?? Promise.resolve())
+      .then(() => {
+        // Asked back while he faded: he comes in afresh.
+        layers = present ? [layerFor(status, "none")] : [];
+        if (!present) {
+          performance.measure(`caw ${current.status} gone`);
+          ongone?.();
+        }
+      })
+      .catch(() => {
+        // Cancelled: the canvas left the page before its fade ended.
+      });
   }
 
   function write(
@@ -401,7 +440,10 @@
   /** Hears the file's triggers: the end of his coming in, his still while leaving, his exit's end. */
   function listen(layer: Layer, rive: Rive) {
     const caw = rive.viewModelInstance;
-    caw?.trigger("entered")?.on(() => reportEntered(layer));
+    caw?.trigger("entered")?.on(() => {
+      layer.landed = true;
+      reportEntered(layer);
+    });
     caw?.trigger("still")?.on(() => {
       layer.still = true;
       settle();
@@ -412,6 +454,7 @@
         layers = [layerFor(status, "none")];
       } else {
         layers = [];
+        performance.measure(`caw ${layer.status} gone`);
         ongone?.();
       }
     });
@@ -429,7 +472,7 @@
         }
       };
       Promise.all([riveRuntime(), fileBytes(layer.status)])
-        .then(([{ Rive, Layout, Fit, Alignment }, buffer]) => {
+        .then(([{ Rive, Layout, Fit, Alignment, EventType }, buffer]) => {
           if (gone) {
             return;
           }
@@ -450,6 +493,14 @@
               }
               rive.resizeDrawingSurfaceToCanvas();
               write(rive, { dark, reducedMotion });
+              layer.rests =
+                rive.viewModelInstance?.boolean("rests")?.value ?? false;
+              // Which clip or loop he is in, as performance marks beside the measures.
+              rive.on(EventType.StateChange, (event) => {
+                for (const name of event.data as string[]) {
+                  performance.mark(`caw state ${name}`);
+                }
+              });
               listen(layer, rive);
               layer.rive = rive;
               show(layer, canvas);
