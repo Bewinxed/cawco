@@ -571,7 +571,10 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         if received.isEmpty, !currentTail.isEmpty { currentTail = "" }
         if dirty { dirty = false; commit() }
         restoreIfReady()
-        if following, !gliding { latest() }
+        // The tail is not held under the reader's finger, nor while the list
+        // coasts: a slow drag moves less in a frame than the distance that lets
+        // go of the tail, and pinning it each frame would never let it leave.
+        if following, !gliding, !collection.isDragging, !collection.isDecelerating { latest() }
         let visible = collection.visibleCells
         let seen = collection.convert(visibleBox, to: nil)
         for cell in visible {
