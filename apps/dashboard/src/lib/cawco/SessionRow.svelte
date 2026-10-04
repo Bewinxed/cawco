@@ -288,6 +288,8 @@
        two-line row leaves under it (44px less the 18px mark, halved), and
        the gap to the next row. */
     --mark-hit-max: calc(13px + var(--tree-gap));
+    /* And how far sideways under a finger: to the row's words. */
+    --mark-hit-gap: var(--space-2);
     padding: var(--space-1) var(--space-3);
     border-radius: inherit;
     color: inherit;
@@ -310,6 +312,7 @@
       2 +
       var(--tree-gap)
     );
+    --mark-hit-gap: var(--row-compact-gap);
     padding: 0 var(--row-compact-pad-end) 0 var(--row-compact-gap);
   }
   /* Hover and selection are the list's (highlight: the rail's one ghost,

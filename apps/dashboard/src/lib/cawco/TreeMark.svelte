@@ -152,7 +152,7 @@
     <span
       aria-expanded={open}
       aria-label={label}
-      class="hit focus-inset"
+      class="hit focus-inset touch-hit"
       onclick={toggle}
       onkeydown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
@@ -440,6 +440,32 @@
     );
     border-radius: var(--radius-xs);
     cursor: pointer;
+  }
+  /* Under a finger the switch is the kit's touch target (`.touch-hit`: a
+     transparent area centred on it, up to 44px), and it is centred on the
+     tile, so that area is too. It stops where a tap would be the row's own
+     or the next row's: sideways at the name (--mark-hit-gap, the row's gap
+     from its mark to its words), up and down at the midpoint of the gap
+     between rows (--mark-hit-max, less half that gap). Where a row is
+     tighter than 44px those win: 30 by 32px on a one-line row in the rail,
+     32 by 44px on a two-line row. */
+  @media (pointer: coarse) {
+    .hit {
+      inset-block-end: calc(-1 * var(--reach));
+      --hit-gap-x: calc(
+        2 *
+        (var(--mark-hit-gap, var(--row-compact-gap)) - var(--reach))
+      );
+      --hit-gap-y: calc(
+        2 *
+        (
+          var(--mark-hit-max, calc(5px + var(--tree-gap))) -
+          var(--tree-gap) /
+          2 -
+          var(--reach)
+        )
+      );
+    }
   }
 
   /* The status dot, for a row that needs you or has failed: a circle
