@@ -3,6 +3,7 @@ import CawCoCore
 import CawCoDesign
 import CawCoTranscript
 import Observation
+import OSLog
 import UIKit
 
 /// The delegate tray (DelegateTray.svelte): one compact chip per delegate
@@ -456,6 +457,8 @@ final class DelegateTrayView: UIView {
         return widths
     }
 
+    private static let log = Logger(subsystem: "dev.cawco.app", category: "Tray")
+
     /// The mark flew in from its card; the chip's surface and words come in after it.
     private func land(_ view: TrayChipView, _ instanceId: String) {
         guard let window, let from = state.takeDeparture(instanceId), !UIAccessibility.isReduceMotionEnabled else {
@@ -464,6 +467,7 @@ final class DelegateTrayView: UIView {
         }
         layoutIfNeeded()
         let to = view.mark.convert(view.mark.bounds, to: window)
+        Self.log.info("chip \(instanceId, privacy: .public) flies from \(from.debugDescription, privacy: .public) to \(to.debugDescription, privacy: .public)")
         view.arrive(after: Motion.durControl)
         view.mark.transform = CGAffineTransform(translationX: from.minX - to.minX, y: from.minY - to.minY)
             .scaledBy(x: from.width / max(1, to.width), y: from.height / max(1, to.height))
