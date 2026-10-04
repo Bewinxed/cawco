@@ -166,24 +166,34 @@ export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
     reset: boolean,
     at?: string
   ): Promise<HistoryRead> => {
-    const loading = ports.readHistory(instanceId, at).then((read) => {
-      if (entries.get(instanceId) !== entry) {
+    const loading = ports.readHistory(instanceId, at).then(
+      (read) => {
+        if (entries.get(instanceId) !== entry) {
+          return read;
+        }
+        entry.loading = null;
+        if ("fault" in read) {
+          entries.delete(instanceId);
+          return read;
+        }
+        entry.where = read.where;
+        entry.build = ports.build(read.where.machineId);
+        entry.builder.seed(read.entries, read.records);
+        emit(instanceId, [
+          ...(reset ? [{ type: "reset" } as const] : []),
+          ...replayHeld(entry),
+        ]);
         return read;
+      },
+      // A read that threw is a read that failed: no transcript is left
+      // holding frames behind a promise that will never resolve.
+      (error: unknown) => {
+        if (entries.get(instanceId) === entry) {
+          entries.delete(instanceId);
+        }
+        throw error;
       }
-      entry.loading = null;
-      if ("fault" in read) {
-        entries.delete(instanceId);
-        return read;
-      }
-      entry.where = read.where;
-      entry.build = ports.build(read.where.machineId);
-      entry.builder.seed(read.entries, read.records);
-      emit(instanceId, [
-        ...(reset ? [{ type: "reset" } as const] : []),
-        ...replayHeld(entry),
-      ]);
-      return read;
-    });
+    );
     entry.loading = loading;
     return loading;
   };
@@ -302,22 +312,28 @@ export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
     stop: () => clearInterval(timer),
     machineRegistered: async (machineId, instanceIds) => {
       const build = ports.build(machineId);
+      // One transcript's read failing is that transcript's: the rest of the
+      // machine's are still read.
+      const settled = (read: Promise<HistoryRead> | null): Promise<unknown> =>
+        Promise.resolve(read).catch((error: unknown) =>
+          console.error(`[hub] transcript read on ${machineId} failed:`, error)
+        );
       for (const [instanceId, entry] of [...entries]) {
         const inFlight = entry.loading;
         // biome-ignore lint/performance/noAwaitInLoops: one machine read at a time, on purpose
-        await inFlight;
+        await settled(inFlight);
         const stale =
           entries.get(instanceId) === entry &&
           entry.where?.machineId === machineId &&
           (inFlight !== null || entry.build !== build);
         if (stale && !entry.loading) {
-          await load(instanceId, entry, true);
+          await settled(load(instanceId, entry, true));
         }
       }
       for (const instanceId of instanceIds) {
         if (!entries.has(instanceId)) {
           // biome-ignore lint/performance/noAwaitInLoops: one machine read at a time, on purpose — a register names every session it runs
-          await entryFor(instanceId).loading;
+          await settled(entryFor(instanceId).loading);
         }
       }
     },
