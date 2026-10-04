@@ -19,6 +19,76 @@
     }
   ],
   "paths": {
+    "/api/dashboard-errors": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "message": {
+                    "maxLength": 1000,
+                    "type": "string"
+                  },
+                  "stack": {
+                    "maxLength": 6000,
+                    "type": "string"
+                  },
+                  "path": {
+                    "minLength": 1,
+                    "maxLength": 1000,
+                    "pattern": "^/",
+                    "type": "string"
+                  },
+                  "sessionId": {
+                    "maxLength": 256,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "version": {
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "type": "string"
+                  },
+                  "userAgent": {
+                    "maxLength": 512,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "message",
+                  "stack",
+                  "path",
+                  "sessionId",
+                  "version",
+                  "userAgent"
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "operationId": "postApiDashboardErrors",
+        "responses": {
+          "204": {
+            "description": "postApiDashboardErrors 204"
+          },
+          "422": {
+            "description": "postApiDashboardErrors 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/delegate-types": {
       "get": {
         "operationId": "getApiDelegateTypes",
@@ -5849,20 +5919,6 @@
   },
   "components": {
     "schemas": {
-      "getApiDelegateTypes200": {
-        "type": "object",
-        "properties": {
-          "types": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/DelegateType"
-            }
-          }
-        },
-        "required": [
-          "types"
-        ]
-      },
       "ValidationErrorResponse": {
         "description": "Request validation problem. Diagnostic fields are development-only.",
         "type": "object",
@@ -5911,6 +5967,20 @@
           "status",
           "title",
           "type"
+        ]
+      },
+      "getApiDelegateTypes200": {
+        "type": "object",
+        "properties": {
+          "types": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DelegateType"
+            }
+          }
+        },
+        "required": [
+          "types"
         ]
       },
       "deleteApiDelegateTypesByName200": {
@@ -6388,11 +6458,11 @@
               ]
             }
           },
-          "machineId": {
-            "type": "string"
-          },
           "status": {
             "$ref": "#/components/schemas/WorkflowRunStatus"
+          },
+          "machineId": {
+            "type": "string"
           },
           "id": {
             "type": "string"
@@ -6499,11 +6569,11 @@
             "items": {
               "type": "object",
               "properties": {
-                "result": {},
                 "at": {
                   "type": "string",
                   "format": "date-time"
                 },
+                "result": {},
                 "failure": {
                   "$ref": "#/components/schemas/WorkflowFailure"
                 },
@@ -6539,11 +6609,11 @@
           {
             "type": "object",
             "properties": {
-              "machineId": {
-                "type": "string"
-              },
               "status": {
                 "$ref": "#/components/schemas/WorkflowRunStatus"
+              },
+              "machineId": {
+                "type": "string"
               },
               "id": {
                 "type": "string"
@@ -6874,6 +6944,24 @@
       "patchApiInstancesById200": {
         "type": "object",
         "properties": {
+          "sessionId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "status": {
+            "enum": [
+              "discarded",
+              "error",
+              "running",
+              "sleeping",
+              "starting",
+              "stopped",
+              "unknown"
+            ],
+            "type": "string"
+          },
           "machineId": {
             "type": "string"
           },
@@ -6906,18 +6994,6 @@
               "boolean"
             ]
           },
-          "status": {
-            "enum": [
-              "discarded",
-              "error",
-              "running",
-              "sleeping",
-              "starting",
-              "stopped",
-              "unknown"
-            ],
-            "type": "string"
-          },
           "id": {
             "type": "string"
           },
@@ -6949,12 +7025,6 @@
             "type": "string"
           },
           "projectId": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "sessionId": {
             "type": [
               "null",
               "string"
@@ -8348,10 +8418,10 @@
       "postApiWorkspacesByIdArchive200": {
         "type": "object",
         "properties": {
-          "machineId": {
+          "path": {
             "type": "string"
           },
-          "path": {
+          "machineId": {
             "type": "string"
           },
           "id": {
@@ -11662,11 +11732,11 @@
           {
             "type": "object",
             "properties": {
-              "machineId": {
-                "type": "string"
-              },
               "status": {
                 "$ref": "#/components/schemas/WorkflowRunStatus"
+              },
+              "machineId": {
+                "type": "string"
               },
               "id": {
                 "type": "string"
@@ -12751,6 +12821,24 @@
       "BoardInstanceRow": {
         "type": "object",
         "properties": {
+          "sessionId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "status": {
+            "enum": [
+              "discarded",
+              "error",
+              "running",
+              "sleeping",
+              "starting",
+              "stopped",
+              "unknown"
+            ],
+            "type": "string"
+          },
           "machineId": {
             "type": "string"
           },
@@ -12783,18 +12871,6 @@
               "boolean"
             ]
           },
-          "status": {
-            "enum": [
-              "discarded",
-              "error",
-              "running",
-              "sleeping",
-              "starting",
-              "stopped",
-              "unknown"
-            ],
-            "type": "string"
-          },
           "id": {
             "type": "string"
           },
@@ -12826,12 +12902,6 @@
             "type": "string"
           },
           "projectId": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "sessionId": {
             "type": [
               "null",
               "string"
@@ -14441,6 +14511,10 @@
         "description": "A rule as it arrives from the dashboard, before the hub gives it an id.",
         "type": "object",
         "properties": {
+          "pattern": {
+            "description": "The phrase to watch for, a regular expression, or a yes/no question, as `matchKind` says.",
+            "type": "string"
+          },
           "name": {
             "description": "What the rule is called in the list, and in the reply the session reads.",
             "type": "string"
@@ -14459,10 +14533,6 @@
               "null",
               "string"
             ]
-          },
-          "pattern": {
-            "description": "The phrase to watch for, a regular expression, or a yes/no question, as `matchKind` says.",
-            "type": "string"
           },
           "enabled": {
             "type": "boolean"

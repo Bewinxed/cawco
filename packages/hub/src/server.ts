@@ -144,6 +144,7 @@ import {
   summariserPrompt,
   transcriptModel,
 } from "./continuation";
+import { dashboardErrorsRoutes } from "./dashboard-errors";
 import type {
   AgentAuth,
   ContinuationRow,
@@ -6556,6 +6557,7 @@ export const createServer = (
   return (
     new Elysia()
       .use(websocket())
+      .use(dashboardErrorsRoutes())
       .use(delegateTypesRoutes(delegateTypes))
       .use(
         joinRoutes({
