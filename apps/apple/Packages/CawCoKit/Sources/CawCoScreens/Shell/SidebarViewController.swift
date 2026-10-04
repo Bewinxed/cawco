@@ -331,17 +331,8 @@ final class SidebarViewController: ObservedViewController {
 
         let user = RailRow(height: nil, leading: 10, trailing: 10, gap: 10)
         navConstraint(user)
-        let avatar = UILabel()
-        avatar.text = "bw"
-        avatar.font = TypeScale.typeMeta.font
-        avatar.textColor = Palette.selectedInk
-        avatar.textAlignment = .center
-        avatar.backgroundColor = Palette.selectedBg
-        avatar.layer.cornerRadius = 9
-        avatar.clipsToBounds = true
-        avatar.translatesAutoresizingMaskIntoConstraints = false
-        avatar.widthAnchor.constraint(equalToConstant: 18).isActive = true
-        avatar.heightAnchor.constraint(equalToConstant: 18).isActive = true
+        // No picture of the reader yet: Caw stands in.
+        let avatar = BrandMark(round: true)
         let name = KitLabel(TypeScale.typeBody, ink: Palette.foreground)
         name.text = "bewinxed"
         user.content.addArrangedSubview(RailRow.slot(avatar))
@@ -518,13 +509,15 @@ final class SidebarViewController: ObservedViewController {
                 let front = node.row.id == active
                 let count = node.count
                 let failed = node.failed
+                // `statusWord`: a session the operator stopped says so; its mark is an ended session's.
+                let word = node.row.status == .stopped ? "Stopped" : status.word
                 // The row view itself is part of the print: a rebuilt row is filled whatever it last drew.
                 prints[node.row.id] = AnyHashable([
                     AnyHashable(ObjectIdentifier(row)), AnyHashable(title), AnyHashable(status), AnyHashable(place), AnyHashable(age),
-                    AnyHashable(hint), AnyHashable(count), AnyHashable(failed), AnyHashable(open), AnyHashable(front),
+                    AnyHashable(hint), AnyHashable(count), AnyHashable(failed), AnyHashable(open), AnyHashable(front), AnyHashable(word),
                 ])
                 fills[node.row.id] = {
-                    row.configure(title: title, status: status, place: place, age: age, count: count, failed: failed, open: open)
+                    row.configure(title: title, status: status, word: word, place: place, age: age, count: count, failed: failed, open: open)
                     row.ageHint = hint
                     row.active = front
                 }

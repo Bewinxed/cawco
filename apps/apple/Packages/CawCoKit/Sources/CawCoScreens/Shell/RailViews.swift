@@ -1,5 +1,6 @@
 import CawCoCore
 import CawCoDesign
+import CawCoMascot
 import UIKit
 
 // The rail's pieces (Sidebar.svelte on the sidebar kit, ui/sidebar/*):
@@ -221,29 +222,23 @@ final class ProjectMarkView: UIView {
     }
 }
 
-/// The brand tile (Sidebar.svelte's header): the 18pt slot in `--brand-solid`
-/// at `--radius-xs`, and in it the 12pt mark, an outlined square whose left
-/// half is filled, in `--on-brand`.
+/// The app's own icon (Sidebar.svelte's `.brand-icon`): Caw on spark in the
+/// 18pt lead tile, at `--radius-xs` beside the wordmark and round where he
+/// stands in for the reader's picture, his edge drawn 1pt inside the tile in
+/// `--image-outline`.
 final class BrandMark: UIView {
-    private let shape = CAShapeLayer()
-    private let half = CAShapeLayer()
+    private let caw = CawMark(status: .ready, side: 18)
 
-    init() {
+    init(round: Bool = false) {
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
-        backgroundColor = Palette.brandSolid
-        layer.cornerRadius = Radius.radiusXs
-        layer.cornerCurve = .continuous
-        // The 24-unit viewBox drawn at 12pt: a stroke of 1.7 units is 0.85pt.
-        let scale = 12.0 / 24
-        let origin = 3.0
-        shape.path = UIBezierPath(rect: CGRect(x: origin + 4 * scale, y: origin + 4 * scale, width: 16 * scale, height: 16 * scale)).cgPath
-        shape.fillColor = nil
-        shape.lineWidth = 1.7 * scale
-        half.path = UIBezierPath(rect: CGRect(x: origin + 4 * scale, y: origin + 4 * scale, width: 8 * scale, height: 16 * scale)).cgPath
-        half.lineWidth = 1.7 * scale
-        layer.addSublayer(half)
-        layer.addSublayer(shape)
+        backgroundColor = Palette.spark
+        layer.cornerRadius = round ? 9 : Radius.radiusXs
+        layer.cornerCurve = round ? .circular : .continuous
+        layer.borderWidth = 1
+        // He draws a little past his box; the tile keeps its shape.
+        clipsToBounds = true
+        addSubview(caw)
         NSLayoutConstraint.activate([widthAnchor.constraint(equalToConstant: 18), heightAnchor.constraint(equalToConstant: 18)])
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (view: BrandMark, _: UITraitCollection) in view.paint() }
         paint()
@@ -255,10 +250,7 @@ final class BrandMark: UIView {
     }
 
     private func paint() {
-        let ink = Palette.onBrand.resolvedColor(with: traitCollection).cgColor
-        shape.strokeColor = ink
-        half.strokeColor = ink
-        half.fillColor = ink
+        layer.borderColor = Palette.imageOutline.resolvedColor(with: traitCollection).cgColor
     }
 }
 

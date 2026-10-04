@@ -129,13 +129,13 @@ final class SessionRailRow: RailRow, HoverSessionRow {
     /// The age's `title`: when it last moved, in words.
     var ageHint = ""
 
-    func configure(title: String, status: MarkStatus, place: String, age text: String, count total: Int, failed: Int, open: Bool) {
+    func configure(title: String, status: MarkStatus, word: String, place: String, age text: String, count total: Int, failed: Int, open: Bool) {
         name.text = title
         mark.configure(id: id, place: place, status: status)
         age.text = text
         count.isHidden = total == 0
         count.configure(count: total, failed: failed, open: open)
-        accessibilityLabel = "\(status.word): \(title)"
+        accessibilityLabel = "\(word): \(title)"
         accessibilityValue = text.isEmpty ? nil : text
     }
 
