@@ -249,14 +249,14 @@ final class WorkflowRunViewController: ObservedViewController, UIGestureRecogniz
         let live = hub.state == .connected
         let primary: UIButton
         if model.going {
-            primary = KitButton.workflow("Cancel run") { [weak self] in self?.confirmCancel(model) }
+            primary = KitButton.make("Cancel run", variant: .outline, height: .sm) { [weak self] in self?.confirmCancel(model) }
             primary.isEnabled = detail.acting == nil && live
         } else {
-            primary = KitButton.workflow("Re-run") { [weak self] in self?.rerun(from: nil) }
+            primary = KitButton.make("Re-run", variant: .outline, height: .sm) { [weak self] in self?.rerun(from: nil) }
             primary.isEnabled = (detail.acting == nil || detail.acting == "rerun") && live
             PromptCardView.setPending(primary, detail.acting == "rerun", label: "Re-running…")
         }
-        let edit = KitButton.workflow("Edit workflow") { [weak self] in
+        let edit = KitButton.make("Edit workflow", variant: .outline, height: .sm) { [weak self] in
             guard let address = self?.hub.address else { return }
             var url = address.appendingPathComponent("workflows/\(model.workflowId)")
             url.append(queryItems: [URLQueryItem(name: "tab", value: "program")])
@@ -286,12 +286,14 @@ final class WorkflowRunViewController: ObservedViewController, UIGestureRecogniz
         answer.addArrangedSubview(heading)
         var options: [UIView] = []
         for option in ask.options {
-            let button = KitButton.workflow(option.label) { [weak self] in self?.submit(choice: option.label) }
+            let button = KitButton.make(option.label, variant: .outline, height: .sm) { [weak self] in self?.submit(choice: option.label) }
             if let description = option.description {
                 var config = button.configuration
                 config?.attributedSubtitle = AttributedString(description, attributes: AttributeContainer(TypeScale.typeMeta.attributes(color: Palette.inkMuted)))
                 config?.titleAlignment = .leading
-                config?.contentInsets = NSDirectionalEdgeInsets(top: Space.space3, leading: Space.space3, bottom: Space.space3, trailing: Space.space3)
+                // The kit's side insets stay: only the block grows to hold the second line.
+                config?.contentInsets.top = Space.space3
+                config?.contentInsets.bottom = Space.space3
                 button.configuration = config
                 button.widthAnchor.constraint(lessThanOrEqualToConstant: 320).isActive = true
             }
@@ -329,11 +331,12 @@ final class WorkflowRunViewController: ObservedViewController, UIGestureRecogniz
             typed.axis = .vertical
             typed.spacing = Space.space2
             answer.addArrangedSubview(typed)
-            if ask.options.isEmpty { addSend { [weak self] in self?.submit(choice: nil) } }
+            // The typed answer's own Send is the form's action; the other answer's is an outline beside its field.
+            if ask.options.isEmpty { addSend(.action) { [weak self] in self?.submit(choice: nil) } }
         }
         if ask.allowOther {
             field(other, name: "Other answer")
-            addSend { [weak self] in self?.submit(choice: self?.other.text) }
+            addSend(.outline) { [weak self] in self?.submit(choice: self?.other.text) }
         }
         // It folds open (`unfold`).
         if view.window != nil, !UIAccessibility.isReduceMotionEnabled {
@@ -342,8 +345,8 @@ final class WorkflowRunViewController: ObservedViewController, UIGestureRecogniz
         }
     }
 
-    private func addSend(_ action: @escaping () -> Void) {
-        let button = KitButton.workflow("Send answer", action: action)
+    private func addSend(_ variant: KitButton.Variant, _ action: @escaping () -> Void) {
+        let button = KitButton.make("Send answer", variant: variant, height: .sm, action: action)
         answerButtons.append(button)
         let row = UIStackView(arrangedSubviews: [button, UIView()])
         answer.addArrangedSubview(row)
@@ -670,7 +673,7 @@ final class RunStepsView: UIView {
                     fold.arrangedSubviews.last?.widthAnchor.constraint(equalTo: fold.widthAnchor).isActive = true
                 }
                 do {
-                    let button = KitButton.workflow("Re-run from this step") { rerun(step.id) }
+                    let button = KitButton.make("Re-run from this step", variant: .outline, height: .sm) { rerun(step.id) }
                     button.isEnabled = live && !going
                     fold.addArrangedSubview(button)
                 }
