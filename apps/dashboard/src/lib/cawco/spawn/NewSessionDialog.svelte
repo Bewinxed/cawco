@@ -229,8 +229,8 @@
     if (effort) {
       return effort;
     }
-    if (harness === "claude" && efforts.includes("xhigh")) {
-      return "xhigh";
+    if (selected?.defaultEffort !== undefined) {
+      return selected.defaultEffort;
     }
     return efforts.includes("high") ? "high" : (efforts[0] ?? null);
   });

@@ -5,6 +5,7 @@ export interface ModelEntry {
   aliases: string[];
   /** Tokens of context the harness reports for this model; absent is unknown. */
   contextWindow?: number;
+  defaultEffort?: EffortLevel | null;
   effort: EffortLevel[];
   id: string;
   isCustom: boolean;
@@ -90,6 +91,8 @@ export function deriveModelEntries(
       lastUsedAt: use.lastUsedAt[id],
       isDefault: group.some((row) => row.value === "default"),
       contextWindow: group.find((row) => row.contextWindow)?.contextWindow,
+      defaultEffort: group.find((row) => row.defaultEffort !== undefined)
+        ?.defaultEffort,
       isCustom: false,
       effort: [
         ...new Set(group.flatMap((row) => row.supportedEffortLevels ?? [])),

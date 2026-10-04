@@ -159,6 +159,11 @@ export interface ModelInfo {
    * unknown — never a guess.
    */
   contextWindow?: number;
+  /**
+   * The effort the CLI applies when a spawn omits effort, measured by the
+   * harness. Null when the model takes none; absent when not measured.
+   */
+  defaultEffort?: EffortLevel | null;
   description?: string;
   displayName: string;
   /** ISO date the model was released, when the catalog source says. */

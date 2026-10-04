@@ -1601,7 +1601,25 @@ async function probeModels(): Promise<ModelInfo[] | undefined> {
           options: { maxTurns: 0, persistSession: false },
         });
         try {
-          return await handle.supportedModels();
+          const models = await handle.supportedModels();
+          const measured: ModelInfo[] = [];
+          for (const model of models) {
+            // biome-ignore lint/performance/noAwaitInLoops: each read must follow its alias's switch on the same probe handle
+            await handle.setModel(model.value);
+            const settings = await (
+              handle as unknown as {
+                getSettings: () => Promise<{
+                  applied?: { effort?: EffortLevel | null };
+                }>;
+              }
+            ).getSettings();
+            const defaultEffort = settings.applied?.effort;
+            measured.push({
+              ...model,
+              ...(defaultEffort === undefined ? {} : { defaultEffort }),
+            });
+          }
+          return measured;
         } finally {
           // Tearing the child down takes longer than the answer did, and nothing
           // waits on it — the catalog is already in hand.
@@ -1611,7 +1629,8 @@ async function probeModels(): Promise<ModelInfo[] | undefined> {
             // not something the report should carry
           });
         }
-      } catch {
+      } catch (error) {
+        console.warn(`[claude] model probe failed: ${String(error)}`);
         return undefined;
       }
     })(),
@@ -1641,20 +1660,28 @@ async function probeModels(): Promise<ModelInfo[] | undefined> {
     ...(accountModels ?? [])
       .filter((model) => !values.has(model.id))
       .sort((a, b) => b.created_at.localeCompare(a.created_at))
-      .map((model) => ({
-        value: model.id,
-        resolvedModel: model.id,
-        displayName: model.display_name,
-        released: model.created_at.slice(0, 10),
-        description: `Released ${model.created_at.slice(0, 10)}`,
-        ...(defaultModel
-          ? {
-              supportsEffort: defaultModel.supportsEffort,
-              supportedEffortLevels: defaultModel.supportedEffortLevels,
-              supportsAdaptiveThinking: defaultModel.supportsAdaptiveThinking,
-            }
-          : {}),
-      })),
+      .map((model) => {
+        const alias = aliases?.find(
+          (row) =>
+            row.resolvedModel?.replace(CONTEXT_SUFFIX, "") === model.id &&
+            row.defaultEffort !== undefined
+        );
+        return {
+          value: model.id,
+          resolvedModel: model.id,
+          displayName: model.display_name,
+          released: model.created_at.slice(0, 10),
+          description: `Released ${model.created_at.slice(0, 10)}`,
+          ...(alias ? { defaultEffort: alias.defaultEffort } : {}),
+          ...(defaultModel
+            ? {
+                supportsEffort: defaultModel.supportsEffort,
+                supportedEffortLevels: defaultModel.supportedEffortLevels,
+                supportsAdaptiveThinking: defaultModel.supportsAdaptiveThinking,
+              }
+            : {}),
+        };
+      }),
   ];
 }
 
