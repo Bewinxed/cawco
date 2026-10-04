@@ -3011,6 +3011,12 @@ export class OpencodeSession implements HarnessSession {
     model?: { providerID?: string; modelID?: string }
   ): Promise<void> {
     const names = await this.#commandNamesOf();
+    // `/compact` is a TUI command in opencode, not a registered one: it is the
+    // session.summarize call, so it never reaches the model as a prompt.
+    if (name === "compact" && !names.has(name)) {
+      await this.#summarize(uuid);
+      return;
+    }
     if (!names.has(name)) {
       this.#prompt(parts, messageID, uuid, model);
       return;
@@ -3041,6 +3047,31 @@ export class OpencodeSession implements HarnessSession {
           this.#ctx.rejected(uuid, new Error(errorText(res.error)));
         }
       });
+  }
+
+  /** Compacts the session with its current model; the send `uuid` fails if opencode refuses. */
+  async #summarize(uuid: string): Promise<void> {
+    if (!this.#model) {
+      this.#ctx.rejected(uuid, new Error("compact needs the session's model"));
+      return;
+    }
+    try {
+      await this.#prepareDispatch();
+    } catch (error) {
+      this.#ctx.rejected(uuid, error);
+      return;
+    }
+    const { providerID, modelID } = splitModel(this.#model);
+    const res = await this.#client.session.summarize({
+      // biome-ignore lint/style/noNonNullAssertion: invariant: sessionId is set once in the constructor and never nulled; the interface types it nullable for other harnesses
+      sessionID: this.sessionId!,
+      directory: this.#directory,
+      providerID,
+      modelID,
+    });
+    if (res.error) {
+      this.#ctx.rejected(uuid, new Error(errorText(res.error)));
+    }
   }
 
   /** Providers the current OpenCode account can actually use, including OAuth. */
