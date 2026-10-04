@@ -24,6 +24,7 @@
    * read between them, not two.
    */
   import { untrack } from "svelte";
+  import { toast } from "svelte-sonner";
   import { Button } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as ContextMenu from "#lib/components/ui/context-menu/index.js";
@@ -157,12 +158,20 @@
     if (!(forkable && machine)) {
       return;
     }
-    const instanceId = forkSession({
-      machineId: machine.machineId,
-      cwd,
-      sessionId: forkable,
-      harness: session?.harness ?? "claude",
-    });
+    // The page leaves for the fork once the hub has taken it; a refusal stays
+    // here, with the hub's reason.
+    let instanceId: string;
+    try {
+      instanceId = await forkSession({
+        machineId: machine.machineId,
+        cwd,
+        sessionId: forkable,
+        harness: session?.harness ?? "claude",
+      });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error));
+      return;
+    }
     await goto(conversationHref(instanceId, cawco.instanceIndex));
   }
 

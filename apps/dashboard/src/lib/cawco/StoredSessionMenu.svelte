@@ -6,6 +6,7 @@
    * the context-menu key still reaches this menu from the keyboard.
    */
   import type { Snippet } from "svelte";
+  import { toast } from "svelte-sonner";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as AlertDialog from "#lib/components/ui/alert-dialog/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -101,13 +102,20 @@
     }
   }
 
+  /** The page leaves for the fork once the hub has taken it; a refusal stays here, with the hub's reason. */
   async function fork() {
-    const instanceId = forkSession({
-      machineId,
-      cwd: info.cwd ?? "",
-      sessionId: info.sessionId,
-      harness: info.harness,
-    });
+    let instanceId: string;
+    try {
+      instanceId = await forkSession({
+        machineId,
+        cwd: info.cwd ?? "",
+        sessionId: info.sessionId,
+        harness: info.harness,
+      });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error));
+      return;
+    }
     await goto(conversationHref(instanceId, cawco.instanceIndex));
   }
 </script>

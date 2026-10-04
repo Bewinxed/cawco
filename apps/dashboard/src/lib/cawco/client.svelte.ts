@@ -3621,19 +3621,35 @@ function explicit(machineId: string, payload: SpawnPayload): SpawnPayload {
   };
 }
 
-function start({
+/**
+ * Sends a spawn and returns the view it streams into once the hub has taken
+ * it: its row is open. A spawn the hub refuses throws the hub's reason, and
+ * nothing of it is kept here: no view, and no id for a caller to navigate to.
+ * Every session this dashboard starts, resumes or forks goes through here.
+ */
+async function start({
   machineId,
   ...spawn
-}: Omit<SpawnPayload, "instanceId"> & { machineId: string }): SessionState {
+}: Omit<SpawnPayload, "instanceId"> & {
+  machineId: string;
+}): Promise<SessionState> {
   const instanceId = newId();
+  const requestId = newId();
   const payload = explicit(machineId, { instanceId, ...spawn });
-  send({ verb: "spawn", machineId, instanceId, payload });
-  return opened(machineId, payload);
-}
-
-/** The view a spawn that has gone out streams into. */
-function opened(machineId: string, payload: SpawnPayload): SessionState {
-  const created = session(payload.instanceId);
+  try {
+    await ask<void>(
+      requestId,
+      "Starting the session",
+      CONTROL_TIMEOUT_MS,
+      () => {
+        opening.set(instanceId, requestId);
+        send({ verb: "spawn", machineId, instanceId, requestId, payload });
+      }
+    );
+  } finally {
+    opening.delete(instanceId);
+  }
+  const created = session(instanceId);
   created.machineId = machineId;
   created.cwd = payload.cwd;
   created.harness = payload.harness ?? "claude";
@@ -3647,9 +3663,8 @@ function opened(machineId: string, payload: SpawnPayload): SessionState {
 
 /**
  * Starts a session on `machineId` and returns the id its route lives at, once
- * the hub has taken the spawn: its row is open. A spawn the hub refuses throws
- * the hub's reason, and nothing of it is kept here: no view, no first prompt
- * sent, no id for a caller to navigate to.
+ * the hub has taken the spawn ({@link start}). A spawn the hub refuses throws
+ * the hub's reason, and its first prompt is never sent.
  */
 export async function spawnSession({
   machineId,
@@ -3674,10 +3689,8 @@ export async function spawnSession({
   bootstrap?: SpawnPayload["bootstrap"];
   projectId?: string;
 }): Promise<string> {
-  const instanceId = newId();
-  const requestId = newId();
-  const payload = explicit(machineId, {
-    instanceId,
+  const created = await start({
+    machineId,
     cwd,
     harness,
     permissionMode,
@@ -3687,20 +3700,6 @@ export async function spawnSession({
     bootstrap,
     projectId,
   });
-  try {
-    await ask<void>(
-      requestId,
-      "Starting the session",
-      CONTROL_TIMEOUT_MS,
-      () => {
-        opening.set(instanceId, requestId);
-        send({ verb: "spawn", machineId, instanceId, requestId, payload });
-      }
-    );
-  } finally {
-    opening.delete(instanceId);
-  }
-  const created = opened(machineId, payload);
   if (prompt?.trim()) {
     // Followed before its first prompt goes, on the socket that carries it:
     // that send's record is among the first frames the session's stream
@@ -3718,8 +3717,9 @@ export async function spawnSession({
 /**
  * Re-opens a stored session as a live one. The hub reads the conversation it
  * resumes into the new view's transcript, so it reads as one continuous thread.
+ * A resume the hub refuses throws the hub's reason ({@link start}).
  */
-export function resumeSession({
+export async function resumeSession({
   machineId,
   cwd,
   sessionId,
@@ -3729,7 +3729,7 @@ export function resumeSession({
   cwd: string;
   sessionId: string;
   harness?: HarnessKind;
-}): string {
+}): Promise<string> {
   const live = instanceForSession(
     instanceIndex,
     sessionId,
@@ -3746,7 +3746,7 @@ export function resumeSession({
     return live.id;
   }
 
-  const created = start({
+  const created = await start({
     machineId,
     cwd,
     harness,
@@ -3762,9 +3762,10 @@ export function resumeSession({
  * Branches a side quest off a session (NEW.md §1): the same context carried into
  * a new SDK session, kept apart from mainline work until it is kept or
  * discarded. The hub reads the conversation it branches, up to the turn it
- * branches at, into the new view's transcript.
+ * branches at, into the new view's transcript. A fork the hub refuses throws
+ * the hub's reason ({@link start}).
  */
-export function forkSession({
+export async function forkSession({
   machineId,
   cwd,
   sessionId,
@@ -3777,14 +3778,14 @@ export function forkSession({
   harness?: HarnessKind;
   /** Branch from this assistant turn rather than from the end — see {@link rewindPoint}. */
   at?: string;
-}): string {
+}): Promise<string> {
   // The branch runs on what its source runs on, never on the machine's
   // defaults: the hub's row for the conversation says what that is.
   const source = instanceForSession(instanceIndex, sessionId, {
     machineId,
     cwd,
   });
-  const created = start({
+  const created = await start({
     machineId,
     cwd,
     harness,
@@ -4950,7 +4951,7 @@ export async function editAndResend(
  * end: the fork the header offers, resumed at the turn the reader picked. The
  * session it branches from is left running and untouched.
  */
-export function forkFrom(instanceId: string, id: string): string {
+export function forkFrom(instanceId: string, id: string): Promise<string> {
   const target = session(instanceId);
   if (!(target.sessionId && target.machineId)) {
     throw new Error(

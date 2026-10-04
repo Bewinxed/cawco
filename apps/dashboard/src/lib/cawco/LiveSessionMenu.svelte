@@ -11,6 +11,7 @@
    */
   import type { HarnessKind } from "@cawco/core";
   import type { Snippet } from "svelte";
+  import { toast } from "svelte-sonner";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as ContextMenu from "#lib/components/ui/context-menu/index.js";
   import {
@@ -84,14 +85,22 @@
     if (!(forkable && machine)) {
       return;
     }
-    const forked = forkSession({
-      machineId: machine.machineId,
-      cwd: session?.cwd || instance.cwd,
-      sessionId: forkable,
-      harness: (session?.harness ??
-        instance.harness ??
-        "claude") as HarnessKind,
-    });
+    // The page leaves for the fork once the hub has taken it; a refusal stays
+    // here, with the hub's reason.
+    let forked: string;
+    try {
+      forked = await forkSession({
+        machineId: machine.machineId,
+        cwd: session?.cwd || instance.cwd,
+        sessionId: forkable,
+        harness: (session?.harness ??
+          instance.harness ??
+          "claude") as HarnessKind,
+      });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error));
+      return;
+    }
     await goto(conversationHref(forked, cawco.instanceIndex));
   }
 
