@@ -668,6 +668,7 @@ async function saveWorkflowProgram(
 
 const coldRefusals = new Map<string, string>();
 
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: expiry evidence and repeat consumption must share one decision path.
 async function checkCold(
   instanceId: string | undefined,
   workspace: string | undefined,
@@ -682,12 +683,14 @@ async function checkCold(
   if (!response.ok) {
     throw new Error(await response.text());
   }
-  const { row, midTurn, turns, lastTurnAt } = (await response.json()) as {
-    row: KeepAliveRow | null;
-    midTurn: boolean;
-    turns: number;
-    lastTurnAt: string | null;
-  };
+  const { row, midTurn, turns, lastTurnAt, activityBound } =
+    (await response.json()) as {
+      row: KeepAliveRow | null;
+      midTurn: boolean;
+      turns: number;
+      lastTurnAt: string | null;
+      activityBound: boolean;
+    };
   if (!row) {
     return;
   }
@@ -724,12 +727,21 @@ async function checkCold(
       60_000
   );
   const lifetime = row.cacheTtl === "1h" ? "1 hour" : "5 minutes";
-  const age = measured
-    ? `Its last request was ${idle} minutes ago`
-    : `Its last recorded turn ended ${idle} minutes ago`;
+  let age = `Its last recorded turn ended ${idle} minutes ago`;
+  if (activityBound) {
+    age = `Its last model activity was at least ${idle} minutes ago`;
+  }
+  if (turns === 0) {
+    age = `Its last recorded activity was ${Math.floor((now - new Date(row.updatedAt).getTime()) / 60_000)} minutes ago`;
+  }
+  if (measured) {
+    age = `Its last request was ${idle} minutes ago`;
+  }
   const cache = measured ? lifetime : "not measured, at most 1 hour";
+  const size =
+    turns > 0 ? `recorded model turns: ${turns}` : "size not recorded";
   throw new Error(
-    `Refused: "${title}" (${row.id}) is cold. ${age} and its prompt cache (${cache}) has expired, so the next message makes it re-read its whole transcript (recorded model turns: ${turns}) at full price. Nothing was sent.\n\nCheck first:\n1. Does this task need context that session already holds, which a brief could not carry?\n2. Would a fresh delegate with a tight brief cost less than that transcript?\n3. Is the message still needed at all, or was it meant for a session that has moved on?\n\nThen: if a fresh delegate fits, start one with delegate and no workspace. If no message is needed, stop. If this session is the right one, make the same call again and it will be delivered.`
+    `Refused: "${title}" (${row.id}) is cold. ${age} and its prompt cache (${cache}) has expired, so the next message makes it re-read its whole transcript (${size}) at full price. Nothing was sent.\n\nCheck first:\n1. Does this task need context that session already holds, which a brief could not carry?\n2. Would a fresh delegate with a tight brief cost less than that transcript?\n3. Is the message still needed at all, or was it meant for a session that has moved on?\n\nThen: if a fresh delegate fits, start one with delegate and no workspace. If no message is needed, stop. If this session is the right one, make the same call again and it will be delivered.`
   );
 }
 

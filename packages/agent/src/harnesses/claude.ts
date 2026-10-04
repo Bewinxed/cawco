@@ -138,7 +138,10 @@ interface CommandLifecycle {
  * before the interrupt was `started` (read) already, so its later
  * `cancelled` changes nothing.
  */
-export const toNeutral = (sdk: SDKMessage): NeutralMessage | null => {
+export const toNeutral = (
+  sdk: SDKMessage,
+  recovered = false
+): NeutralMessage | null => {
   if ((sdk as { type: string }).type === "command_lifecycle") {
     const command = sdk as unknown as CommandLifecycle;
     const session = command.session_id
@@ -180,6 +183,13 @@ export const toNeutral = (sdk: SDKMessage): NeutralMessage | null => {
     return {
       ...sdk,
       raw: sdk,
+      ...(recovered
+        ? { recovered: true }
+        : {
+            timestamp:
+              (sdk as { timestamp?: string }).timestamp ??
+              new Date().toISOString(),
+          }),
       ...(usage
         ? {
             cache: {
@@ -1012,15 +1022,17 @@ class ClaudeSession implements HarnessSession {
               .map((task) => task.task_id)
           );
         }
-        const neutral = toNeutral(message);
+        const seq =
+          message.type === "result" && message.uuid
+            ? this.#seqs.get(message.uuid)
+            : undefined;
+        const recovered =
+          seq !== undefined &&
+          !!this.#sessiond?.attach &&
+          seq <= this.#sessiond.attach.head;
+        const neutral = toNeutral(message, recovered);
         if (!neutral) {
           continue;
-        }
-        if (neutral.type === "result" && this.#sessiond?.attach) {
-          const seq = message.uuid ? this.#seqs.get(message.uuid) : undefined;
-          if (seq !== undefined && seq <= this.#sessiond.attach.head) {
-            neutral.recovered = true;
-          }
         }
         // The session-start hooks that failed go out as this run's first
         // prompt is taken up: where the CLI stores them, ahead of that

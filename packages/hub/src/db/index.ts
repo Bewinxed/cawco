@@ -706,6 +706,7 @@ export interface DbShape {
   readonly recordedTurns: (instanceId: string) => {
     turns: number;
     lastTurnAt: string | null;
+    unboundedTurns: number;
   };
   /**
    * Keeps a version that is about to be replaced or destroyed — a save, an
@@ -3273,6 +3274,7 @@ const make = (path: string): DbShape => {
         db.insert(delegateEvents).values(event).returning().get()
       ),
     claimCompletedTurn: (instanceId, resultId, completedAt, recovered) => {
+      const receivedAt = recovered ? undefined : new Date().toISOString();
       const reports = db
         .select()
         .from(delegateEvents)
@@ -3305,7 +3307,7 @@ const make = (path: string): DbShape => {
         .values({
           instanceId,
           resultId,
-          completedAt,
+          completedAt: completedAt ?? receivedAt,
           adoptedWithoutReport: unkeyed && !exact,
         })
         .onConflictDoNothing()
@@ -3316,12 +3318,27 @@ const make = (path: string): DbShape => {
     recordedTurns: (instanceId) =>
       db
         .select({
-          turns: sql<number>`count(*)`,
-          lastTurnAt: sql<string | null>`max(${completedTurns.completedAt})`,
+          turns: sql<number>`count(distinct ${completedTurns.resultId})`,
+          lastTurnAt: sql<
+            string | null
+          >`max(coalesce(${completedTurns.completedAt}, strftime('%Y-%m-%dT%H:%M:%fZ', ${delegateEvents.createdAt} / 1000.0, 'unixepoch')))`,
+          unboundedTurns: sql<number>`count(case when ${completedTurns.completedAt} is null and ${delegateEvents.createdAt} is null then 1 end)`,
         })
         .from(completedTurns)
+        .leftJoin(
+          delegateEvents,
+          and(
+            eq(delegateEvents.instanceId, completedTurns.instanceId),
+            eq(delegateEvents.kind, "report"),
+            sql`json_extract(${delegateEvents.payload}, '$.resultId') = ${completedTurns.resultId}`
+          )
+        )
         .where(eq(completedTurns.instanceId, instanceId))
-        .get() as { turns: number; lastTurnAt: string | null },
+        .get() as {
+        turns: number;
+        lastTurnAt: string | null;
+        unboundedTurns: number;
+      },
     delegateAsk: (requestId) => {
       const row = db
         .select()

@@ -7522,12 +7522,30 @@ export const createServer = (
             instanceId = db.workItemsIn(workspaces[0].id)[0]?.instanceId;
           }
           const [row] = instanceId ? db.getInstancesByIds([instanceId]) : [];
+          const turns = row
+            ? db.recordedTurns(row.id)
+            : { turns: 0, lastTurnAt: null, unboundedTurns: 0 };
+          const activityBound =
+            !!row &&
+            (turns.unboundedTurns > 0 ||
+              (row.harness === "claude" &&
+                !!row.sessionId &&
+                turns.turns === 0));
+          // Activity writes are throttled; the closing pulse can land within that window.
+          const lastTurnAt = activityBound
+            ? new Date(
+                Math.max(
+                  row.updatedAt.getTime() + ACTIVITY_TOUCH_MS,
+                  Date.parse(turns.lastTurnAt ?? "") || 0
+                )
+              ).toISOString()
+            : turns.lastTurnAt;
           return {
             row: row ?? null,
             midTurn: !!(row && pulses.get(row.id)?.busy),
-            ...(row
-              ? db.recordedTurns(row.id)
-              : { turns: 0, lastTurnAt: null }),
+            turns: turns.turns,
+            lastTurnAt,
+            activityBound,
           };
         }
       )
