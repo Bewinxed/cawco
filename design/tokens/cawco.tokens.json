@@ -2370,6 +2370,11 @@
       "$type": "cubicBezier",
       "$value": "cubic-bezier(0.32, 0.72, 0, 1)"
     },
+    "ease-arrive": {
+      "$type": "cubicBezier",
+      "$value": "cubic-bezier(0.2, 0, 0, 1)",
+      "$description": "A small mark arriving beside what it belongs to (the compaction divider's chevron): it leaves at once and takes most of its time settling, so a 160ms entrance reads as motion where ease-out reads as a swap."
+    },
     "ease-glide-in": {
       "$type": "cubicBezier",
       "$value": "cubic-bezier(0.3333, 0, 0.6667, 0.3333)",

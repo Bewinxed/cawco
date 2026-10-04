@@ -2105,6 +2105,11 @@
         "purpose": "Popovers, sheets, page swaps, shared-element flights, container morphs."
       },
       {
+        "name": "ease-arrive",
+        "value": "cubic-bezier(0.2, 0, 0, 1)",
+        "purpose": "A small mark arriving beside what it belongs to: the compaction divider's chevron."
+      },
+      {
         "name": "ease-glide-in",
         "value": "cubic-bezier(0.3333, 0, 0.6667, 0.3333)",
         "purpose": "A glide's first stretch (--space-3): speed rising evenly from rest into the steady pace an opening tree's line, its room and the rows under it travel at."

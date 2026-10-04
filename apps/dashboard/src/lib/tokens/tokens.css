@@ -670,6 +670,8 @@
     --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
     --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
     --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+    /* A small mark arriving beside what it belongs to (the compaction divider's chevron): it leaves at once and takes most of its time settling, so a 160ms entrance reads as motion where ease-out reads as a swap. */
+    --ease-arrive: cubic-bezier(0.2, 0, 0, 1);
     /* A glide's first stretch: speed rising evenly from rest (its position the square of its time), into the steady pace a tree's line, its room and the rows under it travel at. */
     --ease-glide-in: cubic-bezier(0.3333, 0, 0.6667, 0.3333);
     /* A glide's last stretch: from the steady pace, speed falling evenly to rest. */

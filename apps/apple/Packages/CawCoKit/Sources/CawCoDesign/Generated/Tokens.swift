@@ -533,6 +533,8 @@ public enum Motion {
     public static let easeOut = TimingCurve(x1: 0.23, y1: 1, x2: 0.32, y2: 1)
     public static let easeInOut = TimingCurve(x1: 0.77, y1: 0, x2: 0.175, y2: 1)
     public static let easeDrawer = TimingCurve(x1: 0.32, y1: 0.72, x2: 0, y2: 1)
+    /// A small mark arriving beside what it belongs to (the compaction divider's chevron): it leaves at once and takes most of its time settling, so a 160ms entrance reads as motion where ease-out reads as a swap.
+    public static let easeArrive = TimingCurve(x1: 0.2, y1: 0, x2: 0, y2: 1)
     /// A glide's first stretch: speed rising evenly from rest (its position the square of its time), into the steady pace a tree's line, its room and the rows under it travel at.
     public static let easeGlideIn = TimingCurve(x1: 0.3333, y1: 0, x2: 0.6667, y2: 0.3333)
     /// A glide's last stretch: from the steady pace, speed falling evenly to rest.

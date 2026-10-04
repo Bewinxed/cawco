@@ -9,6 +9,8 @@
 </script>
 
 <script lang="ts">
+  import caw2x from "#lib/assets/brand/caw-compacted@2x.webp";
+  import caw3x from "#lib/assets/brand/caw-compacted@3x.webp";
   /**
    * A compaction in the transcript: a wavy vermillion line across the column
    * with "Compacted" set in the middle of it. The whole divider is the button
@@ -16,7 +18,9 @@
    * there is nothing to open, and the button waits disabled. A chevron comes
    * in beside the word under the pointer or keyboard focus, and stays, turned
    * down, while the brief is open; a finger has no hover, so there it is
-   * always shown.
+   * always shown. Caw, a folded note in his beak, sits before the word: he
+   * is decoration and he is still — a compaction is nothing to attend to —
+   * but for coming in once with the line when one lands live.
    */
   import IconChevron from "~icons/solar/alt-arrow-right-bold-duotone";
   import { unfold } from "../motion/fold.svelte";
@@ -79,6 +83,14 @@
     <svg aria-hidden="true" class="wave"><path d={WAVE} /></svg>
   </span>
   <span class="mid"
+    ><img
+      alt=""
+      aria-hidden="true"
+      class="caw"
+      height="18"
+      src={caw2x}
+      srcset="{caw2x} 2x, {caw3x} 3x"
+      width="19"
     >Compacted<span class="chev"><IconChevron aria-hidden="true" /></span></span
   >
   <span class="arm">
@@ -99,8 +111,16 @@
 <style>
   .divider {
     --line: var(--brand-solid);
-    /* How far in the chevron is: 0 away, 1 beside the word. */
+    /* How far in the chevron is: 0 away, 1 beside the word. It leaves a
+       little quicker than it arrives; a state that shows it names the
+       arrival's clock, since a transition runs on the clock of the state it
+       is going to. */
     --chev: 0;
+    --chev-dur: var(--dur-control);
+    --chev-ease: var(--ease-out);
+    /* Half the chevron's mark and gap: how far the centre and each arm move
+       to hold it. */
+    --room: calc((12px + var(--space-1)) / 2);
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
     align-items: center;
@@ -121,6 +141,8 @@
     /* The chevron is in for keyboard focus and while the brief is open. */
     &:is(:focus-visible, [aria-expanded="true"]) {
       --chev: 1;
+      --chev-dur: var(--dur-toggle);
+      --chev-ease: var(--ease-arrive);
     }
     /* Under the pointer the line and word step to the stronger vermillion
        and the chevron comes in; nothing else. */
@@ -128,6 +150,8 @@
       &:hover:not(:disabled) {
         --line: var(--brand-ink-strong);
         --chev: 1;
+        --chev-dur: var(--dur-toggle);
+        --chev-ease: var(--ease-arrive);
         color: var(--brand-ink-strong);
       }
     }
@@ -139,25 +163,41 @@
     }
     transition: color var(--dur-control) var(--ease-out);
   }
+  /* The centre: the word, and the chevron's 12px mark a --space-1 gap after
+     it. The chevron takes no room in the layout, in or out: the word stands
+     where it stands without it. As it comes in the centre makes room by
+     moving, never by resizing — the word steps half the chevron's width
+     aside and each arm draws back the same from the centre — so the arms
+     give way without a layout pass. Transitions throughout, so leaving
+     half-way turns back from where it is. */
   .mid {
     white-space: nowrap;
+    translate: calc(var(--chev) * var(--room) * -1) 0;
   }
-  /* The chevron takes no room until it is in: the word stands where it
-     stands without it, and the centre widens as it comes, so the arms give
-     way rather than jump. `middle` sets it on the word's x-height. */
+  /* Caw's head, 18px tall, its middle on the word's x-height. */
+  .caw {
+    display: inline-block;
+    vertical-align: middle;
+    inline-size: auto;
+    block-size: 18px;
+    margin-inline-end: var(--c-pill-gap);
+  }
+  /* A zero-width box on the word's line, `middle` setting its mark on the
+     word's x-height; the mark hangs out of it after the gap. */
   .chev {
     display: inline-block;
     vertical-align: middle;
-    inline-size: calc(var(--chev) * 12px);
+    inline-size: 0;
     block-size: 12px;
-    margin-inline-start: calc(var(--chev) * var(--space-1));
     opacity: var(--chev);
-    transition: opacity var(--dur-control) var(--ease-out);
+    transition: opacity var(--chev-dur) var(--chev-ease);
 
+    /* It slides out from the word's edge to its gap as it comes in. */
     & :global(svg) {
       display: block;
       inline-size: 12px;
       block-size: 12px;
+      translate: calc(var(--chev) * var(--space-1)) 0;
       scale: calc(0.25 + 0.75 * var(--chev));
       filter: blur(calc((1 - var(--chev)) * 4px));
     }
@@ -165,24 +205,43 @@
     [aria-expanded="true"] & :global(svg) {
       rotate: 90deg;
     }
-    /* Transitions, so leaving half-way turns back from where it is. */
-    @media (prefers-reduced-motion: no-preference) {
-      transition:
-        opacity var(--dur-control) var(--ease-out),
-        inline-size var(--dur-control) var(--ease-out),
-        margin-inline-start var(--dur-control) var(--ease-out);
-
-      & :global(svg) {
-        transition:
-          scale var(--dur-control) var(--ease-out),
-          filter var(--dur-control) var(--ease-out),
-          rotate var(--dur-toggle) var(--ease-out);
-      }
-    }
   }
   /* Each arm is the container its wave is measured against. */
   .arm {
     container-type: inline-size;
+    clip-path: inset(0 0 0 calc(var(--chev) * var(--room)));
+
+    &.start {
+      clip-path: inset(0 calc(var(--chev) * var(--room)) 0 0);
+    }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .mid {
+      transition:
+        translate var(--chev-dur) var(--chev-ease),
+        scale var(--dur-toggle) var(--ease-out);
+    }
+    .arm {
+      transition: clip-path var(--chev-dur) var(--chev-ease);
+    }
+    /* The mark turns on the spot: on-screen movement, not an entrance. */
+    .chev :global(svg) {
+      transition:
+        translate var(--chev-dur) var(--chev-ease),
+        scale var(--chev-dur) var(--chev-ease),
+        filter var(--chev-dur) var(--chev-ease),
+        rotate var(--dur-toggle) var(--ease-in-out);
+    }
+    /* Landed live, Caw comes in once with the line. */
+    .arriving .caw {
+      animation: caw-in var(--dur-pop) var(--ease-out)
+        calc(var(--dur-rail) + var(--lead)) backwards;
+    }
+    /* Pressed: the centre gives, the line holds. A divider is as wide as the
+       column, and scaling all of it would move its ends by pixels. */
+    .divider:active:not(:disabled) .mid {
+      scale: var(--press-scale);
+    }
   }
   .wave {
     display: block;
@@ -220,6 +279,12 @@
   @keyframes wave-draw {
     from {
       stroke-dashoffset: var(--run);
+    }
+  }
+  @keyframes caw-in {
+    from {
+      opacity: 0;
+      scale: 0.9;
     }
   }
 
