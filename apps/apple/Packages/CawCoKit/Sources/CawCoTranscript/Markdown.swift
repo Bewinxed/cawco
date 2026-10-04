@@ -126,6 +126,16 @@ enum MarkdownRender {
         var previous: Markup?
         // The web's markdown keeps quotes and dashes as typed: no smart punctuation.
         for node in Document(parsing: source, options: [.disableSmartOpts]).children {
+            // Raw HTML blocks in a row are bare text nodes side by side: they run
+            // on in one line box, nothing between them (`</details><custom-tag>`).
+            if node is HTMLBlock, previous is HTMLBlock, let last = out.last, case let .text(before) = last.kind,
+               case let .text(more) = block(node, style: style).kind {
+                let joined = NSMutableAttributedString(attributedString: before)
+                joined.append(more)
+                out[out.count - 1] = MarkdownBlock(kind: .text(joined), top: last.top, bottom: last.bottom)
+                previous = node
+                continue
+            }
             var each = block(node, style: style)
             if style.wraps { each = wrapped(each, node) }
             (each.top, each.bottom) = margins(node, after: previous, style: style)
@@ -207,9 +217,17 @@ enum MarkdownRender {
         return (top, bottom)
     }
 
+    /// The top-level blocks a source is cut at: each one, but a raw HTML block
+    /// that follows another stays with it, since the two draw as one line (`blocks`).
+    static func pieceHeads(_ children: [Markup]) -> [Markup] {
+        children.indices.compactMap { i in
+            i > 0 && children[i] is HTMLBlock && children[i - 1] is HTMLBlock ? nil : children[i]
+        }
+    }
+
     /// A settled source cut at its top-level blocks.
     static func topLevel(_ source: String) -> [String] {
-        let children = Array(Document(parsing: source).children)
+        let children = pieceHeads(Array(Document(parsing: source).children))
         guard children.count > 1 else { return source.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? [] : [source] }
         let raw = Array(source.utf8)
         var lines = [0]
@@ -521,7 +539,12 @@ enum MarkdownRender {
                 case is SoftBreak: out.append(NSAttributedString(string: " ", attributes: attributes))
                 case is LineBreak: out.append(NSAttributedString(string: "\u{2028}", attributes: attributes))
                 case let image as Markdown.Image: out.append(NSAttributedString(string: image.plainText, attributes: attributes))
-                case let html as InlineHTML: out.append(NSAttributedString(string: html.rawHTML, attributes: attributes))
+                case let html as InlineHTML:
+                    // The web's markdown (svelte-streamdown) renders no raw HTML: a tag, a
+                    // comment, an unknown element is its source as text. The one tag its
+                    // lexer reads is `<br>` (marked-br: `/^<br\s*\/?>/i`), a line break.
+                    let isBreak = html.rawHTML.wholeMatch(of: /<br\s*\/?>/.ignoresCase()) != nil
+                    out.append(NSAttributedString(string: isBreak ? "\u{2028}" : html.rawHTML, attributes: attributes))
                 default: walk(child, attributes)
                 }
             }

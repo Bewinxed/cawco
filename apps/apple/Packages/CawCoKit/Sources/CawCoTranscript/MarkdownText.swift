@@ -19,7 +19,7 @@ struct MarkdownSplitter {
         if offset > bytes.count { self = MarkdownSplitter() }
         let headerBytes = Array(header.utf8)
         var tail = header + String(decoding: bytes[offset...], as: UTF8.self)
-        let children = Array(Document(parsing: tail).children)
+        let children = MarkdownRender.pieceHeads(Array(Document(parsing: tail).children))
         var frozen: [String] = []
         if children.count > 1 {
             let raw = Array(tail.utf8)
