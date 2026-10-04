@@ -1282,6 +1282,20 @@
   [data-holding] {
     background-color: var(--surface-fill) !important;
   }
+  /* By day the hover step is surface-fill's own, so a press under the
+     pointer is the step past it. Muted ink on that step is 3.93:1: the
+     muted inks inside the pressed control go strong for as long as it is
+     held (8.90:1). Night keeps surface-fill and its inks. */
+  :root:not(.dark)
+  :is(
+    .press-tint:active:not(:disabled, [aria-disabled="true"]),
+    [data-holding]
+  ) {
+    --ink-muted: var(--ink-strong);
+    --text-muted: var(--ink-strong);
+    --ink-subtle: var(--ink-strong);
+    background-color: var(--surface-fill-strong) !important;
+  }
 }
 
 /* The focus ring drawn over the element's own border box, for a control or

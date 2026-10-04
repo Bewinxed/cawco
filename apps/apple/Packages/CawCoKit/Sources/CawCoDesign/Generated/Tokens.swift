@@ -135,7 +135,7 @@ public enum Palette {
     /// A stat tile's figure, a step lighter than the strongest ink.
     public static let inkStat = Palette.named("ink-stat")
     public static let inkMuted = Palette.named("ink-muted")
-    /// Placeholders and tertiary text: the weakest mix of neutral-8 into neutral-11 that holds 4.5:1 on fill, hover and raised (by day 4.55 / 5.21 / 5.66:1 at 6%; the cool ramp's 8.3% measured 4.47 on the warm fill).
+    /// Placeholders and tertiary text: the weakest mix of neutral-8 into neutral-11 that holds 4.5:1 on fill, hover and raised (by day 4.55 / 4.55 / 5.66:1 at 6%, hover being the fill's own step; the cool ramp's 8.3% measured 4.47 on the warm fill).
     public static let inkSubtle = Palette.named("ink-subtle")
     public static let textStrong = Palette.named("text-strong")
     public static let textMuted = Palette.named("text-muted")

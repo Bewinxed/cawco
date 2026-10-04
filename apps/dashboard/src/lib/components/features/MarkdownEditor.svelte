@@ -274,6 +274,17 @@
     background: var(--surface-fill);
     box-shadow: var(--shadow-inset-sel);
   }
+  /* The block handle's open item: by day a step past its hover, which is
+     surface-fill's own step, with its glyph in the strong ink. Styled here
+     and not through --crepe-color-selected, which is also the document's
+     text selection. */
+  .crepe-host :global(.milkdown .milkdown-block-handle .operation-item.active) {
+    background: light-dark(var(--surface-fill-strong), var(--surface-fill));
+
+    & :global(svg) {
+      fill: light-dark(var(--ink-strong), var(--ink-muted));
+    }
+  }
   @media (hover: none) {
     .crepe-host :global(.milkdown) {
       --crepe-color-hover: transparent;

@@ -322,8 +322,10 @@
     .item:focus-within .peek {
       opacity: 1;
     }
+    /* They stand on the row's ghost, by day the hover step itself: their own
+       hover is the step past it. */
     .peek:hover {
-      background: var(--surface-fill);
+      background: light-dark(var(--surface-fill-strong), var(--surface-fill));
       color: var(--ink-strong);
     }
     /* Archive rises beside Peek, a step left of it. */

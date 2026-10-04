@@ -164,7 +164,8 @@
     /* The press tints the whole segment (trailing controls included), not
        the label's hit alone. A press on a trailing control leaves it be. */
     &:has(.hit:active:not(:disabled, [aria-disabled="true"])) {
-      background-color: var(--surface-fill);
+      --press: light-dark(var(--surface-fill-strong), var(--surface-fill));
+      background-color: var(--press);
     }
 
     @media (prefers-reduced-motion: no-preference) {
@@ -316,7 +317,7 @@
 
       &::before,
       &::after {
-        background: var(--surface-fill);
+        background: var(--press);
       }
     }
   }
@@ -360,5 +361,12 @@
   }
   .text {
     font-weight: var(--weight-strong);
+  }
+  /* By day the press is the step past the hover ghost, and an unchosen
+     tab's muted label goes strong on it (app.css .press-tint). Last, so it
+     outranks every tab rule above by order as well as by weight. */
+  :global(:root:not(.dark))
+  .ff-tab:has(.hit:active:not(:disabled, [aria-disabled="true"])) {
+    color: var(--ink-strong);
   }
 </style>

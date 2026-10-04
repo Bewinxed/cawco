@@ -218,6 +218,24 @@
   .row:has(.link:active) {
     background-color: var(--surface-fill);
   }
+  /* By day the press is the step past the ghost the row already stands on,
+     and the row's muted inks go strong on it (app.css .press-tint). */
+  :global(:root:not(.dark)) .row:has(.link:active) {
+    --ink-muted: var(--ink-strong);
+    --ink-subtle: var(--ink-strong);
+    background-color: var(--surface-fill-strong);
+  }
+  /* A control that rests clear in the row stands on the row's ghost, by day
+     the hover step itself: its own hover is the step past it. The kit's
+     ghost button, whose ink is already the strong one. */
+  @media (hover: hover) {
+    .controls
+      :global(
+        .bg-transparent.border-transparent:not(.text-link):hover:not(:disabled)
+      ) {
+      background: light-dark(var(--surface-fill-strong), var(--surface-hover));
+    }
+  }
   .row.two {
     min-height: 56px;
   }
