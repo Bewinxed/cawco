@@ -7,6 +7,14 @@
       name="viewport"
     >
     <title>CawCo — mission control for Claude Code</title>
+    <!--
+      The tab's icon, in every page's HTML (a route with SSR off has no
+      server-rendered head of its own), so the browser never asks for
+      /favicon.ico: Caw's head asleep on his tile, what the icon shows while
+      nothing is going on. hooks.server.ts fills in its hashed URL, and the
+      root layout's `tabIcon` changes it with the fleet.
+    -->
+    <link href="%cawco.tab-icon%" rel="icon" type="image/png">
     %sveltekit.head%
     <!--
       The faces the first paint sets its text in, decoded before it. The build

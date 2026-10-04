@@ -90,7 +90,10 @@ function waveDrawings(): Promise<string[]> {
   return wave;
 }
 
-/** An attachment for the page's `<link rel="icon">`. */
+/**
+ * Makes the page's `<link rel="icon">` (app.html's) follow the fleet. Run in an
+ * effect; returns its teardown.
+ */
 export function tabIcon(link: HTMLLinkElement) {
   let asked = 0;
   let clock: Worker | undefined;

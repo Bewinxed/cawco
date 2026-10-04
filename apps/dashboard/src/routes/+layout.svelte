@@ -12,10 +12,7 @@
   import { leaving, plan, route } from "#lib/cawco/motion/route.svelte.js";
   import { departAll } from "#lib/cawco/motion/share.svelte.js";
   import Shell from "#lib/cawco/Shell.svelte";
-  import {
-    RESTING_TAB_ICON,
-    tabIcon,
-  } from "#lib/cawco/tab-icon/tab-icon.svelte.js";
+  import { tabIcon } from "#lib/cawco/tab-icon/tab-icon.svelte.js";
   import { tallestComposer } from "#lib/cawco/transcript/composer-presence.svelte.js";
   import { workspace } from "#lib/cawco/workspace/workspace.svelte.js";
   import { Toaster } from "#lib/components/ui/sonner/index.js";
@@ -63,6 +60,10 @@
   onMount(restWhenHidden);
   // Hairlines drawn outside a box stand on whole device pixels.
   onMount(trackDevicePixel);
+  // The tab's icon is app.html's link, there on every route; it follows the fleet.
+  $effect(() =>
+    tabIcon(document.querySelector('link[rel="icon"]') as HTMLLinkElement)
+  );
 
   /** Configure's sections in the rail's order, top to bottom. */
   const SECTION_ORDER = GROUPS.flatMap(({ sections }) =>
@@ -101,10 +102,6 @@
 </script>
 
 <svelte:head>
-  <!-- The tab's icon, in the server-rendered head so the browser never asks
-       for /favicon.ico: Caw's head asleep on his tile, what the icon shows
-       while nothing is going on. `tabIcon` changes it with the fleet. -->
-  <link href={RESTING_TAB_ICON} rel="icon" type="image/png" {@attach tabIcon}>
   <!-- Caw's runtime and his waiting file go to the HTTP cache at idle
        priority, so a wait that outlasts its grace shows him without fetching. -->
   {#each CAW_PREFETCHES as href (href)}
