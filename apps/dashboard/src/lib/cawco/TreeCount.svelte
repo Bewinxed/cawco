@@ -1,13 +1,13 @@
 <script lang="ts">
   /**
-   * A parent's count of what is folded under it (tree.ts), and the switch
-   * that opens and folds it: flush with the row's trailing edge, so every
-   * count in a list stands in one column at the edge. On a one-line row
-   * (the projects list) the row's time stands just before it; on a two-line
-   * row (the home's) it stands under the time. Folded, what is under the row is
-   * this number and nothing else; open, it hangs under the row on its
-   * nesting rail (app.css .kit-nest, motion/branch). Failures among them are
-   * said beside the count in their own ink.
+   * A parent's count of what is folded under it, and the switch that opens
+   * and folds it: flush with the row's trailing edge, so every count in a
+   * list stands in one column at the edge (a run's steps, a project's
+   * running sessions). A session says its delegates on its own mark instead
+   * (SessionMark). Folded, what is under the row is this number and nothing
+   * else; open, it hangs under the row on its nesting rail (app.css
+   * .kit-nest, motion/branch). Failures among them are said beside the
+   * count in their own ink.
    *
    * It sits inside the row's own link, so it is a button by role: a
    * <button> cannot nest in an <a>. Its click is its own and never the
@@ -22,16 +22,10 @@
     failed = 0,
     open,
     ontoggle,
-    compact = false,
     noun = "delegate",
     passive = false,
     ...rest
   }: {
-    /**
-     * On a one-line row (the projects list), where the title shares the
-     * line: a failure count beside the count without its word.
-     */
-    compact?: boolean;
     /** What is folded under the parent, at every depth. */
     count: number;
     /** How many of them failed. */
@@ -59,7 +53,7 @@
   <span {...rest} class="count num" data-open={open || undefined}>
     <span>{count}</span>
     {#if failed}
-      <span class="failed">· {failed}{compact ? "" : " failed"}</span>
+      <span class="failed">· {failed} failed</span>
     {/if}
   </span>
 {:else}
@@ -81,7 +75,7 @@
   >
     <span>{count}</span>
     {#if failed}
-      <span class="failed">· {failed}{compact ? "" : " failed"}</span>
+      <span class="failed">· {failed} failed</span>
     {/if}
   </span>
 {/if}

@@ -69,6 +69,7 @@
     nestFrom,
   } from "../motion/branch.svelte";
   import { crossIn, crossOut, dur, motionOk } from "../motion/curves.svelte";
+  import { echoBeat } from "../motion/echo.svelte";
   import { holdWhileInside } from "../motion/held-order.svelte";
   import { IN_MS, ListSwap } from "../motion/list-swap.svelte";
   import {
@@ -216,7 +217,6 @@
     }
     return {
       count: line.descendants.length,
-      failed: line.descendants.filter(isFailed).length,
       open: openTrees.has(id, "home"),
       ontoggle: () => openTrees.toggle(id, "home"),
     };
@@ -879,6 +879,7 @@
           bind:this={listEl}
           {@attach reflow()}
           {@attach highlight(ROW_PILL)}
+          {@attach echoBeat()}
           {@attach holdWhileInside("home:")}
           {@attach arrowKeys}
         >

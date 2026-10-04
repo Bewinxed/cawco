@@ -146,6 +146,9 @@ export const popScale = (): number =>
   Number.parseFloat(rootToken("--pop-scale"));
 /** `--pop-rise` in px: how far a small entrance travels. */
 export const popRise = (): number => Number.parseFloat(rootToken("--pop-rise"));
+/** A unitless or px token as its number (`--echo-scale`, `--ride-fade`). */
+export const numberOf = (name: `--${string}`): number =>
+  Number.parseFloat(rootToken(name));
 
 /** The CSS strings of the same curves, for `element.animate()`. */
 export const CURVE = {

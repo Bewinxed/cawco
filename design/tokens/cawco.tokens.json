@@ -434,6 +434,16 @@
       "$value": "linear-gradient(oklch(from {color.neutral-1} l c h / 0.22), oklch(from {color.neutral-12} l c h / 0.06))",
       "$description": "Identity-mark sheen."
     },
+    "mark-deck-shade": {
+      "$type": "color",
+      "$value": "oklch(14% 0.01 60)",
+      "$description": "Laid over a session mark's deck cards, a step stronger per card (SessionMark): the delegates behind the tile, darker with depth."
+    },
+    "mark-deck-cast": {
+      "$type": "color",
+      "$value": "oklch(0 0 0 / 0.16)",
+      "$description": "The shadow the card in front casts on the band of the next deck card that shows."
+    },
     "hue-cyan-400": {
       "$type": "color",
       "$value": "oklch(75.35% 0.139 232.66)",
@@ -2470,6 +2480,41 @@
     "pop-scale": {
       "$type": "number",
       "$value": "0.92"
+    },
+    "deck-step": {
+      "$type": "dimension",
+      "$value": "1.25px",
+      "$description": "How far each card of a session mark's deck shows below the one in front (SessionMark)."
+    },
+    "deck-shrink": {
+      "$type": "number",
+      "$value": "0.11",
+      "$description": "How much smaller each deck card is than the one in front: card i is the tile scaled by 1 - 0.11 x i."
+    },
+    "deck-depth": {
+      "$type": "dimension",
+      "$value": "40px",
+      "$description": "The deck's perspective: its cards recede in z from this far."
+    },
+    "deck-shade-step": {
+      "$type": "number",
+      "$value": "0.2",
+      "$description": "How much more of the deck's shade each card behind takes."
+    },
+    "echo-scale": {
+      "$type": "number",
+      "$value": "1.45",
+      "$description": "How far a working session's echo grows from its tile before it has faded (motion/echo)."
+    },
+    "echo-opacity": {
+      "$type": "number",
+      "$value": "0.45",
+      "$description": "A working session's echo as it leaves the tile."
+    },
+    "ride-fade": {
+      "$type": "dimension",
+      "$value": "14px",
+      "$description": "The first stretch of its nesting line over which a child's icon fades in as it leaves its parent's (motion/branch)."
     },
     "pop-rise": {
       "$type": "dimension",

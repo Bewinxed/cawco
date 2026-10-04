@@ -52,6 +52,10 @@
       oklch(from var(--neutral-1) l c h / 0.22),
       oklch(from var(--neutral-12) l c h / 0.06)
     );
+    /* Laid over a session mark's deck cards, a step stronger per card (SessionMark): the delegates behind the tile, darker with depth. */
+    --mark-deck-shade: oklch(14% 0.01 60);
+    /* The shadow the card in front casts on the band of the next deck card that shows. */
+    --mark-deck-cast: oklch(0 0 0 / 0.16);
     /* Identity hues for duotone icon tiles (new-session modal, Configure). Dark keeps each hue's chroma and raises its lightness. */
     --hue-cyan-400: light-dark(
       oklch(75.35% 0.139 232.66),
@@ -705,6 +709,20 @@
     --breath: calc(var(--c-500) * 4);
     --press-scale: 0.97;
     --pop-scale: 0.92;
+    /* How far each card of a session mark's deck shows below the one in front (SessionMark). */
+    --deck-step: 1.25px;
+    /* How much smaller each deck card is than the one in front: card i is the tile scaled by 1 - 0.11 x i. */
+    --deck-shrink: 0.11;
+    /* The deck's perspective: its cards recede in z from this far. */
+    --deck-depth: 40px;
+    /* How much more of the deck's shade each card behind takes. */
+    --deck-shade-step: 0.2;
+    /* How far a working session's echo grows from its tile before it has faded (motion/echo). */
+    --echo-scale: 1.45;
+    /* A working session's echo as it leaves the tile. */
+    --echo-opacity: 0.45;
+    /* The first stretch of its nesting line over which a child's icon fades in as it leaves its parent's (motion/branch). */
+    --ride-fade: 14px;
     --pop-rise: 8px;
     --transition-control:
       background-color var(--dur-control) var(--ease-out),

@@ -60,6 +60,7 @@
   import { markHue } from "./mark";
   import { type BranchOptions, branch, nestFrom } from "./motion/branch.svelte";
   import { CURVE, dur } from "./motion/curves.svelte";
+  import { echoBeat } from "./motion/echo.svelte";
   import { heldOrder, holdWhileInside } from "./motion/held-order.svelte";
   import { reflow } from "./motion/rows.svelte";
   import NewProjectPopover from "./NewProjectPopover.svelte";
@@ -688,8 +689,6 @@
     children: Branch[];
     /** Every row under it, at any depth. */
     count: number;
-    /** How many of those failed. */
-    failed: number;
     row: InstanceRow;
   }
 
@@ -710,7 +709,6 @@
         row: line.row,
         children: [],
         count: line.descendants.length,
-        failed: line.descendants.filter(isFailed).length,
       };
       byId.set(line.row.id, node);
       const parent = line.parent ? byId.get(line.parent) : undefined;
@@ -816,8 +814,12 @@
       href={rowHref(row.id)}
       isActive={activeSession === row.id}
     >
+      <!-- Its mark says how many delegates it has and opens them. -->
       <SessionMark
+        count={node.count}
         id={row.id}
+        ontoggle={() => openTrees.toggle(row.id, "rail")}
+        open={unfolded}
         place={row.cwd || row.machineId}
         status={state}
       />
@@ -826,15 +828,6 @@
         {sessionName(row)}</span
       >
       {@render age(row)}
-      {#if node.count > 0}
-        <TreeCount
-          compact
-          count={node.count}
-          failed={node.failed}
-          ontoggle={() => openTrees.toggle(row.id, "rail")}
-          open={unfolded}
-        />
-      {/if}
     </Sidebar.MenuSubButton>
     {#if unfolded}
       <!-- Its delegates, on a rail of their own that grows from this row's
@@ -1014,8 +1007,9 @@
          the ones before it down; arriving together, nothing drawn moves.
          Until then, rows standing where they will be. -->
     {#if stage >= 3}
-      <!-- Projects -->
-      <Sidebar.Group class={GROUP} data-flip>
+      <!-- Projects. Its working sessions echo in turn, top to bottom
+           (motion/echo). -->
+      <Sidebar.Group class={GROUP} data-flip {@attach echoBeat()}>
         <Sidebar.GroupLabel class="{GROUP_LABEL} {CONTROL_LABEL}">
           <span>Projects</span>
           <!-- The sort lives here rather than once per list because it governs all

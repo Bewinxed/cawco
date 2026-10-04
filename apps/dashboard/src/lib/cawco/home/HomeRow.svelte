@@ -45,7 +45,6 @@
     sessionStatus,
   } from "../SessionMark.svelte";
   import StoredSessionMenu from "../StoredSessionMenu.svelte";
-  import TreeCount from "../TreeCount.svelte";
   import { runIdOf } from "../workflow-runs";
   import { dragSession } from "../workspace/dnd.svelte";
   import { openPeek } from "./peek.svelte";
@@ -89,7 +88,6 @@
     /** The rows under it, when it is a parent (tree.ts). */
     fold?: {
       count: number;
-      failed: number;
       open: boolean;
       ontoggle: () => void;
     } | null;
@@ -166,12 +164,19 @@
             : null,
       }}
     >
-      <SessionMark id={sessionId} {place} {status} />
+      <!-- On a parent, its mark says how many rows are under it and opens
+           them. -->
+      <SessionMark
+        count={fold?.count ?? 0}
+        id={sessionId}
+        ontoggle={fold?.ontoggle}
+        open={fold?.open ?? false}
+        {place}
+        {status}
+      />
       <!-- Two lines of words (the title, then what it is doing), and at the
-           row's end one column for what trails them: the age on the title's
-           line and, on a parent, the count of the rows under it on the line
-           below, both flush with the row's trailing edge. Every row's age
-           ends at that edge, with a count or without one. -->
+           row's end the age, on the title's line, flush with the row's
+           trailing edge. -->
       <span class="words">
         <span class="cell title"
           ><span class="sr-only">{STATUS_WORD[status]}: </span>{title}</span
@@ -180,11 +185,7 @@
       </span>
       <span class="end" {@attach trailWidth}>
         <span class="cell num trail">{trail}</span>
-        <span class="cell">
-          {#if fold}
-            <TreeCount compact {...fold} />
-          {/if}
-        </span>
+        <span class="cell"></span>
       </span>
     </a>
     {#if onarchive}
@@ -259,6 +260,10 @@
     min-width: 0;
     /* Compact at a desk; a finger keeps its 44px. */
     min-height: var(--space-8);
+    /* How far under its mark the mark's switch may reach: the room a
+       two-line row leaves under it (44px less the 18px mark, halved), and
+       the gap to the next row. */
+    --mark-hit-max: calc(13px + var(--tree-gap));
     padding: var(--space-1) var(--space-3);
     border-radius: inherit;
     color: inherit;

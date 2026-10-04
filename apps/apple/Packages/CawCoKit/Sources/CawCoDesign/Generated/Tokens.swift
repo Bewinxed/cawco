@@ -51,6 +51,10 @@ public enum Palette {
     public static let markGlyph = Palette.named("mark-glyph")
     /// Identity-mark sheen.
     public static let markOverlay = Gradient(stops: [Ink(light: P3(0.9949, 0.9906, 0.9805, 0.2200), dark: P3(0.0759, 0.0714, 0.0656, 0.2200)), Ink(light: P3(0.1850, 0.1722, 0.1560, 0.0600), dark: P3(0.9247, 0.9128, 0.8883, 0.0600))])
+    /// Laid over a session mark's deck cards, a step stronger per card (SessionMark): the delegates behind the tile, darker with depth.
+    public static let markDeckShade = Palette.named("mark-deck-shade")
+    /// The shadow the card in front casts on the band of the next deck card that shows.
+    public static let markDeckCast = Palette.named("mark-deck-cast")
     /// Identity hues for duotone icon tiles (new-session modal, Configure). Dark keeps each hue's chroma and raises its lightness.
     public static let hueCyan400 = Palette.named("hue-cyan-400")
     public static let hueCyan500 = Palette.named("hue-cyan-500")
@@ -586,5 +590,19 @@ public enum Motion {
     public static let breath: TimeInterval = 2
     public static let pressScale: Double = 0.97
     public static let popScale: Double = 0.92
+    /// How far each card of a session mark's deck shows below the one in front (SessionMark).
+    public static let deckStep: Double = 1.25
+    /// How much smaller each deck card is than the one in front: card i is the tile scaled by 1 - 0.11 x i.
+    public static let deckShrink: Double = 0.11
+    /// The deck's perspective: its cards recede in z from this far.
+    public static let deckDepth: Double = 40
+    /// How much more of the deck's shade each card behind takes.
+    public static let deckShadeStep: Double = 0.2
+    /// How far a working session's echo grows from its tile before it has faded (motion/echo).
+    public static let echoScale: Double = 1.45
+    /// A working session's echo as it leaves the tile.
+    public static let echoOpacity: Double = 0.45
+    /// The first stretch of its nesting line over which a child's icon fades in as it leaves its parent's (motion/branch).
+    public static let rideFade: Double = 14
     public static let popRise: Double = 8
 }

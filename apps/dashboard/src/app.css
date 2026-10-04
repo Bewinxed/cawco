@@ -32,13 +32,6 @@
   inherits: false;
   initial-value: 0px;
 }
-/* Where a working session's rim sweep stands (SessionMark), registered so
-   the sweep can turn it. */
-@property --rim-turn {
-  syntax: "<angle>";
-  inherits: false;
-  initial-value: 0turn;
-}
 /* How far a stretch of a nesting line is cut back from its right and from
    its foot while the line draws (.kit-nest, motion/branch), registered so the
    fold can move them. At rest neither cuts: well clear of the stretch. */
@@ -579,6 +572,23 @@
   [data-branch-draw] .kit-nest > li::before,
   [data-branch-draw] .kit-nest > li::after {
     clip-path: inset(-9999px var(--nest-cut-r) var(--nest-cut-b) -9999px);
+  }
+  /* A session's deck (SessionMark) is the rows folded under it. While they
+     are out, from the frame their group mounts to the frame it unmounts,
+     the deck is away: the children's icons left from it and come back to
+     it (motion/branch). Scoped to the row that owns the group and stopped
+     at the group, so a child's own deck inside it is its own affair. */
+  @scope (:is(li, [data-nest-host]):has(> [data-flip-anchor])) to (
+    [data-flip-anchor]
+  ) {
+    .session-mark .deck {
+      visibility: hidden;
+    }
+  }
+  /* An icon on its way along its line takes no press: in flight it passes
+     over its parent's mark, whose switch is under it. */
+  [data-branch-draw] .session-mark {
+    pointer-events: none;
   }
   /* A group folding away is out of the pointer's reach from the press that
      folds it: its rows are still drawn until they have gone, and one of
@@ -1354,13 +1364,6 @@
    home's Working/Finished switch. Global, because the rows name them from
    an inline style: Svelte rewrites `animation:` inside a component's own
    <style> to a scoped name but cannot rewrite a string built in script. */
-/* A working session's rim (SessionMark): its arc once round. */
-@keyframes kit-rim-sweep {
-  to {
-    --rim-turn: 1turn;
-  }
-}
-
 @keyframes ns-in-r {
   from {
     opacity: 0;
