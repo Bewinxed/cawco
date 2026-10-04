@@ -832,7 +832,10 @@ if (role === "sessiond") {
       "restarted",
       "status",
       "tools",
-    ] satisfies (keyof import("../packages/core/src").AgentRow | "createdAt")[]);
+    ] satisfies (
+      | keyof import("../packages/core/src").AgentRow
+      | "createdAt"
+    )[]);
     const extraAgentFields = (await api("/api/agents")).flatMap(
       (entry: object) =>
         Object.keys(entry).filter((field) => !agentFields.has(field))
