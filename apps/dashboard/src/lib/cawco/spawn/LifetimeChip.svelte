@@ -45,7 +45,7 @@
 <NsPopover
   gap={2}
   id="session-lifetime"
-  label="Session lifetime"
+  label={`Session lifetime: ${current.name}`}
   {onchange}
   {open}
   rows="[data-fh]"

@@ -72,7 +72,7 @@
 <NsPopover
   gap={2}
   id="session-project"
-  label="Project"
+  label={`Project: ${project?.name ?? "No project"}`}
   {onchange}
   {open}
   rows="[data-fh]"

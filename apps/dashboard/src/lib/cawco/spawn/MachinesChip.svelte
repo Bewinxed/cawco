@@ -69,7 +69,7 @@
 
 <NsPopover
   id="session-machines"
-  label="Machines"
+  label={`Machines: ${label}`}
   {onchange}
   {open}
   rows="[data-fh]"

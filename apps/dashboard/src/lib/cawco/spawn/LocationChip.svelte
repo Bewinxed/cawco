@@ -66,7 +66,7 @@
 <NsPopover
   gap={2}
   id="session-location"
-  label="Location"
+  label={`Location: ${label}`}
   {onchange}
   {onclosefocus}
   {open}

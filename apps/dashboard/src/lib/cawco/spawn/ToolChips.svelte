@@ -138,7 +138,7 @@
           <NsPopover
             align="end"
             id={`${id}-effort`}
-            label="Effort"
+            label={`Effort: ${tools.effort ?? "Default"}`}
             onchange={(value) => {
               pop = value ? "effort" : null;
             }}
@@ -166,7 +166,7 @@
           <NsPopover
             align="end"
             id={`${id}-permission`}
-            label="Permission mode"
+            label={`Permission mode: ${look.short}`}
             onchange={(value) => {
               pop = value ? "permission" : null;
             }}
