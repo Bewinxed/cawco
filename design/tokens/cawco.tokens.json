@@ -2169,6 +2169,11 @@
       "$value": "440px",
       "$description": "The widest the shared hover panel grows (HoverPanel.svelte .cell): its content is this less the 2px border and its space-3 padding."
     },
+    "hover-panel-inset": {
+      "$type": "dimension",
+      "$value": "8px",
+      "$description": "The least room between the shared hover panel and the viewport's block edges when it stands beside a list (HoverPanel.svelte .panel.right)."
+    },
     "tx-line": {
       "$type": "dimension",
       "$value": "26px",

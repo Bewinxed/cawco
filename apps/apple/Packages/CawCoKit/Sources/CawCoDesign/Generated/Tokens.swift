@@ -458,6 +458,8 @@ public enum Size {
     public static let tailRow: Double = 24
     /// The widest the shared hover panel grows (HoverPanel.svelte .cell): its content is this less the 2px border and its space-3 padding.
     public static let hoverPanelMax: Double = 440
+    /// The least room between the shared hover panel and the viewport's block edges when it stands beside a list (HoverPanel.svelte .panel.right).
+    public static let hoverPanelInset: Double = 8
     /// A transcript rail line's least height: a tool call, a note, a branch head.
     public static let txLine: Double = 26
     /// tx-line under a coarse pointer.

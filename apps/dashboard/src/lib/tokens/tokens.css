@@ -601,6 +601,8 @@
     --tail-row: 24px;
     /* The widest the shared hover panel grows (HoverPanel.svelte .cell): its content is this less the 2px border and its space-3 padding. */
     --hover-panel-max: 440px;
+    /* The least room between the shared hover panel and the viewport's block edges when it stands beside a list (HoverPanel.svelte .panel.right). */
+    --hover-panel-inset: 8px;
     /* A transcript rail line's least height: a tool call, a note, a branch head. */
     --tx-line: 26px;
     /* tx-line under a coarse pointer. */

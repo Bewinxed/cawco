@@ -226,13 +226,20 @@
     }
   }
   /* Beside a list: level with its row, pulled back inside the viewport by
-     its own height (the 100%), 8px clear of either edge. */
+     its own height (the 100%), --hover-panel-inset clear of either edge.
+     It grows from its row's centre, which is --origin under the row's top
+     (--y) wherever the panel's own top (--top) ends up. */
   .panel.right {
+    --top: clamp(
+      var(--hover-panel-inset),
+      var(--y),
+      calc(100dvh - 100% - var(--hover-panel-inset))
+    );
     position: fixed;
     inset-block-start: 0;
     inset-inline-start: var(--x);
-    translate: 0 clamp(8px, var(--y), calc(100dvh - 100% - 8px));
-    transform-origin: 0 var(--origin);
+    translate: 0 var(--top);
+    transform-origin: 0 calc(var(--y) + var(--origin) - var(--top));
     z-index: 40;
 
     &::after {
