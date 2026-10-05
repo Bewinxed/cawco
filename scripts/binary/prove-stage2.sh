@@ -14,6 +14,7 @@ out=$(realpath "$1")
 bins=$(realpath "$2")
 [[ "$out" != *" "* ]] || { echo "output path may not contain spaces" >&2; exit 2; }
 here=$(dirname "$(realpath "$0")")
+python3 -c 'import pexpect' 2> /dev/null || { echo "python3 with pexpect is needed to answer the installer's prompts (pip install pexpect)" >&2; exit 2; }
 for need in cawco-1 cawco-2 cawco-3 keys/test-release-private.pem keys/test-release-public.pem; do
   [[ -e "$bins/$need" ]] || { echo "missing $bins/$need: run build-stage2.ts first" >&2; exit 2; }
 done
@@ -271,29 +272,15 @@ grep -q "command: sudo apt-get install -y openssl" "$LAST_LOG" \
   || { echo "the installer showed the openssl install command and ran it: FAIL (see $LAST_LOG)"; status=1; }
 
 join_machine() {
-  # The hub's own install.sh, the way the app's Connect a machine hands it out. The answers are typed at a
-  # terminal one prompt at a time: each "n" is sent only after its prompt has been printed.
+  # The hub's own install.sh, the way the app's Connect a machine hands it out; pexpect types an "n" after each prompt appears.
   as_user "$joinerc" curl -fsS "http://$hub_ip:3456/install.sh" -o /tmp/join.sh
-  local fifo="$out/join.in" screen="$out/join.out" sent=0 seen pid end=$((SECONDS + 420))
-  rm -f "$fifo" "$screen"
-  mkfifo "$fifo"
-  : > "$screen"
-  exec 3<> "$fifo"
-  as_user_tty "$joinerc" "sh /tmp/join.sh" <&3 > "$screen" 2>&1 &
-  pid=$!
-  while kill -0 "$pid" 2> /dev/null; do
-    seen=$(grep -c 'Run that command now?' "$screen" || true)
-    if (( seen > sent )); then
-      printf 'n\n' >&3
-      sent=$((sent + 1))
-    fi
-    (( SECONDS < end )) || { kill "$pid"; cat "$screen"; echo "the install did not finish; prompts answered: $sent"; return 1; }
-    sleep 0.5
-  done
-  wait "$pid" || { cat "$screen"; echo "the install failed"; return 1; }
-  cat "$screen"
-  echo "prompts answered: $sent"
-  [[ "$sent" -ge 1 ]]
+  local rc=0
+  python3 "$here/stage2-answer-prompts.py" $P exec -it --user cawco --workdir /home/cawco --env HOME=/home/cawco \
+    --env XDG_RUNTIME_DIR=/run/user/1000 --env DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus \
+    --env CAWCO_RELEASE_HOST="${FEED_OVERRIDE:-$feed}" "$joinerc" sh /tmp/join.sh > "$out/join.out" || rc=$?
+  cat "$out/join.out"
+  [[ $rc == 0 ]]
+  grep -qE 'prompts answered: [1-9]' "$out/join.out"
   [[ "$(hub_api /api/agents | json 'd => d.filter(a => a.status === "online").length')" == 2 ]]
 }
 export -f join_machine

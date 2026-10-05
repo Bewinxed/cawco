@@ -1,4 +1,5 @@
 import { readConfig, writeConfig } from "@cawco/agent";
+import { ask, closeAsking } from "./ask";
 
 /**
  * `claude setup-token` is a full-screen TUI, not a line-oriented command: with
@@ -33,8 +34,8 @@ export const login = async (): Promise<void> => {
     );
   }
 
-  // biome-ignore lint/suspicious/noAlert: this is a terminal CLI; Bun's global prompt() reads a line from stdin, not a browser dialog
-  const pasted = prompt("\nPaste the token it printed:");
+  const pasted = await ask("\nPaste the token it printed: ");
+  closeAsking();
   if (!pasted?.trim()) {
     throw new LoginError("nothing pasted; nothing was saved.");
   }

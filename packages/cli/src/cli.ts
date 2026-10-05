@@ -8,6 +8,7 @@ import {
   readEnv,
 } from "@cawco/core";
 import { protocolRange, runtimeCommit } from "@cawco/core/runtime";
+import { ask, closeAsking } from "./ask";
 import { discoverHub, type Hub } from "./discover";
 import { clearToken, LoginError, login, saveToken } from "./login";
 import {
@@ -383,11 +384,11 @@ anyway; the fleet will show this machine as needing sign-in.`);
     return state;
   }
 
-  // biome-ignore lint/suspicious/noAlert: this is a terminal CLI; Bun's global prompt() reads a line from stdin, not a browser dialog
-  const answer = prompt("\nRun `claude setup-token` now to fix it? [Y/n]")
+  const answer = (await ask("\nRun `claude setup-token` now to fix it? [Y/n] "))
     ?.trim()
     .toLowerCase();
-  if (answer && answer !== "y" && answer !== "yes") {
+  closeAsking();
+  if (answer === undefined || !["", "y", "yes"].includes(answer)) {
     return state;
   }
 
