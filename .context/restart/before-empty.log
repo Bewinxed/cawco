@@ -1,0 +1,7 @@
+BEFORE hub restart: {"status":"running","error":null,"sessionId":"ses_restart_proof"}
+AFTER hub restart: {"status":"error","error":"The agent restarted, and this session left nothing to resume from.","sessionId":"ses_restart_proof"}; conflict reports=5; generations alive=2
+CUSTODY: {"busy":4,"instances":["ses_restart_proof","opencode:activity-unknown","opencode:pending-operations","agent:recovery-recovering"],"ready":false,"recovery":"recovering"}
+RECOVERY: retired scoped abort=true; {"status":"running","error":null,"sessionId":"ses_restart_proof"}; active runner={"ses_restart_proof":{"type":"busy"}}
+HISTORY: original message preserved on both generations; conversation key unchanged.
+RETIREMENT: older generation exited after its only runner went idle; active generation still alive.
+Private hub, agent, sessiond and stub generations ended by PID; scratch removed.
