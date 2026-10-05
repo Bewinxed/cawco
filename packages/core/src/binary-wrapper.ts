@@ -43,11 +43,18 @@ if [ "$1" = sessiond ]; then
       swap_link "versions/$keeper_from" "$ROOT/keeper"
       cp "$KEEPER_TRIAL" "$ROOT/keeper-trial.recovered"
       rm -f "$KEEPER_TRIAL"
+      # The build was not at fault while its keeper was failing (its agent could not stay up to confirm it):
+      # it gets a fresh trial from here.
+      if [ -f "$TRIAL" ]; then
+        sed 's/"deadline":[0-9][0-9]*/"deadline":'"$(( $(date +%s) + 150 ))"'/' "$TRIAL" > "$TRIAL.renew" && mv "$TRIAL.renew" "$TRIAL"
+      fi
     fi
   fi
   exec "$ROOT/keeper/cawco" sessiond
 fi
-if [ -f "$TRIAL" ] && ! helper_live; then
+# The build's own recovery: not while a helper is live, and not while a keeper move is unresolved (a failing
+# keeper keeps the agent from staying up, which is not the build's fault).
+if [ -f "$TRIAL" ] && ! helper_live && [ ! -f "$ROOT/keeper-trial.json" ]; then
   field() { sed -n "s/.*\\"$1\\":\\"\\([^\\"]*\\)\\".*/\\1/p" "$TRIAL"; }
   deadline="$(sed -n 's/.*"deadline":\\([0-9][0-9]*\\).*/\\1/p' "$TRIAL")"
   if [ -n "$deadline" ] && [ "$(date +%s)" -gt "$deadline" ]; then
@@ -73,10 +80,11 @@ if [ -f "$TRIAL" ] && ! helper_live; then
       fi
     fi
     if [ -n "$previous" ] && [ "$migrating" = 0 ]; then
-      ln -sfn "versions/$previous" "$ROOT/current"
-      [ ! -f "$ROOT/installation.previous.json" ] || cp "$ROOT/installation.previous.json" "$ROOT/installation.json"
-      # One service finishes the recovery: the hub restores its database, an agent-only machine's agent has none.
+      # One service does the whole recovery, so it is never half done: the hub restores its database, an
+      # agent-only machine's agent has none. A service that runs fine leaves the unconfirmed build alone.
       if { [ "$role" = hub ] && [ "$1" = hub ]; } || { [ "$role" != hub ] && [ "$1" = up ]; }; then
+        ln -sfn "versions/$previous" "$ROOT/current"
+        [ ! -f "$ROOT/installation.previous.json" ] || cp "$ROOT/installation.previous.json" "$ROOT/installation.json"
         if [ -n "$backup" ] && [ -f "$backup" ] && [ -n "$db" ]; then
           mv "$db" "$db.migrated-$version"
           rm -f "$db-wal" "$db-shm"

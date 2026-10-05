@@ -367,6 +367,9 @@ export class BinaryUpdater {
       error: `The session keeper could not start on ${trial.to} and runs ${trial.from} again.`,
       keeperFailedVersion: trial.to,
       sessiondVersion: trial.from,
+      // The move is over (the wrapper writes this only when no helper is live): an `installing` left by a helper
+      // that died mid-move is not an update in flight.
+      ...(this.#state.phase === "installing" ? { phase: "installed" } : {}),
     });
     await rm(keeperRecoveredPath(), { force: true });
   }

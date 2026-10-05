@@ -1017,13 +1017,25 @@ helper_killed_mid_keeper_move() {
   sleep 4
   as_user "$hubc" pkill -9 -f binary-apply
   has_file "$hubc" keeper-trial.json
-  # The keeper's own restarts go through the wrapper; after the trial's deadline the first of them puts the previous build back.
-  wait_until 240 'has_file "$hubc" keeper-trial.recovered'
-  wait_until 60 '! has_file "$hubc" keeper-trial.recovered'
-  [[ "$(keeper_link "$hubc")" == "$before" ]]
+  # The property, for a helper killed at this point: within the keeper trial's deadline (120 s) plus a restart or
+  # two, the keeper link names the build it was on, the build is untouched, the keeper answers and the agent
+  # holds it, the state says what happened, and nothing is left in flight. (The marker the wrapper leaves for the
+  # agent lives for less than a restart of the agent, so it is not what is checked.)
+  wait_until 300 '[[ "$(keeper_link "$hubc")" == "'"$before"'" ]]'
   ! has_file "$hubc" keeper-trial.json
   wait_until 120 '[[ "$(custody_of $hid)" == available ]]'
-  wait_until 60 '[[ "$(field $hid keeperFailedVersion)" == "$(nb 7)" ]]'
+  wait_until 120 '[[ "$(field $hid keeperFailedVersion)" == "$(nb 7)" ]]'
+  wait_until 120 '[[ "$(phase $hid)" != installing ]]'
+  [[ "$(current_link "$hubc")" == "versions/$(nb 7)" ]]
+  [[ "$(build_version $hid)" == "$(nb 7)" ]]
+  # The build's own trial, unconfirmed while the keeper failed, is confirmed afterwards and nothing rolled it back.
+  wait_until 300 '! has_file "$hubc" trial.json'
+  ! has_file "$hubc" trial.recovered
+  [[ "$(current_link "$hubc")" == "versions/$(nb 7)" ]]
+  # Sessions start, and the keeper link was not touched again.
+  start_session "$hid" keeperlive-7
+  wait_until 60 'session_running keeperlive-7'
+  [[ "$(keeper_link "$hubc")" == "$before" ]]
   keeper_dropin remove
 }
 export -f helper_killed_mid_keeper_move
