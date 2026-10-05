@@ -109,6 +109,8 @@ await writeFile(join(lock, "pid"), String(process.pid));
 try {
   let current = request;
   for (;;) {
+    // A newer request may have arrived before this lease started doing work.
+    current = (await Bun.file(queued).json()) as typeof request;
     if (freemem() < 4 * 1024 ** 3) {
       throw new Error(
         "Release build refused: less than 4 GiB available memory"
