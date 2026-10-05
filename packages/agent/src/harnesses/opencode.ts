@@ -124,6 +124,29 @@ interface RecoveryWave {
   round?: RecoveryRound;
 }
 
+interface PublicationDebt {
+  owed: boolean;
+  servers: Set<string>;
+}
+
+type MutationGate = { kind: "publication" } | { kind: "mcp"; users: number };
+
+async function waitForAdmission(
+  waiting: Promise<void>,
+  signal: AbortSignal
+): Promise<void> {
+  signal.throwIfAborted();
+  const aborted = Promise.withResolvers<never>();
+  const cancel = () => aborted.reject(signal.reason);
+  signal.addEventListener("abort", cancel, { once: true });
+  try {
+    await Promise.race([waiting, aborted.promise]);
+    signal.throwIfAborted();
+  } finally {
+    signal.removeEventListener("abort", cancel);
+  }
+}
+
 function withImageAttachments(
   output: string,
   attachments: FilePart[] = []
@@ -1291,6 +1314,8 @@ export class OpencodeSession implements HarnessSession {
   #completion: { uuid: string; timestamp?: string } | undefined;
   #recoveringTurn = false;
   #sleepAfterRecovery = false;
+  readonly #reservations = new Set<string>();
+  #reservationBaseOpen = false;
   #open = false;
   /**
    * A turn is open: the hub is owed its end (a `result` frame). Recorded on
@@ -1323,6 +1348,7 @@ export class OpencodeSession implements HarnessSession {
     model?: { providerID?: string; modelID?: string };
     messageID: string;
     uuid: string;
+    retry?: () => void;
   }[] = [];
   /** The held send delivered last, until opencode has written it. */
   #draining: string | undefined;
@@ -1360,7 +1386,10 @@ export class OpencodeSession implements HarnessSession {
    */
   readonly #isConfigGateHeld: (urgent?: boolean) => boolean;
   readonly #readActivity: () => Promise<boolean>;
-  readonly #prepareDispatch: () => Promise<void>;
+  readonly #prepareDispatch: (submit: () => void) => Promise<boolean>;
+  readonly #validateDispatch: () => void;
+  readonly #requestFailed: () => void;
+  readonly #mutateMcp: (work: () => Promise<unknown>) => Promise<unknown>;
   readonly #workflowStepId?: string;
   readonly #canDelegate?: boolean;
 
@@ -1376,7 +1405,10 @@ export class OpencodeSession implements HarnessSession {
     onRelease: () => void,
     isConfigGateHeld: (urgent?: boolean) => boolean,
     readActivity: () => Promise<boolean>,
-    prepareDispatch: () => Promise<void>,
+    prepareDispatch: (submit: () => void) => Promise<boolean>,
+    validateDispatch: () => void,
+    requestFailed: () => void,
+    mutateMcp: (work: () => Promise<unknown>) => Promise<unknown>,
     effort?: EffortLevel,
     workflowStepId?: string,
     canDelegate?: boolean
@@ -1395,6 +1427,9 @@ export class OpencodeSession implements HarnessSession {
     this.#isConfigGateHeld = isConfigGateHeld;
     this.#readActivity = readActivity;
     this.#prepareDispatch = prepareDispatch;
+    this.#validateDispatch = validateDispatch;
+    this.#requestFailed = requestFailed;
+    this.#mutateMcp = mutateMcp;
     this.#workflowStepId = workflowStepId;
     this.#canDelegate = canDelegate;
   }
@@ -1434,7 +1469,66 @@ export class OpencodeSession implements HarnessSession {
   /** Dispatch custody, not an independent server-idle heuristic. */
   get turnInFlight(): boolean {
     // biome-ignore lint/suspicious/noUnnecessaryConditions: server events and dispatch methods update these fields outside this getter
-    return this.#busy || this.#turnOpen;
+    return this.#busy || this.#turnOpen || this.#reservations.size > 0;
+  }
+
+  get lifetime(): AbortSignal {
+    return this.#lifetime.signal;
+  }
+
+  get submitting(): boolean {
+    return this.#reservations.size > 0;
+  }
+
+  reserveSubmission(key: string): void {
+    this.#lifetime.signal.throwIfAborted();
+    if (this.#reservations.size === 0) {
+      this.#reservationBaseOpen = this.#turnOpen;
+    }
+    this.#reservations.add(key);
+    this.#turnOpen = true;
+    this.#noteServerActivity();
+  }
+
+  finishStartupSubmission(key: string): void {
+    // Startup commands finish before this handle is attached to its event pump.
+    // Their completion response settles the reservation without inventing a result frame.
+    this.#reservations.delete(key);
+    if (this.#reservations.size === 0 && !this.#busy) {
+      this.#turnOpen = false;
+      this.#reservationBaseOpen = false;
+      this.#clearStallTimer();
+      this.#requestFailed();
+    }
+  }
+
+  refusedSubmission(
+    key: string,
+    uuid: string | undefined,
+    error: unknown
+  ): void {
+    if (this.#reservations.delete(key)) {
+      if (this.#reservations.size === 0 && !this.#busy) {
+        this.#turnOpen = this.#reservationBaseOpen;
+        if (!this.#turnOpen) {
+          this.#clearStallTimer();
+          this.#ctx.busy(false);
+        }
+      }
+      this.#requestFailed();
+    }
+    if (uuid) {
+      this.#ctx.rejected(uuid, error);
+    }
+    this.#drained(key);
+  }
+
+  #holdSubmission(key: string, uuid: string, retry: () => void): void {
+    this.#queue.push({ parts: [], messageID: key, uuid, retry });
+    if (this.#draining === key) {
+      this.#draining = undefined;
+    }
+    this.#drainQueue();
   }
 
   /**
@@ -1959,6 +2053,9 @@ export class OpencodeSession implements HarnessSession {
 
   /** Keeps when opencode created a message, as {@link toTranscript} dates it. */
   #noteCreated(info: Message): void {
+    if (info.role === "user" && this.#reservations.delete(info.id)) {
+      this.#reservationBaseOpen = true;
+    }
     this.#created.set(info.id, new Date(info.time.created).toISOString());
   }
 
@@ -2331,6 +2428,12 @@ export class OpencodeSession implements HarnessSession {
       this.#completion ??
       (this.#turnPrompt ? { uuid: this.#turnPrompt } : undefined);
     this.#turnOpen = false;
+    this.#reservationBaseOpen = false;
+    for (const key of this.#reservations) {
+      if (key.startsWith("compact:")) {
+        this.#reservations.delete(key);
+      }
+    }
     // Clear even an inherited disk entry when the in-memory turn was already closed.
     if (this.sessionId) {
       markTurn(this.sessionId, false);
@@ -2381,6 +2484,7 @@ export class OpencodeSession implements HarnessSession {
     this.#busy = status.type === "busy" || status.type === "retry";
     // biome-ignore lint/suspicious/noUnnecessaryConditions: #busy was just assigned a live boolean; biome's field-declaration inference doesn't see it
     if (this.#busy) {
+      this.#reservationBaseOpen = true;
       this.#turnOpen = true;
     }
     if (status.type === "retry" && status.message) {
@@ -2526,6 +2630,9 @@ export class OpencodeSession implements HarnessSession {
     const rows = listed.data as { info: Message; parts: Part[] }[];
     if (!this.#snapshotCurrent(revision)) {
       return;
+    }
+    for (const { info } of rows) {
+      this.#noteCreated(info);
     }
     const prompt = rows.findLast((row) => row.info.role === "user")?.info;
     if (!prompt || (this.#turnPrompt && prompt.id !== this.#turnPrompt)) {
@@ -2848,7 +2955,10 @@ export class OpencodeSession implements HarnessSession {
         messageID,
         uuid,
         model
-      );
+      ).catch((error: unknown) => {
+        this.#ctx.rejected(uuid, error);
+        this.#drained(messageID);
+      });
     } else {
       this.#prompt(parts, messageID, uuid, model);
     }
@@ -2876,71 +2986,71 @@ export class OpencodeSession implements HarnessSession {
     model?: { providerID?: string; modelID?: string }
   ): Promise<void> {
     try {
-      await this.#prepareDispatch();
-    } catch (error) {
-      this.#ctx.rejected(uuid, error);
-      this.#drained(messageID);
-      return;
-    }
-    this.#turnOpen = true;
-    this.#turnPrompt = messageID;
-    this.#noteServerActivity();
-    // biome-ignore lint/complexity/noVoid: fire-and-forget: #prompt itself is not awaited by its callers
-    void reached(
-      this.#client.session.promptAsync({
-        // biome-ignore lint/style/noNonNullAssertion: invariant: sessionId is set once in the constructor and never nulled; the interface types it nullable for other harnesses
-        sessionID: this.sessionId!,
-        directory: this.#directory,
-        messageID,
-        parts: parts as never,
-        tools: {
-          cawco_submit_result: !!this.#workflowStepId,
-          cawco_workflow_state_read: !!this.#workflowStepId,
-          cawco_workflow_state_write: !!this.#workflowStepId,
-          ...Object.fromEntries(
-            [
-              "start_session",
-              "continue_session",
-              "delegate",
-              "stop_delegate",
-              "interrupt_delegate",
-              "answer_delegate",
-              "set_item_checks",
-              "run_workflow",
-              "steer_workflow",
-              "workflow_read",
-              "list_workflows",
-            ].map((name) => [`cawco_${name}`, this.#canDelegate !== false])
-          ),
-        },
-        ...(this.#effort ? { variant: this.#effort } : {}),
-        // A bare model id (no provider) is left to opencode's default; never send `providerID: ''`.
-        ...(model?.providerID && model.modelID
-          ? {
-              model: { providerID: model.providerID, modelID: model.modelID },
+      const admitted = await this.#prepareDispatch(() => {
+        this.reserveSubmission(messageID);
+        this.#turnPrompt = messageID;
+        // Initiation, not completion: the reservation owns the turn after this returns.
+        // biome-ignore lint/complexity/noVoid: the SDK response is independent of admission
+        void reached(
+          this.#client.session.promptAsync({
+            // biome-ignore lint/style/noNonNullAssertion: an attached OpenCode session has its server id
+            sessionID: this.sessionId!,
+            directory: this.#directory,
+            messageID,
+            parts: parts as never,
+            tools: {
+              cawco_submit_result: !!this.#workflowStepId,
+              cawco_workflow_state_read: !!this.#workflowStepId,
+              cawco_workflow_state_write: !!this.#workflowStepId,
+              ...Object.fromEntries(
+                [
+                  "start_session",
+                  "continue_session",
+                  "delegate",
+                  "stop_delegate",
+                  "interrupt_delegate",
+                  "answer_delegate",
+                  "set_item_checks",
+                  "run_workflow",
+                  "steer_workflow",
+                  "workflow_read",
+                  "list_workflows",
+                ].map((name) => [`cawco_${name}`, this.#canDelegate !== false])
+              ),
+            },
+            ...(this.#effort ? { variant: this.#effort } : {}),
+            ...(model?.providerID && model.modelID
+              ? {
+                  model: {
+                    providerID: model.providerID,
+                    modelID: model.modelID,
+                  },
+                }
+              : {}),
+            ...(this.#permissionMode === "plan" ? { agent: "plan" } : {}),
+          })
+        )
+          .then((res) => {
+            if (res.error) {
+              this.refusedSubmission(
+                messageID,
+                uuid,
+                new Error(errorText(res.error))
+              );
             }
-          : {}),
-        ...(this.#permissionMode === "plan" ? { agent: "plan" } : {}),
-      })
-    )
-      .then((res) => {
-        if (res.error) {
-          this.#ctx.rejected(uuid, new Error(errorText(res.error)));
-          this.#drained(messageID);
-        }
-      })
-      .catch((error: unknown) => {
-        // A prompt that never reached the server never opens a turn there, so
-        // no pump event will ever settle it: say so and leave busy clear here,
-        // or the session strands busy with every later message queuing behind
-        // nothing.
-        this.#turnOpen = false;
-        this.#clearStallTimer();
-        this.#busy = false;
-        this.#ctx.busy(false);
-        this.#ctx.rejected(uuid, error);
-        this.#drained(messageID);
+          })
+          .catch((error: unknown) =>
+            this.refusedSubmission(messageID, uuid, error)
+          );
       });
+      if (!admitted) {
+        this.#holdSubmission(messageID, uuid, () =>
+          this.#prompt(parts, messageID, uuid, model)
+        );
+      }
+    } catch (error) {
+      this.refusedSubmission(messageID, uuid, error);
+    }
   }
 
   /**
@@ -2965,7 +3075,11 @@ export class OpencodeSession implements HarnessSession {
     }
     this.#ctx.busy(true);
     this.#draining = next.messageID;
-    this.#prompt(next.parts, next.messageID, next.uuid, next.model);
+    if (next.retry) {
+      next.retry();
+    } else {
+      this.#prompt(next.parts, next.messageID, next.uuid, next.model);
+    }
   }
 
   /** The sends waiting on an answer, read. */
@@ -3016,6 +3130,7 @@ export class OpencodeSession implements HarnessSession {
     model?: { providerID?: string; modelID?: string }
   ): Promise<void> {
     const names = await this.#commandNamesOf();
+    this.#validateDispatch();
     // `/compact` is a TUI command in opencode, not a registered one: it is the
     // session.summarize call, so it never reaches the model as a prompt.
     if (name === "compact" && !names.has(name)) {
@@ -3027,31 +3142,52 @@ export class OpencodeSession implements HarnessSession {
       return;
     }
     try {
-      await this.#prepareDispatch();
-    } catch (error) {
-      this.#ctx.rejected(uuid, error);
-      return;
-    }
-    this.#turnOpen = true;
-    this.#turnPrompt = messageID;
-    // biome-ignore lint/complexity/noVoid: fire-and-forget: #commandOrPrompt itself is not awaited by its callers
-    void this.#client.session
-      .command({
-        // biome-ignore lint/style/noNonNullAssertion: invariant: sessionId is set once in the constructor and never nulled; the interface types it nullable for other harnesses
-        sessionID: this.sessionId!,
-        directory: this.#directory,
-        messageID,
-        command: name,
-        arguments: args,
-        ...(this.#effort ? { variant: this.#effort } : {}),
-        ...(this.#model ? { model: this.#model } : {}),
-        ...(this.#permissionMode === "plan" ? { agent: "plan" } : {}),
-      })
-      .then((res) => {
-        if (res.error) {
-          this.#ctx.rejected(uuid, new Error(errorText(res.error)));
-        }
+      const admitted = await this.#prepareDispatch(() => {
+        this.reserveSubmission(messageID);
+        this.#turnPrompt = messageID;
+        // biome-ignore lint/complexity/noVoid: command completion never holds admission
+        void reached(
+          this.#client.session.command({
+            // biome-ignore lint/style/noNonNullAssertion: an attached OpenCode session has its id
+            sessionID: this.sessionId!,
+            directory: this.#directory,
+            messageID,
+            command: name,
+            arguments: args,
+            ...(this.#effort ? { variant: this.#effort } : {}),
+            ...(this.#model ? { model: this.#model } : {}),
+            ...(this.#permissionMode === "plan" ? { agent: "plan" } : {}),
+          })
+        )
+          .then((res) => {
+            if (res.error) {
+              this.refusedSubmission(
+                messageID,
+                uuid,
+                new Error(errorText(res.error))
+              );
+            }
+          })
+          .catch((error: unknown) =>
+            this.refusedSubmission(messageID, uuid, error)
+          );
       });
+      if (!admitted) {
+        this.#holdSubmission(messageID, uuid, () => {
+          // biome-ignore lint/complexity/noVoid: held work re-enters the same admission path
+          void this.#commandOrPrompt(
+            name,
+            args,
+            parts,
+            messageID,
+            uuid,
+            model
+          ).catch((error: unknown) => this.#ctx.rejected(uuid, error));
+        });
+      }
+    } catch (error) {
+      this.refusedSubmission(messageID, uuid, error);
+    }
   }
 
   /** Compacts the session with its current model; the send `uuid` fails if opencode refuses. */
@@ -3061,29 +3197,48 @@ export class OpencodeSession implements HarnessSession {
       return;
     }
     try {
-      await this.#prepareDispatch();
+      const admitted = await this.#prepareDispatch(() => {
+        const key = `compact:${uuid}`;
+        this.reserveSubmission(key);
+        this.#ctx.frame({
+          type: "system",
+          subtype: MESSAGES_READ,
+          read: [uuid],
+          session_id: this.sessionId ?? undefined,
+        });
+        const { providerID, modelID } = splitModel(this.#model as string);
+        // biome-ignore lint/complexity/noVoid: compaction completion never holds admission
+        void reached(
+          this.#client.session.summarize({
+            // biome-ignore lint/style/noNonNullAssertion: an attached OpenCode session has its id
+            sessionID: this.sessionId!,
+            directory: this.#directory,
+            providerID,
+            modelID,
+          })
+        )
+          .then((res) => {
+            if (res.error) {
+              this.refusedSubmission(
+                key,
+                uuid,
+                new Error(errorText(res.error))
+              );
+            }
+          })
+          .catch((error: unknown) => this.refusedSubmission(key, uuid, error));
+        this.#drained(key);
+      });
+      if (!admitted) {
+        this.#holdSubmission(`compact:${uuid}`, uuid, () => {
+          // biome-ignore lint/complexity/noVoid: held compaction re-enters the same path
+          void this.#summarize(uuid).catch((error: unknown) =>
+            this.#ctx.rejected(uuid, error)
+          );
+        });
+      }
     } catch (error) {
-      this.#ctx.rejected(uuid, error);
-      return;
-    }
-    // opencode stores no user message for a compaction, so nothing else would
-    // tell the hub this send was taken up; without it the row stays queued.
-    this.#ctx.frame({
-      type: "system",
-      subtype: MESSAGES_READ,
-      read: [uuid],
-      session_id: this.sessionId ?? undefined,
-    });
-    const { providerID, modelID } = splitModel(this.#model);
-    const res = await this.#client.session.summarize({
-      // biome-ignore lint/style/noNonNullAssertion: invariant: sessionId is set once in the constructor and never nulled; the interface types it nullable for other harnesses
-      sessionID: this.sessionId!,
-      directory: this.#directory,
-      providerID,
-      modelID,
-    });
-    if (res.error) {
-      this.#ctx.rejected(uuid, new Error(errorText(res.error)));
+      this.refusedSubmission(`compact:${uuid}`, uuid, error);
     }
   }
 
@@ -3135,7 +3290,7 @@ export class OpencodeSession implements HarnessSession {
     // Config convergence gate: MCP mutations must not race with a dispose
     // cycle. Reads, interrupt, and local-only setters are always allowed.
     if (
-      this.#isConfigGateHeld() &&
+      this.#isConfigGateHeld(true) &&
       (method === CONTROL_MCP_RECONNECT || method === CONTROL_MCP_TOGGLE)
     ) {
       throw new Error(`${method} blocked: config reload in progress`);
@@ -3223,39 +3378,63 @@ export class OpencodeSession implements HarnessSession {
       }
       case CONTROL_MCP_RECONNECT: {
         const name = args[0] as string;
-        const connected = await reached(
-          this.#client.mcp.connect({
-            name,
-            directory: this.#directory,
-          })
-        );
-        if (connected.error) {
-          throw new Error(errorText(connected.error));
-        }
-        const snapshot = await reached(
-          this.#client.mcp.status({ directory: this.#directory })
-        );
-        if (snapshot.error) {
-          throw new Error(errorText(snapshot.error));
-        }
-        const status = snapshot.data?.[name];
-        if (status?.status !== "connected") {
-          throw new Error(
-            `MCP ${name} is not connected (${status?.status ?? "missing"}).`
+        return this.#mutateMcp(async () => {
+          const connected = await reached(
+            this.#client.mcp.connect(
+              { name, directory: this.#directory },
+              {
+                signal: AbortSignal.any([
+                  this.#lifetime.signal,
+                  AbortSignal.timeout(RECOVERY_TIMEOUT_MS),
+                ]),
+              }
+            )
           );
-        }
-        return undefined;
+          if (connected.error) {
+            throw new Error(errorText(connected.error));
+          }
+          const snapshot = await reached(
+            this.#client.mcp.status(
+              { directory: this.#directory },
+              {
+                signal: AbortSignal.any([
+                  this.#lifetime.signal,
+                  AbortSignal.timeout(RECOVERY_TIMEOUT_MS),
+                ]),
+              }
+            )
+          );
+          if (snapshot.error) {
+            throw new Error(errorText(snapshot.error));
+          }
+          const status = snapshot.data?.[name];
+          if (status?.status !== "connected") {
+            throw new Error(
+              `MCP ${name} is not connected (${status?.status ?? "missing"}).`
+            );
+          }
+        });
       }
       case CONTROL_MCP_TOGGLE: {
         const name = args[0] as string;
         const enabled = args[1] as boolean;
         const target = { name, directory: this.#directory };
-        await reached(
-          enabled
-            ? this.#client.mcp.connect(target)
-            : this.#client.mcp.disconnect(target)
-        );
-        return undefined;
+        return this.#mutateMcp(async () => {
+          const options = {
+            signal: AbortSignal.any([
+              this.#lifetime.signal,
+              AbortSignal.timeout(RECOVERY_TIMEOUT_MS),
+            ]),
+          };
+          const result = await reached(
+            enabled
+              ? this.#client.mcp.connect(target, options)
+              : this.#client.mcp.disconnect(target, options)
+          );
+          if (result.error) {
+            throw new Error(errorText(result.error));
+          }
+        });
       }
       default:
         // An unsupported control verb is a silent no-op, never a user-facing
@@ -3432,6 +3611,13 @@ export class OpencodeHarness implements Harness {
   #verifiedProcId: string | null = null;
   #opening = 0;
   #mutatingMcp = 0;
+  #mutationGate: MutationGate | null = null;
+  #proxiedNames = new Set<string>();
+  #appliedMcp: Record<string, unknown> = {};
+  readonly #publicationDebts = new Map<string, PublicationDebt>();
+  readonly #connectionStates = new Map<string, boolean>();
+  readonly #admissionLocks = new Map<string, Promise<void>>();
+  readonly #openingSessions = new Map<string, OpencodeSession>();
   readonly #activities = new Map<string, OpencodeActivity>();
   readonly #generationClients = new Map<string, OpencodeClient>();
   readonly #sessionOwners = new Map<string, ServerIdentity>();
@@ -3667,7 +3853,13 @@ export class OpencodeHarness implements Harness {
     if (!activity) {
       activity = new OpencodeActivity(
         key,
-        this.#serverOwner.startedAtMs(identity)
+        this.#serverOwner.startedAtMs(identity),
+        (directory) => {
+          // biome-ignore lint/complexity/noVoid: refresh alone owns outcome logging
+          void this.#recoverMcp(directory, identity).catch(
+            () => undefined
+          );
+        }
       );
       this.#activities.set(key, activity);
     }
@@ -3808,6 +4000,12 @@ export class OpencodeHarness implements Harness {
           "OpenCode active generation changed during idle migration."
         );
       }
+      if (
+        this.#admissionLocks.has(this.#pumpKey(session.directory, old)) ||
+        this.#admissionLocks.has(this.#pumpKey(session.directory, target))
+      ) {
+        throw new Error("OpenCode idle handoff waits for directory admission.");
+      }
       this.#activity(old).unbind(sessionId, session.instanceId);
       for (const [id, child] of this.#children) {
         if (child.parent === session && child.identity.procId === old.procId) {
@@ -3828,30 +4026,221 @@ export class OpencodeHarness implements Harness {
       if (this.#sessions.get(session.instanceId) !== session) {
         throw new Error("OpenCode attachment ended during idle migration.");
       }
+      await this.#reportPublication(session.directory, old, target);
     })().finally(() => this.#migrations.delete(session.instanceId));
     this.#migrations.set(session.instanceId, migrating);
     return migrating;
   }
 
-  async #prepareDispatch(session: OpencodeSession): Promise<void> {
-    if (this.#applyGate) {
-      await this.#applyGate.promise;
-    }
-    await this.#migrate(session);
-    if (this.#sessions.get(session.instanceId) !== session) {
+  #assertDispatch(session: OpencodeSession, identity?: ServerIdentity): void {
+    session.lifetime.throwIfAborted();
+    if (
+      // biome-ignore lint/suspicious/noUnnecessaryConditions: dispose changes this across admission awaits
+      this.#disposed ||
+      (this.#sessions.get(session.instanceId) !== session &&
+        this.#openingSessions.get(session.instanceId) !== session)
+    ) {
       throw new Error("OpenCode dispatch attachment has ended.");
     }
-    const identity = this.#sessionOwners.get(session.instanceId);
-    if (!(identity && session.sessionId)) {
-      throw new Error("OpenCode dispatch has no generation custody.");
+    const owner = this.#sessionOwners.get(session.instanceId);
+    if (
+      !(owner && session.sessionId) ||
+      (identity && owner.procId !== identity.procId)
+    ) {
+      throw new Error("OpenCode dispatch generation custody has changed.");
     }
-    this.#activity(identity).observeBusy(session.sessionId, session.directory);
+  }
+
+  #publicationHeld(): boolean {
+    return this.#mutationGate?.kind === "publication";
+  }
+
+  // This is agent admission only: native-client/server starts not yet observed
+  // cannot be excluded here. Request completion is never held under this lock.
+  async #withAdmission<T>(
+    identity: ServerIdentity,
+    directory: string,
+    signal: AbortSignal,
+    work: () => Promise<T>
+  ): Promise<T> {
+    const key = this.#pumpKey(directory, identity);
+    const previous = this.#admissionLocks.get(key) ?? Promise.resolve();
+    const released = Promise.withResolvers<void>();
+    const tail = previous.then(() => released.promise);
+    this.#admissionLocks.set(key, tail);
+    try {
+      await waitForAdmission(previous, signal);
+      return await work();
+    } finally {
+      released.resolve();
+      // A cancelled waiter must leave its predecessor on record until it releases.
+      // biome-ignore lint/complexity/noVoid: tails settle independently of work failures
+      void tail.then(() => {
+        if (this.#admissionLocks.get(key) === tail) {
+          this.#admissionLocks.delete(key);
+        }
+      });
+    }
+  }
+
+  #beginMcpMutation(): (() => void) | undefined {
+    if (this.#mutationGate?.kind === "publication") {
+      return undefined;
+    }
+    const gate = this.#mutationGate ?? { kind: "mcp" as const, users: 0 };
+    this.#mutationGate = gate;
+    gate.users += 1;
+    this.#mutatingMcp += 1;
+    return () => {
+      this.#mutatingMcp -= 1;
+      gate.users -= 1;
+      if (gate.users === 0 && this.#mutationGate === gate) {
+        this.#mutationGate = null;
+      }
+    };
+  }
+
+  #directoryInFlight(identity: ServerIdentity, directory?: string): boolean {
+    return [...this.#sessions.values(), ...this.#openingSessions.values()].some(
+      (session) =>
+        (directory === undefined || session.directory === directory) &&
+        session.turnInFlight &&
+        this.#sessionOwners.get(session.instanceId)?.procId === identity.procId
+    );
+  }
+
+  #knownBusy(session: OpencodeSession, identity: ServerIdentity): boolean {
+    return Boolean(session.sessionId && session.turnInFlight && this.#activity(identity).serverBusy(session.sessionId));
+  }
+
+  #requestFailed(session: OpencodeSession): void {
+    const identity = this.#sessionOwners.get(session.instanceId);
+    if (
+      identity &&
+      !session.lifetime.aborted &&
+      !session.turnInFlight &&
+      session.sessionId
+    ) {
+      this.#activity(identity).observeIdle(
+        session.sessionId,
+        session.directory
+      );
+      // biome-ignore lint/complexity/noVoid: a pre-custody refusal has no future idle event
+      void this.#recoverMcp(session.directory, identity).catch(
+        () => undefined
+      );
+    }
+  }
+
+  async #prepareDispatch(
+    session: OpencodeSession,
+    submit: () => void
+  ): Promise<boolean> {
+    this.#assertDispatch(session);
+    if (this.#publicationHeld()) {
+      return false;
+    }
+    const prior = this.#sessionOwners.get(session.instanceId) as ServerIdentity;
+    if (prior.procId !== this.#serverOwner.active?.procId && !this.#knownBusy(session, prior)) {
+      if (
+        session.turnInFlight ||
+        this.#activity(prior).state(session.sessionId as string) !== "idle"
+      ) {
+        return false;
+      }
+      try {
+        await this.#migrate(session);
+      } catch (error) {
+        this.#assertDispatch(session);
+        if (
+          this.#sessionOwners.get(session.instanceId)?.procId !==
+          this.#serverOwner.active?.procId
+        ) {
+          return false;
+        }
+        throw error;
+      }
+      this.#assertDispatch(session);
+    }
+    const identity = this.#sessionOwners.get(
+      session.instanceId
+    ) as ServerIdentity;
+    return this.#withAdmission(
+      identity,
+      session.directory,
+      session.lifetime,
+      async () => {
+        this.#assertDispatch(session, identity);
+        if (
+          (identity.procId !== this.#serverOwner.active?.procId && !this.#knownBusy(session, identity)) ||
+          this.#publicationHeld()
+        ) {
+          return false;
+        }
+        // Failure belongs to the refresh log, never to this send. Busy stays owed.
+        await this.#recoverMcpLocked(
+          session.directory,
+          identity,
+          () => this.#assertDispatch(session, identity),
+          session.lifetime
+        );
+        this.#assertDispatch(session, identity);
+        if (
+          (identity.procId !== this.#serverOwner.active?.procId && !this.#knownBusy(session, identity)) ||
+          this.#publicationHeld()
+        ) {
+          return false;
+        }
+        this.#activity(identity).observeBusy(
+          session.sessionId as string,
+          session.directory,
+          true
+        );
+        submit();
+        return true;
+      }
+    );
+  }
+
+  async #controlMcp(
+    session: OpencodeSession,
+    work: () => Promise<unknown>
+  ): Promise<unknown> {
+    this.#assertDispatch(session);
+    const identity = this.#sessionOwners.get(
+      session.instanceId
+    ) as ServerIdentity;
+    const release = this.#beginMcpMutation();
+    if (!release) {
+      throw new Error("MCP mutation blocked: config reload in progress");
+    }
+    try {
+      return await this.#withAdmission(
+        identity,
+        session.directory,
+        session.lifetime,
+        async () => {
+          this.#assertDispatch(session, identity);
+          const result = await work();
+          this.#assertDispatch(session, identity);
+          return result;
+        }
+      );
+    } finally {
+      release();
+    }
   }
 
   async #handoffIdle(): Promise<void> {
     const { active } = this.#serverOwner;
     if (!active || this.#disposed) {
       return;
+    }
+    for (const session of this.#sessions.values()) {
+      const owner = this.#sessionOwners.get(session.instanceId);
+      if (owner && owner.procId !== active.procId && this.#knownBusy(session, owner)) {
+        session.configGateLifted();
+      }
     }
     const idle = [...this.#sessions.values()].filter((session) => {
       const owner = this.#sessionOwners.get(session.instanceId);
@@ -3894,11 +4283,18 @@ export class OpencodeHarness implements Harness {
     this.#custodyReadiness = read;
   }
 
-  #operationsPending(): boolean {
+  #operationsPending(ignoreAdmissionKey?: string): boolean {
     return (
       !this.#custodyReadiness() ||
       this.#opening > 0 ||
       this.#mutatingMcp > 0 ||
+      this.#publicationHeld() ||
+      [...this.#admissionLocks.keys()].some(
+        (key) => key !== ignoreAdmissionKey
+      ) ||
+      [...this.#sessions.values(), ...this.#openingSessions.values()].some(
+        (session) => session.submitting
+      ) ||
       this.#migrations.size > 0 ||
       this.#pendingRecoveries.size > 0 ||
       this.#recovering > 0 ||
@@ -3940,6 +4336,9 @@ export class OpencodeHarness implements Harness {
     return [
       ...new Set([
         ...snapshots.flatMap((snapshot) => snapshot.instances),
+        ...[...this.#sessions.values(), ...this.#openingSessions.values()]
+          .filter((session) => session.turnInFlight)
+          .map((session) => session.instanceId),
         ...operations,
       ]),
     ];
@@ -3964,7 +4363,7 @@ export class OpencodeHarness implements Harness {
 
   /** Two complete reads of this exact generation, with a real sampling gap. */
   async #generationIdle(identity: ServerIdentity): Promise<boolean> {
-    if (this.#operationsPending()) {
+    if (this.#operationsPending() || this.#directoryInFlight(identity)) {
       return false;
     }
     const activity = this.#activity(identity);
@@ -3997,7 +4396,8 @@ export class OpencodeHarness implements Harness {
       second.instances.length === 0 &&
       second.generation === first.generation &&
       second.sampledAt >= first.sampledAt + 2000 &&
-      !this.#operationsPending()
+      !this.#operationsPending() &&
+      !this.#directoryInFlight(identity)
     );
   }
 
@@ -4032,6 +4432,26 @@ export class OpencodeHarness implements Harness {
   }
 
   async #attemptConfigApply(): Promise<void> {
+    if (this.#mutationGate || this.#opening > 0) {
+      return;
+    }
+    // Publication owns the same mutation gate before its precheck's first await.
+    const gate: MutationGate = { kind: "publication" };
+    this.#mutationGate = gate;
+    try {
+      await this.#applyConfig();
+    } finally {
+      if (this.#mutationGate === gate) {
+        this.#mutationGate = null;
+      }
+      for (const session of this.#sessions.values()) {
+        session.configGateLifted();
+      }
+      this.#drainPendingSpawns();
+    }
+  }
+
+  async #applyConfig(): Promise<void> {
     if (
       this.#applyGate ||
       this.#checkingPublication ||
@@ -4087,6 +4507,7 @@ export class OpencodeHarness implements Harness {
       }
       const targetHash = this.#desiredHash;
       const targetVersion = this.#desiredVersion;
+      let candidateMcp: Record<string, unknown> = {};
 
       this.#configState = "applying";
       console.log(
@@ -4126,7 +4547,7 @@ export class OpencodeHarness implements Harness {
           if (!(await this.#readsThisConfig(candidate))) {
             throw new Error("Candidate reads another global config root.");
           }
-          await this.#verifyApply(candidate, targetHash, targetVersion, signal);
+          candidateMcp = await this.#verifyApply(candidate, targetHash, targetVersion, signal);
         },
         (identity) => {
           const client = this.#adopt(identity.url);
@@ -4134,6 +4555,7 @@ export class OpencodeHarness implements Harness {
           this.#verifiedProcId = identity.procId;
           this.#appliedHash = targetHash;
           this.#appliedVersion = targetVersion;
+          this.#appliedMcp = candidateMcp;
           this.#configError = null;
           // The incumbent's clients and pumps remain owned until its turns end.
           // biome-ignore lint/complexity/noVoid: publication does not wait for busy incumbent sessions to migrate
@@ -4183,10 +4605,6 @@ export class OpencodeHarness implements Harness {
     } finally {
       this.#applyGate = null;
       gateResolve();
-      for (const session of this.#sessions.values()) {
-        session.configGateLifted();
-      }
-      this.#drainPendingSpawns();
     }
   }
 
@@ -4217,7 +4635,7 @@ export class OpencodeHarness implements Harness {
     targetHash: string | null,
     targetVersion: string | null,
     signal?: AbortSignal
-  ): Promise<void> {
+  ): Promise<Record<string, unknown>> {
     const health = await reached(
       client.global.health({
         signal: signal ?? AbortSignal.timeout(RECOVERY_TIMEOUT_MS),
@@ -4316,6 +4734,7 @@ export class OpencodeHarness implements Harness {
         `config verification failed: managed MCP definitions diverge on: ${mismatched.join(", ")}`
       );
     }
+    return structuredClone(liveMcp ?? {});
   }
 
   async detect(): Promise<HarnessReport> {
@@ -4500,7 +4919,7 @@ export class OpencodeHarness implements Harness {
             try {
               // No directory is initialized yet; this verifies the global
               // resolved config (no directory query).
-              await this.#verifyApply(client, initialHash, initialVersion);
+              this.#appliedMcp = await this.#verifyApply(client, initialHash, initialVersion);
               this.#appliedHash = initialHash;
               this.#appliedVersion = initialVersion;
               this.#verifiedProcId = identity.procId;
@@ -4662,13 +5081,27 @@ export class OpencodeHarness implements Harness {
   }
 
   /** Whether the directory is settled: disposed, or in use again and not this call's to dispose. */
-  async #disposeUnused(
+  #disposeUnused(
     directory: string,
     identity: ServerIdentity
   ): Promise<boolean> {
+    return this.#withAdmission(
+      identity,
+      directory,
+      new AbortController().signal,
+      () => this.#disposeUnusedLocked(directory, identity)
+    );
+  }
+
+  async #disposeUnusedLocked(
+    directory: string,
+    identity: ServerIdentity
+  ): Promise<boolean> {
+    const key = this.#pumpKey(directory, identity);
     const used = (): boolean =>
       // biome-ignore lint/suspicious/noUnnecessaryConditions: #disposed is set true by dispose(), a different method biome's per-method inference doesn't see
       this.#disposed ||
+      this.#directoryInFlight(identity, directory) ||
       !this.#serverOwner.generations.some(
         (generation) => generation.procId === identity.procId
       ) ||
@@ -4681,30 +5114,28 @@ export class OpencodeHarness implements Harness {
     if (used()) {
       return true;
     }
-    if (this.#operationsPending()) {
+    if (this.#operationsPending(key)) {
       return false;
     }
     const client = this.#clientForGeneration(identity);
-    const status = await client.session.status(
-      { directory },
-      { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
+    const idle = await this.#activity(identity).readDirectoryIdle(
+      client,
+      directory
     );
     if (used()) {
       return true;
     }
-    if (
-      status.error ||
-      !status.data ||
-      this.#operationsPending() ||
-      Object.values(status.data).some((state) => state.type !== "idle")
-    ) {
+    if (!idle || this.#operationsPending(key)) {
       return false;
     }
-    const key = this.#pumpKey(directory, identity);
     this.#pumps.get(key)?.abort();
     this.#pumps.delete(key);
     this.#pumpReady.delete(key);
     this.#pumpConnected.delete(key);
+    this.#publicationDebts.delete(key);
+    for (const stateKey of this.#connectionStates.keys()) {
+      if (stateKey.startsWith(`${key}\n`)) this.#connectionStates.delete(stateKey);
+    }
     const disposed = await client.instance.dispose(
       { directory },
       { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
@@ -4791,12 +5222,16 @@ export class OpencodeHarness implements Harness {
                   identity.procId
               ) {
                 // biome-ignore lint/complexity/noVoid: snapshots must not block consumption of live gate events
-                void this.#reconcile(session);
+                void this.#reconcile(session).catch(() => undefined);
               }
             }
           }
           delay = 1000;
           if (event.type === "session.created") {
+            const { info } = event.properties as { info?: Session };
+            if (info) {
+              this.#activity(identity).observeCreated(info.id, info.directory);
+            }
             this.#routeChildCreated(event, identity);
             continue;
           }
@@ -4809,6 +5244,10 @@ export class OpencodeHarness implements Harness {
                 event.properties.status.type === "idle"))
           ) {
             this.#activity(identity).observeIdle(sid, directory);
+            // biome-ignore lint/complexity/noVoid: refresh alone logs its outcome
+            void this.#recoverMcp(directory, identity).catch(
+              () => undefined
+            );
           }
           if (
             sid &&
@@ -4950,6 +5389,10 @@ export class OpencodeHarness implements Harness {
         return;
       }
       await Promise.all([session.watchResumedTurn(), session.reconcileGates()]);
+      const identity = this.#sessionOwners.get(session.instanceId);
+      if (identity && !session.lifetime.aborted) {
+        await this.#recoverMcp(session.directory, identity);
+      }
     }).finally(() => {
       this.#reconcileJobs.delete(session);
       if (
@@ -4957,7 +5400,7 @@ export class OpencodeHarness implements Harness {
         this.#sessions.get(session.instanceId) === session
       ) {
         // biome-ignore lint/complexity/noVoid: a reconnect during a snapshot needs a fresh snapshot after it
-        void this.#reconcile(session);
+        void this.#reconcile(session).catch(() => undefined);
       }
     });
     this.#reconcileJobs.set(session, job);
@@ -5187,7 +5630,7 @@ export class OpencodeHarness implements Harness {
   spawn(spec: SpawnPayload, ctx: HarnessContext): Promise<HarnessSession> {
     // Config convergence gate: if a reload is in progress, queue this spawn
     // and deliver it when the gate lifts.
-    if (this.#applyGate) {
+    if (this.#applyGate || this.#mutationGate?.kind === "publication") {
       return new Promise<HarnessSession>((resolve, reject) => {
         this.#pendingSpawns.push({ resolve, reject, spec, ctx });
       });
@@ -5344,6 +5787,11 @@ export class OpencodeHarness implements Harness {
       },
       () => {
         const held = this.#sessionOwners.get(ctx.instanceId) ?? identity;
+        if (this.#openingSessions.get(ctx.instanceId) === session) {
+          this.#openingSessions.delete(ctx.instanceId);
+          this.#sessionOwners.delete(ctx.instanceId);
+          this.#activity(held).unbind(sessionId, ctx.instanceId);
+        }
         if (this.#sessions.get(ctx.instanceId) === session) {
           this.#sessions.delete(ctx.instanceId);
           const owner = this.#sessionOwners.get(ctx.instanceId);
@@ -5362,21 +5810,27 @@ export class OpencodeHarness implements Harness {
       },
       (urgent) =>
         this.#applyGate !== null ||
+        this.#mutationGate?.kind === "publication" ||
         (!urgent &&
           this.#sessionOwners.get(ctx.instanceId)?.procId !==
-            this.#serverOwner.active?.procId),
+            this.#serverOwner.active?.procId &&
+          !this.#knownBusy(session, this.#sessionOwners.get(ctx.instanceId) ?? identity)),
       () =>
         this.#sessionBusy(
           sessionId,
           ctx.cwd,
           this.#sessionOwners.get(ctx.instanceId)
         ),
-      () => this.#prepareDispatch(session),
+      (submit) => this.#prepareDispatch(session, submit),
+      () => this.#assertDispatch(session),
+      () => this.#requestFailed(session),
+      (work) => this.#controlMcp(session, work),
       spec.effort,
       spec.workflowStepId,
       spec.canDelegate
     );
     this.#sessionOwners.set(ctx.instanceId, identity);
+    this.#openingSessions.set(ctx.instanceId, session);
     // A session an earlier agent left mid-turn: the hub still waits on that
     // turn's end, which the reconcile after its subscription comes up pays.
     if (spec.resume && !spec.resume.fork && turnWasOpen(sessionId)) {
@@ -5394,6 +5848,7 @@ export class OpencodeHarness implements Harness {
       }
       session.rebindClient(this.#clientForGeneration(owner));
       this.#sessions.set(ctx.instanceId, session);
+      this.#openingSessions.delete(ctx.instanceId);
       this.#activity(owner).bind(sessionId, ctx.instanceId, ctx.cwd);
       if (owner.procId !== this.#serverOwner.active?.procId) {
         this.#handoffIdle().catch(console.warn);
@@ -5442,28 +5897,61 @@ export class OpencodeHarness implements Harness {
       );
       if (this.#pumpConnected.has(this.#pumpKey(ctx.cwd, owner))) {
         // biome-ignore lint/complexity/noVoid: attached handles remain operable while reconciliation runs
-        void this.#reconcile(session);
+        void this.#reconcile(session).catch(() => undefined);
       }
     };
 
     // Load skills natively: send each as a /command before the first prompt.
     // The opencode server queues them in order, so skills load before work.
     if (!existing?.running && spec.skills?.length) {
-      for (const skill of spec.skills) {
-        // biome-ignore lint/performance/noAwaitInLoops: skills must load in order, before the first prompt
-        await reached(
-          client.session.command(
-            {
-              sessionID: sessionId,
-              directory: ctx.cwd,
-              command: skill,
-              arguments: "",
-              ...(spec.model ? { model: spec.model } : {}),
-              ...(spec.effort ? { variant: spec.effort } : {}),
-            },
-            { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
-          )
-        );
+      try {
+        for (const skill of spec.skills) {
+          const key = messageId();
+          let pending:
+            | ReturnType<typeof client.session.command<false>>
+            | undefined;
+          // biome-ignore lint/performance/noAwaitInLoops: skills must load in order, before the first prompt
+          const admitted = await this.#prepareDispatch(session, () => {
+            session.reserveSubmission(key);
+            pending = client.session.command(
+              {
+                sessionID: sessionId,
+                directory: ctx.cwd,
+                messageID: key,
+                command: skill,
+                arguments: "",
+                ...(spec.model ? { model: spec.model } : {}),
+                ...(spec.effort ? { variant: spec.effort } : {}),
+              },
+              {
+                signal: AbortSignal.any([
+                  session.lifetime,
+                  AbortSignal.timeout(RECOVERY_TIMEOUT_MS),
+                ]),
+              }
+            );
+          });
+          this.#assertDispatch(session);
+          if (!(admitted && pending)) {
+            throw new Error(
+              "OpenCode skill admission has no active generation."
+            );
+          }
+          try {
+            const result = await reached(pending);
+            this.#assertDispatch(session);
+            if (result.error) {
+              throw new Error(errorText(result.error));
+            }
+            session.finishStartupSubmission(key);
+          } catch (error) {
+            session.refusedSubmission(key, undefined, error);
+            throw error;
+          }
+        }
+      } catch (error) {
+        await session.dispose();
+        throw error;
       }
     }
 
@@ -5748,6 +6236,8 @@ export class OpencodeHarness implements Harness {
     }
     this.#handoffTimer = null;
     this.#stopPumps();
+    this.#publicationDebts.clear();
+    this.#connectionStates.clear();
     // The socket, not the child: a closed sessiond connection is re-dialled by
     // `sessiond()` and the held server never notices.
     // biome-ignore lint/complexity/noVoid: fire-and-forget close; dispose() must not block on the socket teardown
@@ -5792,6 +6282,8 @@ export class OpencodeHarness implements Harness {
       await syncMemory(OPENCODE_MEMORY, null, sidecar.memory, report);
     }
     await writeJson(OPENCODE_SIDECAR, { mcp });
+    this.#proxiedNames = new Set(config.mcp.filter((server) => server.proxied && server.enabled).map((server) => server.name));
+    this.#stageMcpPublication(Object.fromEntries(config.mcp.filter((server) => server.enabled).map((server) => [server.name, toOpencodeMcp(server.config)])), new Set([...(sidecar.mcp ?? []), ...mcp]));
 
     // Poke the config watcher: syncFleet just wrote opencode.json, so the disk
     // hash will have changed. An immediate tick avoids the up-to-2s polling
@@ -5808,44 +6300,177 @@ export class OpencodeHarness implements Harness {
       );
       return report;
     }
-    const client = await this.#ensure();
-    for (const server of config.mcp.filter(
-      (row) => row.proxied && row.enabled
-    )) {
-      const directories = new Set([
-        undefined,
-        ...this.#pumps.keys(),
-        ...[...this.#sessions.values()].map((session) => session.directory),
-      ]);
-      for (const directory of directories) {
-        // biome-ignore lint/performance/noAwaitInLoops: replace each directory's connection before reporting runtime state
-        const connected = await client.mcp.add({
-          name: server.name,
-          config: toOpencodeMcp(server.config),
-          directory,
-        });
-        if (connected.error) {
-          throw new Error(errorText(connected.error));
-        }
-        const removed = await client.mcp.auth.remove({
-          name: server.name,
-          directory,
-        });
-        if (removed.error) {
-          throw new Error(errorText(removed.error));
-        }
-        const reconnected = await client.mcp.connect({
-          name: server.name,
-          directory,
-        });
-        if (reconnected.error) {
-          throw new Error(errorText(reconnected.error));
-        }
-      }
-    }
+    // Definition changes have exactly one delivery path: generation publication.
     Object.assign(report.mcp, await this.#readFleetMcp(mcp));
 
     return report;
+  }
+
+  async #recoverMcp(
+    directory: string,
+    identity: ServerIdentity
+  ): Promise<void> {
+    if (
+      identity.procId !== this.#serverOwner.active?.procId ||
+      this.#disposed ||
+      !this.#pumps.has(this.#pumpKey(directory, identity))
+    ) {
+      return;
+    }
+    await this.#withAdmission(
+      identity,
+      directory,
+      new AbortController().signal,
+      () => this.#recoverMcpLocked(directory, identity)
+    ).catch(() => undefined);
+  }
+
+  /** Recovery never replaces a connected client; definition changes belong to publication. */
+  async #recoverMcpLocked(
+    directory: string,
+    identity: ServerIdentity,
+    validate?: () => void,
+    signal?: AbortSignal
+  ): Promise<void> {
+    if (
+      // biome-ignore lint/suspicious/noUnnecessaryConditions: dispose changes this outside the transaction
+      this.#disposed ||
+      identity.procId !== this.#serverOwner.active?.procId
+    ) {
+      return;
+    }
+    if (this.#proxiedNames.size === 0 || this.#directoryInFlight(identity, directory)) {
+      return;
+    }
+    const release = this.#beginMcpMutation();
+    if (!release) {
+      return;
+    }
+    const assertActive = () => {
+      validate?.();
+      if (
+        // biome-ignore lint/suspicious/noUnnecessaryConditions: lifecycle changes across each awaited request
+        this.#disposed ||
+        identity.procId !== this.#serverOwner.active?.procId ||
+        this.#mutationGate?.kind !== "mcp"
+      ) {
+        throw new Error("OpenCode MCP recovery generation is no longer active.");
+      }
+    };
+    const options = () => ({
+      signal: AbortSignal.any([
+        AbortSignal.timeout(RECOVERY_TIMEOUT_MS),
+        ...(signal ? [signal] : []),
+      ]),
+    });
+    try {
+      assertActive();
+      const client = this.#client as OpencodeClient;
+      const idle = await this.#activity(identity).readDirectoryIdle(client, directory);
+      assertActive();
+      if (!idle || this.#directoryInFlight(identity, directory)) {
+        return;
+      }
+      const before = await reached(client.mcp.status({ directory }, options()));
+      assertActive();
+      if (before.error || !before.data) {
+        throw new Error(errorText(before.error));
+      }
+      for (const name of this.#proxiedNames) {
+        const status = before.data[name];
+        // Runtime disabled is an explicit operator toggle, not a failed handshake.
+        if (status?.status === "disabled") {
+          continue;
+        }
+        this.#noteConnection(identity, directory, name, status, "recovery");
+        if (status?.status === "connected") {
+          continue;
+        }
+        assertActive();
+        if (!this.#activity(identity).directoryIdle(directory)) {
+          return;
+        }
+        // MCP.connect touches only this non-connected name, never another client's call.
+        // biome-ignore lint/performance/noAwaitInLoops: each bounded recovery settles before checking the next client
+        const connected = await reached(
+          client.mcp.connect({ name, directory }, options())
+        );
+        assertActive();
+        if (connected.error) {
+          continue;
+        }
+        const statuses = await reached(
+          client.mcp.status({ directory }, options())
+        );
+        assertActive();
+        if (!statuses.error) {
+          this.#noteConnection(identity, directory, name, statuses.data?.[name], "recovery");
+        }
+      }
+    } catch (error) {
+      for (const name of this.#proxiedNames) {
+        this.#noteConnection(identity, directory, name, { status: "failed", error: errorText(error) }, "recovery");
+      }
+    } finally {
+      release();
+    }
+  }
+
+  #noteConnection(identity: ServerIdentity, directory: string, name: string,
+    status: { status: string; error?: string } | undefined, path: "publication" | "recovery"): void {
+    const key = `${this.#pumpKey(directory, identity)}\n${name}`;
+    const connected = status?.status === "connected";
+    const previous = this.#connectionStates.get(key);
+    if (!connected && previous !== false) {
+      console.warn(`[opencode] MCP ${name} ${path} not connected for ${directory}: ${status?.error ?? status?.status ?? "missing"}`);
+    } else if (connected && previous === false) {
+      console.info(`[opencode] MCP ${name} ${path} connected for ${directory}`);
+    }
+    this.#connectionStates.set(key, connected);
+  }
+
+  #stageMcpPublication(desired: Record<string, unknown>, managed: Iterable<string>): void {
+    const changed = [...managed].filter((name) => canonicalizeJson(desired[name]) !== canonicalizeJson(this.#appliedMcp[name]));
+    if (!changed.length) return;
+    for (const session of this.#sessions.values()) {
+      const owner = this.#sessionOwners.get(session.instanceId);
+      if (!owner) continue;
+      const key = this.#pumpKey(session.directory, owner);
+      const debt = this.#publicationDebts.get(key) ?? { owed: false, servers: new Set<string>() };
+      const busy = session.turnInFlight || this.#activity(owner).state(session.sessionId as string) !== "idle";
+      for (const name of changed) {
+        if (busy && (!debt.owed || !debt.servers.has(name))) {
+          console.info(`[opencode] MCP ${name} publication owed for ${session.directory} because a turn is running`);
+        }
+        debt.servers.add(name);
+      }
+      debt.owed ||= busy;
+      this.#publicationDebts.set(key, debt);
+    }
+  }
+
+  async #reportPublication(directory: string, old: ServerIdentity, target: ServerIdentity): Promise<void> {
+    const key = this.#pumpKey(directory, old);
+    const debt = this.#publicationDebts.get(key);
+    if (!debt) return;
+    this.#publicationDebts.delete(key);
+    await this.#withAdmission(target, directory, new AbortController().signal, async () => {
+      try {
+        const result = await reached(this.#clientForGeneration(target).mcp.status({ directory }, { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }));
+        if (result.error) throw new Error(errorText(result.error));
+        for (const name of debt.servers) {
+          if (this.#proxiedNames.has(name)) {
+            this.#noteConnection(target, directory, name, result.data?.[name], "publication");
+            if (result.data?.[name]?.status !== "connected") continue;
+          }
+          console.info(debt.owed
+            ? `[opencode] MCP ${name} publication applied at idle for ${directory} by handoff`
+            : `[opencode] MCP ${name} publication applied at once for ${directory} by handoff`);
+        }
+      } catch (error) {
+        for (const name of debt.servers) this.#noteConnection(target, directory, name, { status: "failed", error: errorText(error) }, "publication");
+      }
+    }).catch(() => undefined);
   }
 
   async fleetStatus(): Promise<FleetSyncReport> {
@@ -5876,18 +6501,39 @@ export class OpencodeHarness implements Harness {
     }
     try {
       const client = await this.#ensure();
-      // This probe initializes the default directory's MCP servers, but owns no session.
-      const result = await reached(
-        client.mcp.status({}, { signal: AbortSignal.timeout(10_000) })
-      ).finally(async () => {
-        const disposed = await client.instance.dispose(
+      const identity = this.#serverOwner.active;
+      const paths = await reached(
+        client.path.get(
           {},
-          { signal: AbortSignal.timeout(10_000) }
-        );
-        if (disposed.error) {
-          throw new Error(errorText(disposed.error));
+          { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
+        )
+      );
+      const directory = paths.data?.directory;
+      if (
+        paths.error ||
+        !directory ||
+        !identity ||
+        this.#serverOwner.active?.procId !== identity.procId
+      ) {
+        throw new Error("OpenCode fleet probe default directory is unknown.");
+      }
+      const result = await this.#withAdmission(
+        identity,
+        directory,
+        new AbortController().signal,
+        async () => {
+          const status = await reached(
+            client.mcp.status(
+              { directory },
+              { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
+            )
+          );
+          // Same use, local-reservation, pending-operation and fresh-status guards
+          // as directory release. An unscoped query is never proof of no session.
+          await this.#disposeUnusedLocked(directory, identity);
+          return status;
         }
-      });
+      );
       if (result.error || !result.data) {
         throw new Error(errorText(result.error));
       }

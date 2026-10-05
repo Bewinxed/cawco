@@ -7,6 +7,8 @@ const SAMPLE_BUDGET_MS = 3000;
 const INITIAL_BUDGET_MS = 20_000;
 const ACTIVE_INTERVAL_MS = 5000;
 const IDLE_INTERVAL_MS = 30_000;
+const ACTIVE_SNAPSHOT_MS = 15_000;
+const IDLE_SNAPSHOT_MS = 45_000;
 
 interface SessionObservation {
   afterRequest: number;
@@ -14,6 +16,7 @@ interface SessionObservation {
   lastRequest: number;
   observedAt: number;
   sequence: number;
+  serverBusy: boolean;
   state: ActivityState;
 }
 
@@ -77,9 +80,11 @@ function statusData(value: unknown): StatusMap | null {
 export class OpencodeActivity {
   readonly #generation: string;
   readonly #birth: Promise<number>;
+  readonly #onIdle: (directory: string) => void;
   readonly #bindings = new Map<string, Set<string>>();
   readonly #sessions = new Map<string, SessionObservation>();
   readonly #directories = new Map<string, DirectoryObservation>();
+  readonly #covered = new Map<string, number>();
   readonly #inventory = new Map<string, string>();
   readonly #waves = new WeakMap<object, Map<string, DirectorySnapshot>>();
   #known = false;
@@ -92,9 +97,14 @@ export class OpencodeActivity {
   #stopped = false;
   readonly #requestWaiters: (() => void)[] = [];
 
-  constructor(generation: string, birth: Promise<number>) {
+  constructor(
+    generation: string,
+    birth: Promise<number>,
+    onIdle: (directory: string) => void
+  ) {
     this.#generation = generation;
     this.#birth = birth.catch(() => Number.NaN);
+    this.#onIdle = onIdle;
   }
 
   #directory(directory: string): DirectoryObservation {
@@ -112,6 +122,7 @@ export class OpencodeActivity {
       entry = {
         directory,
         sequence: 0,
+        serverBusy: false,
         afterRequest: 0,
         state: "unobserved",
         observedAt: 0,
@@ -123,6 +134,7 @@ export class OpencodeActivity {
       entry.sequence += 1;
       entry.afterRequest = this.#directory(directory).requested;
       entry.state = "unobserved";
+      entry.serverBusy = false;
     }
     return entry;
   }
@@ -142,11 +154,14 @@ export class OpencodeActivity {
     }
   }
 
-  #observe(id: string, directory: string, state: "busy" | "idle"): void {
+  #observe(id: string, directory: string, state: "busy" | "idle", admission = false): void {
     const entry = this.#session(id, directory);
     entry.sequence += 1;
     entry.afterRequest = this.#directory(directory).requested;
     entry.state = state;
+    if (!admission || state === "idle") {
+      entry.serverBusy = state === "busy";
+    }
     entry.observedAt = Date.now();
     if (state === "busy") {
       this.#nextSampleAt = Math.min(
@@ -156,8 +171,8 @@ export class OpencodeActivity {
     }
   }
 
-  observeBusy(id: string, directory: string): void {
-    this.#observe(id, directory, "busy");
+  observeBusy(id: string, directory: string, admission = false): void {
+    this.#observe(id, directory, "busy", admission);
   }
   observeIdle(id: string, directory: string): void {
     this.#observe(id, directory, "idle");
@@ -165,13 +180,49 @@ export class OpencodeActivity {
 
   /** Text/tool progress during an already busy turn does not change its activity ordering. */
   observeProgress(id: string, directory: string): void {
-    if (this.#session(id, directory).state !== "busy") {
+    const entry = this.#session(id, directory);
+    if (entry.state !== "busy" || !entry.serverBusy) {
       this.#observe(id, directory, "busy");
+    } else {
+      entry.observedAt = Date.now();
     }
   }
 
   state(id: string): ActivityState {
     return this.#sessions.get(id)?.state ?? "unobserved";
+  }
+
+  serverBusy(id: string): boolean {
+    const entry = this.#sessions.get(id);
+    return Boolean(entry?.serverBusy && entry.state === "busy" && Date.now() - entry.observedAt <= ACTIVE_SNAPSHOT_MS);
+  }
+
+  observeCreated(id: string, directory: string): void {
+    this.#session(id, directory);
+    this.#known = false;
+  }
+
+  /** The completed sampler owns inventory coverage; individual idle events cannot replace it. */
+  directoryIdle(directory: string): boolean {
+    const observed = this.#directories.get(directory)?.latest;
+    if (
+      observed?.kind !== "available" ||
+      this.#covered.get(directory) !== observed.request ||
+      Date.now() - observed.sampledAt > IDLE_SNAPSHOT_MS
+    ) {
+      return false;
+    }
+    return (
+      Object.values(observed.statuses).every(
+        (value) => statusState(value) === "idle"
+      ) &&
+      [...this.#sessions.values()]
+        .filter((entry) => entry.directory === directory)
+        .every(
+          (entry) =>
+            entry.state === "idle" && entry.observedAt >= observed.sampledAt
+        )
+    );
   }
 
   async #request(
@@ -307,10 +358,51 @@ export class OpencodeActivity {
         return { ...base, kind: "unreachable", reason: snapshot.reason };
       }
       entry.state = statusState(snapshot.statuses[sessionId]);
+      entry.serverBusy = entry.state === "busy";
       entry.observedAt = snapshot.sampledAt;
       entry.lastRequest = snapshot.request;
       return { ...base, kind: "decided", state: entry.state, sequence };
     }
+  }
+
+  /** Fresh complete directory status, without overwriting a newer observed turn. */
+  async readDirectoryIdle(
+    client: OpencodeClient,
+    directory: string
+  ): Promise<boolean> {
+    const snapshot = await this.#readDirectory(
+      client,
+      directory,
+      0,
+      Date.now()
+    );
+    if (snapshot.kind !== "available") {
+      return false;
+    }
+    for (const id of Object.keys(snapshot.statuses)) {
+      this.#session(id, directory);
+    }
+    for (const [id, entry] of this.#sessions) {
+      if (
+        entry.directory !== directory ||
+        snapshot.request <= entry.afterRequest
+      ) {
+        continue;
+      }
+      entry.state = statusState(snapshot.statuses[id]);
+      entry.serverBusy = entry.state === "busy";
+      entry.observedAt = snapshot.sampledAt;
+      entry.lastRequest = snapshot.request;
+    }
+    this.#covered.set(directory, snapshot.request);
+    return (
+      Object.values(snapshot.statuses).every(
+        (value) => statusState(value) === "idle"
+      ) &&
+      [...this.#sessions.values()]
+        .filter((entry) => entry.directory === directory)
+        .every((entry) => entry.state === "idle")
+    );
   }
 
   snapshot(): ActivitySnapshot {
@@ -320,7 +412,7 @@ export class OpencodeActivity {
     const unreachableDirectories = [...this.#directories]
       .filter(([, entry]) => entry.latest?.kind === "unreachable")
       .map(([directory]) => directory);
-    const lifetime = instances.length ? 15_000 : 45_000;
+    const lifetime = instances.length ? ACTIVE_SNAPSHOT_MS : IDLE_SNAPSHOT_MS;
     if (
       // biome-ignore lint/suspicious/noUnnecessaryConditions: completed sampling rounds set #known true
       !this.#known ||
@@ -432,6 +524,7 @@ export class OpencodeActivity {
     const directories = [...new Set(sessions.values())];
     // One request per directory in this sampling round; recovery readers join it.
     const round = {};
+    const covered = new Map<string, number>();
     const readings = Promise.all(
       directories.map(async (directory) => {
         const snapshot = await this.#readDirectory(
@@ -469,9 +562,14 @@ export class OpencodeActivity {
             continue;
           }
           entry.state = statusState(snapshot.statuses[id]);
+          entry.serverBusy = entry.state === "busy";
           entry.observedAt = snapshot.sampledAt;
           entry.lastRequest = snapshot.request;
         }
+        covered.set(
+          directory,
+          this.#directory(directory).latest?.request ?? snapshot.request
+        );
         return true;
       })
     );
@@ -486,12 +584,21 @@ export class OpencodeActivity {
     }
     const coverage = await Promise.race([readings, timeout]);
     this.#known = coverage.every(Boolean);
+    this.#covered.clear();
+    for (const [directory, request] of covered) {
+      this.#covered.set(directory, request);
+    }
     this.#sampledAt = Date.now();
     this.#nextSampleAt =
       this.#sampledAt +
       (this.snapshot().instances.length
         ? ACTIVE_INTERVAL_MS
         : IDLE_INTERVAL_MS);
+    for (const directory of directories) {
+      if (this.directoryIdle(directory)) {
+        this.#onIdle(directory);
+      }
+    }
     return this.snapshot();
   }
 }
