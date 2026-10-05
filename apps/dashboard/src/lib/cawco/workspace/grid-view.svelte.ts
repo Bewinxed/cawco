@@ -19,75 +19,107 @@ import {
 
 const ALL = 100;
 
-interface Shape {
-  dir: "h" | "v";
-  id: string;
-  kids: PaneNode[];
-  sizes: number[];
-  t: PaneNode["t"];
-}
-
-export interface Ghost {
-  /** The branch as it was, drawn while the group that left collapses. */
-  branch: BranchNode;
-  /** Where each of its boxes is going. */
-  to: number[];
-}
-
-const shapeOf = (of: PaneNode): Shape =>
-  of.t === "b"
-    ? {
-        t: "b",
-        id: of.id,
-        dir: of.dir,
-        sizes: [...of.sizes],
-        kids: [...of.kids],
-      }
-    : { t: "l", id: of.id, dir: "h", sizes: [], kids: [] };
-
-const idsOf = (shape: Shape) => shape.kids.map((kid) => kid.id).join(",");
-
-/** A box's share once the grid draws the tree as it now is. */
-function shareAfter(id: string, stays: string[], now: Shape): number {
-  if (!stays.includes(id)) {
-    return 0;
-  }
-  return now.t === "l" ? ALL : (now.sizes[stays.indexOf(id)] ?? 0);
-}
-
-/** What a change took away, as a branch to go on drawing, or nothing when it only added or rearranged. */
-function ghostOf(before: Shape, now: Shape): Ghost | null {
-  if (before.t !== "b") {
-    return null;
-  }
-  const stays = now.t === "l" ? [now.id] : now.kids.map((kid) => kid.id);
-  const ids = before.kids.map((kid) => kid.id);
-  const sameBranch = now.t === "l" || now.id === before.id;
-  const left = ids.filter((id) => !stays.includes(id));
-  if (
-    !sameBranch ||
-    left.length === 0 ||
-    stays.some((id) => !ids.includes(id))
-  ) {
-    return null;
+/** The tree's shape as it stood: branches copied, groups themselves (they are keyed by id and carry their own tabs). */
+function snapshot(node: PaneNode): PaneNode {
+  if (node.t === "l") {
+    return node;
   }
   return {
-    branch: {
-      t: "b",
-      id: before.id,
-      dir: before.dir,
-      sizes: before.sizes,
-      kids: before.kids,
-    },
-    to: ids.map((id) => shareAfter(id, stays, now)),
+    t: "b",
+    id: node.id,
+    dir: node.dir,
+    sizes: [...node.sizes],
+    kids: node.kids.map(snapshot),
   };
 }
 
+const idsIn = (node: PaneNode, out = new Set<string>()): Set<string> => {
+  out.add(node.id);
+  if (node.t === "b") {
+    for (const kid of node.kids) {
+      idsIn(kid, out);
+    }
+  }
+  return out;
+};
+
+const branchesIn = (
+  node: PaneNode,
+  out = new Map<string, BranchNode>()
+): Map<string, BranchNode> => {
+  if (node.t === "b") {
+    out.set(node.id, node);
+    for (const kid of node.kids) {
+      branchesIn(kid, out);
+    }
+  }
+  return out;
+};
+
+export interface Ghost {
+  /**
+   * Each branch that lost a group, and the share each of its boxes is going
+   * to once the tree is drawn as it now is: nothing for the group that left.
+   */
+  changes: Map<string, number[]>;
+  /** The tree as it was, drawn while the groups that left collapse. */
+  tree: PaneNode;
+}
+
+/**
+ * What a change took away, as the tree to go on drawing, or nothing when it
+ * did anything else (added a group, rearranged): only a group leaving is
+ * given a motion of its own.
+ */
+function ghostOf(before: PaneNode, now: PaneNode): Ghost | null {
+  const nowIds = idsIn(now);
+  const beforeIds = idsIn(before);
+  for (const id of nowIds) {
+    if (!beforeIds.has(id)) {
+      return null;
+    }
+  }
+  const nowBranches = branchesIn(now);
+  /** Whether the group or anything under the branch is still in the tree. */
+  const alive = (node: PaneNode): boolean =>
+    nowIds.has(node.id) || (node.t === "b" && node.kids.some(alive));
+  /** The box the kid (or what is left of it) is in, among the branch's kids as they now stand. */
+  const nowIndex = (branch: BranchNode, kid: PaneNode): number => {
+    const holds = (node: PaneNode): boolean =>
+      node.id === kid.id ||
+      (kid.t === "b" && kid.kids.some((inner) => idsIn(node).has(inner.id)));
+    return branch.kids.findIndex(holds);
+  };
+  const changes = new Map<string, number[]>();
+  for (const branch of branchesIn(before).values()) {
+    if (branch.kids.every(alive)) {
+      continue;
+    }
+    const grown = nowBranches.get(branch.id);
+    const survivors = branch.kids.filter(alive);
+    if (!grown && survivors.length !== 1) {
+      return null;
+    }
+    changes.set(
+      branch.id,
+      branch.kids.map((kid) => {
+        if (!alive(kid)) {
+          return 0;
+        }
+        return grown ? (grown.sizes[nowIndex(grown, kid)] ?? 0) : ALL;
+      })
+    );
+  }
+  return changes.size > 0 ? { tree: before, changes } : null;
+}
+
 /** What was last drawn, to tell what a change took away. */
-let was: Shape | null = null;
+let was: PaneNode | null = null;
 let held: Ghost | null = null;
 let released = $state(0);
 let letGo = 0;
+/** The branches whose boxes have run to where they were going. */
+const done = new Set<string>();
 
 const ghost = $derived.by((): Ghost | null => {
   // The grid draws the tree again once the ghost is let go.
@@ -98,20 +130,24 @@ const ghost = $derived.by((): Ghost | null => {
   if (!browser) {
     return null;
   }
-  const now = shapeOf(workspace.root);
+  const now = snapshot(workspace.root);
   const before = was;
   was = now;
-  if (
-    before &&
-    motionOk.current &&
-    (before.t !== now.t || idsOf(before) !== idsOf(now))
-  ) {
+  if (before && motionOk.current && signature(before) !== signature(now)) {
     held = ghostOf(before, now);
+    done.clear();
   }
   return held;
 });
 
-const drawn = $derived<PaneNode>(ghost?.branch ?? workspace.root);
+/** What the tree is made of, in order: a change of it is a group coming or going. */
+function signature(node: PaneNode): string {
+  return node.t === "l"
+    ? node.id
+    : `${node.id}${node.dir}(${node.kids.map(signature).join(",")})`;
+}
+
+const drawn = $derived<PaneNode>(ghost?.tree ?? workspace.root);
 const tops = $derived(topLeaves(drawn));
 
 export const gridView = {
@@ -130,8 +166,11 @@ export const gridView = {
   hosts(leafId: string): boolean {
     return tops.some((leaf) => leaf.id === leafId);
   },
-  /** The closing motion has run: draw the tree as it is. */
-  release(): void {
-    released += 1;
+  /** One branch's boxes have run; once every branch that lost a group has, draw the tree as it is. */
+  finish(branchId: string): void {
+    done.add(branchId);
+    if (held && done.size >= held.changes.size) {
+      released += 1;
+    }
   },
 };

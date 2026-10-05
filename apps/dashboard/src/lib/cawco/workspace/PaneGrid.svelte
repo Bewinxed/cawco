@@ -59,19 +59,21 @@
    * draw.
    *
    * Closing: the tree has already lost the group, but the grid goes on
-   * drawing the branch as it was (`ghost`: the same groups in the same
-   * boxes, none rebuilt) while the leaving group's share runs to nothing and
-   * the rest grow into the room. Then it draws the tree as it now is. Both
-   * run from the shares as they stand, read off the boxes, so a close that
-   * comes while a split is still opening carries on from where the groups
-   * are.
+   * drawing it as it was (`ghost`: the same groups in the same boxes, none
+   * rebuilt) while the leaving group's share, in whichever branch it was,
+   * runs to nothing and the rest grow into the room. Then it draws the tree
+   * as it now is. Both run from the shares as they stand, read off the
+   * boxes, so a close that comes while a split is still opening carries on
+   * from where the groups are.
    */
   const ALL = 100;
 
   let group = $state<HTMLElement | null>(null);
-  /** The root draws what the grid view says (a closed split is still drawn while it collapses); a nested branch draws its own. */
-  const ghost = $derived(nested ? null : gridView.ghost);
+  /** The root draws what the grid view says (a closed split is still drawn while it collapses); the groups inside draw what the root gives them. */
+  const ghost = $derived(gridView.ghost);
   const drawn = $derived(nested ? node : gridView.drawn);
+  /** Where this branch's boxes are going, when a group of it left. */
+  const leaving = $derived(ghost?.changes.get(drawn.id) ?? null);
 
   /** The groups' boxes, in order. */
   const panesOf = (el: HTMLElement) => [
@@ -117,10 +119,11 @@
 
   $effect(() => {
     const el = group;
-    const out = ghost;
-    if (!(el && out)) {
+    const to = leaving;
+    if (!(el && to)) {
       return;
     }
+    const { id } = drawn;
     const panes = panesOf(el);
     const from = panes.map(shareOf);
     for (const pane of panes) {
@@ -128,14 +131,14 @@
         running.cancel();
       }
     }
-    const runs = grow(panes, from, out.to);
+    const runs = grow(panes, from, to);
     let live = true;
     Promise.all(runs.map((run) => run.finished)).then(
       async () => {
         if (!live) {
           return;
         }
-        gridView.release();
+        gridView.finish(id);
         await tick();
         for (const run of runs) {
           run.cancel();
