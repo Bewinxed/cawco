@@ -101,7 +101,10 @@ const settle = (cmd: Command, from: Snapshot, duration: number, easing: string) 
  * A pick mid-motion starts from where everything is on screen, so nothing queues or jumps.
  */
 export function initChannel(tablist: HTMLElement): void {
-  const easing = getComputedStyle(document.documentElement).getPropertyValue('--ease-out').trim();
+  const token = (name: string) =>
+    getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  const easing = token('--ease-out');
+  const travel = token('--ease-in-out');
   const commands = all(document, '[data-cmd]').map(build);
   const slider = one(tablist, '[data-slider]');
   const tabButtons = all(tablist, '[data-tab]');
@@ -115,7 +118,7 @@ export function initChannel(tablist: HTMLElement): void {
       cmd.chan = span('cmd-chan', CHAN);
       cmd.tail.insertBefore(cmd.chan, cmd.sh);
     }
-    settle(cmd, from, IN_MOVE, easing);
+    settle(cmd, from, IN_MOVE, travel);
     cmd.fade = cmd.chan.animate([{ opacity: start }, { opacity: 1 }], {
       duration: reduced() ? OUT_FADE : IN_FADE,
       easing,
@@ -138,7 +141,7 @@ export function initChannel(tablist: HTMLElement): void {
       cancelAll(cmd);
       chan.remove();
       cmd.chan = null;
-      settle(cmd, from, OUT_MOVE, easing);
+      settle(cmd, from, OUT_MOVE, travel);
     };
   };
 
