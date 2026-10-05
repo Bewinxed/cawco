@@ -53,6 +53,7 @@ class UsageCard: TileView {
     /// `.title`: the card's name, in muted label type.
     static func title(_ text: String) -> KitLabel {
         let label = KitLabel(TypeScale.typeLabel, ink: Palette.inkMuted)
+        label.wrap = .balance
         label.text = text
         label.accessibilityTraits = .header
         return label
@@ -61,6 +62,7 @@ class UsageCard: TileView {
     /// `.note`: a line of muted meta type.
     static func note(_ text: String) -> KitLabel {
         let label = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted, lines: 0)
+        label.wrap = .pretty
         label.text = text
         return label
     }
