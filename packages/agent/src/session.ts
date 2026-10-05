@@ -677,14 +677,6 @@ export class SessionSupervisor {
   /** Settles once the envelope has been handled, success or failure alike. */
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: address ACK bypasses the queue waiting on that same ACK
   dispatch(envelope: Envelope): Promise<void> {
-    if (envelope.verb === "stop") {
-      const stop = envelope.payload as StopPayload;
-      Effect.runFork(
-        Effect.logInfo(
-          `[agent] stop session=${stop.instanceId} request=${stop.requestId ?? "none"} machine=${envelope.machineId} outcome=received elapsedMs=0`
-        )
-      );
-    }
     const control =
       envelope.verb === "control"
         ? (envelope.payload as ControlPayload)

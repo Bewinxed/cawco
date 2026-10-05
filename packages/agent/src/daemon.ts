@@ -1024,6 +1024,12 @@ const attach = (
     socket.addEventListener("message", (event) => {
       const envelope = JSON.parse(String(event.data)) as Envelope;
       if (envelope.verb === "stop") {
+        const stop = envelope.payload as import("@cawco/core").StopPayload;
+        Effect.runFork(
+          Effect.logInfo(
+            `[agent] stop session=${stop.instanceId} request=${stop.requestId ?? "none"} machine=${identity.machineId} outcome=received elapsedMs=0`
+          )
+        );
         supervisor.receivedStop(
           (envelope.payload as import("@cawco/core").StopPayload)
             .stopSequence ?? 0
