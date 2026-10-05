@@ -348,7 +348,7 @@ fi
 healthy() { curl -fsS --max-time 5 http://127.0.0.1:3456/health 2> /dev/null | grep -q "\"version\":\"$good\""; }
 clean() {
   [ ! -e "$binary/apply.lock" ] && [ ! -e "$binary/trial.json" ] && [ ! -e "$data/cawco.db.migrating" ] &&
-    [ ! -e "$binary/keeper-trial.json" ] && [ ! -e "$binary/keeper-trial.recovered" ] && [ ! -e "$HOME/.config/systemd/user/cawco-sessiond.service.d" ] &&
+    [ ! -e "$binary/keeper-trial.json" ] && [ ! -e "$binary/keeper-trial.recovered" ] && [ ! -e "$HOME/.config/systemd/user/cawco-sessiond.service.d" ] && ! ls "$binary"/versions/*/cawco.real > /dev/null 2>&1 &&
     [ "$(readlink "$binary/current")" = "versions/$good" ] &&
     grep -qE '"phase":"(none|installed|waiting-sessions|available)"' "$binary/update-state.json" 2> /dev/null
 }
@@ -357,6 +357,7 @@ pkill -9 -f binary-apply
 systemctl --user stop cawco-agent.service cawco-hub.service cawco-dashboard.service
 rm -f "$binary/apply.lock" "$binary/trial.json" "$binary/trial.recovered" "$binary/keeper-trial.json" "$binary/keeper-trial.recovered" "$binary/installation.previous.json" "$binary/update-failures.json" "$data/cawco.db.migrating"
 rm -rf "$HOME/.config/systemd/user/cawco-sessiond.service.d"
+for d in "$binary"/versions/*/; do [ -f "${d}cawco.real" ] && mv -f "${d}cawco.real" "${d}cawco"; done
 systemctl --user daemon-reload
 ln -sfn "versions/$good" "$binary/current.reset" && mv -T "$binary/current.reset" "$binary/current"
 ln -sfn "versions/$good" "$binary/keeper.reset" && mv -T "$binary/keeper.reset" "$binary/keeper"
@@ -401,8 +402,22 @@ case "$1" in
   delay)
     mkdir -p "$dir"
     printf '[Service]\nExecStartPre=/bin/sleep %s\n' "$2" > "$dir/proof.conf" ;;
+  break-build)
+    # The keeper cannot start on one build because that build's own `sessiond` verb fails: its executable is
+    # replaced by a stub that fails for `sessiond` and runs the real program (kept under a second name, the same
+    # file) for every other verb. The unit is untouched, so the wrapper runs at every start and the keeper
+    # then fails, as a real build whose keeper cannot start would.
+    v="$root/versions/$2"
+    [ -f "$v/cawco.real" ] || ln "$v/cawco" "$v/cawco.real"
+    printf '#!/bin/sh\n[ "$1" = sessiond ] && exit 1\nexec "$(dirname "$0")/cawco.real" "$@"\n' > "$v/cawco.stub"
+    chmod 700 "$v/cawco.stub"
+    mv "$v/cawco.stub" "$v/cawco" ;;
   remove)
-    rm -rf "$dir" ;;
+    rm -rf "$dir"
+    for d in "$root"/versions/*/; do
+      [ -f "${d}cawco.real" ] && mv -f "${d}cawco.real" "${d}cawco"
+    done
+    true ;;
 esac
 systemctl --user daemon-reload
 EOF
@@ -994,10 +1009,10 @@ helper_killed_mid_keeper_move() {
   local before
   before=$(keeper_link "$hubc")
   [[ "$before" != "versions/$(nb 7)" ]]
-  keeper_dropin slow-fail-on "$(nb 7)" 30
+  keeper_dropin break-build "$(nb 7)"
   end_all_sessions "$hubc"
-  # The keeper-only helper moves the link; the keeper's restart then stays open for 30 s before it fails, and the
-  # helper is killed while it waits (a fast failure would be put back by the helper itself within a second).
+  # The keeper-only helper moves the link and waits up to 45 s for the keeper; the keeper's unit starts through
+  # the wrapper, whose exec of build 7 fails at once, over and over. The helper is killed while it waits.
   wait_until 400 '[[ "$(keeper_link "$hubc")" == "versions/$(nb 7)" ]]'
   sleep 4
   as_user "$hubc" pkill -9 -f binary-apply
@@ -1017,10 +1032,12 @@ check "a helper killed right after the keeper's link moved to a build it cannot 
 keeper_moves_on_joined_machine() {
   keeper_start_state
   # The joined machine follows its hub's build; its keeper stays where it was while sessions hold it, and follows once it holds nothing.
+  # The build the joined machine itself runs (not its hub's: a reset may have put the hub on an older one).
   local want
-  want=$(build_version $hid)
-  wait_until 600 '[[ "$(build_version $jid)" == "'"$want"'" ]]'
+  want=$(build_version $jid)
+  [[ -n "$want" ]]
   wait_until 180 '[[ "$(phase $jid)" != installing ]]'
+  [[ "$(keeper_link "$joinerc")" != "versions/$want" ]]
   end_all_sessions "$joinerc"
   wait_until 500 '[[ "$(keeper_link "$joinerc")" == "versions/'"$want"'" ]]'
   wait_until 120 '[[ "$(phase $jid)" == installed ]]'
