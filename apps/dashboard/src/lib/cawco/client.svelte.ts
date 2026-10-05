@@ -4465,16 +4465,17 @@ async function requestPage<T>(
   const request = new AbortController();
   const stop = () => request.abort(cancel?.reason);
   cancel?.addEventListener("abort", stop, { once: true });
+  // WebKit rejects an aborted fetch with its own "Fetch is aborted", whatever
+  // reason the abort carried, so the limit's sentence is thrown from here.
+  const late = new Error(
+    `The hub did not answer within ${TRANSCRIPT_READ_LIMIT_MS / 1000} seconds`
+  );
+  let timedOut = false;
   const limit = () =>
-    setTimeout(
-      () =>
-        request.abort(
-          new Error(
-            `The hub did not answer within ${TRANSCRIPT_READ_LIMIT_MS / 1000} seconds`
-          )
-        ),
-      TRANSCRIPT_READ_LIMIT_MS
-    );
+    setTimeout(() => {
+      timedOut = true;
+      request.abort(late);
+    }, TRANSCRIPT_READ_LIMIT_MS);
   let timer = limit();
   try {
     const response = await fetch(url, { signal: request.signal });
@@ -4483,6 +4484,8 @@ async function requestPage<T>(
     clearTimeout(timer);
     timer = limit();
     return await parse(response);
+  } catch (error) {
+    throw timedOut ? late : error;
   } finally {
     clearTimeout(timer);
     cancel?.removeEventListener("abort", stop);
