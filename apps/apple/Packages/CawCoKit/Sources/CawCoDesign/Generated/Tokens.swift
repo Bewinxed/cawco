@@ -413,6 +413,12 @@ public enum Radius {
 }
 
 public enum Size {
+    /// Caw's 512 box on the channel cards: he stands behind the chosen card and looks over its top edge.
+    public static let cawPeek: Double = 160
+    /// How far that box rises above the cards (56.84% of caw-peek): clear room kept above them.
+    public static let cawPeekRise: Double = 91
+    /// A channel card's widest.
+    public static let channelCardMax: Double = 280
     public static let cBtnH: Double = 36
     public static let cBtnHSm: Double = 30
     public static let cBtnHXs: Double = 24

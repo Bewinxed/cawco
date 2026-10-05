@@ -551,6 +551,12 @@
     --row-mark-r: 4.6px;
     /* The tab icon's tile, at the 16px a tab draws it; its bitmap scales the corner with its side. */
     --tab-icon-r: 4px;
+    /* Caw's 512 box on the channel cards: he stands behind the chosen card and looks over its top edge. */
+    --caw-peek: 160px;
+    /* How far that box rises above the cards (56.84% of caw-peek): clear room kept above them. */
+    --caw-peek-rise: 91px;
+    /* A channel card's widest. */
+    --channel-card-max: 280px;
     --c-btn-h: 36px;
     --c-btn-h-sm: 30px;
     --c-btn-h-xs: 24px;

@@ -22,7 +22,10 @@
 import { toast } from "svelte-sonner";
 import { updated } from "$app/state";
 
-let toasted = false;
+let toasted = $state(false);
+
+/** The reload toast is up: the update notice gives the box to it. */
+export const deployPending = (): boolean => toasted;
 
 export async function checkDeployToast(): Promise<void> {
   if (toasted || !(await updated.check())) {

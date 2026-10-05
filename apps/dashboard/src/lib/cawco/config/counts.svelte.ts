@@ -1,5 +1,7 @@
 import { cawco } from "../client.svelte";
 import { hubFaults, machineFaults, SCOPE_ANCHOR } from "../fleet-faults";
+import { attention } from "../updates/model";
+import { updates } from "../updates/updates.svelte";
 import type { SectionSlug } from "./sections";
 import type { ConfigStore } from "./store.svelte";
 
@@ -49,6 +51,12 @@ export function allFaults(store: ConfigStore) {
       machineFaults(machine.machineId, machine.fleet)
     ),
   ];
+}
+
+/** Machines whose update waits on the operator: Updates' rail badge. */
+export function updatesWaiting(): number {
+  const { policy } = updates;
+  return policy ? attention(cawco.machines, policy) : 0;
 }
 
 /** How many faults belong to a section, for its rail badge. */

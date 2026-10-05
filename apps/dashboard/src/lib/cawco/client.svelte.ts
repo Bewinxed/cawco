@@ -76,7 +76,7 @@ import { browser } from "$app/env";
 import { goto } from "$app/navigation";
 import type { Activity } from "./activity";
 import { activityOf, runningSubagents } from "./activity";
-import { checkDeployToast } from "./deploy-toast";
+import { checkDeployToast } from "./deploy-toast.svelte";
 import { hubFailure } from "./hub-read";
 import { newId } from "./id";
 import {
@@ -124,6 +124,7 @@ import { routedToParent } from "./transcript/present";
 import { holdsCompaction } from "./transcript/rows";
 import { topsIn } from "./tree";
 import type { DelegateAskEvent, Message } from "./types";
+import { updates } from "./updates/updates.svelte";
 import {
   onBoard,
   runIdOf,
@@ -3596,6 +3597,8 @@ function connect(): void {
     resumePendingSends(streamState, streamHost);
     // biome-ignore lint/complexity/noVoid: fire-and-forget — the toast shows itself when the served build is newer
     void checkDeployToast();
+    // biome-ignore lint/complexity/noVoid: fire-and-forget — the settings page and the notice read the policy once it lands
+    void updates.loadPolicy();
   };
 
   bind(socket);

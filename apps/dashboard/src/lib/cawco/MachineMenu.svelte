@@ -1,39 +1,9 @@
-<script lang="ts" module>
-  import { SvelteMap } from "svelte/reactivity";
-
-  /**
-   * An update this tab started on a machine, which the fleet board's build
-   * chip reads. `since` is the daemon start the machine reported as the
-   * update began: a restarted agent reports a new one, and until it does the
-   * chip reads "Updating…". `said` is what the update did, in one line.
-   */
-  export interface MachineUpdate {
-    said?: string;
-    /** The update ran and restarted nothing: there is no new build to wait for. */
-    settled: boolean;
-    since: number | undefined;
-  }
-  export const machineUpdates = new SvelteMap<string, MachineUpdate>();
-
-  /** The chip reads "Updating…": the update runs, or its restart has not reported yet. */
-  export function isUpdating(machine: {
-    build?: { startedAt: number };
-    machineId: string;
-  }): boolean {
-    const update = machineUpdates.get(machine.machineId);
-    return Boolean(
-      update && !update.settled && machine.build?.startedAt === update.since
-    );
-  }
-</script>
-
 <script lang="ts">
   /** Right-click on a machine's heading — what you can do to the box, not to a session. */
-  import { machineLabel, UPDATE_CAWCO, type UpdateReport } from "@cawco/core";
+  import { machineLabel } from "@cawco/core";
   import type { Snippet } from "svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as ContextMenu from "#lib/components/ui/context-menu/index.js";
-  import { UPDATE_TIMEOUT_MS } from "#lib/config.js";
   import {
     IconAlert,
     IconDownload,
@@ -47,13 +17,13 @@
     cawco,
     loadCatalog,
     type Machine,
-    machineControl,
     removeMachine,
   } from "./client.svelte";
   import { confirm } from "./confirm.svelte";
   import ErrorDialog from "./ErrorDialog.svelte";
   import MachineLogin from "./MachineLogin.svelte";
   import UnlockKeychain from "./UnlockKeychain.svelte";
+  import { updates } from "./updates/updates.svelte";
 
   let { machine, children }: { machine: Machine; children: Snippet } = $props();
 
@@ -67,63 +37,15 @@
   const stuck = $derived(machine.auth === "unreadable-credentials");
   let unlocking = $state(false);
   let loggingIn = $state(false);
-  /** Why the last update failed, whole: its menu item opens it in a dialog. */
-  let updateFailed = $state<string | null>(null);
-  let readingFailure = $state(false);
-
-  /** What an {@link UpdateReport} amounts to, in one line. */
-  function said(report: UpdateReport): string {
-    const moved =
-      report.to === report.from
-        ? `${machine.hostname} was already on ${report.from}`
-        : `${machine.hostname}: ${report.from} → ${report.to}`;
-    const restarted =
-      report.restarted.length > 0
-        ? `, restarted ${report.restarted.join(", ")}`
-        : "";
-    return report.skipped
-      ? `${moved}${restarted} — ${report.skipped}`
-      : `${moved}${restarted}`;
-  }
-
   /**
-   * Brings the machine onto the current checkout: pull, install, rebuild,
-   * restart. This is the only thing that moves the Claude Code its sessions
-   * run — the harness spawns the agent SDK's own pinned build, so the `claude`
-   * on the machine's PATH is not what any session ever launches, and updating
-   * it moved nothing. The agent is restarted too, but only once it is idle:
-   * sessions already running keep the build they launched with either way.
-   *
-   * The item spins while it runs; a failure adds an "Update failed" item
-   * that opens the whole error. The machine's
-   * build chip on the board reads "Updating…" from the start until the
-   * restarted agent reports its new build, and carries what the update did.
+   * What the machine reports about its update decides the items: "Install
+   * update now" while a build waits (it queues until the machine is idle),
+   * "Update failed" while the last one failed, opening the whole error.
    */
-  async function updateMachine() {
-    updateFailed = null;
-    const { machineId } = machine;
-    machineUpdates.set(machineId, {
-      since: machine.build?.startedAt,
-      settled: false,
-    });
-    try {
-      const report = await machineControl<UpdateReport>(
-        machineId,
-        UPDATE_CAWCO,
-        [{ restartAgent: true }],
-        UPDATE_TIMEOUT_MS
-      );
-      machineUpdates.set(machineId, {
-        since: machineUpdates.get(machineId)?.since,
-        settled: !report.restarted.includes("agent"),
-        said: said(report),
-      });
-    } catch (err) {
-      machineUpdates.delete(machineId);
-      updateFailed = err instanceof Error ? err.message : String(err);
-      throw err;
-    }
-  }
+  const phase = $derived(
+    machine.status === "online" ? machine.binaryUpdate?.phase : undefined
+  );
+  let readingFailure = $state(false);
 
   const count = (n: number, noun: string) =>
     `${n} ${noun}${n === 1 ? "" : "s"}`;
@@ -190,13 +112,13 @@
         Unlock keychain…
       </ContextMenu.Item>
     {/if}
-    <ContextMenu.PendingItem
-      icon={IconDownload}
-      label="Update this machine"
-      pendingLabel="Updating…"
-      run={updateMachine}
-    />
-    {#if updateFailed}
+    {#if phase === "available"}
+      <ContextMenu.Item onSelect={() => updates.installNow(machine)}>
+        <IconDownload />
+        Install update now
+      </ContextMenu.Item>
+    {/if}
+    {#if phase === "failed" || phase === "failed-rolled-back"}
       <ContextMenu.Item
         onSelect={() => {
           readingFailure = true;
@@ -227,9 +149,9 @@
 </ContextMenu.Root>
 
 <MachineLogin {machine} bind:open={loggingIn} />
-{#if updateFailed}
+{#if phase === "failed" || phase === "failed-rolled-back"}
   <ErrorDialog
-    message={updateFailed}
+    message={machine.binaryUpdate?.error ?? "The machine did not say why."}
     title="Update failed on {machine.hostname}"
     bind:open={readingFailure}
   />

@@ -2013,6 +2013,21 @@
     }
   },
   "size": {
+    "caw-peek": {
+      "$type": "dimension",
+      "$value": "160px",
+      "$description": "Caw's 512 box on the channel cards: he stands behind the chosen card and looks over its top edge."
+    },
+    "caw-peek-rise": {
+      "$type": "dimension",
+      "$value": "91px",
+      "$description": "How far that box rises above the cards (56.84% of caw-peek): clear room kept above them."
+    },
+    "channel-card-max": {
+      "$type": "dimension",
+      "$value": "280px",
+      "$description": "A channel card's widest."
+    },
     "c-btn-h": {
       "$type": "dimension",
       "$value": "36px"

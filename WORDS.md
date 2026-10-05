@@ -145,6 +145,9 @@ it actually means.
 | A host running the cawco daemon | **machine** | The roster rows, the offline states, the select-at-spawn type. | "host" in user-facing copy (fine as a network term in the code) |
 | The connected collective of machines the operator supervises | **fleet** | The board, the global-nav entry, "the fleet is down". | "cluster", "network" (ambiguous) |
 | A standing instruction the hub enforces on every session: what to watch for and what to answer | **rule** | The Rules surface and its rows. | "policy", "permission set" |
+| One released version of CawCo | **build** | What a machine runs and what an update installs. | "release" in Configure copy (the release host is a service, not the thing a machine runs) |
+| Which builds a fleet follows: Stable (tagged releases) or Nightly (every build of main) | **channel** | The Updates section's two cards. | "track", "stream", "ring" |
+| No session working on that machine | **idle** | When a ready build installs by itself. | "free", "quiet" |
 | Daily cost against a limit | **spend** (the number) / **budget** (the limit) | The Usage surface's total and threshold. | "cost" when the operator-facing term for the whole surface is Spend/Usage |
 
 **Banned-synonym quick list** (for the gate and for writers): `run` ≡ entity, `session` ≡ execution,
@@ -217,7 +220,7 @@ Every button parses as **[Verb] + [Object]** and stays comprehensible with surro
 "Yes" alone. A button is not "Submit" (mechanism), not "OK" (ambiguous), not "Click here" (pointer).
 Allowlisted imperative verbs for the gate: *Start, Create, Add, Save, Cancel, Delete, Remove,
 Approve, Deny, Allow, Deny, Reconnect, Retry, Export, Filter, Manage, Open, Stop, Interrupt, Send,
-Attach, Refresh, Install, Fetch, Restore, Redirect, Skip*. "Continue" is acceptable only where the
+Attach, Refresh, Install, Fetch, Restore, Redirect, Skip, Switch, Check, Configure*. "Continue" is acceptable only where the
 next step is already visible in context (microcopy-patterns catalog).
 
 **Composer exception (recorded):** the transcript composer's `<textarea>` carries `aria-label="Message

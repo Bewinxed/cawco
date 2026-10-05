@@ -13,7 +13,7 @@
     popScale,
   } from "#lib/cawco/motion/curves.svelte.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
-  import { countOf, faultsIn } from "./counts.svelte";
+  import { countOf, faultsIn, updatesWaiting } from "./counts.svelte";
   import { unsavedIn } from "./drafts.svelte";
   import { GROUPS, type SectionSlug } from "./sections";
   import { configStore } from "./store.svelte";
@@ -67,7 +67,10 @@
       <ul class="list">
         {#each sections as section (section.slug)}
           {@const count = countOf(store, section.slug)}
-          {@const faults = faultsIn(store, section.slug)}
+          {@const waiting = section.slug === "updates"}
+          {@const faults = waiting
+            ? updatesWaiting()
+            : faultsIn(store, section.slug)}
           <li>
             <a
               aria-current={current === section.slug ? "page" : undefined}
@@ -86,17 +89,21 @@
               {#if faults > 0}
                 <span
                   class="fault num"
-                  title="{faults} failing on a machine or at the hub"
+                  title={waiting
+                    ? `${faults} waiting on you`
+                    : `${faults} failing on a machine or at the hub`}
                   transition:badge
                   ><TextMorph
                     as="span"
                     duration={morphMs()}
                     text={String(faults)}
                   />
-                  <span class="sr-only"> failing</span></span
+                  <span class="sr-only"
+                    >{waiting ? " waiting" : " failing"}</span
+                  ></span
                 >
               {/if}
-              {#if section.slug !== "models"}
+              {#if section.slug !== "models" && section.slug !== "updates"}
                 <!-- The figure is its own element, not the dash's text
                      rewritten: it arrives in place rather than moving in. -->
                 {#if count === null}
