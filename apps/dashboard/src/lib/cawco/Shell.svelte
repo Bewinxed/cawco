@@ -514,8 +514,16 @@
    * observer reports a change, so whatever moves a group (a split opening, a
    * divider dragged, the window) moves its column with it, and nothing here
    * knows a size.
+   *
+   * It cannot loop. What it observes is the strip's box and the groups'
+   * boxes; what it writes is the columns' custom properties, and a column is
+   * not observed and cannot change the box of either: the strip is
+   * layout-contained (`.slot-tabs`), so nothing in it reaches its own size
+   * or its surroundings, and the groups are not inside the bar. A column
+   * whose reading has not changed is not written at all.
    */
   const followPanes: Attachment<HTMLElement> = (slot) => {
+    const written = new WeakMap<HTMLElement, string>();
     const place = () => {
       const area = slot.getBoundingClientRect();
       for (const col of slot.querySelectorAll<HTMLElement>(":scope > .col")) {
@@ -526,11 +534,14 @@
           continue;
         }
         const box = group.getBoundingClientRect();
-        col.style.setProperty("--col-x", `${box.left - area.left}px`);
-        col.style.setProperty(
-          "--col-w",
-          `${Math.max(0, Math.min(box.width, area.right - box.left))}px`
-        );
+        const x = `${box.left - area.left}px`;
+        const w = `${Math.max(0, Math.min(box.width, area.right - box.left))}px`;
+        if (written.get(col) === `${x} ${w}`) {
+          continue;
+        }
+        written.set(col, `${x} ${w}`);
+        col.style.setProperty("--col-x", x);
+        col.style.setProperty("--col-w", w);
       }
     };
     const sizes = new ResizeObserver(place);
@@ -1103,6 +1114,10 @@
     min-width: 0;
   }
   .slot-tabs {
+    /* Nothing inside reaches the strip's own size or what is around it: the
+       columns are placed by script from the groups' boxes, so they must not
+       be able to feed back into the boxes that script observes. */
+    contain: layout size;
     position: relative;
     flex: 1 1 0;
     align-self: stretch;
