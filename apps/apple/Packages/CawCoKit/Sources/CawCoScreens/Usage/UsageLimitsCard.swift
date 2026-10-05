@@ -13,6 +13,9 @@ final class UsageLimitsCard: UsageCard {
     private let body = UIStackView()
     private var shown: UsageLimits?
     private var now = 0.0
+    private var viewport = 0.0
+    private var bars: [String: LimitBar] = [:]
+    private var extraBar: LimitBar?
 
     /// The grid's columns: the name, the percent, and between them the bar.
     private static let nameWidth = 120.0
@@ -24,6 +27,7 @@ final class UsageLimitsCard: UsageCard {
         body.axis = .vertical
         body.spacing = Space.space4
         column.addArrangedSubview(body)
+        registerForTraitChanges([UITraitPreferredContentSizeCategory.self]) { (card: UsageLimitsCard, _: UITraitCollection) in card.render() }
     }
 
     @available(*, unavailable)
@@ -41,8 +45,29 @@ final class UsageLimitsCard: UsageCard {
         render()
     }
 
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        let width = Double(window?.bounds.width ?? bounds.width)
+        if viewport != width {
+            viewport = width
+            render()
+        }
+    }
+
     private func render() {
         guard let limits = shown else { return }
+        // Configure retained bars while still mounted: LimitBar owns its
+        // interruptible fill tween, and the clock tick remains unanimated.
+        for row in limits.claudeRows + limits.goRows {
+            if let bar = bars[row.key] {
+                bar.configure(used: row.meter.used, elapsed: row.meter.elapsed, tone: Self.tone(row.meter.state),
+                              reached: row.meter.state == .reached, paint: Self.paint(row.meter.state), label: row.label)
+            }
+        }
+        if let extra = limits.extra, let extraBar {
+            extraBar.configure(used: extra.used, elapsed: nil, tone: Self.tone(extra.state), reached: extra.state == .reached,
+                               paint: Self.paint(extra.state), label: "Extra usage")
+        }
         body.arrangedSubviews.forEach { $0.removeFromSuperview() }
         guard limits.read else {
             body.addArrangedSubview(skeleton())
@@ -77,7 +102,7 @@ final class UsageLimitsCard: UsageCard {
     /// `.lead`: "42%" in the KPI role, "of the 5-hour window" beside it on
     /// its baseline, and under them the projection.
     private func lead(_ row: Usage.Row, _ limits: UsageLimits) -> UIView {
-        let percent = KitLabel(TypeScale.typeKpi, ink: Palette.inkStrong)
+        let percent = KitLabel(TypeScale.typeKpi.with(points: TypeScale.typeKpi.points(viewport: viewport)), ink: Palette.inkStrong)
         percent.tabular = true
         percent.text = "\(Int(row.meter.used.rounded()))%"
         percent.setContentHuggingPriority(.required, for: .horizontal)
@@ -228,7 +253,8 @@ final class UsageLimitsCard: UsageCard {
         let meter = row.meter
         let paint = Self.paint(meter.state)
         let name = Self.name(row.label)
-        let bar = LimitBar(height: 8)
+        let bar = bars[row.key] ?? LimitBar(height: 8)
+        bars[row.key] = bar
         bar.configure(used: meter.used, elapsed: meter.elapsed, tone: Self.tone(meter.state), reached: meter.state == .reached, paint: paint, label: row.label)
         let percent = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong)
         percent.tabular = true
@@ -268,7 +294,8 @@ final class UsageLimitsCard: UsageCard {
     private func extra(_ extra: UsageLimits.Extra) -> UIView {
         let paint = Self.paint(extra.state)
         let name = Self.name("Extra usage")
-        let bar = LimitBar(height: 8)
+        let bar = extraBar ?? LimitBar(height: 8)
+        extraBar = bar
         bar.configure(used: extra.used, elapsed: nil, tone: Self.tone(extra.state), reached: extra.state == .reached, paint: paint, label: "Extra usage")
         let money = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong)
         money.tabular = true
@@ -324,15 +351,31 @@ final class UsageLimitsCard: UsageCard {
         said.tabular = true
         said.wrap = .pretty
         said.text = figures
-        let row = UIStackView(arrangedSubviews: [name, said])
-        if narrow {
-            row.axis = .vertical
-            row.spacing = Space.space1
-        } else {
-            row.spacing = Space.space3
-            row.alignment = .firstBaseline
-            name.widthAnchor.constraint(equalToConstant: Self.nameWidth).isActive = true
+        if !narrow {
+            // UIKit's baseline anchor describes the face, not the attributed
+            // CSS line box. Seat both roles on the kit's measured WebKit strut.
+            let nameBox = LineBox.strut(name.role.font, height: name.role.lineHeight)
+            let figureBox = LineBox.strut(said.role.font, height: said.role.lineHeight)
+            let above = max(nameBox.above, figureBox.above)
+            let below = max(nameBox.below, figureBox.below)
+            let row = UIView()
+            row.addSubview(name)
+            row.addSubview(said)
+            NSLayoutConstraint.activate([
+                name.leadingAnchor.constraint(equalTo: row.leadingAnchor),
+                name.widthAnchor.constraint(equalToConstant: Self.nameWidth),
+                name.topAnchor.constraint(equalTo: row.topAnchor, constant: Space.space2 + above - nameBox.above),
+                name.bottomAnchor.constraint(lessThanOrEqualTo: row.bottomAnchor, constant: -Space.space2),
+                said.leadingAnchor.constraint(equalTo: name.trailingAnchor, constant: Space.space3),
+                said.trailingAnchor.constraint(equalTo: row.trailingAnchor),
+                said.topAnchor.constraint(equalTo: row.topAnchor, constant: Space.space2 + above - figureBox.above),
+                said.bottomAnchor.constraint(equalTo: row.bottomAnchor, constant: -Space.space2 - below + figureBox.below),
+            ])
+            return row
         }
+        let row = UIStackView(arrangedSubviews: [name, said])
+        row.axis = .vertical
+        row.spacing = Space.space1
         row.isLayoutMarginsRelativeArrangement = true
         row.directionalLayoutMargins = NSDirectionalEdgeInsets(top: Space.space2, leading: 0, bottom: Space.space2, trailing: 0)
         return row

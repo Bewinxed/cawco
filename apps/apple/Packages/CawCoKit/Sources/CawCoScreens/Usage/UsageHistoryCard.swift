@@ -29,6 +29,9 @@ final class UsageHistoryCard: UsageCard {
     private var failed = false
     private var retrying = false
     private var ticket = 0
+    private var slots: [UsageHarness: UsageRelayView] = [:]
+    private var charts: [UsageHarness: UsageHistory.Chart] = [:]
+    private var plots: [UsageHarness: UsagePlot] = [:]
 
     init(hub: HubConnection, reads: UsageReads) {
         self.hub = hub
@@ -38,7 +41,7 @@ final class UsageHistoryCard: UsageCard {
         viewTabs.addAction(UIAction { [weak self] _ in
             guard let self else { return }
             table = viewTabs.selectedIndex == 1
-            render()
+            if shown == nil { render() } else { swapBodies() }
         }, for: .valueChanged)
         let head = UIStackView(arrangedSubviews: [Self.title("History"), UIView(), viewTabs])
         head.spacing = Space.space3
@@ -92,6 +95,19 @@ final class UsageHistoryCard: UsageCard {
     // MARK: Drawing
 
     private func render() {
+        let byHour = shown?.hourly ?? hourly
+        let now = Date.now.timeIntervalSince1970 * 1000
+        charts = Dictionary(uniqueKeysWithValues: UsageHarness.allCases.map { harness in
+            (harness, UsageHistory.chart(harness, summary: shown?.series[harness], since: shown?.since[harness] ?? .pending,
+                                        hourly: byHour, spend: hub.fleet.spend, now: now))
+        })
+        // Update mounted marks before moving their figure: retained periods
+        // keep the plot's own height tween when a new range is read.
+        for (harness, plot) in plots {
+            if let chart = charts[harness], !chart.missing {
+                plot.configure(chart, byHour: byHour, timeZone: hub.fleet.spend?.timeZone)
+            }
+        }
         body.arrangedSubviews.forEach { $0.removeFromSuperview() }
         if failed, shown == nil {
             body.axis = .vertical
@@ -106,12 +122,26 @@ final class UsageHistoryCard: UsageCard {
         body.spacing = Space.space6
         body.alignment = narrow ? .fill : .top
         body.distribution = narrow ? .fill : .fillEqually
-        let byHour = shown?.hourly ?? hourly
-        let now = Date.now.timeIntervalSince1970 * 1000
         for harness in UsageHarness.allCases {
-            let chart = UsageHistory.chart(harness, summary: shown?.series[harness], since: shown?.since[harness] ?? .pending,
-                                           hourly: byHour, spend: hub.fleet.spend, now: now)
+            let chart = charts[harness]!
             body.addArrangedSubview(figure(chart, byHour: byHour))
+        }
+    }
+
+    private func chartBody(_ chart: UsageHistory.Chart, byHour: Bool) -> UIView {
+        if table { return UsageFigures(chart, byHour: byHour, timeZone: hub.fleet.spend?.timeZone) }
+        let plot = plots[chart.harness] ?? UsagePlot(chart, byHour: byHour, timeZone: hub.fleet.spend?.timeZone)
+        plot.configure(chart, byHour: byHour, timeZone: hub.fleet.spend?.timeZone)
+        plots[chart.harness] = plot
+        return plot
+    }
+
+    private func swapBodies() {
+        for (index, harness) in UsageHarness.allCases.enumerated() {
+            guard let chart = charts[harness], !chart.missing, let slot = slots[harness] else { continue }
+            slot.show([.init(id: harness.rawValue, order: index, head: nil,
+                             rows: [.init(key: table ? "table" : "chart", view: chartBody(chart, byHour: shown!.hourly))], more: nil)],
+                      direction: table ? 1 : -1, style: .body(index))
         }
     }
 
@@ -134,15 +164,16 @@ final class UsageHistoryCard: UsageCard {
         let stack = UIStackView(arrangedSubviews: [caption])
         stack.axis = .vertical
         stack.spacing = Space.space2
-        let zone = hub.fleet.spend?.timeZone
         if chart.missing {
             stack.addArrangedSubview(Self.note("No 5-hour window is running."))
         } else if !ready {
             stack.addArrangedSubview(SkeletonView(height: 96))
-        } else if table {
-            stack.addArrangedSubview(UsageFigures(chart, byHour: byHour, timeZone: zone))
         } else {
-            stack.addArrangedSubview(UsagePlot(chart, byHour: byHour, timeZone: zone))
+            let slot = slots[chart.harness] ?? UsageRelayView()
+            slots[chart.harness] = slot
+            stack.addArrangedSubview(slot)
+            slot.show([.init(id: chart.harness.rawValue, order: chart.harness == .claude ? 0 : 1, head: nil,
+                             rows: [.init(key: table ? "table" : "chart", view: chartBody(chart, byHour: byHour))], more: nil)], direction: nil)
         }
         return stack
     }
@@ -153,10 +184,13 @@ final class UsageHistoryCard: UsageCard {
 /// names, `space-1` under. A bar is its share of the range's peak, 1pt at
 /// least, rounded at the top, in `--meter-share`.
 private final class UsagePlot: UIView {
-    private let chart: UsageHistory.Chart
+    private var chart: UsageHistory.Chart
     private let bars = UIView()
     private let rule = UIView()
-    private var marks: [UIView] = []
+    private var marks: [Double: UIView] = [:]
+    private var arriving = Set<Double>()
+    private let axis = UIStackView()
+    private var axisBottom: NSLayoutConstraint!
     private let first = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
     private let last = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
 
@@ -167,35 +201,24 @@ private final class UsagePlot: UIView {
         rule.backgroundColor = Palette.borderHairline
         addSubview(bars)
         addSubview(rule)
-        for point in chart.points {
-            let mark = UIView()
-            mark.backgroundColor = Palette.meterShare
-            mark.layer.cornerRadius = Radius.radiusHair
-            mark.layer.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner]
-            mark.isAccessibilityElement = true
-            mark.accessibilityTraits = .image
-            mark.accessibilityLabel = "\(UsageHistory.label(point.at, hourly: byHour, timeZone: timeZone)): \(chart.approx)\(Usage.money(point.cost))"
-            bars.addSubview(mark)
-            marks.append(mark)
-        }
-        if let start = chart.points.first, let end = chart.points.last {
-            first.text = UsageHistory.label(start.at, hourly: byHour, timeZone: timeZone)
-            last.text = UsageHistory.label(end.at, hourly: byHour, timeZone: timeZone)
-            let axis = UIStackView(arrangedSubviews: [first, UIView(), last])
+        axis.addArrangedSubview(first)
+        axis.addArrangedSubview(UIView())
+        axis.addArrangedSubview(last)
             axis.translatesAutoresizingMaskIntoConstraints = false
             axis.isAccessibilityElement = false
             first.isAccessibilityElement = false
             last.isAccessibilityElement = false
             addSubview(axis)
+            axisBottom = axis.bottomAnchor.constraint(equalTo: bottomAnchor)
+            axisBottom.priority = .defaultHigh
             NSLayoutConstraint.activate([
                 axis.topAnchor.constraint(equalTo: topAnchor, constant: 96 + Space.space1),
                 axis.leadingAnchor.constraint(equalTo: leadingAnchor),
                 axis.trailingAnchor.constraint(equalTo: trailingAnchor),
-                axis.bottomAnchor.constraint(equalTo: bottomAnchor),
+                axisBottom,
+                heightAnchor.constraint(greaterThanOrEqualToConstant: 96),
             ])
-        } else {
-            heightAnchor.constraint(equalToConstant: 96).isActive = true
-        }
+        configure(chart, byHour: byHour, timeZone: timeZone)
     }
 
     @available(*, unavailable)
@@ -203,18 +226,61 @@ private final class UsagePlot: UIView {
         fatalError("UsagePlot is built in code")
     }
 
+    func configure(_ chart: UsageHistory.Chart, byHour: Bool, timeZone: String?) {
+        self.chart = chart
+        let present = Set(chart.points.map(\.at))
+        for (at, mark) in marks where !present.contains(at) { mark.removeFromSuperview(); marks[at] = nil }
+        for point in chart.points {
+            let mark = marks[point.at] ?? UIView()
+            if marks[point.at] == nil {
+                mark.backgroundColor = Palette.meterShare
+                mark.layer.cornerRadius = Radius.radiusHair
+                mark.layer.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner]
+                mark.isAccessibilityElement = true
+                mark.accessibilityTraits = .image
+                bars.addSubview(mark)
+                marks[point.at] = mark
+                arriving.insert(point.at)
+            }
+            let label = UsageHistory.label(point.at, hourly: byHour, timeZone: timeZone)
+            let amount = "\(chart.approx)\(Usage.money(point.cost))"
+            mark.accessibilityLabel = "\(label): \(amount)"
+            KitTip.attach(to: mark, label: "\(label) · \(amount)", side: .top)
+        }
+        axis.isHidden = chart.points.isEmpty
+        axisBottom.isActive = !chart.points.isEmpty
+        first.text = chart.points.first.map { UsageHistory.label($0.at, hourly: byHour, timeZone: timeZone) }
+        last.text = chart.points.last.map { UsageHistory.label($0.at, hourly: byHour, timeZone: timeZone) }
+        invalidateIntrinsicContentSize()
+        setNeedsLayout()
+        if window != nil, !UIAccessibility.isReduceMotionEnabled {
+            Motion.easeDrawer.animator(Motion.durMorph) { self.layoutIfNeeded() }.startAnimation()
+        }
+    }
+
     override func layoutSubviews() {
         super.layoutSubviews()
         // The hairline is the plot's own bottom pixel: the bars stand on it, in the 95pt above.
         bars.frame = CGRect(x: 0, y: 0, width: bounds.width, height: 95)
         rule.frame = CGRect(x: 0, y: 95, width: bounds.width, height: 1)
-        guard !marks.isEmpty else { return }
-        let count = Double(marks.count)
+        guard !chart.points.isEmpty else { return }
+        let count = Double(chart.points.count)
         let slot = max(0, (bounds.width - 2 * (count - 1)) / count)
-        for (index, mark) in marks.enumerated() {
-            let share = chart.peak > 0 ? chart.points[index].cost / chart.peak : 0
+        for (index, point) in chart.points.enumerated() {
+            let mark = marks[point.at]!
+            let share = chart.peak > 0 ? point.cost / chart.peak : 0
             let height = max(1, share * 95)
-            mark.frame = CGRect(x: Double(index) * (slot + 2), y: 95 - height, width: slot, height: height)
+            let next = CGRect(x: Double(index) * (slot + 2), y: 95 - height, width: slot, height: height)
+            if arriving.remove(point.at) != nil {
+                UIView.performWithoutAnimation { mark.frame = next }
+            } else {
+                UIView.performWithoutAnimation {
+                    mark.frame.origin.x = next.minX
+                    mark.frame.size.width = next.width
+                }
+                mark.frame.origin.y = next.minY
+                mark.frame.size.height = next.height
+            }
         }
     }
 }

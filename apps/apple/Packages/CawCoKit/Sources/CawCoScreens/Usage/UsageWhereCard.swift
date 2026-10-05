@@ -16,6 +16,9 @@ final class UsageWhereCard: UsageCard {
     private let groupTabs = SegmentedTabs(UsageGrouping.allCases.map { .init($0.label) })
     private let head = UIStackView()
     private let body = UIStackView()
+    private let relay = UsageRelayView()
+    private var rows: [String: UsageWhereRow] = [:]
+    private var drawnView: (harness: UsageHarness, grouping: UsageGrouping, start: Double, all: Bool, narrow: Bool)?
     private let footnote = UsageCard.note("~ is the API price of work the plan already covers.")
 
     private(set) var harness = UsageHarness.claude
@@ -68,6 +71,9 @@ final class UsageWhereCard: UsageCard {
     /// `.head`: the title, and the two switches at the row's end; where they
     /// do not fit beside it they wrap under it, `space-3` below.
     override func layoutChanged() {
+        rows = [:]
+        drawnView = nil
+        relay.reset()
         head.arrangedSubviews.forEach { $0.removeFromSuperview() }
         let title = Self.title("Where it goes")
         let switches = UIStackView(arrangedSubviews: [harnessTabs, groupTabs])
@@ -119,7 +125,8 @@ final class UsageWhereCard: UsageCard {
         let want = "\(harness.rawValue):\(grouping.rawValue):\(Int(from))"
         latest = want
         let (h, g) = (harness, grouping)
-        render()
+        if view == nil { render() }
+        footnote.isHidden = harness != .claude
         Task { @MainActor [weak self, reads] in
             do {
                 let summary = try await reads.summary(h, groupBy: g.groupBy, since: from)
@@ -140,6 +147,38 @@ final class UsageWhereCard: UsageCard {
 
     private func render() {
         footnote.isHidden = harness != .claude
+        if let view, start != .none, !view.summary.rows.isEmpty {
+            let previous = drawnView
+            if let previous, previous.harness == view.harness, previous.grouping == view.grouping,
+               previous.start == view.start, previous.all == all, previous.narrow == narrow { return }
+            var direction: Double?
+            if let previous {
+                if previous.harness != view.harness {
+                    direction = view.harness == .opencode ? 1 : -1
+                } else if previous.grouping != view.grouping {
+                    direction = Double(UsageGrouping.allCases.firstIndex(of: view.grouping)! - UsageGrouping.allCases.firstIndex(of: previous.grouping)!)
+                } else if previous.all != all {
+                    direction = all ? 1 : -1
+                }
+            } else {
+                relay.reset()
+            }
+            let lines = list(view)
+            if relay.superview !== body {
+                UIView.transition(with: body, duration: Motion.durControl, options: [.transitionCrossDissolve, .allowUserInteraction]) {
+                    self.body.arrangedSubviews.forEach { $0.removeFromSuperview() }
+                    self.body.addArrangedSubview(self.relay)
+                    self.body.layoutIfNeeded()
+                    self.relay.show(lines, direction: direction)
+                }
+            } else {
+                relay.show(lines, direction: direction)
+            }
+            drawnView = (view.harness, view.grouping, view.start, all, narrow)
+            return
+        }
+        drawnView = nil
+        relay.reset()
         body.arrangedSubviews.forEach { $0.removeFromSuperview() }
         if start == .none {
             body.addArrangedSubview(Self.note("No 5-hour window is running for \(harness.name)."))
@@ -148,12 +187,8 @@ final class UsageWhereCard: UsageCard {
                 self?.retrying = true
                 self?.read()
             })
-        } else if let view {
-            if view.summary.rows.isEmpty {
-                body.addArrangedSubview(Self.note("Nothing recorded in this range."))
-            } else {
-                body.addArrangedSubview(list(view))
-            }
+        } else if view != nil {
+            body.addArrangedSubview(Self.note("Nothing recorded in this range."))
         } else {
             body.addArrangedSubview(skeleton())
         }
@@ -171,27 +206,27 @@ final class UsageWhereCard: UsageCard {
 
     /// `.list`: the groups flush, a second group `space-2` under the first;
     /// each group its machine's header (Sessions only) and its rows `space-1` apart.
-    private func list(_ view: View) -> UIView {
+    private func list(_ view: View) -> [UsageRelayView.Group] {
         let groups = UsageWhere.groups(view.summary, harness: view.harness, grouping: view.grouping, every: all,
                                        machines: hub.fleet.machines.map(\.machineId))
-        let list = UIStackView()
-        list.axis = .vertical
+        var list: [UsageRelayView.Group] = []
         for (index, group) in groups.enumerated() {
-            let box = UIStackView()
-            box.axis = .vertical
+            var header: UsageRelayView.Line?
             if group.machineId != UsageWhere.flat {
-                box.addArrangedSubview(machine(group))
+                header = .init(key: RelayPlan.head(group.machineId), view: machine(group))
             }
-            let rows = UIStackView(arrangedSubviews: group.rows.map(row))
-            rows.axis = .vertical
-            rows.spacing = Space.space1
-            box.addArrangedSubview(rows)
-            if index > 0 {
-                box.isLayoutMarginsRelativeArrangement = true
-                box.directionalLayoutMargins = NSDirectionalEdgeInsets(top: Space.space2, leading: 0, bottom: 0, trailing: 0)
+            let lines = group.rows.enumerated().map { offset, item in
+                UsageRelayView.Line(key: item.id, view: row(item), gap: offset > 0 ? Space.space1 : 0)
             }
-            list.addArrangedSubview(box)
+            list.append(.init(id: group.machineId, order: group.machineId == UsageWhere.flat ? -1 : hub.fleet.machines.firstIndex(where: { $0.machineId == group.machineId }) ?? (Int.max - 1),
+                              head: header, rows: lines, more: nil, gap: index > 0 ? Space.space2 : 0))
         }
+        // The flat box and global "more" box stay in the plan even while
+        // empty: neither has a header to insert when a grouping changes.
+        if !list.contains(where: { $0.id == UsageWhere.flat }) {
+            list.insert(.init(id: UsageWhere.flat, order: -1, head: nil, rows: [], more: nil), at: 0)
+        }
+        var moreLine: UsageRelayView.Line?
         if let more = UsageWhere.more(view.summary, every: all) {
             // `.more-slot`: the rest of the rows, a ghost button at the list's start.
             let button = KitButton.make(more, variant: .ghost, height: .sm) { [weak self] in
@@ -201,8 +236,9 @@ final class UsageWhereCard: UsageCard {
             let slot = UIStackView(arrangedSubviews: [button, UIView()])
             slot.isLayoutMarginsRelativeArrangement = true
             slot.directionalLayoutMargins = NSDirectionalEdgeInsets(top: Space.space2, leading: 0, bottom: 0, trailing: 0)
-            list.addArrangedSubview(slot)
+            moreLine = .init(key: RelayPlan.more("usage-more"), view: slot)
         }
+        list.append(.init(id: "usage-more", order: Int.max, head: nil, rows: [], more: moreLine))
         return list
     }
 
@@ -222,6 +258,10 @@ final class UsageWhereCard: UsageCard {
     /// `.row`: the name on two fifths and the measure on three, 28pt at
     /// least; a phone stacks them `space-1` apart with `space-1` above and below.
     private func row(_ item: UsageWhere.Item) -> UIView {
+        if let kept = rows[item.id] {
+            kept.update(item)
+            return kept
+        }
         let name = KitLabel(TypeScale.typeBody, ink: Palette.inkStrong)
         name.text = item.label
         name.lineBreakMode = .byTruncatingTail
@@ -235,6 +275,9 @@ final class UsageWhereCard: UsageCard {
 
         let measure = UsageMeasure(share: item.share, value: item.value)
         let line = UsageWhereRow(session: item.session, onOpen: onOpen)
+        line.name = name
+        line.measure = measure
+        rows[item.id] = line
         line.accessibilityLabel = "\(item.label), \(item.value)"
         line.accessibilityValue = item.tip
         KitTip.attach(to: measure, label: item.tip, side: .top)
@@ -266,12 +309,19 @@ final class UsageWhereCard: UsageCard {
 
 /// A row of the list: a Sessions row opens its conversation on a tap.
 private final class UsageWhereRow: UIControl {
+    var name: KitLabel!
+    var measure: UsageMeasure!
+    private var session: String?
+
     init(session: String?, onOpen: @escaping (String) -> Void) {
+        self.session = session
         super.init(frame: .zero)
         isAccessibilityElement = true
         accessibilityTraits = session == nil ? .staticText : .link
         if let session {
-            addAction(UIAction { _ in onOpen(session) }, for: .touchUpInside)
+            addAction(UIAction { [weak self] _ in
+                if let session = self?.session { onOpen(session) }
+            }, for: .touchUpInside)
         } else {
             isUserInteractionEnabled = true
         }
@@ -280,6 +330,17 @@ private final class UsageWhereRow: UIControl {
     @available(*, unavailable)
     required init?(coder _: NSCoder) {
         fatalError("UsageWhereRow is built in code")
+    }
+
+    func update(_ item: UsageWhere.Item) {
+        session = item.session
+        isAccessibilityElement = true
+        accessibilityElementsHidden = false
+        name.text = item.label
+        accessibilityLabel = "\(item.label), \(item.value)"
+        accessibilityValue = item.tip
+        KitTip.attach(to: measure, label: item.tip, side: .top)
+        measure.configure(share: item.share, value: item.value)
     }
 
     override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
@@ -295,7 +356,7 @@ private final class UsageWhereRow: UIControl {
 final class UsageMeasure: UIView {
     private let fill = UIView()
     private let value = KitLabel(TypeScale.typeMeta, ink: Palette.inkStrong)
-    private let share: Double
+    private var share: Double
 
     init(share: Double, value text: String) {
         self.share = share
@@ -320,6 +381,16 @@ final class UsageMeasure: UIView {
 
     override var intrinsicContentSize: CGSize {
         CGSize(width: UIView.noIntrinsicMetric, height: max(8, value.intrinsicContentSize.height))
+    }
+
+    func configure(share: Double, value text: String) {
+        self.share = share
+        value.text = text
+        invalidateIntrinsicContentSize()
+        setNeedsLayout()
+        if window != nil, !UIAccessibility.isReduceMotionEnabled {
+            Motion.easeDrawer.animator(Motion.durMorph) { self.layoutIfNeeded() }.startAnimation()
+        }
     }
 
     override func layoutSubviews() {

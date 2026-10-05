@@ -80,7 +80,7 @@ extension Usage {
         if left < 7 * dayMs {
             return "\(at.formatted(.dateTime.weekday(.abbreviated).locale(clock))) \(time)"
         }
-        return "\(at.formatted(.dateTime.day().month(.abbreviated).locale(clock))) \(time)"
+        return at.formatted(.dateTime.day().month(.abbreviated).hour(.twoDigits(amPM: .omitted)).minute(.twoDigits).locale(clock))
     }
 
     /// The projection, as one sentence: what the Limits block leads with (`projectionSentence`).
