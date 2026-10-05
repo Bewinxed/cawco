@@ -432,6 +432,7 @@ public final class HubConnection {
 
     /// A machine that came online after the connect-time read has its stored sessions read now.
     private func adopt(machines next: [MachineRow]) {
+        guard next != fleet.machines else { return }
         let wasOnline = Set(fleet.machines.filter { $0.status == "online" }.map(\.machineId))
         fleet.machines = next
         guard fleet.fleetRead else {
@@ -440,6 +441,24 @@ public final class HubConnection {
         for machine in next where machine.status == "online" && !wasOnline.contains(machine.machineId) {
             readCatalog(machine.machineId)
         }
+    }
+
+    /// A board delta names only changed machines and ids that left. Keep the
+    /// others at their places, append new ids, then run the snapshot's adoption
+    /// side effects (client.svelte.ts `patchRows` followed by `adoptMachines`).
+    private func patchMachines(_ changed: [MachineRow], removed: [String]) {
+        let gone = Set(removed)
+        var next = fleet.machines.filter { !gone.contains($0.machineId) }
+        var at = Dictionary(uniqueKeysWithValues: next.enumerated().map { ($0.element.machineId, $0.offset) })
+        for machine in changed {
+            if let index = at[machine.machineId] {
+                next[index] = machine
+            } else {
+                at[machine.machineId] = next.count
+                next.append(machine)
+            }
+        }
+        adopt(machines: next)
     }
 
     private func readCatalogs() {
@@ -518,9 +537,8 @@ public final class HubConnection {
                 ledger.handle(message)
             case let .frame(frame):
                 switch frame {
-                case .instances, .instancesDelta:
+                case .instances:
                     fleet.merge(pulses: message.pulses)
-                    fleet.continuations = message.continuations
                 default:
                     break
                 }
@@ -537,13 +555,17 @@ public final class HubConnection {
         switch frame {
         case let .instances(board, hubBuild):
             if let hubBuild { fleet.hubBuild = hubBuild }
+            fleet.continuations = board.continuations
             adopt(machines: board.agents)
             fleet.adopt(rows: board.instances)
             tasks.sweepLiveLedgers()
             fleet.liveRead = true
         case let .instancesDelta(delta, hubBuild):
             if let hubBuild { fleet.hubBuild = hubBuild }
-            adopt(machines: delta.agents)
+            if let continuations = delta.continuations { fleet.continuations = continuations }
+            if delta.agents != nil || delta.removedAgents != nil {
+                patchMachines(delta.agents ?? [], removed: delta.removedAgents ?? [])
+            }
             fleet.patch(upserts: delta.upserts, removed: delta.removed)
             tasks.sweepLiveLedgers()
         case let .permissionRequest(ask, routedTo):

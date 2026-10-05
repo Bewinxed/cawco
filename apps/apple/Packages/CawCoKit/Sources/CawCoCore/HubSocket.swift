@@ -15,21 +15,15 @@ struct HubSocket: Sendable {
     /// board frame never runs on the main actor. The stream keeps the order.
     struct Message: Sendable {
         let read: Result<Inbound, any Error>
-        /// A board frame's pulses and continuations, which it carries beside its rows.
+        /// A full board frame's pulses, which it carries beside its rows.
         let pulses: [String: Components.Schemas.SessionPulse]
-        let continuations: [Components.Schemas.ContinuationJob]
 
         init(_ data: Data) {
             read = Result { try Inbound.read(data) }
             if case .frame(.instances) = try? read.get() {
                 pulses = Inbound.pulses(data, enveloped: true)
-                continuations = Inbound.continuations(data)
-            } else if case .frame(.instancesDelta) = try? read.get() {
-                pulses = Inbound.pulses(data, enveloped: true)
-                continuations = Inbound.continuations(data)
             } else {
                 pulses = [:]
-                continuations = []
             }
         }
     }
