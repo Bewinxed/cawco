@@ -41,20 +41,27 @@ public enum LineBox {
     }
 
     /// A label's line: its paragraph and the baseline offset to set with it.
+    /// The line is `height` tall and its baseline stands where `strut` puts
+    /// it: a label seats the glyphs on the line's foot, the face's own
+    /// descent above it, and the offset raises them the rest of the way.
     public static func label(_ font: UIFont, height: Double) -> (paragraph: NSMutableParagraphStyle, baselineOffset: Double) {
         let paragraph = NSMutableParagraphStyle()
         paragraph.minimumLineHeight = height
         paragraph.maximumLineHeight = height
-        return (paragraph, halfLeading(font, height: height))
+        return (paragraph, max(0, strut(font, height: height).below + Double(font.descender)))
     }
 
-    /// A TextKit 2 text view's line, with no baseline offset set.
+    /// A TextKit 2 text view's line, with no baseline offset set: the line
+    /// reaches `strut`'s distance above its baseline and the face's own
+    /// descent below it, and the rest of what stands below is line spacing.
     public static func textView(_ font: UIFont, height: Double) -> NSMutableParagraphStyle {
-        let half = halfLeading(font, height: height)
+        let box = strut(font, height: height)
+        let descent = Double(-font.descender)
+        let below = max(0, box.below - descent)
         let paragraph = NSMutableParagraphStyle()
-        paragraph.minimumLineHeight = font.lineHeight + half
-        paragraph.maximumLineHeight = font.lineHeight + half
-        paragraph.lineSpacing = half
+        paragraph.minimumLineHeight = height - below
+        paragraph.maximumLineHeight = height - below
+        paragraph.lineSpacing = below
         return paragraph
     }
 }
