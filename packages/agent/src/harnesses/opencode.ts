@@ -4646,7 +4646,7 @@ export class OpencodeHarness implements Harness {
    * running in it.
    */
   #releaseDirectory(directory: string, identity: ServerIdentity): void {
-    this.#disposeUnused(directory, identity)
+    this.#disposeUnused(directory, identity, "directory release")
       .then((settled) => {
         if (!settled) {
           setTimeout(
@@ -4665,7 +4665,8 @@ export class OpencodeHarness implements Harness {
   /** Whether the directory is settled: disposed, or in use again and not this call's to dispose. */
   async #disposeUnused(
     directory: string,
-    identity: ServerIdentity
+    identity: ServerIdentity,
+    caller: string
   ): Promise<boolean> {
     const used = (): boolean =>
       // biome-ignore lint/suspicious/noUnnecessaryConditions: #disposed is set true by dispose(), a different method biome's per-method inference doesn't see
@@ -4714,7 +4715,7 @@ export class OpencodeHarness implements Harness {
       throw new Error(errorText(disposed.error));
     }
     console.info(
-      `[opencode] ${directory}: instance disposed, nothing attached`
+      `[opencode] ${directory}: instance disposed by ${caller}, nothing attached and no turn running`
     );
     return true;
   }
@@ -5890,17 +5891,26 @@ export class OpencodeHarness implements Harness {
     }
     try {
       const client = await this.#ensure();
-      // This probe initializes the default directory's MCP servers, but owns no session.
+      const identity = this.#serverOwner.active;
+      const paths = await reached(
+        client.path.get(
+          {},
+          { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
+        )
+      );
+      if (!identity || paths.error || !paths.data) {
+        throw new Error(
+          "OpenCode MCP probe has no verified directory custody."
+        );
+      }
+      const { directory } = paths.data;
+      // A status probe can initialize the server's default directory, which
+      // may also hold live sessions. Cleanup shares the directory release's
+      // attachment and server-idle checks; a read never cuts their turns short.
       const result = await reached(
         client.mcp.status({}, { signal: AbortSignal.timeout(10_000) })
       ).finally(async () => {
-        const disposed = await client.instance.dispose(
-          {},
-          { signal: AbortSignal.timeout(10_000) }
-        );
-        if (disposed.error) {
-          throw new Error(errorText(disposed.error));
-        }
+        await this.#disposeUnused(directory, identity, "fleet MCP status");
       });
       if (result.error || !result.data) {
         throw new Error(errorText(result.error));
