@@ -8,10 +8,12 @@
     land,
   } from "#lib/cawco/motion/share.svelte.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import PendingContent, {
     whileIdle,
   } from "#lib/components/ui/button/pending-content.svelte";
   import { Textarea } from "#lib/components/ui/textarea/index.js";
+  import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import { IconFork, IconPenLine } from "#lib/icons.js";
   import { goto } from "$app/navigation";
   import {
@@ -432,35 +434,48 @@
           {:else}
             <MessageBody source={message.content} />
             {#if canEdit || canFork}
-              <div class="actions">
+              <div class="actions turn-actions" class:pending={forkPending}>
                 {#if canEdit}
-                  <button
-                    class="pressable action"
-                    onclick={startEditing}
-                    type="button"
-                  >
-                    <PendingContent
-                      icon={IconPenLine}
-                      label="Edit and resend"
-                    />
-                  </button>
+                  <Tip label="Edit and resend">
+                    {#snippet children(
+                      tip
+                    )}
+                      <Button
+                        {...tip}
+                        aria-label="Edit and resend"
+                        onclick={startEditing}
+                        size="icon-sm"
+                        variant="ghost"
+                      >
+                        <IconPenLine aria-hidden="true" />
+                      </Button>
+                    {/snippet}
+                  </Tip>
                 {/if}
                 {#if canFork}
-                  <button
-                    aria-busy={forkPending || undefined}
-                    aria-disabled={forkPending || undefined}
-                    class="pressable action"
-                    onclick={whileIdle(() => forkPending, branch)}
-                    type="button"
-                  >
-                    <PendingContent
-                      failed={!!editError}
-                      icon={IconFork}
-                      label="Fork from here"
-                      pending={forkPending}
-                      pendingLabel="Forking…"
-                    />
-                  </button>
+                  <Tip label="Fork from here">
+                    {#snippet children(
+                      tip
+                    )}
+                      <Button
+                        {...tip}
+                        aria-busy={forkPending || undefined}
+                        aria-disabled={forkPending || undefined}
+                        onclick={whileIdle<MouseEvent>(
+                          () => forkPending,
+                          branch
+                        )}
+                        size="icon-sm"
+                        variant="ghost"
+                      >
+                        <PendingContent
+                          failed={!!editError}
+                          icon={IconFork}
+                          pending={forkPending}
+                        />
+                      </Button>
+                    {/snippet}
+                  </Tip>
                 {/if}
               </div>
             {/if}
@@ -741,6 +756,16 @@
     display: flex;
     gap: var(--space-2);
     margin-block-start: var(--space-2);
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .turn-actions {
+      opacity: 0;
+    }
+    .turn.you:hover .turn-actions,
+    .turn.you:focus-within .turn-actions,
+    .turn-actions.pending {
+      opacity: 1;
+    }
   }
   /* Text actions in the chip vocabulary MessageRow already speaks (radius-mark,
      text-meta, space-2) rather than a new button style — a failed send reads as
