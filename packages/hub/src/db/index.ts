@@ -469,13 +469,14 @@ export interface DbShape {
   readonly markInstanceLive: (id: string) => boolean;
   /**
    * The owner looked at these sessions and runs (a tab in front) or archived
-   * them off Finished, at `at`. `updatedAt` stays: being looked at is not
+   * them off Finished, at `at`; a null `at` clears the mark (unarchive), which
+   * every reader counts as never seen. `updatedAt` stays: being looked at is not
    * the session moving. Returns the rows it changed, to publish.
    */
   readonly markSeen: (
     instanceIds: string[],
     runIds: string[],
-    at: Date
+    at: Date | null
   ) => {
     instances: (typeof instances.$inferSelect)[];
     runs: WorkflowRunRow[];

@@ -8037,8 +8037,14 @@ export const createServer = (
              * `archive`: taken off Finished without opening it, refused for
              * anything still doing something (`archiveRefusal`). `look`: the
              * owner had it in front after it ended, which is always so.
+             * `unarchive`: clears the mark, so a session that ended is in
+             * Finished again; keep-alive stays as it is.
              */
-            kind: t.Union([t.Literal("archive"), t.Literal("look")]),
+            kind: t.Union([
+              t.Literal("archive"),
+              t.Literal("look"),
+              t.Literal("unarchive"),
+            ]),
           }),
         },
         ({ body, status }) => {
@@ -8067,7 +8073,7 @@ export const createServer = (
               });
             }
           }
-          const at = new Date();
+          const at = body.kind === "unarchive" ? null : new Date();
           const seen = db.markSeen(instanceIds, runIds, at);
           for (const machineId of new Set(
             seen.instances.map((row) => row.machineId)
@@ -8077,7 +8083,7 @@ export const createServer = (
           for (const run of seen.runs) {
             workflowRuntime.announce(run);
           }
-          return { at: at.getTime() };
+          return { at: at?.getTime() ?? null };
         }
       )
       // The session naming itself (`set_title`). Refused, with the owner's

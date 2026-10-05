@@ -23,6 +23,7 @@
     IconPenLine,
     IconStop,
     IconTrash,
+    IconUnarchive,
   } from "#lib/icons.js";
   import { goto } from "$app/navigation";
   import {
@@ -38,6 +39,7 @@
   } from "./client.svelte";
   import { confirm } from "./confirm.svelte";
   import { continueInNewSession } from "./continue.svelte";
+  import { archivedRow, unarchive } from "./home/home-state.svelte";
   import { conversationHref } from "./links";
   import RenameDialog from "./RenameDialog.svelte";
   import { sessionName } from "./session-name";
@@ -204,6 +206,11 @@
       <ContextMenu.Item onSelect={onarchive}>
         <IconArchive />
         Archive
+      </ContextMenu.Item>
+    {:else if archivedRow(instance)}
+      <ContextMenu.Item onSelect={() => unarchive([instance])}>
+        <IconUnarchive />
+        Unarchive
       </ContextMenu.Item>
     {/if}
     <ContextMenu.Item

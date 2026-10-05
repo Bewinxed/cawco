@@ -56,6 +56,13 @@ import { choices } from "./choices.svelte";
  */
 const seenHere = $state<Record<string, number>>({});
 
+/**
+ * What this dashboard unarchived and the hub has not yet echoed back: the
+ * `seenAt` the row still carried. The row counts as never seen while its
+ * `seenAt` is that; once the hub's frame changes it, the entry lapses.
+ */
+const clearedHere = $state<Record<string, number>>({});
+
 const epochOf = (value: string | number | Date | null | undefined): number => {
   const at = value ? new Date(value).getTime() : 0;
   return Number.isNaN(at) ? 0 : at;
@@ -63,7 +70,9 @@ const epochOf = (value: string | number | Date | null | undefined): number => {
 
 /** When the owner last looked at it or archived it, on any device. */
 export const seenAt = (row: InstanceRow): number =>
-  Math.max(epochOf(row.seenAt), seenHere[row.id] ?? 0);
+  clearedHere[row.id] === epochOf(row.seenAt)
+    ? 0
+    : Math.max(epochOf(row.seenAt), seenHere[row.id] ?? 0);
 
 /**
  * Marks sessions (and runs, as `run:<id>`) seen on the hub: `look`, the
@@ -78,6 +87,7 @@ function markSeen(ids: string[], kind: "archive" | "look"): void {
   const at = Date.now();
   for (const id of ids) {
     seenHere[id] = at;
+    delete clearedHere[id];
   }
   const undo = () => {
     for (const id of ids) {
@@ -86,6 +96,10 @@ function markSeen(ids: string[], kind: "archive" | "look"): void {
       }
     }
   };
+  postSeen(ids, kind, undo);
+}
+
+function postSeen(ids: string[], kind: string, undo: () => void): void {
   fetch("/api/seen", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -101,6 +115,29 @@ function markSeen(ids: string[], kind: "archive" | "look"): void {
       undo();
       console.error("[cawco] marking seen failed:", error);
     });
+}
+
+/**
+ * Puts an archived session back in Finished: the hub clears its `seenAt`
+ * and leaves keep-alive as it is. The row moves in the click, as archive's
+ * does.
+ */
+export function unarchive(rows: InstanceRow[]): void {
+  const ids = rows.map((row) => row.id);
+  const before: Record<string, number | undefined> = {};
+  for (const row of rows) {
+    before[row.id] = seenHere[row.id];
+    clearedHere[row.id] = epochOf(row.seenAt);
+    delete seenHere[row.id];
+  }
+  postSeen(ids, "unarchive", () => {
+    for (const row of rows) {
+      delete clearedHere[row.id];
+      if (before[row.id] !== undefined) {
+        seenHere[row.id] = before[row.id] as number;
+      }
+    }
+  });
 }
 
 /** Records that the reader has a conversation in front of them, ended. */
@@ -395,6 +432,15 @@ function endedAt(row: InstanceRow): number | undefined {
   return cawco.activityOf(row.id) === "idle"
     ? cawco.pulseAt(row.id)
     : undefined;
+}
+
+/**
+ * It ended and the owner has seen it or archived it since (`seenAt` at or
+ * after the end): what Unarchive is offered for.
+ */
+export function archivedRow(row: InstanceRow): boolean {
+  const ended = endedAt(row);
+  return ended !== undefined && ended <= seenAt(row);
 }
 
 /**

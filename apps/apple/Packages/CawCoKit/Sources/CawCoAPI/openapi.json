@@ -2514,7 +2514,8 @@
                     "type": "string",
                     "enum": [
                       "archive",
-                      "look"
+                      "look",
+                      "unarchive"
                     ]
                   }
                 },
@@ -7562,7 +7563,10 @@
         "type": "object",
         "properties": {
           "at": {
-            "type": "number"
+            "type": [
+              "null",
+              "number"
+            ]
           }
         },
         "required": [
