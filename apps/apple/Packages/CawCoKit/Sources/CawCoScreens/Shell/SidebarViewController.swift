@@ -436,9 +436,10 @@ final class SidebarViewController: ObservedViewController {
         _ = fleet.openCodeGoLimits
         _ = fleet.limitsRead
         for project in fleet.projects { _ = prefs.collapsed(project.cwd) }
-        rowInputs = RailModel.inputs(hub: hub, home: home, sort: prefs.sort)
-        liveCount = rowInputs.filter { $0.status == "running" || $0.status == "starting" }.count
-        blockedCount = rowInputs.filter { ($0.status == "running" || $0.status == "starting") && $0.activity == .blocked }.count
+        let inputs = RailModel.inputs(hub: hub, home: home, sort: prefs.sort)
+        rowInputs = inputs.rows
+        liveCount = inputs.live
+        blockedCount = inputs.blocked
     }
 
     override func drawContent() {
@@ -467,6 +468,11 @@ final class SidebarViewController: ObservedViewController {
         let sort = prefs.sort
         let delegates = home.delegates
         if rowInputs != drawnInputs || projects != listProjects || pins != listPins || sort != listSort || delegates != listDelegates {
+            #if DEBUG
+            if let pair = zip(drawnInputs, rowInputs).first(where: { $0 != $1 }) {
+                Self.performance.debug("rail input first \(pair.0.id, privacy: .public) -> \(pair.1.id, privacy: .public), status \(pair.0.status, privacy: .public) -> \(pair.1.status, privacy: .public), activity \(pair.0.activity.rawValue, privacy: .public) -> \(pair.1.activity.rawValue, privacy: .public), time changed \(pair.0.updatedDate != pair.1.updatedDate || pair.0.updatedText != pair.1.updatedText), recent changed \(pair.0.recent != pair.1.recent)")
+            }
+            #endif
             drawnInputs = rowInputs
             listProjects = projects
             listPins = pins
@@ -502,8 +508,8 @@ final class SidebarViewController: ObservedViewController {
         fleetRow.active = host.destination == .fleet
         // Any page under /workflows (Sidebar.svelte `path.startsWith("/workflows")`).
         workflowsRow.active = host.destination.spoke == ShellDestination.workflows.spoke
-        configureButton.on = host.destination == .configure
-        assistantButton.on = host.assistantOpen
+        if configureButton.on != (host.destination == .configure) { configureButton.on = host.destination == .configure }
+        if assistantButton.on != host.assistantOpen { assistantButton.on = host.assistantOpen }
         // `blockedCount || runningInstances.length`: what waits on the operator, else what runs.
         let blocked = blockedCount
         let count = blocked > 0 ? blocked : liveCount
@@ -647,12 +653,12 @@ final class SidebarViewController: ObservedViewController {
                 // `statusWord`: a session the operator stopped says so; its mark is an ended session's.
                 let word = node.row.status == .stopped ? "Stopped" : status.word
                 // The row view itself is part of the print: a rebuilt row is filled whatever it last drew.
+                row.ageHint = hint
                 let print = SessionPrint(view: ObjectIdentifier(row), title: title, status: status, place: place,
-                                         age: age, hint: hint, count: count, failed: failed, open: open, front: front, word: word)
+                                         age: age, count: count, failed: failed, open: open, front: front, word: word)
                 if sessionPrints[node.row.id] != print {
                     sessionPrints[node.row.id] = print
                     row.configure(title: title, status: status, word: word, place: place, age: age, count: count, failed: failed, open: open)
-                    row.ageHint = hint
                     row.active = front
                 }
             }
@@ -676,7 +682,6 @@ final class SidebarViewController: ObservedViewController {
         let status: MarkStatus
         let place: String
         let age: String
-        let hint: String
         let count: Int
         let failed: Int
         let open: Bool

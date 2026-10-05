@@ -45,10 +45,24 @@ enum RailModel {
         let recent: Bool
     }
 
-    static func inputs(hub: HubConnection, home: HomeModel, sort: RailPrefs.Sort) -> [RowInput] {
-        (hub.fleet.rows + hub.fleet.runRows).map { row in
-            let activity = row.isListed ? home.activity(row.id) : .idle
-            let settled = hub.fleet.activityPulse(row.id)?.at
+    struct Inputs {
+        let rows: [RowInput]
+        let live: Int
+        let blocked: Int
+    }
+
+    static func inputs(hub: HubConnection, home: HomeModel, sort: RailPrefs.Sort) -> Inputs {
+        let sessions = hub.fleet.rows
+        var live = 0
+        var blocked = 0
+        let rows = (sessions + hub.fleet.runRows).enumerated().map { index, row in
+            let watchesActivity = row.isLive || row.isStale || sort == .state
+            let activity = watchesActivity ? home.activity(row.id) : .idle
+            if index < sessions.count, row.isLive {
+                live += 1
+                if activity == .blocked { blocked += 1 }
+            }
+            let settled = watchesActivity ? hub.fleet.activityPulse(row.id)?.at : nil
             var updated = 0.0
             if let date = row.updatedAt?.value1 {
                 updated = date.timeIntervalSince1970 * 1000
@@ -58,9 +72,12 @@ enum RailModel {
             }
             return RowInput(id: row.id, status: row.status.rawValue, parent: row.parentInstanceId,
                      project: row.projectId, machine: row.machineId, folder: row.cwd,
-                     title: row.title, updatedDate: row.updatedAt?.value1, updatedText: row.updatedAt?.value2,
-                     activity: activity, recent: row.isLive || activity == .blocked || home.now - (settled ?? updated) < dayMs)
+                     title: row.title, updatedDate: settled == nil ? row.updatedAt?.value1 : nil,
+                     updatedText: settled == nil ? row.updatedAt?.value2 : nil,
+                     activity: sort == .state || !row.isLive ? activity : .idle,
+                     recent: row.isLive || activity == .blocked || home.now - (settled ?? updated) < dayMs)
         }
+        return Inputs(rows: rows, live: live, blocked: blocked)
     }
 
     /// Pinned projects first, then by name (`orderedProjects`).
