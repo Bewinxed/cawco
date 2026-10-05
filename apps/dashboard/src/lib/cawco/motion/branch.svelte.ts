@@ -1709,7 +1709,7 @@ const HELD = "data-branch-hold";
  * cuts their pieces move (app.css `[data-branch-draw]`). Off at rest, where
  * a stretch has no clip at all.
  */
-const DRAWN = "data-branch-draw";
+export const DRAWN = "data-branch-draw";
 /**
  * A group just mounted whose line has not set off yet: its parent's deck
  * still stands (app.css). The deck goes on the frame the glyphs that were

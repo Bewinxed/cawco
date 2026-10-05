@@ -28,9 +28,17 @@
  * echoes in the board under a conversation, 66 layouts a second with nothing
  * on screen moving, none with them stopped. Rendered again, every echo is
  * started from the list's same fixed time, so it is in step at once.
+ *
+ * Nor is anything re-timed while a tree in the list draws in or runs back
+ * (motion/branch `DRAWN`). Rows joining move every echo below them a place,
+ * and a longer list has a longer cycle, so each was made again: nine echoes
+ * started over in the second frame of a tree of seven opening, the frame
+ * that carries the tree's own first pieces, 39 to 41ms long in Safari. The
+ * order is taken up when the tree has landed, or gone.
  */
 import type { Attachment } from "svelte/attachments";
 import { watchRendered } from "#lib/utils/rendered.js";
+import { DRAWN } from "./branch.svelte";
 import { CURVE, dur, motionOk, numberOf } from "./curves.svelte";
 
 /** How many beats fit in one loop: the rows start a third of a loop apart. */
@@ -113,6 +121,10 @@ export function echoBeat(): Attachment<HTMLElement> {
         }
         return;
       }
+      // A tree is moving: its landing, or its group leaving, comes back here.
+      if (container.querySelector(`[${DRAWN}]`)) {
+        return;
+      }
       const loop = dur("--dur-loop");
       const gap = loop / BEATS;
       const echoes = [
@@ -140,7 +152,12 @@ export function echoBeat(): Attachment<HTMLElement> {
     };
 
     const watch = new MutationObserver(schedule);
-    watch.observe(container, { childList: true, subtree: true });
+    watch.observe(container, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: [DRAWN],
+    });
     // A reader who turns motion off or on mid-session.
     $effect(() => {
       moving = motionOk.current;
