@@ -1,6 +1,7 @@
 import CawCoCore
 import CawCoDesign
 import CawCoMascot
+import OSLog
 import UIKit
 
 /// The hub's address, entered once and kept, the hubs found on this network,
@@ -22,15 +23,22 @@ final class ConnectViewController: ObservedViewController, UITextFieldDelegate {
     private let done: () -> Void
     private let discovery = HubDiscovery()
     private let field = UITextField()
+    private let body = KitLabel(TypeScale.typeBody, ink: Palette.inkMuted, lines: 0)
     let scroll = UIScrollView()
     private let problem = KitLabel(TypeScale.typeMeta, ink: Palette.statusFailInk, lines: 0)
     private let status = StatusLineView()
     private let found = UIStackView()
     private let foundHead = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
+    private let networkAccess = UIStackView()
+    private let searching = UIStackView()
+    private let noWifi = KitLabel(TypeScale.typeBody, ink: Palette.inkMuted, lines: 0)
     private var connectButton: UIButton!
     /// Caw on this screen; when the screen goes, Root lets him fade out over the next one.
     private(set) var caw: CawView?
     private var shownFound: [HubDiscovery.Found] = []
+    #if DEBUG
+    private var lastEvidence = ""
+    #endif
 
     init(hub: HubConnection, mode: Mode, done: @escaping () -> Void = {}) {
         self.hub = hub
@@ -72,7 +80,6 @@ final class ConnectViewController: ObservedViewController, UITextFieldDelegate {
         let title = KitLabel(TypeScale.typeTitle, ink: Palette.inkStrong, lines: 0)
         title.text = mode == .reconnecting ? "Your hub" : "Connect to your hub"
         title.accessibilityTraits = .header
-        let body = KitLabel(TypeScale.typeBody, ink: Palette.inkMuted, lines: 0)
         body.text = "The hub's address on your network, like http://192.168.3.100:3456."
 
         field.placeholder = "http://hub:3456"
@@ -114,6 +121,34 @@ final class ConnectViewController: ObservedViewController, UITextFieldDelegate {
         found.addArrangedSubview(foundHead)
         found.isHidden = true
         column.addArrangedSubview(found)
+
+        let searchLabel = KitLabel(TypeScale.typeBody, ink: Palette.inkMuted, lines: 0)
+        searchLabel.text = "Looking for your hub on this Wi-Fi network…"
+        let spinner = KitSpinner()
+        spinner.isAccessibilityElement = false
+        searching.spacing = Space.space2
+        searching.alignment = .center
+        searching.addArrangedSubview(spinner)
+        searching.addArrangedSubview(searchLabel)
+        searching.isHidden = true
+        // Before a hub answers, the section carries the search instead of rows.
+        found.addArrangedSubview(searching)
+
+        noWifi.text = "Hubs are found automatically on the same Wi-Fi. Over Tailscale, enter your hub's Tailscale name."
+        noWifi.isHidden = true
+        column.addArrangedSubview(noWifi)
+
+        let networkProblem = KitLabel(TypeScale.typeBody, ink: Palette.statusFailInk, lines: 0)
+        networkProblem.text = "Local Network access is off. Allow it in Settings to find your hub."
+        networkAccess.axis = .vertical
+        networkAccess.spacing = Space.space2
+        networkAccess.addArrangedSubview(networkProblem)
+        networkAccess.addArrangedSubview(KitButton.make("Open Settings", variant: .outline, height: .lg, stretch: true) {
+            UIApplication.shared.open(URL(string: UIApplication.openSettingsURLString)!)
+        })
+        networkAccess.isHidden = true
+        column.addArrangedSubview(networkAccess)
+        NotificationCenter.default.addObserver(self, selector: #selector(sceneWillEnterForeground(_:)), name: UIScene.willEnterForegroundNotification, object: nil)
 
         connectButton = KitButton.make(mode == .reconnecting ? "Connect to this address" : "Connect", variant: .action, height: .lg, stretch: true) { [weak self] in
             self?.connect()
@@ -179,12 +214,21 @@ final class ConnectViewController: ObservedViewController, UITextFieldDelegate {
         // A hub that was never entered has no state to say.
         status.isHidden = hub.address == nil
         status.configure(hub: hub, ready: false)
+        networkAccess.isHidden = !discovery.localNetworkDenied
+        let noLocalPath = discovery.localNetworkAvailable == false
+        noWifi.isHidden = !noLocalPath
+        body.text = noLocalPath
+            ? "The hub's Tailscale address, like http://<machine>.<tailnet>.ts.net:3456."
+            : "The hub's address on your network, like http://192.168.3.100:3456."
+        field.placeholder = noLocalPath ? "http://<machine>.<tailnet>.ts.net:3456" : "http://hub:3456"
         let hubs = discovery.found
+        searching.isHidden = !discovery.browsing || !hubs.isEmpty
+        found.isHidden = hubs.isEmpty && searching.isHidden
         guard hubs != shownFound else {
             return
         }
         shownFound = hubs
-        for view in found.arrangedSubviews.dropFirst() {
+        for view in found.arrangedSubviews.dropFirst(2) {
             view.removeFromSuperview()
         }
         for hub in hubs {
@@ -195,8 +239,39 @@ final class ConnectViewController: ObservedViewController, UITextFieldDelegate {
             button.contentHorizontalAlignment = .leading
             found.addArrangedSubview(button)
         }
-        found.isHidden = hubs.isEmpty
     }
+
+    @objc private func sceneWillEnterForeground(_ note: Notification) {
+        guard let scene = note.object as? UIWindowScene, scene === viewIfLoaded?.window?.windowScene,
+              discovery.localNetworkDenied else { return }
+        discovery.stop()
+        discovery.start()
+    }
+
+    #if DEBUG
+    /// Simulator proof reads the laid-out views, including effective hidden
+    /// state, rather than interpreting a screenshot or inventing model output.
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        guard ProcessInfo.processInfo.arguments.contains("--connect-evidence") else { return }
+        func rows(_ node: UIView) -> [String] {
+            guard !node.isHidden else { return [] }
+            let text: String? = if let label = node as? UILabel { label.text }
+                else if let field = node as? UITextField { field.placeholder }
+                else if let button = node as? UIButton { button.configuration?.attributedTitle.map { String($0.characters) } }
+                else if node is KitSpinner { "KitSpinner" }
+                else { nil }
+            let frame = node.convert(node.bounds, to: view)
+            let row = text.map { "\($0) frame=\(frame)" }
+            return (row.map { [$0] } ?? []) + node.subviews.flatMap(rows)
+        }
+        let evidence = rows(view).joined(separator: " | ")
+        if evidence != lastEvidence {
+            lastEvidence = evidence
+            Logger(subsystem: "dev.cawco.app", category: "ConnectEvidence").notice("\(evidence, privacy: .public)")
+        }
+    }
+    #endif
 
     private func fieldChanged() {
         connectButton.isEnabled = !(field.text ?? "").trimmingCharacters(in: .whitespaces).isEmpty
