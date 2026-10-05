@@ -34,10 +34,11 @@
   import { flushSync, onDestroy, setContext, tick, untrack } from "svelte";
   import { Virtualizer, type VirtualizerHandle } from "virtua/svelte";
   import { describeTool } from "#lib/components/features/tool-cards/descriptors.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { IconChat } from "#lib/icons.js";
   import { browser } from "$app/env";
-  import { cawco, type SessionState } from "../client.svelte";
+  import { cawco, readOlderPage, type SessionState } from "../client.svelte";
   import {
     crossIn,
     dur,
@@ -883,7 +884,7 @@
   /**
    * The place this pane returns to, until a landing has used it. A place at
    * a row the rows do not hold yet — a reload, whose first rows are the
-   * server's tail — waits for the history read (see the reveal).
+   * newest page — is read back to, a page at a time (see the reveal).
    */
   let resume: Landing | null = browser
     ? JSON.parse(
@@ -1475,6 +1476,113 @@
     return true;
   }
 
+  // ── Older pages ─────────────────────────────────────────────────────────
+  /**
+   * The session whose older pages this view asks for: the store's own. The
+   * server's stand-in for it (see `SessionPane`) is dropped the moment the
+   * store's read lands, and a page put in front of it would go with it.
+   */
+  function paged(): SessionState | null {
+    const store = cawco.session(session.instanceId);
+    return store === session ? store : null;
+  }
+
+  /**
+   * OLDER PAGES COME AS THE READER NEARS THEM, ONE AT A TIME.
+   *
+   * The view holds the newest page and whatever its reader has scrolled up
+   * to. The next older page is asked for when less than ONE VIEWPORT of rows
+   * stands between the top of the view and the first row held: `above`, the
+   * list's own top to the view's top, as virtua has the rows sized. A row it
+   * has not measured counts at `ROW_ESTIMATE`, the smallest a row can be, so
+   * the rows really there are never fewer than counted and the ask is early,
+   * never late; a wheel notch, a key or a flick moves the view by less than
+   * the viewport it is asked across. A list shorter than its viewport is
+   * inside that distance by definition, so it fills, a page at a time, until
+   * it can scroll or the conversation's start is in hand.
+   *
+   * Asked from the reader's scrolling and again once a page has landed (the
+   * rows in front may still be too few), never before the list is drawn,
+   * never for a pane off screen, and not again for a page that failed: that
+   * one is asked for by its own Try again (the strip above the list).
+   */
+  function askOlder(above?: number): void {
+    const store = paged();
+    if (
+      !(scroller && listing && list && shown && visible && store?.cursor) ||
+      store.hydrating ||
+      store.loading ||
+      store.olderFault
+    ) {
+      return;
+    }
+    // A front shift virtua is holding until a touch scroll comes to rest is
+    // not in the scroll offset yet: it stands in the first row's own offset.
+    const before =
+      (above ??
+        scroller.getBoundingClientRect().top -
+          listing.getBoundingClientRect().top) - list.getItemOffset(0);
+    if (before < scroller.clientHeight) {
+      // biome-ignore lint/complexity/noVoid: fire-and-forget; the page lands in the store the rows are built from
+      void readOlderPage(store.instanceId);
+    }
+  }
+
+  // What can bring the first rows near without a scroll: the list drawn, a
+  // page landed with few rows in it, the pane coming on screen. Measured in
+  // the next frame, once virtua has moved the view by what the page added.
+  $effect(() => {
+    const store = paged();
+    if (
+      !(shown && visible && store?.cursor) ||
+      store.hydrating ||
+      store.loading ||
+      store.olderFault
+    ) {
+      return;
+    }
+    // biome-ignore lint/complexity/noVoid: a page landing changes the rows without moving the cursor's truthiness
+    void rows.length;
+    const frame = requestAnimationFrame(() => askOlder());
+    return () => cancelAnimationFrame(frame);
+  });
+
+  /**
+   * How tall the strip before the list stands (see the markup): the page
+   * being read, or the one that could not be. The list starts under it, and
+   * virtua is told so (`startMargin`).
+   */
+  let olderRoom = $state(0);
+  /**
+   * THE STRIP BEFORE THE LIST MOVES NOTHING. It comes and goes with the
+   * cursor, and grows when a read fails — above every row, where a change of
+   * height would push the whole conversation by as much. So the view moves
+   * with it, in the resize itself, after the frame's layout and before its
+   * paint: the rows on screen stand where they stood. At the tail the pin
+   * does the same from the other end.
+   */
+  function keepPlace(node: HTMLElement) {
+    const watch = new ResizeObserver(() => {
+      const grew = node.offsetHeight - olderRoom;
+      if (grew === 0) {
+        return;
+      }
+      olderRoom = node.offsetHeight;
+      flushSync();
+      if (!(landed && scroller) || jumping) {
+        return;
+      }
+      if (atBottom) {
+        pinBottom();
+        return;
+      }
+      scroller.scrollTop += grew;
+      lastWrite = scroller.scrollTop;
+    });
+    watch.observe(node);
+    return () => watch.disconnect();
+  }
+
   /** The scroll height the last scroll event saw — what tells a clamp from a reader. */
   let lastHeight = 0;
   /**
@@ -1530,6 +1638,9 @@
     if (!shown) {
       return;
     }
+    // Wherever the view now is, and whoever moved it: near the first rows
+    // held, the page before them is asked for.
+    askOlder(lastTop - listStart);
     if (jumping) {
       jumpScrolled(scroller);
       return;
@@ -1927,31 +2038,46 @@
    * frame later — any change to the rows in between starts the wait again —
    * so the frame that shows the rows is never the frame that moved them. The
    * server's render is unpainted too: it is the same rows, at estimated
-   * offsets. It waits out a history read in flight as well. What arrives
-   * after the reveal — the read replacing the server's tail, older chunks in
-   * front — keeps the rows on screen measured and in place: see `frontOnly`
-   * and the two steps in `build`.
+   * offsets. It waits for the newest page and for nothing older — with one
+   * exception, the reader's own place (below). What arrives after the reveal
+   * — the read replacing the server's tail, an older page in front — keeps
+   * the rows on screen measured and in place: see `frontOnly` and the two
+   * steps in `build`.
    */
   $effect(() => {
     const node = scroller;
     const container = listing?.firstElementChild;
-    // A read of the history under way is about to put rows in front of
-    // these: drawn first, they would be moved under the reader. virtua
-    // renders the indexes it was showing for a frame after such a shift,
-    // rows far above the viewport now, and measures them there. That counts
-    // the store's own read when these rows are the server's stand-in for it
-    // (see `SessionPane`): the store's session replaces them the moment its
-    // read is in, with the turn in flight on the end.
+    // The newest page under way replaces these rows when they are the
+    // server's stand-in for it (see `SessionPane`): the store's session takes
+    // their place the moment its read is in, with the turn in flight on the
+    // end. Drawn first, they would be moved under the reader.
     const store = cawco.session(session.instanceId);
 
     const reading =
-      session.loading ||
-      session.hydrating ||
-      (store !== null &&
-        store !== session &&
-        (store.loading || store.hydrating));
+      session.loading || (store !== null && store !== session && store.loading);
 
     if (shown || reading || !(landed && node && container)) {
+      return;
+    }
+    // THE READER'S PLACE IS READ BACK TO. A place kept at a row older than
+    // the rows held (a reload far up: the first rows are the newest page) is
+    // not given up for the tail: the pages before them are read, one at a
+    // time, until one holds that row or the conversation's start is in hand,
+    // and the list is drawn there. A page that cannot be read ends the
+    // search: the list is drawn with what it holds, the failure said at its
+    // top.
+    const own = paged();
+    if (
+      own?.cursor &&
+      !own.olderFault &&
+      resume &&
+      !resume.tail &&
+      anchorIndex() < 0
+    ) {
+      if (!own.hydrating) {
+        // biome-ignore lint/complexity/noVoid: fire-and-forget; the page landing re-runs this reveal
+        void untrack(() => readOlderPage(own.instanceId));
+      }
       return;
     }
     let frame: number | null = null;
@@ -2061,7 +2187,7 @@
     }
     if (!landed) {
       // A place the rows do not hold yet — a reload's first rows are the
-      // server's tail — is looked for again once the history read is in.
+      // newest page — is read back to before the list is drawn (the reveal).
       if (anchorIndex() >= 0) {
         restore();
       } else {
@@ -2564,8 +2690,9 @@
     // speaking about a surface the reader cannot see, and its rows are frozen
     // anyway. Both branches still SEED `announced`, so coming back to a tab
     // announces what arrived while it was away exactly once, rather than
-    // re-reading the whole transcript.
-    if (!(landed && active)) {
+    // re-reading the whole transcript. An older page put in front is history
+    // too, however long the pane has been read.
+    if (!(landed && active) || built.shifted) {
       for (const r of rows) {
         announced.add(announceKeyOf(r));
       }
@@ -2700,7 +2827,8 @@
   <!-- Empty is what is drawn: a conversation whose one row is folding away
        as its retry comes in is not empty for the frame between the two, and
        the empty state shown there pushed the fold 53px down. -->
-  {#if session.loading && renderedRows.length === 0}
+  {#if (session.loading || session.cursor !== null) &&
+    renderedRows.length === 0}
     <p class="empty">Loading transcript…</p>
   {:else if renderedRows.length === 0}
     <!-- Only once the read has said the conversation is empty, fading in
@@ -2714,6 +2842,30 @@
       />
     </div>
   {/if}
+
+  <!-- What is before the first row, while there is a page before it: the
+       transcript's loading row, or — that page could not be read — why, and
+       the way to ask for it again. The reader sees it only at the very top
+       of the rows held; a page is asked for a viewport before that. -->
+  <div class="older" {@attach keepPlace}>
+    {#if renderedRows.length > 0 && session.olderFault}
+      <p class="empty">
+        {session.olderFault.reason === "offline"
+          ? "This machine is offline"
+          : "The turns before these couldn't be read"}:
+        {session.olderFault.message}
+      </p>
+      <Button
+        onclick={() => readOlderPage(session.instanceId)}
+        size="sm"
+        variant="outline"
+      >
+        Try again
+      </Button>
+    {:else if renderedRows.length > 0 && session.cursor !== null}
+      <p class="empty">Loading transcript…</p>
+    {/if}
+  </div>
 
   <!-- The list's own box: what the pin reads virtua's container off. -->
   <div
@@ -2733,7 +2885,7 @@
       scrollRef={scroller}
       shift={built.shifted}
       {ssrCount}
-      startMargin={spare}
+      startMargin={olderRoom + spare}
       bind:this={
         () => list,
         (value) => {
@@ -2859,6 +3011,11 @@
   .tr {
     flex: 1 1 auto;
     overflow-y: auto;
+    /* The view is kept in place by this component alone (`keepPlace`, and
+       virtua inside its list). A browser that anchors scrolling moved it a
+       second time for the strip before the list, by the strip's height; one
+       that does not (WebKit) never did. */
+    overflow-anchor: none;
     /* asymmetric content padding is the DESIGN.md ledger signature:
        inline start --space-7 (25), inline end --space-6 (21). */
     padding-block-start: 0;
@@ -2886,6 +3043,12 @@
     font-weight: var(--weight-body);
     color: var(--ink-muted);
     padding-block: var(--space-5);
+  }
+
+  /* The failed line's button stands off the first row by the line's own
+     block padding. */
+  .older:has(> :global(button)) {
+    padding-block-end: var(--space-5);
   }
 
   .top-dock {
