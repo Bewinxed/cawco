@@ -897,8 +897,9 @@
   <Sidebar.Content class="gap-0 py-1" {@attach reflow()} {@attach scroller}>
     <!-- On a wide screen the home is the sidebar: what needs you, what is
          working, what finished, and the rest, while the transcripts take the
-         screen. On the narrow line the home is the session surface's own
-         page instead, and the rail is only navigation. -->
+         screen. On the narrow line the same home leads the sheet, above the
+         projects; with no session open the session surface draws its own
+         page of it too. -->
     <!-- The app's places, first: one compact block, no heading over it. -->
     <Sidebar.Group class={GROUP}>
       <Sidebar.Menu aria-label="Places" class={MENU} {@attach highlight(PILL)}>
@@ -950,9 +951,7 @@
         </Sidebar.MenuItem>
       </Sidebar.Menu>
     </Sidebar.Group>
-    {#if !narrow}
-      <Home variant="rail" />
-    {/if}
+    <Home variant="rail" />
 
     <!-- The groups built from the fleet come in together, once every read
          they need is in (`stage` 3): Projects straight under the home, then
