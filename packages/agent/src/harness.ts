@@ -31,6 +31,9 @@ import type {
   SpawnPayload,
 } from "@cawco/core";
 
+/** Known surviving custody requires an operator decision, not another probe or a replacement. */
+export class HarnessRecoveryRefused extends Error {}
+
 /** Everything a harness needs from the supervisor while it owns a session. */
 export interface HarnessContext {
   /**

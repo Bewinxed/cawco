@@ -98,6 +98,7 @@ import {
 import { workspacesDir } from "../boundary";
 import { delegationHubUrl, harnessMcpUrl } from "../delegation";
 import type { Harness, HarnessContext, HarnessSession } from "../harness";
+import { HarnessRecoveryRefused } from "../harness";
 import { isMachineAgent } from "../machine-agent";
 import { OPENCODE_SERVER_PROC_ID } from "../proc-id";
 import { ensureSessiond, SessiondClient } from "../sessiond-client";
@@ -5050,6 +5051,9 @@ export class OpencodeHarness implements Harness {
         // biome-ignore lint/performance/noAwaitInLoops: unresolved custody is retried, never converted to spawn failure
         return await this.#reattachOnce(spec, ctx, wave.round);
       } catch (error) {
+        if (error instanceof HarnessRecoveryRefused) {
+          throw error;
+        }
         const delay = Math.min(250 * 2 ** Math.min(attempt, 5), 5000);
         console.warn(
           `[opencode] recovery ${ctx.instanceId} waiting; retry in ${delay}ms: ${errorText(error)}`
@@ -5102,7 +5106,9 @@ export class OpencodeHarness implements Harness {
       );
       const busy = states.filter((state) => state.running);
       if (busy.length > 1) {
-        throw new Error("OpenCode session is running in multiple generations.");
+        throw new HarnessRecoveryRefused(
+          `OpenCode session ${resume.sessionKey} is running in multiple generations: ${busy.map(({ identity: owner }) => `${owner.procId}/${owner.pid} at ${owner.url}`).join(", ")}. Interrupt the duplicate runner explicitly before resuming; no runner was replaced.`
+        );
       }
       if (busy.length === 0) {
         for (const generation of states) {
@@ -5485,7 +5491,9 @@ export class OpencodeHarness implements Harness {
         )
       );
       if (result.error || !result.data) {
-        return [];
+        throw new Error(
+          `OpenCode session catalog unreadable: ${errorText(result.error)}`
+        );
       }
       // Subagent children do not belong in the rail.
       return (result.data as Session[])
@@ -5507,29 +5515,35 @@ export class OpencodeHarness implements Harness {
       )
     );
     if (projects.error || !projects.data) {
-      return [];
+      throw new Error(
+        `OpenCode project catalog unreadable: ${errorText(projects.error)}`
+      );
     }
     const lists = await Promise.all([
-      client.session
-        .list({}, { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) })
-        .then((res) => (res.error || !res.data ? [] : (res.data as Session[])))
-        .catch(() => [] as Session[]),
+      reached(
+        client.session.list(
+          {},
+          { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
+        )
+      ),
       ...(projects.data as Project[]).map((project) =>
-        client.session
-          .list(
+        reached(
+          client.session.list(
             { directory: project.worktree },
             { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
           )
-          .then((res) =>
-            res.error || !res.data ? [] : (res.data as Session[])
-          )
-          .catch(() => [] as Session[])
+        )
       ),
     ]);
     const seen = new Set<string>();
     const merged: Session[] = [];
     for (const list of lists) {
-      for (const session of list) {
+      if (list.error || !list.data) {
+        throw new Error(
+          `OpenCode session catalog unreadable: ${errorText(list.error)}`
+        );
+      }
+      for (const session of list.data) {
         if (session.parentID || seen.has(session.id)) {
           continue;
         }

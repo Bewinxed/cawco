@@ -68,6 +68,7 @@ import { harnessMcpUrl } from "./delegation";
 import { DEPLOY_BRANCH } from "./deploy";
 import { expandHome, runFs } from "./fs";
 import type { Harness, HarnessContext, HarnessSession } from "./harness";
+import { HarnessRecoveryRefused } from "./harness";
 import { harnesses, harness as harnessOf } from "./harnesses";
 import { generateImage } from "./image-generation";
 import { isMachineAgent } from "./machine-agent";
@@ -1472,7 +1473,20 @@ export class SessionSupervisor {
           error: message,
         });
       }
-      this.#fail(instanceId, error, payload.processGeneration);
+      if (error instanceof HarnessRecoveryRefused) {
+        // Surviving runners are positively known. Refused custody is neither
+        // a dead conversation nor permission to replace either runner.
+        this.#failures.set(instanceId, message);
+        this.sink({
+          kind: "error",
+          instanceId,
+          processGeneration: payload.processGeneration,
+          verb: "register",
+          message,
+        });
+      } else {
+        this.#fail(instanceId, error, payload.processGeneration);
+      }
     }
   }
 

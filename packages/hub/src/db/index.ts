@@ -2193,9 +2193,14 @@ const make = (path: string): DbShape => {
         .all();
 
       const catalog = resumable && new Set(resumable);
-      for (const row of orphans) {
+      const settled = orphans.map((row) => {
         const resumes =
-          !catalog || (row.sessionId !== null && catalog.has(row.sessionId));
+          !catalog ||
+          (row.sessionId !== null &&
+            (row.harness === "opencode" || catalog.has(row.sessionId)));
+        // OpenCode's listing is a directory/project-filtered catalog, not a
+        // proof of absence. Only recovery's keyed session.get can decide that
+        // a recorded conversation is gone; a hub restart cannot infer it here.
         // A session that lost its process but kept its conversation is not
         // broken — it is asleep. It used to land in `error` carrying a marker
         // string that said so in prose, which made every rail draw a red row
@@ -2210,16 +2215,13 @@ const make = (path: string): DbShape => {
           )
           .where(eq(instances.id, row.id))
           .run();
-      }
+        return { row, resumes };
+      });
 
       // Last, the truth about when each of these sessions actually moved.
       dateStoredSessions(machineId, liveIds, resumableAt);
 
-      return orphans.map((row) => ({
-        row,
-        resumes:
-          !catalog || (row.sessionId !== null && catalog.has(row.sessionId)),
-      }));
+      return settled;
     },
     // Every 15 seconds, the machine says what it is actually carrying. This is
     // the only place `running` is minted from evidence rather than intent.
