@@ -46,6 +46,16 @@
   /** The kit trigger's props, once it is built. */
   let live = $state.raw<(() => TriggerProps) | null>(null);
 
+  /**
+   * The kit trigger's props less its `tabindex: -1`: the trigger is the
+   * caller's row link, a normal Tab stop; the menu opens from the context
+   * menu key and Shift+F10 on it all the same.
+   */
+  const stops = (props: TriggerProps): TriggerProps => {
+    const { tabindex: _, ...rest } = props;
+    return rest;
+  };
+
   const ask = () => {
     asked = true;
   };
@@ -61,14 +71,13 @@
     "data-slot": "context-menu-trigger",
     "data-state": "closed",
     "data-context-menu-trigger": "",
-    tabindex: -1,
     style: "pointer-events: auto;",
     onpointerover: ask,
     onfocusin: ask,
   });
 </script>
 
-{@render trigger(live?.() ?? rest)}
+{@render trigger(live ? stops(live()) : rest)}
 {#if asked}
   <ContextMenu>
     <ContextMenuTrigger class={className}>
