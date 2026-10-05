@@ -8943,7 +8943,7 @@ export const createServer = (
           );
         }
         try {
-          await fleetMcp.complete(query.code, query.state);
+          await fleetMcp.complete(query.code, query.state, query.iss);
           return page(
             "Signed in for the whole fleet. You can close this tab.",
             true

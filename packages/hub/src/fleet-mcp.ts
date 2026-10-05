@@ -295,12 +295,26 @@ export class FleetMcp {
     };
   }
 
-  async complete(code: string, state: string): Promise<void> {
+  async complete(code: string, state: string, iss?: string): Promise<void> {
     // Consumed synchronously before the exchange, so concurrent callbacks cannot spend a code twice.
     const row = this.#db.takeMcpAuthorization(state);
     if (!(row?.client && row.pending)) {
       throw new Error(
         "This sign-in expired or was already completed. Start sign-in again."
+      );
+    }
+    // RFC 9207: a server that says it names itself on the redirect must be heard
+    // doing so, and as the one this sign-in started with.
+    if (
+      (
+        row.metadata as {
+          authorization_response_iss_parameter_supported?: boolean;
+        }
+      ).authorization_response_iss_parameter_supported === true &&
+      iss !== row.metadata.issuer
+    ) {
+      throw new Error(
+        "This sign-in came back from a different authorization server than it started with. Start sign-in again."
       );
     }
     let tokens: OAuthRow["tokens"];

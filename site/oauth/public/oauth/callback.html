@@ -55,6 +55,7 @@
   const q = new URLSearchParams(location.search);
   const code = q.get("code");
   const state = q.get("state");
+  const iss = q.get("iss");
   history.replaceState(null, "", location.pathname);
   const key = state ? "cawco-oauth:" + state : "";
   const TRUST = "cawco-oauth:trusted";
@@ -70,6 +71,7 @@
     const back = new URL("/api/fleet/mcp/oauth/callback", origin);
     back.searchParams.set("code", code);
     back.searchParams.set("state", state);
+    if (iss) back.searchParams.set("iss", iss);
     location.assign(back.href);
   };
   if (q.get("error")) {
