@@ -49,6 +49,7 @@ import type {
   SentMessage,
   SessionCredentialInstall,
   SessionCustody,
+  SessionHistory,
   SessionMessage,
   SessionPulse,
   SessionTooling,
@@ -76,6 +77,7 @@ import {
   BUCKET_MS,
   CLAUDE_CONVERSATION_GONE,
   CONTROL_CONTEXT_USAGE,
+  CONTROL_GET_SESSION_HISTORY,
   CONTROL_GET_SESSION_INFO,
   CONTROL_GET_SESSION_MESSAGES,
   CONTROL_GIT_CHANGES,
@@ -1399,9 +1401,17 @@ const userTurnText = (message: unknown): string | undefined => {
   }
   const outer = message as {
     type?: unknown;
+    compactSummary?: unknown;
+    parent_tool_use_id?: unknown;
+    origin?: { kind?: string };
     message?: { role?: unknown; content?: unknown };
   };
-  if (outer.type !== "user") {
+  if (
+    outer.type !== "user" ||
+    outer.compactSummary ||
+    outer.parent_tool_use_id ||
+    (outer.origin && outer.origin.kind !== "human")
+  ) {
     return undefined;
   }
   const content = outer.message?.content;
@@ -2549,7 +2559,7 @@ export const createServer = (
     newest: boolean,
     start: boolean
   ): { record: SendRecord }[] => {
-    const { lines, last } = linkEntries(instanceId, entries);
+    const { lines, last } = linkEntries(instanceId, entries, newest);
     if (instanceId) {
       if (newest && last && !anchors.has(instanceId)) {
         anchors.set(instanceId, last);
@@ -2596,7 +2606,8 @@ export const createServer = (
    */
   const linkEntries = (
     instanceId: string | undefined,
-    entries: SessionMessage[]
+    entries: SessionMessage[],
+    settle = true
   ): { lines: Map<string, SentMessageRow>; last: string | undefined } => {
     const sendsOf = sendFinder(instanceId, entries);
     const lines = new Map<string, SentMessageRow>();
@@ -2609,7 +2620,7 @@ export const createServer = (
         last = entry.uuid;
         failures = [];
       }
-      for (const send of linkEntry(entry, sendsOf(entry))) {
+      for (const send of linkEntry(entry, sendsOf(entry), settle)) {
         last = send.uuid;
         if (send.state === "failed" || send.state === "replaced") {
           failures.push(send.uuid);
@@ -2751,12 +2762,26 @@ export const createServer = (
    */
   const linkEntry = (
     entry: SessionMessage,
-    found: SentMessageRow[]
+    found: SentMessageRow[],
+    settle = true
   ): SentMessageRow[] => {
     if (found.length === 0) {
       return found;
     }
     entry.sends = found.map((send) => send.uuid);
+    if (!settle) {
+      return found.map((send) =>
+        send.body || found.length !== 1
+          ? send
+          : {
+              ...send,
+              body: {
+                type: "user",
+                message: entry.message as NeutralUserMessage["message"],
+              },
+            }
+      );
+    }
     return found.map((each) => {
       let send = each;
       if (!send.body && found.length === 1) {
@@ -6267,6 +6292,8 @@ export const createServer = (
         entries: [],
         records: recordMap(sendLines(row.id, [], true, true)),
         where,
+        cursor: null,
+        complete: true,
       };
     }
     return { where, cut: fork?.at, row };
@@ -6274,15 +6301,14 @@ export const createServer = (
 
   /** The stored entries under `where`, as its machine answers, or why it could not. */
   const storedEntries = async (
-    where: TranscriptWhere
-  ): Promise<
-    { entries: SessionMessage[] } | Extract<HistoryRead, { fault: string }>
-  > => {
+    where: TranscriptWhere,
+    before?: string
+  ): Promise<SessionHistory | Extract<HistoryRead, { fault: string }>> => {
     const { machineId } = where;
     const answer = await callAgent(
       machineId,
-      CONTROL_GET_SESSION_MESSAGES,
-      [where.sessionKey, { dir: where.cwd || undefined }],
+      CONTROL_GET_SESSION_HISTORY,
+      [where.sessionKey, { dir: where.cwd || undefined, before, limit: 200 }],
       READ_TIMEOUT_MS,
       where.harness as HarnessKind
     );
@@ -6302,16 +6328,22 @@ export const createServer = (
     if (!answer.ok) {
       return {
         fault: "failed",
-        message: answer.error ?? "the transcript could not be read",
+        message: `getSessionHistory failed: ${answer.error ?? "the agent has no display-history reader"}`,
       };
     }
-    // A session the machine has never stored answers with nothing: an empty
-    // transcript, the same shape a brand new session has.
-    return {
-      entries: (Array.isArray(answer.result)
-        ? answer.result
-        : []) as SessionMessage[],
-    };
+    const history = answer.result as SessionHistory | undefined;
+    if (
+      !(history && Array.isArray(history.entries)) ||
+      typeof history.complete !== "boolean" ||
+      !(history.cursor === null || typeof history.cursor === "string")
+    ) {
+      return {
+        fault: "failed",
+        message:
+          "getSessionHistory unavailable: agent did not return a display-history page",
+      };
+    }
+    return history;
   };
 
   /**
@@ -6321,7 +6353,9 @@ export const createServer = (
    */
   const readHistory = async (
     instanceId: string,
-    at?: string
+    at?: string,
+    before?: string
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one display read preserves rewind, send provenance and keep-alive suppression
   ): Promise<HistoryRead> => {
     const found = await historyWhere(instanceId);
     if ("entries" in found || "fault" in found) {
@@ -6329,21 +6363,40 @@ export const createServer = (
     }
     const { where, row } = found;
     const cut = at ?? found.cut;
-    const answer = await storedEntries(where);
+    let answer = await storedEntries(where, before);
     if ("fault" in answer) {
       return answer;
     }
     let transcript = answer.entries;
-    if (cut) {
-      const end = transcript.findIndex((entry) => entry.uuid === cut);
-      if (end >= 0) {
-        transcript = transcript.slice(0, end + 1);
+    if (cut && before === undefined) {
+      while (
+        !(transcript.some((entry) => entry.uuid === cut) || answer.complete) &&
+        answer.cursor
+      ) {
+        // biome-ignore lint/performance/noAwaitInLoops: a rewind is found by following the source's opaque cursors
+        const prior = await storedEntries(where, answer.cursor);
+        if ("fault" in prior) {
+          return prior;
+        }
+        answer = prior;
+        transcript = [...prior.entries, ...transcript];
       }
+      const end = transcript.findIndex((entry) => entry.uuid === cut);
+      if (end < 0) {
+        return {
+          fault: "failed",
+          message:
+            "getSessionHistory: rewind point is not on the conversation line",
+        };
+      }
+      transcript = transcript.slice(0, end + 1);
     }
     // Pictures as references to the media store, before a send's record is
     // filled from one of these entries.
     externalizeImages(transcript);
-    const records = recordMap(sendLines(row?.id, transcript, true, true));
+    const records = recordMap(
+      sendLines(row?.id, transcript, before === undefined, answer.complete)
+    );
     // A stored ping and its answer are hidden together, also after hub restart.
     // A new main-loop user prompt closes that range; tool results do not.
     let quiet = false;
@@ -6365,9 +6418,16 @@ export const createServer = (
       }
     }
     if (row) {
-      readRowHistory(row, transcript);
+      readRowHistory(row, transcript, answer.complete, before === undefined);
     }
-    return { entries: transcript, records, where };
+    return {
+      entries: transcript,
+      records,
+      where,
+      cursor: answer.cursor,
+      complete: answer.complete,
+      ...(answer.incomplete ? { incomplete: answer.incomplete } : {}),
+    };
   };
 
   /**
@@ -6378,9 +6438,11 @@ export const createServer = (
    */
   const readRowHistory = (
     row: InstanceRow,
-    transcript: SessionMessage[]
+    transcript: SessionMessage[],
+    complete: boolean,
+    newest: boolean
   ): void => {
-    if (!(row.title || row.derivedTitle)) {
+    if (complete && !(row.title || row.derivedTitle)) {
       const first = firstTurnOf(transcript);
       if (first) {
         nameFromFirstTurn(row.machineId, row.id, first);
@@ -6388,6 +6450,7 @@ export const createServer = (
     }
     const held = heldSessions.get(row.id);
     if (
+      newest &&
       held &&
       registry.agent(row.machineId) &&
       (row.status === "sleeping" || row.status === "error")
@@ -7839,19 +7902,35 @@ export const createServer = (
                 return { id: ask.id, title: null };
               }
 
-              const answer = await callAgent(
-                machineId,
-                CONTROL_GET_SESSION_MESSAGES,
-                [sessionKey, { dir: cwd }],
-                READ_TIMEOUT_MS,
-                harness
-              );
-              if (answer === "offline" || answer === "timeout" || !answer.ok) {
-                return { id: ask.id, title: null };
+              let first: string | undefined;
+              let cursor: string | undefined;
+              for (;;) {
+                // biome-ignore lint/performance/noAwaitInLoops: a title names the first human turn, not the partial newest segment
+                const answer = await storedEntries(
+                  {
+                    machineId,
+                    sessionKey,
+                    cwd: cwd ?? "",
+                    harness: harness ?? "claude",
+                  },
+                  cursor
+                );
+                if ("fault" in answer) {
+                  return { id: ask.id, title: null };
+                }
+                first = firstTurnOf(answer.entries) ?? first;
+                if (answer.complete) {
+                  break;
+                }
+                if (
+                  !answer.cursor ||
+                  answer.cursor === cursor ||
+                  answer.incomplete
+                ) {
+                  return { id: ask.id, title: null };
+                }
+                ({ cursor } = answer);
               }
-              const first = firstTurnOf(
-                Array.isArray(answer.result) ? answer.result : []
-              );
               if (!first) {
                 return { id: ask.id, title: null };
               }

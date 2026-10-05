@@ -359,8 +359,18 @@ export class TranscriptBuilder {
     // The `/` menu from the newest `init` read back: the live handler is
     // otherwise the only thing that sets it.
     const init = rows.findLast((row) => row.type === "system.init");
+    const compact = rows.findLast(
+      (row) => row.type === "system.compact_boundary"
+    );
     this.facts = {
       ...this.facts,
+      lastCompaction: compact
+        ? {
+            at: Date.parse(compact.timestamp ?? now),
+            preTokens: compact.metadata?.preTokens ?? 0,
+            trigger: compact.metadata?.trigger === "manual" ? "manual" : "auto",
+          }
+        : null,
       commands: {
         ...this.facts.commands,
         names: init?.metadata?.slashCommands ?? this.facts.commands.names,
@@ -369,6 +379,43 @@ export class TranscriptBuilder {
       initialized: this.facts.initialized || entries.length > 0,
     };
     this.tail = { ...blankTail(), busy: this.tail.busy };
+  }
+
+  /** Settled history joins in front. No live fold, events, tail or facts move. */
+  prepend(
+    entries: SessionMessage[],
+    records: Record<string, SendRecord>
+  ): void {
+    const older = new TranscriptBuilder(this.instanceId, this.now);
+    older.seed(entries, records);
+    const rows = older.rows.filter((row) => !this.rowIds.has(row.id));
+    this.rows = [...rows, ...this.rows];
+    for (const row of rows) {
+      this.rowIds.add(row.id);
+    }
+    const held = new Set(this.placed.map((block) => block.id));
+    this.placed = [
+      ...older.placed.filter((block) => !held.has(block.id)),
+      ...this.placed,
+    ];
+    for (const [id, record] of Object.entries(records)) {
+      this.records[id] ??= record;
+    }
+    for (const id of older.seeded) {
+      this.seeded.add(id);
+    }
+    for (const [id, branch] of older.branches) {
+      const known = this.branches.get(id);
+      if (known) {
+        const blocks = new Set(known.blocks.map((block) => block.id));
+        known.blocks = [
+          ...branch.blocks.filter((block) => !blocks.has(block.id)),
+          ...known.blocks,
+        ];
+      } else {
+        this.branches.set(id, branch);
+      }
+    }
   }
 
   /* ------------------------------------------------------------- live — */
@@ -732,10 +779,18 @@ export class TranscriptBuilder {
     const start = Math.max(0, end - span);
     for (let at = start; at >= Math.max(0, start - span); at -= 1) {
       if (at === 0 || this.opensPage(at)) {
-        return at;
+        return this.pairStart(at);
       }
     }
-    return start;
+    return this.pairStart(start);
+  }
+
+  private pairStart(start: number): number {
+    return start > 0 &&
+      this.placed[start]?.metadata?.noteKind === "Session continued" &&
+      this.placed[start - 1]?.type === "system.compact_boundary"
+      ? start - 1
+      : start;
   }
 
   /**

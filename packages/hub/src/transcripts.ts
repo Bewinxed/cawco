@@ -33,6 +33,9 @@ export type HistoryRead =
       entries: SessionMessage[];
       records: Record<string, SendRecord>;
       where: TranscriptWhere;
+      cursor: string | null;
+      complete: boolean;
+      incomplete?: string;
     }
   | HistoryFault;
 
@@ -55,7 +58,8 @@ export interface TranscriptPorts {
   /** The session's whole stored transcript and the records of its sends, cut after `at` when given. */
   readonly readHistory: (
     instanceId: string,
-    at?: string
+    at?: string,
+    before?: string
   ) => Promise<HistoryRead>;
   /** One frame onto the session's Ledger stream. */
   readonly sequence: (instanceId: string, frame: SessionStreamFrame) => void;
@@ -82,9 +86,17 @@ interface Entry {
    */
   build: string | undefined;
   builder: TranscriptBuilder;
+  complete: boolean;
+  cursor: string | null;
+  /** Only a block served as a cursor in this generation may request an older page. */
+  cursors: Set<string>;
+  cut?: string;
+  generation: number;
   held: TranscriptPayload[];
+  incomplete?: string;
   /** The read in flight, while one is; frames meanwhile wait in `held`. */
   loading: Promise<HistoryRead> | null;
+  older: Promise<HistoryRead> | null;
   usedAt: number;
   where: TranscriptWhere | null;
 }
@@ -166,9 +178,16 @@ export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
     reset: boolean,
     at?: string
   ): Promise<HistoryRead> => {
+    entry.generation += 1;
+    entry.cursors.clear();
+    entry.cut = at;
+    const { generation } = entry;
     const loading = ports.readHistory(instanceId, at).then(
       (read) => {
-        if (entries.get(instanceId) !== entry) {
+        if (
+          entries.get(instanceId) !== entry ||
+          entry.generation !== generation
+        ) {
           return read;
         }
         entry.loading = null;
@@ -177,6 +196,9 @@ export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
           return read;
         }
         entry.where = read.where;
+        entry.cursor = read.cursor;
+        entry.complete = read.complete;
+        entry.incomplete = read.incomplete;
         entry.build = ports.build(read.where.machineId);
         entry.builder.seed(read.entries, read.records);
         emit(instanceId, [
@@ -226,6 +248,11 @@ export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
       held: [],
       where: null,
       usedAt: Date.now(),
+      cursor: null,
+      complete: false,
+      older: null,
+      generation: 0,
+      cursors: new Set(),
     };
     entries.set(instanceId, entry);
     load(instanceId, entry, false).catch((error) =>
@@ -243,6 +270,7 @@ export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
     emit(instanceId, fold(entry, payload));
   };
 
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: paging is one generation-checked transaction across live and preceding storage segments
   const page: TranscriptsShape["page"] = async (instanceId, limit, before) => {
     const entry = entryFor(instanceId);
     if (entry.loading) {
@@ -251,11 +279,79 @@ export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
         return read;
       }
     }
-    // Read and stamped in one tick: no frame can fold in between, so the page
-    // is exactly the transcript at `seq`.
-    const built = entry.builder.page(limit ?? TRANSCRIPT_PAGE, before);
+    const { generation } = entry;
+    if (before !== undefined && !entry.cursors.has(before)) {
+      return { gone: before };
+    }
+    let built = entry.builder.page(limit ?? TRANSCRIPT_PAGE, before);
     if (!built) {
       return { gone: before ?? "" };
+    }
+    // A stored segment can map to no visible blocks; keep reading until a page
+    // makes backward progress or storage honestly says why it cannot.
+    while (before !== undefined && built.cursor === null && !entry.complete) {
+      if (
+        !entry.cursor ||
+        (entry.incomplete && entry.builder.whole().blocks[0]?.id === before)
+      ) {
+        return {
+          fault: "failed",
+          message:
+            entry.incomplete ??
+            "History incomplete: the source returned no preceding cursor",
+        };
+      }
+      if (!entry.older) {
+        const { cursor } = entry;
+        entry.older = ports
+          .readHistory(instanceId, entry.cut, cursor)
+          .then((read) => {
+            if (
+              !("fault" in read) &&
+              entries.get(instanceId) === entry &&
+              entry.generation === generation
+            ) {
+              if (read.cursor === cursor && !read.complete) {
+                return {
+                  fault: "failed" as const,
+                  message: "History cursor did not advance",
+                };
+              }
+              entry.builder.prepend(read.entries, read.records);
+              entry.cursor = read.cursor;
+              entry.complete = read.complete;
+              entry.incomplete = read.incomplete;
+            }
+            return read;
+          })
+          .finally(() => {
+            entry.older = null;
+          });
+      }
+      // biome-ignore lint/performance/noAwaitInLoops: each preceding segment supplies the next storage cursor
+      const prior = await entry.older;
+      if (
+        entry.generation !== generation ||
+        entries.get(instanceId) !== entry
+      ) {
+        return { gone: before };
+      }
+      if ("fault" in prior) {
+        return prior;
+      }
+      built = entry.builder.page(limit ?? TRANSCRIPT_PAGE, before);
+      if (!built) {
+        return { gone: before };
+      }
+    }
+    // Read and stamped in one tick: no frame can fold in between, so the page
+    // is exactly the transcript at `seq`.
+    if (built.cursor === null && !entry.complete) {
+      built.cursor =
+        built.blocks[0]?.id ?? entry.builder.whole().blocks[0]?.id ?? null;
+    }
+    if (built.cursor) {
+      entry.cursors.add(built.cursor);
     }
     return {
       ...built,
@@ -271,7 +367,7 @@ export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
 
   const reread = (instanceId: string, at?: string): void => {
     const entry = entries.get(instanceId);
-    if (!entry || entry.loading) {
+    if (!entry) {
       return;
     }
     load(instanceId, entry, true, at).catch((error) =>
