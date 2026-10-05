@@ -297,7 +297,9 @@
   const editable = $derived(offered.edit === "restore");
   const whoNote = $derived.by(() => {
     if (ghost) {
-      return "sending…";
+      return commandRecord(message.id)?.waiting
+        ? "waiting for hub"
+        : "sending…";
     }
     if (failed) {
       return "not sent";

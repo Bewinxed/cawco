@@ -109,6 +109,7 @@ export interface CommandRecord {
   commandId: string;
   /** The stream-dialect local half still owed an outcome; see {@link StreamEffects}. */
   effects?: StreamEffects;
+  envelope?: CommandEnvelope;
   kind: CommandKind;
   outcome?: CommandAck["outcome"];
   reason?: string;
@@ -129,6 +130,8 @@ export interface CommandRecord {
    * guess read off the reason string.
    */
   undelivered?: boolean;
+  /** Retained in this tab until the hub can take it. */
+  waiting?: boolean;
 }
 
 /** Everything the stream half of the store keeps. Plain data, so a runes module can `$state` it. */
@@ -367,6 +370,10 @@ export function noteDisconnect(
     // Record-aware: a send already `accepted` was handed over before the socket
     // died and is not the connection's to take back.
     if (isSettled(record)) {
+      continue;
+    }
+    if (record.kind === "send") {
+      record.waiting = true;
       continue;
     }
     // Through advanceStage, not a raw write: a dying socket is a settling like
@@ -660,6 +667,7 @@ function advanceStage(
     return false;
   }
   record.stage = stage;
+  record.waiting = false;
   record.changedAt = now;
   if (reason !== undefined) {
     record.reason = reason;
@@ -675,6 +683,9 @@ function advanceStage(
   // before the call is what keeps the hook to exactly one run — a later
   // `applied` on a send that already settled at `accepted` finds nothing left
   // to fire.
+  if (isSettled(record)) {
+    record.envelope = undefined;
+  }
   if (record.effects && isSettled(record)) {
     const { settled } = record.effects;
     record.effects = undefined;
@@ -757,6 +768,9 @@ export function submitCommand(
   // send, so a dispatch that fails synchronously still settles it (the
   // rollback below the failure).
   record.effects = submission.streamEffects;
+  if (kind === "send") {
+    record.envelope = envelope;
+  }
   submission.streamEffects?.submitted?.();
   // Through {@link dispatch}, so a socket that shuts between the readiness
   // check and the write is a refusal wearing its own exception rather than a
@@ -767,10 +781,31 @@ export function submitCommand(
     // than inferring from the wording of a reason: it is what lets a retry
     // be offered as plainly safe instead of as a possible duplicate.
     record.undelivered = true;
-    advanceStage(record, "failed", now, refusal, host);
+    if (kind === "send") {
+      record.waiting = true;
+    } else {
+      advanceStage(record, "failed", now, refusal, host);
+    }
   }
   sweepCommands(state, now, host);
   return commandId;
+}
+
+/** Replays retained sends under their original ids, oldest first. */
+export function resumePendingSends(state: StreamState, host: StreamHost): void {
+  const pending = Object.values(state.commands)
+    .filter((record) => record.envelope && !isSettled(record))
+    .sort((a, b) => a.at - b.at);
+  for (const record of pending) {
+    const refusal = dispatch(host, record.envelope as CommandEnvelope);
+    record.waiting = refusal !== null;
+    if (refusal !== null) {
+      break;
+    }
+    record.undelivered = undefined;
+    record.changedAt = host.now();
+  }
+  armCommandSweep(state, host);
 }
 
 const messageOf = (error: unknown): string =>
@@ -874,7 +909,15 @@ export function sweepCommands(
     // here would retro-declare a message that landed a failure — visibly, once
     // the transcript renders the send's own record.
     if (!isSettled(record)) {
-      if (now - record.at >= COMMAND_ACK_TIMEOUT_MS) {
+      if (record.waiting) {
+        continue;
+      }
+      if (now - record.changedAt >= COMMAND_ACK_TIMEOUT_MS) {
+        if (record.kind === "send" && host) {
+          record.waiting = true;
+          resumePendingSends(state, host);
+          continue;
+        }
         advanceStage(
           record,
           "failed",
@@ -917,10 +960,10 @@ export function sweepCommands(
 function nextAckDeadline(state: StreamState): number | null {
   let due: number | null = null;
   for (const record of Object.values(state.commands)) {
-    if (isSettled(record)) {
+    if (isSettled(record) || record.waiting) {
       continue;
     }
-    const deadline = record.at + COMMAND_ACK_TIMEOUT_MS;
+    const deadline = record.changedAt + COMMAND_ACK_TIMEOUT_MS;
     if (due === null || deadline < due) {
       due = deadline;
     }

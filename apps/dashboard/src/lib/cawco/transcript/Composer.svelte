@@ -940,6 +940,9 @@
   function noteCaret(event: Event): void {
     caret = (event.currentTarget as HTMLTextAreaElement).selectionStart ?? 0;
     dismissed = false;
+    if (event.type === "input") {
+      sendBlock = "";
+    }
   }
 
   /** Puts the chosen row where the token was, with a space after it. */
@@ -969,15 +972,21 @@
     highlight = entries[next].id;
   }
 
+  let sendBlock = $state("");
+  const sendNotice = $derived(sendError || sendBlock);
+
   function submit(
     via: (text: string, extras: SendExtras, id: string) => void = onsubmit
   ): void {
-    // Nothing to send, the last one is still unanswered, or a swipe is
-    // still carrying the conversation. The draft is left exactly as it is —
-    // a refused send must never eat what was typed.
-    if (!draft.hasContent || sending || held) {
+    if (held) {
+      sendBlock = "Finish switching conversations before sending.";
       return;
     }
+    if (!draft.hasContent) {
+      sendBlock = "Write a message before sending.";
+      return;
+    }
+    sendBlock = "";
     // The text leaves the field for the one row it becomes (motion/share),
     // keyed by the id the message is sent under. The field is measured
     // before it redraws empty.
@@ -1052,6 +1061,7 @@
 
   function onaction(): void {
     if (held) {
+      submit();
       return;
     }
     if (busy) {
@@ -1317,8 +1327,8 @@
     {/if}
 
     <!-- A send that failed says so right over the field it left. -->
-    {#if sendError}
-      <p class="send-error" role="alert" transition:unfold>{sendError}</p>
+    {#if sendNotice}
+      <p class="send-error" role="alert" transition:unfold>{sendNotice}</p>
     {/if}
 
     <form

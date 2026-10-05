@@ -104,6 +104,7 @@ import {
   handleStreamMessage,
   latestCommand,
   noteDisconnect,
+  resumePendingSends,
   SETTLED_COMMAND_LIMIT,
   SETTLED_COMMAND_TTL_MS,
   sessionCommands,
@@ -2878,6 +2879,9 @@ function pruneOutbox(): void {
   }
   for (const [commandId, entry] of sendOutbox) {
     const record = streamState.commands[commandId];
+    if (record?.stage === "submitted") {
+      continue;
+    }
     const stale = now - entry.at >= SETTLED_COMMAND_TTL_MS;
     // A MISSING record is not evidence of anything and must not be read as
     // custody. The entry is now written before the submit that creates the
@@ -2886,18 +2890,18 @@ function pruneOutbox(): void {
     // treating that as "the hub has it" deleted the payload the moment it was
     // stored. The absent-record case is covered by `stale` anyway: a record the
     // ledger has already forgotten is at least as old as the TTL below.
-    const taken = record
-      ? record.stage !== "submitted" && record.stage !== "failed"
-      : false;
+    const taken = record ? record.stage !== "failed" : false;
     if (stale || taken) {
       sendOutbox.delete(commandId);
     }
   }
   if (sendOutbox.size > SETTLED_COMMAND_LIMIT) {
-    const oldest = [...sendOutbox.entries()].sort((a, b) => a[1].at - b[1].at);
+    const oldest = [...sendOutbox.entries()]
+      .filter(([id]) => streamState.commands[id]?.stage !== "submitted")
+      .sort((a, b) => a[1].at - b[1].at);
     for (const [commandId] of oldest.slice(
       0,
-      sendOutbox.size - SETTLED_COMMAND_LIMIT
+      Math.max(0, oldest.length - SETTLED_COMMAND_LIMIT)
     )) {
       sendOutbox.delete(commandId);
     }
@@ -3497,6 +3501,7 @@ function connect(): void {
     // this dashboard the moment the socket dropped.
     lastSubscriptionKey = "";
     syncSubscriptions();
+    resumePendingSends(streamState, streamHost);
     // biome-ignore lint/complexity/noVoid: fire-and-forget — the toast shows itself when the served build is newer
     void checkDeployToast();
   };
@@ -3595,6 +3600,7 @@ export function ensureConnected(): void {
       readFleet();
       lastSubscriptionKey = "";
       syncSubscriptions();
+      resumePendingSends(streamState, streamHost);
     } else {
       state.status = "connecting";
     }

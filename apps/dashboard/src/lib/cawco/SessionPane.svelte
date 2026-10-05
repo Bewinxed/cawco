@@ -843,7 +843,8 @@
 
   /** Whether this session's last message is out of this tab but not yet taken. */
   const sending = $derived(
-    latestCommandFor(viewId, "send")?.stage === "submitted"
+    latestCommandFor(viewId, "send")?.stage === "submitted" &&
+      !latestCommandFor(viewId, "send")?.waiting
   );
 
   async function onsubmit(
@@ -859,9 +860,6 @@
       if (import.meta.env.DEV) {
         console.warn("composer rendered without a machine", viewId);
       }
-      return;
-    }
-    if (sending) {
       return;
     }
     // A message to a sleeping session wakes it on the hub, in the one path every
@@ -881,7 +879,7 @@
    * than guessed at. On an idle session it is exactly a send.
    */
   function oninterruptsend(text: string, extras: SendExtras, id: string): void {
-    if (!machineId || sending) {
+    if (!machineId) {
       return;
     }
     if (session?.busy) {
