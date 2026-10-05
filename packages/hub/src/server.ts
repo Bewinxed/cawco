@@ -108,6 +108,7 @@ import {
   INSTALL_SESSION_CREDENTIAL,
   isEffortLevel,
   LIVE_CREDENTIAL_ENROLLMENT_REFUSAL,
+  MCP_OAUTH_RETURN_PATH,
   MESSAGES_HELD,
   MESSAGES_READ,
   MESSAGES_STORED,
@@ -166,7 +167,7 @@ import { hashHookMaterial } from "./db";
 import { delegateTypesRoutes, makeDelegateTypes } from "./delegate-types";
 import { hubHttpUrl } from "./delegation-actions";
 import { createDelegationMcp } from "./delegation-mcp";
-import { FleetMcp, MCP_CALLBACK_PATH } from "./fleet-mcp";
+import { FleetMcp } from "./fleet-mcp";
 import { hidden } from "./hidden";
 import { joinRoutes } from "./join";
 import {
@@ -8911,7 +8912,7 @@ export const createServer = (
           try {
             return await fleetMcp.start(
               params.name,
-              `${origin.origin}${MCP_CALLBACK_PATH}`
+              `${origin.origin}${MCP_OAUTH_RETURN_PATH}`
             );
           } catch (error) {
             return status(
@@ -8923,40 +8924,28 @@ export const createServer = (
           }
         }
       )
-      .get(MCP_CALLBACK_PATH, async ({ query }) => {
-        const page = (text: string, ok: boolean) =>
-          new Response(
-            `<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><title>CawCo sign-in</title><body style="font:16px system-ui;margin:2rem;max-width:32rem"><p>${text.replace(/[&<>]/g, "")}</p><p><a href="/config/mcp">Back to CawCo</a></p>`,
-            {
-              status: ok ? 200 : 400,
-              headers: {
-                "Content-Type": "text/html; charset=utf-8",
-                "Cache-Control": "no-store",
-                "Referrer-Policy": "no-referrer",
-              },
-            }
-          );
-        if (!(query.code && query.state) || query.error) {
-          return page(
-            "Sign-in was not completed. Start sign-in again from Configure → MCP servers.",
-            false
-          );
+      .post(
+        "/api/fleet/mcp/oauth/complete",
+        {
+          body: t.Object({
+            code: t.String({ minLength: 1 }),
+            state: t.String({ minLength: 1 }),
+            iss: t.Optional(t.String()),
+          }),
+        },
+        async ({ body, status }) => {
+          try {
+            return await fleetMcp.complete(body.code, body.state, body.iss);
+          } catch (error) {
+            return status(
+              400,
+              error instanceof Error
+                ? error.message
+                : "Sign-in could not finish. Start sign-in again."
+            );
+          }
         }
-        try {
-          await fleetMcp.complete(query.code, query.state, query.iss);
-          return page(
-            "Signed in for the whole fleet. You can close this tab.",
-            true
-          );
-        } catch (error) {
-          return page(
-            error instanceof Error
-              ? error.message
-              : "Sign-in could not finish. Start sign-in again.",
-            false
-          );
-        }
-      })
+      )
       /**
        * Rules: standing instructions the hub enforces on the frame stream. The
        * shape is validated loosely here and strictly by `ruleProblem`, which is

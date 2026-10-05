@@ -752,7 +752,13 @@ export const fleetMcpOauth = sqliteTable("fleet_mcp_oauth", {
   client: text("client", { mode: "json" }).$type<OAuthClientInformationFull>(),
   tokens: text("tokens", { mode: "json" }).$type<OAuthTokens>(),
   expiresAt: timestamp("expires_at"),
+  /** The client the stored tokens were issued to; refreshing them must use that one. */
+  tokenClient: text("token_client", {
+    mode: "json",
+  }).$type<OAuthClientInformationFull>(),
   pending: text("pending", { mode: "json" }).$type<{
+    /** The client this sign-in started with, which is the one its code is exchanged by. */
+    client: OAuthClientInformationFull;
     redirectUri: string;
     verifier: string;
     state: string;

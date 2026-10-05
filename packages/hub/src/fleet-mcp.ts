@@ -11,8 +11,6 @@ import {
 import { LATEST_PROTOCOL_VERSION } from "@modelcontextprotocol/sdk/types.js";
 import type { DbShape } from "./db";
 
-/** Where the hub receives the authorization server's redirect, under the origin the signing-in browser reached the dashboard by. */
-export const MCP_CALLBACK_PATH = "/api/fleet/mcp/oauth/callback";
 const SHARED_CLIENT_ID = `${CAWCO_OAUTH_URL}/client.json`;
 const SHARED_REDIRECT = `${CAWCO_OAUTH_URL}/callback`;
 /** `via` says where the browser goes first: straight to the provider, or through CawCo's start page. */
@@ -283,6 +281,7 @@ export class FleetMcp {
       client,
       lastOpenedAt: new Date(),
       pending: {
+        client,
         redirectUri,
         state,
         verifier: codeVerifier,
@@ -295,10 +294,14 @@ export class FleetMcp {
     };
   }
 
-  async complete(code: string, state: string, iss?: string): Promise<void> {
+  async complete(
+    code: string,
+    state: string,
+    iss?: string
+  ): Promise<{ name: string }> {
     // Consumed synchronously before the exchange, so concurrent callbacks cannot spend a code twice.
     const row = this.#db.takeMcpAuthorization(state);
-    if (!(row?.client && row.pending)) {
+    if (!row?.pending) {
       throw new Error(
         "This sign-in expired or was already completed. Start sign-in again."
       );
@@ -321,7 +324,7 @@ export class FleetMcp {
     try {
       tokens = await exchangeAuthorization(row.issuer, {
         metadata: row.metadata,
-        clientInformation: row.client,
+        clientInformation: row.pending.client,
         authorizationCode: code,
         codeVerifier: row.pending.verifier,
         redirectUri: row.pending.redirectUri,
@@ -341,6 +344,7 @@ export class FleetMcp {
     this.#db.putMcpOauth({
       ...row,
       tokens,
+      tokenClient: row.pending.client,
       expiresAt:
         tokens.expires_in === undefined
           ? null
@@ -349,6 +353,7 @@ export class FleetMcp {
     });
     this.#db.setMcpAuth(row.name, "oauth");
     this.#changed();
+    return { name: row.name };
   }
 
   #refresh(row: OAuthRow): Promise<OAuthRow> {
@@ -365,12 +370,12 @@ export class FleetMcp {
 
   async #refreshToken(row: OAuthRow): Promise<OAuthRow> {
     try {
-      if (!(row.tokens?.refresh_token && row.client)) {
+      if (!(row.tokens?.refresh_token && row.tokenClient)) {
         throw new Error("No refresh token.");
       }
       const tokens = await refreshAuthorization(row.issuer, {
         metadata: row.metadata,
-        clientInformation: row.client,
+        clientInformation: row.tokenClient,
         refreshToken: row.tokens.refresh_token,
         resource: new URL(row.resource.resource),
       });

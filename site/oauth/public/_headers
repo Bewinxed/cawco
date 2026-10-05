@@ -1,9 +1,0 @@
-/oauth/client.json
-  Content-Type: application/json
-  Cache-Control: public, max-age=300
-/oauth/callback
-  Cache-Control: no-store
-  Referrer-Policy: no-referrer
-/oauth/start
-  Cache-Control: no-store
-  Referrer-Policy: no-referrer

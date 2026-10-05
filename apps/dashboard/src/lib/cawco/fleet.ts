@@ -311,6 +311,8 @@ export const catalogHost = (
  * string, so the body is the sentence; the status is the fallback for a hub
  * that fell over without one.
  */
+const TRAILING_STOPS = /\.+$/;
+
 async function said(response: Response): Promise<string> {
   const body = (await response.text()).trim();
   if (!body) {
@@ -346,7 +348,9 @@ async function send<T>(
 ): Promise<T> {
   const response = await fetch(url, init);
   if (!response.ok) {
-    throw new Error(`Could not ${attempt} — ${await said(response)}.`);
+    // The hub's own sentences end in a full stop; the one added here must not double it.
+    const reason = (await said(response)).replace(TRAILING_STOPS, "");
+    throw new Error(`Could not ${attempt} — ${reason}.`);
   }
   return (await response.json()) as T;
 }
@@ -432,6 +436,25 @@ export const signInToMcp = async (name: string): Promise<void> => {
     .replaceAll("=", "");
   window.location.assign(`${CAWCO_OAUTH_URL}/start#${hop}`);
 };
+
+/**
+ * Hands the provider's answer to the hub, which finishes the sign-in by
+ * exchanging the code. It answers with the server that is now signed in.
+ */
+export const completeMcpSignIn = (
+  code: string,
+  state: string,
+  iss: string | null
+): Promise<{ name: string }> =>
+  send(
+    "/api/fleet/mcp/oauth/complete",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code, state, ...(iss ? { iss } : {}) }),
+    },
+    "finish the sign-in"
+  );
 
 /**
  * What `/mcp auth [server]` means in a composer. Claude Code's own `/mcp` has

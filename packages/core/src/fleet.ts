@@ -89,6 +89,14 @@ export const CAWCO_MCP_CALLBACK_PORT = 43_879;
 export const CAWCO_OAUTH_URL = "https://cawco.dev/oauth";
 
 /**
+ * The dashboard page a sign-in is handed back to, on whatever address the
+ * person reaches their hub by. cawco.dev/oauth/callback sends the browser
+ * there, so site/src/oauth/handoff.ts names the same path; the site's build
+ * stops if the two differ.
+ */
+export const MCP_OAUTH_RETURN_PATH = "/oauth/mcp";
+
+/**
  * One linked plugin marketplace. `source` is whatever
  * `claude plugin marketplace add` accepts — `owner/repo`, a git URL, a
  * marketplace.json URL — passed through verbatim.
