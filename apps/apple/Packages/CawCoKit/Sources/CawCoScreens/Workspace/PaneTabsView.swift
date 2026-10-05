@@ -145,8 +145,18 @@ final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteraction
             for id in added { views[id]?.grow() }
         }
         choose(from: previous, to: next, animated: !still)
-        if let id = added.last, let view = views[id] { scroll.scrollRectToVisible(view.frame.insetBy(dx: -Self.flare, dy: 0), animated: !still) }
+        // A new tab, or a new choice by any route (a tap, a swipe landing): the strip shows it.
+        if !added.isEmpty || previous != next { reveal(added.last ?? next, animated: !still) }
     }
+
+    /// The one way a tab is brought into the strip: all of it, with the strip's edge room, scrolled only as far as it takes.
+    private func reveal(_ id: String?, animated: Bool) {
+        guard let id, let view = views[id] else { return }
+        scroll.scrollRectToVisible(view.frame.insetBy(dx: -Self.flare, dy: 0), animated: animated)
+    }
+
+    /// The tab a swipe is approaching, once the strip has gone to meet it.
+    private var approached: String?
 
     private func makeTab(_ id: String) -> TabView {
         let view = TabView(id: id)
@@ -228,6 +238,12 @@ final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteraction
     /// away from `toward`, whose sheet takes it on the side facing the chosen.
     func ride(toward: String?, fraction: Double) {
         guard let active, let here = order.firstIndex(of: active) else { return }
+        // The strip follows the swipe: the tab it is heading for is in view before it lands.
+        let heading = toward != active ? toward : nil
+        if heading != approached {
+            approached = heading
+            reveal(heading, animated: true)
+        }
         for (id, view) in views {
             if let toward, let there = order.firstIndex(of: toward), toward != active {
                 // TabItem.svelte `ride`: the chosen sheet keeps the side facing
