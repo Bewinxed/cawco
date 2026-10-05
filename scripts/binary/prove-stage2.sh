@@ -17,11 +17,14 @@ here=$(dirname "$(realpath "$0")")
 for need in cawco-1 cawco-2 cawco-3 keys/test-release-private.pem keys/test-release-public.pem; do
   [[ -e "$bins/$need" ]] || { echo "missing $bins/$need: run build-stage2.ts first" >&2; exit 2; }
 done
-mkdir -p "$out/tmp" "$out/config" "$out/cache" "$out/run" "$out/logs" "$out/release" "$out/shared" "$out/image-host" "$out/image-machine"
+mkdir -p "$out/tmp" "$out/config" "$out/cache" "$out/logs" "$out/release" "$out/shared" "$out/image-host" "$out/image-machine"
 export TMPDIR="$out/tmp" XDG_CONFIG_HOME="$out/config" XDG_CACHE_HOME="$out/cache"
 export REGISTRY_AUTH_FILE="$out/config/auth.json"
 printf '{"auths":{}}\n' > "$REGISTRY_AUTH_FILE"
-export P="podman --root $out/storage --runroot $out/run --storage-driver vfs"
+# Rootless networking cannot use a run folder under the home directory on every host.
+rr="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/cawco-proof-stage2-$$"
+mkdir -p "$rr"
+export P="podman --root $out/storage --runroot $rr --storage-driver vfs"
 export out bins here
 prefix="cawco-binary-stage2-$$"
 export net="$prefix-net" hubc="$prefix-hub" joinerc="$prefix-joiner" releasec="$prefix-release"
@@ -38,10 +41,25 @@ cleanup() {
   $P network rm -f "$net" >/dev/null 2>&1 || true
   $P rmi -f "localhost/$prefix-machine:latest" "localhost/$prefix-host:latest" docker.io/library/ubuntu:24.04 >/dev/null 2>&1 || true
   rm -f "$bins/keys/test-release-private.pem" "$bins/keys/test-release-public.pem"
+  # Image storage is written by mapped user ids: reset it, then remove it from inside the user namespace.
+  $P system reset -f >/dev/null 2>&1 || true
+  podman unshare rm -rf "$out/storage" "$rr" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT INT TERM
 
 # ---------------------------------------------------------------- helpers
+
+# Setup steps stop the script: a check run against a missing container proves nothing.
+setup() {
+  local step=$1 log=$2
+  shift 2
+  if ! "$@" > "$log" 2>&1; then
+    echo "setup failed at: $step (log: $log)" >&2
+    tail -n 20 "$log" >&2
+    exit 3
+  fi
+}
+export -f setup 2>/dev/null || true
 
 # One check: runs the function in its own shell (so set -e applies inside it),
 # keeps its output in a log, prints one line.
@@ -118,46 +136,52 @@ RUN apt-get update \
  && rm -f /etc/apt/sources.list /etc/apt/sources.list.d/* \
  && echo 'deb [trusted=yes] file:/debs ./' > /etc/apt/sources.list \
  && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*.deb \
- && useradd -m -u 1000 -s /bin/bash cawco \
+ && usermod -l cawco -d /home/cawco -m ubuntu && groupmod -n cawco ubuntu \
  && echo 'cawco ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/cawco
 EOF
 echo "building images (network on for this step only)"
-$P pull docker.io/library/ubuntu:24.04 > "$out/logs/pull.log" 2>&1
-$P build -t "localhost/$prefix-host:latest" "$out/image-host" > "$out/logs/build-host.log" 2>&1
-$P build -t "localhost/$prefix-machine:latest" "$out/image-machine" > "$out/logs/build-machine.log" 2>&1
+setup "pull the base image" "$out/logs/pull.log" $P pull docker.io/library/ubuntu:24.04
+setup "build the release host image" "$out/logs/build-host.log" $P build -t "localhost/$prefix-host:latest" "$out/image-host"
+setup "build the machine image" "$out/logs/build-machine.log" $P build -t "localhost/$prefix-machine:latest" "$out/image-machine"
 
 # Releases: a good one, and three that must be refused.
-fixture installer "$bins/keys/test-release-public.pem" "$out/shared/installer.sh"
-publish ok stable 0.0.1-test.1 1111111111111111111111111111111111111111 "$bins/cawco-1" "$key"
-publish tampered stable 0.0.1-test.1 1111111111111111111111111111111111111111 "$bins/cawco-1" "$key" tamper
-publish badsig stable 0.0.1-test.1 1111111111111111111111111111111111111111 "$bins/cawco-1" "$key" bad-signature
-publish nosig stable 0.0.1-test.1 1111111111111111111111111111111111111111 "$bins/cawco-1" "$key" no-signature
-fixture broken-binary "$out/broken-cawco"
+sha1111=1111111111111111111111111111111111111111
+setup "write the installer" "$out/logs/fixture-installer.log" fixture installer "$bins/keys/test-release-public.pem" "$out/shared/installer.sh"
+setup "publish the good release" "$out/logs/fixture-ok.log" publish ok stable 0.0.1-test.1 $sha1111 "$bins/cawco-1" "$key"
+setup "publish the tampered release" "$out/logs/fixture-tampered.log" publish tampered stable 0.0.1-test.1 $sha1111 "$bins/cawco-1" "$key" tamper
+setup "publish the bad-signature release" "$out/logs/fixture-badsig.log" publish badsig stable 0.0.1-test.1 $sha1111 "$bins/cawco-1" "$key" bad-signature
+setup "publish the unsigned release" "$out/logs/fixture-nosig.log" publish nosig stable 0.0.1-test.1 $sha1111 "$bins/cawco-1" "$key" no-signature
+setup "write the broken build" "$out/logs/fixture-broken.log" fixture broken-binary "$out/broken-cawco"
 
-$P network create --internal --subnet 10.89.77.0/24 "$net" > /dev/null
-$P run -d --name "$releasec" --network "$net" --ip "$release_ip" \
+setup "create the internal network" "$out/logs/network.log" $P network create --internal --subnet 10.89.77.0/24 "$net"
+setup "start the release host" "$out/logs/release-host.log" $P run -d --name "$releasec" --network "$net" --ip "$release_ip" \
   --mount "type=bind,src=$out/release,dst=/srv/release,ro" "localhost/$prefix-host:latest" \
-  python3 -m http.server 8000 --directory /srv/release --bind "$release_ip" > /dev/null
-boot "$hubc" "$hub_ip" hub
-boot "$joinerc" "$joiner_ip" joiner
+  python3 -m http.server 8000 --directory /srv/release --bind "$release_ip"
+setup "boot the hub machine" "$out/logs/boot-hub.log" boot "$hubc" "$hub_ip" hub
+setup "boot the joining machine" "$out/logs/boot-joiner.log" boot "$joinerc" "$joiner_ip" joiner
 
 # ---------------------------------------------------------------- installer
 
 no_route_out() {
-  ! as_user "$hubc" curl -sS --max-time 4 http://192.168.3.100:3456/health
+  # The container is up and the release host answers, so a failure to reach the live hub means no route.
+  as_user "$hubc" curl -fsS --max-time 10 "$feed/stable/release.json" > /dev/null || { echo "the release host does not answer"; return 1; }
+  if as_user "$hubc" curl -sS --max-time 4 http://192.168.3.100:3456/health; then
+    echo "the live hub answered"
+    return 1
+  fi
 }
 export -f no_route_out
 check "the containers cannot reach the live hub" no_route_out
 
 install_hub() {
   # Pristine: no git, Bun, Node or openssl to begin with.
-  ! as_user "$hubc" sh -c 'command -v git || command -v bun || command -v node || command -v openssl'
+  as_user "$hubc" sh -c 'for tool in git bun node openssl; do if command -v $tool > /dev/null; then echo "$tool is already there"; exit 1; fi; done; echo pristine'
   as_user "$hubc" sh /shared/installer.sh
   as_user "$hubc" curl -fsS http://127.0.0.1:3456/health | grep -q '"ok":true'
   as_user "$hubc" curl -fsS -o /dev/null http://127.0.0.1:3000/
   [[ "$(hub_api /health | json 'd => d.build?.version')" == 0.0.1-test.1 ]]
   [[ "$(as_user "$hubc" readlink /home/cawco/.local/share/cawco/binary/current)" == versions/0.0.1-test.1 ]]
-  ! as_user "$hubc" sh -c 'command -v git || command -v bun || command -v node'
+  as_user "$hubc" sh -c 'for tool in git bun node; do if command -v $tool > /dev/null; then echo "$tool appeared"; exit 1; fi; done; echo still-none'
 }
 export -f install_hub
 check "pristine container installs the hub, and the hub answers" install_hub
@@ -189,11 +213,12 @@ refuse() {
   set +e
   $P run --rm --network "$net" --user cawco --env HOME=/home/cawco --env CAWCO_RELEASE_HOST="http://$release_ip:8000/$feedname" \
     --mount "type=bind,src=$out/shared,dst=/shared,ro" "localhost/$prefix-machine:latest" \
-    sh -c 'sh /shared/installer.sh; rc=$?; if [ -e "$HOME/.local/share/cawco" ] || [ -e "$HOME/.local/bin/cawco" ]; then echo CHANGED-A-MACHINE; fi; exit $rc' > "$log" 2>&1
+    sh -c 'sh /shared/installer.sh; rc=$?; if [ -e "$HOME/.local/share/cawco" ] || [ -e "$HOME/.local/bin/cawco" ]; then echo CHANGED-A-MACHINE; else echo NOTHING-WAS-CHANGED; fi; exit $rc' > "$log" 2>&1
   local rc=$?
   set -e
   [[ $rc != 0 ]]
   grep -q "$phrase" "$log"
+  grep -q NOTHING-WAS-CHANGED "$log"
   ! grep -q CHANGED-A-MACHINE "$log"
 }
 export -f refuse
@@ -206,7 +231,7 @@ rerun() {
   before=$(as_user "$hubc" sh -c 'cat ~/.local/share/cawco/binary/installation.json; readlink ~/.local/share/cawco/binary/current')
   as_user "$hubc" sh /shared/installer.sh | tee /dev/stderr | grep -q "Updates are installed from the CawCo app"
   after=$(as_user "$hubc" sh -c 'cat ~/.local/share/cawco/binary/installation.json; readlink ~/.local/share/cawco/binary/current')
-  [[ "$before" == "$after" ]]
+  [[ -n "$before" && "$before" == "$after" ]]
 }
 export -f rerun
 check "running the installer again reports the install and changes nothing" rerun
@@ -291,7 +316,7 @@ check "a child held by the session keeper survives the update and the keeper is 
 keeper_advances() {
   read -r child keeper < "$out/held.txt"
   as_user "$hubc" kill "$child"
-  wait_until 300 '[[ "$(keeper_pid)" != "'"$keeper"'" && "$(phase $hid)" == installed ]]'
+  wait_until 300 '[[ -n "$(keeper_pid)" && "$(keeper_pid)" != "'"$keeper"'" && "$(phase $hid)" == installed ]]'
   [[ "$(as_user "$hubc" sh -c 'grep -o "\"sessiondVersion\":\"[^\"]*\"" ~/.local/share/cawco/binary/installation.json')" == '"sessiondVersion":"0.0.1-nightly.3+333333333333"' ]]
 }
 export -f keeper_advances
