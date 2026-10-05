@@ -331,55 +331,6 @@ h1 {
   font-weight: 900;
 }
 
-/*
- * The channel switch is the page's tabs on paper: the chosen tab is ink, the others are ink text.
- * Its tabs are as tall as the label's line, so the row adds no height; the pseudo-element keeps the touch target.
- */
-.tabs.tabs-channel {
-  grid-area: auto;
-  flex-direction: row;
-  gap: 2px;
-  margin-left: auto;
-  margin-block: -4px;
-}
-
-.tabs-channel[hidden] {
-  display: none;
-}
-
-.tabs-channel .tab {
-  flex: none;
-  flex-direction: row;
-  justify-content: center;
-  min-height: 0;
-  height: 30px;
-  padding: 0 12px;
-  border-radius: var(--btn-radius);
-  color: var(--soft-on-paper);
-  font-size: 0.88rem;
-  font-weight: 900;
-  line-height: 1;
-}
-
-.tabs-channel .tab::before {
-  content: "";
-  position: absolute;
-  inset: -7px -1px;
-}
-
-.tabs-channel .tab[aria-selected="true"] {
-  background: var(--ink);
-  color: var(--paper);
-}
-
-.tabs-channel .tab-bar {
-  inset: auto 12px 5px 12px;
-}
-
-.tabs-channel .tab-bar span {
-  transition: transform 200ms var(--ease-out);
-}
-
 .cmd {
   position: relative;
   display: flex;
@@ -395,10 +346,8 @@ h1 {
 .cmd code {
   flex: 1;
   min-width: 0;
-  overflow-x: auto;
-  white-space: nowrap;
+  /* The whole command always shows: a line that will not fit breaks at a space. */
   font-size: clamp(0.76rem, 3.05vw, 0.95rem);
-  scrollbar-width: none;
 }
 
 .copy {
@@ -592,6 +541,55 @@ h1 {
   background: var(--vermilion);
   transform: scaleX(0);
   transform-origin: 0 50%;
+}
+
+/*
+ * The channel switch is the page's tabs on paper: the chosen tab is ink, the others are ink text.
+ * Its tabs are as tall as the label's line, so the row adds no height; the pseudo-element keeps the touch target.
+ */
+.tabs.tabs-channel {
+  grid-area: auto;
+  flex-direction: row;
+  gap: 2px;
+  margin-left: auto;
+  margin-block: -4px;
+}
+
+.tabs-channel[hidden] {
+  display: none;
+}
+
+.tabs-channel .tab {
+  flex: none;
+  flex-direction: row;
+  justify-content: center;
+  min-height: 0;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: var(--btn-radius);
+  color: var(--soft-on-paper);
+  font-size: 0.88rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.tabs-channel .tab::before {
+  content: "";
+  position: absolute;
+  inset: -7px -1px;
+}
+
+.tabs-channel .tab[aria-selected="true"] {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.tabs-channel .tab-bar {
+  inset: auto 12px 5px 12px;
+}
+
+:where(.tabs-channel) .tab-bar span {
+  transition: transform 200ms var(--ease-out);
 }
 
 .panel {
@@ -2111,12 +2109,6 @@ mark {
 
   .cmd-alert {
     left: 0;
-  }
-
-  /* Where one line will not fit, the command breaks before the pipe. */
-  .cmd code {
-    overflow-x: visible;
-    white-space: normal;
   }
 }
 
