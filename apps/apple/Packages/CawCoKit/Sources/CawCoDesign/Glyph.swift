@@ -411,16 +411,24 @@ public final class KitLabel: UILabel {
         } else {
             return nil
         }
-        guard limit > 0, starts.count >= limit else {
+        // Where the last line that shows ends: at the start of the line the
+        // limit hides, whether the rule made that line or the text simply
+        // runs on past the lines the rule was given.
+        var end: Int
+        if limit > 0, starts.count >= limit {
+            end = starts[limit - 1]
+            starts = Array(starts.prefix(limit - 1))
+        } else if over {
+            end = greedy[limit - 1]
+        } else {
             return Self.set(full, starts: starts, cut: nil)
         }
         let string = full.string as NSString
-        let start = limit > 1 ? starts[limit - 2] : 0
-        var end = starts[limit - 1]
+        let start = starts.last ?? 0
         while end > start, let scalar = Unicode.Scalar(string.character(at: end - 1)), CharacterSet.whitespacesAndNewlines.contains(scalar) { end -= 1 }
         let line = full.attributedSubstring(from: NSRange(location: start, length: end - start))
         let kept = TextWrap.tailCut(line, width: width, continues: true) ?? line.length
-        return Self.set(full, starts: Array(starts.prefix(limit - 1)), cut: start + kept)
+        return Self.set(full, starts: starts, cut: start + kept)
     }
 
     /// `full` with a line separator where each of `starts` begins a line and,
