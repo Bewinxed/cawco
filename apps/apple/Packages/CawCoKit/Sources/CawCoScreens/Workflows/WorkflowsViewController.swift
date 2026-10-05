@@ -182,9 +182,10 @@ final class WorkflowsViewController: ObservedViewController {
         failure = ""
         requestRefresh()
         Task {
-            // The new workflow joins the list; its editor is the web's until the native one lands.
+            // The new workflow opens on its own page (`goto("/workflows/<id>")`): a program on its Program tab.
             do {
-                try await hub.workflows.create(program: program)
+                let id = try await hub.workflows.create(program: program)
+                context.go(.workflow(id: id, program: program))
             } catch {
                 failure = error.localizedDescription
             }
@@ -371,7 +372,8 @@ final class WorkflowsViewController: ObservedViewController {
             count.tabular = true
             count.text = "\(row.runs.count)"
             count.isHidden = narrow
-            return line(name: WorkflowNameCell(workflow), status: status, age: age, count: count, actions: actions(workflow))
+            let name = WorkflowNameLink(workflow) { [weak self] in self?.context.go(.workflow(id: workflow.id, program: false)) }
+            return line(name: name, status: status, age: age, count: count, actions: actions(workflow))
         })
         tile.accessibilityLabel = "Workflows"
         return tile
@@ -403,12 +405,13 @@ final class WorkflowsViewController: ObservedViewController {
     }
 }
 
-/// A workflow's name, its description under it in muted meta (`a.name`):
-/// 24pt at the least, 44pt under a finger. On the web it is the link to the
-/// workflow's editor; here it is text until the editor exists.
-private final class WorkflowNameCell: UIView {
-    init(_ workflow: WorkflowRow) {
+/// A workflow's name, its description under it in muted meta, as the link to
+/// its own page (`a.name`): 24pt at the least, 44pt under a finger.
+private final class WorkflowNameLink: UIControl {
+    init(_ workflow: WorkflowRow, action: @escaping () -> Void) {
         super.init(frame: .zero)
+        addAction(UIAction { _ in action() }, for: .touchUpInside)
+        addInteraction(UIPointerInteraction(delegate: nil))
         let name = KitLabel(TypeScale.typeBody.withWeight(TypeScale.weightStrong), ink: Palette.inkStrong, lines: 0)
         name.text = workflow.name
         let about = KitLabel(WorkflowForm.text(TypeScale.typeMeta), ink: Palette.inkMuted, lines: 0)
@@ -416,6 +419,7 @@ private final class WorkflowNameCell: UIView {
         about.isHidden = workflow.description.isEmpty
         let stack = UIStackView(arrangedSubviews: [name, about])
         stack.axis = .vertical
+        stack.isUserInteractionEnabled = false
         stack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)
         NSLayoutConstraint.activate([
@@ -426,14 +430,18 @@ private final class WorkflowNameCell: UIView {
             heightAnchor.constraint(greaterThanOrEqualToConstant: WorkflowForm.coarse ? Size.cBtnHLg : 24),
         ])
         isAccessibilityElement = true
-        accessibilityTraits = .staticText
+        accessibilityTraits = .link
         accessibilityLabel = workflow.description.isEmpty ? workflow.name : "\(workflow.name), \(workflow.description)"
         accessibilityIdentifier = "workflow-name"
     }
 
     @available(*, unavailable)
     required init?(coder _: NSCoder) {
-        fatalError("WorkflowNameCell is built in code")
+        fatalError("WorkflowNameLink is built in code")
+    }
+
+    override var isHighlighted: Bool {
+        didSet { alpha = isHighlighted ? 0.6 : 1 }
     }
 }
 

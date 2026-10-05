@@ -401,7 +401,8 @@ final class SidebarViewController: ObservedViewController {
         let fleet = hub.fleet
         // Places.
         fleetRow.active = host.destination == .fleet
-        workflowsRow.active = host.destination == .workflows
+        // Any page under /workflows (Sidebar.svelte `path.startsWith("/workflows")`).
+        workflowsRow.active = host.destination.spoke == ShellDestination.workflows.spoke
         configureButton.on = host.destination == .configure
         assistantButton.on = host.assistantOpen
         // `blockedCount || runningInstances.length`: what waits on the operator, else what runs.

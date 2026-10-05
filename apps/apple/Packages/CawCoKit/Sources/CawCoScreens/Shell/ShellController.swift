@@ -83,6 +83,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         super.init(style: .doubleColumn)
         panes.onReturnToFleet = { [weak self] id in self?.returnToFleet(id) }
         panes.onOpen = { [weak self] id in self?.openSession(id) }
+        panes.onEditWorkflow = { [weak self] id in self?.go(.workflow(id: id, program: true)) }
         panes.continueHandler = { [weak self] id in self?.newSession.continueSession(id) }
         // The details' "N MCP" leads to the fleet's MCP configuration (`/config/mcp`).
         panes.onOpenMcp = { [weak self] in
@@ -269,6 +270,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         switch destination {
         case let .project(id): .project("compact:" + id)
         case .workflows: .project("compact:workflows")
+        case let .workflow(id, program): .workflow(id: "compact:" + id, program: program)
         case .configure: .project("compact:configure")
         case .usage: .project("compact:usage")
         case .fleet: .fleet

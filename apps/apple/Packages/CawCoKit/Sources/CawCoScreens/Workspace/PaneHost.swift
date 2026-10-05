@@ -13,6 +13,8 @@ final class PaneHost {
     /// A conversation's own back or close: its tab closes.
     var onReturnToFleet: (String) -> Void = { _ in }
     var onOpen: (String) -> Void = { _ in }
+    /// A run's Edit workflow: its workflow's own page, on the Program tab.
+    var onEditWorkflow: (String) -> Void = { _ in }
     /// Session details' "Continue in new session…", when that flow exists.
     var continueHandler: ((String) -> Void)?
 
@@ -32,6 +34,7 @@ final class PaneHost {
             let run = WorkflowRunViewController(hub: hub, runId: runId)
             run.onReturn = { [weak self] in self?.onReturnToFleet(id) }
             run.onOpen = { [weak self] id in self?.onOpen(id) }
+            run.onEdit = { [weak self] id in self?.onEditWorkflow(id) }
             made = run
         } else {
             let session = SessionViewController(hub: hub, id: id)

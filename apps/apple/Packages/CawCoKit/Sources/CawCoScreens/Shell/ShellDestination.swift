@@ -8,6 +8,8 @@ import UIKit
 public enum ShellDestination: Hashable, Sendable {
     case fleet
     case workflows
+    /// A workflow's own page (`/workflows/[id]`), on its Program tab when asked (`?tab=program`).
+    case workflow(id: String, program: Bool)
     case project(String)
     case configure
     case usage
@@ -16,7 +18,7 @@ public enum ShellDestination: Hashable, Sendable {
     var crumb: String {
         switch self {
         case .fleet: "Fleet"
-        case .workflows: "Workflows"
+        case .workflows, .workflow: "Workflows"
         case .project: "Project"
         case .configure: "Configure"
         case .usage: "Usage"
@@ -28,7 +30,7 @@ public enum ShellDestination: Hashable, Sendable {
     var spoke: Int? {
         switch self {
         case .fleet: 0
-        case .workflows: 1
+        case .workflows, .workflow: 1
         case .usage: 2
         case .configure: 3
         case .project: nil
@@ -66,6 +68,8 @@ enum ShellScreens {
             ProjectViewController(projectId: id, context: context)
         case .workflows:
             WorkflowsViewController(context: context)
+        case let .workflow(id, program):
+            WorkflowEditorController(context: context, workflowId: id, program: program)
         case .configure:
             PlaceholderViewController(destination: destination)
         case .usage:

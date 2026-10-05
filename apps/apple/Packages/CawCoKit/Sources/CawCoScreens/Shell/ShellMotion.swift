@@ -29,7 +29,10 @@ struct Travel {
             return Travel(enter: (0, y, 0), leave: (0, -y, 0), duration: Motion.durControl)
         }
         // A project home is a step deeper than the spoke it was opened from.
-        let deeper: Bool = if case .project = to { true } else { false }
+        let deeper: Bool = switch to {
+        case .project, .workflow: true
+        default: false
+        }
         let x = deeper ? 0.08 : -0.08
         return Travel(enter: (x, 0, 0), leave: (-x, 0, 0), duration: Motion.durControl)
     }
