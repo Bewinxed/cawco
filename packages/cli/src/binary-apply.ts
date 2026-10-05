@@ -404,6 +404,31 @@ function backUpDatabase(db: string, previous: string): string {
   return copy;
 }
 
+/** After the new build is healthy: the keeper follows it if it holds nothing, and the services are healthy again with it. */
+async function moveKeeperWhenProven(o: {
+  db: string | undefined;
+  held: number;
+  installed: BinaryInstallation;
+  marker: () => TrialMarker;
+  onMoved: (keeper: string) => void;
+  proven: BinaryInstallation;
+  sinceMs: number;
+}): Promise<void> {
+  const version = o.proven.installedVersion;
+  const epochBefore = (await readKeeper().catch(() => undefined))?.epoch;
+  const keeper = await moveKeeper(o.installed, version, o.held);
+  if (keeper === o.installed.sessiondVersion) {
+    return;
+  }
+  o.onMoved(keeper);
+  await writeJsonAtomic(installationPath(), {
+    ...o.proven,
+    sessiondVersion: keeper,
+  });
+  await awaitKeeperEpoch(epochBefore);
+  await awaitHealthy(o.proven, version, o.sinceMs, o.db, o.marker());
+}
+
 async function applyBuild(version: string, held: number): Promise<void> {
   const installed = await readInstallation();
   if (!installed) {
@@ -449,24 +474,23 @@ async function applyBuild(version: string, held: number): Promise<void> {
       ...installed,
       installedVersion: version,
     });
-    keeperAfter = await moveKeeper(installed, version, held);
-    await writeJsonAtomic(installationPath(), {
-      ...installed,
-      installedVersion: version,
-      sessiondVersion: keeperAfter,
-    });
-    await writeJsonAtomic(previousInstallationPath(), {
-      ...installed,
-      sessiondVersion: keeperAfter,
-    });
-    await svc("restart", ids, keeperAfter);
-    await awaitHealthy(
-      { ...installed, installedVersion: version },
-      version,
+    await writeJsonAtomic(previousInstallationPath(), installed);
+    // The services start on the new build with the keeper still on the old one: the keeper is the one
+    // piece that holds sessions, so it moves only once the new build has shown itself healthy.
+    await svc("restart", ids, keeperBefore);
+    const proven = { ...installed, installedVersion: version };
+    await awaitHealthy(proven, version, sinceMs, db, marker());
+    await moveKeeperWhenProven({
+      proven,
+      installed,
+      held,
       sinceMs,
       db,
-      marker()
-    );
+      marker,
+      onMoved: (to) => {
+        keeperAfter = to;
+      },
+    });
     await writeJsonAtomic(trialPath(), {
       ...marker(),
       deadline: Math.floor(Date.now() / 1000) + TRIAL_S,
@@ -487,10 +511,11 @@ async function applyBuild(version: string, held: number): Promise<void> {
   } catch (error) {
     let message = error instanceof Error ? error.message : String(error);
     try {
-      await rollBackBuild({
+      keeperAfter = await rollBackBuild({
         installed,
         previous,
         version,
+        keeperBefore,
         keeperAfter,
         backup,
         db,
@@ -522,16 +547,34 @@ interface Rollback {
   ids: ServiceId[];
   installed: BinaryInstallation;
   keeperAfter: string;
+  keeperBefore: string;
   previous: string;
   version: string;
 }
 
-/** The previous build back, and its database when the schema changed. The keeper is never restarted here. */
-async function rollBackBuild(r: Rollback): Promise<void> {
+/**
+ * The previous build back, and its database when the schema changed. Returns the version the keeper ends on.
+ * A keeper that moved to the build being rolled back goes back to the old one when it holds nothing (or cannot
+ * be reached, as when the new build cannot run it); a keeper that holds a child is never restarted here.
+ */
+async function rollBackBuild(r: Rollback): Promise<string> {
+  let keeper = r.keeperAfter;
+  if (keeper !== r.keeperBefore) {
+    const held = await readKeeper()
+      .then((now) => now.held)
+      .catch(() => 0);
+    if (held === 0) {
+      await svc("install", ["sessiond"], r.keeperBefore);
+      if (process.platform !== "darwin") {
+        await svc("restart", ["sessiond"], r.keeperBefore);
+      }
+      keeper = r.keeperBefore;
+    }
+  }
   await pointCurrentAt(r.previous);
   await writeJsonAtomic(installationPath(), {
     ...r.installed,
-    sessiondVersion: r.keeperAfter,
+    sessiondVersion: keeper,
   });
   if (r.backup && r.db) {
     // The hub is stopped while its database is swapped; the migrated file is moved aside, not deleted.
@@ -545,10 +588,11 @@ async function rollBackBuild(r: Rollback): Promise<void> {
     await rm(`${r.db}-shm`, { force: true });
     await copyFile(r.backup, r.db);
     if (process.platform === "darwin") {
-      await startAgain(["hub"], r.keeperAfter);
+      await startAgain(["hub"], keeper);
     }
   }
-  await svc("restart", r.ids, r.keeperAfter);
+  await svc("restart", r.ids, keeper);
   await rm(trialPath(), { force: true });
   await rm(previousInstallationPath(), { force: true });
+  return keeper;
 }

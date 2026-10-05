@@ -591,7 +591,10 @@ check "a build that cannot start is rolled back and the failure is recorded" rol
 migration_rolled_back() {
   need_hub
   # Data the hub holds before the update.
-  hub_api /api/workflows -X POST -H 'content-type: application/json' -d @/shared/workflow.json > /dev/null
+  # Without -f, so a refusal shows the hub's own words instead of a bare 400.
+  saved=$(as_user "$hubc" curl -sS -w '\nHTTP %{http_code}' http://127.0.0.1:3456/api/workflows -X POST -H 'content-type: application/json' -d @/shared/workflow.json)
+  echo "saving the workflow: $saved"
+  [[ "$saved" == *"HTTP 201" ]]
   hub_api /api/workflows | grep -q kept-through-rollback
   publish ok stable 0.0.1-test.8 8888888888888888888888888888888888888888 "$out/migrating-cawco" "$key" 32 "$((schema + 1))"
   learn
