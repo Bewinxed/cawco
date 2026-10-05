@@ -224,21 +224,20 @@ final class UsageSheetController: ObservedViewController {
         stack.translatesAutoresizingMaskIntoConstraints = false
         scroll.translatesAutoresizingMaskIntoConstraints = false
         scroll.alwaysBounceVertical = false
+        scroll.contentInsetAdjustmentBehavior = .never
         view.addSubview(scroll)
         scroll.addSubview(stack)
-        // As tall as the list, until the sheet's own ceiling makes it scroll.
-        let fit = scroll.heightAnchor.constraint(equalTo: stack.heightAnchor)
-        fit.priority = .defaultLow
+        // The sheet allocates the viewport. Its list keeps its natural height,
+        // so navigation chrome cannot push the foot beyond the visible scroll area.
         NSLayoutConstraint.activate([
             scroll.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             scroll.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            scroll.topAnchor.constraint(equalTo: view.topAnchor),
-            scroll.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            scroll.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
+            scroll.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor),
             stack.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor),
             stack.bottomAnchor.constraint(equalTo: scroll.contentLayoutGuide.bottomAnchor),
             stack.leadingAnchor.constraint(equalTo: scroll.frameLayoutGuide.leadingAnchor),
             stack.trailingAnchor.constraint(equalTo: scroll.frameLayoutGuide.trailingAnchor),
-            fit,
         ])
     }
 
