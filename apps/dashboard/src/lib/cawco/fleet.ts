@@ -433,6 +433,67 @@ export const signInToMcp = async (name: string): Promise<void> => {
   window.location.assign(`${CAWCO_OAUTH_URL}/start#${hop}`);
 };
 
+/**
+ * What `/mcp auth [server]` means in a composer. Claude Code's own `/mcp` has
+ * no `auth`, and the hub signs fleet servers in, so the dashboard answers it:
+ * the server is matched without regard to case, and with no name it is the one
+ * server still waiting for a sign-in. `none` means the text is not this command
+ * and goes to the agent as typed.
+ */
+const MCP_AUTH_RE = /^\/mcp\s+(?:auth|login)(?:\s+(\S+))?$/i;
+
+export type McpSignInIntent =
+  | { kind: "none" }
+  | { kind: "go"; name: string }
+  | { kind: "say"; level: "error" | "info"; message: string };
+
+export const mcpSignInIntent = (
+  text: string,
+  servers: readonly FleetMcpServer[]
+): McpSignInIntent => {
+  const match = text.trim().match(MCP_AUTH_RE);
+  if (!match) {
+    return { kind: "none" };
+  }
+  const oauth = servers.filter((server) => server.auth?.mode === "oauth");
+  const waiting = oauth.filter((server) => server.auth?.state !== "signed-in");
+  const names = (list: readonly FleetMcpServer[]) =>
+    list.map((server) => server.name).join(", ");
+  const [, asked] = match;
+  if (asked) {
+    const found = oauth.find(
+      (server) => server.name.toLowerCase() === asked.toLowerCase()
+    );
+    if (found) {
+      return { kind: "go", name: found.name };
+    }
+    return {
+      kind: "say",
+      level: "error",
+      message: oauth.length
+        ? `No sign-in server named "${asked}". Servers that sign in: ${names(oauth)}.`
+        : "No fleet MCP server uses a sign-in.",
+    };
+  }
+  if (waiting.length === 1) {
+    return { kind: "go", name: waiting[0].name };
+  }
+  if (waiting.length === 0) {
+    return {
+      kind: "say",
+      level: "info",
+      message: oauth.length
+        ? `Every server that signs in is already signed in (${names(oauth)}).`
+        : "No fleet MCP server uses a sign-in.",
+    };
+  }
+  return {
+    kind: "say",
+    level: "error",
+    message: `More than one server needs a sign-in: ${names(waiting)}. Say which: /mcp auth <server>.`,
+  };
+};
+
 export const saveMarketplace = (
   name: string,
   source: string
