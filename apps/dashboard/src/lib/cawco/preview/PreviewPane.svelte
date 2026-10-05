@@ -50,12 +50,8 @@
   let well = $state<HTMLDivElement>();
   const preview = $derived(cawco.previews[instanceId]);
   const source = $derived(preview?.source);
-  /** The base preview URL (always under /preview/<id>/). */
-  const previewBase = $derived(
-    cawco.previews[instanceId]
-      ? `/preview/${encodeURIComponent(instanceId)}/`
-      : ""
-  );
+  /** Each show gives the document and its assets a fresh URL namespace. */
+  const previewBase = $derived(preview?.path ?? "");
   /** Iframe src uses the base; the header shows the app's own path. */
   const url = $derived(previewBase);
   let displayPath = $state("");

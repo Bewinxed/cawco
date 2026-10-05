@@ -97,7 +97,7 @@ function publicOrigin(req) {
   };
 }
 
-const PREVIEW_PREFIX = /^\/preview\/([^/]+)\//;
+const PREVIEW_PREFIX = /^\/preview\/([^/]+)\/[^/]+\//;
 /**
  * Extract preview instance id from a path or Referer. Returns
  * `{ id, stripped }` where `stripped` is the path with the prefix removed
@@ -109,7 +109,7 @@ function previewMatch(req) {
   if (match) {
     const id = decodeURIComponent(match[1]);
     const stripped = req.url.slice(match[0].length - 1); // keep leading /
-    return { id, stripped, viaReferer: false };
+    return { id, stripped, prefix: match[0].slice(0, -1), viaReferer: false };
   }
   const { referer } = req.headers;
   if (referer) {
@@ -118,7 +118,12 @@ function previewMatch(req) {
       const refMatch = refUrl.pathname.match(PREVIEW_PREFIX);
       if (refMatch) {
         const id = decodeURIComponent(refMatch[1]);
-        return { id, stripped: req.url, viaReferer: true };
+        return {
+          id,
+          stripped: req.url,
+          prefix: refMatch[0].slice(0, -1),
+          viaReferer: true,
+        };
       }
     } catch {
       // malformed referer — not a preview request
@@ -134,7 +139,7 @@ function proxyPreviewHttp(req, res, info) {
   // is never stored: a CDN keeping it would send one preview's file to
   // another's.
   if (info.viaReferer && (req.method === "GET" || req.method === "HEAD")) {
-    const prefix = `/preview/${encodeURIComponent(info.id)}`;
+    const { prefix } = info;
     res.writeHead(302, {
       location: `${prefix}${req.url}`,
       "cache-control": "no-store",
@@ -153,8 +158,13 @@ function proxyPreviewHttp(req, res, info) {
       "x-cawco-preview": info.id,
     },
   };
-  const prefix = `/preview/${encodeURIComponent(info.id)}`;
+  const { prefix } = info;
   const proxyReq = http.request(options, (proxyRes) => {
+    // Includes upstream errors: no preview response or validator is reusable.
+    proxyRes.headers["cache-control"] = "no-store";
+    for (const name of ["etag", "last-modified", "expires"]) {
+      delete proxyRes.headers[name];
+    }
     // A root-absolute Location must stay under the prefix so the browser
     // does not leave /preview/<id>/ on a redirect.
     const { location } = proxyRes.headers;
@@ -169,7 +179,7 @@ function proxyPreviewHttp(req, res, info) {
       `[cawco] preview proxy error for ${info.id}: ${error.code ?? error.message}`
     );
     if (!res.headersSent) {
-      res.writeHead(502);
+      res.writeHead(502, { "cache-control": "no-store" });
     }
     res.end();
   });

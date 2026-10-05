@@ -9,11 +9,11 @@ const PNG_PREFIX = /^data:image\/png;base64,/;
 let selecting = false;
 
 /**
- * The `/preview/<id>/` prefix this page lives under. Derived from the current
+ * The `/preview/<id>/<revision>/` prefix this page lives under. Derived from the current
  * path at load time — the overlay script is the first thing in <head>, so
  * location.pathname is the iframe's initial URL before any SPA navigation.
  */
-const prefix = location.pathname.match(/^\/preview\/[^/]+\//)?.[0] ?? "";
+const prefix = location.pathname.match(/^\/preview\/[^/]+\/[^/]+\//)?.[0] ?? "";
 
 /**
  * Patch history.pushState/replaceState: a root-absolute `url` argument (starts
