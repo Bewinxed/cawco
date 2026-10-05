@@ -197,22 +197,28 @@ final class UsageViewController: ObservedViewController, UIDocumentPickerDelegat
         exportButton.configuration?.showsActivityIndicator = true
         let since = range.since(fleet: context.hub.fleet)
         Task { @MainActor [weak self, reads, context] in
-            var file = (name: "usage.csv", body: "")
-            if shown.grouping == .session {
-                var entries: [(key: String, harness: UsageHarness, row: UsageSummaryRow)] = []
-                for harness in UsageHarness.allCases {
-                    guard let start = since[harness]?.start, let summary = try? await reads.summary(harness, groupBy: .session, since: start) else { continue }
-                    entries += summary.rows.map { ($0.id, harness, $0) }
-                }
-                guard let self else { return }
-                file = ("fleet-sessions.csv", UsageSessionsExport.csv(fleet: context.hub.fleet, home: context.home, entries: entries) { self.stats($0) })
-            } else {
-                file = UsageWhere.csv(shown.summary, harness: shown.harness, grouping: shown.grouping)
-            }
             guard let self else { return }
-            exporting = false
-            exportButton.configuration?.showsActivityIndicator = false
-            save(file.name, file.body)
+            defer {
+                exporting = false
+                exportButton.configuration?.showsActivityIndicator = false
+            }
+            do {
+                let file: (name: String, body: String)
+                if shown.grouping == .session {
+                    var entries: [(key: String, harness: UsageHarness, row: UsageSummaryRow)] = []
+                    for harness in UsageHarness.allCases {
+                        guard let start = since[harness]?.start else { continue }
+                        let summary = try await reads.summary(harness, groupBy: .session, since: start)
+                        entries += summary.rows.map { ($0.id, harness, $0) }
+                    }
+                    file = ("fleet-sessions.csv", UsageSessionsExport.csv(fleet: context.hub.fleet, home: context.home, entries: entries) { self.stats($0) })
+                } else {
+                    file = UsageWhere.csv(shown.summary, harness: shown.harness, grouping: shown.grouping)
+                }
+                save(file.name, file.body)
+            } catch {
+                Toast.error("Could not export usage. \(error.localizedDescription)", in: view)
+            }
         }
     }
 
