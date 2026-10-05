@@ -117,6 +117,8 @@ export async function buildBinary(options: {
   commit: string;
   proof?: boolean;
   prepare?: boolean;
+  /** Link the credential-free stub harnesses into the real entry point; for proofs only. */
+  stubHarness?: boolean;
   testPublicKey?: string;
 }) {
   if (Bun.version !== PINNED_BUN) {
@@ -334,7 +336,7 @@ export async function buildBinary(options: {
               resolveDir: dirname(path),
             })
           );
-          if (options.proof) {
+          if (options.proof || options.stubHarness) {
             build.onLoad(
               { filter: /packages\/agent\/src\/harnesses\/index\.ts$/ },
               async () => ({

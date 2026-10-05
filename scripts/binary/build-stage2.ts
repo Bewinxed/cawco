@@ -42,6 +42,7 @@ for (const [index, [name, version, commit]] of builds.entries()) {
     version,
     commit,
     testPublicKey: publicKey.trim(),
+    stubHarness: true,
     prepare: index === 0,
   });
 }

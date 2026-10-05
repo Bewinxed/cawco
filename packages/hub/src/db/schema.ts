@@ -276,6 +276,14 @@ export const instances = sqliteTable("instances", {
     "stop" | "discard" | "delete" | "delete-transcript"
   >(),
   endConfirmedAt: timestamp("end_confirmed_at"),
+  /**
+   * A start the hub accepted but did not forward because its machine was
+   * installing an update: the envelope to send, kept until the machine can take
+   * it. The row stays `starting` meanwhile, which is how the person sees it.
+   */
+  owedSpawn: text("owed_spawn"),
+  /** When it was asked for, so what a machine is owed goes out in order. */
+  owedAt: integer("owed_at"),
   keepAliveEnabled: integer("keep_alive", { mode: "boolean" })
     .notNull()
     .default(false),

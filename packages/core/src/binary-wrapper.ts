@@ -19,8 +19,19 @@ if [ -f "$TRIAL" ]; then
     backup="$(field dbBackup)"
     migrating=0
     if [ -n "$db" ] && [ -f "$db.migrating" ]; then
+      mfield() { sed -n "s/.*\\"$1\\":\\"\\([^\\"]*\\)\\".*/\\1/p" "$db.migrating"; }
       pid="$(sed -n 's/.*"pid":\\([0-9]*\\).*/\\1/p' "$db.migrating")"
-      if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then migrating=1; fi
+      # A marker is live only if its process is still the one that wrote it: same start time, same boot.
+      if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+        if [ -r "/proc/$pid/stat" ]; then
+          now_start="$(sed 's/^.*) //' "/proc/$pid/stat" | cut -d ' ' -f 20)"
+          now_boot="$(cat /proc/sys/kernel/random/boot_id 2>/dev/null)"
+        else
+          now_start="$(ps -o lstart= -p "$pid" | sed 's/^ *//;s/ *$//')"
+          now_boot="$(sysctl -n kern.boottime 2>/dev/null)"
+        fi
+        if [ -n "$now_start" ] && [ "$now_start" = "$(mfield procStart)" ] && [ "$now_boot" = "$(mfield bootId)" ]; then migrating=1; fi
+      fi
     fi
     if [ -n "$previous" ] && [ "$migrating" = 0 ]; then
       ln -sfn "versions/$previous" "$ROOT/current"

@@ -39,6 +39,7 @@ import {
   writeJsonAtomic,
 } from "@cawco/core/binary-installation";
 import type { BinaryUpdateState } from "@cawco/core/binary-updates";
+import { markerIsLive } from "@cawco/core/process-identity";
 import {
   type ReleaseManifest,
   verifyManifest,
@@ -169,8 +170,8 @@ async function migrationRunning(db: string | undefined): Promise<boolean> {
   }
   const marker = JSON.parse(
     await readFile(`${db}.migrating`, "utf8").catch(() => "{}")
-  ) as { pid?: number };
-  return marker.pid !== undefined && alive(marker.pid);
+  );
+  return markerIsLive(marker);
 }
 
 /**

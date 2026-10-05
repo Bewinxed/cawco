@@ -110,8 +110,26 @@ api_on() { local c=$1; shift; as_user "$c" curl -fsS "http://127.0.0.1:3456$1" "
 spawn_child() {
   as_user "$1" sh -c 'printf "%s\n" "{\"type\":\"spawn\",\"commandId\":\"hold-$1\",\"procId\":\"boundary-$1\",\"spec\":{\"command\":\"sleep\",\"args\":[\"3000\"]}}" | socat -t1 - UNIX-CONNECT:/run/user/1000/cawco/sessiond.sock > /dev/null' sh "$2"
 }
+# Asks the hub, from inside its own container, to start a session on a machine, the way the dashboard does.
+start_session() { as_user "$hubc" env BUN_BE_BUN=1 /home/cawco/.local/bin/cawco /shared/stage2-start-session.ts http://127.0.0.1:3456 "$1" "$2"; }
+# Keeps asking until the stop file appears. A start is written down only if the hub accepted it
+# while the machine was installing, as the hub itself reported before and after.
+start_loop() {
+  local machine=$1 prefix=$2 accepted=$3 stop=$4 n=0 before after
+  : > "$accepted"
+  while [[ ! -e "$stop" ]]; do
+    n=$((n + 1))
+    before=$(phase "$machine" 2> /dev/null || true)
+    if start_session "$machine" "$prefix-$n" > /dev/null 2>&1; then
+      after=$(phase "$machine" 2> /dev/null || true)
+      if [[ $before == installing && $after == installing ]]; then echo "$prefix-$n" >> "$accepted"; fi
+    fi
+    sleep 0.5
+  done
+}
+keeper_pid() { as_user "$1" systemctl --user show -p MainPID --value cawco-sessiond.service; }
 untouched() { as_user "$1" sh -c 'test ! -e "$HOME/.local/share/cawco" && test ! -e "$HOME/.local/bin/cawco" && echo untouched'; }
-export -f as_user as_user_tty hub_api api_on spawn_child untouched json machine_id build_version phase field wait_until publish
+export -f as_user as_user_tty hub_api api_on spawn_child start_session start_loop keeper_pid untouched json machine_id build_version phase field wait_until publish
 
 boot() {
   local c=$1 ip=$2 name=$3 linger=${4:-linger}
@@ -163,6 +181,7 @@ setup "publish the bad-signature release" "$out/logs/fixture-badsig.log" publish
 setup "publish the unsigned release" "$out/logs/fixture-nosig.log" publish nosig stable 0.0.1-test.1 $sha1111 "$bins/cawco-1" "$key" 10 "$schema" no-signature
 setup "write the broken build" "$out/logs/fixture-broken.log" fixture broken-binary "$out/broken-cawco"
 setup "write the workflow the hub keeps" "$out/logs/fixture-workflow.log" bun -e "await Bun.write('$out/shared/workflow.json', JSON.stringify({name: 'kept-through-rollback', program: 'import { z } from \"zod\"; export const inputs=z.object({name:z.string()}); export default async function(w:Workflow<typeof inputs>){await w.checkpoint(\"binary\",w.inputs);return {name:w.inputs.name};}'}))"
+setup "put the session starter where the machines can read it" "$out/logs/starter.log" cp "$here/stage2-start-session.ts" "$out/shared/stage2-start-session.ts"
 setup "write the migrating build" "$out/logs/fixture-migrates.log" fixture broken-binary "$out/migrating-cawco" migrates
 setup "publish the release whose setup cannot run" "$out/logs/fixture-brokeninstall.log" publish brokeninstall stable 0.0.1-test.1 $sha1111 "$out/broken-cawco" "$key" 10 "$schema"
 
@@ -371,6 +390,22 @@ joiner_follows() {
 export -f joiner_follows
 check "once the hub runs the newer build its joined machine is offered it" joiner_follows
 
+joiner_starts_held() {
+  rm -f "$out/stop-joiner" "$out/accepted-joiner.txt"
+  install_now_request "$jid" > /dev/null
+  start_loop "$jid" joinerstart "$out/accepted-joiner.txt" "$out/stop-joiner" &
+  loop=$!
+  wait_until 300 '[[ "$(build_version $jid)" == 0.0.1-test.2 && "$(phase $jid)" == installed ]]'
+  touch "$out/stop-joiner"
+  wait "$loop"
+  [[ "$(wc -l < "$out/accepted-joiner.txt")" -ge 1 ]]
+  # Every start the hub accepted while that machine was installing is a running session, once.
+  wait_until 120 '[[ "$(hub_api /api/instances | json "d => d.filter(r => r.id.startsWith(\"joinerstart-\") && r.status === \"running\").length")" == "$(wc -l < "$out/accepted-joiner.txt")" ]]'
+  [[ "$(hub_api /api/instances | json 'd => d.filter(r => r.id.startsWith("joinerstart-")).length')" == "$(wc -l < "$out/accepted-joiner.txt")" ]]
+}
+export -f joiner_starts_held
+check "a session start requested while the joined machine installs runs once afterwards, none lost" joiner_starts_held
+
 one_helper() {
   publish ok stable 0.0.1-test.9 9999999999999999999999999999999999999999 "$out/broken-cawco" "$key" 30 "$schema"
   learn
@@ -417,20 +452,28 @@ migration_rolled_back() {
 export -f migration_rolled_back
 check "a build with a new migration that fails to start is rolled back and the hub opens its restored database" migration_rolled_back
 
-killed_helper_recovered() {
-  publish ok stable 0.0.1-test.7 7777777777777777777777777777777777777777 "$out/broken-cawco" "$key" 33 "$schema"
+swap_kill_recover() {
+  local version=$1 sequence=$2 plant=$3
+  publish ok stable "$version" "$sequence$sequence$sequence$sequence$sequence$sequence$sequence$sequence" "$out/broken-cawco" "$key" "$sequence" "$schema"
   learn
   put_policy stable true
-  wait_until 240 '[[ "$(as_user "$hubc" readlink /home/cawco/.local/share/cawco/binary/current)" == versions/0.0.1-test.7 ]]'
+  wait_until 240 '[[ "$(as_user "$hubc" readlink /home/cawco/.local/share/cawco/binary/current)" == versions/'"$version"' ]]'
   put_policy stable false
-  as_user "$hubc" pkill -9 -f "binary-apply 0.0.1-test.7"
+  as_user "$hubc" pkill -9 -f "binary-apply $version"
+  if [[ $plant == plant ]]; then
+    # What a killed hub leaves behind: a marker naming a process id that now belongs to something else.
+    live=$(keeper_pid "$hubc")
+    as_user "$hubc" sh -c "printf '{\"pid\":$live,\"procStart\":\"1\",\"bootId\":\"not-this-boot\"}' > ~/.local/share/cawco/cawco.db.migrating"
+  fi
   # The unit that cannot start keeps being restarted; the first start after the trial runs out restores the previous build.
   wait_until 420 '[[ "$(as_user "$hubc" readlink /home/cawco/.local/share/cawco/binary/current)" == versions/0.0.1-test.2 ]]'
   wait_until 120 'as_user "$hubc" curl -fsS http://127.0.0.1:3456/health | grep -q "\"version\":\"0.0.1-test.2\""'
-  wait_until 120 '[[ "$(field $hid failedVersion)" == 0.0.1-test.7 && "$(phase $hid)" == failed-rolled-back ]]'
+  wait_until 120 '[[ "$(field $hid failedVersion)" == '"$version"' && "$(phase $hid)" == failed-rolled-back ]]'
+  as_user "$hubc" rm -f /home/cawco/.local/share/cawco/cawco.db.migrating
 }
-export -f killed_helper_recovered
-check "a helper killed right after the swap of a build that cannot start is recovered at the next start" killed_helper_recovered
+export -f swap_kill_recover
+check "a helper killed right after the swap of a build that cannot start is recovered at the next start" "swap_kill_recover 0.0.1-test.7 33 none"
+check "a stale migration marker left by a killed hub does not hold a failed build in place" "swap_kill_recover 0.0.1-test.6 34 plant"
 
 channel_change() {
   publish ok nightly "0.0.1-nightly.3+333333333333" 3333333333333333333333333333333333333333 "$bins/cawco-3" "$key" 40 "$schema"
@@ -441,8 +484,6 @@ channel_change() {
 export -f channel_change
 check "changing the channel takes effect" channel_change
 
-keeper_pid() { as_user "$1" systemctl --user show -p MainPID --value cawco-sessiond.service; }
-export -f keeper_pid
 auto_with_held_child() {
   # A child the session keeper holds, as a running session's process would be.
   spawn_child "$hubc" held
@@ -450,11 +491,25 @@ auto_with_held_child() {
   keeper=$(keeper_pid "$hubc")
   [[ -n "$child" && -n "$keeper" ]]
   echo "$child $keeper" > "$out/held.txt"
+  rm -f "$out/stop-hub" "$out/accepted-hub.txt"
+  start_loop "$hid" hubstart "$out/accepted-hub.txt" "$out/stop-hub" &
+  echo $! > "$out/hubloop.pid"
   put_policy nightly true
   wait_until 300 '[[ "$(build_version $hid)" == "0.0.1-nightly.3+333333333333" ]]'
+  touch "$out/stop-hub"
+  wait "$(cat "$out/hubloop.pid")"
 }
 export -f auto_with_held_child
 check "with auto-update on the build is applied when the machine is idle" auto_with_held_child
+
+hub_starts_held() {
+  [[ "$(wc -l < "$out/accepted-hub.txt")" -ge 1 ]]
+  wait_until 180 '[[ "$(phase $hid)" != installing ]]'
+  wait_until 120 '[[ "$(hub_api /api/instances | json "d => d.filter(r => r.id.startsWith(\"hubstart-\") && r.status === \"running\").length")" == "$(wc -l < "$out/accepted-hub.txt")" ]]'
+  [[ "$(hub_api /api/instances | json 'd => d.filter(r => r.id.startsWith("hubstart-")).length')" == "$(wc -l < "$out/accepted-hub.txt")" ]]
+}
+export -f hub_starts_held
+check "a session start requested while the hub's own machine installs runs once afterwards, none lost" hub_starts_held
 
 held_survives() {
   read -r child keeper < "$out/held.txt"

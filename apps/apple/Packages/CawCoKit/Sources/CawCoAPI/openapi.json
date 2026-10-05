@@ -459,6 +459,41 @@
         }
       }
     },
+    "/api/binary-updates/machines/{machineId}/state": {
+      "put": {
+        "parameters": [
+          {
+            "name": "machineId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          }
+        },
+        "operationId": "putApiBinaryUpdatesMachinesByMachineIdState",
+        "responses": {
+          "200": {
+            "description": "putApiBinaryUpdatesMachinesByMachineIdState 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/putApiBinaryUpdatesMachinesByMachineIdState200"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/binary-updates/machines/{machineId}/acknowledge": {
       "post": {
         "parameters": [
@@ -6295,6 +6330,17 @@
           "version"
         ]
       },
+      "putApiBinaryUpdatesMachinesByMachineIdState200": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ]
+      },
       "postApiBinaryUpdatesMachinesByMachineIdAcknowledge200": {
         "type": "object",
         "properties": {
@@ -6824,6 +6870,9 @@
           "id": {
             "type": "string"
           },
+          "state": {
+            "type": "object"
+          },
           "result": {},
           "parentRunId": {
             "type": [
@@ -6863,9 +6912,6 @@
               "null",
               "string"
             ]
-          },
-          "state": {
-            "type": "object"
           },
           "startedAt": {
             "type": "string",
@@ -6975,6 +7021,9 @@
               "id": {
                 "type": "string"
               },
+              "state": {
+                "type": "object"
+              },
               "result": {},
               "parentRunId": {
                 "type": [
@@ -7014,9 +7063,6 @@
                   "null",
                   "string"
                 ]
-              },
-              "state": {
-                "type": "object"
               },
               "startedAt": {
                 "type": "string",
@@ -8948,12 +8994,12 @@
           "id": {
             "type": "string"
           },
+          "state": {
+            "$ref": "#/components/schemas/WorkspaceState"
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time"
-          },
-          "state": {
-            "$ref": "#/components/schemas/WorkspaceState"
           },
           "branch": {
             "type": "string"
@@ -11891,6 +11937,9 @@
               "id": {
                 "type": "string"
               },
+              "state": {
+                "type": "object"
+              },
               "result": {},
               "parentRunId": {
                 "type": [
@@ -11930,9 +11979,6 @@
                   "null",
                   "string"
                 ]
-              },
-              "state": {
-                "type": "object"
               },
               "startedAt": {
                 "type": "string",

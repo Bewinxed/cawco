@@ -1777,6 +1777,54 @@ export const createServer = (
   const binaryUpdateStates = new Map<string, BinaryUpdateState>();
 
   /**
+   * A machine that is installing an update takes no new session start: its agent
+   * is about to restart, and a start held there would go with it. The hub keeps
+   * the start instead, on the instance row already written for it.
+   */
+  const holdingStarts = (machineId: string): boolean =>
+    binaryUpdateStates.get(machineId)?.phase === "installing";
+
+  /** Sends a start, or, while its machine is installing an update, keeps it on its row. */
+  const sendSpawn = (
+    agent: NonNullable<ReturnType<typeof registry.agent>>,
+    machineId: string,
+    envelope: Envelope<SpawnPayload>
+  ): void => {
+    if (holdingStarts(machineId) && envelope.instanceId) {
+      db.oweSpawn(envelope.instanceId, JSON.stringify(envelope), Date.now());
+      return;
+    }
+    agent.send(envelope);
+  };
+
+  /**
+   * Sends every start a machine is owed, in the order they were asked for,
+   * each exactly once: the row's claim is taken before the send. Runs when the
+   * machine registers and when its update state changes, and does nothing while
+   * it is still installing. A start the person has since stopped is dropped.
+   */
+  const flushOwedStarts = (machineId: string): void => {
+    const agent = registry.agent(machineId);
+    if (!agent || holdingStarts(machineId)) {
+      return;
+    }
+    for (const owed of db.owedSpawns(machineId)) {
+      if (!db.takeOwedSpawn(owed.id)) {
+        continue;
+      }
+      const row = db.ownedInstance(owed.id, machineId);
+      if (
+        !row ||
+        row.endIntent ||
+        ["stopped", "discarded"].includes(row.status)
+      ) {
+        continue;
+      }
+      agent.send(JSON.parse(owed.envelope) as Envelope<SpawnPayload>);
+    }
+  };
+
+  /**
    * Standing instructions, enforced on the frame stream this server already
    * carries. Constructed here so it shares the request's `db` and reaches
    * machines through the same registry every other injection uses.
@@ -3088,7 +3136,7 @@ export const createServer = (
       permissionMode: settled.permissionMode,
       model: row.model ?? undefined,
     });
-    agent.send({
+    sendSpawn(agent, machineId, {
       verb: "spawn",
       machineId,
       instanceId,
@@ -3915,6 +3963,12 @@ export const createServer = (
     if (!agent) {
       throw new Error(`machine ${machineId} is not connected`);
     }
+    if (asked.requestId && holdingStarts(machineId)) {
+      // The caller is waiting for this start; it is told now rather than left to time out.
+      throw new Error(
+        `machine ${machineId} is installing an update; start the session again when it finishes`
+      );
+    }
     const settled = settleMode(machineId, asked, fallbackMode);
     if ("refusal" in settled) {
       throw new WorkItemRefusal(400, settled.refusal);
@@ -3939,7 +3993,7 @@ export const createServer = (
       ...peekParent(payload),
       ...(workItemId ? { workItemId } : {}),
     });
-    agent.send({
+    sendSpawn(agent, machineId, {
       verb: "spawn",
       machineId,
       instanceId: payload.instanceId,
@@ -4032,6 +4086,9 @@ export const createServer = (
   ): Promise<void> => {
     const agent = registry.agent(machineId);
     if (!agent) {
+      throw new MachineAway(machineId);
+    }
+    if (holdingStarts(machineId)) {
       throw new MachineAway(machineId);
     }
     const settled = settleMode(machineId, asked, fallbackMode);
@@ -7537,6 +7594,13 @@ export const createServer = (
               .listAgents()
               .filter((row) => registry.agent(row.machineId))
               .map((row) => row.machineId),
+          setState: (machineId, state) => {
+            const known = peekBinaryUpdate({ binaryUpdate: state });
+            if (known) {
+              binaryUpdateStates.set(machineId, known);
+              flushOwedStarts(machineId);
+            }
+          },
           acknowledge: (machineId) =>
             callAgent(machineId, ACKNOWLEDGE_BINARY_UPDATE, [], 10_000),
           cancel: (machineId) =>
@@ -10500,6 +10564,7 @@ export const createServer = (
               if (registered) {
                 binaryUpdateStates.set(message.machineId, registered);
               }
+              flushOwedStarts(message.machineId);
               // A question parked by a process that is gone cannot be answered:
               // the reply would arrive at a daemon with no such session. Drop them
               // with the sessions they belonged to, or they replay to every
@@ -10865,6 +10930,9 @@ export const createServer = (
                 );
               if (beaten) {
                 binaryUpdateStates.set(message.machineId, beaten);
+              }
+              if (moved) {
+                flushOwedStarts(message.machineId);
               }
               // What the machine can do: one beat per connection carries it,
               // sent the moment the daemon's probes finish. It used to ride the
@@ -12059,7 +12127,22 @@ export const createServer = (
                   model: peek(message.payload, "model"),
                   ...peekParent(message.payload),
                 });
-                forward({ ...message, payload: bounded(settled.payload) }, ws);
+                if (holdingStarts(message.machineId)) {
+                  // The row says starting; the start goes out when the machine can take it.
+                  db.oweSpawn(
+                    message.instanceId,
+                    JSON.stringify({
+                      ...message,
+                      payload: bounded(settled.payload),
+                    }),
+                    Date.now()
+                  );
+                } else {
+                  forward(
+                    { ...message, payload: bounded(settled.payload) },
+                    ws
+                  );
+                }
                 // A conversation that starts here: its first turn is its name.
                 if (!peekResume(message.payload)) {
                   awaitingFirstTurn.add(message.instanceId);

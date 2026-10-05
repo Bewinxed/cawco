@@ -47,6 +47,8 @@ interface Options {
   ) => Promise<unknown>;
   dbPath: string;
   online: () => string[];
+  /** Records what a machine says its update state is, ahead of its next heartbeat. */
+  setState: (machineId: string, state: BinaryUpdateState) => void;
   states: () => ReadonlyMap<string, BinaryUpdateState>;
 }
 
@@ -147,6 +149,16 @@ export function createBinaryUpdates(options: Options) {
         notes: found.manifest.notes,
       };
     })
+    // A machine tells the hub it is installing before it starts, so no start is
+    // sent to it in the seconds before its next heartbeat would have said so.
+    .put(
+      "/api/binary-updates/machines/:machineId/state",
+      { body: t.Any() },
+      ({ params, body }) => {
+        options.setState(params.machineId, body as BinaryUpdateState);
+        return { ok: true };
+      }
+    )
     .post(
       "/api/binary-updates/machines/:machineId/acknowledge",
       async ({ params }) => {

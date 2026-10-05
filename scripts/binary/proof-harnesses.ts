@@ -1,4 +1,4 @@
-/** Only linked by the explicitly requested proof build, never a release build. */
+/** Only linked by an explicitly requested proof build, never a release build. */
 const registry = new Map();
 for (const kind of ["claude", "opencode", "pi"]) {
   registry.set(kind, {
@@ -25,8 +25,25 @@ for (const kind of ["claude", "opencode", "pi"]) {
             memory: null,
           })
         : undefined,
-    spawn: () =>
-      Promise.reject(new Error("Proof harness cannot run model turns")),
+    // A session that exists and runs no model turns: enough for the hub and the
+    // agent to carry it as a running session, with no credentials.
+    spawn: (
+      _payload: unknown,
+      ctx: { closed?: () => void; instanceId: string }
+    ) =>
+      Promise.resolve({
+        harness: kind,
+        sessionId: `stub-${ctx.instanceId}`,
+        control: () => Promise.resolve(undefined),
+        dispose: () => Promise.resolve(),
+        interrupt: () => Promise.resolve(),
+        resolvePermission: () => undefined,
+        send: () => undefined,
+        stop: () => {
+          ctx.closed?.();
+          return Promise.resolve();
+        },
+      }),
     deleteSession: () => Promise.resolve(),
     renameSession: () => Promise.resolve(),
     tagSession: () => Promise.resolve(),

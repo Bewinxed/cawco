@@ -61,31 +61,10 @@ export async function mayReplaceMachineServices(
   return busy.ready && busy.busy === 0;
 }
 
-/** Session starts wait here while an update is installing; see `waitWhileInstalling`. */
-const installingWaiters: (() => void)[] = [];
-let installing = false;
-
-/**
- * Resolves at once unless an update is installing, and then when it is not. A
- * start requested in that window is never dropped: it waits and proceeds.
- */
-export function waitWhileInstalling(): Promise<void> {
-  if (!installing) {
-    return Promise.resolve();
-  }
-  return new Promise((resolve) => installingWaiters.push(resolve));
-}
-
 let latest: BinaryUpdateState | undefined;
 export const latestBinaryUpdate = (): BinaryUpdateState | undefined => latest;
 export const reportBinaryUpdate = (state: BinaryUpdateState): void => {
   latest = state;
-  installing = state.phase === "installing";
-  if (!installing) {
-    for (const resolve of installingWaiters.splice(0)) {
-      resolve();
-    }
-  }
 };
 
 /** The session keeper's held children, what it speaks and its epoch, read now. */
@@ -267,7 +246,7 @@ export class BinaryUpdater {
     await this.#noteRecovery();
     this.#timer = setInterval(() => this.tick(), POLL_MS);
     this.#timer.unref();
-    this.#trialTimer = setInterval(() => this.#confirmTrial(), 10_000);
+    this.#trialTimer = setInterval(() => this.#watch(), 10_000);
     this.#trialTimer.unref();
     await this.tick();
   }
@@ -361,6 +340,14 @@ export class BinaryUpdater {
       unseen: true,
     });
     await rm(recoveredPath(), { force: true });
+  }
+
+  /** Every ten seconds: take up what the helper wrote, so the hub learns the phase has moved on, and confirm the trial. */
+  async #watch(): Promise<void> {
+    if (!this.#running) {
+      await this.#load();
+    }
+    await this.#confirmTrial();
   }
 
   /** Clears the trial marker once this build has been healthy for a minute. */
@@ -639,6 +626,33 @@ export class BinaryUpdater {
     await this.#set({ phase: "ready" });
   }
 
+  /**
+   * Says `installing` to the hub now, not at the next heartbeat: from this
+   * moment the hub keeps new session starts for this machine instead of
+   * sending them to an agent that is about to restart. If the hub cannot be
+   * told, nothing is installed.
+   */
+  async #tellHub(): Promise<void> {
+    const installation = await readInstallation();
+    if (!installation) {
+      return;
+    }
+    const response = await fetch(
+      `${installation.hubUrl}/api/binary-updates/machines/${await machineId()}/state`,
+      {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(this.#state),
+        signal: AbortSignal.timeout(10_000),
+      }
+    );
+    if (!response.ok) {
+      throw new Error(
+        `The hub did not take the update state: ${response.status}`
+      );
+    }
+  }
+
   /** Runs only from `ready`: the one state in which a build is staged and nothing is applying. */
   async #apply(release: SignedRelease): Promise<void> {
     if (this.#state.phase !== "ready") {
@@ -671,6 +685,7 @@ export class BinaryUpdater {
       waitingFor: undefined,
     });
     this.#flags.commanded = false;
+    await this.#tellHub();
     await launchApplyHelper(release.manifest.version, keeper.held, false);
   }
 
@@ -700,6 +715,7 @@ export class BinaryUpdater {
     if (await mayReplaceMachineServices(this.#readBusy)) {
       await this.#set({ phase: "installing", heldChildren: undefined });
       this.#flags.commanded = false;
+      await this.#tellHub();
       await launchApplyHelper(runtimeVersion, 0, true);
     }
   }
