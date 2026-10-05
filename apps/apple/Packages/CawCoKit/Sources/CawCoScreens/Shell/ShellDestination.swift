@@ -73,7 +73,7 @@ enum ShellScreens {
         case .configure:
             PlaceholderViewController(destination: destination)
         case .usage:
-            PlaceholderViewController(destination: destination)
+            UsageViewController(context: context)
         }
     }
 }
