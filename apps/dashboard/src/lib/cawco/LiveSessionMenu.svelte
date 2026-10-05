@@ -18,6 +18,7 @@
     IconArchive,
     IconArrowRight,
     IconCheck,
+    IconColumns,
     IconExternal,
     IconFork,
     IconPenLine,
@@ -43,6 +44,7 @@
   import { conversationHref } from "./links";
   import RenameDialog from "./RenameDialog.svelte";
   import { sessionName } from "./session-name";
+  import { canOpenBeside, openBeside } from "./workspace/open-beside.svelte";
 
   interface Props {
     /** The row, spreading the trigger's props on its root element. */
@@ -176,6 +178,12 @@
       <IconExternal />
       Open
     </ContextMenu.Item>
+    {#if canOpenBeside(instance.id)}
+      <ContextMenu.Item onSelect={() => openBeside(instance.id)}>
+        <IconColumns />
+        Open in split view
+      </ContextMenu.Item>
+    {/if}
     <ContextMenu.Item disabled={!(forkable && machine)} onSelect={fork}>
       <IconFork />
       Fork

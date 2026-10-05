@@ -14,6 +14,7 @@
   import * as ContextMenu from "#lib/components/ui/context-menu/index.js";
   import {
     IconArrowRight,
+    IconColumns,
     IconExternal,
     IconFork,
     IconPenLine,
@@ -31,6 +32,7 @@
   import { continueInNewSession } from "./continue.svelte";
   import { conversationHref, instanceForSession, sessionTitle } from "./links";
   import RenameDialog from "./RenameDialog.svelte";
+  import { canOpenBeside, openBeside } from "./workspace/open-beside.svelte";
 
   let {
     machineId,
@@ -139,6 +141,19 @@
       <IconExternal />
       Open
     </ContextMenu.Item>
+    {#if canOpenBeside(info.sessionId)}
+      <ContextMenu.Item
+        onSelect={() =>
+          openBeside(info.sessionId, {
+            machine: machineId,
+            cwd: info.cwd ?? "",
+            harness: info.harness ?? "claude",
+          })}
+      >
+        <IconColumns />
+        Open in split view
+      </ContextMenu.Item>
+    {/if}
     <ContextMenu.Item
       onSelect={() =>
         continueInNewSession({
