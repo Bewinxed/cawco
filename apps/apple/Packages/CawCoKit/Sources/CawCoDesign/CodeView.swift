@@ -40,11 +40,13 @@ public final class CodeView: UIView {
         gutter.isUserInteractionEnabled = false
         text.addSubview(underline)
         text.addSubview(gutter)
+        // The 1pt border is part of the view's box, as the web's is: the
+        // editor stands inside it, so a line has the web's width to wrap in.
         NSLayoutConstraint.activate([
-            text.topAnchor.constraint(equalTo: topAnchor),
-            text.bottomAnchor.constraint(equalTo: bottomAnchor),
-            text.leadingAnchor.constraint(equalTo: leadingAnchor),
-            text.trailingAnchor.constraint(equalTo: trailingAnchor),
+            text.topAnchor.constraint(equalTo: topAnchor, constant: 1),
+            text.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -1),
+            text.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 1),
+            text.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -1),
         ])
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (view: CodeView, _: UITraitCollection) in view.paint() }
         paint()
