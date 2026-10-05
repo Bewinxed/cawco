@@ -15,7 +15,11 @@ import { workspace } from "./workspace.svelte";
 
 const coarse = new MediaQuery("pointer: coarse");
 
-type Context = { machine?: string | null; cwd?: string; harness?: string };
+interface Context {
+  cwd?: string;
+  harness?: string;
+  machine?: string | null;
+}
 
 /** Whether the menu offers the item for this session right now. */
 export function canOpenBeside(sessionId: string): boolean {

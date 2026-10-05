@@ -714,8 +714,8 @@
       bind:open={
         () => railOpen && !railed,
         (open) => {
-          railOpen = open;
-        }
+    railOpen = open;
+  }
       }
     >
       <Sheet.Content
