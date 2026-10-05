@@ -1512,6 +1512,20 @@ const waitForIdle = async (
  */
 const HOSTS_SESSIONS: readonly ServiceId[] = ["sessiond"];
 
+const cancelAgentRetirement = async (): Promise<void> => {
+  const hub = await joinedHub();
+  if (!hub) {
+    return;
+  }
+  const { machineId } = await import("@cawco/agent");
+  // Cancellation never retries the failed OS operation and cannot cancel an
+  // automatic retirement whose action has already been selected.
+  await fetch(`${hub}/api/agents/${await machineId()}/cancel-restart`, {
+    method: "POST",
+    signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
+  }).catch(() => undefined);
+};
+
 /**
  * Asked before a session-hosting service is restarted. One machine's busy count
  * answers for both of them: they are the two ends of the same sessions, so
@@ -1522,7 +1536,7 @@ const clearToRestart = async (
   { whenIdle, force }: Pick<RestartRequest, "whenIdle" | "force">,
   note: (line: string) => void
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: fenced agent requests and sessiond's destructive turn policy share this entrypoint.
-): Promise<boolean> => {
+): Promise<void> => {
   if (spec.id === "agent") {
     const hub = await joinedHub();
     if (!hub) {
@@ -1544,26 +1558,19 @@ const clearToRestart = async (
         );
       }
       if (report.ready) {
-        const response = await fetch(`${base}/retire`, {
+        const response = await fetch(`${base}/prepare-restart`, {
           method: "POST",
           signal: AbortSignal.timeout(10_000),
         });
         if (!response.ok) {
           throw new ServiceError(await response.text());
         }
-        const decision = (await response.json()) as AgentRestartReadiness & {
-          scheduled: boolean;
-        };
-        if (decision.scheduled) {
-          note("agent restart scheduled; sessions carry on in sessiond");
-          return true;
+        const decision = (await response.json()) as AgentRestartReadiness;
+        if (decision.ready && decision.retiring) {
+          note("agent ready to restart; sessions carry on in sessiond");
+          return;
         }
         report = decision;
-        if (report.ready) {
-          throw new ServiceError(
-            "No agent service was restarted on this machine. Install its service before retrying."
-          );
-        }
       }
       const reasons = report.holds
         .map(({ reason, ids }) => `${reason}=${ids.join(",")}`)
@@ -1578,7 +1585,7 @@ const clearToRestart = async (
     }
   }
   if (!HOSTS_SESSIONS.includes(spec.id)) {
-    return false;
+    return;
   }
   const busy = await agentBusy();
   const decision = restartDecision({
@@ -1589,12 +1596,12 @@ const clearToRestart = async (
   });
   switch (decision.kind) {
     case "go":
-      return false;
+      return;
     case "refuse":
       throw new ServiceError(decision.reason);
     case "wait":
       await waitForIdle(decision.busy, note);
-      return false;
+      return;
     default:
       throw new ServiceError("unreachable: unknown restart decision kind");
   }
@@ -1828,12 +1835,17 @@ export const service = async (
         // Asked per service and not up front, so the two that are safe to bounce
         // are already back up by the time the daemon's question is answered.
         // biome-ignore lint/performance/noAwaitInLoops: services restart one at a time so each one's notes print in its own order and a failure is attributable to the service that caused it.
-        if (await clearToRestart(spec, { whenIdle, force }, note)) {
-          continue;
+        await clearToRestart(spec, { whenIdle, force }, note);
+        try {
+          await (mac
+            ? restartLaunchAgent(spec, note)
+            : restartSystemdUnit(spec, note));
+        } catch (error) {
+          if (spec.id === "agent") {
+            await cancelAgentRetirement();
+          }
+          throw error;
         }
-        await (mac
-          ? restartLaunchAgent(spec, note)
-          : restartSystemdUnit(spec, note));
       }
       return;
     case "status":
@@ -2161,7 +2173,6 @@ const settleServices = async (
   }
   const start: ServiceSpec[] = [];
   const replace: ServiceSpec[] = [];
-  const retired = new Set<ServiceId>();
   const rendered: RenderedUnit[] = [];
   for (const base of specs) {
     const path = mac ? launchAgentPath(base.id) : systemdPath(base.id);
@@ -2187,50 +2198,37 @@ const settleServices = async (
       replace.push(spec);
     }
   }
-  for (const spec of replace.filter((candidate) => candidate.id !== "agent")) {
+  let preparedAgent = false;
+  for (const spec of replace) {
     // biome-ignore lint/performance/noAwaitInLoops: each session-hosting service asks the hub in turn; nothing restarts until every one is clear
-    if (await clearToRestart(spec, { whenIdle: true, force }, note)) {
-      retired.add(spec.id);
+    await clearToRestart(spec, { whenIdle: true, force }, note);
+    if (spec.id === "agent") {
+      preparedAgent = true;
     }
   }
-  if (mac) {
-    const replacementAgent = replace.find(
-      (candidate) => candidate.id === "agent"
-    );
-    if (replacementAgent) {
-      await writeUnit(launchAgentPath("agent"), plist(replacementAgent));
-      retired.add("agent");
+  try {
+    if (mac) {
+      // A LaunchAgent is replaced by booting it out and back in: that is the
+      // restart, and every one of them has already been cleared above.
+      if (start.length + replace.length > 0) {
+        await installLaunchAgents([...start, ...replace], note);
+      }
+      return rendered;
     }
-    // A LaunchAgent is replaced by booting it out and back in: that is the
-    // restart, and every one of them has already been cleared above.
-    const install = [
-      ...start,
-      ...replace.filter((spec) => !retired.has(spec.id)),
-    ];
-    if (install.length > 0) {
-      await installLaunchAgents(install, note);
+    if (start.length + replace.length > 0) {
+      await installSystemdUnits([...start, ...replace], note);
     }
-    if (replacementAgent) {
-      await clearToRestart(replacementAgent, { whenIdle: true, force }, note);
+    for (const spec of replace) {
+      // biome-ignore lint/performance/noAwaitInLoops: services restart one at a time so each one's note prints in its own order
+      await restartSystemdUnit(spec, note);
     }
     return rendered;
-  }
-  if (start.length + replace.length > 0) {
-    await installSystemdUnits([...start, ...replace], note);
-  }
-  for (const spec of replace) {
-    if (spec.id === "agent") {
-      // biome-ignore lint/performance/noAwaitInLoops: each service must publish its own retirement receipt in order.
-      await clearToRestart(spec, { whenIdle: true, force }, note);
-      continue;
+  } catch (error) {
+    if (preparedAgent) {
+      await cancelAgentRetirement();
     }
-    if (retired.has(spec.id)) {
-      continue;
-    }
-    // biome-ignore lint/performance/noAwaitInLoops: services restart one at a time so each one's note prints in its own order
-    await restartSystemdUnit(spec, note);
+    throw error;
   }
-  return rendered;
 };
 
 // ---------------------------------------------------------------------------

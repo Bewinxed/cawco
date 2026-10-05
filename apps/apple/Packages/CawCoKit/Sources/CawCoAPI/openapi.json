@@ -2014,7 +2014,7 @@
         }
       }
     },
-    "/api/agents/{machineId}/retire": {
+    "/api/agents/{machineId}/prepare-restart": {
       "post": {
         "parameters": [
           {
@@ -2026,20 +2026,20 @@
             }
           }
         ],
-        "operationId": "postApiAgentsByMachineIdRetire",
+        "operationId": "postApiAgentsByMachineIdPrepareRestart",
         "responses": {
           "200": {
-            "description": "postApiAgentsByMachineIdRetire 200",
+            "description": "postApiAgentsByMachineIdPrepareRestart 200",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/postApiAgentsByMachineIdRetire200"
+                  "$ref": "#/components/schemas/AgentRestartReadiness"
                 }
               }
             }
           },
           "500": {
-            "description": "postApiAgentsByMachineIdRetire 500",
+            "description": "postApiAgentsByMachineIdPrepareRestart 500",
             "content": {
               "text/plain": {
                 "schema": {
@@ -2049,7 +2049,54 @@
             }
           },
           "503": {
-            "description": "postApiAgentsByMachineIdRetire 503",
+            "description": "postApiAgentsByMachineIdPrepareRestart 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agents/{machineId}/cancel-restart": {
+      "post": {
+        "parameters": [
+          {
+            "name": "machineId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "postApiAgentsByMachineIdCancelRestart",
+        "responses": {
+          "200": {
+            "description": "postApiAgentsByMachineIdCancelRestart 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiAgentsByMachineIdCancelRestart200"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "postApiAgentsByMachineIdCancelRestart 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "postApiAgentsByMachineIdCancelRestart 503",
             "content": {
               "text/plain": {
                 "schema": {
@@ -7325,7 +7372,7 @@
           "instances"
         ]
       },
-      "postApiAgentsByMachineIdRetire200": {
+      "postApiAgentsByMachineIdCancelRestart200": {
         "allOf": [
           {
             "$ref": "#/components/schemas/AgentRestartReadiness"
@@ -7333,12 +7380,12 @@
           {
             "type": "object",
             "properties": {
-              "scheduled": {
+              "cancelled": {
                 "type": "boolean"
               }
             },
             "required": [
-              "scheduled"
+              "cancelled"
             ]
           }
         ]

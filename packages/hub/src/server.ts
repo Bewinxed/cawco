@@ -7605,23 +7605,47 @@ export const createServer = (
           return answer.result as import("@cawco/core").AgentRestartReadiness;
         }
       )
-      .post("/api/agents/:machineId/retire", async ({ params, status }) => {
-        const answer = await callAgent(
-          params.machineId,
-          AGENT_RETIRE,
-          [],
-          BUSY_TIMEOUT_MS
-        );
-        if (typeof answer === "string") {
-          return status(503, `Agent retirement ${answer}`);
+      .post(
+        "/api/agents/:machineId/prepare-restart",
+        async ({ params, status }) => {
+          const answer = await callAgent(
+            params.machineId,
+            AGENT_RETIRE,
+            [],
+            BUSY_TIMEOUT_MS
+          );
+          if (typeof answer === "string") {
+            return status(503, `Agent retirement ${answer}`);
+          }
+          if (!answer.ok) {
+            return status(500, answer.error ?? "Agent retirement failed");
+          }
+          return answer.result as import("@cawco/core").AgentRestartReadiness;
         }
-        if (!answer.ok) {
-          return status(500, answer.error ?? "Agent retirement failed");
+      )
+      .post(
+        "/api/agents/:machineId/cancel-restart",
+        async ({ params, status }) => {
+          const answer = await callAgent(
+            params.machineId,
+            AGENT_RETIRE,
+            ["cancel"],
+            BUSY_TIMEOUT_MS
+          );
+          if (typeof answer === "string") {
+            return status(503, `Agent retirement ${answer}`);
+          }
+          if (!answer.ok) {
+            return status(
+              500,
+              answer.error ?? "Agent retirement cancellation failed"
+            );
+          }
+          return answer.result as import("@cawco/core").AgentRestartReadiness & {
+            cancelled: boolean;
+          };
         }
-        return answer.result as import("@cawco/core").AgentRestartReadiness & {
-          scheduled: boolean;
-        };
-      })
+      )
       .post(
         "/api/agents/:machineId/unowned-processes/stop",
         {

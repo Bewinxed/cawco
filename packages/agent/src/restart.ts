@@ -90,6 +90,46 @@ export const describeRestartHolds = (report: AgentRestartReadiness): string =>
 /** Check, fence synchronously, check again, then schedule. Never force past a hold. */
 type RetirementResult = AgentRestartReadiness & { scheduled: boolean };
 let retirement: Promise<RetirementResult> | undefined;
+let preparing = false;
+let scheduledHere = false;
+
+/** Shared fence decision; CLI service actions keep their existing OS loader. */
+export async function prepareRetirement(
+  read: () => Promise<AgentRestartReadiness>
+): Promise<AgentRestartReadiness> {
+  if (retiring || preparing) {
+    return restartSnapshot([
+      { reason: "retirement-in-progress", ids: ["agent"] },
+    ]);
+  }
+  preparing = true;
+  try {
+    const first = await read();
+    if (!first.ready) {
+      return first;
+    }
+    setRetiring(true);
+    const fenced = await read();
+    if (!fenced.ready) {
+      setRetiring(false);
+      return { ...fenced, retiring: false };
+    }
+    return fenced;
+  } catch (error) {
+    setRetiring(false);
+    throw error;
+  } finally {
+    preparing = false;
+  }
+}
+
+export function cancelPreparedRetirement(): boolean {
+  if (preparing || scheduledHere) {
+    return false;
+  }
+  setRetiring(false);
+  return true;
+}
 
 export function retireAgent(
   read: () => Promise<AgentRestartReadiness>,
@@ -105,27 +145,21 @@ async function decideRetirement(
   read: () => Promise<AgentRestartReadiness>,
   schedule: () => Promise<boolean>
 ): Promise<AgentRestartReadiness & { scheduled: boolean }> {
-  if (retiring) {
-    return { ...(await read()), scheduled: true };
+  const fenced = await prepareRetirement(read);
+  if (!fenced.ready) {
+    return { ...fenced, scheduled: false };
   }
-  const first = await read();
-  if (!first.ready) {
-    return { ...first, scheduled: false };
-  }
-  setRetiring(true);
+  scheduledHere = true;
   try {
-    const fenced = await read();
-    if (!fenced.ready) {
-      setRetiring(false);
-      return { ...fenced, retiring: false, scheduled: false };
-    }
     const scheduled = await schedule();
     if (!scheduled) {
+      scheduledHere = false;
       setRetiring(false);
       return { ...(await read()), scheduled: false };
     }
     return { ...fenced, retiring: true, scheduled };
   } catch (error) {
+    scheduledHere = false;
     setRetiring(false);
     throw error;
   }

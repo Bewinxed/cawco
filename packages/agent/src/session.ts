@@ -67,10 +67,9 @@ import {
 import { sessiondEndpoint } from "@cawco/core/sessiond";
 import { Effect } from "effect";
 import { type Boundary, boundaryFor } from "./boundary";
-import { buildInfo } from "./build";
 import { fetchDefaultBranch } from "./clone";
 import { harnessMcpUrl } from "./delegation";
-import { DEPLOY_BRANCH, deployRoot } from "./deploy";
+import { DEPLOY_BRANCH } from "./deploy";
 import { expandHome, runFs } from "./fs";
 import type { Harness, HarnessContext, HarnessSession } from "./harness";
 import { harnesses, harness as harnessOf } from "./harnesses";
@@ -86,17 +85,18 @@ import {
   withPromptWrites,
 } from "./prompt-writes";
 import {
+  cancelPreparedRetirement,
   holdRestart,
   isRetiring,
+  prepareRetirement,
   restartSnapshot,
-  retireAgent,
   withRestartHold,
 } from "./restart";
 import { acknowledgeSessionCredential } from "./session-identity";
 import { endProc, procEpoch, SessiondClient } from "./sessiond-client";
 import { readHeldProcesses } from "./sessiond-custody";
 import { installTool, probeTools } from "./tools";
-import { restartAgentNow, type UpdateOptions, updateCheckout } from "./update";
+import { type UpdateOptions, updateCheckout } from "./update";
 
 /**
  * What {@link SessionSupervisor.reattach} needs of a sessiond-backed adapter, named
@@ -571,17 +571,13 @@ export class SessionSupervisor {
     [PREVIEW_STOP]: (options) => stopPreview(options as { instanceId: string }),
     [AGENT_BUSY]: () => this.busyNow(),
     [AGENT_RESTART_READINESS]: () => this.restartReadiness(),
-    [AGENT_RETIRE]: async () =>
-      retireAgent(
-        () => this.restartReadiness(),
-        async () => {
-          const { commit } = await buildInfo();
-          if (!commit) {
-            throw new Error("The agent build commit is unavailable.");
-          }
-          return restartAgentNow(deployRoot(), commit);
-        }
-      ),
+    [AGENT_RETIRE]: async (action) => {
+      if (action === "cancel") {
+        const cancelled = cancelPreparedRetirement();
+        return { ...(await this.restartReadiness()), cancelled };
+      }
+      return await prepareRetirement(() => this.restartReadiness());
+    },
     [UPDATE_CAWCO]: async (options) =>
       updateCheckout({
         ...(options as Pick<UpdateOptions, "force" | "restartAgent">),
@@ -667,6 +663,7 @@ export class SessionSupervisor {
   /** Settles once the envelope has been handled, success or failure alike. */
   dispatch(envelope: Envelope): Promise<void> {
     const release = this.#admitRequest(envelope);
+    // biome-ignore lint/suspicious/noUnnecessaryConditions: asynchronous retirement raises the process fence; rejected admission returns undefined.
     if (!release) {
       return Promise.resolve();
     }
