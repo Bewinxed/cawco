@@ -20,8 +20,17 @@
  * under an open parent take their place in the order as they are drawn.
  *
  * With reduced motion nothing runs here: the mark draws a still dot.
+ *
+ * Nor while the list is not rendered (`watchRendered`: the home board put
+ * away under a conversation, `content-visibility: hidden`). An echo there
+ * has no layer for the compositor to run it on, so Safari ran it on the
+ * page's own thread and laid the page out for it on every frame: five
+ * echoes in the board under a conversation, 66 layouts a second with nothing
+ * on screen moving, none with them stopped. Rendered again, every echo is
+ * started from the list's same fixed time, so it is in step at once.
  */
 import type { Attachment } from "svelte/attachments";
+import { watchRendered } from "#lib/utils/rendered.js";
 import { CURVE, dur, motionOk, numberOf } from "./curves.svelte";
 
 /** How many beats fit in one loop: the rows start a third of a loop apart. */
@@ -41,8 +50,16 @@ const BEATS = 3;
  * not draw a layer that is wholly transparent, so one resting at opacity 0
  * was first drawn on the frame its beat began: two frames went out with
  * its content missing, every time a working row was drawn again (a project
- * opening). The jump back is a step: eased, it would pass through a
- * half-grown, half-seen echo.
+ * opening).
+ *
+ * The way back is never seen, and has no step in it. Faded out at its full
+ * size, the echo shrinks to the tile's size still at nothing over the first
+ * half of the wait, then comes back to the beat's first frame over the
+ * second half, behind the cut. A step on the way back (`step-start`) drew
+ * the same thing, and Safari runs no animation with a step in it on the
+ * compositor: each echo was then worked out on the page's own thread, a
+ * style pass and a composite on all 66 frames of a second for nine echoes
+ * at rest, 3 frames a second without the step.
  */
 const beatFrames = (share: number): Keyframe[] => {
   const start = { opacity: numberOf("--echo-opacity"), transform: "scale(1)" };
@@ -52,8 +69,8 @@ const beatFrames = (share: number): Keyframe[] => {
       opacity: 0,
       transform: `scale(${numberOf("--echo-scale")})`,
       offset: share,
-      easing: "step-start",
     },
+    { opacity: 0, transform: "scale(1)", offset: (1 + share) / 2 },
     start,
   ];
 };
@@ -77,9 +94,20 @@ export function echoBeat(): Attachment<HTMLElement> {
     };
     /** The reader's motion setting, as it last was. */
     let moving = motionOk.current;
+    /** Once a frame at most, however many rows changed in it. */
+    const schedule = () => {
+      pending ||= requestAnimationFrame(sync);
+    };
+    /** The list is drawn at all: skipped, nothing beats in it. */
+    let rendered = true;
+    const watching = watchRendered(container, (on) => {
+      rendered = on;
+      schedule();
+    });
+    ({ rendered } = watching);
     const sync = () => {
       pending = 0;
-      if (!moving) {
+      if (!(moving && rendered)) {
         for (const echo of [...beats.keys()]) {
           stop(echo);
         }
@@ -110,10 +138,6 @@ export function echoBeat(): Attachment<HTMLElement> {
         beats.set(echo, { animation, cycle, place });
       });
     };
-    /** Once a frame at most, however many rows changed in it. */
-    const schedule = () => {
-      pending ||= requestAnimationFrame(sync);
-    };
 
     const watch = new MutationObserver(schedule);
     watch.observe(container, { childList: true, subtree: true });
@@ -126,6 +150,7 @@ export function echoBeat(): Attachment<HTMLElement> {
     return () => {
       cancelAnimationFrame(pending);
       watch.disconnect();
+      watching.stop();
       for (const echo of [...beats.keys()]) {
         stop(echo);
       }
