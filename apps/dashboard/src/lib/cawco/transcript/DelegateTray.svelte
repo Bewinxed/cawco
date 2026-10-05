@@ -871,7 +871,7 @@
     aria-expanded={openKey === item.id}
     aria-label="{item.title}, {stateWords(chip)}"
     class="chip touch-hit {tone}"
-    data-flip={fanned ? undefined : "pop box"}
+    data-flip={fanned ? undefined : "pop"}
     data-flip-enter={fanned || entry === "fade" ? undefined : "own"}
     data-key={item.id}
     onblur={() => {
