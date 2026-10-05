@@ -78,7 +78,19 @@ extension HubConnection {
     }
 
     /// Ends the process, rather than merely interrupting its current turn.
+    ///
+    /// A plain Stop is the operator's decision and waits for no answer
+    /// (client.svelte.ts `stopSession`): the hub files it the moment it
+    /// arrives and answers nothing when it stands, so a wait here could only
+    /// time out. What the hub or the machine has to say against it comes back
+    /// as an error about the session, and is said in its transcript. A
+    /// discard waits, as the web's does: its caller is told either way.
     public func stopSession(instanceId: String, machineId: String, discard: Bool = false) async throws {
+        guard discard else {
+            try post(machineId: machineId, instanceId: instanceId, verb: .stop,
+                     payload: Components.Schemas.StopPayload(instanceId: instanceId))
+            return
+        }
         let requestId = UUID().uuidString.lowercased()
         let payload = Components.Schemas.StopPayload(discard: discard, instanceId: instanceId, requestId: requestId)
         _ = try await request(machineId: machineId, instanceId: instanceId, verb: .stop,

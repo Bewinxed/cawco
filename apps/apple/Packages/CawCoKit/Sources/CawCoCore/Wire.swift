@@ -79,6 +79,8 @@ enum Inbound {
         /// refused spawn, a machine that is not connected) names its request
         /// here and nowhere in its payload (server.ts `failure`).
         let requestId: String?
+        /// The session an envelope is about; the hub's own failures name it here too.
+        let instanceId: String?
     }
 
     /// A frame's own discriminators, and the structural fields the hub adds
@@ -134,14 +136,14 @@ enum Inbound {
         }
         let peek = try decoder.decode(Envelope<PayloadRoute>.self, from: data).payload
         let payload = try decoder.decode(Envelope<Components.Schemas.FramePayload>.self, from: data).payload
-        return .frame(Frame(payload, peek, answering: route.requestId))
+        return .frame(Frame(payload, peek, answering: route.requestId, about: route.instanceId))
     }
 
     /// A frame payload on its own (a `/api/pending` envelope's payload).
     static func frame(_ data: Data) throws -> Frame {
         let decoder = Wire.decoder()
         let peek = try decoder.decode(PayloadRoute.self, from: data)
-        return Frame(try decoder.decode(Components.Schemas.FramePayload.self, from: data), peek, answering: nil)
+        return Frame(try decoder.decode(Components.Schemas.FramePayload.self, from: data), peek, answering: nil, about: nil)
     }
 }
 
@@ -161,7 +163,7 @@ enum Frame {
     case runQuestion(runId: String, raisedAt: Double?)
     case usage(Components.Schemas.UsageFrame)
     case controlResult(Components.Schemas.ControlResultFrame)
-    case error(requestId: String?, message: String)
+    case error(requestId: String?, instanceId: String?, message: String)
     case pulse(Components.Schemas.PulseFrame)
     case supervisorEvent(Components.Schemas.SupervisorEvent)
     case workflow(Components.Schemas.WorkflowFrame)
@@ -171,7 +173,8 @@ enum Frame {
 
     /// `answering`: the envelope's own `requestId`, which an error frame takes
     /// when its payload names none (client.svelte.ts reads it the same way).
-    fileprivate init(_ payload: Components.Schemas.FramePayload, _ peek: Inbound.PayloadRoute, answering: String?) {
+    /// `about`: the envelope's `instanceId`, for an error that names its session only there.
+    fileprivate init(_ payload: Components.Schemas.FramePayload, _ peek: Inbound.PayloadRoute, answering: String?, about: String?) {
         switch payload {
         case .instances(let frame):
             self = .instances(frame, hubBuild: peek.hubBuild)
@@ -190,7 +193,7 @@ enum Frame {
         case .controlResult(let frame):
             self = .controlResult(frame)
         case .error(let frame):
-            self = .error(requestId: frame.requestId ?? answering, message: frame.message)
+            self = .error(requestId: frame.requestId ?? answering, instanceId: frame.instanceId ?? about, message: frame.message)
         case .pulse(let frame):
             self = .pulse(frame)
         case .supervisorEvent(let frame):

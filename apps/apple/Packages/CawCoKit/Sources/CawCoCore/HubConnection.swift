@@ -483,6 +483,17 @@ public final class HubConnection {
                                  requestId: requestId, payload: payload, timeout: timeout)
     }
 
+    /// Puts one envelope on the socket and waits for nothing: a verb whose
+    /// answer, if any, comes back as a frame about its session.
+    func post(machineId: String, instanceId: String? = nil, verb: Components.Schemas.Verb, payload: some Encodable) throws {
+        guard socket == .connected, let live else {
+            throw URLError(.notConnectedToInternet)
+        }
+        let envelope = Components.Schemas.Envelope(instanceId: instanceId, machineId: machineId,
+            payload: try Wire.transcode(payload, as: OpenAPIObjectContainer.self), verb: verb)
+        live.post(try Wire.encoder().encode(envelope))
+    }
+
     /// All correlated socket verbs share the same reply, disconnect and cancellation paths.
     func request(machineId: String, instanceId: String? = nil, verb: Components.Schemas.Verb,
                  requestId: String, payload: some Encodable, timeout: Duration = controlTimeout) async throws -> OpenAPIValueContainer? {
@@ -566,6 +577,11 @@ public final class HubConnection {
             fleet.recordSupervisorEvent(event)
         case let .controlResult(result):
             guard let waiter = waiters.removeValue(forKey: result.requestId) else {
+                // Fire-and-forget controls still report failure: nobody waits, so the
+                // session it was asked of says so (client.svelte.ts `control_result`).
+                if !result.ok, let id = result.instanceId {
+                    sessions.noteError(id, result.error ?? "The machine could not carry out that request.")
+                }
                 return
             }
             if result.ok {
@@ -573,8 +589,16 @@ public final class HubConnection {
             } else {
                 waiter.resume(throwing: ControlError(message: result.error ?? "The machine could not carry out that request."))
             }
-        case let .error(requestId, message):
-            if let requestId { waiters.removeValue(forKey: requestId)?.resume(throwing: ControlError(message: message)) }
+        case let .error(requestId, instanceId, message):
+            // The request that asked hears it; with none waiting, the session it
+            // is about says it in its transcript (client.svelte.ts `kind === "error"`).
+            if let waiter = requestId.flatMap({ waiters.removeValue(forKey: $0) }) {
+                waiter.resume(throwing: ControlError(message: message))
+            } else if let instanceId {
+                sessions.noteError(instanceId, message)
+            } else {
+                log.error("hub error: \(message, privacy: .public)")
+            }
         case let .usage(frame):
             // The small limits frame the hub pushes on each report (USAGE-SPEC.md §6.4).
             fleet.adopt(limits: frame.limits.map { ($0.machineId, $0.payload, $0.openCodeGo) })
