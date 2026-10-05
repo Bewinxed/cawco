@@ -70,13 +70,19 @@ public struct TypeRole: Sendable {
         let line = LineBox.label(font, height: font.pointSize * leading)
         line.paragraph.alignment = alignment
         line.paragraph.lineBreakMode = .byTruncatingTail
-        return [
+        var attributes: [NSAttributedString.Key: Any] = [
             .font: font,
             .foregroundColor: color,
-            .kern: (tracking ?? self.tracking) * font.pointSize,
             .paragraphStyle: line.paragraph,
             .baselineOffset: line.baselineOffset,
         ]
+        // A kern attribute, even of zero, turns the face's own pair kerning
+        // off. Untracked text keeps that kerning, as the web sets it; tracked
+        // text loses it there too (measured in Mobile Safari 27.2: "your" at
+        // 12pt is 23.89 with its y-o pair, and a title at -0.01em has none).
+        let kern = (tracking ?? self.tracking) * font.pointSize
+        if kern != 0 { attributes[.kern] = kern }
+        return attributes
     }
 
     private var textStyle: UIFont.TextStyle {

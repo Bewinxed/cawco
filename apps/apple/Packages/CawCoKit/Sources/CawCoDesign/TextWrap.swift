@@ -1,3 +1,50 @@
+// This file follows the behaviour of these files of WebKit (https://webkit.org),
+// commit d96b145709, under Source/WebCore/:
+//
+//   layout/formattingContexts/inline/InlineContentConstrainer.cpp, .h
+//       the paragraph-level programme for pretty and balance, its costs and constants
+//       Copyright (C) 2023 Apple Inc. All rights reserved.
+//   layout/formattingContexts/inline/InlineFormattingUtils.cpp
+//       a break entry before every inline item; item widths
+//       Copyright (C) 2018-2026 Apple Inc. All rights reserved.
+//   layout/formattingContexts/inline/InlineItemsBuilder.cpp
+//       text cut into word, space and line-break items
+//       Copyright (C) 2021-2023 Apple Inc. All rights reserved.
+//   layout/formattingContexts/inline/text/TextUtil.cpp
+//       the longest prefix that fits before an ellipsis
+//       Copyright (C) 2018-2024 Apple Inc. All rights reserved.
+//       Copyright (C) 2014 Google Inc. All rights reserved.
+//   layout/formattingContexts/inline/display/InlineDisplayLineBuilder.cpp
+//       when a line takes an ellipsis and the room kept for it
+//       Copyright (C) 2021 Apple Inc. All rights reserved.
+//   rendering/BreakablePositions.cpp
+//       which pairs of characters up to U+00FF a line may break between
+//       Copyright (C) 2005-2024 Apple Inc. All rights reserved.
+//       Copyright (C) 2011-2024 Google Inc. All rights reserved.
+//
+// Redistribution and use in source and binary forms, with or without
+// modification, are permitted provided that the following conditions
+// are met:
+// 1. Redistributions of source code must retain the above copyright
+//    notice, this list of conditions and the following disclaimer.
+// 2. Redistributions in binary form must reproduce the above copyright
+//    notice, this list of conditions and the following disclaimer in the
+//    documentation and/or other materials provided with the distribution.
+//
+// THIS SOFTWARE IS PROVIDED BY APPLE INC. AND ITS CONTRIBUTORS ``AS IS''
+// AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
+// THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL APPLE INC. OR ITS CONTRIBUTORS
+// BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+// SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+// INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+// CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+// ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
+// THE POSSIBILITY OF SUCH DAMAGE.
+//
+// The same notice ships in the app as Resources/Licenses/WebKit.txt.
+
 import CoreText
 import Foundation
 
@@ -7,10 +54,10 @@ import Foundation
 /// together, by WebKit's rule, so a label breaks where Mobile Safari breaks
 /// the same words in the same box.
 ///
-/// The rule is WebKit's `InlineContentConstrainer.cpp` at d96b145709: a
-/// dynamic programme over the paragraph's break opportunities that costs each
-/// line by how far it stands from an ideal width. The tail cut beside it is
-/// `InlineDisplayLineBuilder.cpp` and `TextUtil::breakWord` of the same commit.
+/// The rule is WebKit's `InlineContentConstrainer.cpp`: a dynamic programme
+/// over the paragraph's break entries that costs each line by how far it
+/// stands from an ideal width. The tail cut beside it is
+/// `InlineDisplayLineBuilder.cpp` and `TextUtil.cpp`'s word breaking.
 public enum TextWrap: Sendable {
     case greedy, pretty, balance
 
@@ -86,8 +133,10 @@ struct WrapParagraph {
         let space: Bool
     }
 
-    /// The text between two forced breaks. `breaks` are item indices: the
-    /// chunk's first item, each item a line may start at, and the chunk's end.
+    /// The text between two forced breaks. `breaks` are the break entries,
+    /// as item indices: the chunk's first item, then every item after it
+    /// (WebKit offers a break before each inline item, so before a space
+    /// and again before the word after it), and the chunk's end.
     private struct Chunk {
         var breaks: [Int]
         /// The UTF-16 offset one past the chunk's last item.
@@ -118,7 +167,8 @@ struct WrapParagraph {
         var chunks: [Chunk] = []
         var widest: Float = 0
         var plain = true
-        // The system's line-break iterator: every token ends at an opportunity.
+        // The system's line-break iterator, asked only about a pair with a
+        // character above U+00FF: below that the pair rule decides alone.
         var opportunities = Set<Int>()
         let tokenizer = CFStringTokenizerCreate(nil, string, CFRange(location: 0, length: length), kCFStringTokenizerUnitLineBreak, nil)
         while !CFStringTokenizerAdvanceToNextToken(tokenizer).isEmpty {
@@ -152,12 +202,20 @@ struct WrapParagraph {
             }
             if unit == 0x00AD || unit == 0x09 { plain = false }
             let space = unit == 0x20
-            let opens = run == nil
-            if opens || opportunities.contains(offset) || run?.space != space {
-                close(offset)
-                if opens && chunk.breaks.isEmpty || opportunities.contains(offset) {
-                    chunk.breaks.append(items.count)
+            // A new item: the chunk's first, a space after a word or a word
+            // after a space, or a place inside a word where a line may break.
+            var parts = run == nil || run?.space != space
+            if !parts, !space {
+                let before = string.character(at: offset - 1)
+                if before <= 0xFF, unit <= 0xFF {
+                    parts = Self.breaks(after: before, before: unit, behind: offset > 1 ? string.character(at: offset - 2) : nil)
+                } else {
+                    parts = opportunities.contains(offset)
                 }
+            }
+            if parts {
+                close(offset)
+                chunk.breaks.append(items.count)
                 run = (offset, space)
             }
         }
@@ -167,6 +225,69 @@ struct WrapParagraph {
         self.chunks = chunks
         self.widest = widest
         unconstrainable = !plain
+    }
+
+    /// Whether a line may break between two characters of one word, both at
+    /// or under U+00FF: the pairs WebKit's line-break data
+    /// (`BreakablePositions.cpp`) allows under `line-break: auto`, restated
+    /// as rules. WebKit never asks the system iterator about such a pair.
+    /// `behind` is the character before `first`.
+    private static func breaks(after first: unichar, before second: unichar, behind: unichar?) -> Bool {
+        func digit(_ unit: unichar) -> Bool { unit >= 0x30 && unit <= 0x39 }
+        func letter(_ unit: unichar) -> Bool { (unit >= 0x41 && unit <= 0x5A) || (unit >= 0x61 && unit <= 0x7A) }
+        func among(_ unit: unichar, _ set: String) -> Bool { set.utf16.contains(unit) }
+        // A hyphen before a digit: see `hyphenBeforeDigit`.
+        if first == 0x2D, digit(second) { return hyphenBeforeDigit(behind) }
+        guard first >= 0x21, first <= 0xFF, second >= 0x21, second <= 0xFF else { return false }
+        // The Latin-1 characters a break may stand before, by family.
+        let acute = second == 0xB4
+        let symbols = (0xA1 ... 0xA5).contains(second) || second == 0xB0 || second == 0xB1 || acute || second == 0xBF
+        let most = (0xA1 ... 0xAA).contains(second) || second == 0xAC || (0xAE ... 0xBA).contains(second) || second >= 0xBC
+        if first >= 0x80 {
+            switch first {
+            case 0xA0, 0xA1, 0xAB, 0xB4, 0xBB, 0xBF:
+                // No-break space, inverted marks, guillemets, the acute: never after them.
+                return false
+            case 0xA2 ... 0xA5, 0xB0, 0xB1:
+                // Currency signs, degree, plus-minus.
+                return among(second, "$%(+[\\{") || symbols
+            case 0xAD:
+                // The soft hyphen.
+                return second >= 0x80
+                    ? most || second == 0xA0
+                    : letter(second) || digit(second) || among(second, "#$%&(*+<=>@[\\^_`{~")
+            case 0x85:
+                return true
+            default:
+                // Accented letters and the rest: only before an acute accent.
+                return acute
+            }
+        }
+        if second >= 0x80 {
+            if among(first, "!}/?") { return most }
+            if first == 0x7C { return most || second == 0xA0 }
+            if first == 0x2D { return (0xA0 ... 0xA5).contains(second) || second == 0xB0 || second == 0xB1 || acute || second >= 0xBF }
+            if among(first, "$%)+,.:;\\]") { return symbols }
+            if among(first, "\"'([{") { return false }
+            return acute
+        }
+        guard first <= 0x7E, second <= 0x7E else { return false }
+        if among(first, "!\"#%&)*+,.:;=>\\]|}~") { return among(second, "(<[{") }
+        if first == 0x2D { return !among(second, ",.") }
+        if first == 0x3F { return letter(second) || digit(second) || among(second, "#$%&(*+-<=>@[\\^_`{|~") }
+        // After $ ' ( / < @ [ ^ _ ` {, a letter or a digit: never.
+        return false
+    }
+
+    /// A hyphen before a digit breaks only when a letter or a digit stands
+    /// before the hyphen: it parts a word from its number, never a sign from
+    /// its figure. This rule is taken from Mobile Safari's own layout, read
+    /// on 5 October 2026 in Safari 27.2 (iOS simulator), each string an
+    /// unbroken run in a 120pt box under `text-wrap: wrap`:
+    /// PENDING-READS
+    private static func hyphenBeforeDigit(_ behind: unichar?) -> Bool {
+        guard let behind else { return false }
+        return (behind >= 0x30 && behind <= 0x39) || (behind >= 0x41 && behind <= 0x5A) || (behind >= 0x61 && behind <= 0x7A)
     }
 
     // MARK: Measuring
@@ -193,15 +314,21 @@ struct WrapParagraph {
         var start = 0
         while start < last {
             var end = start + 1
-            while end < last, trimmed(chunk, start, end + 1) <= box { end += 1 }
+            // A line takes what fits, and never only the spaces that lead it.
+            while end < last, trimmed(chunk, start, end + 1) <= box || trimmed(chunk, start, end) == 0 { end += 1 }
             lines.append(Line(start: start, end: end, width: candidate(chunk, start, end)))
             start = end
         }
         return lines
     }
 
+    /// Where the line that starts at a break entry puts its first character:
+    /// past the spaces that lead it, which never show.
     private func offset(_ chunk: Chunk, _ entry: Int) -> Int {
-        entry < chunk.breaks.count - 1 ? items[chunk.breaks[entry]].start : chunk.end
+        var item = chunk.breaks[entry]
+        let end = chunk.breaks[chunk.breaks.count - 1]
+        while item < end, items[item].space { item += 1 }
+        return item < end ? items[item].start : chunk.end
     }
 
     // MARK: Lines
@@ -266,7 +393,9 @@ struct WrapParagraph {
                 starts += lines.dropFirst().map { offset(chunk, $0.start) }
             }
         }
-        return constrained ? starts : nil
+        guard constrained else { return nil }
+        // Two entries either side of a space start the same line.
+        return starts.enumerated().filter { $0.offset == 0 || starts[$0.offset - 1] != $0.element }.map(\.element)
     }
 
     /// `computeRaggedness`: the cube of the distance from the ideal, in
