@@ -180,10 +180,17 @@ export interface WorkItemDeps {
     workspace?: WorkspaceRef
   ) => Promise<CommandResult>;
   readonly db: DbShape;
+  /** The agent's live turn state, including a long tool call with no output. */
+  readonly inTurn: (row: InstanceRow) => boolean;
   /** Tells every dashboard an item moved: its parent's delegate tray follows it. */
   readonly publish: (item: WorkItemSummary) => void;
   /** Hands a report to the parent of the item's session. */
-  readonly report: (row: InstanceRow, body: string, failed: boolean) => void;
+  readonly report: (
+    row: InstanceRow,
+    body: string,
+    failed: boolean,
+    notice?: boolean
+  ) => void;
   /** The one send path; its record says whether the machine took it. */
   readonly send: (envelope: Envelope<SendPayload>) => {
     reason: string | null;
@@ -476,6 +483,7 @@ export const createWorkItems = ({
   db,
   publish,
   report,
+  inTurn,
   send,
   spawn,
   types,
@@ -483,9 +491,12 @@ export const createWorkItems = ({
   /** Turns in a row each live item's session ended without `finish_item`, by item. */
   const quiet = new Map<string, number>();
   const waitTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  /** Waits whose declaring turn ended: the next busy transition resumes them. */
+  const waitsAtRest = new Set<string>();
   const disarmWait = (id: string): void => {
     clearTimeout(waitTimers.get(id));
     waitTimers.delete(id);
+    waitsAtRest.delete(id);
     quiet.delete(id);
   };
   /** Items whose checks this hub process is running now: a resume leaves them to that run. */
@@ -1004,6 +1015,9 @@ export const createWorkItems = ({
     clearWait(item);
     const [row] = db.getInstancesByIds([item.instanceId]);
     if (row && LIVE.has(item.state)) {
+      if (inTurn(row)) {
+        return;
+      }
       const resuming = update(id, { waitResumeBy: resumeBy }) as WorkItemRow;
       armWait(resuming);
       tell(
@@ -1023,10 +1037,11 @@ export const createWorkItems = ({
         }
         update(item.id, { waitResumeBy: null });
         const [row] = db.getInstancesByIds([item.instanceId]);
-        if (row) {
+        if (row && !inTurn(row)) {
           report(
             row,
             `${item.title}: the delegate did not resume within 60 seconds of its wait deadline.`,
+            false,
             true
           );
         }
@@ -1056,6 +1071,7 @@ export const createWorkItems = ({
       return false;
     }
     quiet.delete(item.id);
+    waitsAtRest.add(item.id);
     if (item.waitUntil.getTime() <= Date.now()) {
       endWait(item.id);
     }
@@ -1248,11 +1264,11 @@ export const createWorkItems = ({
       }
     },
 
-    /** A live harness read (not a spawn/init or queued send) starts the turn. */
-    turnStarted(instanceId: string): void {
+    /** A new busy turn resumes a resting wait even without a harness read/output. */
+    turnBusy(instanceId: string): void {
       const [row] = db.getInstancesByIds([instanceId]);
       const item = row ? itemOf(row) : undefined;
-      if (item?.waitResumeBy) {
+      if (item?.waitResumeBy || (item?.waitUntil && waitsAtRest.has(item.id))) {
         clearWait(item);
       }
     },
@@ -1261,6 +1277,9 @@ export const createWorkItems = ({
     resumeWaits(): void {
       for (const item of db.waitingWorkItems()) {
         armWait(item);
+        if (item.waitUntil) {
+          waitsAtRest.add(item.id);
+        }
       }
     },
 
@@ -1404,8 +1423,8 @@ export const createWorkItems = ({
      * An item with checks ends only through {@link finishItem}, or here when
      * its turn failed. A turn that ends it quietly, with nothing queued for
      * the session, nothing handed to it since, and none of its own delegated
-     * work live, gets the "still open" message and reports its unexplained
-     * stop to the parent; the third in a row fails it. A declared wait stays
+     * work live, gets the "still open" message; the third in a row fails it
+     * and reports that failure to the parent. A declared wait stays
      * on the tray and is summarized only with the next actionable message.
      *
      * An item filed before checks existed, and a delegate from before work
@@ -1454,7 +1473,7 @@ export const createWorkItems = ({
         row,
         `Your work item is still open. Its checks: ${checkNames(item.checks)}. Finish the work and call finish_item, or call it with \`blocked\` and the exact command and error. Use wait_item for a bounded wait on a command you started.`
       );
-      return { body: `${turn.text}${reportLine(item)}`, failed: false };
+      return undefined;
     },
 
     /**

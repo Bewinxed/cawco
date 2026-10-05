@@ -2010,7 +2010,8 @@ export const createServer = (
     delegate: InstanceRow,
     body: string,
     failed: boolean,
-    completion?: { resultId: string; completedAt?: string }
+    completion?: { resultId: string; completedAt?: string },
+    notice = false
   ): void => {
     const parent = delegate.parentInstanceId
       ? db.getInstancesByIds([delegate.parentInstanceId])[0]
@@ -2030,7 +2031,7 @@ export const createServer = (
           uuid: crypto.randomUUID(),
           message: {
             role: "user",
-            content: `${reportMarker(label, failed)}${body}`,
+            content: `${reportMarker(label, failed, notice)}${body}`,
           },
           parent_tool_use_id: null,
           origin: {
@@ -2049,7 +2050,12 @@ export const createServer = (
         instanceId: delegate.id,
         parentInstanceId: parent.id,
         kind: "report",
-        payload: { body, failed, ...completion },
+        payload: {
+          body,
+          failed,
+          ...(notice ? { notice: true } : {}),
+          ...completion,
+        },
       })
     );
   };
@@ -2378,7 +2384,6 @@ export const createServer = (
       db.linkSend(uuid, harnessId);
     }
     if (signal.kind === "read") {
-      workItems.turnStarted(instanceId);
       takeRead(instanceId, signal.read);
     }
   };
@@ -2470,7 +2475,6 @@ export const createServer = (
   ): void => {
     const neutral = frame.message;
     if (neutral.type === "assistant" && !neutral.parent_tool_use_id) {
-      workItems.turnStarted(instanceId);
       // An error the harness wrote in the model's place answers nothing:
       // what it had just read failed, in its words, which its rows carry.
       const waiting = unanswered.get(instanceId);
@@ -6480,8 +6484,9 @@ export const createServer = (
   const workItems = createWorkItems({
     db,
     command: runOnMachine,
-    report: (row, body, failed) => {
-      reportToParent(row, body, failed);
+    inTurn: (row) => row.status === "running" && !!pulses.get(row.id)?.busy,
+    report: (row, body, failed, notice) => {
+      reportToParent(row, body, failed, undefined, notice);
       // An item that ends while its session is at rest (checks a restarted
       // hub ran again) has no turn's end left to stop it at.
       sleepFinished(row.id);
@@ -10821,7 +10826,11 @@ export const createServer = (
               if (kind === "pulse" && message.instanceId) {
                 const { pulse } = message.payload as { pulse?: SessionPulse };
                 if (pulse) {
+                  const wasBusy = pulses.get(message.instanceId)?.busy;
                   pulses.set(message.instanceId, pulse);
+                  if (pulse.busy && !wasBusy) {
+                    workItems.turnBusy(message.instanceId);
+                  }
                   // A pulse is only ever emitted by a session doing something,
                   // so it is the fleet's cheapest honest signal for the column
                   // the rails age rows from.

@@ -111,13 +111,18 @@ export function parseWorkflowNotice(
 
 /**
  * The header of a delegate's report to its parent, written when the
- * delegate's turn ends. `label` is `<name>#<first 8 of its id>`.
+ * delegate's turn ends, or the hub issues a notice without ending the item.
+ * `label` is `<name>#<first 8 of its id>`.
  */
-export const reportMarker = (label: string, failed: boolean): string =>
-  `[Report from delegate ${label} — turn ${failed ? "failed" : "complete"}]\n\n`;
+export const reportMarker = (
+  label: string,
+  failed: boolean,
+  notice = false
+): string =>
+  `[Report from delegate ${label} — ${notice ? "notice" : `turn ${failed ? "failed" : "complete"}`}]\n\n`;
 
 const REPORT =
-  /^\[Report from delegate (.+?)#([0-9a-f]{8}) — turn (complete|failed)\]\n\n/;
+  /^\[Report from delegate (.+?)#([0-9a-f]{8}) — (turn complete|turn failed|notice)\]\n\n/;
 
 /**
  * A report read back. Only the 8-character short id survives, so consumers
@@ -136,7 +141,7 @@ export function parseReportMarker(text: string): {
   return {
     name: marker[1],
     short: marker[2],
-    failed: marker[3] === "failed",
+    failed: marker[3] === "turn failed",
     body: text.slice(marker[0].length).trim(),
   };
 }
