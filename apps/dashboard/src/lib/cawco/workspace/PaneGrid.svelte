@@ -99,15 +99,41 @@
     ...el.querySelectorAll<HTMLElement>(":scope > [data-pane]"),
   ];
 
+  /** The run each box is on, and between which shares. */
+  const moving = new WeakMap<
+    HTMLElement,
+    { from: number; run: Animation; to: number }
+  >();
+
   /** Runs each box from one share to another. */
   function grow(panes: HTMLElement[], from: number[], to: number[]) {
-    return panes.map((pane, i) =>
-      pane.animate([{ flexGrow: `${from[i]}` }, { flexGrow: `${to[i]}` }], {
-        duration: dur("--dur-panel"),
-        easing: ease("--ease-in-out"),
-        fill: "forwards",
-      })
-    );
+    return panes.map((pane, i) => {
+      const run = pane.animate(
+        [{ flexGrow: `${from[i]}` }, { flexGrow: `${to[i]}` }],
+        {
+          duration: dur("--dur-panel"),
+          easing: ease("--ease-in-out"),
+          fill: "forwards",
+        }
+      );
+      moving.set(pane, { from: from[i], to: to[i], run });
+      return run;
+    });
+  }
+
+  /**
+   * A box's share where it stands: along the run it is on (the eased
+   * progress of the animation itself: a computed style read in the middle of
+   * a busy frame still says where the run began), else the share it was
+   * given.
+   */
+  function shareOf(pane: HTMLElement): number {
+    const on = moving.get(pane);
+    if (on) {
+      const progress = on.run.effect?.getComputedTiming().progress ?? 1;
+      return on.from + (on.to - on.from) * progress;
+    }
+    return Number.parseFloat(getComputedStyle(pane).flexGrow);
   }
 
   /** A box's share once the grid draws the tree as it now is. */
@@ -168,9 +194,7 @@
       return;
     }
     const panes = panesOf(el);
-    const from = panes.map((pane) =>
-      Number.parseFloat(getComputedStyle(pane).flexGrow)
-    );
+    const from = panes.map(shareOf);
     for (const pane of panes) {
       for (const running of pane.getAnimations()) {
         running.cancel();
