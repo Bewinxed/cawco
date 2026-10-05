@@ -1,90 +1,177 @@
-import { all } from './dom';
+import { all, one } from './dom';
 import { initTabs } from './tabs';
 
-/** The install command for each release channel. The served HTML carries the stable one. */
-const COMMANDS: Record<string, string> = {
-  stable: 'curl -fsSL https://cawco.dev/install.sh | sh',
-  nightly: 'curl -fsSL https://cawco.dev/install.sh | CAWCO_CHANNEL=nightly sh',
+/**
+ * The install command is three parts: a head, the `sh` tail, and, for Nightly only, the piece
+ * that sits before `sh`. Stable is the head and `sh`; Nightly adds `CAWCO_CHANNEL=nightly `.
+ * The served HTML carries the stable line as plain text, so the page is right without scripts.
+ */
+const HEAD = 'curl -fsSL https://cawco.dev/install.sh |';
+const CHAN = 'CAWCO_CHANNEL=nightly ';
+const SH = 'sh';
+
+const IN_MOVE = 220;
+const IN_FADE = 200;
+const OUT_FADE = 100;
+const OUT_MOVE = 180;
+
+const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+const span = (className: string, text: string) => {
+  const node = document.createElement('span');
+  node.className = className;
+  node.textContent = text;
+  return node;
 };
 
-const FADE_OUT = 160;
-const FADE_IN = 200;
-const EASE_OUT = 'cubic-bezier(0.23, 1, 0.32, 1)';
+/** One command box: its `sh`, its tail, and the motion running on them. */
+interface Command {
+  box: HTMLElement;
+  tail: HTMLElement;
+  sh: HTMLElement;
+  chan: HTMLElement | null;
+  /** The movement of `sh` and the box height. */
+  moves: Animation[];
+  /** The fade of the channel piece. */
+  fade: Animation | null;
+}
+
+interface Snapshot {
+  left: number;
+  top: number;
+  height: number;
+}
+
+const build = (code: HTMLElement): Command => {
+  const box = code.closest<HTMLElement>('.cmd');
+  if (!box) throw new Error('A command sits outside a command box.');
+  const sh = span('cmd-sh', SH);
+  const tail = document.createElement('span');
+  tail.className = 'cmd-tail';
+  tail.append(sh);
+  code.replaceChildren(span('cmd-head', HEAD), ' ', tail);
+  return { box, tail, sh, chan: null, moves: [], fade: null };
+};
+
+/** Where `sh` is on screen now (running transform included), and how tall the box is now. */
+const snapshot = (cmd: Command): Snapshot => {
+  const rect = cmd.sh.getBoundingClientRect();
+  return { left: rect.left, top: rect.top, height: cmd.box.getBoundingClientRect().height };
+};
+
+const opacityOf = (node: HTMLElement) => Number(getComputedStyle(node).opacity);
+
+const cancelAll = (cmd: Command) => {
+  for (const move of cmd.moves) move.cancel();
+  cmd.moves = [];
+  cmd.fade?.cancel();
+  cmd.fade = null;
+};
+
+/**
+ * The layout now holds the new choice. Moves `sh` from where it was to where it is, and grows or
+ * shrinks the box with it. A visitor who asked for reduced motion gets both at once.
+ */
+const settle = (cmd: Command, from: Snapshot, duration: number, easing: string) => {
+  if (reduced()) return;
+  const to = snapshot(cmd);
+  const dx = from.left - to.left;
+  const dy = from.top - to.top;
+  if (dx !== 0 || dy !== 0) {
+    cmd.moves.push(
+      cmd.sh.animate(
+        [{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'translate(0px, 0px)' }],
+        { duration, easing },
+      ),
+    );
+  }
+  if (from.height !== to.height) {
+    cmd.moves.push(
+      cmd.box.animate([{ height: `${from.height}px` }, { height: `${to.height}px` }], {
+        duration,
+        easing,
+      }),
+    );
+  }
+};
 
 /**
  * The release channel switch: one choice for the whole page, shown in every command box.
- * A command swaps by fading out and back in. A second pick mid-swap retargets from the
- * opacity the text has reached, so nothing queues.
+ * Nightly: the piece arrives and `sh` makes room. Stable: the piece fades, then `sh` closes up.
+ * A pick mid-motion starts from where everything is on screen, so nothing queues or jumps.
  */
 export function initChannel(tablist: HTMLElement): void {
-  const codes = all(document, '[data-cmd]');
-  const runs = new Map<HTMLElement, Animation>();
-  const heights = new Map<HTMLElement, Animation>();
+  const easing = getComputedStyle(document.documentElement).getPropertyValue('--ease-out').trim();
+  const commands = all(document, '[data-cmd]').map(build);
+  const slider = one(tablist, '[data-slider]');
+  const tabButtons = all(tablist, '[data-tab]');
   let chosen = 'stable';
 
-  const fade = (code: HTMLElement, from: number, to: number, duration: number) => {
-    const run = code.animate([{ opacity: from }, { opacity: to }], { duration, easing: EASE_OUT });
-    runs.set(code, run);
-    return run;
-  };
-
-  // Where a narrow screen wraps the command, the new text can need a different height:
-  // the box grows or shrinks to it over the fade-in instead of jumping.
-  const resize = (code: HTMLElement, change: () => void) => {
-    const box = code.closest<HTMLElement>('.cmd');
-    if (!box) throw new Error('A command sits outside a command box.');
-    const from = box.getBoundingClientRect().height;
-    heights.get(box)?.cancel();
-    change();
-    const to = box.getBoundingClientRect().height;
-    if (from === to) return;
-    heights.set(
-      box,
-      box.animate([{ height: `${from}px` }, { height: `${to}px` }], {
-        duration: FADE_IN,
-        easing: EASE_OUT,
-      }),
-    );
-  };
-
-  const swap = (code: HTMLElement, text: string) => {
-    const from = Number(getComputedStyle(code).opacity);
-    runs.get(code)?.cancel();
-    if (code.textContent === text) {
-      // The old text is still on screen (a swap was cut short): bring it back.
-      fade(code, from, 1, FADE_IN);
-      return;
+  const toNightly = (cmd: Command) => {
+    const start = cmd.chan ? opacityOf(cmd.chan) : 0;
+    const from = snapshot(cmd);
+    cancelAll(cmd);
+    if (!cmd.chan) {
+      cmd.chan = span('cmd-chan', CHAN);
+      cmd.tail.insertBefore(cmd.chan, cmd.sh);
     }
-    code.style.opacity = '0';
-    const out = fade(code, from, 0, FADE_OUT * from);
+    settle(cmd, from, IN_MOVE, easing);
+    cmd.fade = cmd.chan.animate([{ opacity: start }, { opacity: 1 }], {
+      duration: reduced() ? OUT_FADE : IN_FADE,
+      easing,
+    });
+  };
+
+  const toStable = (cmd: Command) => {
+    const chan = cmd.chan;
+    if (!chan) return;
+    const start = opacityOf(chan);
+    cmd.fade?.cancel();
+    const out = chan.animate([{ opacity: start }, { opacity: 0 }], {
+      duration: OUT_FADE,
+      easing,
+      fill: 'forwards',
+    });
+    cmd.fade = out;
     out.onfinish = () => {
-      resize(code, () => {
-        code.textContent = text;
-      });
-      code.style.opacity = '';
-      fade(code, 0, 1, FADE_IN);
+      const from = snapshot(cmd);
+      cancelAll(cmd);
+      chan.remove();
+      cmd.chan = null;
+      settle(cmd, from, OUT_MOVE, easing);
     };
   };
 
-  // The chosen tab's bar is full, the other is empty, the way the stage tabs' bars fill.
-  const showBars = () => {
-    for (const bar of all(tablist, '[data-bar]')) {
-      const on = bar.closest('[data-tab]')?.getAttribute('aria-selected') === 'true';
-      bar.style.transform = `scaleX(${on ? 1 : 0})`;
+  // One bar under the chosen tab. It moves by transform alone: a translate, and a scale where
+  // the two tabs differ in width.
+  const place = (animate: boolean) => {
+    const selected = tabButtons.find((tab) => tab.getAttribute('aria-selected') === 'true');
+    const first = tabButtons[0];
+    if (!selected || !first) return;
+    const inset = (tab: HTMLElement) => parseFloat(getComputedStyle(tab).paddingLeft);
+    const base = first.offsetWidth - inset(first) * 2;
+    if (base <= 0) return;
+    const scale = (selected.offsetWidth - inset(selected) * 2) / base;
+    if (!animate) slider.style.transition = 'none';
+    slider.style.width = `${base}px`;
+    slider.style.transform = `translateX(${selected.offsetLeft + inset(selected)}px) scaleX(${scale})`;
+    if (!animate) {
+      slider.getBoundingClientRect();
+      slider.style.transition = '';
     }
   };
 
   const tabs = initTabs(tablist, (id) => {
-    const text = COMMANDS[id];
-    if (text === undefined || id === chosen) return;
+    if ((id !== 'stable' && id !== 'nightly') || id === chosen) return;
     chosen = id;
     tabs.mark(id);
-    showBars();
-    for (const code of codes) swap(code, text);
+    place(true);
+    for (const cmd of commands) (id === 'nightly' ? toNightly : toStable)(cmd);
   });
 
   // Without scripts the tabs would do nothing, so they ship hidden.
   tabs.mark(chosen);
-  showBars();
   tablist.hidden = false;
+  place(false);
+  new ResizeObserver(() => place(false)).observe(tablist);
 }

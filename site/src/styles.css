@@ -548,6 +548,7 @@ h1 {
  * Its tabs are as tall as the label's line, so the row adds no height; the pseudo-element keeps the touch target.
  */
 .tabs.tabs-channel {
+  position: relative;
   grid-area: auto;
   flex-direction: row;
   gap: 2px;
@@ -584,12 +585,26 @@ h1 {
   color: var(--paper);
 }
 
-.tabs-channel .tab-bar {
-  inset: auto 12px 5px 12px;
+/* One bar for the pair: it slides under the chosen tab. channel.ts sets its width and transform. */
+.tab-slider {
+  position: absolute;
+  bottom: 5px;
+  left: 0;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--vermilion);
+  transform-origin: 0 50%;
+  pointer-events: none;
+  transition: transform 220ms var(--ease-in-out);
 }
 
-:where(.tabs-channel) .tab-bar span {
-  transition: transform 200ms var(--ease-out);
+/* The parts of the install command that the channel switch moves. */
+.cmd-tail {
+  white-space: nowrap;
+}
+
+.cmd-sh {
+  display: inline-block;
 }
 
 .panel {
@@ -2255,7 +2270,7 @@ mark {
   .tab,
   .autoplay,
   .copy-icons > *,
-  .tabs-channel .tab-bar span {
+  .tab-slider {
     transition: none;
   }
 
