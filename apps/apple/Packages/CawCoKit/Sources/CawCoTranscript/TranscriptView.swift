@@ -120,6 +120,17 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         /// their places and before any is built, so only rows it shows are.
         override func prepare() {
             super.prepare()
+            settle()
+        }
+
+        /// iOS 18 reads the list's place after it has been told of the update,
+        /// not after `prepare`: the list is stood there too.
+        override func prepare(forCollectionViewUpdates updates: [UICollectionViewUpdateItem]) {
+            super.prepare(forCollectionViewUpdates: updates)
+            settle()
+        }
+
+        private func settle() {
             guard let view = collectionView, let y = stand?(), abs(view.contentOffset.y - y) > 0.5 else { return }
             view.contentOffset.y = y
         }
@@ -192,6 +203,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         paneState.onReturn = { [weak self] in self?.onReturnToFleet() }
         registerForTraitChanges([UITraitUserInterfaceStyle.self, UITraitPreferredContentSizeCategory.self]) { (view: TranscriptView, _: UITraitCollection) in
             view.env.cache.clear()
+            view.settled = nil
             view.prints = [:]
             view.dirty = true
         }
@@ -477,6 +489,13 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             taken = anchored ? blocks.count : min(blocks.count, taken + Self.stretch)
             if taken < blocks.count { dirty = true }
         }
+        // The same blocks fold into the same rows: a long session's are folded
+        // when its blocks change, not on every frame its tail or its fleet moves.
+        let stamp = "\(revision)|\(taken)|\(bypass)"
+        if let folded, folded.stamp == stamp {
+            voices = folded.voices
+            return folded.rows
+        }
         let drawn = blocks.suffix(taken).filter { block in
             !(Fold.isQuestion(block) && block.toolStatus == "pending" && !bypass)
                 && block.type != "send.ref" && block.type != "system.init"
@@ -484,8 +503,15 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         var voices = Voices()
         let rows = Fold.rows(drawn, branches: branches, voices: &voices)
         self.voices = voices
+        folded = (stamp, rows, voices)
         return rows
     }
+
+    /// The settled rows as last folded, and what they were folded from.
+    private var folded: (stamp: String, rows: [Row], voices: Voices)?
+    /// The settled rows' items as last built, what they were built from, and
+    /// which of them read the fleet (`fleetPrint`).
+    private var settled: (stamp: String, items: [Item], rail: Bool, fleet: [Int])?
 
     private func factsValue(_ key: String) -> Any? {
         if let facts { return facts[key] }
@@ -536,17 +562,30 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
 
         var builder = Builder(agentName: env.agentName, cache: env.cache)
         builder.keys = keys
-        var (out, rail) = builder.items(rows)
+        // Built when the rows, the landed answers' keys or the fold in hand
+        // change; a frame that only moves the tail takes them as they are.
+        let stamp = "\(folded?.stamp ?? "")|\(keys.count)|\(folding ?? "")|\(env.agentName)"
+        if settled?.stamp != stamp {
+            var (items, rail) = builder.items(rows)
+            var fleet: [Int] = []
+            for i in items.indices {
+                if case let .thinking(r) = items[i].kind, r.key == "think:\(folding ?? "")" {
+                    items[i] = Item(id: items[i].id, top: items[i].top, kind: .thinking(.init(key: r.key, text: r.text, live: false, folding: true)),
+                                    print: items[i].print + "folding")
+                }
+                switch items[i].kind {
+                case .delegate, .run, .peer: fleet.append(i)
+                default: break
+                }
+            }
+            settled = (stamp, items, rail, fleet)
+        }
+        var out = settled?.items ?? []
+        var rail = settled?.rail ?? false
         // Read once a build: a fleet row is a large value, and going through
         // them all for every report in a long session was most of a build.
         let sessions = hub?.fleet.rows.map(\.id) ?? []
-        for i in out.indices {
-            if case let .thinking(r) = out[i].kind, r.key == "think:\(folding ?? "")" {
-                out[i] = Item(id: out[i].id, top: out[i].top, kind: .thinking(.init(key: r.key, text: r.text, live: false, folding: true)),
-                              print: out[i].print + "folding")
-            }
-            out[i].print += fleetPrint(out[i], sessions: sessions)
-        }
+        for i in settled?.fleet ?? [] { out[i].print += fleetPrint(out[i], sessions: sessions) }
 
         // The tail: the sends drawn ahead of it, the live row, the call in flight, the rest.
         let tool = tail?.currentTool.flatMap { glance -> (String, String)? in
@@ -670,7 +709,11 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             }
         }
         if received.isEmpty, !currentTail.isEmpty { currentTail = "" }
-        if dirty { dirty = false; commit() }
+        // A pane beside the one being read keeps what it has until it comes on
+        // screen: a long session's every change is a frame's worth of work, and
+        // it was taken out of the reply the reader was watching stream. Its
+        // first screen is still built where it stands, so it is there to come to.
+        if dirty, onScreen || !landed { dirty = false; commit() }
         // A first screen takes a row at a time for as long as the frame has
         // time for one: rows cost anything from a millisecond to a frame's worth.
         while feeding, CACurrentMediaTime() - now < Self.budget / 2 {
