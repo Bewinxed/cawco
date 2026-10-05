@@ -12,6 +12,7 @@ import type {
 } from "@cawco/core";
 import {
   ACKNOWLEDGE_BINARY_UPDATE,
+  CANCEL_BINARY_UPDATE,
   CAWCO_ENV,
   CAWCO_HUB_PORT,
   CONFIGURE_BINARY_UPDATES,
@@ -24,10 +25,7 @@ import {
   OPEN_MCP_AUTHORIZATION,
   UPDATE_CAWCO,
 } from "@cawco/core";
-import type {
-  BinaryUpdatePolicy,
-  BinaryUpdateState,
-} from "@cawco/core/binary-updates";
+import type { BinaryUpdateState } from "@cawco/core/binary-updates";
 import { sessiondEndpoint } from "@cawco/core/sessiond";
 import { fetchClaudeLimits } from "@cawco/core/usage/limits";
 import { mergeObserved } from "@cawco/core/usage/observed";
@@ -1241,8 +1239,11 @@ export const startDaemon = (auth?: AuthState, rediscover = false) =>
       reportBinaryUpdate
     );
     supervisor.registerDaemonFunction(UPDATE_CAWCO, () => updater.installNow());
-    supervisor.registerDaemonFunction(CONFIGURE_BINARY_UPDATES, (policy) =>
-      updater.configure(policy as BinaryUpdatePolicy)
+    supervisor.registerDaemonFunction(CONFIGURE_BINARY_UPDATES, () =>
+      updater.configure()
+    );
+    supervisor.registerDaemonFunction(CANCEL_BINARY_UPDATE, () =>
+      updater.cancel()
     );
     supervisor.registerDaemonFunction(ACKNOWLEDGE_BINARY_UPDATE, () =>
       updater.acknowledge()

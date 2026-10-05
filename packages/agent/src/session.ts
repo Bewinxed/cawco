@@ -61,6 +61,7 @@ import {
 } from "@cawco/core";
 import { sessiondEndpoint } from "@cawco/core/sessiond";
 import { Effect } from "effect";
+import { waitWhileInstalling } from "./binary-update";
 import { type Boundary, boundaryFor } from "./boundary";
 import { fetchDefaultBranch } from "./clone";
 import { harnessMcpUrl } from "./delegation";
@@ -1345,7 +1346,10 @@ export class SessionSupervisor {
   #route(envelope: Envelope): Promise<void> {
     switch (envelope.verb) {
       case "spawn":
-        return this.#spawn(envelope.payload as SpawnPayload);
+        // A start requested while an update is installing waits for it, then proceeds.
+        return waitWhileInstalling().then(() =>
+          this.#spawn(envelope.payload as SpawnPayload)
+        );
       case "send":
         return this.#send(envelope.payload as SendPayload);
       case "stop":

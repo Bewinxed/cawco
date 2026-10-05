@@ -4,6 +4,7 @@ import { createPublicKey } from "node:crypto";
 import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { freemem, homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
+import { releaseTag } from "../packages/core/src/binary-distribution";
 import {
   type ReleaseManifest,
   signManifest,
@@ -202,10 +203,26 @@ try {
           "Container runtime absent: proof must be run by the operator before accepting this build"
         );
       }
+      // Only grows: no path installs a build whose sequence is not above the running one.
+      const sequence = Number(
+        await run(
+          ["git", "rev-list", "--first-parent", "--count", current.commit],
+          checkout,
+          true
+        )
+      );
+      // How many database migrations this build carries; never installed over a newer database.
+      const schemaVersion = (
+        (await Bun.file(
+          join(checkout, "packages/hub/drizzle/meta/_journal.json")
+        ).json()) as { entries: unknown[] }
+      ).entries.length;
       const manifest: ReleaseManifest = {
         version,
         commit: current.commit,
         channel: current.channel,
+        sequence,
+        schemaVersion,
         protocol: { min: 1, max: 1 },
         sessiondProtocol: SESSIOND_V1,
         notes,
@@ -248,7 +265,8 @@ try {
             await run(["ssh", current.macHost, "rm", "-rf", remote]);
           }
         }
-        const archive = `cawco-${version}-${target}.tar.gz`;
+        // The tag form, so the file name carries no `+`.
+        const archive = `cawco-${releaseTag(manifest)}-${target}.tar.gz`;
         await run(
           ["tar", "-czf", join(staging, archive), "-C", dir, "cawco"],
           checkout

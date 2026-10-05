@@ -1,20 +1,33 @@
 /**
- * The machine's side of binary updates: learn of the channel's build from the
- * hub, verify and stage it, and apply it through a service-manager-owned helper
- * when `mayReplaceMachineServices` allows. One code path, whether it runs on
- * the idle tick (auto-update on) or because a person pressed "Install now".
+ * The machine's side of binary updates: learn of a build from the hub, verify
+ * and stage it, and apply it through a service-manager-owned helper when
+ * `mayReplaceMachineServices` allows. One code path, whether it runs on the
+ * idle tick (auto-update on) or because a person pressed "Install now".
+ *
+ * Nothing here ever goes backwards: a build whose signed `sequence` is not
+ * above the running one is never installed, a machine other than the hub's own
+ * applies only the build its hub is running, and the hub's machine never
+ * installs a build with fewer migrations than its database holds.
  */
-import { rename, rm } from "node:fs/promises";
-import { join } from "node:path";
+import { readdir, rename, rm } from "node:fs/promises";
+import { basename, dirname, join } from "node:path";
 import type { AgentBusyReport, UpdateReport } from "@cawco/core";
 import {
   archiveMatches,
+  readAtMost,
   type SignedRelease,
 } from "@cawco/core/binary-distribution";
+import { hubProtocol, probeHealth } from "@cawco/core/binary-health";
 import {
+  type BinaryInstallation,
   binaryRoot,
+  previousInstallationPath,
   readInstallation,
+  readRunningManifest,
+  readTrial,
   readUpdateState,
+  recoveredPath,
+  trialPath,
   updateStatePath,
   versionDirectory,
   writeJsonAtomic,
@@ -26,11 +39,16 @@ import type {
 import { verifyManifest } from "@cawco/core/release-manifest";
 import { runtimeVersion } from "@cawco/core/runtime";
 import { sessiondEndpoint } from "@cawco/core/sessiond";
+import { machineId } from "./machine-id";
 import { SessiondClient } from "./sessiond-client";
 
 const POLL_MS = 60_000;
 /** An update that says it is installing for longer than this has lost its helper. */
 const INSTALL_STALE_MS = 10 * 60_000;
+/** How long a new build must be healthy before it clears its trial marker. */
+const TRIAL_CONFIRM_MS = 60_000;
+/** Minutes to wait before trying a failed download or verification again; the last repeats. */
+const RETRY_DELAYS_MIN = [1, 5, 30, 60];
 
 /**
  * Whether this machine's services may be replaced right now. The retirement
@@ -43,7 +61,34 @@ export async function mayReplaceMachineServices(
   return busy.ready && busy.busy === 0;
 }
 
-/** The session keeper's held children and what it speaks, read now. */
+/** Session starts wait here while an update is installing; see `waitWhileInstalling`. */
+const installingWaiters: (() => void)[] = [];
+let installing = false;
+
+/**
+ * Resolves at once unless an update is installing, and then when it is not. A
+ * start requested in that window is never dropped: it waits and proceeds.
+ */
+export function waitWhileInstalling(): Promise<void> {
+  if (!installing) {
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => installingWaiters.push(resolve));
+}
+
+let latest: BinaryUpdateState | undefined;
+export const latestBinaryUpdate = (): BinaryUpdateState | undefined => latest;
+export const reportBinaryUpdate = (state: BinaryUpdateState): void => {
+  latest = state;
+  installing = state.phase === "installing";
+  if (!installing) {
+    for (const resolve of installingWaiters.splice(0)) {
+      resolve();
+    }
+  }
+};
+
+/** The session keeper's held children, what it speaks and its epoch, read now. */
 async function readKeeper(): Promise<{
   capabilities: readonly string[];
   held: number;
@@ -61,12 +106,57 @@ async function readKeeper(): Promise<{
   }
 }
 
-async function launchApplyHelper(version: string, held: number) {
+interface Failure {
+  count: number;
+  error: string;
+  nextAt: number;
+  version: string;
+}
+const failuresPath = () => join(binaryRoot(), "update-failures.json");
+async function readFailure(version: string): Promise<Failure | undefined> {
+  const saved = (await Bun.file(failuresPath())
+    .json()
+    .catch(() => undefined)) as Failure | undefined;
+  return saved?.version === version ? saved : undefined;
+}
+async function recordFailure(version: string, error: string): Promise<void> {
+  const before = await readFailure(version);
+  const count = (before?.count ?? 0) + 1;
+  const minutes =
+    RETRY_DELAYS_MIN[Math.min(count, RETRY_DELAYS_MIN.length) - 1] ?? 60;
+  await writeJsonAtomic(failuresPath(), {
+    version,
+    count,
+    error,
+    nextAt: Date.now() + minutes * 60_000,
+  } satisfies Failure);
+}
+
+/** The forwarded environment: CawCo's own settings, and a PATH and HOME a one-shot job would otherwise lack. */
+function helperEnvironment(): [string, string][] {
+  return Object.entries(process.env).filter(
+    (entry): entry is [string, string] =>
+      entry[1] !== undefined &&
+      (entry[0].startsWith("CAWCO_") ||
+        entry[0] === "PATH" ||
+        entry[0] === "HOME")
+  );
+}
+
+async function launchApplyHelper(
+  version: string,
+  held: number,
+  keeperOnly: boolean
+) {
   const executable = process.execPath;
-  const args = ["binary-apply", version, "--held", String(held)];
-  const forwarded = Object.entries(process.env).filter(
-    ([key, value]) => key.startsWith("CAWCO_") && value !== undefined
-  ) as [string, string][];
+  const args = [
+    "binary-apply",
+    version,
+    "--held",
+    String(held),
+    ...(keeperOnly ? ["--keeper-only"] : []),
+  ];
+  const forwarded = helperEnvironment();
   if (process.platform === "linux") {
     const child = Bun.spawn(
       [
@@ -115,6 +205,27 @@ async function launchApplyHelper(version: string, held: number) {
   }
 }
 
+/** A finished one-shot macOS job and its file are removed the next time an agent starts. */
+async function removeFinishedHelpers(): Promise<void> {
+  if (process.platform !== "darwin") {
+    return;
+  }
+  const files = (await readdir(binaryRoot())).filter(
+    (name) =>
+      name.startsWith("dev.cawco.binary-apply.") && name.endsWith(".plist")
+  );
+  await Promise.all(
+    files.map(async (name) => {
+      const label = name.slice(0, -".plist".length);
+      await Bun.spawn(
+        ["launchctl", "bootout", `gui/${process.getuid?.()}/${label}`],
+        { stdout: "ignore", stderr: "ignore" }
+      ).exited;
+      await rm(join(binaryRoot(), name), { force: true });
+    })
+  );
+}
+
 export class BinaryUpdater {
   #state: BinaryUpdateState = {
     phase: "none",
@@ -129,6 +240,8 @@ export class BinaryUpdater {
   readonly #flags: { commanded: boolean } = { commanded: false };
   #running: Promise<void> | undefined;
   #timer: ReturnType<typeof setInterval> | undefined;
+  #trialTimer: ReturnType<typeof setInterval> | undefined;
+  #healthySince: number | undefined;
   readonly #readBusy: () => Promise<AgentBusyReport>;
   readonly #report: (state: BinaryUpdateState) => void;
 
@@ -149,9 +262,13 @@ export class BinaryUpdater {
     if (!(await readInstallation())) {
       return;
     }
+    await removeFinishedHelpers();
     await this.#load();
+    await this.#noteRecovery();
     this.#timer = setInterval(() => this.tick(), POLL_MS);
     this.#timer.unref();
+    this.#trialTimer = setInterval(() => this.#confirmTrial(), 10_000);
+    this.#trialTimer.unref();
     await this.tick();
   }
 
@@ -159,11 +276,13 @@ export class BinaryUpdater {
     if (this.#timer) {
       clearInterval(this.#timer);
     }
+    if (this.#trialTimer) {
+      clearInterval(this.#trialTimer);
+    }
   }
 
-  /** The hub's push: remember it and act on it without holding the hub's call. */
-  configure(policy: BinaryUpdatePolicy): BinaryUpdateState {
-    this.#policy = policy;
+  /** The hub's push: act on the changed policy without holding the hub's call. */
+  configure(): BinaryUpdateState {
     setTimeout(() => this.tick(), 0);
     return this.#state;
   }
@@ -171,6 +290,16 @@ export class BinaryUpdater {
   async acknowledge(): Promise<BinaryUpdateState> {
     await this.#load();
     await this.#set({ unseen: false });
+    return this.#state;
+  }
+
+  /** Returns a machine waiting for the fence to `available`: the person changed their mind. */
+  async cancel(): Promise<BinaryUpdateState> {
+    this.#flags.commanded = false;
+    await this.#load();
+    if (this.#state.phase === "ready") {
+      await this.#set({ phase: "available", waitingFor: undefined });
+    }
     return this.#state;
   }
 
@@ -182,6 +311,10 @@ export class BinaryUpdater {
     await this.#running;
     await this.tick();
     const to = this.#state.availableVersion;
+    const waiting =
+      this.#state.phase === "ready" && this.#state.waitingFor !== undefined
+        ? `waiting for ${this.#state.waitingFor} working session${this.#state.waitingFor === 1 ? "" : "s"} to finish`
+        : `update is ${this.#state.phase}`;
     return {
       from,
       to,
@@ -190,9 +323,7 @@ export class BinaryUpdater {
       installed: this.#state.phase === "installing",
       pulled: to ? `signed release ${to}` : "no newer release",
       restarted: [],
-      ...(this.#state.phase === "installing"
-        ? {}
-        : { skipped: `update is ${this.#state.phase}` }),
+      ...(this.#state.phase === "installing" ? {} : { skipped: waiting }),
     };
   }
 
@@ -209,6 +340,67 @@ export class BinaryUpdater {
     this.#state = { ...this.#state, ...update, updatedAt: Date.now() };
     await writeJsonAtomic(updateStatePath(), this.#state);
     this.#report(this.#state);
+  }
+
+  /** A service wrapper that restored the previous build leaves a note; this records it. */
+  async #noteRecovery(): Promise<void> {
+    const note = (
+      await Bun.file(recoveredPath())
+        .text()
+        .catch(() => undefined)
+    )?.trim();
+    if (!note) {
+      return;
+    }
+    await this.#set({
+      phase: "failed-rolled-back",
+      failedVersion: note,
+      availableVersion: note,
+      error:
+        "The new build did not become healthy and the helper never reported back; the previous build was restored on its next start",
+      unseen: true,
+    });
+    await rm(recoveredPath(), { force: true });
+  }
+
+  /** Clears the trial marker once this build has been healthy for a minute. */
+  async #confirmTrial(): Promise<void> {
+    const trial = await readTrial();
+    const installation = await readInstallation();
+    if (!(trial && installation) || trial.version !== runtimeVersion) {
+      this.#healthySince = undefined;
+      return;
+    }
+    const problem = await probeHealth({
+      installation,
+      machineId: await machineId(),
+      sinceMs: trial.swappedAt * 1000,
+      version: runtimeVersion,
+    });
+    if (problem) {
+      this.#healthySince = undefined;
+      return;
+    }
+    this.#healthySince ??= Date.now();
+    if (Date.now() - this.#healthySince < TRIAL_CONFIRM_MS) {
+      return;
+    }
+    await rm(trialPath(), { force: true });
+    await rm(previousInstallationPath(), { force: true });
+    if (trial.dbPath && trial.dbBackup) {
+      // Confirmed healthy: keep the newest copy, drop older ones.
+      const prefix = `${basename(trial.dbPath)}.pre-`;
+      const old = (await readdir(dirname(trial.dbPath))).filter(
+        (name) =>
+          name.startsWith(prefix) &&
+          join(dirname(trial.dbPath ?? ""), name) !== trial.dbBackup
+      );
+      await Promise.all(
+        old.map((name) =>
+          rm(join(dirname(trial.dbPath ?? ""), name), { force: true })
+        )
+      );
+    }
   }
 
   /** One pass of load, check and (when allowed) stage and apply; callers share a pass in flight. */
@@ -232,32 +424,61 @@ export class BinaryUpdater {
     }
   }
 
+  /** What the hub offers this machine, signature checked, and what the hub's database holds. */
+  async #offer(
+    installation: BinaryInstallation
+  ): Promise<{ dbSchemaVersion?: number; release: SignedRelease }> {
+    const hub = installation.hubUrl;
+    // The hub's machine considers the channel's newest; every other machine
+    // takes the build its hub runs, so none is ever ahead of its hub.
+    const path = installation.role === "hub" ? "latest" : "release";
+    const response = await fetch(`${hub}/api/binary-updates/${path}`, {
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (!response.ok) {
+      throw new Error(
+        `The hub has no build to offer (${path}: ${response.status})`
+      );
+    }
+    const body = (await response.json()) as SignedRelease & {
+      dbSchemaVersion?: number;
+    };
+    verifyManifest(body.manifest, body.signature);
+    if (installation.role === "hub") {
+      if (body.manifest.channel !== this.#policy.channel) {
+        throw new Error("The hub offered a build from another channel");
+      }
+    } else {
+      const protocol = await hubProtocol(hub);
+      const offered = body.manifest.protocol;
+      if (
+        !protocol ||
+        offered.min > protocol.max ||
+        offered.max < protocol.min
+      ) {
+        throw new Error(
+          "This build's wire protocol does not overlap the hub's"
+        );
+      }
+    }
+    return { release: body, dbSchemaVersion: body.dbSchemaVersion };
+  }
+
   async #check(): Promise<void> {
     const installation = await readInstallation();
     if (!installation) {
       return;
     }
-    const hub = installation.hubUrl;
-    const settings = await fetch(`${hub}/api/binary-updates/settings`, {
-      signal: AbortSignal.timeout(10_000),
-    });
+    const settings = await fetch(
+      `${installation.hubUrl}/api/binary-updates/settings`,
+      { signal: AbortSignal.timeout(10_000) }
+    );
     if (!settings.ok) {
       throw new Error(`The hub's update settings answered ${settings.status}`);
     }
     this.#policy = (await settings.json()) as BinaryUpdatePolicy;
-    const offer = await fetch(`${hub}/api/binary-updates/release`, {
-      signal: AbortSignal.timeout(20_000),
-    });
-    if (!offer.ok) {
-      throw new Error(
-        `The hub has no ${this.#policy.channel} build: ${offer.status}`
-      );
-    }
-    const release = (await offer.json()) as SignedRelease;
-    verifyManifest(release.manifest, release.signature);
-    if (release.manifest.channel !== this.#policy.channel) {
-      throw new Error("The hub offered a build from another channel");
-    }
+    const { release, dbSchemaVersion } = await this.#offer(installation);
+    const running = await readRunningManifest();
     await this.#set({ channel: this.#policy.channel });
     if (
       this.#state.phase === "installing" &&
@@ -268,22 +489,14 @@ export class BinaryUpdater {
         error: "The update helper did not report back",
       });
     }
-    if (release.manifest.version === runtimeVersion) {
-      this.#staged = undefined;
-      this.#flags.commanded = false;
-      if (
-        ["failed", "available", "downloading", "ready"].includes(
-          this.#state.phase
-        )
-      ) {
-        await this.#set({
-          phase: "none",
-          availableVersion: undefined,
-          notes: undefined,
-          error: undefined,
-        });
-      }
-      await this.#advanceKeeper(installation.sessiondVersion);
+    const newer = release.manifest.sequence > running.sequence;
+    const schemaOk =
+      dbSchemaVersion === undefined ||
+      release.manifest.schemaVersion >= dbSchemaVersion;
+    if (!(newer && schemaOk)) {
+      // Never a build that is not newer, and never one older than the data.
+      await this.#settleNothingNewer(this.#policy.channel !== running.channel);
+      await this.#advanceKeeper(installation);
       return;
     }
     const failedBefore = this.#state.failedVersion === release.manifest.version;
@@ -296,17 +509,79 @@ export class BinaryUpdater {
         notes: release.manifest.notes,
       });
     }
-    if (this.#flags.commanded || (this.#policy.autoUpdate && !failedBefore)) {
-      await this.#stage(release, hub);
-      await this.#apply(release);
+    if (
+      !(this.#flags.commanded || (this.#policy.autoUpdate && !failedBefore))
+    ) {
+      return;
+    }
+    if (!(await this.#retryAllowed(release.manifest.version))) {
+      return;
+    }
+    try {
+      await this.#stage(release, installation);
+    } catch (error) {
+      await recordFailure(
+        release.manifest.version,
+        error instanceof Error ? error.message : String(error)
+      );
+      throw error;
+    }
+    await this.#apply(release);
+  }
+
+  /** Nothing is newer: say `none`, or that a channel change waits for that channel's next release. */
+  async #settleNothingNewer(waitsForChannel: boolean): Promise<void> {
+    this.#staged = undefined;
+    this.#flags.commanded = false;
+    const target = waitsForChannel ? "waiting-for-channel" : "none";
+    if (
+      this.#state.phase !== target &&
+      [
+        "failed",
+        "available",
+        "downloading",
+        "ready",
+        "waiting-for-channel",
+        "none",
+      ].includes(this.#state.phase)
+    ) {
+      await this.#set({
+        phase: target,
+        availableVersion: undefined,
+        notes: undefined,
+        waitingFor: undefined,
+        error: undefined,
+      });
     }
   }
 
-  /** Download through the hub, verify, extract and try the candidate binary. */
-  async #stage(release: SignedRelease, hub: string): Promise<void> {
+  /** A failed download or verification waits out a growing delay; the state keeps saying why. */
+  async #retryAllowed(version: string): Promise<boolean> {
+    const failure = await readFailure(version);
+    if (!failure || Date.now() >= failure.nextAt) {
+      return true;
+    }
+    if (this.#state.phase !== "failed") {
+      await this.#set({ phase: "failed", error: failure.error });
+    }
+    return false;
+  }
+
+  /** Download through the hub, verify, extract into a partial folder of its own, then put it in place. */
+  async #stage(
+    release: SignedRelease,
+    installation: BinaryInstallation
+  ): Promise<void> {
     const { manifest } = release;
-    if (this.#staged === manifest.version) {
+    if (this.#staged === manifest.version && this.#state.phase === "ready") {
       return;
+    }
+    if (
+      manifest.version === runtimeVersion ||
+      manifest.version === installation.sessiondVersion
+    ) {
+      // A folder a running process was started from is never touched.
+      throw new Error("This version is one that is already running");
     }
     const target = `${process.platform}-${process.arch}`;
     const artifact = manifest.artifacts.find((row) => row.target === target);
@@ -315,50 +590,60 @@ export class BinaryUpdater {
     }
     await this.#set({ phase: "downloading" });
     const response = await fetch(
-      `${hub}/api/binary-updates/artifacts/${encodeURIComponent(manifest.version)}/${encodeURIComponent(artifact.archive)}`,
+      `${installation.hubUrl}/api/binary-updates/artifacts/${encodeURIComponent(manifest.version)}/${encodeURIComponent(artifact.archive)}`,
       { signal: AbortSignal.timeout(600_000) }
     );
     if (!response.ok) {
       throw new Error(`The hub could not supply the build: ${response.status}`);
     }
-    const bytes = new Uint8Array(await response.arrayBuffer());
+    const bytes = await readAtMost(response, artifact.size);
     if (!archiveMatches(manifest, target, bytes)) {
       throw new Error(
         "The downloaded build does not match the signed manifest"
       );
     }
     const directory = versionDirectory(manifest.version);
-    const work = `${directory}.partial`;
-    await rm(work, { recursive: true, force: true });
-    const archive = join(binaryRoot(), `${manifest.version}.tar.gz`);
-    await Bun.write(archive, bytes);
-    await Bun.$`mkdir -p ${work} && tar -xzf ${archive} -C ${work} cawco`.quiet();
-    await rm(archive, { force: true });
-    const binary = join(work, "cawco");
-    const extracted = await Bun.file(binary).bytes();
-    if (
-      extracted.byteLength !== artifact.binarySize ||
-      new Bun.CryptoHasher("sha256").update(extracted).digest("hex") !==
-        artifact.binarySha256
-    ) {
-      throw new Error(
-        "The extracted binary does not match the signed manifest"
-      );
+    const work = `${directory}.partial-${crypto.randomUUID()}`;
+    const archive = `${work}.tar.gz`;
+    try {
+      await Bun.write(archive, bytes);
+      await Bun.$`mkdir -p ${work} && tar -xzf ${archive} -C ${work} cawco`.quiet();
+      const binary = join(work, "cawco");
+      const extracted = await Bun.file(binary).bytes();
+      if (
+        extracted.byteLength !== artifact.binarySize ||
+        new Bun.CryptoHasher("sha256").update(extracted).digest("hex") !==
+          artifact.binarySha256
+      ) {
+        throw new Error(
+          "The extracted binary does not match the signed manifest"
+        );
+      }
+      await Bun.$`chmod 700 ${binary}`.quiet();
+      await writeJsonAtomic(join(work, "release.json"), manifest);
+      await writeJsonAtomic(join(work, "release.signature.json"), {
+        signature: release.signature,
+      });
+      await rm(directory, { recursive: true, force: true });
+      await rename(work, directory);
+    } finally {
+      await rm(work, { recursive: true, force: true });
+      await rm(archive, { force: true });
     }
-    await Bun.$`chmod 700 ${binary}`.quiet();
-    await writeJsonAtomic(join(work, "release.json"), manifest);
-    await writeJsonAtomic(join(work, "release.signature.json"), {
-      signature: release.signature,
-    });
-    await rm(directory, { recursive: true, force: true });
-    await rename(work, directory);
     this.#staged = manifest.version;
     await this.#set({ phase: "ready" });
   }
 
+  /** Runs only from `ready`: the one state in which a build is staged and nothing is applying. */
   async #apply(release: SignedRelease): Promise<void> {
+    if (this.#state.phase !== "ready") {
+      return;
+    }
     if (!(await mayReplaceMachineServices(this.#readBusy))) {
-      await this.#set({ phase: "ready" });
+      await this.#set({
+        phase: "ready",
+        waitingFor: (await this.#readBusy()).busy,
+      });
       return;
     }
     const keeper = await readKeeper();
@@ -368,17 +653,28 @@ export class BinaryUpdater {
     ) {
       // The new agent could not speak to the keeper that holds the sessions:
       // the whole machine's update waits, and nothing is ended to make room.
-      await this.#set({ phase: "waiting-sessions", heldChildren: keeper.held });
+      await this.#set({
+        phase: "waiting-sessions",
+        heldChildren: keeper.held,
+        waitingFor: undefined,
+      });
       return;
     }
-    await this.#set({ phase: "installing", heldChildren: undefined });
+    await this.#set({
+      phase: "installing",
+      heldChildren: undefined,
+      waitingFor: undefined,
+    });
     this.#flags.commanded = false;
-    await launchApplyHelper(release.manifest.version, keeper.held);
+    await launchApplyHelper(release.manifest.version, keeper.held, false);
   }
 
-  /** The keeper advances only once it holds nothing. */
-  async #advanceKeeper(keeperVersion: string): Promise<void> {
-    if (keeperVersion === runtimeVersion) {
+  /**
+   * The session keeper advances only once it holds nothing, and only under the
+   * same policy as any update: auto-update on, or a person's Install now.
+   */
+  async #advanceKeeper(installation: BinaryInstallation): Promise<void> {
+    if (installation.sessiondVersion === runtimeVersion) {
       if (this.#state.phase === "waiting-sessions") {
         await this.#set({ phase: "installed", heldChildren: undefined });
       }
@@ -389,19 +685,17 @@ export class BinaryUpdater {
       await this.#set({
         phase: "waiting-sessions",
         heldChildren: keeper.held,
-        sessiondVersion: keeperVersion,
+        sessiondVersion: installation.sessiondVersion,
       });
+      return;
+    }
+    if (!(this.#flags.commanded || this.#policy.autoUpdate)) {
       return;
     }
     if (await mayReplaceMachineServices(this.#readBusy)) {
       await this.#set({ phase: "installing", heldChildren: undefined });
-      await launchApplyHelper(runtimeVersion, 0);
+      this.#flags.commanded = false;
+      await launchApplyHelper(runtimeVersion, 0, true);
     }
   }
 }
-
-let latest: BinaryUpdateState | undefined;
-export const latestBinaryUpdate = (): BinaryUpdateState | undefined => latest;
-export const reportBinaryUpdate = (state: BinaryUpdateState): void => {
-  latest = state;
-};

@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { chmod, mkdir } from "node:fs/promises";
-import { homedir, platform, userInfo } from "node:os";
+import { homedir, platform } from "node:os";
 import { dirname, join } from "node:path";
 import type { AgentRow } from "@cawco/core";
 import { CAWCO_ENV, CAWCO_HUB_PORT, readEnv } from "@cawco/core";
@@ -300,6 +300,9 @@ const dataDir = (): string =>
 
 const DEFAULT_DB_PATH =
   readEnv(CAWCO_ENV.dbPath) ?? join(dataDir(), "cawco.db");
+
+/** Where the hub this machine runs keeps its database: what its unit is given. */
+export const hubDbPath = (): string => DEFAULT_DB_PATH;
 
 /** How long a liveness probe is worth waiting for before it has said enough. */
 const PROBE_TIMEOUT_MS = 2000;
@@ -1133,12 +1136,11 @@ const lingerHint = async (note: (line: string) => void): Promise<void> => {
 };
 
 /**
- * Turns lingering on for this user, with no argument: logind lets a user set
- * their own when polkit allows it. A refusal is the whole answer — the exact
- * words logind gave, and the one command that fixes it — because a joined
- * machine whose services stop at logout has not joined anything.
+ * Lingering must already be on for this user: the installer turns it on before
+ * placing anything, and a machine whose services stop at logout has not joined
+ * anything, so this says exactly what is missing rather than guess.
  */
-export const enableLinger = async (
+export const requireLinger = async (
   note: (line: string) => void
 ): Promise<void> => {
   // sd_booted(3): systemd as PID 1 is exactly when this directory exists.
@@ -1151,21 +1153,18 @@ export const enableLinger = async (
       "this machine is not running systemd (no /run/systemd/system), and cawco's services are systemd user units, so there is nothing here to install them into. Add a machine whose init is systemd."
     );
   }
-  note("loginctl enable-linger…");
+  // The name comes from the system, never from an environment variable.
+  const name = (await run(["id", "-un"])).stdout.toString().trim();
   const current = await run([
     "loginctl",
     "show-user",
-    userInfo().username,
+    name,
     "--property=Linger",
     "--value",
   ]);
-  if (current.exitCode === 0 && current.stdout.toString().trim() === "yes") {
-    return;
-  }
-  const enabled = await run(["loginctl", "enable-linger"]);
-  if (enabled.exitCode !== 0) {
+  if (current.exitCode !== 0 || current.stdout.toString().trim() !== "yes") {
     throw new ServiceError(
-      `loginctl enable-linger failed: ${enabled.stderr.toString().trim() || `exit ${enabled.exitCode}`}\nWithout lingering, systemd stops this machine's services when its last session closes. Turn it on as an administrator, then run this again:\n  sudo loginctl enable-linger ${userInfo().username}`
+      `lingering is off for ${name}, so systemd would stop this machine's services when its last session closes. Turn it on, then run this again:\n  loginctl enable-linger ${name}\nIf that is refused, ask an administrator to run:\n  sudo loginctl enable-linger ${name}`
     );
   }
 };
@@ -1542,6 +1541,17 @@ const restartSystemdUnit = async (
   note(`restarted ${unitName(spec.id)}`);
 };
 
+/** Stops one installed service and leaves it stopped. */
+export const stopService = async (id: ServiceId): Promise<void> => {
+  const stopped =
+    platform() === "darwin"
+      ? await run(["launchctl", "bootout", `${guiDomain()}/${label(id)}`])
+      : await run(["systemctl", "--user", "stop", unitName(id)]);
+  if (stopped.exitCode !== 0) {
+    throw failed(`stopping ${id}`, stopped);
+  }
+};
+
 /**
  * The mode a service was installed in, read back from the unit it was installed
  * as — nothing else remembers it.
@@ -1672,7 +1682,12 @@ const systemdLogs = async (
 
 export interface ServiceOptions {
   /** Verified binary installer pins sessiond separately from the replaceable roles. */
-  binaryLayout?: { executable: string; sessiondExecutable: string };
+  binaryLayout?: {
+    executable: string;
+    sessiondExecutable: string;
+    /** The wrapper hub, dashboard and agent start through; the keeper does not. */
+    wrapper: string;
+  };
   follow: boolean;
   /** `restart` only: interrupt them, or restart without knowing whether it will. */
   force: boolean;
@@ -1705,15 +1720,15 @@ export const service = async (
     ? {
         root: dirname(binaryLayout.executable),
         hub: {
-          command: [binaryLayout.executable, "hub"],
+          command: [binaryLayout.wrapper, "hub"],
           needs: binaryLayout.executable,
         },
         agent: {
-          command: [binaryLayout.executable, "up"],
+          command: [binaryLayout.wrapper, "up"],
           needs: binaryLayout.executable,
         },
         dashboard: {
-          command: [binaryLayout.executable, "dashboard"],
+          command: [binaryLayout.wrapper, "dashboard"],
           needs: binaryLayout.executable,
         },
         sessiond: {

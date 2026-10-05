@@ -14,6 +14,10 @@ export interface ReleaseManifest {
   commit: string;
   notes: string;
   protocol: { min: number; max: number };
+  /** Database migrations this build carries; a build with fewer than the database holds is never installed. */
+  schemaVersion: number;
+  /** First-parent commit count of the built commit; only grows, and no path installs a lower or equal one. */
+  sequence: number;
   /** The capability required by this build's agent from its process keeper. */
   sessiondProtocol: string;
   testSigned: boolean;

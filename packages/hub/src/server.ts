@@ -73,6 +73,7 @@ import {
   agentProblem,
   archiveRefusal,
   BUCKET_MS,
+  CANCEL_BINARY_UPDATE,
   CLAUDE_CONVERSATION_GONE,
   CONFIGURE_BINARY_UPDATES,
   CONTROL_CONTEXT_USAGE,
@@ -7538,6 +7539,8 @@ export const createServer = (
               .map((row) => row.machineId),
           acknowledge: (machineId) =>
             callAgent(machineId, ACKNOWLEDGE_BINARY_UPDATE, [], 10_000),
+          cancel: (machineId) =>
+            callAgent(machineId, CANCEL_BINARY_UPDATE, [], 10_000),
           configure: (machineId, policy: BinaryUpdatePolicy) =>
             callAgent(machineId, CONFIGURE_BINARY_UPDATES, [policy], 10_000),
         }).routes

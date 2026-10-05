@@ -1,4 +1,4 @@
-import { mkdirSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import type {
   AgentRow,
@@ -1269,7 +1269,18 @@ const make = (path: string): DbShape => {
         gt(instances.updatedAt, new Date(Date.now() - STALE_AFTER_MS))
       )
     );
-  migrate(db, { migrationsFolder: MIGRATIONS_DIR });
+  // A marker for the update helper: while it names a live process the hub is
+  // migrating, and the helper's wait for a healthy start does not run down.
+  const migrating = `${path}.migrating`;
+  writeFileSync(
+    migrating,
+    JSON.stringify({ pid: process.pid, startedAt: Date.now() })
+  );
+  try {
+    migrate(db, { migrationsFolder: MIGRATIONS_DIR });
+  } finally {
+    rmSync(migrating, { force: true });
+  }
 
   type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
   /**

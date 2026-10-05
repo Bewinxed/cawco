@@ -127,6 +127,7 @@ interface Args {
   held?: number;
   help: boolean;
   hub?: string;
+  keeperOnly: boolean;
   releaseHost?: string;
   /** Everything after the verb — the services `service` acts on. */
   rest: string[];
@@ -143,6 +144,7 @@ const parseArgs = (argv: string[]): Args => {
   const args: Args = {
     rest: [],
     ask: false,
+    keeperOnly: false,
     autoUpdate: false,
     dev: false,
     whenIdle: false,
@@ -167,6 +169,9 @@ const parseArgs = (argv: string[]): Args => {
       }
       case "--ask":
         args.ask = true;
+        break;
+      case "--keeper-only":
+        args.keeperOnly = true;
         break;
       case "--held": {
         index += 1;
@@ -488,7 +493,7 @@ const runBinaryApply = async (args: Args): Promise<number> => {
     );
   }
   const { applyBinary } = await import("./binary-apply");
-  await applyBinary(args.action, args.held);
+  await applyBinary(args.action, args.held, args.keeperOnly);
   return 0;
 };
 

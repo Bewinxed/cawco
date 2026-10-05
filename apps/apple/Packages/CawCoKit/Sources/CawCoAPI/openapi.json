@@ -486,6 +486,33 @@
         }
       }
     },
+    "/api/binary-updates/machines/{machineId}/cancel": {
+      "post": {
+        "parameters": [
+          {
+            "name": "machineId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "postApiBinaryUpdatesMachinesByMachineIdCancel",
+        "responses": {
+          "200": {
+            "description": "postApiBinaryUpdatesMachinesByMachineIdCancel 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiBinaryUpdatesMachinesByMachineIdCancel200"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/binary-updates/release": {
       "get": {
         "operationId": "getApiBinaryUpdatesRelease",
@@ -496,6 +523,33 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/getApiBinaryUpdatesRelease200"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "getApiBinaryUpdatesRelease 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/binary-updates/latest": {
+      "get": {
+        "operationId": "getApiBinaryUpdatesLatest",
+        "responses": {
+          "200": {
+            "description": "getApiBinaryUpdatesLatest 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiBinaryUpdatesLatest200"
                 }
               }
             }
@@ -6220,6 +6274,9 @@
           "version": {
             "type": "string"
           },
+          "sequence": {
+            "type": "number"
+          },
           "channel": {
             "enum": [
               "nightly",
@@ -6234,10 +6291,22 @@
         "required": [
           "channel",
           "notes",
+          "sequence",
           "version"
         ]
       },
       "postApiBinaryUpdatesMachinesByMachineIdAcknowledge200": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ]
+      },
+      "postApiBinaryUpdatesMachinesByMachineIdCancel200": {
         "type": "object",
         "properties": {
           "ok": {
@@ -6259,6 +6328,25 @@
           }
         },
         "required": [
+          "manifest",
+          "signature"
+        ]
+      },
+      "getApiBinaryUpdatesLatest200": {
+        "type": "object",
+        "properties": {
+          "manifest": {
+            "$ref": "#/components/schemas/ReleaseManifest"
+          },
+          "signature": {
+            "type": "string"
+          },
+          "dbSchemaVersion": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "dbSchemaVersion",
           "manifest",
           "signature"
         ]
@@ -10944,6 +11032,14 @@
               "min"
             ]
           },
+          "schemaVersion": {
+            "description": "Database migrations this build carries; a build with fewer than the database holds is never installed.",
+            "type": "number"
+          },
+          "sequence": {
+            "description": "First-parent commit count of the built commit; only grows, and no path installs a lower or equal one.",
+            "type": "number"
+          },
           "sessiondProtocol": {
             "description": "The capability required by this build's agent from its process keeper.",
             "type": "string"
@@ -10961,6 +11057,8 @@
           "commit",
           "notes",
           "protocol",
+          "schemaVersion",
+          "sequence",
           "sessiondProtocol",
           "testSigned",
           "version"
@@ -12207,6 +12305,10 @@
           },
           "updatedAt": {
             "type": "number"
+          },
+          "waitingFor": {
+            "description": "Sessions working now, while `ready` waits for the machine to be idle.",
+            "type": "number"
           }
         },
         "required": [
@@ -12228,6 +12330,7 @@
           "installing",
           "none",
           "ready",
+          "waiting-for-channel",
           "waiting-sessions"
         ],
         "type": "string"

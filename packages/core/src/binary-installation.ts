@@ -3,8 +3,12 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import type { BinaryUpdateState } from "./binary-updates";
+import type { ReleaseManifest } from "./release-manifest";
+import { runtimeVersion } from "./runtime";
 
 export interface BinaryInstallation {
+  /** Where this machine's dashboard answers, when it runs one. */
+  dashboardUrl?: string;
   hubUrl: string;
   installedVersion: string;
   /** Where releases come from, when not GitHub; recorded by the installer. */
@@ -54,3 +58,42 @@ export const readInstallation = (): Promise<BinaryInstallation | undefined> =>
   readJson<BinaryInstallation>(installationPath());
 export const readUpdateState = (): Promise<BinaryUpdateState | undefined> =>
   readJson<BinaryUpdateState>(updateStatePath());
+
+/** The signed manifest of the build this process is running, as the installer or the updater staged it. */
+export async function readRunningManifest(): Promise<ReleaseManifest> {
+  const manifest = await readJson<ReleaseManifest>(
+    join(versionDirectory(runtimeVersion), "release.json")
+  );
+  if (!manifest) {
+    throw new Error(
+      `No signed manifest is stored for the running build ${runtimeVersion}`
+    );
+  }
+  return manifest;
+}
+
+/**
+ * Written when a build is swapped in and cleared by that build once it has
+ * been healthy for a minute. The service wrapper restores `previous` when a
+ * start finds it past its deadline: the recovery for a helper that died after
+ * the swap.
+ */
+export interface TrialMarker {
+  /** The hub database copy to restore with `previous`, when the schema changed. */
+  dbBackup?: string;
+  dbPath?: string;
+  /** Unix seconds after which a start that finds this marker puts `previous` back. */
+  deadline: number;
+  keeperBefore: string;
+  previous: string;
+  role: BinaryInstallation["role"];
+  swappedAt: number;
+  version: string;
+}
+export const trialPath = (): string => join(binaryRoot(), "trial.json");
+export const previousInstallationPath = (): string =>
+  join(binaryRoot(), "installation.previous.json");
+export const recoveredPath = (): string =>
+  join(binaryRoot(), "trial.recovered");
+export const readTrial = (): Promise<TrialMarker | undefined> =>
+  readJson<TrialMarker>(trialPath());

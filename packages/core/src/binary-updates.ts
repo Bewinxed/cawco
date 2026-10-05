@@ -17,6 +17,7 @@ export type BinaryUpdatePhase =
   | "downloading"
   | "ready"
   | "waiting-sessions"
+  | "waiting-for-channel"
   | "installing"
   | "installed"
   | "failed-rolled-back"
@@ -38,4 +39,6 @@ export interface BinaryUpdateState {
   /** True from a finished install until a person has acknowledged it. */
   unseen: boolean;
   updatedAt: number;
+  /** Sessions working now, while `ready` waits for the machine to be idle. */
+  waitingFor?: number;
 }

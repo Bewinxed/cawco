@@ -26,9 +26,15 @@ import type {
   BinaryUpdatePolicy,
   BinaryUpdateState,
 } from "@cawco/core/binary-updates";
+import { BINARY_WRAPPER } from "@cawco/core/binary-wrapper";
 import { runtimeVersion } from "@cawco/core/runtime";
 import { discoverHub } from "./discover";
-import { awaitFirstMachineReady, enableLinger, service } from "./service";
+import {
+  awaitFirstMachineReady,
+  dashboardUrl,
+  requireLinger,
+  service,
+} from "./service";
 
 /** Tools offered at install: what CawCo uses, none of it required to start. */
 const OFFERED = ["git", "opencode", "pi"] as const;
@@ -46,6 +52,7 @@ export interface BinaryInstallOptions {
 export const binaryLayout = (keeperVersion: string) => ({
   executable: `${binaryRoot()}/current/cawco`,
   sessiondExecutable: `${versionDirectory(keeperVersion)}/cawco`,
+  wrapper: `${binaryRoot()}/run`,
 });
 
 async function awaitJoined(hubUrl: string): Promise<void> {
@@ -109,11 +116,14 @@ async function bringUp(options: BinaryInstallOptions): Promise<void> {
   const note = (line: string) =>
     console.log(line.endsWith("…") ? `${INSTALL_STEP_PREFIX}${line}` : line);
   if (platform() === "linux") {
-    await enableLinger(note);
+    await requireLinger(note);
   }
+  // The wrapper hub, dashboard and agent start through; written once, never replaced by an update.
+  await Bun.write(`${binaryRoot()}/run`, BINARY_WRAPPER, { mode: 0o700 });
   await writeJsonAtomic(installationPath(), {
     role: options.role,
     root: binaryRoot(),
+    ...(options.role === "hub" ? { dashboardUrl: dashboardUrl() } : {}),
     hubUrl: options.hubUrl,
     installedVersion: runtimeVersion,
     sessiondVersion: runtimeVersion,

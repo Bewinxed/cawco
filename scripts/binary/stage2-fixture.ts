@@ -6,6 +6,7 @@
 import { generateKeyPairSync } from "node:crypto";
 import { chmod, mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { releaseTag } from "../../packages/core/src/binary-distribution";
 import { generateInstallScript } from "../../packages/core/src/install-script";
 import {
   type ReleaseManifest,
@@ -61,9 +62,19 @@ if (verb === "keys") {
     })
   );
 } else if (verb === "release") {
-  // release <hostDir> <subdir> <channel> <version> <commit> <binary> <privateKey> [fault]
-  const [hostDir, subdir, channel, version, commit, binary, privateKey, fault] =
-    args;
+  // release <hostDir> <subdir> <channel> <version> <commit> <binary> <privateKey> <sequence> <schemaVersion> [fault]
+  const [
+    hostDir,
+    subdir,
+    channel,
+    version,
+    commit,
+    binary,
+    privateKey,
+    sequence,
+    schemaVersion,
+    fault,
+  ] = args;
   const directory = join(hostDir, subdir, channel);
   await rm(directory, { recursive: true, force: true });
   await mkdir(directory, { recursive: true });
@@ -71,27 +82,30 @@ if (verb === "keys") {
   await mkdir(staging);
   await Bun.write(join(staging, "cawco"), Bun.file(binary));
   await chmod(join(staging, "cawco"), 0o755);
-  const archive = `cawco-${version}-${TARGET}.tar.gz`;
-  await run(["tar", "-czf", join(directory, archive), "-C", staging, "cawco"]);
   const manifest: ReleaseManifest = {
     version,
     commit,
     channel: channel as "stable" | "nightly",
+    sequence: Number(sequence),
+    schemaVersion: Number(schemaVersion),
     protocol: { min: 1, max: 1 },
     sessiondProtocol: SESSIOND_V1,
     notes: `Proof build ${version}`,
     testSigned: false,
-    artifacts: [
-      {
-        target: TARGET,
-        archive,
-        sha256: await sha256(join(directory, archive)),
-        size: Bun.file(join(directory, archive)).size,
-        binarySha256: await sha256(join(staging, "cawco")),
-        binarySize: Bun.file(join(staging, "cawco")).size,
-      },
-    ],
+    artifacts: [],
   };
+  const archive = `cawco-${releaseTag(manifest)}-${TARGET}.tar.gz`;
+  await run(["tar", "-czf", join(directory, archive), "-C", staging, "cawco"]);
+  manifest.artifacts = [
+    {
+      target: TARGET,
+      archive,
+      sha256: await sha256(join(directory, archive)),
+      size: Bun.file(join(directory, archive)).size,
+      binarySha256: await sha256(join(staging, "cawco")),
+      binarySize: Bun.file(join(staging, "cawco")).size,
+    },
+  ];
   await rm(staging, { recursive: true, force: true });
   if (fault === "tamper") {
     // The archive no longer matches what the signed manifest names.
@@ -113,9 +127,23 @@ if (verb === "keys") {
     );
   }
 } else if (verb === "broken-binary") {
-  // A program that signs and unpacks like a build and cannot start.
-  const [outFile] = args;
-  await writeFile(outFile, "#!/bin/sh\nexit 1\n", { mode: 0o755 });
+  // A program that signs and unpacks like a build and cannot start. With
+  // `migrates` it first damages the hub database, as a migration that then
+  // fails would leave it.
+  const [outFile, mode] = args;
+  await writeFile(
+    outFile,
+    mode === "migrates"
+      ? `#!/bin/sh
+if [ "$1" = hub ]; then
+  db="\${CAWCO_DB_PATH:-$HOME/.local/share/cawco/cawco.db}"
+  printf 'migrated-and-broken' >> "$db"
+fi
+exit 1
+`
+      : "#!/bin/sh\nexit 1\n",
+    { mode: 0o755 }
+  );
 } else {
   throw new Error(`unknown fixture verb ${verb}`);
 }

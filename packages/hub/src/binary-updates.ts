@@ -1,9 +1,11 @@
 /**
  * The fleet's update policy and the signed builds the hub hands to machines.
- * Only the hub talks to the release host: it discovers the channel's release,
- * verifies it, and serves manifest and archives to its machines, each of which
- * verifies them again against the embedded key.
+ * Only the hub talks to the release host. It serves two things: its own
+ * machine the channel's newest build, and every other machine the build the hub
+ * itself is running, so no machine is ever ahead of its hub. Each machine
+ * verifies what it is given against the embedded release key.
  */
+import { Database } from "bun:sqlite";
 import {
   existsSync,
   mkdirSync,
@@ -13,11 +15,17 @@ import {
 } from "node:fs";
 import { dirname, join } from "node:path";
 import {
+  assetBase,
   discoverRelease,
   fetchArchive,
   type LocatedRelease,
+  type SignedRelease,
 } from "@cawco/core/binary-distribution";
-import { readInstallation } from "@cawco/core/binary-installation";
+import {
+  readInstallation,
+  readRunningManifest,
+  versionDirectory,
+} from "@cawco/core/binary-installation";
 import type {
   BinaryUpdatePolicy,
   BinaryUpdateState,
@@ -30,6 +38,8 @@ const RELEASE_TTL_MS = 15 * 60_000;
 interface Options {
   /** Marks a machine's finished update as seen; resolves to the control answer. */
   acknowledge: (machineId: string) => Promise<unknown>;
+  /** Returns a machine waiting for sessions or idle to `available`. */
+  cancel: (machineId: string) => Promise<unknown>;
   /** Tell an online machine its policy changed; resolves when it answered. */
   configure: (
     machineId: string,
@@ -38,6 +48,37 @@ interface Options {
   dbPath: string;
   online: () => string[];
   states: () => ReadonlyMap<string, BinaryUpdateState>;
+}
+
+/** How many migrations the hub's database has applied. */
+function databaseSchemaVersion(dbPath: string): number {
+  const db = new Database(dbPath, { readonly: true });
+  try {
+    return (
+      db.query("SELECT count(*) AS n FROM __drizzle_migrations").get() as {
+        n: number;
+      }
+    ).n;
+  } finally {
+    db.close();
+  }
+}
+
+/** The signed manifest and signature of the build this hub is running. */
+async function runningRelease(): Promise<LocatedRelease> {
+  const manifest = await readRunningManifest();
+  const { signature } = JSON.parse(
+    readFileSync(
+      join(versionDirectory(manifest.version), "release.signature.json"),
+      "utf8"
+    )
+  ) as { signature: string };
+  const installation = await readInstallation();
+  return {
+    manifest,
+    signature,
+    assetBaseUrl: assetBase(manifest, installation?.releaseHost),
+  };
 }
 
 export function createBinaryUpdates(options: Options) {
@@ -69,7 +110,7 @@ export function createBinaryUpdates(options: Options) {
     });
     return checking;
   };
-  const release = async (): Promise<LocatedRelease> =>
+  const newest = async (): Promise<LocatedRelease> =>
     current && Date.now() - current.at < RELEASE_TTL_MS
       ? current.release
       : await discover();
@@ -101,6 +142,7 @@ export function createBinaryUpdates(options: Options) {
       const found = await discover();
       return {
         version: found.manifest.version,
+        sequence: found.manifest.sequence,
         channel: found.manifest.channel,
         notes: found.manifest.notes,
       };
@@ -112,23 +154,56 @@ export function createBinaryUpdates(options: Options) {
         return { ok: true };
       }
     )
-    .get("/api/binary-updates/release", async () => {
-      const found = await release();
-      return { manifest: found.manifest, signature: found.signature };
+    .post(
+      "/api/binary-updates/machines/:machineId/cancel",
+      async ({ params }) => {
+        await options.cancel(params.machineId);
+        return { ok: true };
+      }
+    )
+    // What every machine other than the hub's own applies: the build the hub runs.
+    .get("/api/binary-updates/release", async ({ status }) => {
+      try {
+        const running = await runningRelease();
+        return { manifest: running.manifest, signature: running.signature };
+      } catch (error) {
+        return status(
+          404,
+          error instanceof Error ? error.message : String(error)
+        );
+      }
+    })
+    // What the hub's own machine considers: the channel's newest, and the
+    // database's schema, so it never installs a build older than its data.
+    .get("/api/binary-updates/latest", async () => {
+      const found = await newest();
+      return {
+        manifest: found.manifest,
+        signature: found.signature,
+        dbSchemaVersion: databaseSchemaVersion(options.dbPath),
+      } satisfies SignedRelease & { dbSchemaVersion: number };
     })
     .get(
       "/api/binary-updates/artifacts/:version/:archive",
       async ({ params, status }) => {
-        const found = await release();
-        const artifact = found.manifest.artifacts.find(
-          (row) => row.archive === params.archive
-        );
-        if (params.version !== found.manifest.version || !artifact) {
-          return status(404, "This build is not what the channel offers now");
+        const candidates = [await runningRelease().catch(() => undefined)];
+        if (current) {
+          candidates.push(current.release);
         }
-        return new Response(
-          Bun.file(await fetchArchive(found, artifact.target, root))
+        const found = candidates.find(
+          (row) =>
+            row?.manifest.version === params.version &&
+            row.manifest.artifacts.some((a) => a.archive === params.archive)
         );
+        const artifact = found?.manifest.artifacts.find(
+          (a) => a.archive === params.archive
+        );
+        if (found && artifact) {
+          return new Response(
+            Bun.file(await fetchArchive(found, artifact.target, root))
+          );
+        }
+        return status(404, "This build is not one the hub offers");
       }
     );
   return { routes, policy: () => policy };

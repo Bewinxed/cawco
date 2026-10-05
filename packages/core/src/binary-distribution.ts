@@ -113,6 +113,41 @@ export async function discoverRelease(
   };
 }
 
+/** Where a release's archives are: beside a mirror's manifest, or under its GitHub release tag. */
+export function assetBase(
+  manifest: ReleaseManifest,
+  releaseHost?: string
+): string {
+  return releaseHost
+    ? `${releaseHost.replace(TRAILING_SLASH, "")}/${manifest.channel}/`
+    : `https://github.com/${RELEASE_REPOSITORY}/releases/download/${releaseTag(manifest)}/`;
+}
+
+/** Reads a body, refusing one longer than the signed size rather than buffering it. */
+export async function readAtMost(
+  response: Response,
+  size: number
+): Promise<Uint8Array> {
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  if (response.body) {
+    for await (const chunk of response.body) {
+      total += chunk.byteLength;
+      if (total > size) {
+        throw new Error("The download is longer than the signed size");
+      }
+      chunks.push(chunk);
+    }
+  }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
+}
+
 /** Whether these bytes are exactly the archive the signed manifest names. */
 export function archiveMatches(
   manifest: ReleaseManifest,
@@ -162,13 +197,14 @@ export async function fetchArchive(
   if (!response.ok) {
     throw new Error(`The archive download answered ${response.status}`);
   }
-  const bytes = new Uint8Array(await response.arrayBuffer());
+  const bytes = await readAtMost(response, artifact.size);
   if (!archiveMatches(release.manifest, target, bytes)) {
     throw new Error(
       "The downloaded archive does not match the signed manifest"
     );
   }
-  const temporary = `${path}.${process.pid}.tmp`;
+  // Unique per request: concurrent fetches of one archive never share a file.
+  const temporary = `${path}.${crypto.randomUUID()}.tmp`;
   await Bun.write(temporary, bytes);
   await rename(temporary, path);
   return path;

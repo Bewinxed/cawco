@@ -52,6 +52,8 @@ if (verb === "proof-stack") {
       commit: "proof",
       channel: "nightly",
       protocol: { min: 1, max: 1 },
+      sequence: 1,
+      schemaVersion: 1,
       sessiondProtocol: SESSIOND_V1,
       notes: "Proof only",
       testSigned: true,
