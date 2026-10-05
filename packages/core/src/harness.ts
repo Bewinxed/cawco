@@ -459,7 +459,14 @@ export type NeutralContentBlock =
     }
   | {
       type: "image";
-      source: { type: "base64"; media_type: string; data: string };
+      /**
+       * The picture as the harness takes it (`base64`), or as the hub's
+       * transcript and `send` records carry it: a reference into its media
+       * store (`url`), fetched when the picture is shown.
+       */
+      source:
+        | { type: "base64"; media_type: string; data: string }
+        | { type: "url"; media_type: string; url: string };
     };
 
 export type NeutralAssistantBlock = Extract<
