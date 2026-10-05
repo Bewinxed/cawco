@@ -391,7 +391,7 @@ export function highlight(options: HighlightOptions) {
     /**
      * The row an element belongs to: the row it is in, or the one row of
      * the nearest box around it that holds any. A control that stands beside
-     * its row in the row's own box (a session row's Peek) is that row's;
+     * its row in the row's own box (a session row's Archive) is that row's;
      * the box of a parent and the rows under it is nobody's.
      */
     const rowOf = (element: Element): HTMLElement | null => {

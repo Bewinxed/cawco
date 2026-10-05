@@ -51,10 +51,9 @@
    * it (`.press-tint`).
    *
    * A parent folds the rows under it (`fold`): its mark says their count
-   * and is the switch (motion/branch). Peek (`peek`) rises at the row's end
-   * for a live session. A finished row can be archived (`onarchive`): a
-   * pointer has a button left of Peek, a finger swipes the row away, and
-   * both have it in the menu.
+   * and is the switch (motion/branch). A finished row can be archived
+   * (`onarchive`): a pointer has a button at the row's end, a finger swipes
+   * the row away, and both have it in the menu.
    *
    * At rest nothing here is a stacking context (no transform, filter or
    * opacity on the link): a parent's mark stands over the rows folding
@@ -63,10 +62,9 @@
   import type { NeutralSessionInfo } from "@cawco/core";
   import type { Attachment } from "svelte/attachments";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
-  import { IconArchive, IconMaximize } from "#lib/icons.js";
+  import { IconArchive } from "#lib/icons.js";
   import { cn } from "#lib/utils.js";
   import type { InstanceRow } from "./client.svelte";
-  import { openPeek } from "./home/peek.svelte";
   import { swipeToArchive } from "./home/swipe-archive";
   import LiveSessionMenu from "./LiveSessionMenu.svelte";
   import SessionMark, { sessionStatus, statusWord } from "./SessionMark.svelte";
@@ -88,7 +86,6 @@
     done = false,
     context = false,
     compact = false,
-    peek = true,
     fold = null,
     onarchive,
   }: {
@@ -116,8 +113,6 @@
     context?: boolean;
     /** One line, for a tree in the rail: no meta line, the age in a column. */
     compact?: boolean;
-    /** A live session offers Peek at the row's end. */
-    peek?: boolean;
     /** The rows under it, when it is a parent (tree.ts). */
     fold?: {
       count: number;
@@ -136,19 +131,17 @@
   const place = $derived(
     instance?.cwd || info?.cwd || instance?.machineId || machineId
   );
-  /** Peek rises at the row's end: a live session's, not a workflow run's. */
-  const peeks = $derived(peek && instance !== null && !run);
   /**
    * The trailing column's width (the wider of the age and the count), on its
-   * row as `--trail-w`: what rises over the row's end on hover (Peek,
-   * Archive) stands left of it, so a row with neither is not measured: a
+   * row as `--trail-w`: what rises over the row's end on hover (Archive)
+   * stands left of it, so a row without it is not measured: a
    * tree in the rail wrote the width on every row it drew, and each write
    * restyled its row. Written from a size observer, after layout: read
    * where the row renders (`bind:offsetWidth`), it laid the page out in the
    * middle of the update that opened a tree, once a row.
    */
   const trailWidth: Attachment<HTMLElement> | undefined = $derived(
-    peeks || onarchive ? watchTrail : undefined
+    onarchive ? watchTrail : undefined
   );
 </script>
 
@@ -233,32 +226,11 @@
           <button
             {...tip}
             aria-label="Archive {title}"
-            class="peek archive touch-hit focus-inset"
+            class="row-action touch-hit focus-inset"
             onclick={onarchive}
             type="button"
           >
             <IconArchive aria-hidden="true" />
-          </button>
-        {/snippet}
-      </Tip>
-    {/if}
-    {#if peeks && instance}
-      {@const live = instance}
-      <!-- Glance → peek → dive: the tail of this one, without leaving the
-           list. A workflow run has no tail of its own: its card is its
-           steps. -->
-      <Tip label="Peek">
-        {#snippet children(
-          tip
-        )}
-          <button
-            {...tip}
-            aria-label="Peek {title}"
-            class="peek touch-hit focus-inset"
-            onclick={() => openPeek({ viewId: live.id, href, title })}
-            type="button"
-          >
-            <IconMaximize aria-hidden="true" />
           </button>
         {/snippet}
       </Tip>
@@ -331,14 +303,14 @@
   }
   /* Hover and selection are the list's (highlight: the rail's one ghost,
      the list's own pill), so a row never paints a second one under them. */
-  /* The peek sits at the row's end. A fine pointer finds it on hover or
-     focus; a touch screen always shows it, since there is no hover. */
-  .peek {
+  /* Archive sits at the row's end. A fine pointer finds it on hover or
+     focus; a touch screen swipes instead. */
+  .row-action {
     display: inline-grid;
     flex: none;
     place-items: center;
-    width: var(--peek-size);
-    height: var(--peek-size);
+    width: var(--action-size);
+    height: var(--action-size);
     margin-right: var(--space-2);
     border: 0;
     border-radius: var(--radius-xs);
@@ -347,54 +319,50 @@
     cursor: pointer;
     transition: var(--transition-control);
   }
-  .peek :global(svg) {
+  .row-action :global(svg) {
     width: 16px;
     height: 16px;
   }
-  /* At a desk they take no room until wanted: they rise over the row's
+  /* At a desk it takes no room until wanted: it rises over the row's
      words, block-centred on the row, a step left of the trailing column
      (the row's end padding, then the column's measured width), so neither
-     the age nor the count is ever under them. The row's corner is
-     --radius-sm; they stand further in from its edges than that, so they
-     keep the small control's own radius. */
+     the age nor the count is ever under it. The row's corner is
+     --radius-sm; it stands further in from the edges than that, so it
+     keeps the small control's own radius. */
   .item {
-    --peek-size: 28px;
-    --peek-end: calc(var(--space-3) + var(--trail-w, 0px) + var(--space-1));
+    --action-size: 28px;
+    --action-end: calc(var(--space-3) + var(--trail-w, 0px) + var(--space-1));
   }
   @media (hover: hover) and (pointer: fine) {
-    .peek {
+    .row-action {
       position: absolute;
       inset-block: 0;
-      right: var(--peek-end);
+      right: var(--action-end);
       margin: auto 0;
       background: var(--surface-hover);
       opacity: 0;
     }
-    .item[data-current] .peek {
+    .item[data-current] .row-action {
       background: var(--selected-bg);
     }
-    .item:hover .peek,
-    .item:focus-within .peek {
+    .item:hover .row-action,
+    .item:focus-within .row-action {
       opacity: 1;
     }
-    /* They stand on the row's ghost, by day the hover step itself: their own
+    /* It stands on the row's ghost, by day the hover step itself: its own
        hover is the step past it. */
-    .peek:hover {
+    .row-action:hover {
       background: light-dark(var(--surface-fill-strong), var(--surface-fill));
       color: var(--ink-strong);
-    }
-    /* Archive rises beside Peek, a step left of it. */
-    .archive {
-      right: calc(var(--peek-end) + var(--peek-size) + var(--space-1));
     }
   }
   /* A finger swipes the row away instead: no button for it. */
   @media not ((hover: hover) and (pointer: fine)) {
-    .archive {
+    .row-action {
       display: none;
     }
   }
-  /* A finger drawing the row left: the row and its Peek follow it, and
+  /* A finger drawing the row left: the row and its Archive follow it, and
      "Archive" is uncovered behind them, as wide as the drag. Let go short
      of the commit point, they slide back. Up and down stays the list's.
      Moved only while a finger is on it: a `translate` at rest, even of
@@ -404,10 +372,10 @@
   .item[data-archivable] {
     touch-action: pan-y;
   }
-  .item[data-swiping] :is(.row, .peek) {
+  .item[data-swiping] :is(.row, .row-action) {
     translate: calc(var(--swipe, 0px) * -1) 0;
   }
-  .item:not([data-swiping]) :is(.row, .peek) {
+  .item:not([data-swiping]) :is(.row, .row-action) {
     transition:
       var(--transition-control),
       translate var(--dur-exit) var(--ease-out);
@@ -499,7 +467,7 @@
   }
   .item[data-current] .line,
   .item[data-current] .trail,
-  .item[data-current] .peek {
+  .item[data-current] .row-action {
     color: var(--selected-ink);
   }
   .item[data-context]:not([data-current]) .title {
