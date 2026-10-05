@@ -419,7 +419,7 @@ case "$1" in
       done
     fi
     [ -f "$v/cawco.real" ] || ln "$v/cawco" "$v/cawco.real"
-    printf '#!/bin/sh\n[ "$1" = %s ] && exit 1\nexec "$(dirname "$0")/cawco.real" "$@"\n' "$verb" > "$v/cawco.stub"
+    printf '#!/bin/sh\n[ "$1" = %s ] && exit 1\nexec "$(dirname "$(readlink -f "$0")")/cawco.real" "$@"\n' "$verb" > "$v/cawco.stub"
     chmod 700 "$v/cawco.stub"
     mv "$v/cawco.stub" "$v/cawco" ;;
   remove)
@@ -1041,6 +1041,7 @@ helper_killed_mid_keeper_move() {
   # The build's own trial, unconfirmed while the keeper failed, is confirmed afterwards and nothing rolled it back.
   wait_until 300 '! has_file "$hubc" trial.json'
   ! has_file "$hubc" trial.recovered
+  ! has_file "$hubc" apply.lock
   [[ "$(current_link "$hubc")" == "versions/$(nb 7)" ]]
   # Sessions start, and the keeper link was not touched again.
   start_session "$hid" keeperlive-7

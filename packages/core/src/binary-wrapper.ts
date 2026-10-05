@@ -42,7 +42,7 @@ if [ "$1" = sessiond ]; then
     if [ -n "$keeper_deadline" ] && [ -n "$keeper_from" ] && [ "$(date +%s)" -gt "$keeper_deadline" ]; then
       swap_link "versions/$keeper_from" "$ROOT/keeper"
       cp "$KEEPER_TRIAL" "$ROOT/keeper-trial.recovered"
-      rm -f "$KEEPER_TRIAL"
+      rm -f "$KEEPER_TRIAL" "$ROOT/apply.lock"
       # The build was not at fault while its keeper was failing (its agent could not stay up to confirm it):
       # it gets a fresh trial from here.
       if [ -f "$TRIAL" ]; then
