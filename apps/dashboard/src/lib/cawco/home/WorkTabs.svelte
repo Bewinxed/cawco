@@ -84,7 +84,7 @@
   import { openTrees } from "../open-trees.svelte";
   import { rail } from "../rail.svelte";
   import SessionRow, { ROW_PILL } from "../SessionRow.svelte";
-  import { rooted, type TreeLine, tree } from "../tree";
+  import { type TreeLine, tree } from "../tree";
   import { workspace } from "../workspace/workspace.svelte";
   import {
     archive,
@@ -147,26 +147,12 @@
   const allOf = (tab: WorkTab): InstanceRow[] =>
     tab === "working" ? home.working : home.finished;
   /**
-   * A tab's own rows. Every delegate under a listed parent, folded into
-   * its parent's count (tree.ts `rooted`); one whose parent the tab does
-   * not list only when the Delegates button is on: work another session
-   * started is listed on its own on request. A failed one is
-   * listed whatever the button says, so a failure is never missed; a
-   * blocked one is never in a tab, it is a Needs-you card above them.
+   * A tab's own rows, by the Delegates switch: the home's one rule for it
+   * (home-state `workingListed`, `finishedListed`), which Recent reads too,
+   * so a session a tab leaves out is one Recent holds.
    */
-  const rowsOf = (tab: WorkTab): InstanceRow[] => {
-    const all = allOf(tab);
-    if (rail.delegates) {
-      return all;
-    }
-    // A delegate under a listed parent stays, folded into its parent's
-    // count; only one whose parent this tab does not list waits for the
-    // switch.
-    const kept = new Set(
-      rooted(all, (id) => cawco.instanceIndex.byId.has(id)).map((row) => row.id)
-    );
-    return all.filter((row) => kept.has(row.id) || isFailed(row));
-  };
+  const rowsOf = (tab: WorkTab): InstanceRow[] =>
+    tab === "working" ? home.workingListed : home.finishedListed;
   /**
    * What a tab with no rows says of the delegates it leaves out: with the
    * Delegates switch off, a tab whose only rows are delegates of sessions it

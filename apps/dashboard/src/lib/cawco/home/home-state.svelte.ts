@@ -720,6 +720,29 @@ class Home {
   });
 
   /**
+   * The rows of `all` a tab lists itself. Every delegate under a listed
+   * parent, folded into its parent's count (tree.ts `rooted`); one whose
+   * parent the tab does not list only when the Delegates switch is on: work
+   * another session started is listed on its own on request. A failed one is
+   * listed whatever the switch says, so a failure is never missed; a blocked
+   * one is never in a tab, it is a Needs-you card above them.
+   */
+  #listedIn(all: InstanceRow[]): InstanceRow[] {
+    if (rail.delegates) {
+      return all;
+    }
+    const kept = new Set(
+      rooted(all, (id) => cawco.instanceIndex.byId.has(id)).map((row) => row.id)
+    );
+    return all.filter((row) => kept.has(row.id) || isFailed(row));
+  }
+
+  /** What the Working tab lists of `working`, by the Delegates switch. */
+  readonly workingListed = $derived(this.#listedIn(this.working));
+  /** What the Finished tab lists of `finished`, by the Delegates switch. */
+  readonly finishedListed = $derived(this.#listedIn(this.finished));
+
+  /**
    * Nothing to list anywhere: no session the hub lists, and no transcript
    * stored on any machine. Asked without building a list (one look per
    * machine), so the home's empty state costs nothing as the catalogs grow.
@@ -843,9 +866,13 @@ class Home {
    * still say working.
    */
   readonly #recentRows = $derived.by<InstanceRow[]>(() => {
+    // What the tabs list, not all they hold: with the Delegates switch off
+    // a tab holds a delegate it does not draw (one that ended unseen under a
+    // parent the reader has since opened), and left out here too it had no
+    // row anywhere. Its parent's tree in Recent is where it hangs then.
     const shown = new Set([
-      ...this.working.map((row) => row.id),
-      ...this.finished.map((row) => row.id),
+      ...this.workingListed.map((row) => row.id),
+      ...this.finishedListed.map((row) => row.id),
       ...cawco.blocked.map((item) => item.instanceId),
     ]);
     const rows = cawco.listedInstances.filter((row) => !shown.has(row.id));
