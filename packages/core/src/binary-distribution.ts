@@ -52,6 +52,9 @@ const sha256 = (bytes: Uint8Array): string =>
  * confirmed. `host` names a mirror laid out as `<host>/<channel>/release.json`;
  * without it the GitHub release host is read.
  */
+/** The release host answered, and has no release for the channel. */
+export class NoReleaseError extends Error {}
+
 export async function discoverRelease(
   channel: BinaryUpdatePolicy["channel"],
   host?: string
@@ -71,6 +74,9 @@ export async function discoverRelease(
         signal: AbortSignal.timeout(15_000),
       }
     );
+    if (response.status === 404) {
+      throw new NoReleaseError(`No published ${channel} release`);
+    }
     if (!response.ok) {
       throw new Error(`The release host answered ${response.status}`);
     }
@@ -88,7 +94,9 @@ export async function discoverRelease(
       (a) => a.name === "release.json.sig"
     );
     if (!(manifest && signature)) {
-      throw new Error(`No published ${channel} release with a signed manifest`);
+      throw new NoReleaseError(
+        `No published ${channel} release with a signed manifest`
+      );
     }
     manifestUrl = manifest.browser_download_url;
     signatureUrl = signature.browser_download_url;
@@ -97,6 +105,9 @@ export async function discoverRelease(
     fetch(manifestUrl, { signal: AbortSignal.timeout(15_000) }),
     fetch(signatureUrl, { signal: AbortSignal.timeout(15_000) }),
   ]);
+  if (host && manifestResponse.status === 404) {
+    throw new NoReleaseError(`No published ${channel} release`);
+  }
   if (!(manifestResponse.ok && signatureResponse.ok)) {
     throw new Error("The release manifest or its signature could not be read");
   }

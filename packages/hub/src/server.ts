@@ -140,10 +140,11 @@ import {
   WIRE_PROTOCOL,
   WORKSPACE_CREATE_TIMEOUT_MS,
 } from "@cawco/core";
-import type {
-  BinaryUpdatePhase,
-  BinaryUpdatePolicy,
-  BinaryUpdateState,
+import {
+  BINARY_UPDATE_PHASES,
+  type BinaryUpdatePhase,
+  type BinaryUpdatePolicy,
+  type BinaryUpdateState,
 } from "@cawco/core/binary-updates";
 import { Elysia, t, ValidationError } from "elysia";
 import { websocket } from "elysia/websocket";
@@ -998,18 +999,6 @@ const peekMachineCapabilities = (
     : undefined;
 };
 
-const BINARY_UPDATE_PHASES: readonly BinaryUpdatePhase[] = [
-  "none",
-  "available",
-  "downloading",
-  "ready",
-  "waiting-sessions",
-  "installing",
-  "installed",
-  "failed-rolled-back",
-  "failed",
-];
-
 /**
  * A machine's word on its binary update, off a `register` or any heartbeat.
  * Absent from a daemon that is not a binary install; a phase this hub does not
@@ -1026,7 +1015,7 @@ const peekBinaryUpdate = (payload: unknown): BinaryUpdateState | undefined => {
   const state = binaryUpdate as Partial<BinaryUpdateState>;
   return BINARY_UPDATE_PHASES.includes(state.phase as BinaryUpdatePhase) &&
     typeof state.installedVersion === "string"
-    ? (state as BinaryUpdateState)
+    ? ({ ...state, hostsHub: state.hostsHub === true } as BinaryUpdateState)
     : undefined;
 };
 
@@ -7597,8 +7586,15 @@ export const createServer = (
           setState: (machineId, state) => {
             const known = peekBinaryUpdate({ binaryUpdate: state });
             if (known) {
+              const moved = !sameBinaryUpdate(
+                binaryUpdateStates.get(machineId),
+                known
+              );
               binaryUpdateStates.set(machineId, known);
               flushOwedStarts(machineId);
+              if (moved) {
+                publishInstances(machineId);
+              }
             }
           },
           acknowledge: (machineId) =>

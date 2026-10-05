@@ -212,7 +212,10 @@ export class BinaryUpdater {
     channel: "stable",
     updatedAt: Date.now(),
     unseen: false,
+    hostsHub: false,
   };
+  /** Whether this machine runs the hub: it then considers the channel's newest build, not its hub's. */
+  #hostsHub = false;
   #policy: BinaryUpdatePolicy = { channel: "stable", autoUpdate: false };
   #staged: string | undefined;
   /** `commanded`: a person asked for this build, so it applies at the first moment allowed. */
@@ -242,6 +245,7 @@ export class BinaryUpdater {
       return;
     }
     await removeFinishedHelpers();
+    this.#hostsHub = (await readInstallation())?.role === "hub";
     await this.#load();
     await this.#noteRecovery();
     this.#timer = setInterval(() => this.tick(), POLL_MS);
@@ -311,12 +315,18 @@ export class BinaryUpdater {
     this.#state = {
       ...(saved ?? this.#state),
       installedVersion: runtimeVersion,
+      hostsHub: this.#hostsHub,
     };
     this.#report(this.#state);
   }
 
   async #set(update: Partial<BinaryUpdateState>): Promise<void> {
-    this.#state = { ...this.#state, ...update, updatedAt: Date.now() };
+    this.#state = {
+      ...this.#state,
+      ...update,
+      hostsHub: this.#hostsHub,
+      updatedAt: Date.now(),
+    };
     await writeJsonAtomic(updateStatePath(), this.#state);
     this.#report(this.#state);
   }

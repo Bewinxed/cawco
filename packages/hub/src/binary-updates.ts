@@ -19,6 +19,7 @@ import {
   discoverRelease,
   fetchArchive,
   type LocatedRelease,
+  NoReleaseError,
   type SignedRelease,
 } from "@cawco/core/binary-distribution";
 import {
@@ -27,8 +28,10 @@ import {
   versionDirectory,
 } from "@cawco/core/binary-installation";
 import type {
+  BinaryUpdateChannels,
   BinaryUpdatePolicy,
   BinaryUpdateState,
+  ChannelRelease,
 } from "@cawco/core/binary-updates";
 import { Elysia, t } from "elysia";
 
@@ -112,6 +115,53 @@ export function createBinaryUpdates(options: Options) {
     });
     return checking;
   };
+  // What each channel's newest release is, one entry per channel; null where the host has none.
+  const channelCache = new Map<
+    BinaryUpdatePolicy["channel"],
+    ChannelRelease | null
+  >();
+  let channelsCheckedAt = 0;
+  const discoverChannel = async (
+    channel: BinaryUpdatePolicy["channel"]
+  ): Promise<void> => {
+    const installation = await readInstallation();
+    try {
+      const { manifest } = await discoverRelease(
+        channel,
+        installation?.releaseHost
+      );
+      channelCache.set(channel, {
+        version: manifest.version,
+        sequence: manifest.sequence,
+        notes: manifest.notes,
+      });
+    } catch (error) {
+      if (!(error instanceof NoReleaseError)) {
+        throw error;
+      }
+      channelCache.set(channel, null);
+    }
+  };
+  const channels = async (refresh: boolean): Promise<BinaryUpdateChannels> => {
+    if (refresh) {
+      current = undefined;
+      channelCache.clear();
+    }
+    const missing = (["stable", "nightly"] as const).filter(
+      (channel) => !channelCache.has(channel)
+    );
+    if (missing.length > 0) {
+      await Promise.all(missing.map(discoverChannel));
+      channelsCheckedAt = Date.now();
+    }
+    return {
+      channels: {
+        stable: channelCache.get("stable") ?? null,
+        nightly: channelCache.get("nightly") ?? null,
+      },
+      checkedAt: channelsCheckedAt,
+    };
+  };
   const newest = async (): Promise<LocatedRelease> =>
     current && Date.now() - current.at < RELEASE_TTL_MS
       ? current.release
@@ -149,6 +199,8 @@ export function createBinaryUpdates(options: Options) {
         notes: found.manifest.notes,
       };
     })
+    .get("/api/binary-updates/channels", () => channels(false))
+    .post("/api/binary-updates/channels", () => channels(true))
     // A machine tells the hub it is installing before it starts, so no start is
     // sent to it in the seconds before its next heartbeat would have said so.
     .put(

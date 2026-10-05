@@ -11,17 +11,37 @@ export interface BinaryUpdatePolicy {
  * `heldChildren`. A machine whose new agent cannot speak to that keeper is in
  * the same state with `installedVersion` still the old one.
  */
-export type BinaryUpdatePhase =
-  | "none"
-  | "available"
-  | "downloading"
-  | "ready"
-  | "waiting-sessions"
-  | "waiting-for-channel"
-  | "installing"
-  | "installed"
-  | "failed-rolled-back"
-  | "failed";
+export const BINARY_UPDATE_PHASES = [
+  "none",
+  "available",
+  "downloading",
+  "ready",
+  "waiting-sessions",
+  "waiting-for-channel",
+  "installing",
+  "installed",
+  "failed-rolled-back",
+  "failed",
+] as const;
+
+export type BinaryUpdatePhase = (typeof BINARY_UPDATE_PHASES)[number];
+
+/** The newest signed release of one channel, as the release host shows it. */
+export interface ChannelRelease {
+  notes: string;
+  sequence: number;
+  version: string;
+}
+
+/** What the hub knows of each channel; `null` where the release host has no release. */
+export interface BinaryUpdateChannels {
+  channels: {
+    nightly: ChannelRelease | null;
+    stable: ChannelRelease | null;
+  };
+  /** When the release host was asked, in milliseconds. */
+  checkedAt: number;
+}
 
 export interface BinaryUpdateState {
   availableVersion?: string;
@@ -31,6 +51,8 @@ export interface BinaryUpdateState {
   failedVersion?: string;
   /** Children the session keeper holds, while it is the reason for waiting. */
   heldChildren?: number;
+  /** True on the machine that runs the hub. */
+  hostsHub: boolean;
   installedVersion: string;
   notes?: string;
   phase: BinaryUpdatePhase;
