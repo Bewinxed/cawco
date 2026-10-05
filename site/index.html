@@ -65,7 +65,19 @@
             you every session and lets you answer the ones that are waiting.
           </p>
           <div class="install" id="install">
-            <p class="install-label">Install on your first machine</p>
+            <div class="install-head">
+              <p class="install-label">Install on your first machine</p>
+              <div class="tabs tabs-channel" role="tablist" aria-label="Release channel" data-channel hidden>
+                <button class="tab" role="tab" type="button" aria-selected="true" data-tab="stable">
+                  <span class="tab-name">Stable</span>
+                  <span class="tab-bar" aria-hidden="true"><span data-bar></span></span>
+                </button>
+                <button class="tab" role="tab" type="button" aria-selected="false" tabindex="-1" data-tab="nightly">
+                  <span class="tab-name">Nightly</span>
+                  <span class="tab-bar" aria-hidden="true"><span data-bar></span></span>
+                </button>
+              </div>
+            </div>
             <div class="cmd">
               <code data-cmd>curl -fsSL https://cawco.dev/install.sh | sh</code>
               <button class="copy" type="button" data-copy>

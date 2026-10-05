@@ -1,6 +1,7 @@
 import { gsap } from 'gsap';
 import { all, one } from './dom';
 import { drawLinks, SCENE_STATES, type SceneId, scenes } from './scenes';
+import { initTabs } from './tabs';
 
 const ORDER: readonly SceneId[] = ['board', 'phone', 'rules', 'delegates', 'sync'];
 
@@ -80,13 +81,8 @@ export function initStage(stage: HTMLElement): Stage {
   function select(id: SceneId, instant: boolean): void {
     current = id;
     stage.classList.toggle('is-instant', instant);
-    for (const other of ORDER) {
-      const { tab, panel } = parts(other);
-      const on = other === id;
-      tab.setAttribute('aria-selected', String(on));
-      tab.tabIndex = on ? 0 : -1;
-      panel.classList.toggle('is-on', on);
-    }
+    tabs.mark(id);
+    for (const other of ORDER) parts(other).panel.classList.toggle('is-on', other === id);
     play();
   }
 
@@ -107,33 +103,9 @@ export function initStage(stage: HTMLElement): Stage {
     else select(run ? after(current) : current, false);
   });
 
-  tablist.addEventListener('click', (event) => {
-    const tab = (event.target as Element).closest<HTMLElement>('[data-tab]');
-    if (!tab) return;
+  const tabs = initTabs(tablist, (id, fromKey) => {
     setMode('picked');
-    select(tab.dataset.tab as SceneId, false);
-  });
-
-  // Arrow keys move between tabs, as a tablist should. No transition: a key press lands at once.
-  tablist.addEventListener('keydown', (event) => {
-    const last = ORDER.length - 1;
-    const here = ORDER.indexOf(current);
-    const steps: Record<string, number> = {
-      ArrowRight: here + 1,
-      ArrowDown: here + 1,
-      ArrowLeft: here - 1,
-      ArrowUp: here - 1,
-      Home: 0,
-      End: last,
-    };
-    const wanted = steps[event.key];
-    if (wanted === undefined) return;
-    event.preventDefault();
-    const id = ORDER[(wanted + ORDER.length) % ORDER.length];
-    if (!id) return;
-    setMode('picked');
-    select(id, true);
-    parts(id).tab.focus();
+    select(id as SceneId, fromKey);
   });
 
   // Scenes only run while the stage is on screen.

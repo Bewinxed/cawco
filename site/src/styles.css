@@ -46,6 +46,8 @@
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
 
+  --btn-radius: 12px;
+
   --gutter: clamp(16px, 4vw, 40px);
 
   /* The box Caw's ledge clips are drawn in: the same on the stage and the price cards. */
@@ -233,7 +235,6 @@ code {
 }
 
 .btn {
-  --btn-radius: 12px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -315,10 +316,68 @@ h1 {
   scroll-margin-top: 24px;
 }
 
-.install-label {
+/* The label and the channel switch share a line; where they cannot, the switch drops to its own, trailing. */
+.install-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0 12px;
   margin-bottom: 8px;
+}
+
+.install-label {
   font-size: 0.95rem;
   font-weight: 900;
+}
+
+/*
+ * The channel switch is the page's tabs on paper: the chosen tab is ink, the others are ink text.
+ * Its tabs are as tall as the label's line, so the row adds no height; the pseudo-element keeps the touch target.
+ */
+.tabs.tabs-channel {
+  grid-area: auto;
+  flex-direction: row;
+  gap: 2px;
+  margin-left: auto;
+  margin-block: -4px;
+}
+
+.tabs-channel[hidden] {
+  display: none;
+}
+
+.tabs-channel .tab {
+  flex: none;
+  flex-direction: row;
+  justify-content: center;
+  min-height: 0;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: var(--btn-radius);
+  color: var(--soft-on-paper);
+  font-size: 0.88rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.tabs-channel .tab::before {
+  content: "";
+  position: absolute;
+  inset: -7px -1px;
+}
+
+.tabs-channel .tab[aria-selected="true"] {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.tabs-channel .tab-bar {
+  inset: auto 12px 5px 12px;
+}
+
+.tabs-channel .tab-bar span {
+  transition: transform 200ms var(--ease-out);
 }
 
 .cmd {
@@ -1933,6 +1992,10 @@ mark {
     color: var(--paper);
   }
 
+  .tabs-channel .tab:not([aria-selected="true"]):hover {
+    color: var(--ink);
+  }
+
   .top-link:hover,
   .foot-nav a:hover {
     text-decoration: underline;
@@ -2199,7 +2262,8 @@ mark {
   .copy,
   .tab,
   .autoplay,
-  .copy-icons > * {
+  .copy-icons > *,
+  .tabs-channel .tab-bar span {
     transition: none;
   }
 
