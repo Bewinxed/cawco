@@ -282,9 +282,21 @@ final class ConnectViewController: ObservedViewController, UITextFieldDelegate {
         return true
     }
 
+    /// A number in 100.64.0.0/10, the range Tailscale hands out.
+    private static func isTailscaleNumber(_ host: String?) -> Bool {
+        let parts = (host ?? "").split(separator: ".", omittingEmptySubsequences: false).compactMap { Int($0) }
+        return parts.count == 4 && (host ?? "").split(separator: ".").count == 4 && parts[0] == 100 && (64 ... 127).contains(parts[1])
+    }
+
     private func connect() {
         guard let address = HubConnection.address(from: field.text ?? "") else {
             problem.text = "That isn't an address the app can reach. Enter it as http://host:port."
+            problem.isHidden = false
+            return
+        }
+        if Self.isTailscaleNumber(address.host) {
+            // Plain HTTP is allowed to the .ts.net name, never to the number.
+            problem.text = "A Tailscale machine is reached by its name, which ends in .ts.net, like http://<machine>.<tailnet>.ts.net:3456."
             problem.isHidden = false
             return
         }
