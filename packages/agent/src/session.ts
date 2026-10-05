@@ -1320,6 +1320,35 @@ export class SessionSupervisor {
         );
         return;
       }
+      if (payload.resume && !this.#sessions.has(instanceId)) {
+        // A resume can also arrive after a failed custody attachment. Read
+        // sessiond and join adoption before allowing the normal absent-process
+        // spawn; an attachment failure never authorises replacing a held child.
+        const failed = new Set<string>();
+        await this.reattach(
+          [
+            {
+              instanceId,
+              cwd: workdir,
+              sessionId: payload.resume.sessionKey,
+              sessionCredential: payload.sessionCredential,
+              processGeneration: payload.processGeneration,
+              keepAliveTurn: payload.keepAliveTurn,
+            },
+          ],
+          Object.fromEntries(this.#ingested),
+          undefined,
+          failed
+        );
+        if (failed.has(instanceId)) {
+          throw new Error(
+            "The held session could not be adopted; refusing to replace its process."
+          );
+        }
+        if (this.#reuseRecovery(payload)) {
+          return;
+        }
+      }
       // A relaunch stays in the checkout the side quest has been working in.
       const cut = this.#worktrees.get(instanceId);
       if (cut) {

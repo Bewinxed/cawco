@@ -1018,11 +1018,10 @@ const attach = (
         );
         return;
       }
-      if (
-        envelope.verb !== "spawn" &&
-        envelope.instanceId &&
-        custodyIds.has(envelope.instanceId)
-      ) {
+      if (envelope.instanceId && custodyIds.has(envelope.instanceId)) {
+        // A resume behind the ACK must join adoption too: the candidate read
+        // yields before #adopting claims rows, so dispatching it here can
+        // replace the very sessiond child this connection is taking over.
         custodyWaiting.push(envelope);
         return;
       }
