@@ -422,7 +422,13 @@ final class NsComb: UIView {
 final class NsRow: UIControl {
     private let check = GlyphView(.passed, size: 16, tint: Palette.inkStrong)
     private let fills: Bool
-    var chosen = false { didSet { paint(animated: true) } }
+    /// Chosen, and said so to assistive technology (the web row's `aria-pressed`).
+    var chosen = false {
+        didSet {
+            paint(animated: true)
+            if chosen { accessibilityTraits.insert(.selected) } else { accessibilityTraits.remove(.selected) }
+        }
+    }
 
     /// `check`: whether the row keeps a slot for the check, so rows share one
     /// width whichever is chosen. `fills`: whether a chosen row fills.

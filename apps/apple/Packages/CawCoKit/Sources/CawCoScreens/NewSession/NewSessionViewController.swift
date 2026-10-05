@@ -330,11 +330,25 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
         return ""
     }
 
+    /// The model a start names: the picked entry, or the machine's default by
+    /// the model it resolves to. Unknown while the machine's models are still
+    /// being read, and when it names its default no more precisely than
+    /// "default"; a start then would name none, and the hub refuses that.
+    private var startModel: String { selected?.id ?? model }
+    private var modelUnknown: Bool { startModel.isEmpty || startModel == "default" }
+    private var modelReading: String {
+        guard modelUnknown, !machineIds.isEmpty else { return "" }
+        return entries(harness).isEmpty
+            ? "Reading the models on \(machine?.hostname ?? machineId)…"
+            : "Choose a model for this session."
+    }
+
     private var readingText: String {
         guard connected else { return "No spawn while the hub is unreachable. Reconnect to continue." }
         if !error.isEmpty { return error }
         let location = locationReading
-        return location.isEmpty ? (locationUnverified ? "Reading…" : "") : location
+        if !location.isEmpty { return location }
+        return locationUnverified ? "Reading…" : modelReading
     }
 
     private var locationInformational: Bool {
@@ -366,7 +380,7 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
     }
 
     private var cantStart: Bool {
-        continueBlocked || !connected || machineIds.isEmpty || offlineMachine != nil || unreadable || locationUnverified || !repoValid
+        continueBlocked || !connected || machineIds.isEmpty || offlineMachine != nil || unreadable || locationUnverified || modelUnknown || !repoValid
     }
 
     private var startLabel: String {
@@ -1012,7 +1026,7 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
         if !repoValid { return "Enter a repository as owner/repository." }
         if path.isEmpty { return "Enter the directory this session should work in." }
         if unreadable || offlineMachine != nil { return locationReading }
-        return locationUnverified ? "Reading…" : ""
+        return locationUnverified ? "Reading…" : modelReading
     }
 
     private func submit() {
