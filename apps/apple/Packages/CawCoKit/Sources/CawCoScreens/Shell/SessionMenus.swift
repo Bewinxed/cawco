@@ -54,7 +54,10 @@ enum SessionMenus {
         }
         if running {
             first.append(UIAction(title: "Stop", image: Glyph.stop.image) { _ in
-                Task { @MainActor in try? await hub.stopSession(instanceId: id, machineId: row.machineId) }
+                Task { @MainActor in
+                    // A refused Stop says why in the session it was asked of, as the web's does.
+                    do { try await hub.stopSession(instanceId: id, machineId: row.machineId) } catch { hub.sessions.noteError(id, error.localizedDescription) }
+                }
             })
         }
         if let onArchive { first.append(UIAction(title: "Archive", image: Glyph.archive.image) { _ in onArchive() }) }

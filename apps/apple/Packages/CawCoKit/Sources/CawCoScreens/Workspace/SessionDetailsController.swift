@@ -274,14 +274,18 @@ public final class SessionDetailsController: ObservedViewController {
     private func changeModel(_ next: String) {
         guard editable, let machineId, !pending(.model), next != model else { return }
         let id = sessionId
-        Task { [hub] in _ = try? await hub.setModel(instanceId: id, machineId: machineId, model: next) }
+        Task { [hub] in
+            do { try await hub.setModel(instanceId: id, machineId: machineId, model: next) } catch { hub.sessions.noteError(id, error.localizedDescription) }
+        }
         requestRefresh()
     }
 
     private func changeEffort(_ next: String) {
         guard editable, let machineId, !pending(.effort), next != effort, let level = Components.Schemas.SpawnPayload.EffortPayload(rawValue: next) else { return }
         let id = sessionId
-        Task { [hub] in _ = try? await hub.setEffort(instanceId: id, machineId: machineId, effort: level) }
+        Task { [hub] in
+            do { try await hub.setEffort(instanceId: id, machineId: machineId, effort: level) } catch { hub.sessions.noteError(id, error.localizedDescription) }
+        }
         requestRefresh()
     }
 
@@ -291,7 +295,9 @@ public final class SessionDetailsController: ObservedViewController {
         relaunchFailure = nil
         let id = sessionId
         guard mode == .bypassPermissions else {
-            Task { [hub] in _ = try? await hub.setPermissionMode(instanceId: id, machineId: machineId, mode: mode) }
+            Task { [hub] in
+                do { try await hub.setPermissionMode(instanceId: id, machineId: machineId, mode: mode) } catch { hub.sessions.noteError(id, error.localizedDescription) }
+            }
             requestRefresh()
             return
         }

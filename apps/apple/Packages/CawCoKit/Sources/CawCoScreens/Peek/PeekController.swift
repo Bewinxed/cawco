@@ -278,7 +278,10 @@ final class PeekController: ObservedViewController {
         ]
         if let row, row.isLive {
             first.append(UIAction(title: "Stop", image: Glyph.stop.image) { [hub] _ in
-                Task { @MainActor in try? await hub.stopSession(instanceId: row.id, machineId: row.machineId) }
+                Task { @MainActor in
+                    // A refused Stop says why in the session's tail, as the web's does.
+                    do { try await hub.stopSession(instanceId: row.id, machineId: row.machineId) } catch { hub.sessions.noteError(row.id, error.localizedDescription) }
+                }
             })
         }
         let close = UIAction(title: "Close peek", image: Glyph.close.image) { [weak self] _ in self?.onClose() }
