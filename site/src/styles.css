@@ -210,6 +210,14 @@ code {
   letter-spacing: -0.045em;
   line-height: 1;
   text-decoration: none;
+  gap: 0.4em;
+}
+
+/* Caw's icon is part of the mark: 1.3 times the wordmark's type, never taller than its box. */
+.wordmark-icon {
+  height: min(1.3em, 44px);
+  width: auto;
+  border-radius: calc(var(--btn-radius) - 9px);
 }
 
 .top-nav {
@@ -258,19 +266,6 @@ code {
 .btn-ink {
   background: var(--ink);
   color: var(--paper);
-}
-
-/* Caw's app icon sits inside the button, its corners set in from the button's own. */
-.btn-app {
-  --btn-inset: 9px;
-  gap: 9px;
-  padding: 0 16px 0 var(--btn-inset);
-}
-
-.app-icon {
-  width: 26px;
-  height: 26px;
-  border-radius: calc(var(--btn-radius) - var(--btn-inset));
 }
 
 /* Hero */
@@ -2124,6 +2119,11 @@ mark {
 
   .cmd-alert {
     left: 0;
+  }
+
+  /* The wordmark now carries the icon: the tagline must still fit beside it on one line. */
+  .foot {
+    column-gap: 16px;
   }
 }
 
