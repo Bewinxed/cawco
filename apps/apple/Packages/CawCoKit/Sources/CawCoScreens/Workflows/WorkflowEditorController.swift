@@ -511,6 +511,8 @@ final class WorkflowProgramView: UIView {
 
     init() {
         super.init(frame: .zero)
+        // The note, the all-clear and "No workflow runs" each port a `p`: the web wraps them `pretty`.
+        note.wrap = .pretty
         let noteBox = UIView()
         noteBox.translatesAutoresizingMaskIntoConstraints = false
         noteBox.addSubview(note)
@@ -616,6 +618,7 @@ final class WorkflowProgramView: UIView {
         if problems.isEmpty {
             let clear = KitLabel(WorkflowForm.text(TypeScale.typeMeta), ink: Palette.inkMuted, lines: 0)
             clear.text = "The hub compiled and typechecked this program. No problems found."
+            clear.wrap = .pretty
             head.show(clear)
         } else {
             let count = KitLabel(WorkflowForm.text(TypeScale.typeLabel), ink: Palette.inkStrong)
@@ -773,6 +776,7 @@ final class WorkflowRunsList: UIView {
         if listed.isEmpty {
             let none = KitLabel(WorkflowForm.text(TypeScale.typeMeta), ink: Palette.inkMuted, lines: 0)
             none.text = "No workflow runs in this view."
+            none.wrap = .pretty
             rows.addArrangedSubview(none)
         }
         for run in listed {

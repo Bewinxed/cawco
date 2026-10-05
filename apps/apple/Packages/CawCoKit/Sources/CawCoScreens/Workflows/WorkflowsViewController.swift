@@ -15,7 +15,8 @@ final class WorkflowsViewController: ObservedViewController {
     private var hub: HubConnection { context.hub }
     private let scroll = UIScrollView()
     private let column = UIStackView()
-    private let name = KitLabel(WorkflowForm.text(TypeScale.typeTitle), ink: Palette.inkStrong)
+    /// `.wf h1` restates the title's size and weight and sets no letter-spacing: the role's tracking is left off.
+    private let name = KitLabel(WorkflowForm.text(TypeScale.typeTitle), ink: Palette.inkStrong, tracking: 0)
     private var titleWidth = 0.0
     private let error = WorkflowError()
     private let content = CrossView()
@@ -74,6 +75,7 @@ final class WorkflowsViewController: ObservedViewController {
         name.accessibilityTraits = .header
         let purpose = KitLabel(WorkflowForm.text(TypeScale.typeMeta), ink: Palette.inkMuted, lines: 0)
         purpose.text = "Reusable steps across your fleet."
+        purpose.wrap = .pretty
         let titles = UIStackView(arrangedSubviews: [name, purpose])
         titles.axis = .vertical
         titles.spacing = Space.space1

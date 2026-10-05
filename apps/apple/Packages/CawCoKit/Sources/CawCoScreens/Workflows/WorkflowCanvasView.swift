@@ -339,10 +339,13 @@ final class WorkflowNodeCardView: UIView {
             let meta = KitLabel(WorkflowForm.text(TypeScale.typeMeta), ink: Palette.inkMuted, lines: 0)
             meta.tabular = true
             meta.text = "\(harness) · \(model.isEmpty ? "Choose a model" : model)"
+            meta.wrap = .pretty
             body.addArrangedSubview(meta)
         }
         let summary = KitLabel(TypeScale.typeBody, ink: Palette.inkStrong, lines: 2)
+        // `.meta`, `.summary` and `.group` are each a `p`: the web wraps them `pretty`.
         summary.text = Self.summary(node, childName: childName)
+        summary.wrap = .pretty
         body.addArrangedSubview(summary)
         if case let .map(_, inner) = node.kind {
             let group = DashedBox(text: "\(inner.nodes.count) nodes in body")
@@ -466,6 +469,7 @@ final class WorkflowNodeCardView: UIView {
             super.init(frame: .zero)
             let label = KitLabel(TypeScale.typeBody, ink: Palette.inkStrong, lines: 0)
             label.text = text
+            label.wrap = .pretty
             addSubview(label)
             NSLayoutConstraint.activate([
                 label.topAnchor.constraint(equalTo: topAnchor, constant: Space.space3),

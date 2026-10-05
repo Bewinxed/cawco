@@ -206,7 +206,8 @@ final class WorkflowRunViewController: ObservedViewController, UIGestureRecogniz
         head.arrangedSubviews.forEach { $0.removeFromSuperview() }
         // The status's glyph leads the name and its word follows it.
         let status = SessionStatusView(model.face, compact: true)
-        let name = KitLabel(TypeScale.typeTitle.with(weight: .medium), ink: Palette.inkStrong)
+        // RunBlock.svelte `.head`: the label size at the strong weight, with no tracking of its own.
+        let name = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong)
         name.text = model.name
         name.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         let word = KitLabel(TypeScale.typeLabel, ink: Palette.inkMuted)
@@ -431,6 +432,8 @@ final class WorkflowError: UIView {
         super.init(frame: .zero)
         backgroundColor = Palette.error3
         layer.cornerRadius = Radius.radiusSm
+        // It ports a `p`: the web wraps it `pretty`.
+        label.wrap = .pretty
         addSubview(label)
         NSLayoutConstraint.activate([
             label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Space.space3),
