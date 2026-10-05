@@ -23,6 +23,7 @@
   import { pageIn, pageOut, route } from "#lib/cawco/motion/route.svelte.js";
   import { reflow } from "#lib/cawco/motion/rows.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
+  import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Sheet from "#lib/components/ui/sheet/index.js";
   import { setSidebar } from "#lib/components/ui/sidebar/context.svelte.js";
@@ -761,6 +762,9 @@
           {/if}
           {#if hostedLeaf}
             <!-- The strip above has the slot. -->
+          {:else if onSession && workspace.root.t === "b"}
+            <!-- A split: each group has its own strip, and the rail already
+               names the section, so the slot says nothing. -->
           {:else if narrow && page.url.pathname.startsWith("/config/")}
             <!-- Inside a section on a phone the rail is its own page, so the bar
                leads back to it. -->
@@ -773,7 +777,7 @@
             >
           {:else}
             <span class="crumb" in:riseIn out:crossOut>
-              <TextMorph as="span" duration={morphMs()} text={crumb} />
+              <MorphText text={crumb} />
             </span>
           {/if}
         </div>
