@@ -36,6 +36,7 @@
    */
   import { type Snippet, untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
+  import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Sidebar from "#lib/components/ui/sidebar/index.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
@@ -233,7 +234,7 @@
             </span>
           {/snippet}
         </TreeMark>
-        <span class="num">{count} older</span>
+        <span class="num"><MorphText text={String(count)} /> older</span>
         {#if failed > 0}
           <span class="older-failed">{failedWords(failed)}</span>
         {/if}

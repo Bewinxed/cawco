@@ -37,6 +37,7 @@
    * here moves the tile, the row or the nesting lines that meet it.
    */
   import type { Snippet } from "svelte";
+  import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import ChevronIcon from "~icons/solar/alt-arrow-right-bold-duotone";
 
   let {
@@ -123,7 +124,7 @@
   <span aria-hidden="true" class="face tile">
     <span class="rest">
       {#if has}
-        <span class="num">{shown}</span>
+        <span class="num"><MorphText text={shown} /></span>
       {:else}
         {@render face()}
       {/if}
