@@ -79,8 +79,77 @@
   let forkPending = $state(false);
   let editError = $state("");
   let editor = $state<HTMLTextAreaElement | null>(null);
+  let actionsShown = $state(false);
+  let actionsFlipped = $state(false);
+
+  function touchActions(node: HTMLElement): () => void {
+    function reveal(event: MouseEvent): void {
+      if (
+        !(
+          window.matchMedia("(pointer: coarse)").matches &&
+          (canEdit || canFork)
+        ) ||
+        editing ||
+        !(event.target instanceof Element) ||
+        event.target.closest("button, a, input, textarea") ||
+        !window.getSelection()?.isCollapsed
+      ) {
+        return;
+      }
+      actionsShown = true;
+    }
+    node.addEventListener("click", reveal);
+    return () => node.removeEventListener("click", reveal);
+  }
+
+  function placeActions(node: HTMLElement): () => void {
+    const turn = node.closest(".turn");
+    function place(): void {
+      const well = node.closest(".well");
+      const inset = Number.parseFloat(
+        getComputedStyle(node).getPropertyValue("--space-2")
+      );
+      actionsFlipped =
+        grouped &&
+        !!well &&
+        well.getBoundingClientRect().top + inset - node.offsetHeight < 0;
+    }
+    $effect(() => {
+      if (actionsShown) {
+        place();
+      }
+    });
+    turn?.addEventListener("pointerenter", place);
+    turn?.addEventListener("focusin", place);
+    return () => {
+      turn?.removeEventListener("pointerenter", place);
+      turn?.removeEventListener("focusin", place);
+    };
+  }
+
+  $effect(() => {
+    if (!(actionsShown && words)) {
+      return;
+    }
+    const turn = words.closest(".turn");
+    function dismiss(event: Event): void {
+      if (
+        event.type === "scroll" ||
+        (event.target instanceof Node && !turn?.contains(event.target))
+      ) {
+        actionsShown = false;
+      }
+    }
+    document.addEventListener("pointerdown", dismiss, true);
+    document.addEventListener("scroll", dismiss, true);
+    return () => {
+      document.removeEventListener("pointerdown", dismiss, true);
+      document.removeEventListener("scroll", dismiss, true);
+    };
+  });
 
   async function startEditing(): Promise<void> {
+    actionsShown = false;
     editContent = message.content;
     editError = "";
     editing = true;
@@ -116,6 +185,7 @@
     if (!canFork || forkPending) {
       return;
     }
+    actionsShown = false;
     forkPending = true;
     editError = "";
     try {
@@ -364,6 +434,7 @@
     class:ghost={ghost || waiting}
     class:grouped
     class:runs-on={runsOn}
+    {@attach touchActions}
     {@attach land(() => (grouped ? undefined : sent), {
       ms: dur("--dur-pop"),
       uniform: true,
@@ -434,7 +505,13 @@
           {:else}
             <MessageBody source={message.content} />
             {#if canEdit || canFork}
-              <div class="actions turn-actions" class:pending={forkPending}>
+              <div
+                class="actions turn-actions"
+                class:flipped={actionsFlipped}
+                class:pending={forkPending}
+                class:shown={actionsShown}
+                {@attach placeActions}
+              >
                 {#if canEdit}
                   <Tip label="Edit and resend">
                     {#snippet children(
@@ -593,6 +670,7 @@
      bleed into the gutter; the words sit inside at its padding: --space-3,
      or --space-2 at the narrow breakpoint. */
   .turn.you {
+    position: relative;
     /* The seam's inset (app.css .kit-seam): one value for both. */
     --pad: var(--seam-inset);
 
@@ -759,14 +837,38 @@
     gap: var(--space-2);
     margin-block-start: var(--space-2);
   }
-  @media (hover: hover) and (pointer: fine) {
-    .turn-actions {
-      opacity: 0;
+  .turn-actions {
+    position: absolute;
+    inset-block-start: 0;
+    inset-inline-end: var(--pad);
+    z-index: 1;
+    margin-block-start: 0;
+    transform: translateY(-100%);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--dur-control) var(--ease-out);
+  }
+  .grouped .turn-actions {
+    transform: translateY(calc(var(--space-2) - 100%));
+    background: var(--surface-raised);
+    border-radius: var(--radius-md);
+
+    &.flipped {
+      transform: none;
     }
+  }
+  @media (hover: hover) and (pointer: fine) {
     .turn.you:hover .turn-actions,
     .turn.you:focus-within .turn-actions,
     .turn-actions.pending {
       opacity: 1;
+      pointer-events: auto;
+    }
+  }
+  @media (pointer: coarse) {
+    .turn-actions.shown {
+      opacity: 1;
+      pointer-events: auto;
     }
   }
   /* Text actions in the chip vocabulary MessageRow already speaks (radius-mark,
