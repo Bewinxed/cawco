@@ -9,6 +9,7 @@
  */
 
 import { Database } from "bun:sqlite";
+import { rmSync } from "node:fs";
 import {
   appendFile,
   copyFile,
@@ -391,6 +392,7 @@ async function moveKeeper(
 /** `VACUUM INTO` a copy of the hub database beside it, named for the build it belongs to. */
 function backUpDatabase(db: string, previous: string): string {
   const copy = `${db}.pre-${previous}.bak`;
+  rmSync(copy, { force: true });
   const handle = new Database(db, { readonly: true });
   try {
     handle.run(`VACUUM INTO '${copy.replaceAll("'", "''")}'`);

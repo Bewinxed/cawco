@@ -4,7 +4,7 @@
  * this registers it with the service manager, brings the machine up, and tells
  * the person what is missing and offers to install it.
  */
-import { rm } from "node:fs/promises";
+import { chmod, rm } from "node:fs/promises";
 import { platform } from "node:os";
 import { machineId } from "@cawco/agent";
 import { probeCapabilities } from "@cawco/agent/capabilities";
@@ -120,7 +120,8 @@ async function bringUp(options: BinaryInstallOptions): Promise<void> {
     await requireLinger(note);
   }
   // The wrapper hub, dashboard and agent start through; written once, never replaced by an update.
-  await Bun.write(`${binaryRoot()}/run`, BINARY_WRAPPER, { mode: 0o700 });
+  await Bun.write(`${binaryRoot()}/run`, BINARY_WRAPPER);
+  await chmod(`${binaryRoot()}/run`, 0o700);
   await writeJsonAtomic(installationPath(), {
     role: options.role,
     root: binaryRoot(),

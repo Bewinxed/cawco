@@ -414,6 +414,7 @@ export class BinaryUpdater {
   async #pass(): Promise<void> {
     try {
       await this.#load();
+      await this.#noteRecovery();
       await this.#check();
     } catch (error) {
       this.#flags.commanded = false;
@@ -488,6 +489,10 @@ export class BinaryUpdater {
         phase: "failed",
         error: "The update helper did not report back",
       });
+    }
+    if (this.#state.phase === "installing") {
+      // A helper is applying a build: nothing else stages, applies or counts anything now.
+      return;
     }
     const newer = release.manifest.sequence > running.sequence;
     const schemaOk =
