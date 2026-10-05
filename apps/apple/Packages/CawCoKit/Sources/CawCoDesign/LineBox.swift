@@ -28,9 +28,14 @@ public enum LineBox {
     /// Figtree 12 on 16.2 is 15 and 12.594; 13 on 17.55, 17 and 13.266; 14 on
     /// 20.3, 18 and 15.141; 16 on 20, 20 and 16; 20 on 24, 24 and 19.
     /// JetBrains Mono 12 on 19.2 is 17 and 14.094; 13 on 17.55, 18 and 13.766.
-    public static func strut(_ font: UIFont, height: Double) -> (above: Double, below: Double) {
-        let ascent = Double(font.ascender).rounded(.up)
-        let descent = Double(-font.descender).rounded(.up)
+    ///
+    /// `size` is the font size CSS computes when it is not the font object's
+    /// own (an em ratio lands a hair off a whole number, and the rounding
+    /// turns on that hair).
+    public static func strut(_ font: UIFont, size: Double? = nil, height: Double) -> (above: Double, below: Double) {
+        let scale = size.map { $0 / Double(font.pointSize) } ?? 1
+        let ascent = (Double(font.ascender) * scale).rounded(.up)
+        let descent = (Double(-font.descender) * scale).rounded(.up)
         let half = (height - ascent - descent) / 2
         return (ascent + half, descent + half)
     }

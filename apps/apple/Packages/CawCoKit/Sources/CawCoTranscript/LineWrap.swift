@@ -1,3 +1,4 @@
+import CawCoDesign
 import CoreText
 import UIKit
 
@@ -47,8 +48,11 @@ nonisolated enum LineWrap {
         while location < string.length {
             let paragraph = string.paragraphRange(for: NSRange(location: location, length: 0))
             defer { location = NSMaxRange(paragraph) }
-            guard let raw = text.attribute(.wrapStyle, at: paragraph.location, effectiveRange: nil) as? Int,
-                  let style = Style(rawValue: raw), style != .greedy else { continue }
+            let style = (text.attribute(.wrapStyle, at: paragraph.location, effectiveRange: nil) as? Int).flatMap(Style.init) ?? .greedy
+            // A paragraph that wraps as written is TextKit's to lay out, but for
+            // one holding inline code: there the two break at different places
+            // (`chunks`), so its lines are chosen here too.
+            if style == .greedy, !holdsCode(text, paragraph) { continue }
             let style0 = text.attribute(.paragraphStyle, at: paragraph.location, effectiveRange: nil) as? NSParagraphStyle
             let indent = style0?.headIndent ?? 0
             // The marker hangs outside the item's box (`\t•\t`): its line starts after it.
@@ -97,9 +101,27 @@ nonisolated enum LineWrap {
             let space = measure(text, NSRange(location: run.location + content, length: run.length - content))
             out.append(Chunk(start: run.location, width: word + space, trailing: space))
         }
+        // Inside inline code WebKit breaks at white space only (and anywhere
+        // when one word alone is wider than the line), where UAX #14 also
+        // allows a break after a bracket or before a quote: `${name}` stays
+        // with the backtick after it. Mobile Safari sets "`Hello, ${name}`" in
+        // a 143pt cell as "`Hello," and "${name}`".
+        var merged: [Chunk] = []
+        for chunk in out {
+            if let last = merged.last, last.trailing == 0, chunk.start > range.location,
+               text.attribute(.inlineCode, at: chunk.start, effectiveRange: nil) != nil,
+               text.attribute(.inlineCode, at: chunk.start - 1, effectiveRange: nil) != nil {
+                merged[merged.count - 1].width += chunk.width
+                merged[merged.count - 1].trailing = chunk.trailing
+            } else {
+                merged.append(chunk)
+            }
+        }
+        out = merged
         // A code box's opening padding stands as kern on the white space
         // before it; it is the box's, so it goes with the code's chunk.
         let codeStarts = codeStarts(in: text)
+        if let first = out.first, first.start == 0, let pad = codeStarts[0] { out[0].width += pad }
         for index in out.indices.dropLast() {
             guard let pad = codeStarts[out[index + 1].start], pad > 0, out[index].trailing >= pad else { continue }
             out[index].width -= pad
@@ -145,11 +167,13 @@ nonisolated enum LineWrap {
         for chunk in chunks { sums.append(sums.last! + chunk.width) }
         // The `text-wrap: wrap` layout: its line count and widths.
         var greedy: [Double] = []
+        var greedyEnds: [Int] = []
         var from = 0
         while from < chunks.count {
             var to = from + 1
             while to < chunks.count, span(chunks, sums, from, to + 1) <= maxWidth { to += 1 }
             greedy.append(span(chunks, sums, from, to))
+            greedyEnds.append(to)
             from = to
         }
         guard greedy.count > 1 else { return nil }
@@ -168,16 +192,26 @@ nonisolated enum LineWrap {
                 ? balance(chunks, sums, breaks, ideal: ideal, maxWidth: maxWidth, lines: greedy.count)
                 : balance(chunks, sums, breaks, ideal: ideal, maxWidth: maxWidth, lines: nil)
         case .greedy:
-            lines = nil
+            lines = greedyEnds
         }
         guard let ends = lines else { return nil }
         var out: [(Int, Double)] = []
         var start = 0
         for end in ends {
-            out.append((chunks[start].start, span(chunks, sums, start, end)))
+            let width = span(chunks, sums, start, end)
+            // A word wider than the line breaks anywhere: that line is TextKit's.
+            if width <= maxWidth { out.append((chunks[start].start, width)) }
             start = end
         }
         return out
+    }
+
+    private static func holdsCode(_ text: NSAttributedString, _ range: NSRange) -> Bool {
+        var found = false
+        text.enumerateAttribute(.inlineCode, in: range) { value, _, stop in
+            if value != nil { found = true; stop.pointee = true }
+        }
+        return found
     }
 
     /// prettifyRange: the lowest total raggedness, every line but the last
@@ -302,8 +336,12 @@ nonisolated enum LineWrap {
     static func codeStarts(in text: NSAttributedString) -> [Int: Double] {
         var out: [Int: Double] = [:]
         text.enumerateAttribute(.inlineCode, in: NSRange(location: 0, length: text.length)) { value, range, _ in
-            guard value != nil, range.location > 0 else { return }
-            out[range.location] = text.attribute(.kern, at: range.location - 1, effectiveRange: nil) as? Double ?? 0
+            guard value != nil else { return }
+            // Code that opens the text has no character before it to carry its
+            // 4pt of room (MarkdownRender.inline): the line's start gives it.
+            out[range.location] = range.location > 0
+                ? text.attribute(.kern, at: range.location - 1, effectiveRange: nil) as? Double ?? 0
+                : Space.space1
         }
         return out
     }

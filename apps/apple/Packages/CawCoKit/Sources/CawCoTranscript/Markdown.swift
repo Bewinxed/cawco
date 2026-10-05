@@ -355,7 +355,10 @@ enum MarkdownRender {
         let attributes = cellAttributes(style, head: head)
         let text = inline(node, attributes: attributes, style: style)
         guard let font = attributes[.font] as? UIFont, let paragraph = attributes[.paragraphStyle] as? NSParagraphStyle else { return text }
-        let line = LineBox.strut(font, height: font.pointSize * TypeScale.leadingRoot)
+        // At the size CSS computes, not the font object's: a hair over 12 is
+        // what takes the face's descent up a pixel.
+        let size = style.role.points * TypeScale.proseSmTableSize
+        let line = LineBox.strut(font, size: size, height: size * TypeScale.leadingRoot)
         var grown = 0.0
         text.enumerateAttribute(.inlineCode, in: NSRange(location: 0, length: text.length)) { value, range, _ in
             guard value != nil, let mono = text.attribute(.font, at: range.location, effectiveRange: nil) as? UIFont else { return }
@@ -570,12 +573,8 @@ enum MarkdownRender {
                     mono[.inlineCodePad] = style.codePad
                     // Its 4pt inline padding, as room either side of the run. Where
                     // it opens the text there is no character before it to carry the
-                    // room, so a zero-width one does.
-                    if out.length == 0 {
-                        var lead = attributes
-                        lead[.kern] = Space.space1
-                        out.append(NSAttributedString(string: "\u{200B}", attributes: lead))
-                    } else {
+                    // room: the container gives that line its start (LineWrap.codeStarts).
+                    if out.length > 0 {
                         let before = out.length - 1
                         let kern = out.attribute(.kern, at: before, effectiveRange: nil) as? Double ?? 0
                         out.addAttribute(.kern, value: kern + Space.space1, range: NSRange(location: before, length: 1))

@@ -1,4 +1,5 @@
 import CawCoDesign
+import CoreText
 import OSLog
 import UIKit
 
@@ -399,14 +400,27 @@ final class TableBlock: UIView {
         let most = extents.reduce(0) { $0 + $1.most }
         if most > 0, most <= width { return extents.map { $0.most * width / most } }
         if least >= width || most <= least { return extents.map(\.least) }
-        let share = (width - least) / (most - least)
-        return extents.map { $0.least + ($0.most - $0.least) * share }
+        // WebKit's AutoTableLayout: each column in turn takes its share of what
+        // is left in proportion to its widest content, never less than its
+        // narrowest. Mobile Safari, widest 98 / 141.2 / 176 in 366: 86.39,
+        // 124.48, 155.16.
+        var left = width
+        var widest = most
+        return extents.map { column in
+            let taken = max(column.least, left * column.most / widest)
+            left -= taken
+            widest -= column.most
+            return taken
+        }
     }
 
     /// A cell's narrowest and widest one-line widths.
     private static func extent(_ cell: NSAttributedString) -> (least: Double, most: Double) {
-        let most = ceil(cell.boundingRect(with: CGSize(width: CGFloat.greatestFiniteMagnitude, height: .greatestFiniteMagnitude),
-                                          options: [.usesLineFragmentOrigin], context: nil).width)
+        // On one line, as wide as its advances: the padding after a code box is
+        // kern on its last character, and the padding before one that opens the
+        // cell is the container's to give (LineWrap.codeStarts).
+        let opening = LineWrap.codeStarts(in: cell)[0] ?? 0
+        let most = cell.length == 0 ? 0 : CTLineGetTypographicBounds(CTLineCreateWithAttributedString(cell), nil, nil, nil) + opening
         var least = 0.0
         let text = cell.string as NSString
         text.enumerateSubstrings(in: NSRange(location: 0, length: text.length), options: [.byWords, .substringNotRequired]) { _, word, enclosing, _ in
