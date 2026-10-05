@@ -375,6 +375,7 @@ final class DelegateTrayView: UIView {
             }
         }
         if let openKey, openKey != "more", let chip = chips.first(where: { $0.item.id == openKey }) { refreshPanel(chip) }
+        if openKey == "more" { moreList?.chips = folded }
     }
 
     /// Chips share the row: each as wide as its words, between its floor and
@@ -555,6 +556,10 @@ final class DelegateTrayView: UIView {
     private func open(_ key: String, pin: Bool) {
         dwell?.cancel()
         closing?.cancel()
+        if key == "more" {
+            presentMore()
+            return
+        }
         guard let chip = frame(of: key), panelHost != nil else { return }
         syncGround()
         panel.room = min(320, ground.bounds.height - 16)
@@ -566,10 +571,44 @@ final class DelegateTrayView: UIView {
         for (id, view) in chipViews { view.accessibilityValue = id == key ? "Expanded" : "Collapsed" }
     }
 
+    /// The "+N" list: the system popover, standing on its chip.
+    private weak var moreList: TrayMoreController?
+
+    private func presentMore() {
+        guard moreList == nil, let source = moreChip, window != nil,
+              let host = sequence(first: self as UIResponder, next: \.next).compactMap({ $0 as? UIViewController }).first else { return }
+        let list = TrayMoreController(chips: folded, coarse: coarse, room: min(320, host.view.bounds.height / 2))
+        list.onPick = { [weak self] id in
+            self?.close()
+            self?.onOpen(id)
+        }
+        list.onGone = { [weak self] in
+            guard self?.openKey == "more" else { return }
+            self?.openKey = nil
+            self?.moreList = nil
+            self?.chipViews.values.forEach { $0.accessibilityValue = "Collapsed" }
+        }
+        list.modalPresentationStyle = .popover
+        if let popover = list.popoverPresentationController {
+            popover.sourceView = source
+            popover.sourceRect = source.bounds
+            popover.permittedArrowDirections = .down
+            popover.backgroundColor = Palette.surfaceRaised
+            popover.delegate = list
+        }
+        moreList = list
+        openKey = "more"
+        host.present(list, animated: true)
+    }
+
     private func close() {
         dwell?.cancel()
         closing?.cancel()
         guard openKey != nil else { return }
+        if openKey == "more" {
+            moreList?.dismiss(animated: true)
+            moreList = nil
+        }
         openKey = nil
         pinned = false
         ground.catches = false
@@ -632,21 +671,6 @@ final class DelegateTrayView: UIView {
     }
 
     private func content(_ key: String) -> UIView {
-        if key == "more" {
-            panelChip = nil
-            let list = UIStackView()
-            list.axis = .vertical
-            list.spacing = 2
-            for chip in folded {
-                let row = TrayPanelRow(chip, coarse: coarse)
-                row.addAction(UIAction { [weak self] _ in
-                    self?.close()
-                    self?.onOpen(chip.item.instanceId)
-                }, for: .touchUpInside)
-                list.addArrangedSubview(row)
-            }
-            return list
-        }
         guard let chip = chips.first(where: { $0.item.id == key }) else { return UIView() }
         panelChip = chip
         let item = chip.item
@@ -719,6 +743,80 @@ final class DelegateTrayView: UIView {
         Task { @MainActor [weak self, hub] in
             do { try await hub.workItems.dismiss(item.id) } catch { Toast.error(error.localizedDescription, in: self?.window) }
         }
+    }
+}
+
+/// The "+N" list: what the row had no room for, one row each, in the system
+/// popover. It scrolls past its room and hands back the delegate pressed.
+final class TrayMoreController: UIViewController, UIPopoverPresentationControllerDelegate {
+    var onPick: (String) -> Void = { _ in }
+    var onGone: () -> Void = {}
+    var chips: [DelegateTrayView.Chip] {
+        didSet { if isViewLoaded { fill() } }
+    }
+
+    private let coarse: Bool
+    private let room: Double
+    private let scroll = UIScrollView()
+    private let list = UIStackView()
+
+    init(chips: [DelegateTrayView.Chip], coarse: Bool, room: Double) {
+        self.chips = chips
+        self.coarse = coarse
+        self.room = room
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    @available(*, unavailable)
+    required init?(coder _: NSCoder) {
+        fatalError("TrayMoreController is built in code")
+    }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        view.backgroundColor = Palette.surfaceRaised
+        list.axis = .vertical
+        list.spacing = 2
+        list.translatesAutoresizingMaskIntoConstraints = false
+        scroll.translatesAutoresizingMaskIntoConstraints = false
+        scroll.alwaysBounceVertical = false
+        view.addSubview(scroll)
+        scroll.addSubview(list)
+        let pad = Space.space2
+        NSLayoutConstraint.activate([
+            scroll.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            scroll.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            scroll.topAnchor.constraint(equalTo: view.topAnchor),
+            scroll.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            list.leadingAnchor.constraint(equalTo: scroll.contentLayoutGuide.leadingAnchor, constant: pad),
+            list.trailingAnchor.constraint(equalTo: scroll.contentLayoutGuide.trailingAnchor, constant: -pad),
+            list.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor, constant: pad),
+            list.bottomAnchor.constraint(equalTo: scroll.contentLayoutGuide.bottomAnchor, constant: -pad),
+            list.widthAnchor.constraint(equalTo: scroll.frameLayoutGuide.widthAnchor, constant: -pad * 2),
+        ])
+        fill()
+    }
+
+    private func fill() {
+        list.arrangedSubviews.forEach { $0.removeFromSuperview() }
+        for chip in chips {
+            let row = TrayPanelRow(chip, coarse: coarse)
+            row.addAction(UIAction { [weak self] _ in self?.onPick(chip.item.instanceId) }, for: .touchUpInside)
+            list.addArrangedSubview(row)
+        }
+        let width = min(320, UIScreen.main.bounds.width - 32)
+        let fit = list.systemLayoutSizeFitting(CGSize(width: width - Space.space2 * 2, height: 0),
+                                               withHorizontalFittingPriority: .required, verticalFittingPriority: .fittingSizeLevel).height
+        preferredContentSize = CGSize(width: width, height: min(room, fit + Space.space2 * 2))
+    }
+
+    func adaptivePresentationStyle(for _: UIPresentationController, traitCollection _: UITraitCollection) -> UIModalPresentationStyle { .none }
+
+    func presentationControllerDidDismiss(_: UIPresentationController) { onGone() }
+
+    override func viewDidDisappear(_ animated: Bool) {
+        super.viewDidDisappear(animated)
+        onGone()
     }
 }
 
