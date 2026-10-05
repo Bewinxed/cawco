@@ -33,6 +33,7 @@ import {
   catalogTitle,
   conversationHref,
   indexInstances,
+  instanceForSession,
   resolveSessionTitle,
 } from "../links";
 import { signInWarning } from "../machine";
@@ -290,6 +291,13 @@ export function placeOf(
   return where
     ? `${machineName(machineId)} · ${where}`
     : machineName(machineId);
+}
+
+function placeOfRow(row: InstanceRow): string {
+  const where = projectOfRow(row);
+  return where
+    ? `${machineName(row.machineId)} · ${where}`
+    : machineName(row.machineId);
 }
 
 export interface MachineGroup<T> {
@@ -627,7 +635,7 @@ class Home {
         instanceId: item.instanceId,
         machineId: item.machineId,
         title: row ? instanceTitle(row) : item.hostname,
-        place: placeOf(item.machineId, item.cwd),
+        place: row ? placeOfRow(row) : placeOf(item.machineId, item.cwd),
         isQuestion: Boolean(questions),
         ask: questions
           ? questions.map((question) => question.question).join(" · ")
@@ -809,6 +817,13 @@ class Home {
       (entry): RecentItem => ({
         ...entry,
         instance: null,
+        place: (() => {
+          const row = instanceForSession(index, entry.info.sessionId, {
+            machineId: entry.machineId,
+            cwd: entry.info.cwd,
+          });
+          return row ? placeOfRow(row) : entry.place;
+        })(),
         title: catalogTitle(entry.info, index, entry.machineId),
         href: conversationHref(entry.info.sessionId, index, {
           machineId: entry.machineId,
@@ -842,7 +857,7 @@ class Home {
           info: null,
           machineId: row.machineId,
           title: instanceTitle(row),
-          place: placeOf(row.machineId, row.cwd),
+          place: placeOfRow(row),
           href: conversationHref(row.id, cawco.instanceIndex),
           at: lastAt(row),
         })

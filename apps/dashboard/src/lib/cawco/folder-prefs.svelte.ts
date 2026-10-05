@@ -1,12 +1,8 @@
 /**
- * What the reader has said about a directory, over what the app inferred:
- * whether its folder in the rail is shut, and which hue it wears. All the same kind of claim — "this directory, to me, is
- * this" — so they live in one document under one key. A folder shut in the
- * rail stays shut across reloads because the answer is kept here.
- *
- * Keyed by cwd, the one name a directory cannot be renamed out of, which is
- * also what `identity.ts` hashes: an override and the default it replaces are
- * always talking about the same thing.
+ * Directory hues remain keyed by cwd, the name `identity.ts` hashes.
+ * Project folds are keyed by project id: two projects can share a directory.
+ * Both are kept across reloads. Old directory folds are consumed once by
+ * migrateProjects, assigned to the oldest project in each directory.
  */
 
 import type { ProjectRow } from "./client.svelte";
@@ -14,7 +10,7 @@ import { identityHue } from "./identity";
 import { readJson, writeJson } from "./storage";
 
 export interface FolderPref {
-  /** The rail's folder for this directory is shut. */
+  /** Legacy field consumed and removed by migrateProjects. */
   collapsed?: true;
   /** A hue chosen by hand; without one, the cwd's hash chooses. */
   hue?: number;
