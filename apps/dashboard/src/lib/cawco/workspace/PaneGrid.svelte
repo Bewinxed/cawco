@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { tick, untrack } from "svelte";
+  import { tick } from "svelte";
   import { dur, ease, motionOk } from "#lib/cawco/motion/curves.svelte.js";
   /**
    * The grid: a tree of splits, drawn recursively.
@@ -90,9 +90,66 @@
   const idsOf = (shape: Shape) => shape.kids.map((kid) => kid.id).join(",");
 
   let group = $state<HTMLElement | null>(null);
-  /** The branch as it was while the group that left collapses, and where each box is going. */
-  let ghost = $state.raw<{ branch: BranchNode; to: number[] } | null>(null);
+
+  interface Ghost {
+    /** The branch as it was, drawn while the group that left collapses. */
+    branch: BranchNode;
+    /** Where each of its boxes is going. */
+    to: number[];
+  }
+  /** What was last drawn here, to tell what a change took away. */
+  let was: Shape | null = null;
+  /** Kept in step with the tree in the same pass that draws it: a ghost set a step later would be drawn after the tree, and the groups rebuilt. */
+  let held: Ghost | null = null;
+  let released = $state(0);
+  let letGo = 0;
+  const ghost = $derived.by((): Ghost | null => {
+    // The grid draws the tree again once the ghost is let go.
+    if (released !== letGo) {
+      letGo = released;
+      held = null;
+    }
+    const now = shapeOf(node);
+    const before = was;
+    was = now;
+    if (
+      before &&
+      motionOk.current &&
+      (before.t !== now.t || idsOf(before) !== idsOf(now))
+    ) {
+      held = ghostOf(before, now);
+    }
+    return held;
+  });
   const drawn = $derived(ghost?.branch ?? node);
+
+  /** What a change took away, as a branch to go on drawing, or nothing when it only added or rearranged. */
+  function ghostOf(before: Shape, now: Shape): Ghost | null {
+    if (before.t !== "b") {
+      return null;
+    }
+    const stays = now.t === "l" ? [now.id] : now.kids.map((kid) => kid.id);
+    const ids = before.kids.map((kid) => kid.id);
+    const sameBranch = now.t === "l" || now.id === before.id;
+    const left = ids.filter((id) => !stays.includes(id));
+    if (
+      !sameBranch ||
+      left.length === 0 ||
+      stays.some((id) => !ids.includes(id))
+    ) {
+      return null;
+    }
+    return {
+      branch: {
+        t: "b",
+        id: before.id,
+        dir: before.dir,
+        sizes: before.sizes,
+        kids: before.kids,
+      },
+      to: ids.map((id) => shareAfter(id, stays, now)),
+    };
+  }
 
   /** The groups' boxes, in order. */
   const panesOf = (el: HTMLElement) => [
@@ -144,49 +201,6 @@
     return now.t === "l" ? ALL : (now.sizes[stays.indexOf(id)] ?? 0);
   }
 
-  /** What was last drawn here, to tell what a change took away. */
-  let was: Shape | null = null;
-  $effect.pre(() => {
-    const now = shapeOf(node);
-    const before = untrack(() => was);
-    was = now;
-    if (!(before && motionOk.current)) {
-      return;
-    }
-    if (before.t === now.t && idsOf(before) === idsOf(now)) {
-      return;
-    }
-    untrack(() => {
-      // Another change while one closes: the grid draws what is true now.
-      ghost = null;
-      if (before.t !== "b") {
-        return;
-      }
-      const stays = now.t === "l" ? [now.id] : now.kids.map((kid) => kid.id);
-      const ids = before.kids.map((kid) => kid.id);
-      const sameBranch = now.t === "l" || now.id === before.id;
-      const left = ids.filter((id) => !stays.includes(id));
-      if (
-        !sameBranch ||
-        left.length === 0 ||
-        stays.some((id) => !ids.includes(id))
-      ) {
-        return;
-      }
-      ghost = {
-        branch: {
-          t: "b",
-          id: before.id,
-          dir: before.dir,
-          sizes: before.sizes,
-          kids: before.kids,
-        },
-        // Each box's share once the grid draws the tree as it now is.
-        to: ids.map((id) => shareAfter(id, stays, now)),
-      };
-    });
-  });
-
   $effect(() => {
     const el = group;
     const out = ghost;
@@ -207,7 +221,7 @@
         if (!live) {
           return;
         }
-        ghost = null;
+        released += 1;
         await tick();
         for (const run of runs) {
           run.cancel();
