@@ -1071,7 +1071,6 @@ export const createWorkItems = ({
       return false;
     }
     quiet.delete(item.id);
-    waitsAtRest.add(item.id);
     if (item.waitUntil.getTime() <= Date.now()) {
       endWait(item.id);
     }
@@ -1264,11 +1263,16 @@ export const createWorkItems = ({
       }
     },
 
-    /** A new busy turn resumes a resting wait even without a harness read/output. */
-    turnBusy(instanceId: string): void {
+    /** The live idle/busy transition, even while turn-end rules are still deciding. */
+    turnState(instanceId: string, busy: boolean): void {
       const [row] = db.getInstancesByIds([instanceId]);
       const item = row ? itemOf(row) : undefined;
-      if (item?.waitResumeBy || (item?.waitUntil && waitsAtRest.has(item.id))) {
+      if (!busy && item?.waitUntil) {
+        waitsAtRest.add(item.id);
+      } else if (
+        busy &&
+        (item?.waitResumeBy || (item?.waitUntil && waitsAtRest.has(item.id)))
+      ) {
         clearWait(item);
       }
     },

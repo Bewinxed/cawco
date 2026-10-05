@@ -10826,11 +10826,8 @@ export const createServer = (
               if (kind === "pulse" && message.instanceId) {
                 const { pulse } = message.payload as { pulse?: SessionPulse };
                 if (pulse) {
-                  const wasBusy = pulses.get(message.instanceId)?.busy;
                   pulses.set(message.instanceId, pulse);
-                  if (pulse.busy && !wasBusy) {
-                    workItems.turnBusy(message.instanceId);
-                  }
+                  workItems.turnState(message.instanceId, pulse.busy);
                   // A pulse is only ever emitted by a session doing something,
                   // so it is the fleet's cheapest honest signal for the column
                   // the rails age rows from.
