@@ -9,8 +9,8 @@
  * - Working: sessions mid-turn, with what each is doing now.
  * - Finished: sessions whose turn ended, or that failed, since this device
  *   last opened them (the `finished` choice).
- * - Recent: everything else that can be opened — idle and sleeping
- *   sessions, and the transcripts stored on the machines.
+ * - Recent: everything else that can be opened — every session none of the
+ *   groups above shows, and the transcripts stored on the machines.
  */
 import type { NeutralSessionInfo, WorkflowRun } from "@cawco/core";
 import { archiveRefusal, machineLabel } from "@cawco/core";
@@ -20,7 +20,6 @@ import {
   type HubState,
   type InstanceRow,
   isFailed,
-  isResumable,
   isStale,
 } from "../client.svelte";
 import {
@@ -833,7 +832,16 @@ class Home {
     );
   });
 
-  /** The listed sessions Recent lists, in order: what no other group shows. */
+  /**
+   * The listed sessions Recent lists, in order: every one no other group
+   * shows, whatever its status or activity. Recent is the list of last
+   * resort, so it asks nothing more of a row. Asking that it be idle, asleep
+   * or failed left two with no row anywhere, and so no menu to stop or
+   * remove them by: a live session whose pulse says it waits on the reader
+   * while no ask of its own is parked (a delegate's ask its parent answers),
+   * and one stopped before it had a transcript whose pulse or delegates
+   * still say working.
+   */
   readonly #recentLive = $derived.by<RecentItem[]>(() => {
     const shown = new Set([
       ...this.working.map((row) => row.id),
@@ -841,15 +849,7 @@ class Home {
       ...cawco.blocked.map((item) => item.instanceId),
     ]);
     return cawco.listedInstances
-      .filter(
-        (row) =>
-          listed(row) &&
-          !shown.has(row.id) &&
-          (cawco.activityOf(row.id) === "idle" ||
-            isResumable(row) ||
-            isStale(row) ||
-            isFailed(row))
-      )
+      .filter((row) => listed(row) && !shown.has(row.id))
       .map(
         (row): RecentItem => ({
           key: row.id,

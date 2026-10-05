@@ -1,3 +1,24 @@
+<script lang="ts" module>
+  /**
+   * Where the pointer last moved to, for every strip on the page. A tab that
+   * the layout slides under a pointer at rest (a split, a tab closing, the
+   * strip scrolling) is entered at exactly this point, before any move is
+   * heard; a pointer that came onto a tab is entered somewhere else. One
+   * listener for all strips: a strip a split has just made never heard the
+   * move that put the pointer where it is.
+   */
+  let movedTo: { x: number; y: number } | null = null;
+  if (typeof window !== "undefined") {
+    window.addEventListener(
+      "pointermove",
+      (event) => {
+        movedTo = { x: event.clientX, y: event.clientY };
+      },
+      { capture: true, passive: true }
+    );
+  }
+</script>
+
 <script lang="ts">
   import { Popover } from "bits-ui";
   /**
@@ -229,6 +250,12 @@
   }
   function hoverTab(id: string, event: PointerEvent) {
     if (touch.current || event.pointerType !== "mouse" || pinned || menuOpen) {
+      return;
+    }
+    // The tab came under a pointer at rest: nobody pointed at it. Clicking a
+    // tab and then splitting (`mod+\`) slid its neighbour under the pointer
+    // and opened that neighbour's card, which nothing had asked for.
+    if (movedTo?.x === event.clientX && movedTo.y === event.clientY) {
       return;
     }
     clearTimeout(timer);
