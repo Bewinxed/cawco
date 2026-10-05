@@ -352,6 +352,14 @@
     font: var(--type-meta);
     font-variant-numeric: tabular-nums;
     line-height: 1;
+    /* The count's box is fixed, and the morph (which animates its own box's
+       width and height) is contained in it: nothing outside it is laid out
+       as the figure changes, and 9 to 10 stays centred. */
+    display: inline-grid;
+    place-items: center;
+    inline-size: 2ch;
+    block-size: 1lh;
+    contain: layout size;
   }
   /* Which of the two shows (--swap-away: 1 for the one that has given way).
      That number is what transitions (app.css): the swap is by opacity; the

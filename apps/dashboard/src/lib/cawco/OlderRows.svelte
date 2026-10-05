@@ -234,7 +234,13 @@
             </span>
           {/snippet}
         </TreeMark>
-        <span class="num"><MorphText text={String(count)} /> older</span>
+        <span class="num"
+          ><span
+            style="display:inline-grid;inline-size:{String(count).length}ch"
+            ><MorphText text={String(count)} /></span
+          >
+          older</span
+        >
         {#if failed > 0}
           <span class="older-failed">{failedWords(failed)}</span>
         {/if}
