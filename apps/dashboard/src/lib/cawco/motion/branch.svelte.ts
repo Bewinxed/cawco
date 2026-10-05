@@ -975,8 +975,109 @@ const wiped = (item: Item, v: number): Keyframe => {
 };
 
 /**
+ * One moment of a track, `at` ms of τ, and its values as numbers: what a
+ * piece's keyframes are sampled as, trimmed to the span it moves in
+ * (`moving`) and thinned (`thin`) before they are keyframes.
+ */
+interface Sample {
+  at: number;
+  v: number[];
+}
+
+/**
+ * A piece's animation: its keyframes over the span it moves in alone, `delay`
+ * ms into the plan, held at its first frame before and its last after
+ * (`fill: "both"`). Every moment of the plan outside that span has it still,
+ * so an animation over the whole plan was a running animation the page
+ * restyled every frame for nothing: a tree's pieces, all of them, the whole
+ * time any one of them moved.
+ */
+interface Span {
+  delay: number;
+  duration: number;
+  frames: Keyframe[];
+}
+
+/** How far a thinned ride may stray from the samples it was thinned from: translate px, scale, opacity. */
+const RIDE_TOLERANCE = [0.1, 0.1, 0.001, 0.005];
+/** The same for a skin's opacity. */
+const SKIN_TOLERANCE = [0.01];
+
+/**
+ * The samples with the first and last of every straight run kept and the
+ * rest dropped where linear between the ones kept stays within `tolerance`
+ * of each (Ramer–Douglas–Peucker over time): a glyph down the rail or out
+ * along its arm is two keyframes, round its corner as many as hold it
+ * within a quarter of a pixel.
+ */
+function thin(points: Sample[], tolerance: number[]): Sample[] {
+  const last = points.length - 1;
+  const keep = points.map((_, k) => k === 0 || k === last);
+  const todo: [number, number][] = [[0, last]];
+  for (let range = todo.pop(); range; range = todo.pop()) {
+    const [from, to] = range;
+    const span = Math.max(points[to].at - points[from].at, 1e-9);
+    let worst = 1;
+    let at = -1;
+    for (let k = from + 1; k < to; k += 1) {
+      const share = (points[k].at - points[from].at) / span;
+      let stray = 0;
+      for (let c = 0; c < tolerance.length; c += 1) {
+        const lerp =
+          points[from].v[c] + (points[to].v[c] - points[from].v[c]) * share;
+        stray = Math.max(stray, Math.abs(points[k].v[c] - lerp) / tolerance[c]);
+      }
+      if (stray > worst) {
+        worst = stray;
+        at = k;
+      }
+    }
+    if (at !== -1) {
+      keep[at] = true;
+      todo.push([from, at], [at, to]);
+    }
+  }
+  return points.filter((_, k) => keep[k]);
+}
+
+const sameSample = (a: Sample, b: Sample): boolean =>
+  a.v.every((value, c) => value === b.v[c]);
+
+/**
+ * The span a track moves in: the last frame of its still start to the first
+ * of its still end, each side held by the fill. At least two frames, the
+ * second a millisecond on, where nothing moves at all.
+ */
+function moving(points: Sample[]): Sample[] {
+  let from = 0;
+  let to = points.length - 1;
+  while (from < to && sameSample(points[from], points[from + 1])) {
+    from += 1;
+  }
+  while (to > from && sameSample(points[to], points[to - 1])) {
+    to -= 1;
+  }
+  const run = points.slice(from, to + 1);
+  return run.length > 1 ? run : [run[0], { ...run[0], at: run[0].at + 1 }];
+}
+
+/** `points` as an animation over their own span. */
+function spanOf(points: Sample[], frame: (v: number[]) => Keyframe): Span {
+  const delay = points[0].at;
+  const duration = Math.max((points.at(-1) ?? points[0]).at - delay, 1);
+  return {
+    delay,
+    duration,
+    frames: points.map((point, k) => ({
+      ...frame(point.v),
+      offset: k === points.length - 1 ? 1 : (point.at - delay) / duration,
+    })),
+  };
+}
+
+/**
  * A glyph's keyframes, and its skin's: where the head puts it at each of
- * `times`, linear between them, a run of equal frames two. Its centre is `min(head, arrive)` along its way,
+ * `times`, linear between them. Its centre is `min(head, arrive)` along its way,
  * never short of where it starts (a card, at its place in the deck). A card
  * comes from its card's size to its own, shedding the skin, over its way; a
  * glyph that is no card fades in over the first --ride-fade of its. Until
@@ -987,13 +1088,14 @@ const wiped = (item: Item, v: number): Keyframe => {
  * bends (where it sets off, each point round its corner, where it lands, the
  * end of its fade). A tall tree folds its line at ten pixels a millisecond
  * and more: a glyph's whole way fell between two of `times`, and it crossed
- * its corner in a straight line, 16px off its line.
+ * its corner in a straight line, 16px off its line. Then cut to the span it
+ * moves in and thinned (`moving`, `thin`).
  */
 function rideFrames(
   plan: Plan,
   ride: Ride,
   times: number[]
-): { glyph: Keyframe[]; skin: Keyframe[] } {
+): { glyph: Span; skin: Span } {
   const fade = numberOf("--ride-fade");
   const shrunk = ride.card * numberOf("--deck-shrink");
   const way = Math.max(ride.length - ride.lead, 1);
@@ -1001,38 +1103,44 @@ function rideFrames(
     clamp(plan.when(ride.base + d), 0, plan.total)
   );
   const moments = [...new Set([...times, ...passed])].sort((a, b) => a - b);
-  const last = Math.max(1, moments.length - 1);
-  const offsetOf = (k: number) =>
-    k === last || plan.total <= 0 ? k / last : moments[k] / plan.total;
-  const samples = moments.map((t) => {
-    const along = plan.head(t) - ride.base;
+  // Each at the precision it was written at (`px`, four places of scale,
+  // three of opacity), so frames that drew the same are the same.
+  const round = (value: number, places: number) =>
+    Number(value.toFixed(places));
+  const worn: Sample[] = [];
+  const points = moments.map((at): Sample => {
+    const along = plan.head(at) - ride.base;
     const d = clamp(along, ride.lead, ride.length);
     const [x, y] = ride.at(d);
-    const worn = ride.card ? 1 - clamp((d - ride.lead) / way, 0, 1) : 0;
+    const share = ride.card ? 1 - clamp((d - ride.lead) / way, 0, 1) : 0;
     let seen = ride.card ? 1 : clamp(d / fade, 0, 1);
     if (along < 0) {
       seen = 0;
     }
+    worn.push({ at, v: [round(share, 3)] });
     return {
-      translate: `${px(x)} ${px(y)}`,
-      scale: (1 - shrunk * worn).toFixed(4),
-      opacity: seen.toFixed(3),
-      worn: worn.toFixed(3),
+      at,
+      v: [
+        round(x, 2),
+        round(y, 2),
+        round(1 - shrunk * share, 4),
+        round(seen, 3),
+      ],
     };
   });
-  const same = (a: number, b: number) =>
-    samples[a].translate === samples[b].translate &&
-    samples[a].scale === samples[b].scale &&
-    samples[a].opacity === samples[b].opacity;
-  const glyph: Keyframe[] = [];
-  const skin: Keyframe[] = [];
-  samples.forEach(({ worn, ...frame }, k) => {
-    if (k === 0 || k === last || !same(k, k - 1) || !same(k, k + 1)) {
-      glyph.push({ offset: offsetOf(k), ...frame });
-      skin.push({ offset: offsetOf(k), opacity: worn });
-    }
-  });
-  return { glyph, skin };
+  return {
+    glyph: spanOf(
+      thin(moving(points), RIDE_TOLERANCE),
+      ([x, y, scale, opacity]) => ({
+        translate: `${px(x)} ${px(y)}`,
+        scale: scale.toFixed(4),
+        opacity: opacity.toFixed(3),
+      })
+    ),
+    skin: spanOf(thin(moving(worn), SKIN_TOLERANCE), ([opacity]) => ({
+      opacity: opacity.toFixed(3),
+    })),
+  };
 }
 
 /** A stretch's two cuts (app.css `--nest-cut-r`, `--nest-cut-b`). */
@@ -1119,7 +1227,7 @@ function onGrid(place: number): number {
  * millisecond. By place it is within half a `GRAIN` of the head at any pace,
  * and a stretch has as many keyframes as it has pixels at most.
  */
-function railFrames(plan: Plan, stretch: Stretch): Keyframe[] {
+function railFrames(plan: Plan, stretch: Stretch): Span {
   const { from } = stretch;
   const to = endOf(stretch);
   const steps = Math.max(1, Math.ceil((to - from) / GRAIN));
@@ -1141,20 +1249,43 @@ function railFrames(plan: Plan, stretch: Stretch): Keyframe[] {
     { t: plan.total, cut: cutAt(stretch, plan.head(plan.total)) },
   ];
   const last = cuts.length - 1;
-  const frames: Keyframe[] = [];
-  cuts.forEach(({ t, cut: [right, below] }, k) => {
+  const kept: { at: number; cut: [number, number] }[] = [];
+  cuts.forEach(({ t, cut }, k) => {
     const before = cuts[k - 1]?.cut;
-    if (k > 0 && k < last && before?.[0] === right && before[1] === below) {
+    if (k > 0 && k < last && before?.[0] === cut[0] && before[1] === cut[1]) {
       return;
     }
-    frames.push({
-      offset: k === last || plan.total <= 0 ? k / last : t / plan.total,
+    kept.push({ at: t, cut });
+  });
+  // The line is whole where the head has been past it: the last frame, the
+  // plan's end, adds nothing to the one before it. Its first holds until the
+  // second, so it stands a millisecond before it and the span starts there.
+  const [tail, prior] = [kept.at(-1), kept.at(-2)];
+  if (
+    tail &&
+    prior &&
+    tail.cut[0] === prior.cut[0] &&
+    tail.cut[1] === prior.cut[1]
+  ) {
+    kept.pop();
+  }
+  if (kept.length > 1) {
+    kept[0].at = Math.max(kept[0].at, kept[1].at - 1);
+  } else {
+    kept.push({ at: kept[0].at + 1, cut: kept[0].cut });
+  }
+  const delay = kept[0].at;
+  const duration = Math.max((kept.at(-1) ?? kept[0]).at - delay, 1);
+  return {
+    delay,
+    duration,
+    frames: kept.map(({ at, cut: [right, below] }, k) => ({
+      offset: k === kept.length - 1 ? 1 : (at - delay) / duration,
       easing: "step-end",
       [CUT_RIGHT]: px(right),
       [CUT_BELOW]: px(below),
-    });
-  });
-  return frames;
+    })),
+  };
 }
 
 /**
@@ -1222,22 +1353,25 @@ function piecesOf(
     easing: CURVE.out,
     fill: "both",
   });
-  const riding: KeyframeAnimationOptions = {
-    duration: plan.total,
-    easing: "linear",
-    fill: "both",
-  };
+  /** An animation over the span of its own, linear: a glyph's ride, its skin's fade, a stretch's cuts. */
+  const along = (
+    { frames, delay, duration }: Span,
+    pseudoElement?: Stretch["pseudo"]
+  ): [Keyframe[], KeyframeAnimationOptions] => [
+    frames,
+    { delay, duration, easing: "linear", fill: "both", pseudoElement },
+  ];
   /** A glyph on its way, and the card it wears on it. */
   const ridden = ({ icon, ride }: Item): Animation[] => {
     if (!(icon && ride)) {
       return [];
     }
     const frames = rideFrames(plan, ride, times);
-    const built = [icon.animate(frames.glyph, riding)];
+    const built = [icon.animate(...along(frames.glyph))];
     if (ride.card && ride.skin) {
       ride.skin.style.setProperty("--p", String(ride.card));
       ride.skin.style.setProperty("--pfill", ride.fill);
-      built.push(ride.skin.animate(frames.skin, riding));
+      built.push(ride.skin.animate(...along(frames.skin)));
     }
     return built;
   };
@@ -1294,12 +1428,7 @@ function piecesOf(
       bottom: stretch.top + stretch.height,
       start: rests ? enters : 0,
       build: () => [
-        stretch.li.animate(railFrames(plan, stretch), {
-          duration: plan.total,
-          easing: "linear",
-          fill: "both",
-          pseudoElement: stretch.pseudo,
-        }),
+        stretch.li.animate(...along(railFrames(plan, stretch), stretch.pseudo)),
       ],
     });
   }
