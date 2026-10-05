@@ -1,6 +1,7 @@
 {
   "name": "cawco",
   "private": true,
+  "license": "SEE LICENSE IN LICENSE",
   "type": "module",
   "workspaces": [
     "apps/*",

@@ -58,4 +58,8 @@ bun run typecheck
 bun run lint
 ```
 
+## Licence
+
+Caw&Co is source available, not open source. The code is under the Apache License 2.0 with the Commons Clause: you may read it, fork it and change it for free. You may not sell it, and that includes paid hosting or support whose value comes from it. See LICENSE and NOTICE.
+
 <https://cawco.dev>
