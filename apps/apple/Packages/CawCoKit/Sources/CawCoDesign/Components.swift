@@ -132,7 +132,8 @@ public enum KitButton {
     static func configuration(_ title: String, glyph: Glyph?, glyphTint: UIColor?, variant: Variant, height: Height) -> UIButton.Configuration {
         var config = UIButton.Configuration.plain()
         config.attributedTitle = AttributedString(title, attributes: AttributeContainer(height.role.attributes(color: ink(variant), tracking: -0.01)))
-        config.titleLineBreakMode = .byTruncatingTail
+        // The web button never shrinks and never cuts its label (`shrink-0 whitespace-nowrap`, no ellipsis).
+        config.titleLineBreakMode = .byClipping
         if let glyph {
             config.image = glyph.image.resized(to: Size.iconMd)
             config.imageColorTransformer = UIConfigurationColorTransformer { _ in glyphTint ?? ink(variant) }

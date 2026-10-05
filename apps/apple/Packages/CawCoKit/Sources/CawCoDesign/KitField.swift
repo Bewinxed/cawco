@@ -11,6 +11,10 @@ public final class KitField: UITextField {
         let role = mono ? TypeScale.typeCode.with(points: TypeScale.typeBody.points) : TypeScale.typeBody
         font = role.font
         textColor = Palette.inkStrong
+        // An input clips what does not fit and shows no ellipsis (ui/input).
+        let clipped = NSMutableParagraphStyle()
+        clipped.lineBreakMode = .byClipping
+        defaultTextAttributes[.paragraphStyle] = clipped
         attributedPlaceholder = NSAttributedString(string: placeholder, attributes: [.font: role.font, .foregroundColor: Palette.mutedForeground])
         backgroundColor = Palette.surfaceRaised
         layer.cornerRadius = Radius.radiusMd
@@ -86,5 +90,14 @@ public final class KitSelect: UIButton {
         configuration?.attributedTitle = AttributedString(text, attributes: AttributeContainer(TypeScale.typeLabel.withWeight(.regular).attributes(color: Palette.foreground)))
         configuration?.titleLineBreakMode = .byTruncatingTail
         accessibilityValue = text
+        setNeedsLayout()
+    }
+
+    /// The value is one clamped line on the web (`line-clamp-1`): cut where WebKit cuts it.
+    private var cut = TitleCut()
+
+    override public func layoutSubviews() {
+        cut.fit(self)
+        super.layoutSubviews()
     }
 }

@@ -21,7 +21,8 @@ public final class ConfirmDialog: UIViewController, UIViewControllerTransitionin
     private let work: () async throws -> Void
     private let frameView = UIView()
     private let card = UIView()
-    private let failure = UILabel()
+    /// `p.failure` (cawco/ConfirmDialog.svelte): a paragraph, so it wraps `pretty`.
+    private let failure = KitLabel(TypeScale.typeBody, ink: Palette.statusFailInk, lines: 0)
     private var confirm: UIButton!
     private var running = false
 
@@ -66,9 +67,7 @@ public final class ConfirmDialog: UIViewController, UIViewControllerTransitionin
         // `text-balance md:text-pretty` (alert-dialog-description.svelte).
         description.wrap = UIScreen.main.bounds.width >= 768 ? .pretty : .balance
         description.isHidden = body == nil
-        failure.font = TypeScale.typeBody.font
-        failure.textColor = Palette.statusFailInk
-        failure.numberOfLines = 0
+        failure.wrap = .pretty
         failure.isHidden = true
         let header = UIStackView(arrangedSubviews: [title, description, failure])
         header.axis = .vertical

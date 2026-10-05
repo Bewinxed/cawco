@@ -730,7 +730,7 @@ private final class ModelRow: UIControl {
         name.text = entry.name
         name.lineBreakMode = .byTruncatingTail
         name.alpha = reason == nil ? 1 : 0.5
-        let meta = UILabel()
+        let meta = KitLabel(TypeScale.typeMeta)
         meta.lineBreakMode = .byTruncatingTail
         if let reason {
             meta.attributedText = NSAttributedString(string: reason, attributes: TypeScale.typeMeta.attributes(color: Palette.inkMuted))

@@ -372,7 +372,7 @@ final class DirectoryPickerView: UIStackView {
             config.titleLineBreakMode = .byTruncatingTail
             config.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: 11, bottom: 0, trailing: 11)
             config.background.cornerRadius = Radius.radiusMd
-            let row = UIButton(configuration: config, primaryAction: UIAction { [weak self] _ in
+            let row = KitCutButton(configuration: config, primaryAction: UIAction { [weak self] _ in
                 guard let self else { return }
                 go(path == "/" ? "/\(dir.name)" : "\(path)/\(dir.name)", way: 1)
             })

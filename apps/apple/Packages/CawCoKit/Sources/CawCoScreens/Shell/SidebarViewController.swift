@@ -466,7 +466,8 @@ final class SidebarViewController: ObservedViewController {
         guard !lists.isEmpty else {
             // `text-meta text-muted-foreground`; the command's name in the
             // mono face at label size, in the foreground ink.
-            let note = UILabel()
+            let note = KitLabel(TypeScale.typeMeta, ink: Palette.mutedForeground, lines: 0)
+            note.wrap = .pretty
             let said = hub.fleet.machines.isEmpty
                 ? "Run cawco on a machine, then group its checkouts here."
                 : "No projects yet — name a checkout to group its sessions."

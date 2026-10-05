@@ -73,7 +73,7 @@ final class LocationPopover: NsPopoverController, UITextFieldDelegate {
     private var browserFold: NsFold!
     private var repoFold: NsFold!
     private let repoBody = UIStackView()
-    private let note = UILabel()
+    private let note = KitLabel(TypeScale.typeMeta, lines: 0)
     // The browser.
     private var browsing = false
     private var path = "~"
@@ -551,7 +551,7 @@ final class LocationPopover: NsPopoverController, UITextFieldDelegate {
         box.layer.borderColor = Palette.borderControl.resolvedColor(with: traitCollection).cgColor
         box.addSubview(row)
 
-        note.numberOfLines = 0
+        note.wrap = .pretty
         renderNote()
         let noteRow = UIStackView(arrangedSubviews: [GlyphView(.refresh, size: 16, tint: Palette.hueBlue500), note])
         noteRow.spacing = 8

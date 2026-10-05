@@ -767,13 +767,13 @@ final class JumpPaletteController: UIViewController, UIViewControllerTransitioni
 
     /// One row: the mark in muted ink, the name, and the trailing fact at most 45% wide.
     private func item(glyph: Glyph, name: NSAttributedString, trail: NSAttributedString) -> UIView {
-        let nameLabel = UILabel()
+        let nameLabel = KitLabel(TypeScale.typeMeta)
         nameLabel.attributedText = name
         nameLabel.lineBreakMode = .byTruncatingTail
         nameLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         // `.jump-name` is `flex: 1`: it takes the room, so every trail ends on one edge.
         nameLabel.setContentHuggingPriority(.defaultLow - 1, for: .horizontal)
-        let trailLabel = UILabel()
+        let trailLabel = KitLabel(TypeScale.typeMeta)
         trailLabel.attributedText = trail
         trailLabel.lineBreakMode = .byTruncatingTail
         trailLabel.setContentCompressionResistancePriority(.defaultLow + 1, for: .horizontal)
@@ -798,7 +798,7 @@ final class JumpPaletteController: UIViewController, UIViewControllerTransitioni
         let host = hub.fleet.machines.first { $0.machineId == hit.machineId }?.hostname ?? hit.machineId
         let head = item(glyph: .document, name: NSAttributedString(string: title, attributes: TypeScale.typeMeta.attributes(color: Palette.inkMuted)),
                         trail: NSAttributedString(string: "\(host) · \(hit.role)", attributes: TypeScale.typeMeta.attributes(color: Palette.inkMuted, tracking: TypeScale.trackCaps)))
-        let snippet = UILabel()
+        let snippet = KitLabel(TypeScale.typeBody)
         snippet.lineBreakMode = .byTruncatingTail
         let line = NSMutableAttributedString()
         for (i, part) in hit.snippet.split(separator: /「|」/, omittingEmptySubsequences: false).enumerated() {
