@@ -65,6 +65,7 @@
   } from "./client.svelte";
   import { identityVar } from "./folder-prefs.svelte";
   import { conversationHref } from "./links";
+  import { echoBeat } from "./motion/echo.svelte";
   import OsMark from "./OsMark.svelte";
   import { permissionSummary } from "./permission-summary";
   import { plainMarkdown, plainStreaming } from "./plain-markdown";
@@ -320,7 +321,9 @@
     </ContextMenu.Content>
   </ContextMenu.Root>
 
-  <div class="flex items-center gap-2 px-4 pb-3 text-meta">
+  <!-- The mark's echo runs only on a beat (motion/echo): this line is its
+       list of one, so a working session's mark echoes here too. -->
+  <div class="flex items-center gap-2 px-4 pb-3 text-meta" {@attach echoBeat()}>
     <SessionMark
       id={target.viewId}
       place={row?.cwd || row?.machineId || target.viewId}
