@@ -9605,7 +9605,7 @@
             "type": "string"
           },
           "resume": {
-            "description": "Re-open (or fork) a stored session. `sessionKey` is the harness's own\nsession id; `fork` reads the origin conversation into a new one; `atMessage`\nresumes up to and including that assistant turn (a rewind anchor).",
+            "description": "Re-open (or fork) a stored session. `sessionKey` is the harness's own\nsession id; `fork` reads the origin conversation into a new one; `atMessage`\nresumes through that assistant turn in Claude; OpenCode reverts from\nthe selected user turn. A fork includes its anchor in either harness.",
             "type": "object",
             "properties": {
               "sessionKey": {
