@@ -37,6 +37,8 @@ import { failureText, receiptOf } from "./refs";
 
 /** What the steps need from the run around them. */
 export interface StepContext {
+  /** A held process or undecided custody cannot establish an attempt's death. */
+  readonly custodyPending: (machineId: string, instanceId: string) => boolean;
   readonly db: DbShape;
   /** Fills `{{ref:N.path}}` from this run's settled effects. */
   readonly expand: (run: WorkflowRunRow, text: string) => string;
@@ -337,7 +339,8 @@ export function createSteps(ctx: StepContext) {
         if (
           step.kind !== "step" ||
           step.status !== "running" ||
-          !step.instanceId
+          !step.instanceId ||
+          ctx.custodyPending(run.machineId, step.instanceId)
         ) {
           return [];
         }

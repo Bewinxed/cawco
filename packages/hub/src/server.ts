@@ -6523,6 +6523,10 @@ export const createServer = (
     },
   });
   const workflowRuntime = createWorkflowRuntime({
+    custodyPending: (machineId, instanceId) =>
+      machineCustody.get(machineId)?.state !== "available" ||
+      unownedProcesses.get(machineId) === null ||
+      (heldProcesses.get(machineId)?.has(instanceId) ?? false),
     db,
     dbPath: DB_PATH,
     online: (machineId) => !!registry.agent(machineId),
@@ -10256,6 +10260,15 @@ export const createServer = (
                 // gone, and the same goes for anything it was holding.
                 forgetPending(row.id, UNREAD.ended);
                 escalateRoutedAsks(row.id);
+              }
+              // reportUnowned is the agent's custody completion, after adoption.
+              // A listed/held process stays on its attempt; only known absence
+              // runs the existing failure/retry path, against reconciled rows.
+              if (
+                Array.isArray(report) &&
+                machineCustody.get(message.machineId)?.state === "available"
+              ) {
+                workflowRuntime.recover(message.machineId);
               }
               // A process the operator stopped that the machine still carries:
               // one the stop never reached (the agent was restarting), taken

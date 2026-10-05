@@ -68,6 +68,7 @@ export interface WorkflowRuntimeDeps {
     cmd: string,
     timeoutMs?: number
   ) => Promise<CommandResult>;
+  custodyPending: (machineId: string, instanceId: string) => boolean;
   db: DbShape;
   /** The hub's SQLite file, which the workflow engine stores its messages in. */
   dbPath: string;
@@ -591,6 +592,7 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
   // ------------------------------------------------------------------- steps
 
   const steps = createSteps({
+    custodyPending: deps.custodyPending,
     db,
     expand,
     halt: deps.halt,
