@@ -1,5 +1,5 @@
 {
-  "take": "tk_nDQdGUffqyM2-FSODJ9IL",
+  "take": "tk_eAv_9kTaO6Y2TCCc78NVm",
   "frames": 22,
   "fps": 24,
   "drawings": [
@@ -64,7 +64,7 @@
     "x": -63.83197389885811,
     "y": -82.57911908646008
   },
-  "stillOverlap": 0.9893,
+  "stillOverlap": 0.9941,
   "halo": {
     "01": 0,
     "02": 0,
@@ -79,47 +79,47 @@
     "11": 0
   },
   "probe": {
-    "take": "tk_nDQdGUffqyM2-FSODJ9IL",
+    "take": "tk_eAv_9kTaO6Y2TCCc78NVm",
     "specksCleared": {},
     "whiteMarksRemovedAtTrace": [],
     "tracedFrames": 22,
     "traced": [
-      [0, 2, 0],
-      [2, 2, 1308],
-      [4, 2, 0],
-      [6, 2, 39491],
-      [8, 2, 81826],
-      [10, 2, 104481],
-      [12, 2, 114215],
-      [14, 2, 103591],
-      [16, 2, 104894],
-      [18, 2, 104578],
-      [20, 2, 104572]
+      [0, 2, 3881],
+      [2, 2, 7941],
+      [4, 2, 11936],
+      [6, 2, 21352],
+      [8, 2, 33726],
+      [10, 2, 47157],
+      [12, 2, 63551],
+      [14, 2, 95560],
+      [16, 2, 101629],
+      [18, 2, 103647],
+      [20, 2, 104594]
     ],
     "trimmedLeadingFrames": 0,
     "trimmedTrailingFrames": 0,
     "last": {
       "against": "compacted/body-00",
-      "iou": 0.9886,
-      "sameInks": 0.9809,
-      "outlineMaxPx": 9.85,
-      "outlineP99Px": 5.87,
+      "iou": 0.9912,
+      "sameInks": 0.986,
+      "outlineMaxPx": 8.6,
+      "outlineP99Px": 2.24,
       "largestDiffs": [
         {
-          "px": 119,
-          "at": [197, 199]
+          "px": 43,
+          "at": [126, 57]
         },
         {
-          "px": 60,
-          "at": [328, 246]
+          "px": 38,
+          "at": [222, 437]
         },
         {
-          "px": 59,
-          "at": [439, 321]
+          "px": 37,
+          "at": [203, 230]
         }
       ]
     },
-    "firstInkPx": 0,
+    "firstInkPx": 3881,
     "frames": 22,
     "slots": 11,
     "drawings": 11,
@@ -141,11 +141,24 @@
     "eyesCut": {},
     "gates": {
       "landing": true,
-      "firstEmpty": true,
+      "opensSmall": true,
       "onTwos": true,
       "whiteMarks": true,
       "halo": true,
-      "eyes": true
-    }
+      "eyes": true,
+      "inkOrder": true,
+      "safeArea": true
+    },
+    "inksOutOfOrder": {
+      "foreign": [],
+      "ownEarly": [],
+      "ownBy": {
+        "8": "head",
+        "9": "eyes",
+        "10": "eyes",
+        "11": "eyes"
+      }
+    },
+    "outsideSafe": []
   }
 }
