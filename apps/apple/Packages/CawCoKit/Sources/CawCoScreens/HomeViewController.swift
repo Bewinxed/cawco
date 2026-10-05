@@ -63,6 +63,8 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
     // What the last update drew, for the cells to read.
     private var needs: [String: HomeModel.NeedsItem] = [:]
     private var rows: [String: RowLine] = [:]
+    /// Each echoing row's place among the list's echoes (motion/echo): they beat top to bottom.
+    private var echoing: [String: Int] = [:]
     private var groups: [String: (group: HomeModel.MachineGroup, seam: Bool)] = [:]
     private var recentItems: [String: HomeModel.RecentItem] = [:]
     /// Everything Recent lists, before the search narrows it.
@@ -347,8 +349,8 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
             guard let self, case let .row(id) = item, let entry = rows[id], let content = rowContent(id) else { return }
             let line = entry.line.line
             cell.configure(depth: line.depth, first: line.first, last: line.last, through: entry.through)
+            cell.row.mark.onToggle = { [weak self] in self?.toggleTree(id) }
             cell.row.configure(content)
-            cell.row.count.onToggle = { [weak self] in self?.toggleTree(id) }
             cell.actions.configure(title: content.title, peeks: content.peek != nil, archives: content.archives)
             cell.actions.onPeek = { [weak self] in self?.peek(content) }
             cell.actions.onArchive = { [weak self] in
@@ -491,7 +493,9 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
             context: line.context,
             stale: !home.live,
             hover: session.id,
-            archives: entry.tab == .finished && !line.context && home.archivable(session)
+            archives: entry.tab == .finished && !line.context && home.archivable(session),
+            beat: echoing[id] ?? 0,
+            beats: max(1, echoing.count)
         )
     }
 
@@ -575,6 +579,7 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
         counts = (working.count, finished.count, finished.contains(where: \.isFailed))
         rows = [:]
         groups = [:]
+        echoing = [:]
         if !working.isEmpty || !finished.isEmpty {
             snapshot.appendSections([.work])
             var items: [Item] = [.tabs]
@@ -591,6 +596,11 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
                     lastAt[depth] = line.line.last
                     rows[line.id] = RowLine(line: line, tab: home.tab, group: group.machineId, through: through)
                     items.append(.row(line.id))
+                    // The list's echoes, top to bottom: a working tile and a needs-you dot each take a beat.
+                    let status = Self.status(line.line.row, home: home, done: home.tab == .finished)
+                    if status == .live || status == .attn {
+                        echoing[line.id] = echoing.count
+                    }
                 }
                 if group.more != nil {
                     items.append(.more(group.machineId))

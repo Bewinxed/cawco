@@ -805,8 +805,7 @@ final class SessionRowView: UIView, HoverSessionRow {
     private let title = KitLabel(TypeScale.typeLabel)
     private let trail = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
     private let line = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
-    let count = TreeCountButton()
-    /// The second cell of the trailing column where the row has no count: it keeps the line's height and no width.
+    /// The second cell of the trailing column (SessionRow.svelte's empty `.cell`): it keeps the line's height and no width.
     private let noCount = UIView()
     /// The trailing column (`.end`): what rises over the row's end on a pointer stands left of it.
     let end = UIStackView()
@@ -820,14 +819,14 @@ final class SessionRowView: UIView, HoverSessionRow {
         trail.setContentCompressionResistancePriority(.required, for: .horizontal)
         title.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         line.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        // Two lines of words, and at the row's end one column for what trails
-        // them: the age on the title's line and, on a parent, the count on the
-        // line below, both flush with the row's trailing edge.
+        // Two lines of words, and at the row's end the age, on the title's
+        // line, flush with the row's trailing edge. A parent's count is on its
+        // mark, which opens its rows.
         let words = UIStackView(arrangedSubviews: [title, line])
         words.axis = .vertical
         end.axis = .vertical
         end.alignment = .trailing
-        for cell in [trail, count, noCount] as [UIView] { end.addArrangedSubview(cell) }
+        for cell in [trail, noCount] as [UIView] { end.addArrangedSubview(cell) }
         end.setContentHuggingPriority(.required, for: .horizontal)
         end.setContentCompressionResistancePriority(.required, for: .horizontal)
         let body = UIStackView(arrangedSubviews: [mark, words, end])
@@ -886,6 +885,9 @@ final class SessionRowView: UIView, HoverSessionRow {
         var hover: String?
         /// A finished row a pointer can archive from its end (`onarchive`).
         var archives = false
+        /// Its place among its list's echoes and how many the list has (motion/echo).
+        var beat = 0
+        var beats = 1
 
         /// The session Peek shows: a live instance's. A workflow run has no
         /// tail of its own (its card is its steps), and a stored session no instance.
@@ -897,22 +899,17 @@ final class SessionRowView: UIView, HoverSessionRow {
 
     func configure(_ content: Content) {
         hoverSessionId = content.hover
-        mark.configure(id: content.id, place: content.place, status: content.status)
+        mark.beat = (content.beat, content.beats)
+        mark.configure(id: content.id, place: content.place, status: content.status, count: content.fold?.count ?? 0, open: content.fold?.open ?? false)
         title.text = content.title
         title.ink = content.context ? Palette.inkMuted : Palette.inkStrong
         trail.text = content.trail
         line.text = content.line
-        if let fold = content.fold {
-            count.isHidden = false
-            count.configure(count: fold.count, failed: fold.failed, open: fold.open)
-        } else {
-            count.isHidden = true
-        }
-        noCount.isHidden = content.fold != nil
         alpha = content.stale ? 0.55 : 1
         summary.accessibilityLabel = "\(content.status.word): \(content.title)"
         summary.accessibilityValue = [content.line, content.trail].filter { !$0.isEmpty }.joined(separator: ", ")
-        accessibilityElements = content.fold == nil ? [summary] : [summary, count]
+        // The row reads as one element, and a parent's mark is a second one, its own switch.
+        accessibilityElements = [summary] + (mark.switchElement.map { [$0] } ?? [])
     }
 }
 
