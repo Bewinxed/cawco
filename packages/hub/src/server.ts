@@ -3306,7 +3306,7 @@ export const createServer = (
    * a send for a session it is still taking custody of); or, when the grace
    * ran out, failed "not connected" as any send to an absent machine is.
    */
-  const releaseAwaiting = (machineId: string): void => {
+  const releaseAwaiting = (machineId: string, registered = false): void => {
     const waited = awaitingMachine.get(machineId);
     awaitingMachine.delete(machineId);
     for (const envelope of waited ?? []) {
@@ -3314,24 +3314,46 @@ export const createServer = (
       if (id) {
         heldRequestIds.delete(id);
       }
-      const agent = registry.agent(machineId);
+      const agent = registered ? registry.agent(machineId) : undefined;
       if (envelope.verb === "send") {
         const sent = envelope as Envelope<SendPayload>;
-        if (notStartedSends.has(sent.payload.message.uuid) && agent) {
-          agent.send(sent);
+        if (notStartedSends.has(sent.payload.message.uuid)) {
+          if (agent) {
+            agent.send(sent);
+          } else {
+            notStartedSends.delete(sent.payload.message.uuid);
+            const record = db.sendRecord(sent.payload.message.uuid);
+            if (record) {
+              failSend(
+                record,
+                "The agent did not register within the restart grace. The send was not started."
+              );
+            }
+          }
         } else {
           deliverSend(sent);
         }
       } else if (agent) {
         agent.send(envelope);
       } else if (id) {
-        waiting.get(id)?.({
+        const failure: ControlResult = {
           kind: "control_result",
           requestId: id,
           ok: false,
           error:
             "The agent did not register within the restart grace. The request was not started.",
-        });
+        };
+        waiting.get(id)?.(failure);
+        if (!streams.settleCommand(id, failure)) {
+          registry
+            .takeRequester(id)
+            ?.send({
+              verb: "frames",
+              machineId,
+              requestId: id,
+              payload: failure,
+            });
+        }
       }
     }
   };
@@ -10248,7 +10270,7 @@ export const createServer = (
               }
               // Behind the restores and the ack, so the agent reads each send
               // after the spawn it waits on.
-              releaseAwaiting(message.machineId);
+              releaseAwaiting(message.machineId, true);
               // biome-ignore lint/complexity/noVoid: reconnect immediately retries overdue stored schedules after the register ACK
               void keepAliveScheduler.wake();
               workflowRuntime.recover(message.machineId);

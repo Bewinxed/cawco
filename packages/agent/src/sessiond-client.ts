@@ -46,6 +46,7 @@ import {
 import {
   beginHarnessAnswer,
   endHarnessAnswer,
+  endHarnessAnswersFor,
   withRestartHold,
 } from "./restart";
 
@@ -724,6 +725,9 @@ export const sessiondBridge = (
       const control = parsed as
         | { type?: string; request_id?: string; request?: { subtype?: string } }
         | undefined;
+      if (control?.type === "control_cancel_request" && control.request_id) {
+        endHarnessAnswer(`${procId}/${control.request_id}`);
+      }
       if (
         control?.type === "control_request" &&
         control.request?.subtype === "hook_callback" &&
@@ -748,6 +752,7 @@ export const sessiondBridge = (
       stdout.push(`${event.data}\n`);
     },
     exit: (code, sig) => {
+      endHarnessAnswersFor(procId);
       exitCode = code;
       signalCode = sig;
       stdout.push(null);

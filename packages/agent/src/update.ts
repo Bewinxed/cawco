@@ -370,6 +370,7 @@ export const restartAgentNow = async (
   await writeRestartMarker(root, commit);
   const { currentRestartReadiness } = await import("./daemon");
   if (!(await currentRestartReadiness()).ready) {
+    await Bun.file(restartMarkerPath(root)).delete();
     return false;
   }
   scheduleRestart("agent", 0);

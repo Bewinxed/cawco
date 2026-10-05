@@ -14,6 +14,14 @@ export function endHarnessAnswer(id: string): void {
   answers.delete(id);
 }
 
+export function endHarnessAnswersFor(procId: string): void {
+  for (const id of answers.keys()) {
+    if (id.startsWith(`${procId}/`)) {
+      endHarnessAnswer(id);
+    }
+  }
+}
+
 export class AgentRetiring extends Error {
   readonly code = AGENT_NOT_STARTED;
   constructor() {
@@ -80,7 +88,20 @@ export const describeRestartHolds = (report: AgentRestartReadiness): string =>
     .join("; ");
 
 /** Check, fence synchronously, check again, then schedule. Never force past a hold. */
-export async function retireAgent(
+type RetirementResult = AgentRestartReadiness & { scheduled: boolean };
+let retirement: Promise<RetirementResult> | undefined;
+
+export function retireAgent(
+  read: () => Promise<AgentRestartReadiness>,
+  schedule: () => Promise<boolean>
+): Promise<RetirementResult> {
+  retirement ??= decideRetirement(read, schedule).finally(() => {
+    retirement = undefined;
+  });
+  return retirement;
+}
+
+async function decideRetirement(
   read: () => Promise<AgentRestartReadiness>,
   schedule: () => Promise<boolean>
 ): Promise<AgentRestartReadiness & { scheduled: boolean }> {
