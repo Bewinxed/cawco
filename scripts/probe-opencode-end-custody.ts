@@ -148,10 +148,7 @@ if (role !== "child") {
   };
   try {
     await Bun.write(recordPath, JSON.stringify({ active: null, retired: [] }));
-    await assert.rejects(
-      native().endSession(key, scratch, "native-review"),
-      /incomplete/
-    );
+    await native().endSession(key, scratch, "native-review");
     assert.equal(requests.length, 0);
     await client.spawnProc(procId, {
       command: "/bin/sleep",
@@ -163,7 +160,10 @@ if (role !== "child") {
       native().endSession(key, scratch, "native-review"),
       /incomplete/
     );
-    assert.equal(requests.length, 0);
+    assert.equal(
+      requests.filter((path) => path.endsWith("/instance/dispose")).length,
+      0
+    );
     const listed = await client.list();
     const proc = listed.procs.find(
       (entry) => entry.procId === procId && entry.alive
@@ -191,7 +191,10 @@ if (role !== "child") {
       native().endSession(key, scratch, "native-review"),
       /incomplete/
     );
-    assert.equal(requests.length, 0);
+    assert.equal(
+      requests.filter((path) => path.endsWith("/instance/dispose")).length,
+      0
+    );
     await endProc(client, "opencode-server-unrecorded-proof");
     await until(
       () => client.list(),
@@ -202,6 +205,7 @@ if (role !== "child") {
         )
     );
 
+    state = "busy";
     const pendingHarness = native();
     const address = Promise.withResolvers<void>();
     let awaitingAddress = false;
@@ -214,18 +218,26 @@ if (role !== "child") {
     );
     recovery.catch(() => undefined);
     await until(async () => awaitingAddress, Boolean);
+    const abortsBeforePending = requests.filter((path) =>
+      path.endsWith("/abort")
+    ).length;
     await assert.rejects(
       pendingHarness.endSession(key, scratch, "native-review"),
       /incomplete/
     );
-    assert.equal(requests.filter((path) => path.endsWith("/abort")).length, 0);
+    assert.equal(
+      requests.filter((path) => path.endsWith("/abort")).length,
+      abortsBeforePending + 1
+    );
+    assert.equal(state, "idle");
     address.reject(new SessionAddressRefused("private final refusal"));
     await assert.rejects(recovery, /private final refusal/);
     console.log(
-      "REVIEW 5 native known-id end rejects empty generations, unrecorded held generations, and pending recovery without a positive end"
+      "SECOND 6 native Stop aborts its conversation during pending operations, gates receipt on completeness, and confirms an empty server reading"
     );
 
     const beforeShared = requests.length;
+    state = "busy";
     await pendingHarness.endSession(key, scratch, "other-row", [key]);
     assert.equal(requests.length, beforeShared);
     assert.equal(state, "busy");
@@ -250,7 +262,10 @@ if (role !== "child") {
     assert.equal(refusals, 1);
     await refusedHarness.endSession(key, scratch, "native-review");
     assert.equal(state, "idle");
-    assert.equal(requests.filter((path) => path.endsWith("/abort")).length, 1);
+    assert.ok(
+      requests.filter((path) => path.endsWith("/abort")).length >
+        abortsBeforePending
+    );
     assert.equal(
       requests.filter((path) => path.endsWith("/instance/dispose")).length,
       1

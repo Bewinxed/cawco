@@ -564,6 +564,7 @@ const attach = (
     // see {@link sessionsReader}.
     const reading = sessions();
     const socket = yield* connection(url);
+    supervisor.setHubContract(false);
     supervisor.resetStopSequence();
     process.env[CAWCO_ENV.hubUrl] = url;
     const { catalog } = yield* Effect.promise(() => reading);
@@ -856,12 +857,12 @@ const attach = (
      * which asks its server whether its turn is running before it is handed
      * back. Busy answers wait for them as they wait for claude's.
      */
-    const reattaching: Promise<void>[] = [];
+    const reattaching: Envelope[] = [];
     supervisor.registerDaemonFunction("sessionCustody", async () => ({
-      custody: await readCustody(
-        supervisor.stopSequence,
-        supervisor.custodyInstanceIds
-      ),
+      custody: await readCustody(supervisor.stopSequence, [
+        ...supervisor.custodyInstanceIds,
+        ...custodyIds,
+      ]),
       attached: supervisor.instanceIds,
     }));
     supervisor.registerDaemonFunction(
@@ -878,7 +879,9 @@ const attach = (
       const named = spawns.map((envelope) =>
         custodyRow(envelope.payload as SpawnPayload)
       );
-      const otherRecoveries = reattaching.splice(0);
+      const otherRecoveries = reattaching
+        .splice(0)
+        .map((envelope) => supervisor.dispatch(envelope));
       const recoverAttempt = async (signal: AbortSignal) => {
         const { attached, failed } = await supervisor.reattachFrom(
           ackPayload,
@@ -904,10 +907,10 @@ const attach = (
             .splice(0)
             .map((envelope) => supervisor.dispatch(envelope))
         );
-        const freshCustody = await readCustody(
-          supervisor.stopSequence,
-          supervisor.custodyInstanceIds
-        );
+        const freshCustody = await readCustody(supervisor.stopSequence, [
+          ...supervisor.custodyInstanceIds,
+          ...custodyIds,
+        ]);
         signal.throwIfAborted();
         send(socket, {
           verb: "heartbeat",
@@ -916,6 +919,7 @@ const attach = (
             at: Date.now(),
             instances: supervisor.instanceIds,
             custody: freshCustody,
+            custodyComplete: true,
           } satisfies HeartbeatPayload,
         });
         return attached;
@@ -981,6 +985,10 @@ const attach = (
     /** What arrives ahead of the register ack: custody, taken on the ack. Whether it was taken. */
     const beforeAck = (envelope: Envelope): boolean => {
       if (envelope.verb === "register") {
+        supervisor.declareHubContract(
+          (envelope.payload as { addressContract?: unknown })
+            .addressContract === true
+        );
         awaitingRegisterAck = false;
         const spawns = heldSpawns.splice(0);
         takeCustody(envelope.payload, spawns);
@@ -991,13 +999,18 @@ const attach = (
       }
       const spawn = envelope.payload as SpawnPayload | undefined;
       const reattachOnly = spawn?.reattachOnly;
+      const opencodeSpawn = spawn?.harness === "opencode";
+      const instanceId = spawn?.instanceId;
       if (adoptable(spawn)) {
         heldSpawns.push(envelope);
         custodyIds.add(spawn.instanceId);
         return true;
       }
-      if (reattachOnly) {
-        reattaching.push(supervisor.dispatch(envelope));
+      if (reattachOnly || opencodeSpawn) {
+        reattaching.push(envelope);
+        if (instanceId) {
+          custodyIds.add(instanceId);
+        }
         return true;
       }
       return false;
@@ -1055,10 +1068,10 @@ const attach = (
               at: Date.now(),
               sessionAddresses: supervisor.sessionAddresses,
               instances: supervisor.instanceIds,
-              custody: await readCustody(
-                supervisor.stopSequence,
-                supervisor.custodyInstanceIds
-              ),
+              custody: await readCustody(supervisor.stopSequence, [
+                ...supervisor.custodyInstanceIds,
+                ...custodyIds,
+              ]),
               ...(changedPiAuth() ? { harnesses: reportedHarnesses } : {}),
               ...(latestDeploy() ? { deploy: latestDeploy() } : {}),
             } satisfies HeartbeatPayload,

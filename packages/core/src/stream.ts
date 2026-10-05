@@ -174,6 +174,7 @@ export interface IngestMark {
 
 /** `register`'s ack, with the ledger the returning agent reattaches against. */
 export interface RegisterAckPayload {
+  addressContract?: true;
   /**
    * Per instance id. ABSENT from a hub that predates this — which is not an
    * empty ledger: the difference is what stops an agent replaying a backlog

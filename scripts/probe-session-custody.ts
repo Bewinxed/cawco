@@ -11,6 +11,7 @@ const [role, scratch, portText, old] = process.argv.slice(2);
 const machine = "ownership-proof";
 const pathEnv = { PATH: process.env.PATH ?? "/usr/bin:/bin" };
 const CALLBACK_SOURCE = /packages\/agent\/src\/mcp-oauth\.ts$/;
+const MAIN_BASE = "cf00ab303c89b2685186083af25f267a23bbd41b";
 
 async function delay(ms: number) {
   await new Promise<void>((done) => setTimeout(done, ms));
@@ -52,9 +53,90 @@ if (role && scratch) {
   });
 }
 
-if (role === "sessiond") {
+if (role === "migration-main") {
+  const require = createRequire(join(root, "packages/hub/package.json"));
+  const { drizzle } = await import(require.resolve("drizzle-orm/bun-sqlite"));
+  const { migrate } = await import(
+    require.resolve("drizzle-orm/bun-sqlite/migrator")
+  );
+  const { Database } = await import("bun:sqlite");
+  migrate(drizzle(join(scratch, "hub.db")), {
+    migrationsFolder: join(scratch, "old/packages/hub/drizzle"),
+  });
+  const db = new Database(join(scratch, "hub.db"));
+  const columns = db.query("PRAGMA table_info(instances)").all() as {
+    name: string;
+  }[];
+  assert.ok(columns.some((column) => column.name === "cache_cold"));
+  assert.ok(columns.some((column) => column.name === "last_ping_usage"));
+  assert.ok(!columns.some((column) => column.name === "keep_alive_misses"));
+  assert.ok(!columns.some((column) => column.name === "end_intent"));
+  assert.equal(
+    (
+      db
+        .query("SELECT MAX(created_at) AS last FROM __drizzle_migrations")
+        .get() as { last: number }
+    ).last,
+    1_791_060_000_006
+  );
+  const workColumns = db.query("PRAGMA table_info(work_items)").all() as {
+    name: string;
+  }[];
+  assert.ok(workColumns.some((column) => column.name === "wait_resume_by"));
+  assert.ok(workColumns.some((column) => column.name === "wait_history"));
+  db.query(
+    "INSERT INTO agents(machine_id, hostname, os, created_at) VALUES(?, ?, ?, ?)"
+  ).run(machine, machine, "private", Date.now());
+  const insert = db.query(
+    "INSERT INTO instances(id,machine_id,cwd,status,harness,session_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)"
+  );
+  for (const [id, status, harness, key] of [
+    ["migrated-stop", "stopped", "opencode", "ses_migrated"],
+    ["migrated-discard", "discarded", "claude", "conversation-migrated"],
+    ["migrated-legacy", "discarded", "opencode", null],
+    ["migrated-kept", "sleeping", "claude", "conversation-kept"],
+  ]) {
+    insert.run(
+      id,
+      machine,
+      scratch,
+      status,
+      harness,
+      key,
+      Date.now(),
+      Date.now()
+    );
+  }
+  db.close();
+  console.log(`MAIN_SCHEMA_READY ${MAIN_BASE}`);
+} else if (role === "sessiond") {
   await import("../packages/sessiond/src/main");
 } else if (role === "hub") {
+  if (old === "old") {
+    Bun.plugin({
+      name: "main-hub-protocol",
+      setup(build) {
+        for (const file of [
+          "packages/hub/src/server.ts",
+          "packages/hub/src/db/index.ts",
+          "packages/hub/src/db/schema.ts",
+          "packages/core/src/index.ts",
+        ]) {
+          build.onLoad(
+            {
+              filter: new RegExp(
+                `${file.replaceAll("/", "\\/").replaceAll(".", "\\.")}$`
+              ),
+            },
+            async () => ({
+              contents: await Bun.file(join(scratch, "old", file)).text(),
+              loader: "ts",
+            })
+          );
+        }
+      },
+    });
+  }
   const { Effect, Layer } = await import(
     createRequire(join(root, "packages/hub/package.json")).resolve("effect")
   );
@@ -206,6 +288,7 @@ if (role === "sessiond") {
               name: string;
               timeoutMinutes: number;
               prompt: string;
+              program?: string;
             };
             const id = crypto.randomUUID();
             db.putWorkflow({
@@ -216,11 +299,84 @@ if (role === "sessiond") {
               graph: null,
               origin: "code",
               inputs: [],
-              program: `import { z } from "zod"; export const inputs = z.object({}); export default async function(w) { return await w.run({ title: ${JSON.stringify(data.name)}, harness: "claude", model: "stand-in", prompt: ${JSON.stringify(data.prompt)}, timeoutMinutes: ${data.timeoutMinutes}, retries: 1, output: z.object({ ok: z.boolean() }) }); }`,
+              program:
+                data.program ??
+                `import { z } from "zod"; export const inputs = z.object({}); export default async function(w) { return await w.run({ title: ${JSON.stringify(data.name)}, harness: "claude", model: "stand-in", prompt: ${JSON.stringify(data.prompt)}, timeoutMinutes: ${data.timeoutMinutes}, retries: 1, output: z.object({ ok: z.boolean() }) }); }`,
             });
             return { id };
           })
           .get("/proof/rows", () => db.sessionOwnership())
+          .get("/proof/schema", () => {
+            const database = new Database(process.env.CAWCO_DB_PATH, {
+              readonly: true,
+            });
+            const columns = database
+              .query("PRAGMA table_info(instances)")
+              .all();
+            const migrations = database
+              .query("SELECT MAX(created_at) AS last FROM __drizzle_migrations")
+              .get();
+            database.close();
+            return { columns, migrations };
+          })
+          .post("/proof/owed", ({ body }) => {
+            const input = body as {
+              id: string;
+              intent: "stop" | "delete";
+              confirmed?: boolean;
+            };
+            db.endInstance(input.id, input.intent);
+            if (input.confirmed) {
+              db.confirmInstanceEnd(input.id);
+            }
+            return { ok: true };
+          })
+          .post("/proof/continuation", () => {
+            const id = "summary-proof-continuation";
+            const source = {
+              instanceId: "workflow-supervisor-review",
+              machineId: machine,
+              cwd: scratch,
+              title: "Private continuation",
+              model: "stand-in",
+              harness: "claude" as const,
+            };
+            db.insertContinuation({
+              id,
+              sourceInstanceId: source.instanceId,
+              summariserInstanceId: "summary-proof-summariser",
+              targetInstanceId: "summary-proof-target",
+              stage: "summarising",
+              summary: null,
+              error: null,
+              openingUuid: crypto.randomUUID(),
+              request: {
+                summarizer: { harness: "claude", model: "stand-in" },
+                target: {
+                  harness: "claude",
+                  model: "stand-in",
+                  machineId: machine,
+                  cwd: scratch,
+                },
+              },
+              prepared: {
+                source,
+                prompt: "private-summary-proof",
+                extracted: {
+                  artifacts: "",
+                  middle: ["private history"],
+                  tail: "private tail",
+                },
+                compacted: false,
+                entries: { live: 1, whole: 1, scope: 1 },
+                liveContextTokens: 100,
+                openingTokens: 100,
+                summariseInputTokens: 100,
+              },
+            });
+            return { id };
+          })
+          .get("/proof/continuations", () => db.continuationRows())
           .get("/proof/visible", () => ({
             rows: db.listInstances(),
             byId: db.getInstancesByIds(
@@ -302,13 +458,69 @@ if (role === "sessiond") {
           session_id: sessionKey,
           cwd: ctx.cwd,
         }),
-      control: async () => undefined,
+      control: (method) => {
+        if (method === "proofComplete") {
+          ctx.frame({
+            type: "result",
+            subtype: "success",
+            is_error: false,
+            uuid: crypto.randomUUID(),
+            result: "private summary preserved",
+          });
+        }
+        if (method === "proofProviderRetry") {
+          ctx.frame({
+            type: "system",
+            subtype: "provider_retry",
+            retry: {
+              message: "private delayed provider",
+              nextAttemptAt: Date.now() + 86_400_000,
+            },
+          });
+        }
+        return Promise.resolve(undefined);
+      },
       resolvePermission: () => undefined,
       interrupt: async () => undefined,
       dispose: async () => undefined,
       send: (message) => {
         log(`TURN ${ctx.instanceId}`).catch(console.error);
         const { content } = message.message;
+        if (
+          typeof content === "string" &&
+          content.includes("private-held-midturn")
+        ) {
+          writeFile(
+            join(scratch, `busy-${ctx.instanceId}`),
+            "private active turn"
+          ).catch(console.error);
+          ctx.busy(true);
+        }
+        if (
+          typeof content === "string" &&
+          content.includes("Previous attempt:")
+        ) {
+          log(`RETRY_PROMPT ${ctx.instanceId}`).catch(console.error);
+        }
+        if (
+          typeof content === "string" &&
+          content.includes("private-summary-proof")
+        ) {
+          writeFile(
+            transcript(`conversation-${ctx.instanceId}`),
+            "private summary"
+          )
+            .then(() => {
+              ctx.frame({
+                type: "result",
+                subtype: "success",
+                is_error: false,
+                uuid: crypto.randomUUID(),
+                result: "private summary preserved",
+              });
+            })
+            .catch(console.error);
+        }
         if (typeof content === "string" && content.includes("[Workflow ")) {
           log(`NOTICE ${ctx.instanceId} ${content}`).catch(console.error);
         }
@@ -328,6 +540,12 @@ if (role === "sessiond") {
         }
       },
       stop: async () => {
+        while (
+          // biome-ignore lint/performance/noAwaitInLoops: private gate makes an actual stop outlast the hub's normal halt window
+          await Bun.file(join(scratch, `pause-stop-${ctx.instanceId}`)).exists()
+        ) {
+          await delay(100);
+        }
         await endProc(client, procId(kind, ctx.instanceId));
       },
     });
@@ -356,7 +574,25 @@ if (role === "sessiond") {
         (await Bun.file(transcript(key)).exists())
           ? { sessionId: key, harness: kind, lastModified: Date.now() }
           : undefined,
-      getSessionMessages: async () => [],
+      getSessionMessages: async (key) =>
+        key.includes("summary-proof-summariser")
+          ? [
+              {
+                type: "assistant",
+                uuid: "private-summary-entry",
+                session_id: key,
+                parent_agent_id: null,
+                parent_tool_use_id: null,
+                turnEnd: true,
+                message: {
+                  role: "assistant",
+                  content: [
+                    { type: "text", text: "private summary preserved" },
+                  ],
+                },
+              },
+            ]
+          : [],
       renameSession: async () => undefined,
       tagSession: async () => undefined,
       deleteSession: async (key) => {
@@ -427,7 +663,7 @@ if (role === "sessiond") {
           ),
         };
       },
-      turnRunning: async () => false,
+      turnRunning: async (id) => Bun.file(join(scratch, `busy-${id}`)).exists(),
       adopt: async (id, ctx) => {
         const count = (attempts.get(id) ?? 0) + 1;
         attempts.set(id, count);
@@ -506,11 +742,15 @@ if (role === "sessiond") {
     [
       "git",
       "archive",
-      "ef6be1f9",
+      MAIN_BASE,
       "packages/agent/src/daemon.ts",
       "packages/agent/src/session.ts",
       "packages/agent/src/sessiond-custody.ts",
       "packages/core/src/index.ts",
+      "packages/hub/src/server.ts",
+      "packages/hub/src/db/index.ts",
+      "packages/hub/src/db/schema.ts",
+      "packages/hub/drizzle",
     ],
     { cwd: root, env: pathEnv, stdout: "pipe", stderr: "pipe" }
   );
@@ -619,8 +859,8 @@ if (role === "sessiond") {
       }
     });
   };
-  const startHub = async () => {
-    hub = launch("hub");
+  const startHub = async (previous = false) => {
+    hub = launch("hub", previous);
     await readyHub();
   };
   const readyAgent = () =>
@@ -718,7 +958,40 @@ if (role === "sessiond") {
         ),
       (client) => !!client
     );
+    const migrated = launch("migration-main");
+    assert.equal(await migrated.exited, 0);
     await startHub();
+    const migratedSchema = await api("/proof/schema");
+    assert.equal(migratedSchema.migrations.last, 1_791_060_000_007);
+    assert.ok(
+      migratedSchema.columns.some(
+        (column: { name: string }) => column.name === "end_intent"
+      )
+    );
+    const migratedRows = await api("/proof/rows");
+    assert.ok(
+      migratedRows.find((owner: { id: string }) => owner.id === "migrated-stop")
+        .endConfirmedAt
+    );
+    assert.ok(
+      migratedRows.find(
+        (owner: { id: string }) => owner.id === "migrated-discard"
+      ).endConfirmedAt
+    );
+    assert.equal(
+      migratedRows.find(
+        (owner: { id: string }) => owner.id === "migrated-legacy"
+      ).endConfirmedAt,
+      null
+    );
+    assert.equal(
+      migratedRows.find((owner: { id: string }) => owner.id === "migrated-kept")
+        .endIntent,
+      null
+    );
+    console.log(
+      `SECOND 1 main ${MAIN_BASE} 0071 and 0072 database migrates on branch hub startup to 0073 and backfills correctly`
+    );
     await seed("offline-stop");
     await startAgent();
     await disconnect();
@@ -1108,7 +1381,12 @@ if (role === "sessiond") {
       () => row("discarded-before"),
       (owner) => !!owner?.endConfirmedAt
     );
-    assert.equal(await alive("discarded-before"), true);
+    await until(
+      "fresh held historical row is ended",
+      () => alive("discarded-before"),
+      (value) => !value
+    );
+    assert.equal(await alive("discarded-before"), false);
     assert.equal(
       (await events())
         .slice(before.length)
@@ -1118,6 +1396,9 @@ if (role === "sessiond") {
     pass(
       11,
       "discard survives hub crash; historically confirmed discard sends no stop or repeated teardown"
+    );
+    console.log(
+      "SECOND 7 fresh held custody clears historical confirmation and the owed stop proceeds"
     );
 
     await disconnect();
@@ -1686,7 +1967,13 @@ if (role === "sessiond") {
         assert.equal(heldRun.attempts[0].endedAt, null);
         assert.equal(heldRun.attempts[0].failure, null);
         assert.equal(heldRun.steps[0].status, "running");
-        assert.ok(heldRun.steps[0].failure.includes("Attempt timed out at"));
+        assert.ok(
+          heldRun.steps[0].failure.includes(
+            kind === "timeout"
+              ? "Attempt timed out at"
+              : "private provider wait exceeds deadline"
+          )
+        );
         if (kind === "timeout") {
           await api(`/api/workflow-runs/${runId}/steer`, {
             instanceId: "workflow-supervisor-review",
@@ -1743,10 +2030,341 @@ if (role === "sessiond") {
       await workflowCase(kind);
     }
 
-    const legacyFile = Bun.file(
+    await disconnect();
+    await startAgent(true);
+    send("spawn", "workflow-supervisor-review", {
+      cwd: scratchDir,
+      harness: "claude",
+      model: "stand-in",
+    });
+    await until(
+      "old supervisor for child-outcome proof",
+      () => api("/api/instances"),
+      (owners) =>
+        owners.some(
+          (owner: { id: string; status: string }) =>
+            owner.id === "workflow-supervisor-review" &&
+            owner.status === "running"
+        )
+    );
+    const midDefinition = await api("/proof/workflow", {
+      name: "Private held workflow restart",
+      timeoutMinutes: 60,
+      prompt: "private-held-midturn",
+    });
+    const midRun = await api(`/api/workflows/${midDefinition.id}/runs`, {
+      workspace: { machineId: machine, path: scratchDir },
+      supervisor: { instanceId: "workflow-supervisor-review" },
+    });
+    const midDetail = () => api(`/api/workflow-runs/${midRun.runId}`);
+    const midStarted = await until(
+      "workflow turn is owned before restart",
+      midDetail,
+      (run) => run.attempts.length === 1 && run.steps[0].status === "running"
+    );
+    const [midStep] = midStarted.steps;
+    await until(
+      "fixture records its active turn",
+      () => Bun.file(join(scratchDir, `busy-${midStep.instanceId}`)).exists(),
+      Boolean
+    );
+    const midPid = (await holder?.list())?.procs.find(
+      (proc) => proc.procId === midStep.instanceId
+    )?.pid;
+    await disconnect();
+    await startAgent();
+    await until("held workflow is reattached", events, (text) =>
+      text.includes(`ATTACH ${midStep.instanceId}`)
+    );
+    await delay(300);
+    assert.equal((await midDetail()).attempts.length, 1);
+    assert.equal((await midDetail()).attempts[0].endedAt, null);
+    assert.equal(
+      (await holder?.list())?.procs.find(
+        (proc) => proc.procId === midStep.instanceId
+      )?.pid,
+      midPid
+    );
+    assert.ok(!(await events()).includes(`RETRY_PROMPT ${midStep.instanceId}`));
+    await api(`/api/workflow-runs/${midRun.runId}/cancel`, {});
+    await until(
+      "mid-turn fixture confirmed end",
+      midDetail,
+      (run) => run.status === "cancelled"
+    );
+    console.log(
+      "SECOND moving-main custody keeps a workflow mid-turn on attempt one and its original child across restart"
+    );
+    await disconnect();
+    await startAgent(true);
+    send("spawn", "workflow-supervisor-review", {
+      cwd: scratchDir,
+      harness: "claude",
+      model: "stand-in",
+    });
+    await until(
+      "old supervisor restored for child outcome",
+      () => api("/api/instances"),
+      (owners) =>
+        owners.some(
+          (owner: { id: string; status: string }) =>
+            owner.id === "workflow-supervisor-review" &&
+            owner.status === "running"
+        )
+    );
+    const childDefinition = await api("/proof/workflow", {
+      name: "Private child completion",
+      timeoutMinutes: 60,
+      prompt: "private-child-completion",
+    });
+    const parentDefinition = await api("/proof/workflow", {
+      name: "Private parent completion",
+      timeoutMinutes: 60,
+      prompt: "unused",
+      program: `import { z } from "zod"; export const inputs = z.object({}); export default async function(w) { return await w.workflow(${JSON.stringify(`private-${childDefinition.id}`)}, {}); }`,
+    });
+    const parentRun = await api(`/api/workflows/${parentDefinition.id}/runs`, {
+      workspace: { machineId: machine, path: scratchDir },
+      supervisor: { instanceId: "workflow-supervisor-review" },
+    });
+    const parentDetail = () => api(`/api/workflow-runs/${parentRun.runId}`);
+    const openedParent = await until(
+      "child run opens",
+      parentDetail,
+      (run) => !!run.steps[0]?.childRunId
+    );
+    const childId = openedParent.steps[0].childRunId;
+    const childDetail = () => api(`/api/workflow-runs/${childId}`);
+    const openedChild = await until(
+      "child owned attempt starts",
+      childDetail,
+      (run) => run.attempts.length === 1 && run.steps[0].status === "running"
+    );
+    const [childStep] = openedChild.steps;
+    const recordedChild = await fetch(
+      `${base}/api/workflow-steps/${childStep.id}/result`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          instanceId: childStep.instanceId,
+          result: { ok: true },
+        }),
+      }
+    );
+    assert.equal(recordedChild.status, 200);
+    assert.ok((await recordedChild.text()).includes("Recorded"));
+    send("control", childStep.instanceId, {
+      requestId: crypto.randomUUID(),
+      method: "proofComplete",
+      args: [],
+    });
+    const completedParent = await until(
+      "successful child reports while cleanup refuses",
+      parentDetail,
+      (run) => run.status === "done"
+    );
+    const completedChild = await childDetail();
+    assert.equal(completedChild.status, "done");
+    assert.deepEqual(completedParent.result, { ok: true });
+    assert.equal(completedChild.state.__ending, undefined);
+    assert.equal((await row(childStep.instanceId))?.endIntent, "stop");
+    assert.equal((await row(childStep.instanceId))?.endConfirmedAt, null);
+    const childEndTime = completedChild.endedAt;
+    const beforeLateInit = (await events()).length;
+    send("spawn", childStep.instanceId, {
+      cwd: scratchDir,
+      harness: "claude",
+      model: "stand-in",
+    });
+    await until("ended-run instance comes up", events, (text) =>
+      text.slice(beforeLateInit).includes(`SPAWN ${childStep.instanceId}`)
+    );
+    await delay(100);
+    assert.equal((await childDetail()).status, "done");
+    assert.equal((await childDetail()).endedAt, childEndTime);
+    assert.deepEqual((await parentDetail()).result, { ok: true });
+    console.log(
+      "SECOND 2 successful child and parent report done immediately despite refused cleanup"
+    );
+    console.log(
+      "SECOND 3 late init halts only its instance and preserves completed result and timestamp"
+    );
+
+    await api("/proof/continuation", {});
+    await disconnect();
+    await startAgent(true);
+    const continued = await until(
+      "continuation retains summary",
+      () => api("/proof/continuations"),
+      (jobs) =>
+        jobs.some(
+          (job: { id: string; stage: string }) =>
+            job.id === "summary-proof-continuation" && job.stage === "started"
+        )
+    );
+    const summaryJob = continued.find(
+      (job: { id: string }) => job.id === "summary-proof-continuation"
+    );
+    assert.equal(summaryJob.summary, "private summary preserved");
+    assert.equal(summaryJob.error, null);
+    assert.equal((await row("summary-proof-summariser"))?.endIntent, "stop");
+    console.log(
+      "SECOND continuation keeps summary and starts target while summariser stop remains owed"
+    );
+
+    await disconnect();
+    await startAgent();
+    const delayedDefinition = await api("/proof/workflow", {
+      name: "Private delayed end",
+      timeoutMinutes: 60,
+      prompt: "private-delayed-stop",
+    });
+    const delayedRun = await api(
+      `/api/workflows/${delayedDefinition.id}/runs`,
+      {
+        workspace: { machineId: machine, path: scratchDir },
+        supervisor: { instanceId: "workflow-supervisor-review" },
+      }
+    );
+    const delayedDetail = () => api(`/api/workflow-runs/${delayedRun.runId}`);
+    const delayedStarted = await until(
+      "delayed attempt starts",
+      delayedDetail,
+      (run) => run.attempts.length === 1 && run.steps[0].status === "running"
+    );
+    const [delayedStep] = delayedStarted.steps;
+    await writeFile(
+      join(scratchDir, `pause-stop-${delayedStep.instanceId}`),
+      "private slow stop"
+    );
+    send("control", delayedStep.instanceId, {
+      requestId: crypto.randomUUID(),
+      method: "proofProviderRetry",
+      args: [],
+    });
+    const heldDelayed = await until(
+      "slow stop exceeds halt wait",
+      delayedDetail,
+      (run) => !!run.state.__heldStops?.[delayedStep.id]?.error
+    );
+    assert.equal(heldDelayed.attempts.length, 1);
+    await rm(join(scratchDir, `pause-stop-${delayedStep.instanceId}`));
+    const confirmedLate = await until(
+      "late confirmation re-evaluates directly",
+      delayedDetail,
+      (run) => run.attempts.length === 2
+    );
+    assert.ok(confirmedLate.attempts[0].endedAt);
+    await api(`/api/workflow-runs/${delayedRun.runId}/cancel`, {});
+    await until(
+      "delayed fixture ends",
+      delayedDetail,
+      (run) => run.status === "cancelled"
+    );
+    console.log(
+      "SECOND 5 late confirmation starts one retry without reconnect or supervisor action"
+    );
+
+    const cancelledDefinition = await api("/proof/workflow", {
+      name: "Private cancel before open",
+      timeoutMinutes: 60,
+      prompt: "private-no-late-spawn",
+    });
+    const cancelledRun = await api(
+      `/api/workflows/${cancelledDefinition.id}/runs`,
+      {
+        workspace: { machineId: machine, path: scratchDir },
+        supervisor: { instanceId: "workflow-supervisor-review" },
+      }
+    );
+    await api(`/api/workflow-runs/${cancelledRun.runId}/cancel`, {});
+    await until(
+      "cancel wins before later opens",
+      () => api(`/api/workflow-runs/${cancelledRun.runId}`),
+      (run) => run.status === "cancelled"
+    );
+    const cancelledBefore = (await events()).length;
+    await delay(300);
+    assert.ok(!(await events()).slice(cancelledBefore).includes("SPAWN_BEGIN"));
+    console.log(
+      "SECOND 8 cancelled execution cannot write or spawn a later queued attempt"
+    );
+
+    await disconnect();
+    const preservedId = "preserved-stopped-sdk";
+    await seed(preservedId, { harness: "opencode", session: true });
+    await api("/proof/owed", {
+      id: preservedId,
+      intent: "stop",
+      confirmed: true,
+    });
+    await writeFile(
+      join(scratchDir, `conversation-${preservedId}.transcript`),
+      "private stored conversation"
+    );
+    await api(`/api/agents/${machine}`, undefined, "DELETE");
+    const hiddenStopped = (await api("/proof/rows")).find(
+      (owner: { id: string }) => owner.id === preservedId
+    );
+    assert.equal(hiddenStopped.endIntent, "stop");
+    assert.ok(hiddenStopped.endConfirmedAt);
+    const beforeUnhide = (await events()).length;
+    await startAgent();
+    await until(
+      "stopped conversation returns unchanged",
+      () => api("/api/instances"),
+      (owners) =>
+        owners.some(
+          (owner: { id: string; status: string }) =>
+            owner.id === preservedId && owner.status === "stopped"
+        )
+    );
+    assert.ok(
+      !(await events()).slice(beforeUnhide).includes(`ATTACH ${preservedId}`)
+    );
+    console.log(
+      "SECOND 4 removal preserves stopped intent and un-hides without restoration"
+    );
+
+    await disconnect();
+    await stop(hub);
+    dashboard?.close();
+    await startHub(true);
+    await startAgent();
+    send("spawn", "old-hub-new-agent-refusal", {
+      cwd: scratchDir,
+      harness: "opencode",
+      model: "stand-in",
+    });
+    await until(
+      "new agent refuses undeclared hub",
+      async () => JSON.stringify(dashboardFrames),
+      (text) => text.includes("The hub has not restarted onto this build yet")
+    );
+    const blockedHub = await api(`/api/agents/${machine}/busy`);
+    assert.equal(blockedHub.ready, false);
+    assert.ok(
+      blockedHub.error.includes("The hub has not restarted onto this build yet")
+    );
+    assert.ok(!(await events()).includes("SKILL old-hub-new-agent-refusal"));
+    await stop(hub);
+    dashboard?.close();
+    await startHub();
+    await readyAgent();
+    await until(
+      "new hub heals custody automatically",
+      () => api(`/api/agents/${machine}/busy`),
+      (busy) => busy.ready === true
+    );
+    console.log(
+      "SECOND both directions refuse with words and new hub declaration heals custody"
+    );
+
+    const metadataFile = Bun.file(
       join(root, ".context", "ownership", "legacy-null-metadata.json")
     );
-    const legacyRows = (await legacyFile.json()) as {
+    const legacyRows = (await metadataFile.json()) as {
       status: string;
       cwd: string;
       created_at: number;

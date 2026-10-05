@@ -214,6 +214,9 @@ export function createSteps(ctx: StepContext) {
     spec: StepSpecJson,
     previousError = ""
   ) => {
+    if (!active(runOf(run.id))) {
+      return;
+    }
     const number = (latest(step)?.number ?? 0) + 1;
     const notes = (run.state.__notes as string[] | undefined) ?? [];
     run.state = { ...run.state, __notes: [] };
@@ -523,7 +526,11 @@ export function createSteps(ctx: StepContext) {
       }
     } catch (error) {
       const refusal = reason(error);
-      const receipt = `Attempt timed out at ${new Date(decision.deadline).toISOString()}; its session could not be ended because ${refusal}. No retry starts until it is confirmed ended.${decision.action ? ` Recorded ${decision.action}; it takes effect after confirmation.` : ""}`;
+      const cause =
+        decision.failure === "attempt-timeout"
+          ? `Attempt timed out at ${new Date(decision.deadline).toISOString()}`
+          : decision.failure;
+      const receipt = `${cause}. Its session could not be ended because ${refusal}. No retry starts until it is confirmed ended.${decision.action ? ` Recorded ${decision.action}; it takes effect after confirmation.` : ""}`;
       step.failure = receipt;
       const tell = decision.error !== refusal || !!action;
       decision.error = refusal;
@@ -573,7 +580,31 @@ export function createSteps(ctx: StepContext) {
     return attempt;
   };
 
+  const recoverRun = (runId: string) =>
+    ctx
+      .serial(runId, async () => {
+        const run = runOf(runId);
+        if (!active(run)) {
+          return;
+        }
+        for (const [id, decision] of Object.entries(heldStops(run))) {
+          // biome-ignore lint/performance/noAwaitInLoops: positive end events and normal recovery serialize the same held attempt
+          await haltAttempt(
+            runOf(runId),
+            stepOf(id),
+            decision.deadline,
+            decision.failure
+          );
+        }
+        for (const [step, why] of deadAttempts(runOf(runId))) {
+          // biome-ignore lint/performance/noAwaitInLoops: each dead attempt settles before another starts
+          await ended(runOf(runId), step, why);
+        }
+      })
+      .catch(console.error);
+
   return {
+    recoverRun,
     /** Opens a `run`/`spawn` call's step once; a replay finds the row and leaves it. */
     open(run: WorkflowRunRow, seq: number, id: string, spec: StepSpecJson) {
       return ctx.serial(run.id, async () => {
@@ -817,25 +848,7 @@ export function createSteps(ctx: StepContext) {
       for (const run of db
         .listWorkflowRuns()
         .filter((row) => active(row) && row.machineId === machineId)) {
-        ctx
-          .serial(run.id, async () => {
-            for (const [id, decision] of Object.entries(
-              heldStops(runOf(run.id))
-            )) {
-              // biome-ignore lint/performance/noAwaitInLoops: a held stop settles before its next attempt may start
-              await haltAttempt(
-                runOf(run.id),
-                stepOf(id),
-                decision.deadline,
-                decision.failure
-              );
-            }
-            for (const [step, why] of deadAttempts(run)) {
-              // biome-ignore lint/performance/noAwaitInLoops: each dead attempt settles before the next is looked at
-              await ended(runOf(run.id), step, why);
-            }
-          })
-          .catch(console.error);
+        recoverRun(run.id);
       }
     },
     /**

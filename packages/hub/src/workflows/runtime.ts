@@ -62,6 +62,7 @@ export interface WorkflowRuntimeDeps {
     runId: string;
     step?: WorkflowStep;
   }) => void;
+  cleanup: (machineId: string, instanceId: string) => void;
   command: (
     machineId: string,
     cwd: string,
@@ -823,6 +824,35 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
     if (!active(run) || endingOf(runOf(run.id))) {
       return;
     }
+    if (status !== "cancelled") {
+      const sessions = [
+        ...new Set(
+          db
+            .listWorkflowSteps(run.id)
+            .flatMap((step) => (step.instanceId ? [step.instanceId] : []))
+        ),
+      ];
+      run.status = status;
+      run.failure = failure;
+      run.result = result;
+      run.endedAt = new Date();
+      closeSteps(run, status);
+      write(run);
+      notify(
+        run,
+        `${workflowNoticeMarker(nameOf(run), status)}run ${run.id} · ${durationText(Date.now() - run.startedAt.getTime())} · ${status === "done" ? receiptOf(result, "result") : failureText(failure ?? status)}`
+      );
+      reportToParent(run);
+      for (const instanceId of sessions) {
+        cleanupSession(run, instanceId);
+      }
+      for (const child of db
+        .listWorkflowRuns()
+        .filter((entry) => entry.parentRunId === run.id && active(entry))) {
+        finish(child, "cancelled");
+      }
+      return;
+    }
     const children = db
       .listWorkflowRuns()
       .filter(
@@ -931,6 +961,16 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
         notify(run, `Parent stop remains held: ${reason(error)}`)
       );
     }
+  };
+
+  const cleanupSession = (run: WorkflowRunRow, instanceId: string): void => {
+    deps.cleanup(run.machineId, instanceId);
+    deps.halt(run.machineId, instanceId).catch((error) => {
+      notify(
+        run,
+        `${workflowNoticeMarker(nameOf(run), "cleanup held")}Session ${instanceId} could not be ended because ${reason(error)}. Its stop is recorded and will be confirmed after its machine is ready.`
+      );
+    });
   };
 
   // ------------------------------------------------------------------ launch
@@ -1223,7 +1263,7 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
   /** A child run's outcome once its row has ended; undefined while it runs. */
   const childOutcomeOf = (childRunId: string): Outcome | undefined => {
     const child = db.getWorkflowRun(childRunId);
-    if (!child || active(child)) {
+    if (!child || active(child) || endingOf(child)) {
       return;
     }
     if (child.status === "done") {
@@ -1426,16 +1466,7 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
               notify(run, `Stop remains held: ${reason(error)}`)
             );
           } else {
-            const status =
-              run.status === "done" || run.status === "failed"
-                ? run.status
-                : "cancelled";
-            finish(
-              { ...run, status: "running" },
-              status,
-              run.failure,
-              run.result
-            );
+            cleanupSession(run, instanceId);
           }
         }
       }
@@ -1732,6 +1763,19 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
       }
       steps.recover(machineId);
       flushNotices();
+    },
+    endConfirmed(runId: string) {
+      const run = db.getWorkflowRun(runId);
+      if (!run) {
+        return;
+      }
+      if (endingOf(run)) {
+        serial(runId, () => endRunSessions(runId)).catch((error) =>
+          notify(run, `Stop remains held: ${reason(error)}`)
+        );
+      } else {
+        steps.recoverRun(runId);
+      }
     },
     /** A run whose row changed outside the engine (seen, archived): every dashboard hears it. */
     announce: (run: WorkflowRunRow) => announce(run),

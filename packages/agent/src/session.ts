@@ -68,7 +68,11 @@ import { harnessMcpUrl } from "./delegation";
 import { DEPLOY_BRANCH } from "./deploy";
 import { expandHome, runFs } from "./fs";
 import type { Harness, HarnessContext, HarnessSession } from "./harness";
-import { HarnessRecoveryRefused, SessionAddressRefused } from "./harness";
+import {
+  HarnessRecoveryRefused,
+  HubContractRefused,
+  SessionAddressRefused,
+} from "./harness";
 import { harnesses, harness as harnessOf } from "./harnesses";
 import { hashText, readJson, writeJson } from "./harnesses/fleet-common";
 import { generateImage } from "./image-generation";
@@ -445,6 +449,23 @@ export const agreedHashes = (
 };
 
 export class SessionSupervisor {
+  #hubContract = false;
+  readonly #hubRefusal =
+    "The hub has not restarted onto this build yet. Restart the hub, then retry.";
+
+  setHubContract(supported: boolean): void {
+    this.#hubContract = supported;
+  }
+
+  declareHubContract(supported: boolean): void {
+    this.setHubContract(supported);
+    if (!supported) {
+      for (const pending of this.#addressWaiting.values()) {
+        pending.ack.reject(new HubContractRefused(this.#hubRefusal));
+      }
+    }
+  }
+
   #stopSequence = 0;
 
   get stopSequence(): number {
@@ -823,6 +844,11 @@ export class SessionSupervisor {
   }
 
   completeCustody(epoch: number): void {
+    // biome-ignore lint/suspicious/noUnnecessaryConditions: register declarations mutate this connection-local contract before custody completion
+    if (!this.#hubContract) {
+      this.failCustody(epoch, new HubContractRefused(this.#hubRefusal));
+      return;
+    }
     if (epoch === this.#custodyEpoch) {
       this.#custodyState = "ready";
       this.#custodyError = undefined;
@@ -1446,7 +1472,7 @@ export class SessionSupervisor {
     const claim = Promise.withResolvers<void>();
     this.#adopting.set(id, claim.promise);
     try {
-      await this.#spawnClaimed(payload);
+      await this.#spawnClaimed(payload, claim.resolve);
     } finally {
       if (this.#adopting.get(id) === claim.promise) {
         this.#adopting.delete(id);
@@ -1456,7 +1482,10 @@ export class SessionSupervisor {
   }
 
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one claimed spawn owns preparation, address acknowledgement, publication and refusal cleanup
-  async #spawnClaimed(payload: SpawnPayload): Promise<void> {
+  async #spawnClaimed(
+    payload: SpawnPayload,
+    settleClaim: () => void
+  ): Promise<void> {
     const { instanceId, cwd, harness: kind, scratch, requestId: ack } = payload;
     if (payload.processGeneration) {
       this.#generations.set(instanceId, payload.processGeneration);
@@ -1470,6 +1499,9 @@ export class SessionSupervisor {
       });
     }
     try {
+      if (adapter.kind === "opencode" && !this.#hubContract) {
+        throw new HubContractRefused(this.#hubRefusal);
+      }
       if (payload.scratchWorktree) {
         this.#worktrees.set(instanceId, payload.scratchWorktree);
       }
@@ -1485,26 +1517,38 @@ export class SessionSupervisor {
         // A resume can also arrive after a failed custody attachment. Read
         // sessiond and join adoption before allowing the normal absent-process
         // spawn; an attachment failure never authorises replacing a held child.
-        const failed = new Set<string>();
-        await this.reattach(
-          [
-            {
+        const candidate = adapter as Harness & Partial<SessiondAdoption>;
+        if (
+          candidate.custodyCandidates &&
+          candidate.adopt &&
+          candidate.turnRunning
+        ) {
+          const welcome = await candidate.custodyCandidates();
+          const proc = welcome.procs.find((held) => {
+            const identity = parseProcId(held.procId);
+            return (
+              held.alive &&
+              (identity.kind === "claude" || identity.kind === "pi") &&
+              identity.instanceId === instanceId
+            );
+          });
+          if (proc) {
+            const row = {
               instanceId,
               cwd: workdir,
               sessionId: payload.resume.sessionKey,
               sessionCredential: payload.sessionCredential,
               processGeneration: payload.processGeneration,
               keepAliveTurn: payload.keepAliveTurn,
-            },
-          ],
-          Object.fromEntries(this.#ingested),
-          undefined,
-          failed
-        );
-        if (failed.has(instanceId)) {
-          throw new Error(
-            "The held session could not be adopted; refusing to replace its process."
-          );
+            };
+            const running = await candidate.turnRunning(instanceId, proc.head);
+            await this.#adoptClaimed(
+              candidate as Harness & SessiondAdoption,
+              welcome.epoch,
+              { row, proc, running, settle: settleClaim },
+              Object.fromEntries(this.#ingested)
+            );
+          }
         }
         if (this.#reuseRecovery(payload)) {
           return;
@@ -1623,6 +1667,19 @@ export class SessionSupervisor {
         });
       }
     } catch (error) {
+      if (error instanceof HubContractRefused) {
+        this.#fail(instanceId, error, payload.processGeneration);
+        if (ack) {
+          this.sink({
+            kind: "control_result",
+            instanceId,
+            requestId: ack,
+            ok: false,
+            error: error.message,
+          });
+        }
+        return;
+      }
       const cancelled = this.#addressCancelled.delete(instanceId);
       if (cancelled || payload.reattachOnly) {
         return;
@@ -2396,6 +2453,9 @@ export class SessionSupervisor {
     try {
       const session = this.#sessions.get(instanceId);
       const kind = harness ?? session?.harness;
+      if (kind === "opencode" && !this.#hubContract) {
+        throw new HubContractRefused(this.#hubRefusal);
+      }
       let ended: Extract<FramePayload, { kind: "stopped" }>["ended"];
       let sharedConversation = false;
       if (kind === "opencode") {

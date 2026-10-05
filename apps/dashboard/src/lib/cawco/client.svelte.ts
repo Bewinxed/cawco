@@ -3904,12 +3904,28 @@ export async function ensureAlive(
 }
 
 export function stopSession(instanceId: string, machineId: string): void {
-  const payload: StopPayload = { instanceId };
-  send({ verb: "stop", machineId, instanceId, payload });
-
+  const target = session(instanceId);
+  const before = {
+    busy: target.busy,
+    currentTool: target.currentTool,
+    openBlock: target.openBlock,
+    thinkingStream: target.thinkingStream,
+    thinkingClosing: target.thinkingClosing,
+    thinkingSince: target.thinkingSince,
+    pending: target.pending,
+    workingSince: target.workingSince,
+  };
+  const requestId = newId();
+  const payload: StopPayload = { instanceId, requestId };
   settleStopped(instanceId);
-  // biome-ignore lint/complexity/noVoid: fire-and-forget — the stop already landed, this just resyncs the fleet list
-  void refresh();
+  ask<void>(requestId, "stop", CONTROL_TIMEOUT_MS, () =>
+    send({ verb: "stop", machineId, instanceId, requestId, payload })
+  )
+    .catch((error: unknown) => {
+      Object.assign(target, before);
+      toast.error(error instanceof Error ? error.message : String(error));
+    })
+    .finally(() => refresh());
 }
 
 /**

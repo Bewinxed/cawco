@@ -510,7 +510,7 @@ const registerAck = (
 ): Envelope<RegisterAckPayload> => ({
   verb: envelope.verb,
   machineId: envelope.machineId,
-  payload: { ok: true, ingested },
+  payload: { ok: true, ingested, addressContract: true },
 });
 
 /** Sent back as a frame, the only verb a dashboard renders. */
@@ -4142,17 +4142,79 @@ export const createServer = (
       handle: (ws: S, message: unknown) => Promise<void>
     ) =>
     (ws: S, message: unknown): Promise<void> =>
-      handle(ws, message).catch((error: unknown) => {
-        const reason = error instanceof Error ? error.message : String(error);
-        console.error(`[hub] agent websocket handler failed: ${reason}`);
-        ws.close(
-          1011,
-          "Agent registration or message failed; reconnect to retry custody."
-        );
-      });
+      handle(ws, message).catch(
+        // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: acknowledgement failures and correlated request failures share one socket error policy with explicit traces
+        (error: unknown) => {
+          const reason = error instanceof Error ? error.message : String(error);
+          if (!isEnvelope(message)) {
+            console.error(`[hub] malformed agent frame failed: ${reason}`);
+            return;
+          }
+          console.error(
+            `[hub] ${message.verb} for ${message.instanceId ?? "the machine"} failed: ${reason}`
+          );
+          const awaitsAddress =
+            message.verb === "frames" &&
+            peek(message.payload, "kind") === "session_address";
+          const replaysAddresses =
+            message.verb === "heartbeat" &&
+            !!addressClaims(message.payload)?.length;
+          if (
+            message.verb === "register" ||
+            awaitsAddress ||
+            replaysAddresses
+          ) {
+            ws.close(
+              1011,
+              "Session acknowledgement failed. Reconnect to retry custody."
+            );
+            return;
+          }
+          const requestId =
+            message.requestId ?? peek(message.payload, "requestId");
+          if (requestId) {
+            const frame: ControlResult = {
+              kind: "control_result",
+              requestId,
+              ok: false,
+              error: reason,
+            };
+            const waitingReply = waiting.get(requestId);
+            if (waitingReply) {
+              waitingReply(frame);
+            }
+            streams.settleCommand(requestId, frame);
+            const requester = registry.takeRequester(requestId);
+            if (requester) {
+              toDashboard(requester, {
+                ...message,
+                verb: "frames",
+                requestId,
+                payload: frame,
+              });
+            }
+          }
+        }
+      );
   const recoveringRemoved = new Set<string>();
   const lifecycle = createSessionLifecycle({
     db,
+    machineName: (machineId) => {
+      const machine = db
+        .listAgents()
+        .find((agent) => agent.machineId === machineId);
+      if (!machine) {
+        throw new Error(
+          "This machine is no longer registered. Register its agent, then retry."
+        );
+      }
+      return machine.hostname;
+    },
+    confirmed: (row) => {
+      if (row.workflowStepId && row.workflowRunId) {
+        workflowRuntime.endConfirmed(row.workflowRunId);
+      }
+    },
     ready: (machineId) =>
       registry.agent(machineId)
         ? addressProtocolMachines.has(machineId)
@@ -4204,12 +4266,9 @@ export const createServer = (
               ) {
                 db.settleRemovedSession(result.id, result.present);
                 if (result.present) {
-                  const row = db.ownedInstance(result.id, machineId);
-                  const agent = registry.agent(machineId);
-                  if (row && agent && !row.endIntent) {
-                    restore(agent, row, true);
-                  }
-                } else {
+                  lifecycle.preserveUnattached(result.id);
+                }
+                if (!result.present) {
                   forgetInstances([result.id]);
                 }
               }
@@ -4353,7 +4412,7 @@ export const createServer = (
    * restarted agent had already lost would otherwise sit `sleeping` forever.
    */
   const retireSummariser = (machineId: string, instanceId: string): void => {
-    endSession(instanceId, "stop");
+    lifecycle.oweEndSession(instanceId, "stop");
     forgetPending(instanceId, UNREAD.stopped);
     publishInstances(machineId);
   };
@@ -6853,12 +6912,21 @@ export const createServer = (
     }
   }
   const workflowRuntime = createWorkflowRuntime({
-    custodyPending: (machineId, instanceId) =>
-      machineCustody.get(machineId)?.state !== "available" ||
-      unownedProcesses.get(machineId) === null ||
-      (heldProcesses.get(machineId)?.has(instanceId) ?? false),
+    custodyPending: (machineId, instanceId) => {
+      const custody = machineCustody.get(machineId);
+      return (
+        !registry.agent(machineId) ||
+        custody?.state !== "available" ||
+        custody.instances.includes(instanceId) ||
+        custody.pending?.includes(instanceId) === true ||
+        inCustody.has(instanceId) ||
+        heldSessions.has(instanceId)
+      );
+    },
     db,
     dbPath: DB_PATH,
+    cleanup: (_machineId, instanceId) =>
+      lifecycle.oweEndSession(instanceId, "stop"),
     online: (machineId) => !!registry.agent(machineId),
     emit: (envelope) => {
       if (envelope.verb === "stop" && envelope.instanceId) {
@@ -7800,7 +7868,14 @@ export const createServer = (
             );
           }
         }
-        endSession(row.id, "delete");
+        try {
+          endSession(row.id, "delete");
+        } catch (error) {
+          return status(
+            409,
+            error instanceof Error ? error.message : String(error)
+          );
+        }
         forgetInstances([row.id]);
         publishInstances(row.machineId);
         return { ok: true };
@@ -10216,6 +10291,12 @@ export const createServer = (
               // with the sessions they belonged to, or they replay to every
               // dashboard that connects and fail on click.
               const registrationCustody = peekCustody(message.payload);
+              const returningRemoved = new Set(
+                db
+                  .sessionOwnership(message.machineId)
+                  .filter((row) => row.machineRemoved)
+                  .map((row) => row.id)
+              );
               db.restoreRemovedSessions(
                 message.machineId,
                 [
@@ -10226,6 +10307,9 @@ export const createServer = (
                 ],
                 registrationCustody.state === "available"
               );
+              for (const id of returningRemoved) {
+                lifecycle.preserveUnattached(id);
+              }
               const settled = db.settleInstances(
                 message.machineId,
                 peekInstances(message.payload),
@@ -10370,7 +10454,10 @@ export const createServer = (
                 ...held,
                 ...fresh.filter(({ row }) => !row.workflowStepId),
               ].filter(
-                ({ row }) => !row.endIntent && row.kind !== "summariser"
+                ({ row }) =>
+                  !row.endIntent &&
+                  row.kind !== "summariser" &&
+                  !returningRemoved.has(row.id)
               );
               let restoreBatch = 0;
               for (const orphan of revivable) {
@@ -10412,6 +10499,7 @@ export const createServer = (
                   if (
                     row.machineId === message.machineId &&
                     !restoredIds.has(row.id) &&
+                    !returningRemoved.has(row.id) &&
                     !row.workflowStepId &&
                     row.kind !== "summariser" &&
                     row.harness === "opencode" &&
@@ -10531,11 +10619,9 @@ export const createServer = (
                 forgetPending(row.id, UNREAD.ended);
                 escalateRoutedAsks(row.id);
               }
-              // reportUnowned is the agent's custody completion, after adoption.
-              // A listed/held process stays on its attempt; only known absence
-              // runs the existing failure/retry path, against reconciled rows.
               if (
-                Array.isArray(report) &&
+                (message.payload as HeartbeatPayload).custodyComplete ===
+                  true &&
                 machineCustody.get(message.machineId)?.state === "available"
               ) {
                 workflowRuntime.recover(message.machineId);

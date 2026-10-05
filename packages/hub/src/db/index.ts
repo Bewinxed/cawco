@@ -269,6 +269,7 @@ export interface DbShape {
   ) => boolean;
   /** Every claude model's last observed context window, by model id. */
   readonly claudeContextWindows: () => Record<string, number>;
+  readonly clearEndConfirmation: (id: string) => void;
   readonly clearFleetMemory: () => void;
   /** Forget the OpenRouter key. */
   readonly clearOpenRouterConnection: () => void;
@@ -1571,6 +1572,12 @@ const make = (path: string): DbShape => {
   };
 
   return {
+    clearEndConfirmation: (id) => {
+      db.update(instances)
+        .set({ endConfirmedAt: null })
+        .where(and(eq(instances.id, id), isNotNull(instances.endIntent)))
+        .run();
+    },
     invalidateClaudeCaches: (machineId, reason, at) => {
       db.update(instances)
         .set({ cacheCold: { reason, at } })
@@ -3465,11 +3472,6 @@ const make = (path: string): DbShape => {
           .set({
             machineRemoved: true,
             projectId: null,
-            endIntent: null,
-            endConfirmedAt: null,
-            endReason: null,
-            endRetryAt: null,
-            endAttempts: 0,
           })
           .where(eq(instances.machineId, machineId))
           .run();

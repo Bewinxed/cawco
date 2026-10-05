@@ -5038,7 +5038,26 @@ export class OpencodeHarness implements Harness {
       }
       return;
     }
-    const generations = await this.#completeGenerations(true);
+    const candidates = await this.#serverOwner.liveGenerations();
+    for (const identity of candidates) {
+      // biome-ignore lint/performance/noAwaitInLoops: interrupt exactly this conversation before waiting on unrelated ownership operations
+      const result = await reached(
+        this.#clientForGeneration(identity).session.abort(
+          { directory: dir, sessionID: sessionKey },
+          { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
+        )
+      );
+      if (
+        (result.error || result.data !== true) &&
+        result.response?.status !== 404
+      ) {
+        throw new Error(`Could not end OpenCode turn ${sessionKey}`);
+      }
+    }
+    const generations = await this.#completeGenerations();
+    if (generations.length === 0) {
+      return;
+    }
     for (const identity of generations) {
       const client = this.#clientForGeneration(identity);
       const scope = { directory: dir };
@@ -5104,18 +5123,10 @@ export class OpencodeHarness implements Harness {
     }
   }
 
-  async #completeGenerations(
-    requireGeneration = false
-  ): Promise<ServerIdentity[]> {
-    if (this.#operationsPending()) {
-      throw new Error(
-        "OpenCode runner reading is incomplete while ownership operations are pending."
-      );
-    }
+  async #completeGenerations(): Promise<ServerIdentity[]> {
     const generations = await this.#serverOwner.liveGenerations();
     const held = await (await this.sessiond()).list();
     if (
-      (requireGeneration && generations.length === 0) ||
       held.procs.some(
         (proc) =>
           proc.alive &&
@@ -5132,6 +5143,11 @@ export class OpencodeHarness implements Harness {
         "OpenCode runner reading is incomplete: no complete recorded generation custody."
       );
     }
+    if (generations.length > 0 && this.#operationsPending()) {
+      throw new Error(
+        "OpenCode runner reading is incomplete while ownership operations are pending."
+      );
+    }
     return generations;
   }
 
@@ -5139,7 +5155,7 @@ export class OpencodeHarness implements Harness {
     sessionKey: string,
     directory: string
   ): Promise<boolean> {
-    const generations = await this.#completeGenerations(true);
+    const generations = await this.#completeGenerations();
     const readings = await Promise.all(
       generations.map(async (identity) => {
         const reading = await reached(

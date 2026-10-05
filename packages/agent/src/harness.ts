@@ -35,6 +35,7 @@ import type {
 export class HarnessRecoveryRefused extends Error {}
 /** A refusal is final for its launch attempt, including recovery attempts. */
 export class SessionAddressRefused extends Error {}
+export class HubContractRefused extends SessionAddressRefused {}
 
 /** Everything a harness needs from the supervisor while it owns a session. */
 export interface HarnessContext {

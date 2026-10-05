@@ -18,6 +18,8 @@ export const createSessionLifecycle = (ports: {
   restore: (row: InstanceRow) => void;
   deleteTranscript: (row: InstanceRow) => Promise<boolean>;
   ready: (machineId: string) => boolean;
+  machineName: (machineId: string) => string;
+  confirmed: (row: ReturnType<DbShape["sessionOwnership"]>[number]) => void;
   recoverRemoved: (machineId: string) => void;
   changed: (machineId: string, removed?: string) => void;
   refresh: (machineId: string) => void;
@@ -28,6 +30,7 @@ export const createSessionLifecycle = (ports: {
   const issued = new Map<string, { generation: string; sequence: number }>();
   const delivering = new Map<string, string>();
   const unavailable = new Set<string>();
+  const preservedUnattached = new Set<string>();
   let sequence = 0;
   const generation = (row: ReturnType<DbShape["sessionOwnership"]>[number]) =>
     JSON.stringify([row.id, row.spawnedAt]);
@@ -102,10 +105,17 @@ export const createSessionLifecycle = (ports: {
           snapshot.custody.stopSequence !== undefined &&
           snapshot.custody.stopSequence >= sent.sequence;
         if (row.endConfirmedAt) {
-          if (row.endIntent === "delete-transcript") {
-            finishTranscript(row);
+          if (fresh && (held.has(row.id) || attached.has(row.id))) {
+            ports.db.clearEndConfirmation(row.id);
+            row.endConfirmedAt = null;
+            issued.delete(row.id);
+            delivering.delete(row.id);
+          } else {
+            if (row.endIntent === "delete-transcript") {
+              finishTranscript(row);
+            }
+            continue;
           }
-          continue;
         }
         // Only a new machine reading can prove absence, never a cached one.
         if (
@@ -119,6 +129,7 @@ export const createSessionLifecycle = (ports: {
           (row.endIntent !== "discard" || row.status === "discarded")
         ) {
           ports.db.confirmInstanceEnd(row.id);
+          ports.confirmed(row);
           issued.delete(row.id);
           ports.changed(
             machineId,
@@ -175,7 +186,11 @@ export const createSessionLifecycle = (ports: {
       delivering.delete(row.id);
       if (attached.has(row.id)) {
         attaching.delete(row.id);
-      } else if (held.has(row.id) && !unavailable.has(row.id)) {
+      } else if (
+        held.has(row.id) &&
+        !unavailable.has(row.id) &&
+        !preservedUnattached.has(row.id)
+      ) {
         const prior = attaching.get(row.id);
         if (!prior || Date.now() >= prior.at) {
           const attempts = (prior?.attempts ?? 0) + 1;
@@ -191,13 +206,10 @@ export const createSessionLifecycle = (ports: {
     }
   };
 
-  const endSession = (instanceId: string, intent: SessionEndIntent): void => {
-    const owner = ports.db.ownedInstance(instanceId);
-    if (owner && !ports.ready(owner.machineId)) {
-      throw new Error(
-        `Machine ${owner.machineId}'s agent has not restarted onto this build yet.`
-      );
-    }
+  const oweEndSession = (
+    instanceId: string,
+    intent: SessionEndIntent
+  ): void => {
     const row = ports.db.endInstance(instanceId, intent);
     if (row) {
       ports.changed(
@@ -207,6 +219,16 @@ export const createSessionLifecycle = (ports: {
       reconcile(row.machineId);
       ports.refresh(row.machineId);
     }
+  };
+
+  const endSession = (instanceId: string, intent: SessionEndIntent): void => {
+    const owner = ports.db.ownedInstance(instanceId);
+    if (owner && !ports.ready(owner.machineId)) {
+      throw new Error(
+        `${ports.machineName(owner.machineId)}'s agent has not restarted onto this build yet. Restart its agent, then retry.`
+      );
+    }
+    oweEndSession(instanceId, intent);
   };
 
   const confirm = (
@@ -249,6 +271,7 @@ export const createSessionLifecycle = (ports: {
       return false;
     }
     ports.db.confirmInstanceEnd(id, payload.ended.reason);
+    ports.confirmed(row);
     issued.delete(id);
     delivering.delete(id);
     ports.changed(machineId, row.endIntent === "delete" ? id : undefined);
@@ -259,6 +282,7 @@ export const createSessionLifecycle = (ports: {
   };
 
   return {
+    preserveUnattached: (id: string) => preservedUnattached.add(id),
     restoring: (id: string) => {
       const prior = attaching.get(id);
       if (!prior) {
@@ -271,6 +295,7 @@ export const createSessionLifecycle = (ports: {
       attaching.delete(id);
     },
     endSession,
+    oweEndSession,
     reconcile,
     confirm,
     deliveryFailed: (id: string) => delivering.delete(id),
@@ -281,6 +306,7 @@ export const createSessionLifecycle = (ports: {
         issued.delete(row.id);
         attaching.delete(row.id);
         unavailable.delete(row.id);
+        preservedUnattached.delete(row.id);
       }
     },
   };

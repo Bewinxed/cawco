@@ -191,8 +191,9 @@ Historical stopped/discarded rows are migrated confirmed without new stops, exce
 legacy OpenCode missing-address set. Address-required birth provenance is immutable on reopen;
 addressProtocol is recorded only on acknowledgement, so a failed legacy retry remains legacy.
 
-Removing an offline machine is a forget operation, never a stop. Its rows are hidden with no
-end intent. Exact held Claude/pi rows return on register and absent rows are dropped. OpenCode
+Removing an offline machine hides its rows and preserves their existing end decisions.
+Exact held Claude/pi rows return on register and absent rows are dropped. Present rows are
+un-hidden without a recovery command. OpenCode
 rows wait for a complete post-register server reading: present stored IDs return, absent IDs
 are dropped, and missing-ID legacy rows are dropped only after complete absence of unclaimed
 runners in their directory. Incomplete or ambiguous readings retain hidden ownership and retry
@@ -210,9 +211,17 @@ remain owned, a receipt names the deadline and refusal, and no retry starts befo
 confirmation. Ordinary machine recovery and supervisor action re-evaluate the same deadline;
 deferred fail/retry is recorded and applied only afterwards. Cancel rewrites the run's state
 before requesting any session end, launches nothing further, and remains waiting until every
-session and child run has confirmed its end. Refusals use the existing supervisor notice and
-step receipt paths. Transcript cleanup accepts confirmed absence and otherwise records its
+session and child run has confirmed its end. Completed and failed programmes publish their
+outcome immediately; their step sessions' end decisions are cleanup and do not change that
+outcome. A late positive end event re-evaluates a held workflow stop immediately. Refusals use
+the existing supervisor notice and step receipt paths. Transcript cleanup accepts confirmed absence and otherwise records its
 error with durable exponential retry backoff.
+
+Both hub and agent declare the address contract during registration. An agent on a hub that
+has not declared it refuses acknowledgement-dependent OpenCode operations immediately and
+reports that reason through custody readiness. A later supporting hub registration heals
+readiness. Held workflow custody remains on its original attempt across agent restart; a
+resume joins its adoption claim before any absent-process spawn.
 
 ## Who writes what
 

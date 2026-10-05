@@ -283,6 +283,7 @@ export interface HeartbeatPayload {
   browserAvailable?: boolean;
   /** Fresh sessiond custody after an owner-named stop or register recovery. */
   custody?: SessionCustody;
+  custodyComplete?: true;
   /**
    * Where the machine's deployment clone stands (contract C8), on every beat
    * for the same reason `instances` is: it is a live fact that changes without
