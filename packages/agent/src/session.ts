@@ -1681,7 +1681,33 @@ export class SessionSupervisor {
         return;
       }
       const cancelled = this.#addressCancelled.delete(instanceId);
-      if (cancelled || payload.reattachOnly) {
+      if (cancelled) {
+        return;
+      }
+      if (error instanceof HarnessRecoveryRefused) {
+        // Known surviving custody is reported even for inspection-only recovery.
+        // It is neither a dead conversation nor permission to replace a runner.
+        this.#failures.set(instanceId, error.message);
+        warn(`custody ${instanceId} refused: ${error.message}`);
+        this.sink({
+          kind: "error",
+          instanceId,
+          processGeneration: payload.processGeneration,
+          verb: "register",
+          message: error.message,
+        });
+        if (ack) {
+          this.sink({
+            kind: "control_result",
+            instanceId,
+            requestId: ack,
+            ok: false,
+            error: error.message,
+          });
+        }
+        return;
+      }
+      if (payload.reattachOnly) {
         return;
       }
       const message = error instanceof Error ? error.message : String(error);
@@ -1703,20 +1729,7 @@ export class SessionSupervisor {
           error: message,
         });
       }
-      if (error instanceof HarnessRecoveryRefused) {
-        // Surviving runners are positively known. Refused custody is neither
-        // a dead conversation nor permission to replace either runner.
-        this.#failures.set(instanceId, message);
-        this.sink({
-          kind: "error",
-          instanceId,
-          processGeneration: payload.processGeneration,
-          verb: "register",
-          message,
-        });
-      } else {
-        this.#fail(instanceId, error, payload.processGeneration);
-      }
+      this.#fail(instanceId, error, payload.processGeneration);
     }
   }
 
@@ -2506,14 +2519,25 @@ export class SessionSupervisor {
             claimedSessionIds
           );
           if (reading.count > 0) {
+            const message =
+              "End intent is waiting for unclaimed server runners.";
             this.sink({
               kind: "error",
               verb: "stop",
               instanceId,
               processGeneration,
-              message: "End intent is waiting for unclaimed server runners.",
+              message,
               endReason: `waiting: ${reading.count} unclaimed runner(s) in ${directory}`,
             });
+            if (requestId) {
+              this.sink({
+                kind: "control_result",
+                instanceId,
+                requestId,
+                ok: false,
+                error: message,
+              });
+            }
             return;
           }
           ended = {

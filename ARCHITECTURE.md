@@ -166,6 +166,8 @@ signal reaches the child's whole tree, and what a child leaves behind when it ex
 
 The hub stores each session's end intent before delivery. Reconciliation on register and
 heartbeat repeats that decision until the machine confirms exit and any requested teardown.
+Discard's caller request follows that lifecycle Stop to the machine; its reply confirms physical
+teardown or carries the machine's refusal verbatim. Persisting intent alone is not Discard success.
 Delete intent hides the row immediately but retains ownership until confirmation; transcript
 deletion follows confirmed exit and is resumed after a hub restart. A wake clears the intent
 in the same write that reopens the row. Kept held sessions are reattached, with failed attaches
@@ -187,8 +189,11 @@ await. A refused address acknowledgement ends that attempt and frees its recover
 
 Agents declare the address contract at register. A connected agent that has not restarted onto
 this build receives no lifecycle traffic; operations requiring its confirmation refuse immediately.
-Historical stopped/discarded rows are migrated confirmed without new stops, except the bounded
-legacy OpenCode missing-address set. Address-required birth provenance is immutable on reopen;
+Historical stopped/discarded OpenCode rows are migrated with owed end intent, including stored
+addresses: a surviving shared server may still run their conversation without a held row ID.
+Registration sends their exact end and confirms only the machine's receipt. Other historical
+rows retain confirmation until fresh held/attached custody contradicts it.
+Address-required birth provenance is immutable on reopen;
 addressProtocol is recorded only on acknowledgement, so a failed legacy retry remains legacy.
 
 Removing an offline machine hides its rows and preserves their existing end decisions.

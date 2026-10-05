@@ -11,7 +11,7 @@ const [role, scratch, portText, old] = process.argv.slice(2);
 const machine = "ownership-proof";
 const pathEnv = { PATH: process.env.PATH ?? "/usr/bin:/bin" };
 const CALLBACK_SOURCE = /packages\/agent\/src\/mcp-oauth\.ts$/;
-const MAIN_BASE = "9a6afa8a422f55e30d97f9304e83241dc3c26a6b";
+const MAIN_BASE = "57984f2ac7e6c61a90251e25e6a454c6e020f3f2";
 
 async function delay(ms: number) {
   await new Promise<void>((done) => setTimeout(done, ms));
@@ -1108,6 +1108,36 @@ if (role === "migration-main") {
       Boolean
     );
     assert.equal(retriedReply?.payload?.ok, true);
+    await seed("ambiguous-discard", { harness: "opencode" });
+    await held("opencode-server-turn-unclaimed");
+    send("stop", "ambiguous-discard", {
+      discard: true,
+      requestId: "review-ambiguous-discard",
+    });
+    const ambiguousReply = await until(
+      "ambiguous discard refusal",
+      async () => reply("review-ambiguous-discard"),
+      Boolean
+    );
+    assert.equal(ambiguousReply?.payload?.ok, false);
+    assert.equal(
+      ambiguousReply?.payload?.error,
+      "End intent is waiting for unclaimed server runners."
+    );
+    assert.equal(await alive("opencode-server-turn-unclaimed"), true);
+    const { endProc } = await import("../packages/agent/src/sessiond-client");
+    assert.ok(holder);
+    await endProc(holder, "opencode-server-turn-unclaimed");
+    send("stop", "ambiguous-discard", {
+      discard: true,
+      requestId: "review-ambiguous-discard-retry",
+    });
+    const ambiguousRetry = await until(
+      "ambiguous discard retry",
+      async () => reply("review-ambiguous-discard-retry"),
+      Boolean
+    );
+    assert.equal(ambiguousRetry?.payload?.ok, true);
     console.log(
       "THIRD 2 Discard waits for physical teardown, returns machine refusal verbatim, and retries with its own receipt"
     );
@@ -1762,7 +1792,6 @@ if (role === "migration-main") {
     );
     assert.equal((await row("legacy-retry-review"))?.endConfirmedAt, null);
     assert.equal(await alive("opencode-server-turn-unclaimed"), true);
-    const { endProc } = await import("../packages/agent/src/sessiond-client");
     assert.ok(holder);
     await endProc(holder, "opencode-server-turn-unclaimed");
     await rm(join(scratchDir, "pause-address-legacy-retry-review"));
