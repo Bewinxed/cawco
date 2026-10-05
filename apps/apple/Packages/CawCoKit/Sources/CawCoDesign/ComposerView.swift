@@ -217,8 +217,9 @@ public final class ComposerView: UIView, UITextViewDelegate {
         field.tintColor = Palette.inkStrong
         field.textContainer.lineFragmentPadding = 0
         let pad = (Self.control - Self.fieldRole.lineHeight) / 2
-        // The last line's leading below it, which TextKit 2 leaves off (LineBox).
-        let below = LineBox.halfLeading(Self.fieldRole.font, height: Self.fieldRole.lineHeight)
+        // The last line's leading below it, which TextKit 2 leaves off: the
+        // line's own spacing, by the rule the field's lines are set with (LineBox).
+        let below = LineBox.textView(Self.fieldRole.font, height: Self.fieldRole.lineHeight).lineSpacing
         field.textContainerInset = UIEdgeInsets(top: pad, left: 0, bottom: pad + below, right: 0)
         field.typingAttributes = Self.typing
         field.isScrollEnabled = false
