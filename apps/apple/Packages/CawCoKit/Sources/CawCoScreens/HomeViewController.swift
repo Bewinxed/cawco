@@ -54,6 +54,8 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
     var onSelectTab: (HomeModel.Tab) -> Void = { _ in }
     /// Opens the Usage page from the strip's corner link.
     var onUsagePage: (() -> Void)?
+    /// What a row's session menu does through the shell (LiveSessionMenu, StoredSessionMenu).
+    var sessionMenus: (() -> SessionMenuContext?)?
     /// Set on the page (not the rail's copy): its dock's Start session.
     var onStart: (() -> Void)?
     var collectionView: UICollectionView!
@@ -84,8 +86,7 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
     private var cawLine = ""
     /// Nothing is going on, so he sleeps; while a machine is awaited he is awake.
     private var cawStatus = CawStatus.sleeping
-    /// Read in `build()`, so a change to either alone runs the update again.
-    private var spendWords = ""
+    /// Read in `build()`, so a change to it alone runs the update again.
     private var usageStrip: Usage.Strip?
 
     // The view's own state.
@@ -115,6 +116,15 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
     }
 
     private let variant: Variant
+
+    /// How far under 260pt the rail is, 0 to 33 (WorkTabs.svelte `--tight`):
+    /// the tabs' spacing gives that room back. None on the page.
+    private var tight: Double {
+        variant == .rail && isViewLoaded ? min(33, max(0, 260 - view.bounds.width)) : 0
+    }
+
+    /// The width the tabs were last tightened for.
+    private var tightenedAt = -1.0
 
     init(hub: HubConnection, home: HomeModel, variant: Variant) {
         self.hub = hub
@@ -204,6 +214,11 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
         if collectionView.frame.height != tall || collectionView.frame.width != view.bounds.width {
             collectionView.frame = CGRect(x: 0, y: 0, width: view.bounds.width, height: tall)
         }
+        // The rail's grip moved: the tabs tighten or loosen with its width.
+        if tight != tightenedAt {
+            tightenedAt = tight
+            for case let cell as TabsCell in collectionView.visibleCells { cell.tight = tight }
+        }
         guard tall != searchedAt else { return }
         searchedAt = tall
         raiseSearch()
@@ -229,9 +244,13 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
     private func makeLayout() -> HomeLayout {
         HomeLayout { [weak self] index, environment in
             let section = self?.dataSource?.sectionIdentifier(for: index) ?? .top
-            let first = self?.dataSource?.snapshot().sectionIdentifiers.first { $0 != .top }
+            let snapshot = self?.dataSource?.snapshot()
+            let sections = snapshot?.sectionIdentifiers ?? []
+            let first = sections.first { $0 != .top }
+            let metrics = self?.metrics ?? .page
             guard section == .work, let self else {
-                return Self.section(section, firstGroup: section == first)
+                let empty = snapshot.map { $0.indexOfSection(section) != nil && $0.numberOfItems(inSection: section) == 0 } ?? false
+                return Self.section(section, firstGroup: section == first, last: section == sections.last, metrics: metrics, empty: empty)
             }
             // The work rows are a list, so a finished row swipes away to archive.
             var list = UICollectionLayoutListConfiguration(appearance: .plain)
@@ -241,7 +260,11 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
                 self?.archiveSwipe(at: indexPath)
             }
             let layout = NSCollectionLayoutSection.list(using: list, layoutEnvironment: environment)
-            layout.contentInsets = NSDirectionalEdgeInsets(top: section == first ? Space.space2 : Space.space5, leading: Space.space5, bottom: 0, trailing: Space.space5)
+            // The rail's home ends with its work list: the groups' foot is under it there.
+            layout.contentInsets = NSDirectionalEdgeInsets(
+                top: section == first ? metrics.first : metrics.gap, leading: metrics.side,
+                bottom: sections.last == .work ? metrics.foot : 0, trailing: metrics.side
+            )
             return layout
         }
     }
@@ -265,26 +288,54 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
     }
 
     /// Each section a list of self-sized lines, spaced and inset as the web home's groups.
-    private static func section(_ section: Section, firstGroup: Bool) -> NSCollectionLayoutSection {
+    private static func section(_ section: Section, firstGroup: Bool, last: Bool, metrics: Metrics, empty: Bool) -> NSCollectionLayoutSection {
         let size = NSCollectionLayoutSize(widthDimension: .fractionalWidth(1), heightDimension: .estimated(44))
         let group = NSCollectionLayoutGroup.vertical(layoutSize: size, subitems: [NSCollectionLayoutItem(layoutSize: size)])
         let layout = NSCollectionLayoutSection(group: group)
-        let side = Space.space5
+        let side = metrics.side
+        let above = firstGroup ? metrics.first : metrics.gap
         switch section {
         case .top:
             layout.interGroupSpacing = Space.space2
-            layout.contentInsets = NSDirectionalEdgeInsets(top: Space.space5, leading: side, bottom: Space.space3, trailing: side)
+            // With nothing in it the block takes no room (Home.svelte `.top.bare`).
+            layout.contentInsets = empty ? .zero : metrics.top
         case .needs:
             layout.interGroupSpacing = Space.space2
-            layout.contentInsets = NSDirectionalEdgeInsets(top: firstGroup ? Space.space2 : Space.space5, leading: side, bottom: 0, trailing: side)
+            layout.contentInsets = NSDirectionalEdgeInsets(top: above, leading: side, bottom: 0, trailing: side)
         case .work, .caw:
-            layout.contentInsets = NSDirectionalEdgeInsets(top: firstGroup ? Space.space2 : Space.space5, leading: side, bottom: 0, trailing: side)
+            // The groups' foot is under whichever group is last (`.groups` padding).
+            layout.contentInsets = NSDirectionalEdgeInsets(top: above, leading: side, bottom: last ? metrics.foot : 0, trailing: side)
         case .recent:
             layout.interGroupSpacing = 2
-            layout.contentInsets = NSDirectionalEdgeInsets(top: firstGroup ? Space.space2 : Space.space5, leading: side, bottom: Space.space7, trailing: side)
+            layout.contentInsets = NSDirectionalEdgeInsets(top: above, leading: side, bottom: metrics.foot, trailing: side)
         }
         return layout
     }
+
+    /// Home.svelte's spacing, by where the home stands: `.page .top` and
+    /// `.page .groups` (18 18 11; 7 18 25, groups 18 apart), or `.rail .top`
+    /// and `.rail .groups` (7 11 4; 4 7 7, groups 11 apart).
+    struct Metrics {
+        let top: NSDirectionalEdgeInsets
+        /// The groups' inline padding.
+        let side: Double
+        /// Above the first group, and between groups.
+        let first: Double
+        let gap: Double
+        /// Under the last group.
+        let foot: Double
+
+        static let page = Metrics(
+            top: NSDirectionalEdgeInsets(top: Space.space5, leading: Space.space5, bottom: Space.space3, trailing: Space.space5),
+            side: Space.space5, first: Space.space2, gap: Space.space5, foot: Space.space7
+        )
+        static let rail = Metrics(
+            top: NSDirectionalEdgeInsets(top: Space.space2, leading: Space.space3, bottom: Space.space1, trailing: Space.space3),
+            side: Space.space2, first: Space.space1, gap: Space.space3, foot: Space.space2
+        )
+    }
+
+    private var metrics: Metrics { variant == .rail ? .rail : .page }
 
     // MARK: Cells
 
@@ -299,9 +350,10 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
         }
         let status = UICollectionView.CellRegistration<StatusCell, Item> { [weak self] cell, _, _ in
             guard let self else { return }
-            cell.line.configure(hub: hub, ready: home.ready, spend: spendWords)
+            cell.line.configure(hub: hub, ready: home.ready)
         }
         let headline = UICollectionView.CellRegistration<HeadlineCell, Item> { [weak self] cell, _, _ in
+            cell.rail = self?.variant == .rail
             cell.configure(count: self?.needs.count ?? 0)
         }
         let need = UICollectionView.CellRegistration<NeedsCardCell, Item> { [weak self] cell, _, item in
@@ -329,6 +381,7 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
         }
         let tabs = UICollectionView.CellRegistration<TabsCell, Item> { [weak self] cell, _, _ in
             guard let self else { return }
+            cell.tight = tight
             cell.configure(tab: home.tab, working: counts.working, finished: counts.finished, finishedFailed: counts.finishedFailed, delegatesOn: home.delegates)
             cell.onTab = { [weak self] tab in self?.choose(tab) }
             cell.onDelegates = { [weak self] in
@@ -351,6 +404,15 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
             cell.configure(depth: line.depth, first: line.first, last: line.last, through: entry.through)
             cell.row.mark.onToggle = { [weak self] in self?.toggleTree(id) }
             cell.row.configure(content)
+            // LiveSessionMenu, read from the fleet as it opens; a workflow run takes no session commands.
+            cell.row.menu = { [weak self] copy in
+                guard let self, let context = sessionMenus?(), BoardRun.runId(of: id) == nil, let now = hub.fleet.byId[id] else { return nil }
+                let archive: (() -> Void)? = content.archives ? { [weak self] in
+                    guard let self else { return }
+                    home.archive(home.treeOf(id))
+                } : nil
+                return SessionMenus.live(now, context: context, onArchive: archive, copy: copy)
+            }
             cell.actions.configure(title: content.title, peeks: content.peek != nil, archives: content.archives)
             cell.actions.onPeek = { [weak self] in self?.peek(content) }
             cell.actions.onArchive = { [weak self] in
@@ -371,6 +433,7 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
             }, for: .primaryActionTriggered)
         }
         let caw = UICollectionView.CellRegistration<CawCell, Item> { [weak self] cell, _, _ in
+            cell.side = self?.variant == .rail ? 112 : Self.cawSide
             cell.configure(line: self?.cawLine ?? "", status: self?.cawStatus ?? .sleeping)
         }
         let recentHead = UICollectionView.CellRegistration<RecentHeadCell, Item> { [weak self] cell, _, _ in
@@ -396,6 +459,19 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
             cell.row.configure(content)
             cell.actions.configure(title: content.title, peeks: content.peek != nil, archives: false)
             cell.actions.onPeek = { [weak self] in self?.peek(content) }
+            // LiveSessionMenu for a session the hub holds, StoredSessionMenu for a stored transcript.
+            cell.row.menu = { [weak self] copy in
+                guard let self, let context = sessionMenus?(), let recent = recentItems[id] else { return nil }
+                if let held = recent.instance {
+                    guard BoardRun.runId(of: held.id) == nil, let now = hub.fleet.byId[held.id] else { return nil }
+                    return SessionMenus.live(now, context: context, copy: copy)
+                }
+                let fleet = hub.fleet
+                guard let info = fleet.catalog(recent.machineId).first(where: {
+                    fleet.conversationId(sessionKey: $0.sessionId, machineId: recent.machineId, cwd: $0.cwd) == id
+                }) else { return nil }
+                return SessionMenus.stored(machineId: recent.machineId, info: info, context: context, copy: copy)
+            }
         }
         let note = UICollectionView.CellRegistration<NoteCell, Item> { [weak self] cell, _, _ in
             cell.label.text = "No session matches “\(self?.search ?? "")”."
@@ -494,6 +570,7 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
             stale: !home.live,
             hover: session.id,
             archives: entry.tab == .finished && !line.context && home.archivable(session),
+            stopped: session.status == .stopped,
             beat: echoing[id] ?? 0,
             beats: max(1, echoing.count)
         )
@@ -509,7 +586,8 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
             line: recent.place,
             trail: recent.at > 0 ? Naming.span(ms: home.now - recent.at) : "",
             stale: !home.live,
-            hover: recent.instance?.id
+            hover: recent.instance?.id,
+            stopped: recent.instance?.status == .stopped
         )
     }
 
@@ -551,17 +629,17 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
         let ready = home.ready
         let needList = home.needs
 
-        spendWords = home.spendWords
         usageStrip = home.usage
         snapshot.appendSections([.top])
-        if variant == .page {
-            // The phone has no rail: the rail's usage strip stands here, always (owner pick i).
-            snapshot.appendItems([.status, .usage], toSection: .top)
-        } else if !(live && ready) {
-            // In the rail the strip is the rail's own, in its footer, and the
-            // status line is drawn only until the hub is live and read
-            // (Home.svelte `bare`): then the block takes no room.
+        // The status line is drawn only until the hub is live and read
+        // (StatusLine.svelte): then it says nothing and takes no room.
+        if !(live && ready) {
             snapshot.appendItems([.status], toSection: .top)
+        }
+        if variant == .page {
+            // The phone has no rail: the rail's usage strip stands here, always
+            // (owner pick i). In the rail the strip is the rail's own, in its footer.
+            snapshot.appendItems([.usage], toSection: .top)
         }
         if ready, live, !needList.isEmpty {
             snapshot.appendItems([.headline], toSection: .top)
@@ -627,7 +705,8 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
         }
 
         recentItems = [:]
-        if ready, !recent.isEmpty {
+        // Recent is the page's (Home.svelte: `HomeRecent` only where `variant === "page"`); the rail lists projects under the home instead.
+        if variant == .page, ready, !recent.isEmpty {
             snapshot.appendSections([.recent])
             var items: [Item] = [.recentHead]
             if home.recentOpen {
@@ -977,10 +1056,12 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
         if row.isFailed {
             return .fail
         }
-        if row.isStale || row.status == .sleeping {
+        if row.isStale {
             return .idle
         }
-        if row.status == .stopped {
+        // At rest with no process: a session put to sleep, or one that
+        // stopped. Listed as finished, it is done (SessionMark.svelte `sessionStatus`).
+        if row.status == .sleeping || row.status == .stopped {
             return done ? .done : .idle
         }
         switch home.activity(row.id) {

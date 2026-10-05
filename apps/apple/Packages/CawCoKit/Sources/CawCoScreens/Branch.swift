@@ -24,7 +24,7 @@ import UIKit
 /// `durExit`, then the room closes at once.
 enum BranchShape {
     /// A row's glyph centre from its cell's top (NestShape's).
-    static var glyphY: Double { Space.spaceRow + Nest.rowHeight / 2 }
+    static var glyphY: Double { Nest.gap + Nest.rowHeight / 2 }
     /// A parent's glyph foot from its cell's top.
     static var glyphFoot: Double { glyphY + Size.rowMarkBox / 2 }
     static var radius: Double { Radius.radiusSm }

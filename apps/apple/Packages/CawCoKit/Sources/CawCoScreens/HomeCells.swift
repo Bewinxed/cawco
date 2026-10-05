@@ -92,6 +92,19 @@ final class HeadlineCell: HomeCell {
     private let spark = UIView()
     private let words = KitLabel(TypeScale.typeTitle, ink: Palette.inkStrong)
     private var count = -1
+    private var sparkSide: [NSLayoutConstraint] = []
+
+    /// In the rail (Home.svelte `.rail .headline`, `.rail .spark`): the label
+    /// role at the body's size, and a 22pt spark at the small radius.
+    var rail = false {
+        didSet {
+            guard rail != oldValue else { return }
+            words.role = rail ? TypeScale.typeLabel.with(points: TypeScale.textBody) : TypeScale.typeTitle
+            words.tracking = rail ? 0 : TypeScale.trackTitle
+            for side in sparkSide { side.constant = rail ? 22 : 28 }
+            spark.layer.cornerRadius = rail ? Radius.radiusXs : Radius.radiusSm
+        }
+    }
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -105,9 +118,8 @@ final class HeadlineCell: HomeCell {
         row.spacing = Space.space2
         row.alignment = .center
         pin(row)
-        NSLayoutConstraint.activate([
-            spark.widthAnchor.constraint(equalToConstant: 28),
-            spark.heightAnchor.constraint(equalToConstant: 28),
+        sparkSide = [spark.widthAnchor.constraint(equalToConstant: 28), spark.heightAnchor.constraint(equalToConstant: 28)]
+        NSLayoutConstraint.activate(sparkSide + [
             glyph.centerXAnchor.constraint(equalTo: spark.centerXAnchor),
             glyph.centerYAnchor.constraint(equalTo: spark.centerYAnchor),
         ])
@@ -286,6 +298,15 @@ final class TabsCell: HomeCell {
     var onTab: (HomeModel.Tab) -> Void = { _ in }
     var onDelegates: () -> Void = {}
 
+    /// How far under 260pt the rail is (WorkTabs.svelte `--tight`); none on the page.
+    var tight = 0.0 {
+        didSet {
+            guard tight != oldValue else { return }
+            tabs.tight = tight
+            for chip in counts { chip.tight = tight }
+        }
+    }
+
     override init(frame: CGRect) {
         super.init(frame: frame)
         for (index, chip) in counts.enumerated() {
@@ -307,7 +328,8 @@ final class TabsCell: HomeCell {
         }
         NSLayoutConstraint.activate([
             tabs.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
-            tabs.topAnchor.constraint(equalTo: contentView.topAnchor, constant: Space.space1),
+            // `.head`'s 4pt and the tab list's own 4pt above its tabs.
+            tabs.topAnchor.constraint(equalTo: contentView.topAnchor, constant: Space.space1 * 2),
             tabs.bottomAnchor.constraint(equalTo: seam.topAnchor),
             delegates.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -Space.space2),
             delegates.bottomAnchor.constraint(equalTo: seam.topAnchor, constant: -2),
@@ -352,6 +374,16 @@ final class TabsCell: HomeCell {
 final class CountChip: UIView {
     private let figure = KitLabel(TypeScale.typeMeta)
     private var count = -1
+    private var sides: [NSLayoutConstraint] = []
+
+    /// WorkTabs.svelte `.count`: `padding-inline: 3px − tight × 0.03`.
+    var tight = 0.0 {
+        didSet {
+            let pad = 3 - tight * 0.03
+            sides[0].constant = pad
+            sides[1].constant = -pad
+        }
+    }
 
     init() {
         super.init(frame: .zero)
@@ -361,9 +393,11 @@ final class CountChip: UIView {
         figure.tabular = true
         figure.textAlignment = .center
         addSubview(figure)
-        NSLayoutConstraint.activate([
+        sides = [
             figure.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 3),
             figure.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -3),
+        ]
+        NSLayoutConstraint.activate(sides + [
             figure.centerYAnchor.constraint(equalTo: centerYAnchor),
             widthAnchor.constraint(greaterThanOrEqualToConstant: 18),
             heightAnchor.constraint(equalToConstant: 18),
@@ -429,7 +463,8 @@ final class MachineCell: HomeCell {
         row.spacing = Space.space1
         row.alignment = .center
         archiveAll.heightAnchor.constraint(equalToConstant: 22).isActive = true
-        pin(row, insets: NSDirectionalEdgeInsets(top: Space.space2, leading: Space.space3, bottom: Space.space1, trailing: Space.space3))
+        // Its 4pt foot is the first row's own gap above it (`--tree-gap`): every row keeps one.
+        pin(row, insets: NSDirectionalEdgeInsets(top: Space.space2, leading: Space.space3, bottom: 0, trailing: Space.space3))
         row.heightAnchor.constraint(greaterThanOrEqualToConstant: 22).isActive = true
         seam.backgroundColor = Palette.seam
         seam.translatesAutoresizingMaskIntoConstraints = false
@@ -616,7 +651,7 @@ final class RowCell: HomeCell {
         NSLayoutConstraint.activate([
             lead,
             ends,
-            row.topAnchor.constraint(equalTo: contentView.topAnchor, constant: Space.spaceRow),
+            row.topAnchor.constraint(equalTo: contentView.topAnchor, constant: Nest.gap),
             bottom,
         ])
         actions = RowActions(cell: self, row: row, rowEnds: ends)
@@ -741,8 +776,13 @@ final class RowCell: HomeCell {
 enum Nest {
     /// The rail's x from a row's left edge: the row's inset plus half its glyph.
     static var railX: Double { Space.space3 + Size.rowMarkBox / 2 }
-    /// From the rail to the child row's left edge (`--nest-in`).
-    static var nestIn: Double { Space.space2 }
+    /// How far each level is set in from the one above it, mark to mark (`--tree-step`): the same in every tree.
+    static var step: Double { Space.space1 + Space.space2 + Space.space3 }
+    /// From the rail to the child row's left edge (`--nest-in`): what is left
+    /// of one step after the half mark the rail stands under and the row's own inset.
+    static var nestIn: Double { step - Size.rowMarkBox / 2 - Space.space3 }
+    /// Between the rows of a tree, and between a parent and its first child (`--tree-gap`).
+    static var gap: Double { Space.space1 }
     /// Each depth sets its rows in by this.
     static var indent: Double { railX + nestIn }
     static var rowHeight: Double { Size.cBtnHLg }
@@ -855,7 +895,13 @@ final class SessionRowView: UIView, HoverSessionRow {
         // parent's count is a second one, its own button.
         isAccessibilityElement = false
         accessibilityElements = [summary]
+        // The row is the session menu's trigger (SessionRow.svelte): a
+        // long-press under a finger, a right-click under a pointer.
+        ContextMenuHost.attach(to: self) { [weak self] copy in self?.menu?(copy) }
     }
+
+    /// The session's menu, built as it opens from the fleet at that moment; nil where the row has none (a workflow run).
+    var menu: ((@escaping ContextMenuHost.Copy) -> UIMenu?)?
 
     private lazy var summary = UIAccessibilityElement(accessibilityContainer: self)
 
@@ -886,6 +932,8 @@ final class SessionRowView: UIView, HoverSessionRow {
         var hover: String?
         /// A finished row a pointer can archive from its end (`onarchive`).
         var archives = false
+        /// The operator stopped it: its mark is an ended session's, so the word is where it differs (`statusWord`).
+        var stopped = false
         /// Its place among its list's echoes and how many the list has (motion/echo).
         var beat = 0
         var beats = 1
@@ -907,7 +955,7 @@ final class SessionRowView: UIView, HoverSessionRow {
         trail.text = content.trail
         line.text = content.line
         alpha = content.stale ? 0.55 : 1
-        summary.accessibilityLabel = "\(content.status.word): \(content.title)"
+        summary.accessibilityLabel = "\(content.stopped ? "Stopped" : content.status.word): \(content.title)"
         summary.accessibilityValue = [content.line, content.trail].filter { !$0.isEmpty }.joined(separator: ", ")
         // The row reads as one element, and a parent's mark is a second one, its own switch.
         accessibilityElements = [summary] + (mark.switchElement.map { [$0] } ?? [])
@@ -926,7 +974,7 @@ final class MoreCell: HomeCell {
         button.configuration = config
         button.houseStyle()
         button.pressTint()
-        pin(button, insets: NSDirectionalEdgeInsets(top: 2, leading: 0, bottom: 0, trailing: 0))
+        pin(button, insets: NSDirectionalEdgeInsets(top: Nest.gap, leading: 0, bottom: 0, trailing: 0))
         button.heightAnchor.constraint(greaterThanOrEqualToConstant: 28).isActive = true
     }
 
@@ -959,10 +1007,20 @@ final class CawCell: HomeCell {
         column.alignment = .center
         column.spacing = Space.space2
         pin(column, insets: NSDirectionalEdgeInsets(top: Space.space4, leading: 0, bottom: Space.space4, trailing: 0))
-        NSLayoutConstraint.activate([
+        placeSide = [
             place.widthAnchor.constraint(equalToConstant: HomeViewController.cawSide),
             place.heightAnchor.constraint(equalToConstant: HomeViewController.cawSide),
-        ])
+        ]
+        NSLayoutConstraint.activate(placeSide)
+    }
+
+    private var placeSide: [NSLayoutConstraint] = []
+
+    /// His size where he stands (Home.svelte: 160 on the page, 112 in the rail).
+    var side = HomeViewController.cawSide {
+        didSet {
+            for constraint in placeSide { constraint.constant = side }
+        }
     }
 
     /// The fleet has something in it now and this cell is going: he fades out over

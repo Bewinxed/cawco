@@ -98,6 +98,10 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         }
         // The page's dock: Start session where the phone's thumb reaches.
         board.onStart = { [weak self] in self?.startSession(machineId: nil, cwd: nil, projectId: nil) }
+        // A home row is the session menu's trigger, as a rail row is.
+        for home in [board, railHome] {
+            home.sessionMenus = { [weak self] in self?.sessionMenus }
+        }
 
         let railNav = UINavigationController(rootViewController: rail)
         railNav.setNavigationBarHidden(true, animated: false)

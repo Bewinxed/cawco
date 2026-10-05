@@ -581,13 +581,4 @@ public final class HomeModel {
             forKey: Keys.whole
         )
     }
-
-    /// What the status line says while live (StatusLine.svelte): the hub's
-    /// figure for today, or that it could not be read; nothing before it is.
-    public var spendWords: String {
-        if let spend = fleet.spend {
-            return "\(Usage.money(spend.today)) today"
-        }
-        return fleet.spendFailed ? "Spend not read from the hub" : ""
-    }
 }

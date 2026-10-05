@@ -360,6 +360,16 @@ public final class FolderTabs: UIControl {
         cells[index].setTrail(view)
     }
 
+    /// How far under 260pt the rail holding the tabs is, 0 to 33
+    /// (WorkTabs.svelte `--tight`): a tab's inset and the room after its
+    /// trail give that much back, so both labels stand whole beside their counts.
+    public var tight = 0.0 {
+        didSet {
+            guard tight != oldValue else { return }
+            for cell in cells { cell.tight = tight }
+        }
+    }
+
     public func select(_ index: Int, animated: Bool) {
         guard index != selectedIndex else {
             return
@@ -436,8 +446,9 @@ public final class FolderTabs: UIControl {
             row.addArrangedSubview(title)
             addSubview(row)
             end = row.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -FolderTabs.padX)
+            lead = row.leadingAnchor.constraint(equalTo: leadingAnchor, constant: FolderTabs.padX)
             NSLayoutConstraint.activate([
-                row.leadingAnchor.constraint(equalTo: leadingAnchor, constant: FolderTabs.padX),
+                lead,
                 end,
                 row.centerYAnchor.constraint(equalTo: centerYAnchor),
             ])
@@ -459,13 +470,27 @@ public final class FolderTabs: UIControl {
         }
 
         private var end: NSLayoutConstraint!
+        private var lead: NSLayoutConstraint!
+        private var trailed = false
 
         /// A trail ends the tab: the label's hit loses its end padding, the
         /// box keeps `padX − 6` (TabItem.svelte), and the trail its own 2pt
         /// (WorkTabs.svelte `.count`).
         func setTrail(_ view: UIView) {
             row.addArrangedSubview(view)
-            end.constant = -(FolderTabs.padX - 6) - 2
+            trailed = true
+            inset()
+        }
+
+        /// WorkTabs.svelte: `--px: 6px − tight × 0.09`, and after a count `max(0, 2px − tight × 0.06)`.
+        var tight = 0.0 {
+            didSet { inset() }
+        }
+
+        private func inset() {
+            let pad = FolderTabs.padX - tight * 0.09
+            lead.constant = pad
+            end.constant = trailed ? -max(0, 2 - tight * 0.06) : -pad
         }
 
         func set(chosen: Bool, forward: Bool) {

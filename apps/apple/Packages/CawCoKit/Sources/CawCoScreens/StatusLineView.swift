@@ -3,10 +3,10 @@ import CawCoDesign
 import UIKit
 
 /// The line every other line on the home is believed by
-/// (home/StatusLine.svelte): is the hub there, and, once the fleet is read,
-/// what today has cost. A dead hub says so with its retry clock and
-/// Reconnect: a quiet fleet and an unreachable hub never read the same.
-/// Each change of phase cross-fades.
+/// (home/StatusLine.svelte): is the hub there. Live and read is the quiet
+/// default: the home draws no line then. A dead hub says so with its retry
+/// clock and Reconnect: a quiet fleet and an unreachable hub never read the
+/// same. Each change of phase cross-fades.
 final class StatusLineView: UIView {
     enum Phase: Equatable {
         case unreachable, connecting, reading, connected
@@ -19,8 +19,6 @@ final class StatusLineView: UIView {
     private var phase: Phase?
     private var clock: Timer?
     private weak var hub: HubConnection?
-    /// What it says while live: the hub's spend for today, or why it has none.
-    private var spend = ""
 
     init() {
         super.init(frame: .zero)
@@ -52,9 +50,8 @@ final class StatusLineView: UIView {
         fatalError("StatusLineView is built in code")
     }
 
-    func configure(hub: HubConnection, ready: Bool, spend: String) {
+    func configure(hub: HubConnection, ready: Bool) {
         self.hub = hub
-        self.spend = spend
         let next: Phase = switch hub.state {
         case .unreachable: .unreachable
         case .connecting: .connecting
@@ -98,12 +95,12 @@ final class StatusLineView: UIView {
                 words.text = "Hub unreachable, retrying in \(seconds)s"
             }
         case .connecting:
-            words.text = hub.fleet.liveRead ? "Reconnecting…" : "Connecting…"
+            words.text = "Connecting…"
         case .reading:
             words.text = "Connected · reading the fleet…"
         case .connected:
-            // Live is the quiet default; only what it cost is news.
-            words.text = spend
+            // Live and read is the quiet default: the home draws no line then.
+            words.text = nil
         }
         KitButton.setTitle(hub.socket == .connecting ? "Connecting…" : "Reconnect", of: reconnect, variant: .outline, height: .xs)
     }

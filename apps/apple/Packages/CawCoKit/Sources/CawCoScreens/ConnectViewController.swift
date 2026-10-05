@@ -178,7 +178,7 @@ final class ConnectViewController: ObservedViewController, UITextFieldDelegate {
     override func refreshContent() {
         // A hub that was never entered has no state to say.
         status.isHidden = hub.address == nil
-        status.configure(hub: hub, ready: false, spend: "")
+        status.configure(hub: hub, ready: false)
         let hubs = discovery.found
         guard hubs != shownFound else {
             return
