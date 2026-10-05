@@ -17,6 +17,12 @@ enum Pace {
 
     /// A stretch this long is a dropped frame on every screen the app runs on.
     private static let seen = 0.05
+    /// One frame at 60 a second: what a turn of the main thread has before it is late.
+    private static let frame = 1.0 / 60
+    /// Time run past a frame since `told`, and the transcript's frames in those turns.
+    private static var over = 0.0
+    private static var overIn = 0.0
+    private static var told = CACurrentMediaTime()
 
     static func watch() {
         guard !watching else { return }
@@ -32,7 +38,19 @@ enum Pace {
         // After Core Animation's own commit, which lays out what the turn changed.
         let rest = CFRunLoopObserverCreateWithHandler(nil, CFRunLoopActivity.beforeWaiting.rawValue, true, .max) { _, _ in
             MainActor.assumeIsolated {
-                let held = CACurrentMediaTime() - woke
+                let now = CACurrentMediaTime()
+                let held = now - woke
+                // The hitch time: what each turn ran past one frame, summed and
+                // said once a second while there is any (ms of hitch a second).
+                if held > frame { over += held - frame; overIn += taken }
+                if now - told >= 1 {
+                    if over > 0 {
+                        log.info("main thread over a frame by \(over * 1000, format: .fixed(precision: 1)) ms in \((now - told) * 1000, format: .fixed(precision: 0)) ms, transcript frames \(overIn * 1000, format: .fixed(precision: 1)) ms of those turns")
+                    }
+                    told = now
+                    over = 0
+                    overIn = 0
+                }
                 guard held >= seen else { return }
                 log.info("main thread held \(held * 1000, format: .fixed(precision: 0)) ms at a stretch, \(taken * 1000, format: .fixed(precision: 0)) ms of it in \(frames) transcript frames")
             }
