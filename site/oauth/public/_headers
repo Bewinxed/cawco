@@ -4,3 +4,6 @@
 /oauth/callback
   Cache-Control: no-store
   Referrer-Policy: no-referrer
+/oauth/start
+  Cache-Control: no-store
+  Referrer-Policy: no-referrer

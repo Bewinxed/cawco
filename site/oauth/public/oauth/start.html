@@ -1,0 +1,30 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>CawCo sign-in</title>
+<body style="font:16px system-ui;margin:2rem;max-width:32rem">
+<p id="out">Starting sign-in…</p>
+<script>
+  // The install's address arrives in the URL fragment, so it is never sent to
+  // a server. It is kept in this browser only, keyed by the sign-in's state,
+  // until the provider sends the person back to the callback page.
+  const out = document.getElementById("out");
+  const fail = (text) => { out.textContent = text; };
+  try {
+    const b64 = location.hash.slice(1).replaceAll("-", "+").replaceAll("_", "/");
+    const { origin, auth } = JSON.parse(atob(b64));
+    const home = new URL(origin);
+    const to = new URL(auth);
+    const state = to.searchParams.get("state");
+    if (!["http:", "https:"].includes(home.protocol) || home.username || home.password
+        || home.origin !== origin || to.protocol !== "https:" || !state) {
+      throw new Error("bad");
+    }
+    localStorage.setItem("cawco-oauth:" + state, JSON.stringify({ origin, at: Date.now() }));
+    history.replaceState(null, "", location.pathname);
+    location.replace(to.href);
+  } catch {
+    fail("This sign-in link is not valid. Start sign-in again from CawCo.");
+  }
+</script>

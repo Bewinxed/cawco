@@ -81,6 +81,14 @@ export interface FleetMcpServer extends FleetPlacement {
 export const CAWCO_MCP_CALLBACK_PORT = 43_879;
 
 /**
+ * Where CawCo publishes its shared OAuth client: a metadata document, and the
+ * page that hands a sign-in back to the install that started it. Used only for
+ * a provider that identifies clients by such a document and has no dynamic
+ * registration; every other provider redirects straight to the install.
+ */
+export const CAWCO_OAUTH_URL = "https://cawco.dev/oauth";
+
+/**
  * One linked plugin marketplace. `source` is whatever
  * `claude plugin marketplace add` accepts — `owner/repo`, a git URL, a
  * marketplace.json URL — passed through verbatim.

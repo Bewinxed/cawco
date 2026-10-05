@@ -1,4 +1,4 @@
-import type { FleetConfig } from "@cawco/core";
+import { CAWCO_OAUTH_URL, type FleetConfig } from "@cawco/core";
 import {
   discoverAuthorizationServerMetadata,
   discoverOAuthProtectedResourceMetadata,
@@ -13,6 +13,13 @@ import type { DbShape } from "./db";
 
 /** Where the hub receives the authorization server's redirect, under the origin the signing-in browser reached the dashboard by. */
 export const MCP_CALLBACK_PATH = "/api/fleet/mcp/oauth/callback";
+const SHARED_CLIENT_ID = `${CAWCO_OAUTH_URL}/client.json`;
+const SHARED_REDIRECT = `${CAWCO_OAUTH_URL}/callback`;
+/** `via` says where the browser goes first: straight to the provider, or through CawCo's start page. */
+export interface SignInStart {
+  authorizationUrl: string;
+  via: "install" | "cawco";
+}
 const MCP_HEADERS = [
   "Mcp-Session-Id",
   "MCP-Protocol-Version",
@@ -35,10 +42,7 @@ export class FleetMcp {
   readonly #changed: () => void;
   readonly #probing = new Map<string, Promise<void>>();
   readonly #refreshing = new Map<string, Promise<OAuthRow>>();
-  readonly #signingIn = new Map<
-    string,
-    Promise<{ authorizationUrl: string }>
-  >();
+  readonly #signingIn = new Map<string, Promise<SignInStart>>();
 
   constructor(db: DbShape, changed: () => void) {
     this.#db = db;
@@ -197,10 +201,7 @@ export class FleetMcp {
     };
   }
 
-  start(
-    name: string,
-    redirectUri: string
-  ): Promise<{ authorizationUrl: string }> {
+  start(name: string, redirectUri: string): Promise<SignInStart> {
     const running = this.#signingIn.get(name);
     if (running) {
       return running;
@@ -212,10 +213,7 @@ export class FleetMcp {
     return starting;
   }
 
-  async #start(
-    name: string,
-    redirectUri: string
-  ): Promise<{ authorizationUrl: string }> {
+  async #start(name: string, installRedirect: string): Promise<SignInStart> {
     await this.#probing.get(name);
     const server = this.#server(name);
     if (!server.enabled) {
@@ -227,9 +225,21 @@ export class FleetMcp {
         "This server has no discovered OAuth authorization server. Check its URL and save it again."
       );
     }
+    // A provider that names clients by a published document and has no
+    // registration is signed in to as CawCo's shared client, whose one redirect
+    // is CawCo's hand-back page; any other provider redirects to this install.
+    const shared =
+      !row.metadata.registration_endpoint &&
+      row.metadata.client_id_metadata_document_supported === true;
+    const redirectUri = shared ? SHARED_REDIRECT : installRedirect;
     let { client } = row;
-    // A client registered for another origin cannot be redirected to this one.
-    if (!client?.redirect_uris.includes(redirectUri)) {
+    if (shared) {
+      client = {
+        client_id: SHARED_CLIENT_ID,
+        redirect_uris: [SHARED_REDIRECT],
+      };
+      // A client registered for another origin cannot be redirected to this one.
+    } else if (!client?.redirect_uris.includes(redirectUri)) {
       try {
         client = await registerClient(row.issuer, {
           metadata: row.metadata,
@@ -279,7 +289,10 @@ export class FleetMcp {
         expiresAt: Date.now() + 10 * 60_000,
       },
     });
-    return { authorizationUrl: authorizationUrl.toString() };
+    return {
+      authorizationUrl: authorizationUrl.toString(),
+      via: shared ? "cawco" : "install",
+    };
   }
 
   async complete(code: string, state: string): Promise<void> {

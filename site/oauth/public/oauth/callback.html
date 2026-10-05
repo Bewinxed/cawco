@@ -5,17 +5,37 @@
 <title>CawCo sign-in</title>
 <body style="font:16px system-ui;margin:2rem;max-width:32rem">
 <p id="out">Reading the sign-in result…</p>
-<pre id="raw" style="white-space:pre-wrap;word-break:break-all"></pre>
+<button id="go" hidden style="font:inherit;padding:.6rem 1rem;min-height:44px">Continue</button>
 <script>
-  const q = new URLSearchParams(location.search);
+  // The provider sends the person here with a one-time code. The code is
+  // useless without the verifier that stays on the install, and goes on only
+  // to the install that started this sign-in, after a tap.
   const out = document.getElementById("out");
-  const raw = document.getElementById("raw");
+  const go = document.getElementById("go");
+  const q = new URLSearchParams(location.search);
+  const code = q.get("code");
+  const state = q.get("state");
+  history.replaceState(null, "", location.pathname);
+  const key = state ? "cawco-oauth:" + state : "";
+  const saved = key ? localStorage.getItem(key) : null;
+  let origin = "";
+  try {
+    const entry = saved ? JSON.parse(saved) : null;
+    if (entry && Date.now() - entry.at < 10 * 60 * 1000) origin = new URL(entry.origin).origin;
+  } catch {}
   if (q.get("error")) {
-    out.textContent = "The provider said: " + q.get("error");
-  } else if (q.get("code")) {
-    out.textContent = "Sign-in result received (test page, nothing is forwarded yet).";
-    raw.textContent = "code=" + q.get("code") + "\nstate=" + q.get("state");
+    out.textContent = "The provider did not complete the sign-in (" + q.get("error") + "). Start again from CawCo.";
+  } else if (!code || !origin) {
+    out.textContent = "This sign-in has expired or was started on another device. Start sign-in again from CawCo.";
   } else {
-    out.textContent = "No sign-in result in this address.";
+    out.textContent = "Send this sign-in to the CawCo hub at " + origin + "?";
+    go.hidden = false;
+    go.onclick = () => {
+      localStorage.removeItem(key);
+      const back = new URL("/api/fleet/mcp/oauth/callback", origin);
+      back.searchParams.set("code", code);
+      back.searchParams.set("state", state);
+      location.assign(back.href);
+    };
   }
 </script>

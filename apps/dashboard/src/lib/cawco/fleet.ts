@@ -7,6 +7,7 @@
  * `instances` frames say what came of it.
  */
 import {
+  CAWCO_OAUTH_URL,
   type ConfigInspection,
   type FleetAgent,
   type FleetConfig,
@@ -406,16 +407,30 @@ export const removeMcpServer = (name: string): Promise<void> =>
  * lets a phone, or any browser, finish it, whichever machine runs the agent.
  */
 export const signInToMcp = async (name: string): Promise<void> => {
-  const { authorizationUrl } = await send<{ authorizationUrl: string }>(
+  const { origin } = window.location;
+  const { authorizationUrl, via } = await send<{
+    authorizationUrl: string;
+    via: "install" | "cawco";
+  }>(
     `/api/fleet/mcp/${encodeURIComponent(name)}/sign-in`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ origin: window.location.origin }),
+      body: JSON.stringify({ origin }),
     },
     `start sign-in to ${name}`
   );
-  window.location.assign(authorizationUrl);
+  if (via === "install") {
+    window.location.assign(authorizationUrl);
+    return;
+  }
+  // CawCo's page hands the sign-in back to this install. The address rides in
+  // the fragment, which the browser never sends to a server.
+  const hop = btoa(JSON.stringify({ origin, auth: authorizationUrl }))
+    .replaceAll("+", "-")
+    .replaceAll("/", "_")
+    .replaceAll("=", "");
+  window.location.assign(`${CAWCO_OAUTH_URL}/start#${hop}`);
 };
 
 export const saveMarketplace = (
