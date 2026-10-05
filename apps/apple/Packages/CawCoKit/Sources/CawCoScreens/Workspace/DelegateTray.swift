@@ -929,6 +929,11 @@ final class TrayChipView: UIControl {
             line.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Space.space2),
             line.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Space.space2),
             line.centerYAnchor.constraint(equalTo: centerYAnchor),
+            // The "+N" fills the chip: a kit label lays out by constraints, so a frame alone leaves it ambiguous.
+            count.leadingAnchor.constraint(equalTo: leadingAnchor),
+            count.trailingAnchor.constraint(equalTo: trailingAnchor),
+            count.topAnchor.constraint(equalTo: topAnchor),
+            count.bottomAnchor.constraint(equalTo: bottomAnchor),
         ])
         addGestureRecognizer(UIHoverGestureRecognizer(target: self, action: #selector(hovered(_:))))
         isAccessibilityElement = true
@@ -951,7 +956,6 @@ final class TrayChipView: UIControl {
     override func layoutSubviews() {
         super.layoutSubviews()
         surface.frame = bounds
-        count.frame = bounds
     }
 
     /// `.touch-hit`: a finger's 44pt down the chip, and to the midpoint of the gap beside it.

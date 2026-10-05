@@ -154,7 +154,11 @@ public final class ComposerView: UIView, UITextViewDelegate {
         chipsRow.showsHorizontalScrollIndicator = false
         chipsRow.addSubview(chips)
         chipsRow.isHidden = true
+        // With no chip in it the row has no width of its own: none, rather than any.
+        let empty = chips.widthAnchor.constraint(equalToConstant: 0)
+        empty.priority = .fittingSizeLevel
         NSLayoutConstraint.activate([
+            empty,
             chips.leadingAnchor.constraint(equalTo: chipsRow.contentLayoutGuide.leadingAnchor, constant: Space.space1),
             chips.trailingAnchor.constraint(equalTo: chipsRow.contentLayoutGuide.trailingAnchor, constant: -Space.space1),
             chips.topAnchor.constraint(equalTo: chipsRow.contentLayoutGuide.topAnchor, constant: Space.space1),

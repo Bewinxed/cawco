@@ -542,12 +542,11 @@ final class RowActions: NSObject {
         }
         peek.addAction(UIAction { [weak self] _ in self?.onPeek() }, for: .touchUpInside)
         archive.addAction(UIAction { [weak self] _ in self?.onArchive() }, for: .touchUpInside)
+        // Archive stands a step before Peek wherever Peek is; a finger never sees it, and it still has a place.
+        archive.trailingAnchor.constraint(equalTo: peek.leadingAnchor, constant: -Space.space1).isActive = true
         if pointer {
             // They take no room until wanted: block-centred on the row, a step left of the trailing column.
-            NSLayoutConstraint.activate([
-                peek.trailingAnchor.constraint(equalTo: row.end.leadingAnchor, constant: -Space.space1),
-                archive.trailingAnchor.constraint(equalTo: peek.leadingAnchor, constant: -Space.space1),
-            ])
+            peek.trailingAnchor.constraint(equalTo: row.end.leadingAnchor, constant: -Space.space1).isActive = true
             for button in [archive, peek] {
                 button.rest = Palette.surfaceHover
                 button.alpha = 0
