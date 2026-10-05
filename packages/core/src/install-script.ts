@@ -145,8 +145,15 @@ ${
   bun packages/cli/src/cli.ts join --hub "$HUB"`
     : `  if [ "$(uname -s)" = Linux ]; then
     [ -d /run/systemd/system ] || fail "this machine is not running systemd; CawCo needs systemd user services."
-    say "enabling persistent user services"
-    [ "$(loginctl show-user "$(id -un)" -p Linger --value 2>/dev/null)" = yes ] || loginctl enable-linger || fail "enable lingering as an administrator with: sudo loginctl enable-linger $(id -un), then run this again."
+    if [ "$(loginctl show-user "$(id -un)" -p Linger --value 2>/dev/null)" != yes ]; then
+      if [ "$(id -u)" = 0 ]; then
+        say "enabling persistent user services; command: loginctl enable-linger $(id -un)"
+        loginctl enable-linger "$(id -un)" || fail "enable lingering as an administrator with: sudo loginctl enable-linger $(id -un), then run this again."
+      else
+        say "enabling persistent user services; command: sudo loginctl enable-linger $(id -un)"
+        command -v sudo >/dev/null 2>&1 && sudo loginctl enable-linger "$(id -un)" || fail "enable lingering as an administrator with: sudo loginctl enable-linger $(id -un), then run this again."
+      fi
+    fi
   fi
 
   # Fix the socket address explicitly so the printed URL names this install.
