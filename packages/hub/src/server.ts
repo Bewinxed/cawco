@@ -5586,11 +5586,9 @@ export const createServer = (
     // Carried on every publish, so a dashboard follows a continuation it
     // started over the socket rather than over the request that started it.
     continuations: continuationTable(),
-    // `pulses` seeds the rail's now-state on connect instead of leaving it
-    // blank until the next beat. `hubBuild` lets a client tell a hub that is
+    // `hubBuild` lets a client tell a hub that is
     // behind from a machine that is. `protocol` is the wire this hub speaks:
     // a page built for an older one reloads itself on its first frame.
-    pulses: Object.fromEntries(pulses),
     hubBuild,
     protocol: WIRE_PROTOCOL,
   });
@@ -5602,6 +5600,8 @@ export const createServer = (
       kind: "instances",
       instances: boardRows(),
       ...boardExtras(),
+      // Seed now-state once per connection; updates have per-session frames.
+      pulses: Object.fromEntries(pulses),
     },
   });
 
@@ -5619,6 +5619,16 @@ export const createServer = (
     // this and is handed a snapshot at least this fresh, so the first publish
     // sends what moved rather than all of it.
     boardRows().map((row) => [row.id, JSON.stringify(row)])
+  );
+  const publishedExtras = boardExtras();
+  const publishedAgents = new Map(
+    publishedExtras.agents.map((row) => [row.machineId, JSON.stringify(row)])
+  );
+  const publishedMetadata = new Map(
+    (["previews", "handoffs", "continuations"] as const).map((key) => [
+      key,
+      JSON.stringify(publishedExtras[key]),
+    ])
   );
 
   const pendingInstancePublishes = new Set<string>();
@@ -5659,11 +5669,61 @@ export const createServer = (
         removed.push(id);
       }
     }
+    const delta: Extract<FramePayload, { kind: "instances_delta" }> = {
+      kind: "instances_delta",
+      upserts,
+      removed,
+      ...boardMetadataDelta(),
+    };
+    if (
+      upserts.length === 0 &&
+      removed.length === 0 &&
+      Object.keys(delta).length === 3
+    ) {
+      return;
+    }
     registry.broadcast({
       verb: "frames",
       machineId,
-      payload: { kind: "instances_delta", upserts, removed, ...boardExtras() },
+      payload: delta,
     });
+  };
+
+  /** No pulse snapshots on publishes: each session already has its own stream. */
+  const boardMetadataDelta = (): Partial<
+    Extract<FramePayload, { kind: "instances_delta" }>
+  > => {
+    const extras = boardExtras();
+    const delta: ReturnType<typeof boardMetadataDelta> = {};
+    const agents = extras.agents.filter((row) => {
+      const serialised = JSON.stringify(row);
+      if (publishedAgents.get(row.machineId) === serialised) {
+        return false;
+      }
+      publishedAgents.set(row.machineId, serialised);
+      return true;
+    });
+    const machineIds = new Set(extras.agents.map((row) => row.machineId));
+    const removedAgents = [...publishedAgents.keys()].filter(
+      (id) => !machineIds.has(id)
+    );
+    for (const id of removedAgents) {
+      publishedAgents.delete(id);
+    }
+    if (agents.length > 0) {
+      delta.agents = agents;
+    }
+    if (removedAgents.length > 0) {
+      delta.removedAgents = removedAgents;
+    }
+    for (const key of ["previews", "handoffs", "continuations"] as const) {
+      const serialised = JSON.stringify(extras[key]);
+      if (publishedMetadata.get(key) !== serialised) {
+        publishedMetadata.set(key, serialised);
+        Object.assign(delta, { [key]: extras[key] });
+      }
+    }
+    return delta;
   };
 
   /**
@@ -11797,7 +11857,9 @@ export const createServer = (
               // Without it the reply would fall through to the fleet-wide
               // broadcast that an unrouted `control_result` gets today, and every
               // dashboard would draw an error for a command it never sent.
-              else if (settled) {
+              else if (settled || kind === "control_result") {
+                // A reply without a live requester is not fleet news. This
+                // includes late answers after a socket closed or a read timed out.
                 break;
               } else if (kind === "frame" && message.instanceId) {
                 // Folded into the session's transcript here, for every frame and

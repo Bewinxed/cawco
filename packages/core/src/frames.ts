@@ -8,6 +8,8 @@ import type {
 } from "./harness";
 import type {
   AgentRow,
+  BuildInfo,
+  ContinuationJob,
   DelegateEvent,
   InstanceRow,
   PreviewSource,
@@ -68,18 +70,27 @@ export interface RejectedFrame {
 
 export interface InstancesFrame {
   agents: AgentRow[];
+  continuations: ContinuationJob[];
+  handoffs: Record<string, { from: string; at: number }>;
+  hubBuild: BuildInfo;
   instances: InstanceRow[];
-  /** Hub-originated: every session it still lists, pushed whenever a row moves. */
+  /** Hub-originated: the complete board on every connection, including reconnects. */
   kind: "instances";
   previews?: PreviewFrame[];
+  protocol: number;
+  pulses: Record<string, SessionPulse>;
 }
 
 export interface InstancesDeltaFrame {
-  agents: AgentRow[];
-  /** Hub-originated: changes since the last publish, with the same small board metadata. */
+  /** Changed machines only; omitted when no machine moved. */
+  agents?: AgentRow[];
+  continuations?: ContinuationJob[];
+  handoffs?: Record<string, { from: string; at: number }>;
+  /** Hub-originated: only changed rows and metadata; pulses travel separately. */
   kind: "instances_delta";
   previews?: PreviewFrame[];
   removed: string[];
+  removedAgents?: string[];
   upserts: InstanceRow[];
 }
 

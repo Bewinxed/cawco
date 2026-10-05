@@ -1405,7 +1405,9 @@ function trackTurn(instanceId: string, pulse: SessionPulse): void {
  */
 function applyPulse(target: SessionState, pulse: SessionPulse): void {
   target.busy = pulse.busy;
-  target.currentTool = pulse.currentTool;
+  if (!equal(target.currentTool, pulse.currentTool)) {
+    target.currentTool = pulse.currentTool;
+  }
 }
 
 function hydrate(target: SessionState): void {
@@ -1611,10 +1613,59 @@ async function load<T>(path: string): Promise<T | null> {
  * from it, so a snapshot is also how a bare `/session/[id]` fills itself in.
  */
 function adoptInstances(rows: InstanceRow[]): void {
-  hubRows = rows;
+  const next = reconcileRows(hubRows, rows, (row) => row.id);
+  if (next === hubRows) {
+    return;
+  }
+  hubRows = next;
   for (const target of Object.values(state.sessions)) {
     hydrate(target);
   }
+}
+
+/** A snapshot keeps unchanged rows and, when nothing moved, the list itself. */
+function reconcileRows<T>(
+  current: T[],
+  incoming: T[],
+  key: (row: T) => string
+): T[] {
+  const known = new Map(current.map((row) => [key(row), row]));
+  const next = incoming.map((row) => {
+    const held = known.get(key(row));
+    return held && equal(held, row) ? held : row;
+  });
+  return current.length === next.length &&
+    current.every((row, i) => row === next[i])
+    ? current
+    : next;
+}
+
+/** A delta keeps all absent rows; an empty or identical patch is a no-op. */
+function patchRows<T>(
+  current: T[],
+  upserts: T[],
+  removed: string[],
+  key: (row: T) => string
+): T[] {
+  if (upserts.length === 0 && removed.length === 0) {
+    return current;
+  }
+  const gone = new Set(removed);
+  const next = current.filter((row) => !gone.has(key(row)));
+  const at = new Map(next.map((row, i) => [key(row), i]));
+  for (const row of upserts) {
+    const i = at.get(key(row));
+    if (i === undefined) {
+      at.set(key(row), next.length);
+      next.push(row);
+    } else if (!equal(next[i], row)) {
+      next[i] = row;
+    }
+  }
+  return current.length === next.length &&
+    current.every((row, i) => row === next[i])
+    ? current
+    : next;
 }
 
 /**
@@ -1625,19 +1676,9 @@ function adoptInstances(rows: InstanceRow[]): void {
  * instead of all of them.
  */
 function patchInstances(upserts: InstanceRow[], removed: string[]): void {
-  const gone = new Set(removed);
-  const next = hubRows.filter((row) => !gone.has(row.id));
-  if (upserts.length > 0) {
-    const at = new Map(next.map((row, i) => [row.id, i]));
-    for (const row of upserts) {
-      const i = at.get(row.id);
-      if (i === undefined) {
-        at.set(row.id, next.length);
-        next.push(row);
-      } else {
-        next[i] = row;
-      }
-    }
+  const next = patchRows(hubRows, upserts, removed, (row) => row.id);
+  if (next === hubRows) {
+    return;
   }
   hubRows = next;
   for (const row of upserts) {
@@ -1664,13 +1705,19 @@ function adoptUsageLimits(
       openCodeGo[reading.machineId] = reading.openCodeGo;
     }
   }
-  state.usageLimits = claude;
-  state.openCodeGoLimits = openCodeGo;
+  if (!equal(state.usageLimits, claude)) {
+    state.usageLimits = claude;
+  }
+  if (!equal(state.openCodeGoLimits, openCodeGo)) {
+    state.openCodeGoLimits = openCodeGo;
+  }
   state.usageLimitsRead = true;
 }
 
 function adoptSpend(spend: UsageSpend): void {
-  state.spend = spend;
+  if (!equal(state.spend, spend)) {
+    state.spend = spend;
+  }
   state.spendFailed = false;
 }
 
@@ -1712,6 +1759,9 @@ export function followContinuations(
 }
 
 function adoptContinuations(table: ContinuationJob[]): void {
+  if (equal(state.continuations, table)) {
+    return;
+  }
   state.continuations = table;
   continuationFollower?.(table);
 }
@@ -1741,17 +1791,17 @@ async function refresh(): Promise<boolean> {
       load<ContinuationJob[]>("/api/continuations"),
     ]);
 
-  if (handoffs) {
+  if (handoffs && !equal(state.handoffs, handoffs)) {
     state.handoffs = handoffs;
   }
   if (continuations) {
     adoptContinuations(continuations);
   }
   if (machines) {
-    state.machines = machines;
+    adoptMachines(machines);
   }
   if (projects) {
-    state.projects = projects;
+    state.projects = reconcileRows(state.projects, projects, (row) => row.id);
   }
   if (rows) {
     adoptInstances(rows);
@@ -1841,7 +1891,11 @@ function refreshCatalogs(): void {
  * reads every machine offline, and the board's first-read gate
  * (`cawco.catalogsRead`) then waits on catalogs nobody ever asked for.
  */
-function adoptMachines(next: Machine[]): void {
+function adoptMachines(incoming: Machine[]): void {
+  const next = reconcileRows(state.machines, incoming, (row) => row.machineId);
+  if (next === state.machines) {
+    return;
+  }
   const wasOnline = new Set(
     state.machines
       .filter((machine) => machine.status === "online")
@@ -1925,10 +1979,13 @@ function mergePulses(
   if (!incoming) {
     return current;
   }
-  const next = { ...current };
+  let next = current;
   for (const [instanceId, pulse] of Object.entries(incoming)) {
     const existing = next[instanceId];
-    if (!existing || pulse.at >= existing.at) {
+    if ((!existing || pulse.at >= existing.at) && !equal(existing, pulse)) {
+      if (next === current) {
+        next = { ...current };
+      }
       next[instanceId] = pulse;
     }
   }
@@ -2046,7 +2103,9 @@ function clearTurnPhase(target: SessionState): void {
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: dispatches every FramePayload kind the socket can deliver; splitting it would scatter one state machine across files
 function handleFrame(frame: FramePayload): void {
   if (frame.kind === "fleet_mcp") {
-    state.fleetMcp = frame.servers;
+    if (!equal(state.fleetMcp, frame.servers)) {
+      state.fleetMcp = frame.servers;
+    }
     return;
   }
   if (frame.kind === "permission_request" && "workflowRunId" in frame) {
@@ -2077,10 +2136,13 @@ function handleFrame(frame: FramePayload): void {
   if (frame.kind === "preview") {
     const previous = state.previews[frame.instanceId];
     const sameRevision = previous?.revision === frame.revision;
-    state.previews[frame.instanceId] = {
+    const next = {
       ...(sameRevision ? previous : {}),
       ...frame,
     };
+    if (!equal(previous, next)) {
+      state.previews[frame.instanceId] = next;
+    }
     if (
       frame.state === "open" &&
       (previous?.state !== "open" || !sameRevision)
@@ -2095,7 +2157,7 @@ function handleFrame(frame: FramePayload): void {
         frame.previews.map((preview) => preview.instanceId)
       );
       for (const [id, preview] of Object.entries(state.previews)) {
-        if (!current.has(id)) {
+        if (!current.has(id) && preview.state !== "closed") {
           state.previews[id] = { ...preview, state: "closed" };
         }
       }
@@ -2105,17 +2167,30 @@ function handleFrame(frame: FramePayload): void {
     }
     // The machines ride along so a daemon registering — the moment its auth
     // state is decided — reaches the rail without a re-fetch.
-    adoptMachines(frame.agents);
-    checkRestartToast(frame.agents);
+    if (frame.kind === "instances") {
+      adoptMachines(frame.agents);
+    } else if (frame.agents || frame.removedAgents) {
+      adoptMachines(
+        patchRows(
+          state.machines,
+          frame.agents ?? [],
+          frame.removedAgents ?? [],
+          (row) => row.machineId
+        )
+      );
+    }
+    if (frame.agents) {
+      checkRestartToast(frame.agents);
+    }
     // The hub's own record of what each session is carrying. Kept there rather
     // than learnt by watching, so it is the same on every device and survives a
     // reload — a hand-off only this tab saw is one your phone never knows about.
-    state.handoffs =
-      (frame as { handoffs?: Record<string, { from: string; at: number }> })
-        .handoffs ?? {};
-    adoptContinuations(
-      (frame as { continuations?: ContinuationJob[] }).continuations ?? []
-    );
+    if (frame.handoffs && !equal(state.handoffs, frame.handoffs)) {
+      state.handoffs = frame.handoffs;
+    }
+    if (frame.continuations) {
+      adoptContinuations(frame.continuations);
+    }
     if (frame.kind === "instances") {
       adoptInstances(frame.instances);
       state.liveRead = true;
@@ -2129,31 +2204,21 @@ function handleFrame(frame: FramePayload): void {
         settle(requestId, (waiter) => waiter.resolve(undefined));
       }
     }
-    // The hub's now-state for every session it lists (C3), so a freshly-opened
-    // dashboard knows working/blocked/idle at once instead of waiting for the
-    // next per-instance `pulse` frame. Structural read, same as `handoffs` and
-    // `queues` above: a hub that predates the field sends nothing here.
-    state.pulses = mergePulses(
-      state.pulses,
-      (frame as { pulses?: Record<string, SessionPulse> }).pulses
-    );
-    for (const [id, pulse] of Object.entries(state.pulses)) {
-      trackTurn(id, pulse);
-      const held = state.sessions[id];
-      if (held) {
-        applyPulse(held, pulse);
+    // Every connection seeds now-state; subsequent changes arrive as pulses.
+    if (frame.kind === "instances") {
+      state.pulses = mergePulses(state.pulses, frame.pulses);
+      for (const [id, pulse] of Object.entries(state.pulses)) {
+        trackTurn(id, pulse);
+        const held = state.sessions[id];
+        if (held) {
+          applyPulse(held, pulse);
+        }
       }
-    }
-    // Structural read, same reason as `pulses` and `handoffs` above: a hub
-    // that predates C2 sends nothing here, and the comparisons that use it
-    // (see convergence.ts) already treat "nothing to compare against" as
-    // unknown rather than as current.
-    state.hubBuild =
-      (frame as { hubBuild?: BuildInfo }).hubBuild ?? state.hubBuild;
-    const { protocol } = frame as { protocol?: number };
-    if (protocol !== undefined) {
+      if (!equal(state.hubBuild, frame.hubBuild)) {
+        state.hubBuild = frame.hubBuild;
+      }
       // biome-ignore lint/complexity/noVoid: fire-and-forget — a reload ends this page, and one that is not due changes nothing
-      void reloadForProtocol(protocol);
+      void reloadForProtocol(frame.protocol);
     }
     return;
   }
@@ -2171,11 +2236,20 @@ function handleFrame(frame: FramePayload): void {
   }
 
   if (frame.kind === "work_item") {
-    state.workItems[frame.item.id] = frame.item;
+    if (!equal(state.workItems[frame.item.id], frame.item)) {
+      state.workItems[frame.item.id] = frame.item;
+    }
     return;
   }
 
   if (frame.kind === "pulse") {
+    const previous = state.pulses[frame.instanceId];
+    if (
+      equal(previous, frame.pulse) ||
+      (previous && previous.at > frame.pulse.at)
+    ) {
+      return;
+    }
     // The daemon's coarse now-state, broadcast — this is the whole of what the
     // rail knows about a session this browser has not subscribed to.
     state.pulses[frame.instanceId] = frame.pulse;
