@@ -655,7 +655,7 @@ public final class ComposerView: UIView, UITextViewDelegate {
     /// one still out, or a swipe still carrying the conversation leaves the
     /// draft as it is. The pane clears it once it has the message.
     private func submit() {
-        guard let binding, writable, !held, action == .send, hasContent, flight == nil else { return }
+        guard let binding, writable, !held, action != .sending, hasContent, flight == nil else { return }
         let words = field.text.trimmingCharacters(in: .whitespacesAndNewlines)
         binding.onSend(words, attachments)
     }
