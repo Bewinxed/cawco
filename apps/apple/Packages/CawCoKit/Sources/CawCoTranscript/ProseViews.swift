@@ -457,9 +457,15 @@ final class TableBlock: UIView {
         columnTexts = Array(repeating: [], count: columns)
         let known = bounds.width > 0 ? bounds.width : fitWidth
         let start = Self.columns(extents, fitting: known ?? extents.reduce(0) { $0 + $1.most })
-        /// One row. `ruled`: the 1pt rule under it, which stands below the
-        /// row's cells and adds to its height, as a collapsed border does.
-        func line(_ cells: [NSAttributedString], head: Bool, ruled: Bool) -> UIView {
+        // A collapsed 1px border gives each of the two rows it parts half of
+        // itself, and WebKit takes each half down to a whole device pixel:
+        // at 3x a third of a point either side, 0.67 in all, under a rule
+        // painted its full point. Mobile Safari: head 26.33, rows 54.20 and
+        // 53.88 around two-line cells 53.55 tall, rules 54.33 apart.
+        let scale = max(traitCollection.displayScale, 1)
+        let half = scale >= 2 ? (scale / 2).rounded(.down) / scale : 0.5
+        /// One row. `ruled`: the rule under it; `under`: a rule stands above it.
+        func line(_ cells: [NSAttributedString], head: Bool, ruled: Bool, under: Bool) -> UIView {
             let row = UIStackView()
             row.axis = .horizontal
             row.alignment = .top
@@ -478,7 +484,7 @@ final class TableBlock: UIView {
                 row.addArrangedSubview(box)
             }
             let wrap = UIView()
-            wrap.pin(row, insets: UIEdgeInsets(top: 0, left: 0, bottom: ruled ? 1 : 0, right: 0))
+            wrap.pin(row, insets: UIEdgeInsets(top: under ? half : 0, left: 0, bottom: ruled ? half : 0, right: 0))
             guard ruled else { return wrap }
             let rule = UIView()
             rule.backgroundColor = Palette.border
@@ -487,14 +493,14 @@ final class TableBlock: UIView {
             NSLayoutConstraint.activate([
                 rule.leadingAnchor.constraint(equalTo: wrap.leadingAnchor),
                 rule.trailingAnchor.constraint(equalTo: wrap.trailingAnchor),
-                rule.bottomAnchor.constraint(equalTo: wrap.bottomAnchor),
+                rule.topAnchor.constraint(equalTo: wrap.bottomAnchor, constant: -half),
                 rule.heightAnchor.constraint(equalToConstant: 1),
             ])
             return wrap
         }
-        if !head.isEmpty { grid.addArrangedSubview(line(head, head: true, ruled: true)) }
+        if !head.isEmpty { grid.addArrangedSubview(line(head, head: true, ruled: true, under: false)) }
         for (i, row) in rows.enumerated() {
-            grid.addArrangedSubview(line(row, head: false, ruled: i < rows.count - 1))
+            grid.addArrangedSubview(line(row, head: false, ruled: i < rows.count - 1, under: i > 0 || !head.isEmpty))
         }
     }
 }
