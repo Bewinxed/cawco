@@ -1,5 +1,13 @@
 /** Server-only install identity and durable update state of a binary install. */
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  readdir,
+  readFile,
+  readlink,
+  rename,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import type { BinaryUpdateState } from "./binary-updates";
@@ -15,8 +23,6 @@ export interface BinaryInstallation {
   releaseHost?: string;
   role: "hub" | "agent";
   root: string;
-  /** Version of the executable the session keeper's unit runs. */
-  sessiondVersion: string;
 }
 
 export const binaryRoot = (): string =>
@@ -84,7 +90,6 @@ export interface TrialMarker {
   dbPath?: string;
   /** Unix seconds after which a start that finds this marker puts `previous` back. */
   deadline: number;
-  keeperBefore: string;
   previous: string;
   role: BinaryInstallation["role"];
   swappedAt: number;
@@ -97,3 +102,90 @@ export const recoveredPath = (): string =>
   join(binaryRoot(), "trial.recovered");
 export const readTrial = (): Promise<TrialMarker | undefined> =>
   readJson<TrialMarker>(trialPath());
+
+/**
+ * The session keeper's pin: a relative link `<root>/keeper` -> `versions/<v>`,
+ * changed only by an atomic rename, like `current`. The keeper's unit runs
+ * `<root>/run sessiond`, which execs through this link.
+ */
+const VERSIONS_PREFIX = /^versions\//;
+export const keeperPath = (): string => join(binaryRoot(), "keeper");
+export const readKeeperVersion = async (): Promise<string | undefined> => {
+  try {
+    return (await readlink(keeperPath())).replace(VERSIONS_PREFIX, "");
+  } catch {
+    return undefined;
+  }
+};
+
+/** Present only while a keeper move is unconfirmed: what to put back, and when. */
+export interface KeeperTrial {
+  /** Unix seconds after which a keeper start that finds this puts `from` back. */
+  deadline: number;
+  from: string;
+  to: string;
+}
+export const keeperTrialPath = (): string =>
+  join(binaryRoot(), "keeper-trial.json");
+/** The trial's content, left by the wrapper when it put the previous keeper back; the agent reads and removes it. */
+export const keeperRecoveredPath = (): string =>
+  join(binaryRoot(), "keeper-trial.recovered");
+export const readKeeperTrial = (): Promise<KeeperTrial | undefined> =>
+  readJson<KeeperTrial>(keeperTrialPath());
+export const readKeeperRecovered = (): Promise<KeeperTrial | undefined> =>
+  readJson<KeeperTrial>(keeperRecoveredPath());
+export const lockFilePath = (): string => join(binaryRoot(), "apply.lock");
+
+const linkedVersion = async (path: string): Promise<string | undefined> => {
+  try {
+    return (await readlink(path)).replace(VERSIONS_PREFIX, "");
+  } catch {
+    return undefined;
+  }
+};
+
+const alive = (pid: number): boolean => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "EPERM";
+  }
+};
+
+/**
+ * Deletes the directories under `versions/` nothing needs. Kept: what `current`
+ * and `keeper` name, what a pending update trial would restore or has swapped
+ * in (`trial.json`), what a pending keeper trial names (`keeper-trial.json`),
+ * and the build a live helper is applying (named in `apply.lock`). The caller
+ * never supplies a keep-list.
+ */
+export async function prune(): Promise<void> {
+  const keep = new Set<string>();
+  const add = (version: string | undefined) => {
+    if (version) {
+      keep.add(version);
+    }
+  };
+  add(await linkedVersion(join(binaryRoot(), "current")));
+  add(await linkedVersion(keeperPath()));
+  const trial = await readTrial();
+  add(trial?.previous);
+  add(trial?.version);
+  const keeperTrial = await readKeeperTrial();
+  add(keeperTrial?.from);
+  add(keeperTrial?.to);
+  const lock = await readJson<{ pid?: number; version?: string }>(
+    lockFilePath()
+  );
+  if (lock?.pid && alive(lock.pid)) {
+    add(lock.version);
+  }
+  const versions = join(binaryRoot(), "versions");
+  const present = await readdir(versions).catch(() => [] as string[]);
+  await Promise.all(
+    present
+      .filter((name) => !(keep.has(name) || name.includes(".partial")))
+      .map((name) => rm(join(versions, name), { recursive: true, force: true }))
+  );
+}

@@ -17,6 +17,8 @@ interface HealthBody {
 }
 interface AgentRow {
   build?: { startedAt?: number; version?: string };
+  /** The agent's read of its session keeper at its last register (`SessionCustody` in core). */
+  custody?: { state?: string };
   machineId: string;
   status: string;
 }
@@ -34,12 +36,17 @@ async function getJson<T>(url: string): Promise<T | undefined> {
 
 /** The first thing wrong, or `undefined` when everything is up on `version` since `sinceMs`. */
 export async function probeHealth(options: {
+  /** The agent's process must have started after this (default: `sinceMs`). */
+  agentStartedAfterMs?: number;
   installation: Pick<BinaryInstallation, "dashboardUrl" | "hubUrl" | "role">;
   machineId: string;
+  /** The agent's row must report that it holds its session keeper connection. */
+  requireCustody?: boolean;
   sinceMs: number;
   version: string;
 }): Promise<string | undefined> {
   const { installation, machineId, sinceMs, version } = options;
+  const agentSince = options.agentStartedAfterMs ?? sinceMs;
   const hubLocal = installation.role === "hub";
   if (hubLocal) {
     const health = await getJson<HealthBody>(`${installation.hubUrl}/health`);
@@ -67,9 +74,12 @@ export async function probeHealth(options: {
   if (
     row?.status !== "online" ||
     row.build?.version !== version ||
-    (row.build.startedAt ?? 0) <= sinceMs
+    (row.build.startedAt ?? 0) <= agentSince
   ) {
     return "this machine's agent is not registered with the hub on the new build";
+  }
+  if (options.requireCustody && row.custody?.state !== "available") {
+    return "this machine's agent does not hold its session keeper connection";
   }
   return undefined;
 }

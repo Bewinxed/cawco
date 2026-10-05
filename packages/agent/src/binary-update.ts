@@ -21,8 +21,12 @@ import { hubProtocol, probeHealth } from "@cawco/core/binary-health";
 import {
   type BinaryInstallation,
   binaryRoot,
+  keeperRecoveredPath,
   previousInstallationPath,
+  prune,
   readInstallation,
+  readKeeperRecovered,
+  readKeeperVersion,
   readRunningManifest,
   readTrial,
   readUpdateState,
@@ -248,6 +252,7 @@ export class BinaryUpdater {
     this.#hostsHub = (await readInstallation())?.role === "hub";
     await this.#load();
     await this.#noteRecovery();
+    await this.#noteKeeperRecovery();
     this.#timer = setInterval(() => this.tick(), POLL_MS);
     this.#timer.unref();
     this.#trialTimer = setInterval(() => this.#watch(), 10_000);
@@ -352,11 +357,26 @@ export class BinaryUpdater {
     await rm(recoveredPath(), { force: true });
   }
 
-  /** Every ten seconds: take up what the helper wrote, so the hub learns the phase has moved on, and confirm the trial. */
+  /** The keeper's wrapper put the previous keeper back after a move whose helper died; this records it and does not retry that build. */
+  async #noteKeeperRecovery(): Promise<void> {
+    const trial = await readKeeperRecovered();
+    if (!trial) {
+      return;
+    }
+    await this.#set({
+      error: `The session keeper could not start on ${trial.to} and runs ${trial.from} again.`,
+      keeperFailedVersion: trial.to,
+      sessiondVersion: trial.from,
+    });
+    await rm(keeperRecoveredPath(), { force: true });
+  }
+
+  /** Every ten seconds: take up what the helper wrote, so the hub learns the phase has moved on, confirm the trial, and take up a keeper recovery. */
   async #watch(): Promise<void> {
     if (!this.#running) {
       await this.#load();
     }
+    await this.#noteKeeperRecovery();
     await this.#confirmTrial();
   }
 
@@ -384,6 +404,7 @@ export class BinaryUpdater {
     }
     await rm(trialPath(), { force: true });
     await rm(previousInstallationPath(), { force: true });
+    await prune();
     if (trial.dbPath && trial.dbBackup) {
       // Confirmed healthy: keep the newest copy, drop older ones.
       const prefix = `${basename(trial.dbPath)}.pre-`;
@@ -498,7 +519,7 @@ export class BinaryUpdater {
     if (!(newer && schemaOk)) {
       // Never a build that is not newer, and never one older than the data.
       await this.#settleNothingNewer(this.#policy.channel !== running.channel);
-      await this.#advanceKeeper(installation);
+      await this.#advanceKeeper();
       return;
     }
     const failedBefore = this.#state.failedVersion === release.manifest.version;
@@ -580,7 +601,7 @@ export class BinaryUpdater {
     }
     if (
       manifest.version === runtimeVersion ||
-      manifest.version === installation.sessiondVersion
+      manifest.version === (await readKeeperVersion())
     ) {
       // A folder a running process was started from is never touched.
       throw new Error("This version is one that is already running");
@@ -701,13 +722,18 @@ export class BinaryUpdater {
 
   /**
    * The session keeper advances only once it holds nothing, and only under the
-   * same policy as any update: auto-update on, or a person's Install now.
+   * same policy as any update: auto-update on, or a person's Install now. Not
+   * to a build it already could not start on.
    */
-  async #advanceKeeper(installation: BinaryInstallation): Promise<void> {
-    if (installation.sessiondVersion === runtimeVersion) {
+  async #advanceKeeper(): Promise<void> {
+    const keeperVersion = await readKeeperVersion();
+    if (keeperVersion === runtimeVersion) {
       if (this.#state.phase === "waiting-sessions") {
         await this.#set({ phase: "installed", heldChildren: undefined });
       }
+      return;
+    }
+    if (this.#state.keeperFailedVersion === runtimeVersion) {
       return;
     }
     const keeper = await readKeeper();
@@ -715,7 +741,7 @@ export class BinaryUpdater {
       await this.#set({
         phase: "waiting-sessions",
         heldChildren: keeper.held,
-        sessiondVersion: installation.sessiondVersion,
+        sessiondVersion: keeperVersion,
       });
       return;
     }

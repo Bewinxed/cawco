@@ -1681,11 +1681,9 @@ const systemdLogs = async (
 };
 
 export interface ServiceOptions {
-  /** Verified binary installer pins sessiond separately from the replaceable roles. */
+  /** Verified binary install: every unit starts through the wrapper, which picks the build from the `current` and `keeper` links. */
   binaryLayout?: {
     executable: string;
-    sessiondExecutable: string;
-    /** The wrapper hub, dashboard and agent start through; the keeper does not. */
     wrapper: string;
   };
   follow: boolean;
@@ -1732,8 +1730,8 @@ export const service = async (
           needs: binaryLayout.executable,
         },
         sessiond: {
-          command: [binaryLayout.sessiondExecutable, "sessiond"],
-          needs: binaryLayout.sessiondExecutable,
+          command: [binaryLayout.wrapper, "sessiond"],
+          needs: binaryLayout.executable,
         },
         dashboardBuild: binaryLayout.executable,
         dashboardCwd: homedir(),

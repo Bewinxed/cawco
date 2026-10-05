@@ -1,14 +1,42 @@
 /**
- * The script the hub, dashboard and agent units start through. It runs the
- * current build, but first puts the previous build back when an update's trial
- * ran out without the new build confirming itself: the recovery for an update
- * helper that died after the swap, which does not depend on the new build being
- * able to start. It is written once at install and never replaced by an update.
+ * The script the hub, dashboard, agent and session keeper units start through.
+ * Most verbs run the current build, but first put the previous build back when
+ * an update's trial ran out without the new build confirming itself: the
+ * recovery for an update helper that died after the swap, which does not depend
+ * on the new build being able to start. The keeper is started through the same
+ * script, from its own link, and gets the same recovery for a keeper move: a
+ * move writes `keeper-trial.json` before it changes the link, and the keeper's
+ * next start after the deadline puts the previous build back. Nothing is
+ * restored while a helper is live: the helper owns the outcome and rolls back
+ * itself. Written once at install and never replaced by an update.
  */
 export const BINARY_WRAPPER = `#!/bin/sh
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 TRIAL="$ROOT/trial.json"
-if [ -f "$TRIAL" ]; then
+# A helper is live when the lock names a pid that answers.
+helper_live() {
+  [ -f "$ROOT/apply.lock" ] || return 1
+  lock_pid="$(sed -n 's/.*"pid":\\([0-9][0-9]*\\).*/\\1/p' "$ROOT/apply.lock")"
+  [ -n "$lock_pid" ] && kill -0 "$lock_pid" 2>/dev/null
+}
+# Atomic: a temporary link, then a rename onto the link (GNU mv -T, BSD mv -h).
+swap_link() {
+  ln -sfn "$1" "$2.swap" && { mv -T "$2.swap" "$2" 2>/dev/null || mv -h "$2.swap" "$2"; }
+}
+if [ "$1" = sessiond ]; then
+  KEEPER_TRIAL="$ROOT/keeper-trial.json"
+  if [ -f "$KEEPER_TRIAL" ] && ! helper_live; then
+    keeper_deadline="$(sed -n 's/.*"deadline":\\([0-9][0-9]*\\).*/\\1/p' "$KEEPER_TRIAL")"
+    keeper_from="$(sed -n 's/.*"from":"\\([^"]*\\)".*/\\1/p' "$KEEPER_TRIAL")"
+    if [ -n "$keeper_deadline" ] && [ -n "$keeper_from" ] && [ "$(date +%s)" -gt "$keeper_deadline" ]; then
+      swap_link "versions/$keeper_from" "$ROOT/keeper"
+      cp "$KEEPER_TRIAL" "$ROOT/keeper-trial.recovered"
+      rm -f "$KEEPER_TRIAL"
+    fi
+  fi
+  exec "$ROOT/keeper/cawco" sessiond
+fi
+if [ -f "$TRIAL" ] && ! helper_live; then
   field() { sed -n "s/.*\\"$1\\":\\"\\([^\\"]*\\)\\".*/\\1/p" "$TRIAL"; }
   deadline="$(sed -n 's/.*"deadline":\\([0-9][0-9]*\\).*/\\1/p' "$TRIAL")"
   if [ -n "$deadline" ] && [ "$(date +%s)" -gt "$deadline" ]; then

@@ -75,7 +75,7 @@ ${hub ? `  HUB=${shellQuote(hub)}\n` : ""}  REPO=${shellQuote(origin)}
       rm -rf "$ROOT"
       rmdir "$(dirname "$ROOT")" 2>/dev/null
     elif [ -n "$CREATED_VERSION" ]; then
-      rm -rf "$ROOT/versions/$CREATED_VERSION" "$ROOT/current" "$ROOT/run" "$ROOT/installation.json" "$ROOT/update-state.json"
+      rm -rf "$ROOT/versions/$CREATED_VERSION" "$ROOT/current" "$ROOT/keeper" "$ROOT/run" "$ROOT/installation.json" "$ROOT/update-state.json"
     fi
     [ "$CREATED_LINK" = 0 ] || rm -f "$BIN_LINK"
     [ "$LINGER_ENABLED" = 0 ] || loginctl disable-linger "$(id -un)" >/dev/null 2>&1
@@ -248,6 +248,7 @@ ${
   cp "$WORK/release.json" "$ROOT/versions/$VERSION/release.json"
   printf '{"signature":"%s"}\\n' "$(cat "$WORK/release.json.sig")" > "$ROOT/versions/$VERSION/release.signature.json"
   ln -sfn "versions/$VERSION" "$ROOT/current"
+  ln -sfn "versions/$VERSION" "$ROOT/keeper"
   [ -L "$BIN_LINK" ] || CREATED_LINK=1
   ln -sf "$ROOT/current/cawco" "$BIN_LINK"
 

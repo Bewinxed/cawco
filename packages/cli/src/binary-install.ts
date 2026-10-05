@@ -20,7 +20,6 @@ import {
   installationPath,
   readInstallation,
   updateStatePath,
-  versionDirectory,
   writeJsonAtomic,
 } from "@cawco/core/binary-installation";
 import type {
@@ -51,9 +50,8 @@ export interface BinaryInstallOptions {
   role: BinaryInstallation["role"];
 }
 
-export const binaryLayout = (keeperVersion: string) => ({
+export const binaryLayout = () => ({
   executable: `${binaryRoot()}/current/cawco`,
-  sessiondExecutable: `${versionDirectory(keeperVersion)}/cawco`,
   wrapper: `${binaryRoot()}/run`,
 });
 
@@ -133,7 +131,6 @@ async function bringUp(options: BinaryInstallOptions): Promise<void> {
     ...(options.role === "hub" ? { dashboardUrl: dashboardUrl() } : {}),
     hubUrl: options.hubUrl,
     installedVersion: runtimeVersion,
-    sessiondVersion: runtimeVersion,
     ...(options.releaseHost ? { releaseHost: options.releaseHost } : {}),
   } satisfies BinaryInstallation);
   await writeJsonAtomic(updateStatePath(), {
@@ -157,7 +154,7 @@ async function bringUp(options: BinaryInstallOptions): Promise<void> {
     force: false,
     whenIdle: false,
     note,
-    binaryLayout: binaryLayout(runtimeVersion),
+    binaryLayout: binaryLayout(),
   });
   if (options.role === "hub") {
     await awaitFirstMachineReady(options.hubUrl, note);
@@ -183,7 +180,7 @@ async function bringUp(options: BinaryInstallOptions): Promise<void> {
       force: true,
       whenIdle: false,
       note,
-      binaryLayout: binaryLayout(runtimeVersion),
+      binaryLayout: binaryLayout(),
     });
   }
   console.log(`CawCo ${runtimeVersion} is installed.`);
@@ -216,7 +213,7 @@ export async function rejoinBinary(hubUrl: string): Promise<void> {
   // The agent's unit names its hub, so the unit is rewritten before the agent restarts.
   await discoverHub({ hub: hubUrl });
   process.env[CAWCO_ENV.hubUrl] = hubUrl;
-  const layout = binaryLayout(installed.sessiondVersion);
+  const layout = binaryLayout();
   const options = {
     ids: ["agent"] as const,
     mode: "prod" as const,

@@ -12416,6 +12416,10 @@
           "installedVersion": {
             "type": "string"
           },
+          "keeperFailedVersion": {
+            "description": "The build the session keeper could not start on; not retried by itself.",
+            "type": "string"
+          },
           "notes": {
             "type": "string"
           },
@@ -12423,7 +12427,7 @@
             "$ref": "#/components/schemas/BinaryUpdatePhase"
           },
           "sessiondVersion": {
-            "description": "The version the session keeper is running; differs while it holds children.",
+            "description": "The version the session keeper's link names; differs from the build while it holds children.",
             "type": "string"
           },
           "unseen": {

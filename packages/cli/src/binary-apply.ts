@@ -14,7 +14,6 @@ import {
   appendFile,
   copyFile,
   open,
-  readdir,
   readFile,
   rename,
   rm,
@@ -28,8 +27,13 @@ import {
   type BinaryInstallation,
   binaryRoot,
   installationPath,
+  keeperPath,
+  keeperTrialPath,
+  lockFilePath,
   previousInstallationPath,
+  prune,
   readInstallation,
+  readKeeperVersion,
   readRunningManifest,
   readUpdateState,
   type TrialMarker,
@@ -54,7 +58,7 @@ const SERVICE_TIMEOUT_MS = 120_000;
 /** How long a start may find an unconfirmed trial before the wrapper restores the previous build. */
 const TRIAL_S = 150;
 
-const lockPath = () => join(binaryRoot(), "apply.lock");
+const lockPath = lockFilePath;
 const note = (line: string) =>
   appendFile(
     join(binaryRoot(), "apply.log"),
@@ -70,14 +74,14 @@ const alive = (pid: number): boolean => {
   }
 };
 
-/** Exclusive-create the lock; a lock whose process is gone is stale and taken over. */
-async function takeLock(): Promise<boolean> {
+/** Exclusive-create the lock; a lock whose process is gone is stale and taken over. The build being applied is named in it, so `prune` keeps it. */
+async function takeLock(version: string): Promise<boolean> {
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
       // biome-ignore lint/performance/noAwaitInLoops: at most one retry, after clearing a stale lock
       const handle = await open(lockPath(), "wx", 0o600);
       await handle.writeFile(
-        JSON.stringify({ pid: process.pid, startedAt: Date.now() })
+        JSON.stringify({ pid: process.pid, startedAt: Date.now(), version })
       );
       await handle.close();
       return true;
@@ -113,11 +117,7 @@ function withTimeout<T>(
   ]);
 }
 
-const svc = (
-  action: "install" | "restart",
-  ids: readonly ServiceId[],
-  keeper: string
-) =>
+const svc = (action: "install" | "restart", ids: readonly ServiceId[]) =>
   withTimeout(
     service(action, {
       ids,
@@ -127,25 +127,25 @@ const svc = (
       force: true,
       whenIdle: false,
       note: (line) => console.log(`update: ${line}`),
-      binaryLayout: binaryLayout(keeper),
+      binaryLayout: binaryLayout(),
     }),
     SERVICE_TIMEOUT_MS,
     `${action} ${ids.join(", ")}`
   );
 
 /** Put a stopped service back: macOS reloads it, systemd restarts it. */
-const startAgain = (ids: readonly ServiceId[], keeper: string) =>
-  process.platform === "darwin"
-    ? svc("install", ids, keeper)
-    : svc("restart", ids, keeper);
+const startAgain = (ids: readonly ServiceId[]) =>
+  process.platform === "darwin" ? svc("install", ids) : svc("restart", ids);
 
-async function pointCurrentAt(version: string): Promise<void> {
-  const temporary = join(binaryRoot(), `current.${process.pid}`);
+/** Points a link in the binary root at `versions/<version>`, atomically: relative, as the installer and the wrapper write it. */
+async function pointLinkAt(link: string, version: string): Promise<void> {
+  const temporary = `${link}.${process.pid}`;
   await rm(temporary, { force: true });
-  // Relative, as the installer and the service wrapper write it: `versions/<version>` inside the binary root.
   await symlink(join("versions", version), temporary);
-  await rename(temporary, join(binaryRoot(), "current"));
+  await rename(temporary, link);
 }
+const pointCurrentAt = (version: string) =>
+  pointLinkAt(join(binaryRoot(), "current"), version);
 
 /** Held children and epoch of the keeper, read now. */
 async function readKeeper(): Promise<{
@@ -220,19 +220,6 @@ async function awaitHealthy(
   }
 }
 
-/** Keeps the running build and the keeper's; skips anything partial. */
-async function prune(keep: readonly string[]): Promise<void> {
-  const versions = join(binaryRoot(), "versions");
-  const stale = (await readdir(versions)).filter(
-    (name) => !(keep.includes(name) || name.includes(".partial"))
-  );
-  await Promise.all(
-    stale.map((name) =>
-      rm(join(versions, name), { recursive: true, force: true })
-    )
-  );
-}
-
 async function readStaged(version: string): Promise<ReleaseManifest> {
   const directory = versionDirectory(version);
   const manifest = JSON.parse(
@@ -250,13 +237,13 @@ export async function applyBinary(
   held: number,
   keeperOnly: boolean
 ): Promise<void> {
-  if (!(await takeLock())) {
+  if (!(await takeLock(version))) {
     console.log("update: another update helper is running; nothing to do");
     return;
   }
   try {
     await note(`start ${version} held=${held} keeperOnly=${keeperOnly}`);
-    await (keeperOnly ? advanceKeeper(version) : applyBuild(version, held));
+    await (keeperOnly ? moveKeeperAlone(version) : applyBuild(version));
     await note(`end ${version}`);
   } catch (error) {
     // Refused before anything changed: say so rather than leave the state at `installing`.
@@ -283,115 +270,206 @@ async function writeState(
   });
 }
 
-/** Advances only the session keeper, under the same policy as any update, and only if it holds nothing. */
-async function advanceKeeper(version: string): Promise<void> {
-  const installed = await readInstallation();
-  if (!installed || installed.sessiondVersion === version) {
-    return;
-  }
-  const before = await readUpdateState();
-  const old = installed.sessiondVersion;
-  const sinceMs = Date.now();
-  const first = await readKeeper();
-  if (first.held > 0) {
-    await writeState(before, {
-      phase: "waiting-sessions",
-      heldChildren: first.held,
-    });
-    return;
-  }
-  await writeState(before, { phase: "installing", heldChildren: undefined });
-  try {
-    await svc("install", ["sessiond"], version);
-    // The count, once more, immediately before the restart that would end any child it held.
-    const second = await readKeeper();
-    if (second.held > 0) {
-      await svc("install", ["sessiond"], old);
-      await writeState(before, {
-        phase: "waiting-sessions",
-        heldChildren: second.held,
-      });
-      return;
+const KEEPER_TRIAL_S = 120;
+
+type KeeperMove =
+  | { outcome: "already" | "moved" | "unreachable" }
+  | { held: number; outcome: "held" }
+  | {
+      custodyOnPrevious: boolean;
+      error: string;
+      outcome: "failed";
+    };
+
+/** Reads the keeper, three tries one second apart; undefined when it never answered. */
+async function readKeeperWithRetry(): Promise<
+  { epoch: string | undefined; held: number } | undefined
+> {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      // biome-ignore lint/performance/noAwaitInLoops: at most three tries, one second apart
+      return await readKeeper();
+    } catch {
+      if (attempt < 2) {
+        // biome-ignore lint/performance/noAwaitInLoops: at most three tries, one second apart
+        await Bun.sleep(1000);
+      }
     }
-    if (process.platform !== "darwin") {
-      await svc("restart", ["sessiond"], version);
-    }
-    // The agent needs the keeper: restarting one restarts the other, so it is asked outright.
-    await svc("restart", ["agent"], version);
-    await awaitKeeperEpoch(second.epoch);
-    // Only the keeper and the agent were restarted: on a hub's machine the hub and dashboard keep running
-    // from before the swap, so what must have started after it is the agent's registration, which is
-    // what probing as an agent-only machine checks.
-    await awaitHealthy(
-      { ...installed, role: "agent" },
-      installed.installedVersion,
-      sinceMs,
-      undefined
-    );
-    await writeJsonAtomic(installationPath(), {
-      ...installed,
-      sessiondVersion: version,
-    });
-    await prune([installed.installedVersion, version]);
-    await writeState(before, {
-      phase: "installed",
-      sessiondVersion: version,
-      heldChildren: undefined,
-      error: undefined,
-      unseen: true,
-    });
-  } catch (error) {
-    // The keeper stays as it is: a rollback never restarts it.
-    await writeJsonAtomic(installationPath(), {
-      ...installed,
-      sessiondVersion: version,
-    });
-    await writeState(before, {
-      phase: "failed",
-      sessiondVersion: version,
-      error: error instanceof Error ? error.message : String(error),
-    });
   }
+  return undefined;
 }
 
-async function awaitKeeperEpoch(
-  epochBefore: string | undefined
+/** Step 8: the keeper answers, and (unless any answer will do) as a new process. */
+async function awaitKeeperAnswers(
+  epochBefore: string | undefined,
+  anyAnswer: boolean
 ): Promise<void> {
   const end = Date.now() + HEALTH_MS;
   while (Date.now() < end) {
     // biome-ignore lint/performance/noAwaitInLoops: a poll
     const now = await readKeeper().catch(() => undefined);
-    if (now?.epoch && now.epoch !== epochBefore) {
+    if (now && (anyAnswer || (now.epoch && now.epoch !== epochBefore))) {
       return;
     }
     await Bun.sleep(500);
   }
-  throw new Error("The session keeper did not come back as a new process");
+  throw new Error(
+    anyAnswer
+      ? "The session keeper did not answer"
+      : "The session keeper did not come back as a new process"
+  );
+}
+
+/** Step 9: this machine's agent, started after `since`, registered on the running build and holding its keeper connection. */
+async function awaitAgentWithKeeper(since: number): Promise<void> {
+  const installation = await readInstallation();
+  if (!installation) {
+    throw new Error("This machine has no binary installation");
+  }
+  const id = await machineId();
+  const deadline = Date.now() + HEALTH_MS;
+  for (;;) {
+    // biome-ignore lint/performance/noAwaitInLoops: a poll; each read must see the services after the previous one
+    const problem = await probeHealth({
+      installation: { ...installation, role: "agent" },
+      machineId: id,
+      sinceMs: since,
+      agentStartedAfterMs: since,
+      version: installation.installedVersion,
+      requireCustody: true,
+    });
+    if (!problem) {
+      return;
+    }
+    if (Date.now() > deadline) {
+      throw new Error(problem);
+    }
+    await Bun.sleep(1000);
+  }
 }
 
 /**
- * The keeper moves to the new build only if it holds nothing, counted
- * immediately before the restart that would end any child it held. Returns the
- * version the keeper ends on.
+ * The one place the keeper's pin (`<root>/keeper`) and `keeper-trial.json`
+ * are written. Moves the keeper to `to` only if it holds nothing, proves the
+ * keeper and the agent hold sessions on it, and otherwise puts the previous
+ * build back. A keeper holding a live child is never restarted. A helper that
+ * dies mid-move leaves the trial, and the wrapper puts `from` back at the
+ * keeper's next start.
  */
-async function moveKeeper(
-  installed: BinaryInstallation,
-  version: string,
-  held: number
-): Promise<string> {
-  const stay = installed.sessiondVersion;
-  if (held !== 0 || stay === version || (await readKeeper()).held !== 0) {
-    return stay;
+async function moveKeeper(to: string): Promise<KeeperMove> {
+  const from = await readKeeperVersion();
+  if (!from) {
+    throw new Error("The session keeper link is missing");
   }
-  await svc("install", ["sessiond"], version);
-  if ((await readKeeper()).held !== 0) {
-    await svc("install", ["sessiond"], stay);
-    return stay;
+  if (from === to) {
+    return { outcome: "already" };
   }
-  if (process.platform !== "darwin") {
-    await svc("restart", ["sessiond"], version);
+  if (!(await Bun.file(join(versionDirectory(to), "cawco")).exists())) {
+    throw new Error(`The build ${to} is not on this machine`);
   }
-  return version;
+  const first = await readKeeperWithRetry();
+  if (!first) {
+    return { outcome: "unreachable" };
+  }
+  if (first.held > 0) {
+    return { outcome: "held", held: first.held };
+  }
+  await writeJsonAtomic(keeperTrialPath(), {
+    from,
+    to,
+    deadline: Math.floor(Date.now() / 1000) + KEEPER_TRIAL_S,
+  });
+  await pointLinkAt(keeperPath(), to);
+  let firstError: string;
+  try {
+    const second = await readKeeper();
+    if (second.held > 0) {
+      await pointLinkAt(keeperPath(), from);
+      await rm(keeperTrialPath(), { force: true });
+      return { outcome: "held", held: second.held };
+    }
+    const started = Date.now();
+    await startAgain(["sessiond"]);
+    await startAgain(["agent"]);
+    await awaitKeeperAnswers(first.epoch, false);
+    await awaitAgentWithKeeper(started);
+    await rm(keeperTrialPath(), { force: true });
+    return { outcome: "moved" };
+  } catch (error) {
+    firstError = error instanceof Error ? error.message : String(error);
+  }
+  // It did not work: put it back. A keeper that answers and holds a child works as a keeper: it stays.
+  const now = await readKeeper().catch(() => undefined);
+  if (now && now.held > 0) {
+    await rm(keeperTrialPath(), { force: true });
+    return { outcome: "moved" };
+  }
+  await pointLinkAt(keeperPath(), from);
+  let custodyOnPrevious = false;
+  try {
+    const started = Date.now();
+    await startAgain(["sessiond"]);
+    await startAgain(["agent"]);
+    await awaitKeeperAnswers(undefined, true);
+    await awaitAgentWithKeeper(started);
+    custodyOnPrevious = true;
+  } catch {
+    custodyOnPrevious = false;
+  }
+  await rm(keeperTrialPath(), { force: true });
+  return { outcome: "failed", error: firstError, custodyOnPrevious };
+}
+
+/** What the update state says about the keeper after a move: its link, and what became of the move. */
+async function keeperState(
+  move: KeeperMove,
+  version: string
+): Promise<Partial<BinaryUpdateState>> {
+  const sessiondVersion = await readKeeperVersion();
+  switch (move.outcome) {
+    case "moved":
+    case "already":
+      return {
+        phase: "installed",
+        sessiondVersion,
+        heldChildren: undefined,
+        keeperFailedVersion: undefined,
+        error: undefined,
+      };
+    case "held":
+      return {
+        phase: "waiting-sessions",
+        sessiondVersion,
+        heldChildren: move.held,
+        error: undefined,
+      };
+    case "unreachable":
+      return {
+        phase: "waiting-sessions",
+        sessiondVersion,
+        heldChildren: undefined,
+        error: undefined,
+      };
+    default:
+      return {
+        phase: "installed",
+        sessiondVersion,
+        heldChildren: undefined,
+        keeperFailedVersion: version,
+        error: move.error,
+      };
+  }
+}
+
+/** The keeper by itself (`--keeper-only`): move it to the running build and say what became of it. */
+async function moveKeeperAlone(version: string): Promise<void> {
+  const before = await readUpdateState();
+  const move = await moveKeeper(version);
+  await prune();
+  await writeState(before, {
+    ...(await keeperState(move, version)),
+    ...(move.outcome === "moved" ? { unseen: true } : {}),
+  });
 }
 
 /** `VACUUM INTO` a copy of the hub database beside it, named for the build it belongs to. */
@@ -407,32 +485,7 @@ function backUpDatabase(db: string, previous: string): string {
   return copy;
 }
 
-/** After the new build is healthy: the keeper follows it if it holds nothing, and the services are healthy again with it. */
-async function moveKeeperWhenProven(o: {
-  db: string | undefined;
-  held: number;
-  installed: BinaryInstallation;
-  marker: () => TrialMarker;
-  onMoved: (keeper: string) => void;
-  proven: BinaryInstallation;
-  sinceMs: number;
-}): Promise<void> {
-  const version = o.proven.installedVersion;
-  const epochBefore = (await readKeeper().catch(() => undefined))?.epoch;
-  const keeper = await moveKeeper(o.installed, version, o.held);
-  if (keeper === o.installed.sessiondVersion) {
-    return;
-  }
-  o.onMoved(keeper);
-  await writeJsonAtomic(installationPath(), {
-    ...o.proven,
-    sessiondVersion: keeper,
-  });
-  await awaitKeeperEpoch(epochBefore);
-  await awaitHealthy(o.proven, version, o.sinceMs, o.db, o.marker());
-}
-
-async function applyBuild(version: string, held: number): Promise<void> {
+async function applyBuild(version: string): Promise<void> {
   const installed = await readInstallation();
   if (!installed) {
     throw new Error("This machine has no binary installation");
@@ -446,19 +499,20 @@ async function applyBuild(version: string, held: number): Promise<void> {
   }
   const before = await readUpdateState();
   const previous = installed.installedVersion;
-  const keeperBefore = installed.sessiondVersion;
+  const keeperAtStart = await readKeeperVersion();
+  if (!keeperAtStart) {
+    throw new Error("The session keeper link is missing");
+  }
   const ids: ServiceId[] =
     installed.role === "hub" ? ["hub", "dashboard", "agent"] : ["agent"];
   const db = installed.role === "hub" ? hubDbPath() : undefined;
   const schemaChange =
     db !== undefined && manifest.schemaVersion !== running.schemaVersion;
   const sinceMs = Date.now();
-  let keeperAfter = keeperBefore;
   let backup: string | undefined;
   await writeState(before, { phase: "installing", heldChildren: undefined });
   const marker = (): TrialMarker => ({
     deadline: Math.floor(Date.now() / 1000) + TRIAL_S,
-    keeperBefore,
     previous,
     role: installed.role,
     swappedAt: Math.floor(sinceMs / 1000),
@@ -478,48 +532,39 @@ async function applyBuild(version: string, held: number): Promise<void> {
       installedVersion: version,
     });
     await writeJsonAtomic(previousInstallationPath(), installed);
-    // The services start on the new build with the keeper still on the old one: the keeper is the one
-    // piece that holds sessions, so it moves only once the new build has shown itself healthy.
-    await svc("restart", ids, keeperBefore);
-    const proven = { ...installed, installedVersion: version };
-    await awaitHealthy(proven, version, sinceMs, db, marker());
-    await moveKeeperWhenProven({
-      proven,
-      installed,
-      held,
+    // The services start on the new build with the keeper untouched: it is the one piece that holds
+    // sessions, so it moves only once the new build has shown itself healthy.
+    await svc("restart", ids);
+    await awaitHealthy(
+      { ...installed, installedVersion: version },
+      version,
       sinceMs,
       db,
-      marker,
-      onMoved: (to) => {
-        keeperAfter = to;
-      },
-    });
-    await writeJsonAtomic(trialPath(), {
-      ...marker(),
-      deadline: Math.floor(Date.now() / 1000) + TRIAL_S,
-    });
-    await prune([version, keeperAfter]);
-    const heldNow = keeperAfter === version ? 0 : held;
+      marker()
+    );
+    const move = await moveKeeper(version);
+    if (move.outcome === "failed" && !move.custodyOnPrevious) {
+      throw new Error(
+        `The new build cannot hold sessions with either session keeper: ${move.error}`
+      );
+    }
+    await writeJsonAtomic(trialPath(), marker());
+    await prune();
     await writeState(before, {
-      phase: keeperAfter === version ? "installed" : "waiting-sessions",
+      ...(await keeperState(move, version)),
       installedVersion: version,
-      sessiondVersion: keeperAfter,
-      heldChildren: heldNow || undefined,
       availableVersion: version,
       channel: manifest.channel,
       notes: manifest.notes,
-      error: undefined,
       unseen: true,
     });
   } catch (error) {
     let message = error instanceof Error ? error.message : String(error);
     try {
-      keeperAfter = await rollBackBuild({
+      await rollBackBuild({
         installed,
-        previous,
+        keeperAtStart,
         version,
-        keeperBefore,
-        keeperAfter,
         backup,
         db,
         ids,
@@ -530,15 +575,12 @@ async function applyBuild(version: string, held: number): Promise<void> {
     await writeState(before, {
       phase: "failed-rolled-back",
       installedVersion: previous,
-      sessiondVersion: keeperAfter,
+      sessiondVersion: await readKeeperVersion(),
       failedVersion: version,
       availableVersion: version,
       channel: manifest.channel,
       notes: manifest.notes,
-      error:
-        keeperAfter === keeperBefore
-          ? message
-          : `${message} The session keeper had already advanced and stays on the new build.`,
+      error: message,
       unseen: true,
     });
   }
@@ -549,36 +591,14 @@ interface Rollback {
   db: string | undefined;
   ids: ServiceId[];
   installed: BinaryInstallation;
-  keeperAfter: string;
-  keeperBefore: string;
-  previous: string;
+  keeperAtStart: string;
   version: string;
 }
 
-/**
- * The previous build back, and its database when the schema changed. Returns the version the keeper ends on.
- * A keeper that moved to the build being rolled back goes back to the old one when it holds nothing (or cannot
- * be reached, as when the new build cannot run it); a keeper that holds a child is never restarted here.
- */
-async function rollBackBuild(r: Rollback): Promise<string> {
-  let keeper = r.keeperAfter;
-  if (keeper !== r.keeperBefore) {
-    const held = await readKeeper()
-      .then((now) => now.held)
-      .catch(() => 0);
-    if (held === 0) {
-      await svc("install", ["sessiond"], r.keeperBefore);
-      if (process.platform !== "darwin") {
-        await svc("restart", ["sessiond"], r.keeperBefore);
-      }
-      keeper = r.keeperBefore;
-    }
-  }
-  await pointCurrentAt(r.previous);
-  await writeJsonAtomic(installationPath(), {
-    ...r.installed,
-    sessiondVersion: keeper,
-  });
+/** The previous build back, and its database when the schema changed; then the keeper where it was (a keeper holding a child stays). */
+async function rollBackBuild(r: Rollback): Promise<void> {
+  await pointCurrentAt(r.installed.installedVersion);
+  await writeJsonAtomic(installationPath(), r.installed);
   if (r.backup && r.db) {
     // The hub is stopped while its database is swapped; the migrated file is moved aside, not deleted.
     await withTimeout(
@@ -591,11 +611,11 @@ async function rollBackBuild(r: Rollback): Promise<string> {
     await rm(`${r.db}-shm`, { force: true });
     await copyFile(r.backup, r.db);
     if (process.platform === "darwin") {
-      await startAgain(["hub"], keeper);
+      await startAgain(["hub"]);
     }
   }
-  await svc("restart", r.ids, keeper);
+  await svc("restart", r.ids);
   await rm(trialPath(), { force: true });
   await rm(previousInstallationPath(), { force: true });
-  return keeper;
+  await moveKeeper(r.keeperAtStart);
 }

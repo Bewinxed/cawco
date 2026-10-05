@@ -54,9 +54,11 @@ export interface BinaryUpdateState {
   /** True on the machine that runs the hub. */
   hostsHub: boolean;
   installedVersion: string;
+  /** The build the session keeper could not start on; not retried by itself. */
+  keeperFailedVersion?: string;
   notes?: string;
   phase: BinaryUpdatePhase;
-  /** The version the session keeper is running; differs while it holds children. */
+  /** The version the session keeper's link names; differs from the build while it holds children. */
   sessiondVersion?: string;
   /** True from a finished install until a person has acknowledged it. */
   unseen: boolean;
