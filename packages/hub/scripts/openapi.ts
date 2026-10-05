@@ -577,12 +577,11 @@ const typeMembers = (schema: Schema): Schema[] | undefined => {
   if (kinds.length < 2) {
     return undefined;
   }
-  const nullable = kinds.length < (schema.type as string[]).length;
+  const includesNull = kinds.length < (schema.type as string[]).length;
   return kinds.map((kind, index) => ({
-    type: nullable && index === 0 ? ["null", kind] : kind,
+    type: includesNull && index === 0 ? ["null", kind] : kind,
   }));
 };
-let typesSplit = 0;
 const splitTypes = (value: unknown): unknown => {
   if (Array.isArray(value)) {
     return value.map(splitTypes);
@@ -596,9 +595,6 @@ const splitTypes = (value: unknown): unknown => {
       (UNIONS as readonly string[]).includes(key) && Array.isArray(item)
         ? item.flatMap((member) => {
             const members = typeMembers(member as Schema);
-            if (members) {
-              typesSplit += 1;
-            }
             return members ?? [splitTypes(member)];
           })
         : splitTypes(item),
@@ -608,7 +604,6 @@ const splitTypes = (value: unknown): unknown => {
   if (!members) {
     return schema;
   }
-  typesSplit += 1;
   const { type: _, ...others } = schema;
   return { ...others, anyOf: members };
 };

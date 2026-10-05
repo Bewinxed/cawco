@@ -138,6 +138,8 @@ final class UsageViewController: ObservedViewController, UIDocumentPickerDelegat
         let next = span < 640
         guard next != narrow else { return }
         narrow = next
+        controls.axis = next ? .vertical : .horizontal
+        controls.alignment = next ? .leading : .center
         for card in [limits, whereCard, history] as [UsageCard] { card.narrow = next }
         // `.page`: `space-6` all round, `space-4` above and below and `space-3` each side on a phone.
         let (block, inline) = next ? (Space.space4, Space.space3) : (Space.space6, Space.space6)
