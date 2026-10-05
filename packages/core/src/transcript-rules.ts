@@ -1622,7 +1622,10 @@ export const newer = (
  * hub's clock, the record's state. `sdkUuid` is the stored entry's own id,
  * when it has one — the handle a rewind goes by.
  */
-export function sendRow(record: SendRecord, sdkUuid?: string): TranscriptBlock {
+export function sendRow(
+  record: SendRecord,
+  sdkUuid: string | undefined = record.harnessId
+): TranscriptBlock {
   const { message } = record.body;
   const row = sentRow(transcriptUserText(message) ?? "", message, {
     id: record.uuid,
