@@ -353,6 +353,15 @@ const QUIET_TURNS = 3;
 
 const QUIET_ERROR = "ended three turns in a row without finish_item";
 
+/** A harness gets one minute after its declared deadline to start a turn. */
+const WAIT_RESUME_GRACE_MS = 60_000;
+const waitClock = (at: Date): string =>
+  at.toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+
 export const WAIT_ITEM_LIMIT =
   "Wait not set. Use whole minutes from 1 to 120 and a non-empty reason for waiting on a command you started.";
 
@@ -512,15 +521,24 @@ export const createWorkItems = ({
     if (change.state && !LIVE.has(change.state)) {
       disarmWait(id);
       return published(
-        db.updateWorkItem(id, { ...change, waitUntil: null, waitReason: null })
+        db.updateWorkItem(id, {
+          ...change,
+          waitUntil: null,
+          waitReason: null,
+          waitResumeBy: null,
+        })
       );
     }
     return published(db.updateWorkItem(id, change));
   };
   const clearWait = (item: WorkItemRow): void => {
     disarmWait(item.id);
-    if (item.waitUntil || item.waitReason !== null) {
-      update(item.id, { waitUntil: null, waitReason: null });
+    if (item.waitUntil || item.waitReason !== null || item.waitResumeBy) {
+      update(item.id, {
+        waitUntil: null,
+        waitReason: null,
+        waitResumeBy: null,
+      });
     }
   };
 
@@ -982,9 +1000,12 @@ export const createWorkItems = ({
       return;
     }
     const reason = item.waitReason;
+    const resumeBy = new Date(item.waitUntil.getTime() + WAIT_RESUME_GRACE_MS);
     clearWait(item);
     const [row] = db.getInstancesByIds([item.instanceId]);
     if (row && LIVE.has(item.state)) {
+      const resuming = update(id, { waitResumeBy: resumeBy }) as WorkItemRow;
+      armWait(resuming);
       tell(
         row,
         `Your wait is over: ${reason}. Continue, then call finish_item.`
@@ -993,6 +1014,31 @@ export const createWorkItems = ({
   };
   const armWait = (item: WorkItemRow): void => {
     disarmWait(item.id);
+    if (item.waitResumeBy && LIVE.has(item.state)) {
+      const missed = (): void => {
+        waitTimers.delete(item.id);
+        const current = db.workItem(item.id);
+        if (!(current?.waitResumeBy && LIVE.has(current.state))) {
+          return;
+        }
+        update(item.id, { waitResumeBy: null });
+        const [row] = db.getInstancesByIds([item.instanceId]);
+        if (row) {
+          report(
+            row,
+            `${item.title}: the delegate did not resume within 60 seconds of its wait deadline.`,
+            true
+          );
+        }
+      };
+      const timer = setTimeout(
+        missed,
+        Math.max(0, item.waitResumeBy.getTime() - Date.now())
+      );
+      timer.unref?.();
+      waitTimers.set(item.id, timer);
+      return;
+    }
     if (!item.waitUntil) {
       return;
     }
@@ -1183,6 +1229,34 @@ export const createWorkItems = ({
   return {
     start,
 
+    /** The one send path adds this to reports, handoffs and asks alike. */
+    waitSummary(instanceId: string, parentInstanceId: string): string {
+      const [row] = db.getInstancesByIds([instanceId]);
+      const item = row ? itemOf(row) : undefined;
+      const history =
+        item?.parentInstanceId === parentInstanceId ? item.waitHistory : null;
+      return history
+        ? `\n\nWaited ${history.count} time${history.count === 1 ? "" : "s"} since its last delivered message; last wait until ${waitClock(new Date(history.until))}: ${history.reason}.`
+        : "";
+    },
+
+    delivered(instanceId: string, parentInstanceId: string): void {
+      const [row] = db.getInstancesByIds([instanceId]);
+      const item = row ? itemOf(row) : undefined;
+      if (item?.parentInstanceId === parentInstanceId && item.waitHistory) {
+        db.updateWorkItem(item.id, { waitHistory: null });
+      }
+    },
+
+    /** A live harness read (not a spawn/init or queued send) starts the turn. */
+    turnStarted(instanceId: string): void {
+      const [row] = db.getInstancesByIds([instanceId]);
+      const item = row ? itemOf(row) : undefined;
+      if (item?.waitResumeBy) {
+        clearWait(item);
+      }
+    },
+
     /** Called once startup has installed the hub's send path. */
     resumeWaits(): void {
       for (const item of db.waitingWorkItems()) {
@@ -1190,7 +1264,7 @@ export const createWorkItems = ({
       }
     },
 
-    /** Declares a bounded wait; replacement starts a new window and tells the parent once. */
+    /** Declares a bounded wait; the tray keeps it, the next actionable message summarizes it. */
     waitItem(instanceId: string, minutes: unknown, reason: unknown): string {
       if (
         typeof minutes !== "number" ||
@@ -1223,15 +1297,15 @@ export const createWorkItems = ({
         state: "running",
         waitUntil,
         waitReason,
+        waitHistory: {
+          count: (item.waitHistory?.count ?? 0) + 1,
+          until: waitUntil.getTime(),
+          reason: waitReason,
+        },
       }) as WorkItemRow;
       armWait(waiting);
-      const clock = waitUntil.toLocaleTimeString("en-GB", {
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: false,
-      });
+      const clock = waitClock(waitUntil);
       const line = `${item.title} is waiting until ${clock}: ${waitReason}`;
-      report(row, line, false);
       return `${line}\n\nEnd your turn. The hub will wake you when the wait ends.`;
     },
 
@@ -1239,7 +1313,7 @@ export const createWorkItems = ({
     interrupted(instanceId: string): void {
       const [row] = db.getInstancesByIds([instanceId]);
       const item = row ? itemOf(row) : undefined;
-      if (item?.waitUntil) {
+      if (item?.waitUntil || item?.waitResumeBy) {
         clearWait(item);
       }
     },
@@ -1330,7 +1404,9 @@ export const createWorkItems = ({
      * An item with checks ends only through {@link finishItem}, or here when
      * its turn failed. A turn that ends it quietly, with nothing queued for
      * the session, nothing handed to it since, and none of its own delegated
-     * work live, gets the "still open" message; the third in a row fails it.
+      * work live, gets the "still open" message and reports its unexplained
+      * stop to the parent; the third in a row fails it. A declared wait stays
+      * on the tray and is summarized only with the next actionable message.
      *
      * An item filed before checks existed, and a delegate from before work
      * items, end as they always did: on a turn nothing answers, with that
@@ -1345,7 +1421,7 @@ export const createWorkItems = ({
       if (!item) {
         return { body: turn.text, failed: turn.error !== undefined };
       }
-      if (waitingTurn(item)) {
+      if (turn.error === undefined && waitingTurn(item)) {
         return undefined;
       }
       const busy = busyAfter(row, endedAt);
@@ -1378,7 +1454,7 @@ export const createWorkItems = ({
         row,
         `Your work item is still open. Its checks: ${checkNames(item.checks)}. Finish the work and call finish_item, or call it with \`blocked\` and the exact command and error. Use wait_item for a bounded wait on a command you started.`
       );
-      return undefined;
+      return { body: `${turn.text}${reportLine(item)}`, failed: false };
     },
 
     /**

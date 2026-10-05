@@ -991,6 +991,8 @@ export interface DbShape {
         | "submission"
         | "waitUntil"
         | "waitReason"
+        | "waitResumeBy"
+        | "waitHistory"
       >
     >
   ) => WorkItemRow | undefined;
@@ -3210,7 +3212,13 @@ const make = (path: string): DbShape => {
     workItem: (id) =>
       db.select().from(workItems).where(eq(workItems.id, id)).get(),
     waitingWorkItems: () =>
-      db.select().from(workItems).where(isNotNull(workItems.waitUntil)).all(),
+      db
+        .select()
+        .from(workItems)
+        .where(
+          or(isNotNull(workItems.waitUntil), isNotNull(workItems.waitResumeBy))
+        )
+        .all(),
     workItemsIn: (workspaceId) =>
       db
         .select()

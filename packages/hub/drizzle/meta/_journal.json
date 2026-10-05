@@ -505,6 +505,13 @@
       "when": 1791060000005,
       "tag": "0071_prompt_cache_cold",
       "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "6",
+      "when": 1791060000006,
+      "tag": "0072_quiet_waits",
+      "breakpoints": true
     }
   ]
 }

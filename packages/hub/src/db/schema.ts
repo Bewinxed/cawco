@@ -553,6 +553,14 @@ export const workItems = sqliteTable(
     /** A declared wait on work the delegate started; the hub wakes it at this time. */
     waitUntil: timestamp("wait_until"),
     waitReason: text("wait_reason"),
+    /** Deadline plus grace while awaiting the harness's next turn read. */
+    waitResumeBy: timestamp("wait_resume_by"),
+    /** Routine waits since the last message handed to the parent. */
+    waitHistory: text("wait_history", { mode: "json" }).$type<{
+      count: number;
+      until: number;
+      reason: string;
+    }>(),
     /** The `finish_item` the running checks answer, kept while they run. */
     submission: text("submission", {
       mode: "json",

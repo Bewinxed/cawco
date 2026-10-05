@@ -2378,6 +2378,7 @@ export const createServer = (
       db.linkSend(uuid, harnessId);
     }
     if (signal.kind === "read") {
+      workItems.turnStarted(instanceId);
       takeRead(instanceId, signal.read);
     }
   };
@@ -2469,6 +2470,7 @@ export const createServer = (
   ): void => {
     const neutral = frame.message;
     if (neutral.type === "assistant" && !neutral.parent_tool_use_id) {
+      workItems.turnStarted(instanceId);
       // An error the harness wrote in the model's place answers nothing:
       // what it had just read failed, in its words, which its rows carry.
       const waiting = unanswered.get(instanceId);
@@ -3227,6 +3229,17 @@ export const createServer = (
       };
     }
     const agent = refused ? undefined : registry.agent(envelope.machineId);
+    const from =
+      message.origin.kind === "peer" ? message.origin.fromSession : undefined;
+    const waitSummary =
+      agent && from ? workItems.waitSummary(from, instanceId) : "";
+    if (waitSummary) {
+      const { content } = message.message;
+      message.message.content =
+        typeof content === "string"
+          ? `${content}${waitSummary}`
+          : [...content, { type: "text", text: waitSummary }];
+    }
     if (agent) {
       if (keepAlive) {
         db.updateKeepAlive(instanceId, { keepAliveTurn: message.uuid });
@@ -3261,6 +3274,9 @@ export const createServer = (
     }
     publishSend(record);
     if (agent) {
+      if (from) {
+        workItems.delivered(from, instanceId);
+      }
       afterSend(envelope, mode);
     }
     return record;
