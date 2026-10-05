@@ -388,7 +388,10 @@ public final class KitLabel: UILabel {
     private func compose(_ width: Double) -> NSAttributedString? {
         guard let full = super.attributedText, full.length > 0, width > 0 else { return nil }
         if numberOfLines == 1 {
-            guard cutsTail, let kept = TextWrap.tailCut(full, width: width) else { return nil }
+            // Layout snaps a frame to whole pixels, so a label sized to its own
+            // text can stand a fraction of one narrower than it: that still fits.
+            let pixel = 1 / max(traitCollection.displayScale, 1)
+            guard cutsTail, TextWrap.measure(full) > width + pixel, let kept = TextWrap.tailCut(full, width: width) else { return nil }
             return Self.set(full, starts: [], cut: kept)
         }
         let limit = cutsTail ? numberOfLines : 0
