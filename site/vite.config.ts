@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
 import type { IconifyJSON } from '@iconify/types';
 import { getIconData, iconToHTML, iconToSVG } from '@iconify/utils';
 import { defineConfig, type HtmlTagDescriptor, type Plugin } from 'vite';
@@ -159,9 +160,41 @@ const paperGround: Plugin = {
   },
 };
 
+/**
+ * cawco.dev/oauth/callback hands a sign-in to this path on the person's hub. The hub's
+ * dashboard serves it and `MCP_OAUTH_RETURN_PATH` in packages/core names it, so the build
+ * stops if the page and the core constant have drifted apart.
+ */
+const returnPath: Plugin = {
+  name: 'cawco-oauth-return-path',
+  buildStart() {
+    const core = readFileSync(new URL('../packages/core/src/fleet.ts', import.meta.url), 'utf8');
+    const named = core.match(/MCP_OAUTH_RETURN_PATH\s*=\s*"([^"]+)"/)?.[1];
+    const page = readFileSync(new URL('./src/oauth/handoff.ts', import.meta.url), 'utf8');
+    const used = page.match(/HUB_RETURN_PATH\s*=\s*'([^']+)'/)?.[1];
+    if (!named || named !== used) {
+      throw new Error(
+        `src/oauth/handoff.ts hands sign-ins to ${used ?? 'nothing'}, but core's MCP_OAUTH_RETURN_PATH is ${named ?? 'missing'}.`,
+      );
+    }
+  },
+};
+
 export default defineConfig({
   // Relative URLs, so the same build works at cawco.dev's root and under a preview path.
   base: './',
-  plugins: [pageMarkup(), paperGround],
-  build: { outDir: 'dist', emptyOutDir: true, assetsInlineLimit: 0 },
+  plugins: [pageMarkup(), paperGround, returnPath],
+  build: {
+    outDir: 'dist',
+    emptyOutDir: true,
+    assetsInlineLimit: 0,
+    // The landing page, and the two pages a sign-in passes through on its way back to a hub.
+    rollupOptions: {
+      input: {
+        main: fileURLToPath(new URL('./index.html', import.meta.url)),
+        oauthStart: fileURLToPath(new URL('./oauth/start.html', import.meta.url)),
+        oauthCallback: fileURLToPath(new URL('./oauth/callback.html', import.meta.url)),
+      },
+    },
+  },
 });

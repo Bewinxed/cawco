@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="referrer" content="no-referrer" />
+    <meta name="robots" content="noindex" />
+    <meta name="theme-color" content="#F4F0E6" />
+    <title>Finish signing in · Caw&amp;Co</title>
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link
+      rel="preload"
+      href="/node_modules/@fontsource-variable/nunito/files/nunito-latin-wght-normal.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link rel="stylesheet" href="/src/styles.css" />
+    <link rel="stylesheet" href="/src/oauth/oauth.css" />
+    <script type="module" src="/src/oauth/callback.ts"></script>
+  </head>
+  <body>
+    <header class="top wrap">
+      <a class="wordmark" href="/" aria-label="Caw&amp;Co home">Caw&amp;Co</a>
+    </header>
+
+    <main id="main" class="wrap handback" data-state="reading">
+      <div class="handback-art">
+        <i data-caw="ready-enter-distance" role="img" aria-label="Caw, a small fluffy black crow with vermilion wing tips"></i>
+      </div>
+      <div class="handback-copy">
+        <h1 id="title">Finish signing in</h1>
+        <p class="lede" id="msg" aria-live="polite">Reading the sign-in result…</p>
+        <div class="handback-hub" id="target" hidden>
+          <p class="install-label">Your hub</p>
+          <div class="cmd"><code id="hub"></code></div>
+          <button class="btn btn-coral handback-go" id="go" type="button"></button>
+          <p class="handback-note" id="note"></p>
+        </div>
+        <noscript><p class="lede">Signing in needs JavaScript. Turn it on for this page, then start again from CawCo.</p></noscript>
+      </div>
+    </main>
+  </body>
+</html>

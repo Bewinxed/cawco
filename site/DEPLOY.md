@@ -15,6 +15,16 @@ that folder on `cawco.dev/*` (see `wrangler.jsonc`).
   `packages/core/src/install-script.ts`, so it is always the script the hub
   itself would hand out. `public/_headers` serves it as plain text and tells
   caches to revalidate every time.
+- `/oauth/client.json`, `/oauth/start` and `/oauth/callback` are the shared
+  sign-in client for providers that name clients by a published document and
+  have no registration (ElevenLabs). The document is `public/oauth/client.json`;
+  the two pages are `oauth/*.html` with their logic in `src/oauth/`, built with
+  the landing page's own stylesheet, font and Caw, so they cannot drift from it.
+  `/oauth/start` keeps the hub's address in the URL fragment and browser
+  storage, so it never reaches a server, and `/oauth/callback` hands the
+  provider's one-time code to that hub's `/oauth/mcp` page (named by
+  `MCP_OAUTH_RETURN_PATH` in `packages/core`; the build stops if the two
+  differ). `public/_headers` keeps both pages out of every cache.
 - `/og.png` is the picture link previews show. The page's `og:image` tag names
   it by its full `https://cawco.dev/og.png` address.
 - `/version.txt` is the short commit the deploy was built from.
