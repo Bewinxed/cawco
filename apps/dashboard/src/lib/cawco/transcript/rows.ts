@@ -454,6 +454,23 @@ const isCompactSummary = (m: Message | undefined): m is Message =>
   m?.type === "ui.system_note" && m.metadata?.noteKind === COMPACT_SUMMARY_KIND;
 
 /**
+ * Where the newest compaction in `messages` begins, by the pairing
+ * {@link compactionAt} folds: its boundary, or its summary when that was read
+ * back without one. -1 when they hold none.
+ */
+export function newestCompaction(messages: Message[]): number {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    if (isCompactBoundary(messages[i])) {
+      return i;
+    }
+    if (isCompactSummary(messages[i])) {
+      return isCompactBoundary(messages[i - 1]) ? i - 1 : i;
+    }
+  }
+  return -1;
+}
+
+/**
  * The compaction that begins at `messages[i]`, and how many messages it is:
  * a boundary with the summary right after it, a boundary whose summary has
  * not arrived, or a summary read back without its boundary. `null` for any

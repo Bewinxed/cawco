@@ -14,13 +14,13 @@
   import type { Snippet } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import CollapsibleLazy from "#lib/components/ui/collapsible/collapsible-lazy.svelte";
-  import { cawco, readTranscript } from "../client.svelte";
+  import { cawco, readOlderPage, readTranscript } from "../client.svelte";
   import CompactionDivider from "./CompactionDivider.svelte";
   import Delegate from "./Delegate.svelte";
   import MessageBody from "./MessageBody.svelte";
   import MessageRow from "./MessageRow.svelte";
   import RunBlock from "./RunBlock.svelte";
-  import { foldMessages, wellRuns } from "./rows";
+  import { foldMessages, newestCompaction, wellRuns } from "./rows";
   import Subagent from "./Subagent.svelte";
   import Thinking from "./Thinking.svelte";
   import ToolGroup from "./ToolGroup.svelte";
@@ -44,11 +44,49 @@
 
   const branch = $derived(id ? cawco.session(id) : null);
 
+  /**
+   * Where the well begins: at the session's newest compaction, the divider
+   * its first row, or at its first turn when it never compacted. A well has
+   * no scroller and draws everything it is given inside its host's row, so
+   * what came before that compaction is read on the session's own page.
+   */
+  const from = $derived(branch ? newestCompaction(branch.messages) : -1);
+  /**
+   * That beginning is not in hand yet: there is a page older than the rows
+   * held, and they hold no compaction, or open on a summary whose boundary
+   * would be the last block of that page (a page can end between the two).
+   */
+  const wanting = $derived(
+    !!branch &&
+      branch.cursor !== null &&
+      (from < 0 ||
+        (from === 0 && branch.messages[0].type !== "system.compact_boundary"))
+  );
+  // An open well reads back to its beginning, one page at a time. A closed
+  // one asks for nothing older than the newest page.
+  $effect(() => {
+    if (
+      open &&
+      id &&
+      wanting &&
+      branch &&
+      !(branch.loading || branch.hydrating || branch.olderFault)
+    ) {
+      // biome-ignore lint/complexity/noVoid: fire-and-forget; the page lands in the store the rows below read
+      void readOlderPage(id);
+    }
+  });
+  /** What stopped the well's rows arriving: the newest page's read, or an older one's. */
+  const fault = $derived(branch?.readFault ?? branch?.olderFault ?? null);
+
   const rows = $derived.by(() => {
     if (!branch) {
       return [];
     }
-    const folded = foldMessages(branch.messages, branch.subagents);
+    const folded = foldMessages(
+      from > 0 ? branch.messages.slice(from) : branch.messages,
+      branch.subagents
+    );
     if (branch.streaming) {
       folded.push({
         kind: "stream",
@@ -60,14 +98,14 @@
   });
   /**
    * The rows drawn: the transcript as it stood before a read under way,
-   * until that read has finished. The read publishes the newest turns and
-   * then prepends the older ones a chunk at a time, and the well draws from
-   * the top — so every chunk replaced the rows it had just drawn, a 100ms
-   * render each, as the well was opening.
+   * until the well's beginning is in hand. The read publishes the newest
+   * turns and the older ones are put in front a page at a time, and the well
+   * draws from the top — so every page replaced the rows it had just drawn,
+   * a 100ms render each, as the well was opening.
    */
   let settled: typeof rows = [];
   const shown = $derived.by(() => {
-    if (!(branch && (branch.loading || branch.hydrating))) {
+    if (!(branch && (branch.loading || wanting))) {
       settled = rows;
     }
     return settled;
@@ -75,7 +113,7 @@
   const loading = $derived(
     open &&
       !!id &&
-      (!branch || branch.loading || branch.hydrating) &&
+      (!branch || branch.loading || (wanting && !branch.olderFault)) &&
       shown.length === 0
   );
 </script>
@@ -92,15 +130,19 @@
     <div class="inner">
       {#if loading}
         <p class="empty">Loading its transcript…</p>
-      {:else if shown.length === 0 && branch?.readFault}
+      {:else if shown.length === 0 && fault}
         <p class="empty">
-          {branch.readFault.reason === "offline"
+          {fault.reason === "offline"
             ? "Its machine is offline"
             : "Its transcript couldn't be read"}:
-          {branch.readFault.message}
+          {fault.message}
         </p>
+        <!-- The read that failed is the one asked for again: the newest
+             page, or the older page at the cursor the session still holds. -->
         <Button
-          onclick={() => id && readTranscript(id, true)}
+          onclick={() =>
+            id &&
+            (branch?.readFault ? readTranscript(id, true) : readOlderPage(id))}
           size="sm"
           variant="outline"
         >
