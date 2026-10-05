@@ -37,7 +37,7 @@ export function previewFrame(
     kind: "preview",
     instanceId,
     state,
-    path: `/preview/${encodeURIComponent(instanceId)}/`,
+    path: `/preview/${encodeURIComponent(instanceId)}/${encodeURIComponent(revision)}/`,
     source,
     revision,
   };

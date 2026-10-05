@@ -1682,6 +1682,11 @@
     }
   },
   "font": {
+    "font-wordmark": {
+      "$type": "fontFamily",
+      "$value": "\"Nunito Variable\", ui-rounded, system-ui, sans-serif",
+      "$description": "Caw&Co wordmark: the approved landing's Nunito Variable face."
+    },
     "font-sans": {
       "$type": "fontFamily",
       "$value": "\"Figtree Variable\", ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", sans-serif",
@@ -1703,6 +1708,16 @@
     }
   },
   "type": {
+    "weight-wordmark": {
+      "$type": "number",
+      "$value": "1000",
+      "$description": "The landing wordmark's variable-font weight. Brand only."
+    },
+    "track-wordmark": {
+      "$type": "dimension",
+      "$value": "-0.045em",
+      "$description": "The landing wordmark's tracking; the ampersand shares its face and size."
+    },
     "text-meta": {
       "$type": "dimension",
       "$value": "0.75rem",

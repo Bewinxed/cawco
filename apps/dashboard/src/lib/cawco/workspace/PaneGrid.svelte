@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { tick, untrack } from "svelte";
+  import { tick } from "svelte";
   import { dur, ease, motionOk } from "#lib/cawco/motion/curves.svelte.js";
   /**
    * The grid: a tree of splits, drawn recursively.
@@ -18,15 +18,12 @@
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Resizable from "#lib/components/ui/resizable/index.js";
   import { IsCoarsePointer } from "#lib/hooks/is-mobile.svelte.js";
+  import { gridView } from "./grid-view.svelte";
   import Self from "./PaneGrid.svelte";
   import PaneLeaf from "./PaneLeaf.svelte";
-  import {
-    type BranchNode,
-    type PaneNode,
-    workspace,
-  } from "./workspace.svelte";
+  import { type PaneNode, workspace } from "./workspace.svelte";
 
-  let { node }: { node: PaneNode } = $props();
+  let { node, nested = false }: { node: PaneNode; nested?: boolean } = $props();
 
   /**
    * The grid is not only a desk any more: a tablet turned landscape gets it
@@ -62,128 +59,86 @@
    * draw.
    *
    * Closing: the tree has already lost the group, but the grid goes on
-   * drawing the branch as it was (`ghost`: the same groups in the same
-   * boxes, none rebuilt) while the leaving group's share runs to nothing and
-   * the rest grow into the room. Then it draws the tree as it now is. Both
-   * run from the shares as they stand, read off the boxes, so a close that
-   * comes while a split is still opening carries on from where the groups
-   * are.
+   * drawing it as it was (`ghost`: the same groups in the same boxes, none
+   * rebuilt) while the leaving group's share, in whichever branch it was,
+   * runs to nothing and the rest grow into the room. Then it draws the tree
+   * as it now is. Both run from the shares as they stand, read off the
+   * boxes, so a close that comes while a split is still opening carries on
+   * from where the groups are.
    */
   const ALL = 100;
-  interface Shape {
-    dir: "h" | "v";
-    id: string;
-    kids: PaneNode[];
-    sizes: number[];
-    t: PaneNode["t"];
-  }
-  const shapeOf = (of: PaneNode): Shape =>
-    of.t === "b"
-      ? {
-          t: "b",
-          id: of.id,
-          dir: of.dir,
-          sizes: [...of.sizes],
-          kids: [...of.kids],
-        }
-      : { t: "l", id: of.id, dir: "h", sizes: [], kids: [] };
-  const idsOf = (shape: Shape) => shape.kids.map((kid) => kid.id).join(",");
 
   let group = $state<HTMLElement | null>(null);
-  /** The branch as it was while the group that left collapses, and where each box is going. */
-  let ghost = $state.raw<{ branch: BranchNode; to: number[] } | null>(null);
-  const drawn = $derived(ghost?.branch ?? node);
+  /** The root draws what the grid view says (a closed split is still drawn while it collapses); the groups inside draw what the root gives them. */
+  const ghost = $derived(gridView.ghost);
+  const drawn = $derived(nested ? node : gridView.drawn);
+  /** Where this branch's boxes are going, when a group of it left. */
+  const leaving = $derived(ghost?.changes.get(drawn.id) ?? null);
 
   /** The groups' boxes, in order. */
   const panesOf = (el: HTMLElement) => [
     ...el.querySelectorAll<HTMLElement>(":scope > [data-pane]"),
   ];
 
+  /** The run each box is on, and between which shares. */
+  const moving = new WeakMap<
+    HTMLElement,
+    { from: number; run: Animation; to: number }
+  >();
+
   /** Runs each box from one share to another. */
   function grow(panes: HTMLElement[], from: number[], to: number[]) {
-    return panes.map((pane, i) =>
-      pane.animate([{ flexGrow: `${from[i]}` }, { flexGrow: `${to[i]}` }], {
-        duration: dur("--dur-panel"),
-        easing: ease("--ease-in-out"),
-        fill: "forwards",
-      })
-    );
-  }
-
-  /** A box's share once the grid draws the tree as it now is. */
-  function shareAfter(id: string, stays: string[], now: Shape): number {
-    if (!stays.includes(id)) {
-      return 0;
-    }
-    return now.t === "l" ? ALL : (now.sizes[stays.indexOf(id)] ?? 0);
-  }
-
-  /** What was last drawn here, to tell what a change took away. */
-  let was: Shape | null = null;
-  $effect.pre(() => {
-    const now = shapeOf(node);
-    const before = untrack(() => was);
-    was = now;
-    if (!(before && motionOk.current)) {
-      return;
-    }
-    if (before.t === now.t && idsOf(before) === idsOf(now)) {
-      return;
-    }
-    untrack(() => {
-      // Another change while one closes: the grid draws what is true now.
-      ghost = null;
-      if (before.t !== "b") {
-        return;
-      }
-      const stays = now.t === "l" ? [now.id] : now.kids.map((kid) => kid.id);
-      const ids = before.kids.map((kid) => kid.id);
-      const sameBranch = now.t === "l" || now.id === before.id;
-      const left = ids.filter((id) => !stays.includes(id));
-      if (
-        !sameBranch ||
-        left.length === 0 ||
-        stays.some((id) => !ids.includes(id))
-      ) {
-        return;
-      }
-      ghost = {
-        branch: {
-          t: "b",
-          id: before.id,
-          dir: before.dir,
-          sizes: before.sizes,
-          kids: before.kids,
-        },
-        // Each box's share once the grid draws the tree as it now is.
-        to: ids.map((id) => shareAfter(id, stays, now)),
-      };
+    return panes.map((pane, i) => {
+      const run = pane.animate(
+        [{ flexGrow: `${from[i]}` }, { flexGrow: `${to[i]}` }],
+        {
+          duration: dur("--dur-panel"),
+          easing: ease("--ease-in-out"),
+          fill: "forwards",
+        }
+      );
+      moving.set(pane, { from: from[i], to: to[i], run });
+      return run;
     });
-  });
+  }
+
+  /**
+   * A box's share where it stands: along the run it is on (the eased
+   * progress of the animation itself: a computed style read in the middle of
+   * a busy frame still says where the run began), else the share it was
+   * given.
+   */
+  function shareOf(pane: HTMLElement): number {
+    const on = moving.get(pane);
+    if (on) {
+      const progress = on.run.effect?.getComputedTiming().progress ?? 1;
+      return on.from + (on.to - on.from) * progress;
+    }
+    return Number.parseFloat(getComputedStyle(pane).flexGrow);
+  }
 
   $effect(() => {
     const el = group;
-    const out = ghost;
-    if (!(el && out)) {
+    const to = leaving;
+    if (!(el && to)) {
       return;
     }
+    const { id } = drawn;
     const panes = panesOf(el);
-    const from = panes.map((pane) =>
-      Number.parseFloat(getComputedStyle(pane).flexGrow)
-    );
+    const from = panes.map(shareOf);
     for (const pane of panes) {
       for (const running of pane.getAnimations()) {
         running.cancel();
       }
     }
-    const runs = grow(panes, from, out.to);
+    const runs = grow(panes, from, to);
     let live = true;
     Promise.all(runs.map((run) => run.finished)).then(
       async () => {
         if (!live) {
           return;
         }
-        ghost = null;
+        gridView.finish(id);
         await tick();
         for (const run of runs) {
           run.cancel();
@@ -226,7 +181,7 @@
 
 {#if drawn.t === "l"}
   <PaneLeaf
-    hosted={workspace.root.id === drawn.id}
+    hosted={gridView.hosts(drawn.id)}
     leaf={drawn}
     swipeable={coarse.current && workspace.focusedLeafId === drawn.id}
   />
@@ -250,7 +205,7 @@
         defaultSize={drawn.sizes[i] ?? 100 / drawn.kids.length}
         minSize={12}
       >
-        <Self node={kid} />
+        <Self nested node={kid} />
       </Resizable.Pane>
     {/each}
   </Resizable.PaneGroup>

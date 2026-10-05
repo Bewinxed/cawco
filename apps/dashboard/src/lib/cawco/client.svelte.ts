@@ -2547,7 +2547,11 @@ export interface CommandIntents {
   "permission.answer": { requestId: string; result: PermissionResult };
   /** `replaces`: the failed send this one retries, which the hub then retires. */
   send: { text: string; extras?: SendExtras; replaces?: string };
-  "send.withdraw": { sendId: string; text: string; extras: SendExtras };
+  "send.withdraw": {
+    sendId: string;
+    extras: SendExtras;
+    replacement: string;
+  };
   "set-effort": { effort: EffortLevel };
   "set-model": { model: string };
   "set-permission-mode": { mode: PermissionMode };
@@ -3035,34 +3039,86 @@ function restoreComposer(
 export function canWithdraw(message: Message): boolean {
   return (
     message.state === "pending" &&
-    session(message.instanceId).harness === "claude"
+    state.sessions[message.instanceId]?.harness === "claude"
   );
 }
 
-export async function withdrawQueued(message: Message): Promise<void> {
-  if (!(message.id && canWithdraw(message))) {
-    return;
+export async function replaceQueued(
+  message: Message,
+  replacement: string
+): Promise<string> {
+  if (!canWithdraw(message)) {
+    throw new Error("This message can no longer be edited in the queue.");
   }
   const images = await Promise.all(
     (message.metadata?.images ?? []).flatMap(({ src, mediaType }) =>
       src ? [imageBytes(src, mediaType)] : []
     )
   );
-  submitCommand(
+  return submitCommand(
     message.instanceId,
     session(message.instanceId).machineId,
     "send.withdraw",
     {
       sendId: message.id,
-      text: message.content,
       extras: {
         attachments: message.metadata?.attachments?.map(
           ({ name, content }) => ({ kind: "text" as const, name, content })
         ),
         images,
       },
+      replacement,
     }
   );
+}
+
+/** One action table for every surface that draws the reader's own turns. */
+export function userTurnActions(message: Message): {
+  edit: "queued" | "resend" | "restore" | null;
+  fork: boolean;
+  retry: boolean;
+} {
+  const target = state.sessions[message.instanceId];
+  if (!target || message.type !== "user") {
+    return { edit: null, fork: false, retry: false };
+  }
+  const machine = cawco.machines.find(
+    (entry) => entry.machineId === target.machineId
+  );
+  const capability = machine?.harnesses?.find(
+    (entry) => entry.harness === target.harness
+  )?.capabilities;
+  const delivered =
+    message.type === "user" &&
+    cawco.status === "connected" &&
+    machine?.status === "online" &&
+    !!target.sessionId &&
+    capability?.rewind === true &&
+    rewindableTurns(target).has(message.id);
+  const table = {
+    pending: {
+      edit: canWithdraw(message) ? ("queued" as const) : null,
+      fork: false,
+      retry: false,
+    },
+    sending: { edit: null, fork: false, retry: false },
+    failed: { edit: null, fork: false, retry: true },
+    unreached: {
+      edit: canResend(message.id) ? ("restore" as const) : null,
+      fork: false,
+      retry: canResend(message.id),
+    },
+    cancelled: { edit: null, fork: false, retry: false },
+    read: {
+      edit:
+        delivered && !target.busy && !target.relaunching
+          ? ("resend" as const)
+          : null,
+      fork: delivered && capability?.fork === true,
+      retry: false,
+    },
+  };
+  return table[message.state ?? "read"];
 }
 
 /**
@@ -3138,7 +3194,7 @@ function streamEffectsFor<K extends CommandKind>(
   const target = session(instanceId);
   switch (kind) {
     case "send.withdraw": {
-      const { sendId, text, extras } =
+      const { sendId, extras, replacement } =
         intent as CommandIntents["send.withdraw"];
       return {
         settled: (stage) => {
@@ -3153,7 +3209,11 @@ function streamEffectsFor<K extends CommandKind>(
               take(target, block as TranscriptBlock, "removed");
               place(target);
             }
-            restoreComposer(instanceId, text, extras);
+            submitCommand(instanceId, target.machineId, "send", {
+              text: replacement,
+              extras,
+              replaces: sendId,
+            });
           }
         },
       };
@@ -4977,11 +5037,14 @@ export async function editAndResend(
       `no session key on record for ${instanceId}; cannot resume`
     );
   }
-  const point = await rewindPointBehind(target, id);
+  // OpenCode reverts the selected user turn; Claude resumes through the
+  // preceding completed assistant frame.
+  const point =
+    target.harness === "opencode"
+      ? target.messages.find((message) => message.id === id)?.sdkUuid
+      : await rewindPointBehind(target, id);
   if (!point) {
-    throw new Error(
-      "There is no answered turn behind this message to go back to."
-    );
+    throw new Error("This message has no stored rewind point.");
   }
 
   const requestId = newId();

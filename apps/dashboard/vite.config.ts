@@ -7,7 +7,7 @@ import tailwindcss from "@tailwindcss/vite";
 import Icons from "unplugin-icons/vite";
 import { defineConfig, type Plugin } from "vite";
 
-const PREVIEW_PREFIX = /^\/preview\/([^/]+)\//;
+const PREVIEW_PREFIX = /^\/preview\/([^/]+)\/[^/]+\//;
 
 /**
  * Extract a preview instance id from a path or Referer header. Returns
@@ -16,6 +16,7 @@ const PREVIEW_PREFIX = /^\/preview\/([^/]+)\//;
 function previewMatch(req: http.IncomingMessage): {
   id: string;
   stripped: string;
+  prefix: string;
   viaReferer: boolean;
 } | null {
   const url = req.url ?? "";
@@ -24,6 +25,7 @@ function previewMatch(req: http.IncomingMessage): {
     return {
       id: decodeURIComponent(match[1]),
       stripped: url.slice(match[0].length - 1),
+      prefix: match[0].slice(0, -1),
       viaReferer: false,
     };
   }
@@ -36,6 +38,7 @@ function previewMatch(req: http.IncomingMessage): {
         return {
           id: decodeURIComponent(refMatch[1]),
           stripped: url,
+          prefix: refMatch[0].slice(0, -1),
           viaReferer: true,
         };
       }
@@ -92,7 +95,7 @@ const hubProxy = (): Plugin => ({
       // of whatever it loads in turn, and it is never stored (serve.js,
       // Preview routing).
       if (info.viaReferer && (req.method === "GET" || req.method === "HEAD")) {
-        const prefix = `/preview/${encodeURIComponent(info.id)}`;
+        const { prefix } = info;
         res.writeHead(302, {
           location: `${prefix}${req.url}`,
           "cache-control": "no-store",
@@ -111,8 +114,13 @@ const hubProxy = (): Plugin => ({
           "x-cawco-preview": info.id,
         },
       };
-      const pvPrefix = `/preview/${encodeURIComponent(info.id)}`;
+      const pvPrefix = info.prefix;
       const proxyReq = http.request(options, (proxyRes) => {
+        // Includes upstream errors: no preview response or validator is reusable.
+        proxyRes.headers["cache-control"] = "no-store";
+        for (const name of ["etag", "last-modified", "expires"]) {
+          delete proxyRes.headers[name];
+        }
         // A root-absolute Location must stay under the prefix so the browser
         // does not leave /preview/<id>/ on a redirect.
         const { location } = proxyRes.headers;
@@ -132,7 +140,7 @@ const hubProxy = (): Plugin => ({
           { timestamp: true }
         );
         if (!res.headersSent) {
-          res.writeHead(502);
+          res.writeHead(502, { "cache-control": "no-store" });
         }
         res.end();
       });
@@ -263,6 +271,7 @@ export default defineConfig({
       "@fontsource-variable/figtree",
       "@fontsource-variable/jetbrains-mono",
       "@fontsource/fredoka",
+      "@fontsource-variable/nunito",
       "@xyflow/svelte",
       "virtua",
       "@hugeicons/svelte",

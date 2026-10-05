@@ -4,6 +4,7 @@
 @import "@fontsource-variable/figtree";
 @import "@fontsource-variable/jetbrains-mono";
 @import "@fontsource/fredoka/600.css";
+@import "@fontsource-variable/nunito";
 /* Every token the app reads, generated from design/tokens/cawco.tokens.json
    (`bun run tokens`). This sheet defines none of its own. */
 @import "./lib/tokens/tokens.css";

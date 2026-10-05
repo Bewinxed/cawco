@@ -1,5 +1,7 @@
+import CawCoAPI
 import CawCoCore
 import CawCoDesign
+import OSLog
 import UIKit
 
 /// What the rail asks of the shell it sits in.
@@ -61,6 +63,23 @@ final class SidebarViewController: ObservedViewController {
     /// The rail's session card (SessionHover): its `tail` takes the transcript's tail view.
     private(set) var sessionHover: SessionHover?
     private var drawnShape = ""
+    /// The web's derived project trees. Pulses belong to the rows pass,
+    /// not the membership/split/order derivation.
+    private var lists: [RailProjectList] = []
+    private var projectsReady = false
+    private var rowInputs: [RailModel.RowInput] = []
+    private var drawnInputs: [RailModel.RowInput] = []
+    private var listProjects: [ProjectRow] = []
+    private var listPins: [String] = []
+    private var listSort: RailPrefs.Sort?
+    private var listDelegates: Bool?
+    private var shownNodes: [RailBranch] = []
+    private var blockedCount = 0
+    private var liveCount = 0
+    private var usageAt: Double?
+    private var usageRead: Bool?
+    private var claudeReadings: [String: Components.Schemas.ClaudeLimits] = [:]
+    private var goReadings: [String: Components.Schemas.OpenCodeGoLimits] = [:]
     private var olderOpen = Set<String>()
     private var openTrees = Set<String>()
     private let fold = RailFold()
@@ -397,34 +416,107 @@ final class SidebarViewController: ObservedViewController {
     // MARK: Content
 
     override func refreshContent() {
-        guard let host else { return }
+        #if DEBUG
+        let began = CFAbsoluteTimeGetCurrent()
+        defer { Self.performance.debug("rail content \((CFAbsoluteTimeGetCurrent() - began) * 1000) ms") }
+        #endif
         let fleet = hub.fleet
-        // Places.
-        fleetRow.active = host.destination == .fleet
-        // Any page under /workflows (Sidebar.svelte `path.startsWith("/workflows")`).
-        workflowsRow.active = host.destination.spoke == ShellDestination.workflows.spoke
-        configureButton.on = host.destination == .configure
-        assistantButton.on = host.assistantOpen
-        // `blockedCount || runningInstances.length`: what waits on the operator, else what runs.
-        let blocked = fleet.rows.filter { $0.isLive && home.activity($0.id) == .blocked }.count
-        let count = blocked > 0 ? blocked : fleet.rows.filter(\.isLive).count
-        fleetBadgeBox.isHidden = count == 0
-        fleetBadge.text = "\(count)"
-        fleetBadgeBox.backgroundColor = blocked > 0 ? Palette.statusAttnBg : Palette.statusLiveBg
-        fleetBadge.textColor = blocked > 0 ? Palette.statusAttnInk : Palette.statusLiveInk
-        usage.configure(home.usage)
-        // Projects, once every read they need is in.
-        let ready = fleet.catalogsRead || hub.state == .unreachable
-        guard ready else {
+        projectsReady = fleet.catalogsRead || hub.state == .unreachable
+        // Track the inputs of Sidebar.svelte's listed/splits/branches, apart
+        // from lastAt and the row's age. A tool/time pulse changes none of
+        // these; an activity transition, row or preference change does.
+        _ = fleet.projects
+        _ = prefs.pins
+        _ = prefs.sort
+        _ = home.delegates
+        _ = home.now
+        _ = host?.activeSessionId
+        _ = fleet.machines.isEmpty
+        _ = fleet.claudeLimits
+        _ = fleet.openCodeGoLimits
+        _ = fleet.limitsRead
+        for project in fleet.projects { _ = prefs.collapsed(project.cwd) }
+        let inputs = RailModel.inputs(hub: hub, home: home, sort: prefs.sort)
+        rowInputs = inputs.rows
+        liveCount = inputs.live
+        blockedCount = inputs.blocked
+    }
+
+    override func drawContent() {
+        #if DEBUG
+        let began = CFAbsoluteTimeGetCurrent()
+        defer { Self.performance.debug("rail derivation \((CFAbsoluteTimeGetCurrent() - began) * 1000) ms") }
+        #endif
+        let fleet = hub.fleet
+        if usageAt != home.now || usageRead != fleet.limitsRead || claudeReadings != fleet.claudeLimits || goReadings != fleet.openCodeGoLimits {
+            usageAt = home.now
+            usageRead = fleet.limitsRead
+            claudeReadings = fleet.claudeLimits
+            goReadings = fleet.openCodeGoLimits
+            usage.configure(home.usage)
+        }
+        guard projectsReady else {
+            lists = []
             showPending()
             return
         }
-        let lists = RailModel.lists(hub: hub, home: home, prefs: prefs)
+        // As on the web, keep the derived trees between changes of their
+        // inputs. This pass is unobserved: sampling recency for their order
+        // must not subscribe the derivation to each session's pulse.
+        let projects = hub.fleet.projects
+        let pins = prefs.pins
+        let sort = prefs.sort
+        let delegates = home.delegates
+        if rowInputs != drawnInputs || projects != listProjects || pins != listPins || sort != listSort || delegates != listDelegates {
+            #if DEBUG
+            if let pair = zip(drawnInputs, rowInputs).first(where: { $0 != $1 }) {
+                Self.performance.debug("rail input first \(pair.0.id, privacy: .public) -> \(pair.1.id, privacy: .public), status \(pair.0.status, privacy: .public) -> \(pair.1.status, privacy: .public), activity \(pair.0.activity.rawValue, privacy: .public) -> \(pair.1.activity.rawValue, privacy: .public), time changed \(pair.0.updatedDate != pair.1.updatedDate || pair.0.updatedText != pair.1.updatedText), recent changed \(pair.0.recent != pair.1.recent)")
+            }
+            #endif
+            drawnInputs = rowInputs
+            listProjects = projects
+            listPins = pins
+            listSort = sort
+            listDelegates = delegates
+            lists = RailModel.lists(hub: hub, home: home, prefs: prefs)
+        }
         let shape = shape(of: lists)
         if shape != drawnShape {
             drawnShape = shape
             rebuild(lists)
         }
+        shownNodes = []
+        func keep(_ nodes: [RailBranch]) {
+            for node in nodes where sessionRows[node.row.id] != nil {
+                shownNodes.append(node)
+                if openTrees.contains(node.row.id) { keep(node.children) }
+            }
+        }
+        for list in lists {
+            keep(list.recent)
+            if olderShown(list) { keep(list.older) }
+        }
+    }
+
+    override func refreshRows() {
+        #if DEBUG
+        let began = CFAbsoluteTimeGetCurrent()
+        defer { Self.performance.debug("rail rows \((CFAbsoluteTimeGetCurrent() - began) * 1000) ms") }
+        #endif
+        guard let host else { return }
+        // Places.
+        fleetRow.active = host.destination == .fleet
+        // Any page under /workflows (Sidebar.svelte `path.startsWith("/workflows")`).
+        workflowsRow.active = host.destination.spoke == ShellDestination.workflows.spoke
+        if configureButton.on != (host.destination == .configure) { configureButton.on = host.destination == .configure }
+        if assistantButton.on != host.assistantOpen { assistantButton.on = host.assistantOpen }
+        // `blockedCount || runningInstances.length`: what waits on the operator, else what runs.
+        let blocked = blockedCount
+        let count = blocked > 0 ? blocked : liveCount
+        fleetBadgeBox.isHidden = count == 0
+        fleetBadge.text = "\(count)"
+        fleetBadgeBox.backgroundColor = blocked > 0 ? Palette.statusAttnBg : Palette.statusLiveBg
+        fleetBadge.textColor = blocked > 0 ? Palette.statusAttnInk : Palette.statusLiveInk
         update(lists)
     }
 
@@ -546,10 +638,7 @@ final class SidebarViewController: ObservedViewController {
     /// filled again: a session's pulse redraws its own row and no other.
     private func update(_ lists: [RailProjectList]) {
         let active = host?.activeSessionId
-        var prints: [String: AnyHashable] = [:]
-        var fills: [String: () -> Void] = [:]
-        func walk(_ nodes: [RailBranch]) {
-            for node in nodes {
+            for node in shownNodes {
                 guard let row = sessionRows[node.row.id] else { continue }
                 let at = hub.fleet.lastAt(node.row)
                 let title = hub.fleet.title(node.row)
@@ -564,36 +653,52 @@ final class SidebarViewController: ObservedViewController {
                 // `statusWord`: a session the operator stopped says so; its mark is an ended session's.
                 let word = node.row.status == .stopped ? "Stopped" : status.word
                 // The row view itself is part of the print: a rebuilt row is filled whatever it last drew.
-                prints[node.row.id] = AnyHashable([
-                    AnyHashable(ObjectIdentifier(row)), AnyHashable(title), AnyHashable(status), AnyHashable(place), AnyHashable(age),
-                    AnyHashable(hint), AnyHashable(count), AnyHashable(failed), AnyHashable(open), AnyHashable(front), AnyHashable(word),
-                ])
-                fills[node.row.id] = {
+                row.ageHint = hint
+                let print = SessionPrint(view: ObjectIdentifier(row), title: title, status: status, place: place,
+                                         age: age, count: count, failed: failed, open: open, front: front, word: word)
+                if sessionPrints[node.row.id] != print {
+                    sessionPrints[node.row.id] = print
                     row.configure(title: title, status: status, word: word, place: place, age: age, count: count, failed: failed, open: open)
-                    row.ageHint = hint
                     row.active = front
                 }
-                walk(node.children)
             }
-        }
         for list in lists {
             guard let block = blocks[list.project.id] else { continue }
             let name = list.project.name
             let running = list.running
             let open = !prefs.collapsed(list.project.cwd)
-            let key = "project:\(list.project.id)"
-            prints[key] = AnyHashable([AnyHashable(ObjectIdentifier(block)), AnyHashable(name), AnyHashable(running), AnyHashable(open)])
-            fills[key] = { block.configure(name: name, running: running, open: open) }
-            walk(list.recent)
-            walk(list.older)
-        }
-        for key in drawnRows.take(prints, new: true) {
-            fills[key]?()
+            let print = ProjectPrint(view: ObjectIdentifier(block), name: name, running: running, open: open)
+            if projectPrints[list.project.id] != print {
+                projectPrints[list.project.id] = print
+                block.configure(name: name, running: running, open: open)
+            }
         }
     }
 
     /// What each rail row and project block last drew.
-    private var drawnRows = RowPrints<String>()
+    private struct SessionPrint: Equatable {
+        let view: ObjectIdentifier
+        let title: String
+        let status: MarkStatus
+        let place: String
+        let age: String
+        let count: Int
+        let failed: Int
+        let open: Bool
+        let front: Bool
+        let word: String
+    }
+    private struct ProjectPrint: Equatable {
+        let view: ObjectIdentifier
+        let name: String
+        let running: Int
+        let open: Bool
+    }
+    private var sessionPrints: [String: SessionPrint] = [:]
+    private var projectPrints: [String: ProjectPrint] = [:]
+    #if DEBUG
+    private static let performance = Logger(subsystem: "dev.cawco.app", category: "Rail")
+    #endif
 
     // MARK: Folding
 
@@ -637,6 +742,8 @@ final class SidebarViewController: ObservedViewController {
     /// Lays the rail out now, so a fold can measure what it opens.
     private func refreshNow() {
         refreshContent()
+        drawContent()
+        refreshRows()
         view.layoutIfNeeded()
     }
 

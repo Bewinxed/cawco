@@ -1440,6 +1440,7 @@ export class SessionSupervisor {
     // This is shared by Claude adoption, pi resume and OpenCode reattach.
     if (
       (payload.reattachOnly || payload.resume) &&
+      !payload.resume?.atMessage &&
       this.#sessions.has(instanceId)
     ) {
       if (ack) {

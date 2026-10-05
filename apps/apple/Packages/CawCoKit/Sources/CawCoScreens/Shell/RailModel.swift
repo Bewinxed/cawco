@@ -29,6 +29,57 @@ struct RailProjectList {
 enum RailModel {
     static let dayMs = 24.0 * 60 * 60 * 1000
 
+    /// Sidebar.svelte's `drawsAlike`/`keep`: replacement fleet snapshots
+    /// that describe the same rows are the same derivation input.
+    struct RowInput: Equatable {
+        let id: String
+        let status: String
+        let parent: String?
+        let project: String?
+        let machine: String
+        let folder: String
+        let title: String?
+        let updatedDate: Date?
+        let updatedText: String?
+        let activity: Activity
+        let recent: Bool
+    }
+
+    struct Inputs {
+        let rows: [RowInput]
+        let live: Int
+        let blocked: Int
+    }
+
+    static func inputs(hub: HubConnection, home: HomeModel, sort: RailPrefs.Sort) -> Inputs {
+        let sessions = hub.fleet.rows
+        var live = 0
+        var blocked = 0
+        let rows = (sessions + hub.fleet.runRows).enumerated().map { index, row in
+            let watchesActivity = row.isLive || row.isStale || sort == .state
+            let activity = watchesActivity ? home.activity(row.id) : .idle
+            if index < sessions.count, row.isLive {
+                live += 1
+                if activity == .blocked { blocked += 1 }
+            }
+            let settled = watchesActivity ? hub.fleet.activityPulse(row.id)?.at : nil
+            var updated = 0.0
+            if let date = row.updatedAt?.value1 {
+                updated = date.timeIntervalSince1970 * 1000
+            } else if let text = row.updatedAt?.value2,
+                      let date = try? Date(text, strategy: .iso8601.year().month().day().time(includingFractionalSeconds: true)) {
+                updated = date.timeIntervalSince1970 * 1000
+            }
+            return RowInput(id: row.id, status: row.status.rawValue, parent: row.parentInstanceId,
+                     project: row.projectId, machine: row.machineId, folder: row.cwd,
+                     title: row.title, updatedDate: settled == nil ? row.updatedAt?.value1 : nil,
+                     updatedText: settled == nil ? row.updatedAt?.value2 : nil,
+                     activity: sort == .state || !row.isLive ? activity : .idle,
+                     recent: row.isLive || activity == .blocked || home.now - (settled ?? updated) < dayMs)
+        }
+        return Inputs(rows: rows, live: live, blocked: blocked)
+    }
+
     /// Pinned projects first, then by name (`orderedProjects`).
     static func projects(_ fleet: FleetStore, prefs: RailPrefs) -> [ProjectRow] {
         fleet.projects.sorted { a, b in
@@ -124,8 +175,9 @@ enum RailModel {
         var shown = recent
         var rest = older
         if shown.count < shownAtLeast, !rest.isEmpty {
-            let byRecency = rest.sorted { hub.fleet.lastAt($0.row) > hub.fleet.lastAt($1.row) }
-            let lifted = Set(byRecency.prefix(shownAtLeast - shown.count).map(\.row.id))
+            let byRecency = rest.enumerated().map { (index: $0.offset, at: hub.fleet.lastAt($0.element.row)) }
+                .sorted { $0.at != $1.at ? $0.at > $1.at : $0.index < $1.index }
+            let lifted = Set(byRecency.prefix(shownAtLeast - shown.count).map { rest[$0.index].row.id })
             shown += rest.filter { lifted.contains($0.row.id) }
             rest.removeAll { lifted.contains($0.row.id) }
         }
@@ -165,30 +217,49 @@ enum RailModel {
     /// One comparator for every list in the rail (`sorted`); recency breaks every tie.
     static func sorted(_ rows: [InstanceRow], hub: HubConnection, home: HomeModel, by sort: RailPrefs.Sort) -> [InstanceRow] {
         let rank: [Activity: Int] = [.blocked: 0, .working: 1, .idle: 2]
-        return rows.sorted { a, b in
+        // Read each key once, not on every comparator call (the fleet's
+        // pulse and generated row accessors were the sort's measured cost).
+        // Original position explicitly preserves the stable order on ties.
+        let keys = rows.enumerated().map { index, row in
+            (index: index, at: hub.fleet.lastAt(row),
+             name: sort == .name ? hub.fleet.title(row) : "",
+             rank: sort == .state ? (rank[home.activity(row.id)] ?? 2) : 0)
+        }
+        return keys.sorted { a, b in
             switch sort {
             case .name:
-                let order = hub.fleet.title(a).localizedCompare(hub.fleet.title(b))
+                let order = a.name.localizedCompare(b.name)
                 if order != .orderedSame { return order == .orderedAscending }
             case .state:
-                let ra = rank[home.activity(a.id)] ?? 2, rb = rank[home.activity(b.id)] ?? 2
-                if ra != rb { return ra < rb }
+                if a.rank != b.rank { return a.rank < b.rank }
             case .recent:
                 break
             }
-            return hub.fleet.lastAt(a) > hub.fleet.lastAt(b)
-        }
+            return a.at != b.at ? a.at > b.at : a.index < b.index
+        }.map { rows[$0.index] }
+    }
+
+    /// The shared tree builder needs identity and parentage, not a copy of
+    /// the generated wire row (and all its optional payloads) at each step.
+    private struct TreeIndex: TreeRow {
+        let id: String
+        let parentInstanceId: String?
+        let index: Int
     }
 
     /// `branches`: the rows as the tree they are, siblings in the rail's order at every depth.
     private static func branches(_ rows: [InstanceRow], hub: HubConnection, home: HomeModel, prefs: RailPrefs) -> [RailBranch] {
-        let lines = tree(sorted(rows, hub: hub, home: home, by: prefs.sort))
-        var children: [String: [InstanceRow]] = [:]
-        var roots: [InstanceRow] = []
+        let ordered = sorted(rows, hub: hub, home: home, by: prefs.sort)
+        let lines = tree(ordered.enumerated().map {
+            TreeIndex(id: $0.element.id, parentInstanceId: $0.element.parentInstanceId, index: $0.offset)
+        })
+        var children: [String: [Int]] = [:]
+        var roots: [Int] = []
         for line in lines where !line.context {
-            if let parent = line.parent { children[parent, default: []].append(line.row) } else { roots.append(line.row) }
+            if let parent = line.parent { children[parent, default: []].append(line.row.index) } else { roots.append(line.row.index) }
         }
-        func build(_ row: InstanceRow) -> RailBranch {
+        func build(_ index: Int) -> RailBranch {
+            let row = ordered[index]
             let kids = (children[row.id] ?? []).map(build)
             let count = kids.reduce(0) { $0 + 1 + $1.count }
             let failed = kids.reduce(0) { $0 + ($1.row.isFailed ? 1 : 0) + $1.failed }

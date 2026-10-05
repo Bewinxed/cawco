@@ -325,7 +325,9 @@
     if (!rail.delegates) {
       for (const [id, { live, resting }] of lists) {
         const kept = new Set(
-          rooted([...live, ...resting]).map((row) => row.id)
+          rooted([...live, ...resting], (parent) =>
+            cawco.instanceIndex.byId.has(parent)
+          ).map((row) => row.id)
         );
         lists.set(id, {
           live: live.filter((row) => kept.has(row.id)),
@@ -806,9 +808,8 @@
                   src={cawcoIcon}
                   width="18"
                 >
-                <span
-                  class="min-w-0 truncate text-[length:var(--text-body)] font-medium text-foreground"
-                  >CawCo</span
+                <span class="brand-wordmark min-w-0 truncate text-foreground"
+                  >Caw&amp;Co</span
                 >
               </a>
             {/snippet}
@@ -1157,6 +1158,17 @@
 <!-- end flex column wrapper -->
 
 <style>
+  .brand-wordmark {
+    display: inline-flex;
+    align-items: center;
+    block-size: calc(var(--text-body) * var(--leading-body));
+    font-family: var(--font-wordmark);
+    font-size: var(--text-body);
+    font-weight: var(--weight-wordmark);
+    letter-spacing: var(--track-wordmark);
+    line-height: var(--leading-kpi);
+  }
+
   /* The brand row's icon: the lead column's 18px tile, on the tile's radius.
      Its edge is drawn inside it (a negative offset), so the box stays 18px
      and the icon keeps its shape on the rail in either theme. */

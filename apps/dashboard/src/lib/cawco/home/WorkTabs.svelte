@@ -172,7 +172,9 @@
     // A delegate under a listed parent stays, folded into its parent's
     // count; only one whose parent this tab does not list waits for the
     // switch.
-    const kept = new Set(rooted(all).map((row) => row.id));
+    const kept = new Set(
+      rooted(all, (id) => cawco.instanceIndex.byId.has(id)).map((row) => row.id)
+    );
     return all.filter((row) => kept.has(row.id) || isFailed(row));
   };
   /**

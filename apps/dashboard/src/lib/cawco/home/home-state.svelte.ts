@@ -33,6 +33,7 @@ import {
   catalogTitle,
   conversationHref,
   indexInstances,
+  instanceForSession,
   resolveSessionTitle,
 } from "../links";
 import { signInWarning } from "../machine";
@@ -41,7 +42,7 @@ import { permissionSummary } from "../permission-summary";
 import { projectsFor } from "../projects";
 import { questionsOf } from "../question";
 import { rail } from "../rail.svelte";
-import { topsIn } from "../tree";
+import { hasParent, topsIn } from "../tree";
 import { runHref } from "../workflow-runs";
 import { workflowState } from "../workflow-state.svelte";
 import { choices } from "./choices.svelte";
@@ -292,6 +293,13 @@ export function placeOf(
     : machineName(machineId);
 }
 
+function placeOfRow(row: InstanceRow): string {
+  const where = projectOfRow(row);
+  return where
+    ? `${machineName(row.machineId)} · ${where}`
+    : machineName(row.machineId);
+}
+
 export interface MachineGroup<T> {
   machineId: string;
   name: string;
@@ -458,7 +466,7 @@ const enteredWorking = new Map<string, number>();
 
 /** The rail's delegates switch, kept: work handed off is listed only on request. */
 const listed = (row: InstanceRow): boolean =>
-  rail.delegates || !row.parentInstanceId;
+  rail.delegates || !hasParent(row, (id) => cawco.instanceIndex.byId.has(id));
 
 /* ── The machines ──────────────────────────────────────────────────── */
 
@@ -627,7 +635,7 @@ class Home {
         instanceId: item.instanceId,
         machineId: item.machineId,
         title: row ? instanceTitle(row) : item.hostname,
-        place: placeOf(item.machineId, item.cwd),
+        place: row ? placeOfRow(row) : placeOf(item.machineId, item.cwd),
         isQuestion: Boolean(questions),
         ask: questions
           ? questions.map((question) => question.question).join(" · ")
@@ -809,6 +817,13 @@ class Home {
       (entry): RecentItem => ({
         ...entry,
         instance: null,
+        place: (() => {
+          const row = instanceForSession(index, entry.info.sessionId, {
+            machineId: entry.machineId,
+            cwd: entry.info.cwd,
+          });
+          return row ? placeOfRow(row) : entry.place;
+        })(),
         title: catalogTitle(entry.info, index, entry.machineId),
         href: conversationHref(entry.info.sessionId, index, {
           machineId: entry.machineId,
@@ -842,7 +857,7 @@ class Home {
           info: null,
           machineId: row.machineId,
           title: instanceTitle(row),
-          place: placeOf(row.machineId, row.cwd),
+          place: placeOfRow(row),
           href: conversationHref(row.id, cawco.instanceIndex),
           at: lastAt(row),
         })

@@ -22,7 +22,7 @@ const LOOPBACK = new Set(["localhost", "127.0.0.1", "[::1]"]);
 const HEAD_OPEN = /<head(\s[^>]*)?\s*>/i;
 const HEAD_CLOSE = /<\/head\s*>/i;
 const BODY = /<\/body\s*>/i;
-const PREVIEW_PREFIX = /^\/preview\/[^/]+\//;
+const PREVIEW_PREFIX = /^\/preview\/[^/]+\/[^/]+\//;
 let overlay: Promise<string> | undefined;
 
 /**
@@ -134,6 +134,9 @@ export async function startPreview(options: {
       let response: Response;
       if ("port" in source) {
         const headers = proxyHeaders(request.headers);
+        // A preview always asks for bytes, never a cached representation.
+        headers.delete("if-none-match");
+        headers.delete("if-modified-since");
         headers.set("host", `localhost:${source.port}`);
         if (headers.has("origin")) {
           headers.set("origin", `http://localhost:${source.port}`);
@@ -208,6 +211,8 @@ export async function startPreview(options: {
       // one value it passes through untouched.
       headers.set("cache-control", "no-store");
       headers.delete("expires");
+      headers.delete("etag");
+      headers.delete("last-modified");
       if ("port" in source) {
         const location = headers.get("location");
         if (location) {

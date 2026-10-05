@@ -242,6 +242,21 @@ function leavesOf(node: PaneNode, out: LeafNode[] = []): LeafNode[] {
   return out;
 }
 
+/**
+ * The groups whose top edge is the workspace's top edge, left to right: the
+ * ones the top bar carries the tabs of. A group is one; a branch that lays
+ * its children side by side has every child's, and one that stacks them has
+ * only its first child's, since the others stand under it.
+ */
+export function topLeaves(node: PaneNode): LeafNode[] {
+  if (node.t === "l") {
+    return [node];
+  }
+  return node.dir === "h"
+    ? node.kids.flatMap(topLeaves)
+    : topLeaves(node.kids[0]);
+}
+
 function leafById(id: string): LeafNode | null {
   return leavesOf(held.root).find((leaf) => leaf.id === id) ?? null;
 }
