@@ -27,7 +27,9 @@
    * count at the row's trailing edge, opened one level at a time by the
    * count or →, and folded again by the count, the parent's rail or ←. A
    * parent's rows hang under it in a list of their own on its nesting rail,
-   * opening and folding as every tree in the app does (motion/branch). Each
+   * opening and folding as every tree in the app does (motion/branch). A
+   * parent lists its recent rows and folds the rest under one "N older" row
+   * (older.ts, OlderRows), as a project does its sessions. Each
    * machine lists its first MORE_AT trees and its own "N
    * more", so every machine with rows keeps its header and its Archive all;
    * opening the rest (or closing them) is the same relay, the rows arriving
@@ -80,7 +82,9 @@
     waitForBoxes,
   } from "../motion/relay-boxes";
   import { reflow, reflowsFrom, reread } from "../motion/rows.svelte";
+  import OlderRows from "../OlderRows.svelte";
   import OsMark from "../OsMark.svelte";
+  import { DELEGATE_WINDOW, listedOf, runningIds } from "../older";
   import { openTrees } from "../open-trees.svelte";
   import { rail } from "../rail.svelte";
   import SessionRow, { ROW_PILL } from "../SessionRow.svelte";
@@ -191,17 +195,110 @@
     working: tree(rowsOf("working"), { anchor: "last", context: known }),
     finished: tree(rowsOf("finished"), { anchor: "first", context: known }),
   });
-  /** Each tab as the reader sees it: every tree folded until opened. */
-  const folded = $derived({
-    working: collapse(trees.working, (id) => openTrees.has(id, "home")),
-    finished: collapse(trees.finished, (id) => openTrees.has(id, "home")),
-  });
   /** Every row's place in its tab's tree: depth, last sibling, rails through it. */
   const shapes = $derived({
     working: new Map(trees.working.map((line) => [line.row.id, line])),
     finished: new Map(trees.finished.map((line) => [line.row.id, line])),
   });
   const shapeOf = (tab: WorkTab, id: string) => shapes[tab].get(id);
+
+  /** What a parent folds under its "N older" row (older.ts, OlderRows). */
+  interface Older {
+    /** The rows it holds, at every depth: the number the row says. */
+    count: number;
+    /** Every row in it, at every depth. */
+    held: Set<string>;
+    /** The rows directly under the parent that fold. */
+    tops: Set<string>;
+  }
+  const running = $derived(runningIds());
+  /**
+   * Each parent's older rows in a tab's tree, by the rule a project's
+   * sessions are split by: a session lists its recent delegates and folds
+   * the rest. Working's rows are all running, so none of them ever folds;
+   * Finished is where a session's hundred delegates pile up.
+   */
+  function olderIn(tab: WorkTab): Map<string, Older> {
+    const kids = new Map<string, TreeLine<InstanceRow>[]>();
+    for (const line of trees[tab]) {
+      if (line.parent) {
+        kids.set(line.parent, [...(kids.get(line.parent) ?? []), line]);
+      }
+    }
+    const reading = { lastAt, now: clock.now, running };
+    const out = new Map<string, Older>();
+    for (const [parent, lines] of kids) {
+      const listedRows = listedOf(
+        lines.map((line) => line.row),
+        (row) => shapeOf(tab, row.id)?.descendants ?? [],
+        reading,
+        DELEGATE_WINDOW
+      );
+      const older = lines.filter((line) => !listedRows.has(line.row.id));
+      if (older.length === 0) {
+        continue;
+      }
+      // A context line stands in for a row the tab does not list: it is
+      // drawn, and counts for nothing, as on its parent's mark.
+      const rows = older.flatMap((line) =>
+        line.context ? line.descendants : [line.row, ...line.descendants]
+      );
+      out.set(parent, {
+        count: rows.length,
+        held: new Set([
+          ...older.map((line) => line.row.id),
+          ...rows.map((row) => row.id),
+        ]),
+        tops: new Set(older.map((line) => line.row.id)),
+      });
+    }
+    return out;
+  }
+  const olders = $derived({
+    working: olderIn("working"),
+    finished: olderIn("finished"),
+  });
+  const olderOf = (tab: WorkTab, id: string) => olders[tab].get(id);
+  /** `lines` less every row a parent folds away, and all under each. */
+  function listedLines(
+    tab: WorkTab,
+    lines: TreeLine<InstanceRow>[]
+  ): TreeLine<InstanceRow>[] {
+    const out: TreeLine<InstanceRow>[] = [];
+    let foldedBelow = Number.POSITIVE_INFINITY;
+    for (const line of lines) {
+      if (line.depth > foldedBelow) {
+        continue;
+      }
+      foldedBelow = Number.POSITIVE_INFINITY;
+      if (line.parent && olderOf(tab, line.parent)?.tops.has(line.row.id)) {
+        foldedBelow = line.depth;
+        continue;
+      }
+      out.push(line);
+    }
+    return out;
+  }
+  /** Each tab with every tree folded until opened, older rows and all. */
+  const opened = $derived({
+    working: collapse(trees.working, (id) => openTrees.has(id, "home")),
+    finished: collapse(trees.finished, (id) => openTrees.has(id, "home")),
+  });
+  /**
+   * Each tab as the reader sees it listed: the rows a parent folds under
+   * its "N older" row are not lines of the list. They are drawn in that
+   * row's own box (`boxed`), which a change of the list neither relays nor
+   * counts.
+   */
+  const folded = $derived({
+    working: listedLines("working", opened.working),
+    finished: listedLines("finished", opened.finished),
+  });
+  /** Every row a tab draws, the rows in an older box too. */
+  const boxed = $derived({
+    working: opened.working.map((line) => line.row),
+    finished: opened.finished.map((line) => line.row),
+  });
   /** The rows of `rows` that hang directly under `parent` (null: the tops). */
   const under = (
     tab: WorkTab,
@@ -708,11 +805,15 @@
   group: string
 )}
   {@const shape = shapeOf(shown, row.id)}
-  {@const kids = under(shown, rows, row.id)}
+  {@const older = olderOf(shown, row.id)}
+  {@const kids = under(shown, rows, row.id).filter(
+    (kid) => !older?.tops.has(kid.id)
+  )}
   <!-- A row and, open, the rows under it: its box (`data-flip="box"`)
        takes their room at once and its edge travels to it, what is under
        it sliding with that edge (motion/rows); they open and fold on its
-       rail (motion/branch). -->
+       rail (motion/branch). It lists its recent rows, and the rest under
+       one "N older" row, the last on its rail (older.ts). -->
   <li class="node" data-flip={plan ? undefined : "box"}>
     <div class="line" data-key={row.id} style={enterAnim(row.id)}>
       {#if shape?.parent && shape.depth > 0}
@@ -739,6 +840,30 @@
         {#each kids as kid (kid.id)}
           {@render treeNode(kid, rows, group)}
         {/each}
+        {#if older}
+          <!-- It arrives with the last row over it, in a change of the
+               list; its own rows are drawn from every row the tab draws,
+               since the list holds none of them. -->
+          <OlderRows
+            count={older.count}
+            flip={!plan}
+            front={current !== null && older.held.has(current)}
+            id={row.id}
+            keyOf={(kid) => kid.id}
+            list="home"
+            style={enterAnim(kids.at(-1)?.id ?? row.id)}
+            tall
+            trees={under(shown, boxed[shown], row.id).filter((kid) =>
+              older.tops.has(kid.id)
+            )}
+          >
+            {#snippet tree(
+              kid
+            )}
+              {@render treeNode(kid, boxed[shown], group)}
+            {/snippet}
+          </OlderRows>
+        {/if}
       </ul>
     {/if}
   </li>
@@ -751,6 +876,7 @@
   {@const kids = lines.filter(
     (other) => other.row && shapeOf(other.tab, other.key)?.parent === line.key
   )}
+  {@const older = olderOf(line.tab, line.key)}
   <!-- The row's nesting line is this item's own (app.css .kit-nest): it
        leaves on the row's exit, in the row's frames (`--leave`). -->
   <li class="node" style={leaveLine(line.key)}>
@@ -762,6 +888,17 @@
         {#each kids as kid (kid.key)}
           {@render leavingTree(kid, lines)}
         {/each}
+        {#if older}
+          <!-- Its "N older" row leaves with the last row over it. -->
+          <OlderRows
+            count={older.count}
+            id={line.key}
+            list="home"
+            still
+            style={leaveAnim(kids.at(-1)?.key ?? line.key)}
+            tall
+          />
+        {/if}
       </ul>
     {/if}
   </li>

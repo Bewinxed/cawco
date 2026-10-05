@@ -46,8 +46,10 @@ function catchUp(): void {
 }
 
 /**
- * Projects whose older list is open, in whichever rail is mounted (the wide
- * screen's, the drawer's); in memory, so a reload shuts them.
+ * Parents whose older rows are out (older.ts, OlderRows): a project's older
+ * sessions, a session's older delegates, in every list that draws them (the
+ * wide screen's rail, the drawer's, the home); in memory, so a reload shuts
+ * them.
  */
 export const olderOpen = new SvelteSet<string>();
 
