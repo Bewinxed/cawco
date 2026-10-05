@@ -631,7 +631,7 @@ export class SessionSupervisor {
   #admitRequest(envelope: Envelope): (() => void) | undefined {
     const probe =
       envelope.verb === "control" &&
-      [AGENT_BUSY, AGENT_RESTART_READINESS, AGENT_RETIRE].includes(
+      [AGENT_RESTART_READINESS, AGENT_RETIRE].includes(
         (envelope.payload as ControlPayload).method
       );
     if (isRetiring() && !probe) {
@@ -835,7 +835,7 @@ export class SessionSupervisor {
     }
     const operations = this.#adapter("opencode").restartHolds?.() ?? [];
     if (operations.length) {
-      extra.push({ reason: "opencode-operation", ids: operations });
+      extra.push({ reason: "opencode:pending-operations", ids: operations });
     }
     return Promise.resolve(restartSnapshot(extra));
   }
@@ -1066,6 +1066,17 @@ export class SessionSupervisor {
    * the hub starts one as soon as it hears, for exactly those.
    */
   async sleep(
+    instanceId: string
+  ): Promise<{ asleep: boolean; awake?: string }> {
+    if (isRetiring()) {
+      return { asleep: false, awake: "the agent is retiring" };
+    }
+    return await withRestartHold("sleep", instanceId, () =>
+      this.#sleep(instanceId)
+    );
+  }
+
+  async #sleep(
     instanceId: string
   ): Promise<{ asleep: boolean; awake?: string }> {
     const session = this.#sessions.get(instanceId);
@@ -2108,6 +2119,9 @@ export class SessionSupervisor {
    * tried again next turn if it does not land.
    */
   #tagQuest(instanceId: string, adapter: Harness): void {
+    if (isRetiring()) {
+      return;
+    }
     const quest = this.#quests.get(instanceId);
     if (!quest?.sessionId || quest.tagged) {
       return;
@@ -2115,12 +2129,12 @@ export class SessionSupervisor {
     const { sessionId, dir } = quest;
     quest.tagged = true;
     // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — #tagQuest itself is synchronous and does not wait on the tag landing
-    void adapter
-      .tagSession(sessionId, CAWCO_SCRATCH_TAG, dir)
-      .catch((error: unknown) => {
-        quest.tagged = false;
-        warn(`could not tag side quest ${sessionId}: ${error}`);
-      });
+    void withRestartHold("catalog-write", instanceId, () =>
+      adapter.tagSession(sessionId, CAWCO_SCRATCH_TAG, dir)
+    ).catch((error: unknown) => {
+      quest.tagged = false;
+      warn(`could not tag side quest ${sessionId}: ${error}`);
+    });
   }
 
   /** A session whose tag someone has just set by hand is no longer ours to set. */
