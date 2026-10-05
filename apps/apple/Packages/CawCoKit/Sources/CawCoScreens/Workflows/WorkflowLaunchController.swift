@@ -232,7 +232,9 @@ final class WorkflowLaunchController: KitDialogController {
                 let runId = try await hub.workflows.launch(workflow.id, inputs: values, machineId: machineId, path: directory.text ?? "", supervisor: supervisor)
                 busy = false
                 holdsOpen = false
-                dismiss(animated: true) { [onLaunched] in onLaunched(runId) }
+                // The web's order: the run's tab opens, then the form closes over it.
+                onLaunched(runId)
+                dismiss(animated: true)
             } catch {
                 busy = false
                 PromptCardView.setPending(start, false, label: "Starting workflow run…")
