@@ -37,7 +37,10 @@ final class SystemLineView: RailRow, RowContent, Disclosing {
             line.leadingAnchor.constraint(equalTo: row.leadingAnchor),
             line.trailingAnchor.constraint(lessThanOrEqualTo: row.trailingAnchor),
             line.topAnchor.constraint(equalTo: row.topAnchor),
-            line.bottomAnchor.constraint(equalTo: row.bottomAnchor),
+            // The line is an inline box on the transcript's own 14 on 20.3 line,
+            // which reaches below it: a one-line note's row is 21.27 in the
+            // web's DOM around a line 18.85 tall.
+            line.bottomAnchor.constraint(equalTo: row.bottomAnchor, constant: -Self.under),
         ])
         below.axis = .vertical
         opened.axis = .vertical
@@ -59,9 +62,13 @@ final class SystemLineView: RailRow, RowContent, Disclosing {
         return reveal.toggle(open: open)
     }
 
+    /// What the transcript's line reaches below a note's line (21.27 - 18.85 at the label size).
+    private static let under = 2.42 * TypeScale.textLabel / 13
+
+    /// A note's words: the label size on the transcript's leading (18.85 at 13).
     private func words(_ text: String, ink: UIColor, strong: Bool = true) -> NSAttributedString {
         Styled.string(text, TypeScale.typeLabel, color: ink, weight: strong ? TypeScale.weightStrong : TypeScale.weightBody,
-                      leading: TypeScale.leadingRoot, lineBreak: .byWordWrapping)
+                      leading: TypeScale.leadingBody, lineBreak: .byWordWrapping)
     }
 
     private func set(_ glyph: Glyph, title text: String, ink: UIColor = Palette.inkMuted) {
@@ -100,6 +107,7 @@ final class SystemLineView: RailRow, RowContent, Disclosing {
         opened.arrangedSubviews.forEach { $0.removeFromSuperview() }
         status.isHidden = true
         summary.isHidden = true
+        title.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         railColor = RailInk.rail
         var openable = false
         switch item.kind {
@@ -124,6 +132,8 @@ final class SystemLineView: RailRow, RowContent, Disclosing {
                 if let result = block.string("result") {
                     summary.attributedText = words(result, ink: Palette.inkMuted)
                     summary.isHidden = false
+                    // The verb keeps its width and the summary is cut short (`.tverb`, `.tsum`).
+                    title.setContentCompressionResistancePriority(.required, for: .horizontal)
                 }
             case "ui.command_output":
                 set(.terminal, title: command ?? "Output")
@@ -155,6 +165,10 @@ final class SystemLineView: RailRow, RowContent, Disclosing {
             return
         }
         chevron.isHidden = !openable
+        // With nothing under the line there is nothing there: an empty stack
+        // has no height of its own, and took whatever the row was given (a
+        // one-line note stood 44 pt tall, its estimate, against 21.3).
+        below.isHidden = below.arrangedSubviews.isEmpty
         let open = openable && env.isOpen(key)
         chevron.set(open: open, animated: false)
         reveal.set(open: open)
