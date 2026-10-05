@@ -63,6 +63,10 @@ const SOLAR_ICONS = [
   "info-circle-bold-duotone", // IconInfo
   "stop-bold-duotone", // IconStop
   "record-circle-bold-duotone", // IconDot
+  // The workflow editor's node kinds (workflow-ui.ts `kinds`).
+  "routing-2-bold-duotone", // IconHook
+  "branching-paths-down-bold-duotone", // IconSubagent
+  "scale-bold-duotone", // IconJev
   "window-frame-bold-duotone", // IconWindow
   "shield-check-bold-duotone", // IconRules
   "clipboard-check-bold-duotone", // IconReport
