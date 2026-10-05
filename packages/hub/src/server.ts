@@ -5217,6 +5217,12 @@ export const createServer = (
         ? { harness: row.harness as SpawnPayload["harness"] }
         : {}),
       ...(row.model ? { model: row.model } : {}),
+      ...(row.permissionMode
+        ? {
+            permissionMode:
+              row.permissionMode as SpawnPayload["permissionMode"],
+          }
+        : {}),
       ...(isEffortLevel(row.effort) ? { effort: row.effort } : {}),
       ...(row.projectId ? { projectId: row.projectId } : {}),
       // A leaf stays a leaf across a restart: the daemon builds the toolset
@@ -5224,7 +5230,7 @@ export const createServer = (
       // delegate the `delegate` tool back.
       ...(row.canDelegate === false ? { canDelegate: false } : {}),
     };
-    // Held custody is already configured; launch-mode and transcript refusals cannot skip it.
+    // Adopt the stored mode without revalidating a new launch; custody must not be skipped.
     if (reattachOnly) {
       lifecycle.restoring(row.id);
       agent.send({

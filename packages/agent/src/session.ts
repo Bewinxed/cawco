@@ -136,6 +136,7 @@ interface Claimed {
     sessionCredential?: string;
     processGeneration?: string;
     keepAliveTurn?: string;
+    permissionMode?: SpawnPayload["permissionMode"];
   };
   /** Whether its turn was running when its ring was read. */
   running: boolean;
@@ -1541,6 +1542,7 @@ export class SessionSupervisor {
               sessionCredential: payload.sessionCredential,
               processGeneration: payload.processGeneration,
               keepAliveTurn: payload.keepAliveTurn,
+              permissionMode: payload.permissionMode,
             };
             const running = await candidate.turnRunning(instanceId, proc.head);
             await this.#adoptClaimed(
@@ -1629,6 +1631,7 @@ export class SessionSupervisor {
         return;
       }
       holder.session = session;
+      await this.#applyStoredPermissionMode(session, payload.permissionMode);
       this.#sessions.set(instanceId, session);
       session.attached?.();
       if (payload.reattachOnly) {
@@ -2222,6 +2225,7 @@ export class SessionSupervisor {
       turnRunning: running,
     });
     holder.session = session;
+    await this.#applyStoredPermissionMode(session, row.permissionMode);
     this.#sessions.set(row.instanceId, session);
     // biome-ignore lint/complexity/noVoid: the catalog read dates a rest already under way; nothing waits on it
     void this.#dateActivity(row.instanceId, claude, session, row.cwd);
@@ -2229,6 +2233,16 @@ export class SessionSupervisor {
     session.attached?.();
     this.#adopting.delete(row.instanceId);
     settle();
+  }
+
+  /** Restore policy before publishing the handle or replaying its permission snapshot. */
+  async #applyStoredPermissionMode(
+    session: HarnessSession,
+    mode: SpawnPayload["permissionMode"]
+  ): Promise<void> {
+    if (mode !== undefined) {
+      await session.control(CONTROL_SET_PERMISSION_MODE, [mode]);
+    }
   }
 
   /**

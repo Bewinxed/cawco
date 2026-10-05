@@ -459,11 +459,13 @@ export const custodyRow = (
   sessionCredential?: string;
   processGeneration?: string;
   keepAliveTurn?: string;
+  permissionMode?: SpawnPayload["permissionMode"];
 } => ({
   instanceId: payload.instanceId,
   cwd: payload.cwd,
   sessionId: payload.resume?.sessionKey ?? null,
   processGeneration: payload.processGeneration,
+  ...(payload.permissionMode ? { permissionMode: payload.permissionMode } : {}),
   ...(payload.keepAliveTurn ? { keepAliveTurn: payload.keepAliveTurn } : {}),
   ...(payload.sessionCredential
     ? { sessionCredential: payload.sessionCredential }
