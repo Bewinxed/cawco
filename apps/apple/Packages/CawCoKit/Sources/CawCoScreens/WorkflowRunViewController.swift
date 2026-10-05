@@ -322,8 +322,13 @@ final class WorkflowRunViewController: ObservedViewController, UIGestureRecogniz
                 hint.topAnchor.constraint(equalTo: value.frameLayoutGuide.topAnchor, constant: Space.space2),
                 hint.bottomAnchor.constraint(lessThanOrEqualTo: value.frameLayoutGuide.bottomAnchor, constant: -Space.space2),
             ])
-            hintObserver = NotificationCenter.default.addObserver(forName: UITextView.textDidChangeNotification, object: value, queue: .main) { [weak hint, weak value] _ in
-                MainActor.assumeIsolated { hint?.isHidden = value?.text.isEmpty == false }
+            hintObserver = NotificationCenter.default.addObserver(forName: UITextView.textDidChangeNotification, object: value, queue: .main) { [weak value] _ in
+                // The hint is the field's own label: found through the field, since a
+                // KitLabel cannot be captured by a closure that may run anywhere.
+                MainActor.assumeIsolated {
+                    guard let value else { return }
+                    value.subviews.first { $0 is KitLabel }?.isHidden = !value.text.isEmpty
+                }
             }
             value.heightAnchor.constraint(equalToConstant: Space.space8 * 3).isActive = true
             let typed = UIStackView(arrangedSubviews: [name, value])
