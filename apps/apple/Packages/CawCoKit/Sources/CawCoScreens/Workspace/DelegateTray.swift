@@ -894,6 +894,8 @@ final class TrayChipView: UIControl {
     private let words = UIStackView()
     private let line = UIStackView()
     private let count = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong)
+    /// The line's trailing edge to the chip's, while the chip shows the line.
+    private lazy var lineEnds = line.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Space.space2)
     private(set) var chip: DelegateTrayView.Chip?
     var onHover: (Bool) -> Void = { _ in }
     private var over = false
@@ -927,7 +929,7 @@ final class TrayChipView: UIControl {
         addSubview(count)
         NSLayoutConstraint.activate([
             line.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Space.space2),
-            line.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Space.space2),
+            lineEnds,
             line.centerYAnchor.constraint(equalTo: centerYAnchor),
             // The "+N" fills the chip: a kit label lays out by constraints, so a frame alone leaves it ambiguous.
             count.leadingAnchor.constraint(equalTo: leadingAnchor),
@@ -968,6 +970,7 @@ final class TrayChipView: UIControl {
         let was = chip
         chip = next
         line.isHidden = false
+        lineEnds.isActive = true
         count.isHidden = true
         mark.configure(id: next.item.instanceId, place: next.item.instanceId, status: .idle)
         title.text = next.item.title
@@ -994,6 +997,8 @@ final class TrayChipView: UIControl {
     func configureMore(_ hidden: Int, needs: Bool) {
         chip = nil
         line.isHidden = true
+        // The "+N" chip is narrower than a mark and a slot: its unseen line keeps its own width.
+        lineEnds.isActive = false
         count.isHidden = false
         count.text = "+\(hidden)"
         accessibilityLabel = "\(hidden) more delegates"
