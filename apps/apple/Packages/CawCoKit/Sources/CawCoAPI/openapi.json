@@ -11765,9 +11765,11 @@
               {
                 "type": [
                   "null",
-                  "string",
-                  "number"
+                  "string"
                 ]
+              },
+              {
+                "type": "number"
               }
             ]
           },
@@ -15291,9 +15293,13 @@
             ]
           },
           "key": {
-            "type": [
-              "string",
-              "number"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              }
             ]
           },
           "label": {
@@ -16954,9 +16960,11 @@
               {
                 "type": [
                   "null",
-                  "string",
-                  "number"
+                  "string"
                 ]
+              },
+              {
+                "type": "number"
               }
             ]
           },
@@ -17011,9 +17019,11 @@
               {
                 "type": [
                   "null",
-                  "string",
-                  "number"
+                  "string"
                 ]
+              },
+              {
+                "type": "number"
               }
             ]
           },
@@ -17052,9 +17062,11 @@
               {
                 "type": [
                   "null",
-                  "string",
-                  "number"
+                  "string"
                 ]
+              },
+              {
+                "type": "number"
               }
             ]
           },
@@ -17396,10 +17408,10 @@
                 "format": "date-time"
               },
               {
-                "type": [
-                  "string",
-                  "number"
-                ]
+                "type": "string"
+              },
+              {
+                "type": "number"
               }
             ]
           },

@@ -560,6 +560,67 @@ for (const item of Object.values(paths)) {
   }
 }
 
+/**
+ * swift-openapi-generator reads a schema whose `type` lists several value
+ * types (`["string", "number"]`, a `string | number`) as its first one alone,
+ * so a number arriving there fails to decode (a usage summary row's `key` is a
+ * number when grouped by start). Such a schema is written as an `anyOf` with
+ * one member per type, which the generator does read as either. Inside an
+ * `anyOf` already, the members join it in place. A `"null"` in the list stays
+ * with the first member, where the generator reads it as it did before.
+ */
+const typeMembers = (schema: Schema): Schema[] | undefined => {
+  if (!Array.isArray(schema.type)) {
+    return undefined;
+  }
+  const kinds = (schema.type as string[]).filter((kind) => kind !== "null");
+  if (kinds.length < 2) {
+    return undefined;
+  }
+  const nullable = kinds.length < (schema.type as string[]).length;
+  return kinds.map((kind, index) => ({
+    type: nullable && index === 0 ? ["null", kind] : kind,
+  }));
+};
+let typesSplit = 0;
+const splitTypes = (value: unknown): unknown => {
+  if (Array.isArray(value)) {
+    return value.map(splitTypes);
+  }
+  if (typeof value !== "object" || value === null) {
+    return value;
+  }
+  const schema = Object.fromEntries(
+    Object.entries(value).map(([key, item]) => [
+      key,
+      (UNIONS as readonly string[]).includes(key) && Array.isArray(item)
+        ? item.flatMap((member) => {
+            const members = typeMembers(member as Schema);
+            if (members) {
+              typesSplit += 1;
+            }
+            return members ?? [splitTypes(member)];
+          })
+        : splitTypes(item),
+    ])
+  ) as Schema;
+  const members = typeMembers(schema);
+  if (!members) {
+    return schema;
+  }
+  typesSplit += 1;
+  const { type: _, ...others } = schema;
+  return { ...others, anyOf: members };
+};
+for (const [name, schema] of Object.entries(components)) {
+  components[name] = splitTypes(schema);
+}
+for (const item of Object.values(paths)) {
+  for (const op of Object.values(item ?? {})) {
+    Object.assign(op as object, splitTypes(op));
+  }
+}
+
 // Only what a path or a frame reaches: a type the converter met on the way
 // (a `Response`'s internals) is not part of the contract.
 const reached = new Set<string>(Object.values(FRAMES).flat());
