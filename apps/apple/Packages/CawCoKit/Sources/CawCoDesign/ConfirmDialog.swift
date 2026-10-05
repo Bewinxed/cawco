@@ -242,7 +242,8 @@ public final class ScrimPresentation: UIPresentationController, UIGestureRecogni
     }
 
     override public func dismissalTransitionWillBegin() {
-        Motion.easeOut.animator(Motion.durExit) { self.scrim.alpha = 0 }.startAnimation()
+        // The scrim goes in step with what is presented: over that transition's own duration.
+        Motion.easeOut.animator(presentedViewController.transitionCoordinator?.transitionDuration ?? Motion.durExit) { self.scrim.alpha = 0 }.startAnimation()
     }
 
     override public func dismissalTransitionDidEnd(_ completed: Bool) {

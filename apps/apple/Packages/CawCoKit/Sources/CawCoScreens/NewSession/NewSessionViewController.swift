@@ -1,7 +1,8 @@
 public import CawCoCore
 import CawCoAPI
 import CawCoDesign
-public import UIKit
+public import OSLog
+import UIKit
 
 /// The session a continuation starts from, as the form shows and sends it
 /// (continue.svelte.ts `ContinueSource`).
@@ -1279,8 +1280,10 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
             self.presenting = presenting
         }
 
-        func transitionDuration(using _: (any UIViewControllerContextTransitioning)?) -> TimeInterval {
-            presenting ? Motion.durPanel : Motion.durExit
+        /// The phone's sheet leaves as it came: the same duration, the same curve. The card in the middle leaves over `durExit`.
+        func transitionDuration(using context: (any UIViewControllerContextTransitioning)?) -> TimeInterval {
+            let sheet = (context?.viewController(forKey: .from) as? NewSessionViewController)?.compact == true
+            return presenting || sheet ? Motion.durPanel : Motion.durExit
         }
 
         func animateTransition(using context: any UIViewControllerContextTransitioning) {
@@ -1311,7 +1314,7 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
                 card.transform = away
                 if fades { card.alpha = 0 }
             }
-            let curve = presenting && sheet && !still ? Motion.easeDrawer : Motion.easeOut
+            let curve = sheet && !still ? Motion.easeDrawer : Motion.easeOut
             let animator = curve.animator(transitionDuration(using: context)) {
                 card.transform = presenting ? .identity : away
                 if fades { card.alpha = presenting ? 1 : 0 }
