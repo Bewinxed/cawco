@@ -1485,7 +1485,7 @@
     z-index: 50;
     inset-block-end: var(--foot);
     inline-size: var(--fan-w);
-    block-size: min(calc(var(--n) * var(--step)), var(--room));
+    block-size: min(calc(var(--n) * var(--step) + var(--space-2)), var(--room));
     pointer-events: none;
   }
   /* Taller than the room over the tray: it scrolls there, from "+N" up. */
@@ -1496,7 +1496,8 @@
   }
   .stack {
     position: relative;
-    block-size: calc(var(--n) * var(--step));
+    /* Keep the top chip's transparent touch extension inside the scroller. */
+    block-size: calc(var(--n) * var(--step) + var(--space-2));
     margin: 0;
     padding: 0;
     list-style: none;
