@@ -17,17 +17,16 @@
   import { IconFork, IconPenLine } from "#lib/icons.js";
   import { goto } from "$app/navigation";
   import {
-    canResend,
-    canWithdraw,
     cawco,
+    commandRecord,
     editAndResend,
     forkFrom,
-    latestCommandFor,
+    replaceQueued,
     restoreDraft,
     retryFailed,
     retryOf,
     retrySend,
-    withdrawQueued,
+    userTurnActions,
   } from "../client.svelte";
   import { conversationHref } from "../links";
   /** Dispatches one stand-alone transcript message to its renderer by type. */
@@ -54,8 +53,6 @@
     folding = false,
     grouped = false,
     runsOn = false,
-    canEdit = false,
-    canFork = false,
   }: {
     message: Message;
     agentName: string;
@@ -68,11 +65,16 @@
     runsOn?: boolean;
     /** A thinking message that is the live reasoning, settled: it folds shut. */
     folding?: boolean;
-    canEdit?: boolean;
-    canFork?: boolean;
   } = $props();
 
   const kind = $derived(message.type);
+  const offered = $derived(userTurnActions(message));
+  const canEdit = $derived(offered.edit === "resend");
+  const canFork = $derived(offered.fork);
+  const editLabel = $derived(
+    offered.edit === "queued" ? "Edit" : "Edit and resend"
+  );
+  const hasActions = $derived(!!offered.edit || offered.fork || offered.retry);
   let editing = $state(false);
   let editContent = $state("");
   let editPending = $state(false);
@@ -81,14 +83,28 @@
   let editor = $state<HTMLTextAreaElement | null>(null);
   let actionsShown = $state(false);
   let actionsFlipped = $state(false);
+  let editWasQueued = $state(false);
+  let queuedCommand = $state<string | null>(null);
+
+  $effect(() => {
+    const command = queuedCommand ? commandRecord(queuedCommand) : null;
+    if (command?.stage === "failed" || command?.stage === "applied") {
+      editPending = false;
+      queuedCommand = null;
+      if (command.stage === "failed") {
+        editError = command.reason ?? "The queued message could not be edited.";
+      } else if (command.outcome === "withdrawn") {
+        editing = false;
+      } else {
+        editError = "The session has already read this message.";
+      }
+    }
+  });
 
   function touchActions(node: HTMLElement): () => void {
     function reveal(event: MouseEvent): void {
       if (
-        !(
-          window.matchMedia("(pointer: coarse)").matches &&
-          (canEdit || canFork)
-        ) ||
+        !(window.matchMedia("(pointer: coarse)").matches && hasActions) ||
         editing ||
         !(event.target instanceof Element) ||
         event.target.closest("button, a, input, textarea") ||
@@ -150,6 +166,7 @@
 
   async function startEditing(): Promise<void> {
     actionsShown = false;
+    editWasQueued = offered.edit === "queued";
     editContent = message.content;
     editError = "";
     editing = true;
@@ -166,18 +183,24 @@
   }
 
   async function submitEdit(): Promise<void> {
-    if (!canEdit || editPending || !editContent.trim()) {
+    if (!(canEdit || editWasQueued) || editPending || !editContent.trim()) {
       return;
     }
     editPending = true;
     editError = "";
     try {
-      await editAndResend(message.instanceId, message.id, editContent.trim());
-      editing = false;
+      if (editWasQueued) {
+        queuedCommand = await replaceQueued(message, editContent.trim());
+      } else {
+        await editAndResend(message.instanceId, message.id, editContent.trim());
+        editing = false;
+      }
     } catch (error) {
       editError = error instanceof Error ? error.message : String(error);
     } finally {
-      editPending = false;
+      if (!queuedCommand) {
+        editPending = false;
+      }
     }
   }
 
@@ -269,22 +292,9 @@
    * offer is gated on the payload being in hand rather than left standing as
    * a button that does nothing. The reason line stays either way.
    */
-  const recoverable = $derived(
-    kind === "user" &&
-      !!message.id &&
-      (message.state === "failed" || canResend(message.id))
-  );
+  const recoverable = $derived(offered.retry);
   /** Edit hands the whole payload back to the composer, which only the outbox holds. */
-  const editable = $derived(
-    (unreached && !!message.id && canResend(message.id)) || canWithdraw(message)
-  );
-  let withdrawing = $state(false);
-  const withdrawal = $derived(
-    latestCommandFor(message.instanceId, "send.withdraw")
-  );
-  const withdrawalPending = $derived(
-    withdrawal?.stage === "submitted" || withdrawal?.stage === "accepted"
-  );
+  const editable = $derived(offered.edit === "restore");
   const whoNote = $derived.by(() => {
     if (ghost) {
       return "sending…";
@@ -293,7 +303,9 @@
       return "not sent";
     }
     if (waiting) {
-      return "queued";
+      return cawco.session(message.instanceId)?.harness === "claude"
+        ? "queued"
+        : "sent";
     }
     if (message.metadata?.urgent) {
       return "urgent";
@@ -330,7 +342,7 @@
     retried && (message.state === "failed" ? retry?.stage !== "failed" : ghost)
   );
   /** Something to say under the words: the failure, or the retry for it. */
-  const open = $derived(failed || retrying || editable);
+  const open = $derived(failed || retrying);
   /**
    * What the reason line reads: the failure as it stands, or the line the
    * retry went out under — kept while the retry is out and while the fold
@@ -361,16 +373,8 @@
       });
     }
   }
-  async function edit(): Promise<void> {
-    if (waiting) {
-      withdrawing = true;
-      try {
-        await withdrawQueued(message);
-      } finally {
-        withdrawing = false;
-      }
-      return;
-    }
+  function edit(): void {
+    actionsShown = false;
     if (message.id) {
       restoreDraft(message.id);
     }
@@ -490,7 +494,7 @@
                 aria-busy={editPending || undefined}
                 aria-disabled={editPending || undefined}
                 class="pressable action"
-                disabled={!(canEdit && editContent.trim())}
+                disabled={!((canEdit || editWasQueued) && editContent.trim())}
                 onclick={whileIdle(() => editPending, submitEdit)}
                 type="button"
               >
@@ -504,22 +508,22 @@
             </div>
           {:else}
             <MessageBody source={message.content} />
-            {#if canEdit || canFork}
+            {#if hasActions || retried}
               <div
                 class="actions turn-actions"
                 class:flipped={actionsFlipped}
-                class:pending={forkPending}
+                class:pending={forkPending || retrying}
                 class:shown={actionsShown}
                 {@attach placeActions}
               >
-                {#if canEdit}
-                  <Tip label="Edit and resend">
+                {#if canEdit || offered.edit === "queued"}
+                  <Tip label={editLabel}>
                     {#snippet children(
                       tip
                     )}
                       <Button
                         {...tip}
-                        aria-label="Edit and resend"
+                        aria-label={editLabel}
                         onclick={startEditing}
                         size="icon-sm"
                         variant="ghost"
@@ -528,6 +532,32 @@
                       </Button>
                     {/snippet}
                   </Tip>
+                {/if}
+                {#if recoverable || retried}
+                  <button
+                    aria-busy={retrying || undefined}
+                    aria-disabled={retrying || undefined}
+                    class="pressable action"
+                    onclick={whileIdle(() => retrying, tryAgain)}
+                    type="button"
+                  >
+                    <PendingContent
+                      {failed}
+                      label="Try again"
+                      pending={retrying || (retried && !failed)}
+                      pendingLabel="Sending…"
+                    />
+                  </button>
+                {/if}
+                {#if editable || (retried && heldEdit)}
+                  <button
+                    class="pressable action"
+                    disabled={retrying}
+                    onclick={edit}
+                    type="button"
+                  >
+                    Edit
+                  </button>
                 {/if}
                 {#if canFork}
                   <Tip label="Fork from here">
@@ -597,40 +627,9 @@
              close over; a row that never failed renders none of it. -->
         <div class="failure" data-opens inert={!open} class:open>
           <div class="failure-inner">
-            {#if failed || retried || editable}
+            {#if failed || retried}
               {#if failed || retried}
                 <p class="reason">{line}</p>
-              {/if}
-              {#if recoverable || retried || editable}
-                <div class="actions">
-                  {#if failed || retried}
-                    <button
-                      aria-busy={retrying || undefined}
-                      aria-disabled={retrying || undefined}
-                      class="pressable action"
-                      onclick={whileIdle(() => retrying, tryAgain)}
-                      type="button"
-                    >
-                      <!-- A retry that went through keeps its word as it folds away. -->
-                      <PendingContent
-                        {failed}
-                        label="Try again"
-                        pending={retrying || (retried && !failed)}
-                        pendingLabel="Sending…"
-                      />
-                    </button>
-                  {/if}
-                  {#if editable || (retried && heldEdit)}
-                    <button
-                      class="pressable action"
-                      disabled={retrying || withdrawing || withdrawalPending}
-                      onclick={edit}
-                      type="button"
-                    >
-                      Edit
-                    </button>
-                  {/if}
-                </div>
               {/if}
             {/if}
           </div>

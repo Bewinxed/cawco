@@ -38,12 +38,7 @@
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { IconChat } from "#lib/icons.js";
   import { browser } from "$app/env";
-  import {
-    cawco,
-    readOlderPage,
-    rewindableTurns,
-    type SessionState,
-  } from "../client.svelte";
+  import { cawco, readOlderPage, type SessionState } from "../client.svelte";
   import {
     crossIn,
     dur,
@@ -126,31 +121,6 @@
 
   /** One transcript, on screen, being read: `focused` follows `visible`. */
   const isFocused = $derived(focused ?? visible);
-  const rewindable = $derived(
-    visible ? rewindableTurns(session) : new Set<string>()
-  );
-  const machine = $derived(
-    cawco.machines.find((entry) => entry.machineId === session.machineId)
-  );
-  const capabilities = $derived(
-    machine?.harnesses?.find((entry) => entry.harness === session.harness)
-      ?.capabilities
-  );
-  const canBranch = $derived(
-    cawco.status === "connected" &&
-      machine?.status === "online" &&
-      !!session.sessionId &&
-      capabilities?.rewind === true &&
-      capabilities.fork
-  );
-  const canRewind = $derived(
-    cawco.status === "connected" &&
-      machine?.status === "online" &&
-      !!session.sessionId &&
-      capabilities?.rewind === true &&
-      !session.busy &&
-      !session.relaunching
-  );
 
   /**
    * The old single flag, kept as the name the rest of this file reads.
@@ -2946,8 +2916,6 @@
             {:else if row.kind === "single" || row.kind === "queued"}
               <MessageRow
                 {agentName}
-                canEdit={canRewind && rewindable.has(row.message.id)}
-                canFork={canBranch && rewindable.has(row.message.id)}
                 folding={ticket?.kind === "fold"}
                 grouped={row.grouped}
                 message={row.message}

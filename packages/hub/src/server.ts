@@ -2349,10 +2349,10 @@ export const createServer = (
     );
   };
 
-  /** A retry is out: the failed send it stands in for is over. */
+  /** A retry or queued edit has superseded a send the harness no longer holds. */
   const replaceSend = (replaced: string, by: string): void => {
     const row = db.sendRecord(replaced);
-    if (row?.state === "failed") {
+    if (row?.state === "failed" || row?.state === "cancelled") {
       changeSend(row, { state: "replaced", replacedBy: by });
     }
   };

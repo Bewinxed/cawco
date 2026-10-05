@@ -73,6 +73,7 @@
   import SessionMark, { sessionStatus } from "./SessionMark.svelte";
   import TaskPanel from "./TaskPanel.svelte";
   import { refreshTasks, taskProgress, tasksOf } from "./tasks.svelte";
+  import MessageRow from "./transcript/MessageRow.svelte";
   import type { Message } from "./types";
 
   interface Props {
@@ -463,7 +464,9 @@
                 <span class="truncate font-mono">{glanceOf(message)}</span>
               {/if}
             </p>
-          {:else if message.type === "user" || message.type === "user.peer"}
+          {:else if message.type === "user"}
+            <MessageRow agentName="Agent" {message} />
+          {:else if message.type === "user.peer"}
             <!-- The one voice worth tinting: what the session was asked. -->
             <p
               class="line-clamp-4 rounded-lg bg-action-solid/10 px-3 py-2 text-body break-words whitespace-pre-wrap"
