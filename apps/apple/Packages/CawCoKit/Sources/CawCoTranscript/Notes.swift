@@ -263,6 +263,11 @@ final class PeerView: RailRow, RowContent, Disclosing {
             reason.attributedText = Styled.string(why, TypeScale.typeMeta, color: Palette.statusFailInk, lineBreak: .byWordWrapping)
             reason.superview?.isHidden = false
         } else { reason.superview?.isHidden = true }
+        // The reason's own margin (Peer `.reason`): with no reason there is
+        // none, or it stands above the folded body and the row is 4pt tall.
+        if let line = body.arrangedSubviews.first {
+            body.setCustomSpacing(reason.superview?.isHidden == false ? Space.space1 : 0, after: line)
+        }
         text.configure(block.content)
         reveal.set(open: open)
         alpha = block.state == "pending" || block.queued ? Effect.ghostPresence : 1
@@ -364,15 +369,21 @@ final class QuestionCardView: UIView, RowContent {
             let picks: [String] = (answers[text] as? [String]) ?? (answers[text] as? String).map { [$0] } ?? []
             let lede = WrapLabel(wrap: .pretty) // QuestionCard `p.lede`
             lede.attributedText = Styled.string(text, TypeScale.typeBody, color: Palette.inkStrong, lineBreak: .byWordWrapping)
-            content.addArrangedSubview(Self.hang(lede, hang))
-            content.setCustomSpacing(Space.space2 + 2, after: content.arrangedSubviews.last!)
+            // Its margin below it is the card's too where it is the last line (`.lede`).
+            let under = UIView()
+            under.pin(lede, insets: UIEdgeInsets(top: 0, left: 0, bottom: Space.space2, right: 0))
+            content.addArrangedSubview(Self.hang(under, hang))
+            content.setCustomSpacing(2, after: content.arrangedSubviews.last!)
             let row = FlowView()
             let settled = answered || dismissed
             let shown = settled ? options.enumerated().filter { picks.contains($0.element) && answered } : Array(options.enumerated())
             row.set(shown.map { OptionChip(index: $0.offset + 1, label: $0.element, chosen: settled) }, spacing: Space.space2)
             if !shown.isEmpty {
-                content.addArrangedSubview(Self.hang(row, hang))
-                content.setCustomSpacing(Space.space2, after: content.arrangedSubviews.last!)
+                // The options' margin below them stands inside the card even
+                // where they are its last line (`.qopts`, a flex column's child).
+                let below = UIView()
+                below.pin(row, insets: UIEdgeInsets(top: 0, left: 0, bottom: Space.space2, right: 0))
+                content.addArrangedSubview(Self.hang(below, hang))
             }
             if let other = picks.first(where: { !options.contains($0) }) {
                 content.addArrangedSubview(Self.hang(Self.answer("Answered", other), hang))

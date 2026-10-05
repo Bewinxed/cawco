@@ -690,6 +690,13 @@ final class DelegateView: RailRow, RowContent, Disclosing {
                 status.isHidden = false
             } else { status.isHidden = true }
         }
+        // Each line under the head brings its own 4pt above it (Delegate
+        // `.brief`, `.now`); a line that is not drawn brings none.
+        if let head = body.arrangedSubviews.first, let briefBox = brief.superview {
+            let under = !briefBox.isHidden || !status.isHidden || !asks.isHidden
+            body.setCustomSpacing(under ? Space.space1 : 0, after: head)
+            body.setCustomSpacing(status.isHidden ? 0 : Space.space1, after: briefBox)
+        }
         guard open else { return }
         let builder = Builder(agentName: f.row?.harness ?? (block.toolInput["harness"] as? String) ?? "delegate", cache: env.cache)
         if let id, let transcript = env.delegateTranscript(id) {
