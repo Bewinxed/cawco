@@ -75,6 +75,10 @@ enum Inbound {
     private struct Route: Decodable {
         let type: String?
         let verb: String?
+        /// The request an envelope answers. A failure the hub writes itself (a
+        /// refused spawn, a machine that is not connected) names its request
+        /// here and nowhere in its payload (server.ts `failure`).
+        let requestId: String?
     }
 
     /// A frame's own discriminators, and the structural fields the hub adds
@@ -130,14 +134,14 @@ enum Inbound {
         }
         let peek = try decoder.decode(Envelope<PayloadRoute>.self, from: data).payload
         let payload = try decoder.decode(Envelope<Components.Schemas.FramePayload>.self, from: data).payload
-        return .frame(Frame(payload, peek))
+        return .frame(Frame(payload, peek, answering: route.requestId))
     }
 
     /// A frame payload on its own (a `/api/pending` envelope's payload).
     static func frame(_ data: Data) throws -> Frame {
         let decoder = Wire.decoder()
         let peek = try decoder.decode(PayloadRoute.self, from: data)
-        return Frame(try decoder.decode(Components.Schemas.FramePayload.self, from: data), peek)
+        return Frame(try decoder.decode(Components.Schemas.FramePayload.self, from: data), peek, answering: nil)
     }
 }
 
@@ -165,7 +169,9 @@ enum Frame {
     case workItem(Components.Schemas.WorkItemSummary)
     case ignored
 
-    fileprivate init(_ payload: Components.Schemas.FramePayload, _ peek: Inbound.PayloadRoute) {
+    /// `answering`: the envelope's own `requestId`, which an error frame takes
+    /// when its payload names none (client.svelte.ts reads it the same way).
+    fileprivate init(_ payload: Components.Schemas.FramePayload, _ peek: Inbound.PayloadRoute, answering: String?) {
         switch payload {
         case .instances(let frame):
             self = .instances(frame, hubBuild: peek.hubBuild)
@@ -184,7 +190,7 @@ enum Frame {
         case .controlResult(let frame):
             self = .controlResult(frame)
         case .error(let frame):
-            self = .error(requestId: frame.requestId, message: frame.message)
+            self = .error(requestId: frame.requestId ?? answering, message: frame.message)
         case .pulse(let frame):
             self = .pulse(frame)
         case .supervisorEvent(let frame):
