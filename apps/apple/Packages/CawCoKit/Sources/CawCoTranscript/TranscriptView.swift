@@ -220,7 +220,9 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
                 // A row spans the list less its section's inset (the layout above).
                 let width = Double(collection.bounds.width)
                 let inset = width <= 900 ? 2 * Space.space5 : Space.space7 + Space.space6
-                (cell.row as? PieceView)?.fitWidth = width > inset ? CGFloat(width - inset) : nil
+                let fit: CGFloat? = width > inset ? CGFloat(width - inset) : nil
+                (cell.row as? PieceView)?.fitWidth = fit
+                (cell.row as? UserTurnView)?.fitWidth = fit
                 cell.configure(item)
                 Pace.row()
             }
@@ -356,6 +358,46 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         return window.bounds.intersects(convert(bounds, to: nil))
     }
 
+    /// Whether the reader can see any of this view: inside the window, and
+    /// nothing above it hidden (a pane group hides the panes it is not showing).
+    private var inView: Bool {
+        guard onScreen else { return false }
+        return !sequence(first: self as UIView, next: { $0.superview }).contains { $0.isHidden }
+    }
+
+    /// Panes that are off screen with changes they have not drawn.
+    private static let owing = NSHashTable<TranscriptView>.weakObjects()
+    private static var watchingOwing = false
+
+    /// Ends every turn of the main thread, before Core Animation takes the
+    /// screen's next state, by drawing what a pane owes if that turn brought
+    /// it on screen: a swipe's first movement, a tab's switch. The pane's
+    /// first frame in view is then its current one, never the one it kept.
+    private static func watchOwing() {
+        guard !watchingOwing else { return }
+        watchingOwing = true
+        // Core Animation commits at order 2,000,000 of the same activities.
+        let activities = CFRunLoopActivity([.beforeWaiting, .exit]).rawValue
+        let observer = CFRunLoopObserverCreateWithHandler(nil, activities, true, 1_999_000) { _, _ in
+            MainActor.assumeIsolated {
+                for view in owing.allObjects where view.inView || !view.dirty {
+                    owing.remove(view)
+                    view.drawOwed()
+                }
+            }
+        }
+        CFRunLoopAddObserver(CFRunLoopGetMain(), observer, .commonModes)
+    }
+
+    private func drawOwed() {
+        guard dirty else { return }
+        dirty = false
+        commit()
+        collection.layoutIfNeeded()
+        let box = convert(bounds, to: nil)
+        Self.tray.info("pane \(self.env.sessionId.prefix(8), privacy: .public) drew what it owed as it came on screen, at x \(Double(box.minX), format: .fixed(precision: 1)) of \(Double(self.window?.bounds.width ?? 0), format: .fixed(precision: 0))")
+    }
+
     /// The list's view: its bounds less what the bars and the composer cover.
     private var visibleBox: CGRect { collection.bounds.inset(by: collection.adjustedContentInset) }
 
@@ -436,8 +478,10 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     // MARK: Reading the transcript
 
     public func configure(_ transcript: SessionTranscript) {
+        // Read again only when the hub's facts changed: a transcript is handed
+        // in on every frame of a streaming reply.
+        if transcript.facts != self.transcript?.facts { facts = nil }
         self.transcript = transcript
-        facts = nil
         env.sessionId = transcript.id
         joinTray()
         env.machineId = transcript.location?.machineId
@@ -585,7 +629,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         var rail = settled?.rail ?? false
         // Read once a build: a fleet row is a large value, and going through
         // them all for every report in a long session was most of a build.
-        let sessions = hub?.fleet.rows.map(\.id) ?? []
+        let sessions = (settled?.fleet.isEmpty ?? true) ? [] : (hub?.fleet.byId.keys).map(Array.init) ?? []
         for i in settled?.fleet ?? [] { out[i].print += fleetPrint(out[i], sessions: sessions) }
 
         // The tail: the sends drawn ahead of it, the live row, the call in flight, the rest.
@@ -721,7 +765,10 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         // screen: a long session's every change is a frame's worth of work, and
         // it was taken out of the reply the reader was watching stream. Its
         // first screen is still built where it stands, so it is there to come to.
-        if dirty, onScreen || !landed { dirty = false; commit() }
+        // What it owes is drawn before the first frame it shows in (`drawOwed`).
+        if dirty {
+            if inView || !landed { dirty = false; commit() } else { Self.owing.add(self); Self.watchOwing() }
+        }
         // A first screen takes a row at a time for as long as the frame has
         // time for one: rows cost anything from a millisecond to a frame's worth.
         while feeding, CACurrentMediaTime() - now < Self.budget / 2 {

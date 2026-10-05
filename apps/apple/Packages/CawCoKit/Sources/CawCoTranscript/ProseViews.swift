@@ -646,6 +646,15 @@ final class MessageBody: UIView {
             stack.setCustomSpacing(MarkdownRender.gap(after: blocks[i - 1], before: blocks[i]), after: stack.arrangedSubviews[i - 1])
         }
         (stack.arrangedSubviews.first as? ProseView)?.floatSize = floatSize
+        for case let text as ProseView in stack.arrangedSubviews { text.fitWidth = fitWidth }
+    }
+
+    /// The width the words stand at, where their row knows it (ProseView `fitWidth`).
+    var fitWidth: CGFloat? {
+        didSet {
+            guard fitWidth != oldValue else { return }
+            for case let text as ProseView in stack.arrangedSubviews { text.fitWidth = fitWidth }
+        }
     }
 
     func fade(_ now: Double) {

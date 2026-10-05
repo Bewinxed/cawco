@@ -229,6 +229,8 @@ final class UserTurnView: UIView, RowContent {
     private var inner: [NSLayoutConstraint] = []
     private var block: Block?
     private var retried: String?
+    /// The width the row stands at in the list (ProseView `fitWidth`).
+    var fitWidth: CGFloat?
 
     init(env: RowEnv) {
         self.env = env
@@ -294,6 +296,8 @@ final class UserTurnView: UIView, RowContent {
         let floated = turn.grouped ? [note, clock].compactMap(\.self).joined(separator: " ") : nil
         float.set(floated?.isEmpty == false ? floated : nil)
         body.floatSize = float.isHidden ? .zero : FloatNote.size(floated ?? "")
+        // The words stand in the well, its padding either side of them.
+        body.fitWidth = fitWidth.map { $0 - 2 * Space.space2 }
         body.configure(block.content, style: .well)
         let ghost = waiting ? Effect.ghostPresence : 1
         who.alpha = ghost
