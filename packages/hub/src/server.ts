@@ -299,6 +299,8 @@ const UPDATE_TIMEOUT_MS = 10 * 60_000;
 
 /** Reading one file off a machine: it answers about as fast as a disk does. */
 const READ_TIMEOUT_MS = 10_000;
+/** Deduplicate recently orphaned replies without retaining every request forever. */
+const UNROUTED_REPLY_LIMIT = 4096;
 /**
  * Workspace controls other than create/archive: enough for their boundary work.
  * Create and its discard share the longer git-plus-boundary budget; archive
@@ -3444,6 +3446,27 @@ export const createServer = (
    */
   const waiting = new Map<string, (frame: ControlResult) => void>();
   const waitingMachines = new Map<string, string>();
+  const unroutedReplies = new Set<string>();
+  const logUnroutedReply = (message: Envelope): void => {
+    const requestId = message.requestId ?? peek(message.payload, "requestId");
+    const instanceId =
+      message.instanceId ?? peek(message.payload, "instanceId");
+    const kind = peek(message.payload, "kind") ?? "unknown";
+    const key = `${message.machineId}:${instanceId}:${requestId}:${kind}`;
+    if (unroutedReplies.has(key)) {
+      return;
+    }
+    unroutedReplies.add(key);
+    if (unroutedReplies.size > UNROUTED_REPLY_LIMIT) {
+      const oldest = unroutedReplies.values().next().value;
+      if (oldest !== undefined) {
+        unroutedReplies.delete(oldest);
+      }
+    }
+    console.warn(
+      `[hub] unrouted reply session=${instanceId ?? "none"} request=${requestId ?? "none"} kind=${kind} machine=${message.machineId}`
+    );
+  };
 
   /**
    * Where each conversation lives, once somebody has had to find out.
@@ -4210,7 +4233,7 @@ export const createServer = (
             if (waitingReply) {
               waitingReply(frame);
             }
-            streams.settleCommand(requestId, frame);
+            const commandAnswered = streams.settleCommand(requestId, frame);
             const requester = registry.takeRequester(requestId);
             if (requester) {
               toDashboard(requester, {
@@ -4219,6 +4242,8 @@ export const createServer = (
                 requestId,
                 payload: frame,
               });
+            } else if (!(waitingReply || commandAnswered)) {
+              logUnroutedReply({ ...message, payload: frame });
             }
           }
         }
@@ -5257,8 +5282,12 @@ export const createServer = (
     };
   };
 
-  /** Relays a dashboard envelope to its machine; reports back if nobody is home. */
-  const forward = (envelope: Envelope, dashboard: HubSocket): boolean => {
+  /** Registers a socket's correlation before dispatch; Ledger commands own their ack route. */
+  const forward = (
+    envelope: Envelope,
+    dashboard: HubSocket,
+    remember = true
+  ): boolean => {
     let outgoing = envelope;
     const agent = registry.agent(envelope.machineId);
     if (!agent) {
@@ -5280,12 +5309,12 @@ export const createServer = (
         };
       }
     }
-    if (
-      envelope.verb === "spawn" &&
-      envelope.requestId &&
-      peek(outgoing.payload, "requestId") === envelope.requestId
-    ) {
-      registry.rememberRequester(envelope.requestId, dashboard);
+    const requestId = envelope.requestId ?? peek(outgoing.payload, "requestId");
+    if (requestId) {
+      outgoing = { ...outgoing, requestId };
+      if (remember) {
+        registry.rememberRequester(requestId, dashboard);
+      }
     }
     agent.send(outgoing);
     return true;
@@ -6318,22 +6347,14 @@ export const createServer = (
   ): Promise<ControlResult | "timeout"> => {
     const requestId = crypto.randomUUID();
     const payload: FsPayload = { requestId, ...op };
-    agent.send({
-      verb: "fs",
-      machineId,
-      requestId,
-      payload,
-    } satisfies Envelope<FsPayload>);
-    return new Promise((resolve) => {
-      const timer = setTimeout(() => {
-        waiting.delete(requestId);
-        resolve("timeout");
-      }, READ_TIMEOUT_MS);
-      waiting.set(requestId, (frame) => {
-        clearTimeout(timer);
-        resolve(frame);
-      });
-    });
+    return awaitReply(machineId, requestId, READ_TIMEOUT_MS, () =>
+      agent.send({
+        verb: "fs",
+        machineId,
+        requestId,
+        payload,
+      } satisfies Envelope<FsPayload>)
+    );
   };
 
   const writeMachineFile = (
@@ -6713,17 +6734,16 @@ export const createServer = (
         return true;
       }
     }
-    if (!(forward(message, dashboard) && message.requestId)) {
+    const requestId = message.requestId ?? message.payload.requestId;
+    const correlated = { ...message, requestId };
+    if (!forward(correlated, dashboard, remember)) {
       return false;
-    }
-    if (remember) {
-      registry.rememberRequester(message.requestId, dashboard);
     }
     // A per-cell install or retry, clicked rather than swept: the chip
     // turns on every dashboard, not only the one that clicked it.
     const toolId = peekInstall(message.payload);
-    if (toolId) {
-      pendingInstalls.set(message.requestId, {
+    if (toolId && requestId) {
+      pendingInstalls.set(requestId, {
         machineId: message.machineId,
         toolId,
       });
@@ -6737,8 +6757,8 @@ export const createServer = (
     // A sync or a status a dashboard asked for answers with the same
     // report a register's does, and the row is the hub's either way.
     const method = peek(message.payload, "method");
-    if (method === FLEET_SYNC || method === FLEET_STATUS) {
-      pendingFleet.set(message.requestId, message.machineId);
+    if (requestId && (method === FLEET_SYNC || method === FLEET_STATUS)) {
+      pendingFleet.set(requestId, message.machineId);
     }
     noteControl(message);
     return true;
@@ -10977,6 +10997,11 @@ export const createServer = (
               if (kind === "control_result" && !message.requestId) {
                 message.requestId = peek(message.payload, "requestId");
               }
+              const hubReply =
+                kind === "control_result" &&
+                message.requestId !== undefined &&
+                (pendingInstalls.has(message.requestId) ||
+                  pendingFleet.has(message.requestId));
               if (kind === "scratch_worktree" && message.instanceId) {
                 const row = db.ownedInstance(
                   message.instanceId,
@@ -11864,9 +11889,14 @@ export const createServer = (
               // Without it the reply would fall through to the fleet-wide
               // broadcast that an unrouted `control_result` gets today, and every
               // dashboard would draw an error for a command it never sent.
-              else if (settled || kind === "control_result") {
+              else if (settled) {
+                break;
+              } else if (kind === "control_result") {
                 // A reply without a live requester is not fleet news. This
                 // includes late answers after a socket closed or a read timed out.
+                if (!hubReply) {
+                  logUnroutedReply(message);
+                }
                 break;
               } else if (kind === "frame" && message.instanceId) {
                 // Folded into the session's transcript here, for every frame and
@@ -12099,9 +12129,7 @@ export const createServer = (
               break;
             case "fs":
               // Answered on `control_result` too, so the same requester map routes it.
-              if (forward(message, ws) && message.requestId) {
-                registry.rememberRequester(message.requestId, ws);
-              }
+              forward(message, ws);
               break;
             default:
               // The client is named: a verb no build sends any more comes
