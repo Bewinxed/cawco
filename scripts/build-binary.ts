@@ -340,9 +340,12 @@ export async function buildBinary(options: {
             build.onLoad(
               { filter: /packages\/agent\/src\/harnesses\/index\.ts$/ },
               async () => ({
-                contents: await Bun.file(
-                  join(ROOT, "scripts/binary/proof-harnesses.ts")
-                ).text(),
+                // Its imports are relative to scripts/binary, not to the file it replaces.
+                contents: (
+                  await Bun.file(
+                    join(ROOT, "scripts/binary/proof-harnesses.ts")
+                  ).text()
+                ).replaceAll('"../../packages/', `"${ROOT}/packages/`),
                 loader: "ts",
               })
             );

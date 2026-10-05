@@ -127,9 +127,51 @@ start_loop() {
     sleep 0.5
   done
 }
+# What the machine's session holder holds, read from its socket: the first line it answers a list with.
+keeper_list() { as_user "$1" sh -c 'printf "{\"type\":\"list\"}\n" | socat -t1 - UNIX-CONNECT:/run/user/1000/cawco/sessiond.sock | head -n 1'; }
+# The pids of the live children held under one id (one number when there is exactly one child, as there must be).
+child_pids() { keeper_list "$1" | json "d => d.procs.filter(p => p.alive && p.procId === '$2').map(p => p.pid).join(',')"; }
+children_with() { keeper_list "$1" | json "d => d.procs.filter(p => p.alive && p.procId.startsWith('$2')).length"; }
+children_total() { keeper_list "$1" | json "d => d.procs.filter(p => p.alive).length"; }
+session_running() { [[ "$(hub_api /api/instances | json "d => d.find(r => r.id === '$1')?.status")" == running ]]; }
+# Starts sessions through the hub, waits until each runs, and writes down the pid of the process holding it.
+start_before() {
+  local machine=$1 container=$2 file=$3; shift 3
+  : > "$file"
+  for id in "$@"; do
+    start_session "$machine" "$id" > /dev/null
+    wait_until 60 "session_running $id"
+    pid=$(child_pids "$container" "$id")
+    [[ -n "$pid" && "$pid" != *,* ]]
+    echo "$id $pid" >> "$file"
+  done
+}
+# A session that ran before the update: the very same process still holds it, the machine's agent took it over
+# again (the hub lists it as running only when the agent reports it), and nothing else holds it.
+survived() {
+  local container=$1 file=$2 id pid
+  while read -r id pid; do
+    [[ "$(child_pids "$container" "$id")" == "$pid" ]]
+    as_user "$container" kill -0 "$pid"
+    wait_until 120 "session_running $id"
+  done < "$file"
+}
+# Every start accepted during the update runs once: one child under its id, none extra on the machine.
+accepted_ran_once() {
+  local machine=$1 container=$2 prefix=$3 accepted=$4 id
+  [[ "$(wc -l < "$accepted")" -ge 1 ]]
+  wait_until 180 '[[ "$(phase '"$machine"')" != installing ]]'
+  while read -r id; do
+    wait_until 120 "session_running $id"
+    [[ "$(child_pids "$container" "$id")" =~ ^[0-9]+$ ]]
+  done < "$accepted"
+  # One child per running session of this kind on the hub, and no process outside the session holder.
+  [[ "$(children_with "$container" "$prefix-")" == "$(hub_api /api/instances | json "d => d.filter(r => r.id.startsWith('$prefix-') && r.status === 'running').length")" ]]
+  [[ "$(as_user "$container" sh -c 'pgrep -x sleep | wc -l')" == "$(children_total "$container")" ]]
+}
 keeper_pid() { as_user "$1" systemctl --user show -p MainPID --value cawco-sessiond.service; }
 untouched() { as_user "$1" sh -c 'test ! -e "$HOME/.local/share/cawco" && test ! -e "$HOME/.local/bin/cawco" && echo untouched'; }
-export -f as_user as_user_tty hub_api api_on spawn_child start_session start_loop keeper_pid untouched json machine_id build_version phase field wait_until publish
+export -f as_user as_user_tty hub_api api_on spawn_child start_session start_loop keeper_list child_pids children_with children_total session_running start_before survived accepted_ran_once keeper_pid untouched json machine_id build_version phase field wait_until publish
 
 boot() {
   local c=$1 ip=$2 name=$3 linger=${4:-linger}
@@ -392,19 +434,22 @@ check "once the hub runs the newer build its joined machine is offered it" joine
 
 joiner_starts_held() {
   rm -f "$out/stop-joiner" "$out/accepted-joiner.txt"
+  # Sessions already running on the joined machine before its update begins.
+  start_before "$jid" "$joinerc" "$out/joiner-before.txt" joinerpre-1 joinerpre-2
   install_now_request "$jid" > /dev/null
   start_loop "$jid" joinerstart "$out/accepted-joiner.txt" "$out/stop-joiner" &
   loop=$!
   wait_until 300 '[[ "$(build_version $jid)" == 0.0.1-test.2 && "$(phase $jid)" == installed ]]'
   touch "$out/stop-joiner"
   wait "$loop"
-  [[ "$(wc -l < "$out/accepted-joiner.txt")" -ge 1 ]]
-  # Every start the hub accepted while that machine was installing is a running session, once.
-  wait_until 120 '[[ "$(hub_api /api/instances | json "d => d.filter(r => r.id.startsWith(\"joinerstart-\") && r.status === \"running\").length")" == "$(wc -l < "$out/accepted-joiner.txt")" ]]'
-  [[ "$(hub_api /api/instances | json 'd => d.filter(r => r.id.startsWith("joinerstart-")).length')" == "$(wc -l < "$out/accepted-joiner.txt")" ]]
+  accepted_ran_once "$jid" "$joinerc" joinerstart "$out/accepted-joiner.txt"
 }
 export -f joiner_starts_held
-check "a session start requested while the joined machine installs runs once afterwards, none lost" joiner_starts_held
+check "a session start requested while the joined machine installs runs once afterwards, one child, none lost" joiner_starts_held
+
+joiner_survived() { survived "$joinerc" "$out/joiner-before.txt"; }
+export -f joiner_survived
+check "a session already running on the joined machine before its update is the same process afterwards, re-attached and running" joiner_survived
 
 one_helper() {
   publish ok stable 0.0.1-test.9 9999999999999999999999999999999999999999 "$out/broken-cawco" "$key" 30 "$schema"
@@ -487,10 +532,12 @@ check "changing the channel takes effect" channel_change
 auto_with_held_child() {
   # A child the session keeper holds, as a running session's process would be.
   spawn_child "$hubc" held
-  child=$(as_user "$hubc" pgrep -x sleep | head -n 1)
+  child=$(child_pids "$hubc" boundary-held)
   keeper=$(keeper_pid "$hubc")
   [[ -n "$child" && -n "$keeper" ]]
   echo "$child $keeper" > "$out/held.txt"
+  # Sessions already running on the hub's own machine before its update begins.
+  start_before "$hid" "$hubc" "$out/hub-before.txt" hubpre-1 hubpre-2
   rm -f "$out/stop-hub" "$out/accepted-hub.txt"
   start_loop "$hid" hubstart "$out/accepted-hub.txt" "$out/stop-hub" &
   echo $! > "$out/hubloop.pid"
@@ -503,19 +550,20 @@ export -f auto_with_held_child
 check "with auto-update on the build is applied when the machine is idle" auto_with_held_child
 
 hub_starts_held() {
-  [[ "$(wc -l < "$out/accepted-hub.txt")" -ge 1 ]]
-  wait_until 180 '[[ "$(phase $hid)" != installing ]]'
-  wait_until 120 '[[ "$(hub_api /api/instances | json "d => d.filter(r => r.id.startsWith(\"hubstart-\") && r.status === \"running\").length")" == "$(wc -l < "$out/accepted-hub.txt")" ]]'
-  [[ "$(hub_api /api/instances | json 'd => d.filter(r => r.id.startsWith("hubstart-")).length')" == "$(wc -l < "$out/accepted-hub.txt")" ]]
+  accepted_ran_once "$hid" "$hubc" hubstart "$out/accepted-hub.txt"
 }
 export -f hub_starts_held
-check "a session start requested while the hub's own machine installs runs once afterwards, none lost" hub_starts_held
+check "a session start requested while the hub's own machine installs runs once afterwards, one child, none lost" hub_starts_held
+
+hub_survived() { survived "$hubc" "$out/hub-before.txt"; }
+export -f hub_survived
+check "a session already running on the hub's own machine before its update is the same process afterwards, re-attached and running" hub_survived
 
 held_survives() {
   read -r child keeper < "$out/held.txt"
   as_user "$hubc" kill -0 "$child"
   [[ "$(keeper_pid "$hubc")" == "$keeper" ]]
-  wait_until 120 '[[ "$(phase $hid)" == waiting-sessions && "$(field $hid heldChildren)" == 1 ]]'
+  wait_until 120 '[[ "$(phase $hid)" == waiting-sessions && "$(field $hid heldChildren)" -ge 1 ]]'
   [[ "$(as_user "$hubc" sh -c 'grep -o "\"sessiondVersion\":\"[^\"]*\"" ~/.local/share/cawco/binary/installation.json')" == '"sessiondVersion":"0.0.1-test.2"' ]]
 }
 export -f held_survives
@@ -532,14 +580,17 @@ session_during_update() {
   done
   [[ $n -ge 1 ]]
   # Every one of them is still alive afterwards.
-  [[ "$(as_user "$joinerc" sh -c 'pgrep -x sleep | wc -l')" == "$n" ]]
+  [[ "$(children_with "$joinerc" during)" == "$n" ]]
 }
 export -f session_during_update
 check "a session started while an update is installing is still alive afterwards" session_during_update
 
 keeper_advances() {
   read -r child keeper < "$out/held.txt"
-  as_user "$hubc" kill "$child"
+  # Every session on the machine ends, so the keeper holds nothing.
+  for pid in $(keeper_list "$hubc" | json "d => d.procs.filter(p => p.alive).map(p => p.pid).join(' ')"); do
+    as_user "$hubc" kill "$pid"
+  done
   wait_until 300 '[[ -n "$(keeper_pid "$hubc")" && "$(keeper_pid "$hubc")" != "'"$keeper"'" && "$(phase $hid)" == installed ]]'
   [[ "$(as_user "$hubc" sh -c 'grep -o "\"sessiondVersion\":\"[^\"]*\"" ~/.local/share/cawco/binary/installation.json')" == '"sessiondVersion":"0.0.1-nightly.3+333333333333"' ]]
 }
