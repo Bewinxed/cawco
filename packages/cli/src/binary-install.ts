@@ -1,0 +1,187 @@
+/**
+ * First setup of a binary install. The installer script has already verified
+ * the release signature and the archive's checksum and placed the executable;
+ * this registers it with the service manager, brings the machine up, and tells
+ * the person what is missing and offers to install it.
+ */
+import { rm } from "node:fs/promises";
+import { platform } from "node:os";
+import { machineId } from "@cawco/agent";
+import { probeCapabilities } from "@cawco/agent/capabilities";
+import {
+  type AgentRow,
+  CAWCO_ENV,
+  INSTALL_JOINED,
+  INSTALL_STEP_PREFIX,
+} from "@cawco/core";
+import {
+  type BinaryInstallation,
+  binaryRoot,
+  installationPath,
+  updateStatePath,
+  versionDirectory,
+  writeJsonAtomic,
+} from "@cawco/core/binary-installation";
+import type {
+  BinaryUpdatePolicy,
+  BinaryUpdateState,
+} from "@cawco/core/binary-updates";
+import { runtimeVersion } from "@cawco/core/runtime";
+import { discoverHub } from "./discover";
+import { awaitFirstMachineReady, enableLinger, service } from "./service";
+
+/** Tools offered at install: what CawCo uses, none of it required to start. */
+const OFFERED = ["git", "opencode", "pi"] as const;
+const JOIN_TIMEOUT_MS = 90_000;
+
+export interface BinaryInstallOptions {
+  /** Ask in this terminal before installing a missing tool. */
+  ask: boolean;
+  hubUrl: string;
+  policy: BinaryUpdatePolicy;
+  releaseHost?: string;
+  role: BinaryInstallation["role"];
+}
+
+export const binaryLayout = (keeperVersion: string) => ({
+  executable: `${binaryRoot()}/current/cawco`,
+  sessiondExecutable: `${versionDirectory(keeperVersion)}/cawco`,
+});
+
+async function awaitJoined(hubUrl: string): Promise<void> {
+  const id = await machineId();
+  const deadline = Date.now() + JOIN_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    // biome-ignore lint/performance/noAwaitInLoops: a poll; each read must see the hub after the previous one
+    const agents = await fetch(`${hubUrl}/api/agents`, {
+      signal: AbortSignal.timeout(5000),
+    })
+      .then((response) =>
+        response.ok ? (response.json() as Promise<AgentRow[]>) : []
+      )
+      .catch(() => [] as AgentRow[]);
+    if (agents.some((a) => a.machineId === id && a.status === "online")) {
+      return;
+    }
+    await Bun.sleep(1000);
+  }
+  throw new Error(
+    `The agent started, but ${hubUrl} has not listed this machine online after ${JOIN_TIMEOUT_MS / 1000}s.`
+  );
+}
+
+/** Says what is missing and offers each fix; a no, or no terminal, installs nothing. */
+async function offerTools(ask: boolean): Promise<boolean> {
+  let installed = false;
+  for (const item of probeCapabilities().items) {
+    if (item.available) {
+      console.log(`${item.id}: found${item.version ? ` ${item.version}` : ""}`);
+      continue;
+    }
+    console.log(
+      `${item.id}: not installed. ${item.reason ?? ""}\n  To install it: ${item.installCommand}`
+    );
+    if (!(ask && (OFFERED as readonly string[]).includes(item.id))) {
+      continue;
+    }
+    // biome-ignore lint/suspicious/noAlert: a terminal CLI; Bun's prompt() reads a line from the terminal
+    const answer = prompt("Run that command now? [y/N]");
+    if (answer?.trim().toLowerCase() !== "y") {
+      console.log(`${item.id}: skipped. CawCo works without it.`);
+      continue;
+    }
+    const child = Bun.spawn(["/bin/sh", "-c", item.installCommand], {
+      stdio: ["inherit", "inherit", "inherit"],
+    });
+    // biome-ignore lint/performance/noAwaitInLoops: one install at a time, each answering its own prompt in the terminal
+    if ((await child.exited) === 0) {
+      installed = true;
+    } else {
+      console.error(
+        `${item.id}: the install command failed. CawCo is installed.`
+      );
+    }
+  }
+  return installed;
+}
+
+async function bringUp(options: BinaryInstallOptions): Promise<void> {
+  const note = (line: string) =>
+    console.log(line.endsWith("…") ? `${INSTALL_STEP_PREFIX}${line}` : line);
+  if (platform() === "linux") {
+    await enableLinger(note);
+  }
+  await writeJsonAtomic(installationPath(), {
+    role: options.role,
+    root: binaryRoot(),
+    hubUrl: options.hubUrl,
+    installedVersion: runtimeVersion,
+    sessiondVersion: runtimeVersion,
+    ...(options.releaseHost ? { releaseHost: options.releaseHost } : {}),
+  } satisfies BinaryInstallation);
+  await writeJsonAtomic(updateStatePath(), {
+    phase: "none",
+    installedVersion: runtimeVersion,
+    channel: options.policy.channel,
+    updatedAt: Date.now(),
+    unseen: false,
+  } satisfies BinaryUpdateState);
+  // Saved the way `up` saves a hub it was told, so the agent unit finds it.
+  await discoverHub({ hub: options.hubUrl });
+  process.env[CAWCO_ENV.hubUrl] = options.hubUrl;
+  await service("install", {
+    ids:
+      options.role === "hub"
+        ? ["hub", "dashboard", "sessiond", "agent"]
+        : ["sessiond", "agent"],
+    mode: "prod",
+    follow: false,
+    force: false,
+    whenIdle: false,
+    note,
+    binaryLayout: binaryLayout(runtimeVersion),
+  });
+  if (options.role === "hub") {
+    await awaitFirstMachineReady(options.hubUrl, note);
+    const saved = await fetch(`${options.hubUrl}/api/binary-updates/settings`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(options.policy),
+    });
+    if (!saved.ok) {
+      throw new Error(
+        `The hub did not save the update settings: ${await saved.text()}`
+      );
+    }
+  } else {
+    await awaitJoined(options.hubUrl);
+  }
+  if (await offerTools(options.ask)) {
+    // Nothing runs a session yet, so the agent is restarted to report the new tools.
+    await service("restart", {
+      ids: ["agent"],
+      mode: "prod",
+      follow: false,
+      force: true,
+      whenIdle: false,
+      note,
+      binaryLayout: binaryLayout(runtimeVersion),
+    });
+  }
+  console.log(`CawCo ${runtimeVersion} is installed.`);
+  if (options.role === "agent") {
+    console.log(`${INSTALL_JOINED}${await machineId()}`);
+  }
+}
+
+export async function setupBinary(
+  options: BinaryInstallOptions
+): Promise<void> {
+  try {
+    await bringUp(options);
+  } catch (error) {
+    // A half-installed machine must not read as installed to the next run.
+    await rm(installationPath(), { force: true });
+    throw error;
+  }
+}

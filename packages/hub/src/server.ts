@@ -9,8 +9,6 @@ import type {
   ContinuationJob,
   ControlPayload,
   DelegateEvent,
-  DeployInfo,
-  DeployKind,
   Envelope,
   FleetConfig,
   FleetHook,
@@ -69,12 +67,14 @@ import type {
   WorkspaceRef,
 } from "@cawco/core";
 import {
+  ACKNOWLEDGE_BINARY_UPDATE,
   AGENT_BUSY,
   ASK_USER_QUESTION,
   agentProblem,
   archiveRefusal,
   BUCKET_MS,
   CLAUDE_CONVERSATION_GONE,
+  CONFIGURE_BINARY_UPDATES,
   CONTROL_CONTEXT_USAGE,
   CONTROL_GET_SESSION_INFO,
   CONTROL_GET_SESSION_MESSAGES,
@@ -139,8 +139,14 @@ import {
   WIRE_PROTOCOL,
   WORKSPACE_CREATE_TIMEOUT_MS,
 } from "@cawco/core";
+import type {
+  BinaryUpdatePhase,
+  BinaryUpdatePolicy,
+  BinaryUpdateState,
+} from "@cawco/core/binary-updates";
 import { Elysia, t, ValidationError } from "elysia";
 import { websocket } from "elysia/websocket";
+import { createBinaryUpdates } from "./binary-updates";
 import { DB_PATH, HUB_VERSION, SPAWN_START_TIMEOUT_MS } from "./config";
 import {
   type ContinuationSource,
@@ -991,74 +997,45 @@ const peekMachineCapabilities = (
     : undefined;
 };
 
-/** The kinds a daemon may claim for its deployment clone; anything else is not one. */
-const DEPLOY_KINDS: readonly DeployKind[] = [
-  "unmarked",
-  "unreachable",
-  "current",
-  "behind",
-  "ahead",
-  "diverged",
+const BINARY_UPDATE_PHASES: readonly BinaryUpdatePhase[] = [
+  "none",
+  "available",
+  "downloading",
+  "ready",
+  "waiting-sessions",
+  "installing",
+  "installed",
+  "failed-rolled-back",
+  "failed",
 ];
 
 /**
- * A machine's word on its deployment clone (contract C8), off a `register` or
- * off any heartbeat. Absent from a daemon that predates the deployment channel
- * and from one whose watcher has never ticked; a kind this hub does not know is
- * dropped rather than passed through, so a future state cannot arrive at an old
- * board as an unrenderable badge.
+ * A machine's word on its binary update, off a `register` or any heartbeat.
+ * Absent from a daemon that is not a binary install; a phase this hub does not
+ * know is dropped rather than passed through to a board that cannot render it.
  */
-const peekDeploy = (payload: unknown): DeployInfo | undefined => {
+const peekBinaryUpdate = (payload: unknown): BinaryUpdateState | undefined => {
   if (typeof payload !== "object" || payload === null) {
     return undefined;
   }
-  const { deploy } = payload as { deploy?: unknown };
-  if (typeof deploy !== "object" || deploy === null) {
+  const { binaryUpdate } = payload as { binaryUpdate?: unknown };
+  if (typeof binaryUpdate !== "object" || binaryUpdate === null) {
     return undefined;
   }
-  const {
-    kind,
-    detail,
-    updated,
-    failure: deployFailure,
-  } = deploy as Partial<DeployInfo>;
-  if (typeof kind !== "string" || !DEPLOY_KINDS.includes(kind as DeployKind)) {
-    return undefined;
-  }
-  return {
-    kind: kind as DeployKind,
-    ...(typeof detail === "string" ? { detail } : {}),
-    ...(updated === true ? { updated: true } : {}),
-    ...(typeof deployFailure === "string" ? { failure: deployFailure } : {}),
-  };
+  const state = binaryUpdate as Partial<BinaryUpdateState>;
+  return BINARY_UPDATE_PHASES.includes(state.phase as BinaryUpdatePhase) &&
+    typeof state.installedVersion === "string"
+    ? (state as BinaryUpdateState)
+    : undefined;
 };
 
-/**
- * `register`'s word that this daemon just came up because the deploy
- * poller's idle-gated restart fired — see `restarts` above for why the hub
- * treats this as an event rather than a row field.
- */
-const peekRestarted = (payload: unknown): boolean => {
-  if (typeof payload !== "object" || payload === null) {
-    return false;
-  }
-  return (payload as { restarted?: unknown }).restarted === true;
-};
-
-/**
- * Whether two deploy verdicts say the same thing. Compared field by field
- * rather than by identity: every beat arrives as a fresh object, and
- * republishing the whole board four times a minute per machine because the
- * bytes are new would cost every connected dashboard a full frame for no news.
- */
-const sameDeploy = (
-  a: DeployInfo | undefined,
-  b: DeployInfo | undefined
+/** Whether two update states say the same thing; `updatedAt` alone is not news. */
+const sameBinaryUpdate = (
+  a: BinaryUpdateState | undefined,
+  b: BinaryUpdateState | undefined
 ): boolean =>
-  a?.kind === b?.kind &&
-  a?.detail === b?.detail &&
-  a?.updated === b?.updated &&
-  a?.failure === b?.failure;
+  JSON.stringify({ ...a, updatedAt: 0 }) ===
+  JSON.stringify({ ...b, updatedAt: 0 });
 
 /** The states a daemon may claim for a tool; anything else is not a status. */
 const TOOL_STATES: readonly ToolState[] = [
@@ -1795,32 +1772,8 @@ export const createServer = (
     db.touchInstanceActivity(instanceId);
   };
 
-  /**
-   * Where each machine's deployment clone stands, as that machine last said:
-   * memory only, and never a column, for the same reason {@link pulses} is.
-   *
-   * A deploy verdict is a first-hand reading of a checkout at a moment, and it
-   * is worth exactly as long as the socket that asserted it. Stored, it would
-   * outlive the daemon and put a stale `current` — or a stale `diverged` an
-   * operator has since resolved — on the board of a machine nobody can reach,
-   * which is the very failure this build exists to close. So it is dropped when
-   * the socket closes, and a machine with no entry carries no `deploy` field at
-   * all, exactly as a daemon that predates the channel does.
-   */
-  const deploys = new Map<string, DeployInfo>();
-
-  /**
-   * A machine's word, on its *next* register, that it just restarted because
-   * the deploy poller's idle-gated restart fired (update.ts's
-   * `restartAgentNow`/`consumeRestartMarker`). Unlike `deploys` above, this is
-   * not a live-fact cache to hold for as long as the socket stands — it is an
-   * EVENT, true for exactly one {@link instancesFrame} broadcast and never
-   * again, which is why {@link withPresence} deletes the entry the moment it
-   * reads it rather than leaving it for the next reader to find still there.
-   * A dashboard that opens ten minutes later must not be told "just
-   * restarted" about a machine that has been running quietly since.
-   */
-  const restarts = new Map<string, true>();
+  /** Each connected machine's binary update state, as its daemon last said. */
+  const binaryUpdateStates = new Map<string, BinaryUpdateState>();
 
   /**
    * Standing instructions, enforced on the frame stream this server already
@@ -5463,10 +5416,6 @@ export const createServer = (
    */
   const withPresence = (rows: AgentRow[]): AgentRow[] =>
     rows.map((row) => {
-      // Consumed, not read: gone the instant this frame is built, so the
-      // very next broadcast — for this machine or any other — finds nothing
-      // here and says nothing about it. See `restarts` above.
-      const justRestarted = restarts.delete(row.machineId);
       const custody = machineCustody.get(row.machineId);
       const visibleCustody =
         custody?.state === "available"
@@ -5483,10 +5432,9 @@ export const createServer = (
         status: registry.agent(row.machineId) ? "online" : "offline",
         // Additive and live, like `status` above: present only for a machine that
         // has actually reported one on this connection.
-        ...(deploys.get(row.machineId)
-          ? { deploy: deploys.get(row.machineId) }
+        ...(binaryUpdateStates.get(row.machineId)
+          ? { binaryUpdate: binaryUpdateStates.get(row.machineId) }
           : {}),
-        ...(justRestarted ? { restarted: true } : {}),
       };
     });
 
@@ -7578,6 +7526,21 @@ export const createServer = (
         joinRoutes({
           online: (machineId) => Boolean(registry.agent(machineId)),
         })
+      )
+      .use(
+        createBinaryUpdates({
+          dbPath: DB_PATH,
+          states: () => binaryUpdateStates,
+          online: () =>
+            db
+              .listAgents()
+              .filter((row) => registry.agent(row.machineId))
+              .map((row) => row.machineId),
+          acknowledge: (machineId) =>
+            callAgent(machineId, ACKNOWLEDGE_BINARY_UPDATE, [], 10_000),
+          configure: (machineId, policy: BinaryUpdatePolicy) =>
+            callAgent(machineId, CONFIGURE_BINARY_UPDATES, [policy], 10_000),
+        }).routes
       )
       .use(
         workflowRoutes(
@@ -10528,15 +10491,11 @@ export const createServer = (
                 message.machineId,
                 claims !== undefined
               );
-              // A register from a daemon whose watcher has not ticked carries no
-              // deploy state, so it leaves standing what the beats said — the
-              // same tolerance `build` gets on the row itself.
-              const registered = peekDeploy(message.payload);
+              // A register from a daemon with nothing to say leaves standing what
+              // the beats said — the same tolerance `build` gets on the row.
+              const registered = peekBinaryUpdate(message.payload);
               if (registered) {
-                deploys.set(message.machineId, registered);
-              }
-              if (peekRestarted(message.payload)) {
-                restarts.set(message.machineId, true);
+                binaryUpdateStates.set(message.machineId, registered);
               }
               // A question parked by a process that is gone cannot be answered:
               // the reply would arrive at a daemon with no such session. Drop them
@@ -10891,16 +10850,18 @@ export const createServer = (
                   decideCustody(instanceId);
                 }
               }
-              // The deployment clone's state rides the beat (contract C8). A
-              // change in it is board news on its own — `diverged` appearing
-              // between two registers is precisely the thing that must not wait —
-              // so it joins the session reconciliation in deciding to republish.
-              const beaten = peekDeploy(message.payload);
+              // The update state rides the beat. A change in it is board news on
+              // its own, so it joins the session reconciliation in deciding to
+              // republish.
+              const beaten = peekBinaryUpdate(message.payload);
               const moved =
                 beaten !== undefined &&
-                !sameDeploy(deploys.get(message.machineId), beaten);
+                !sameBinaryUpdate(
+                  binaryUpdateStates.get(message.machineId),
+                  beaten
+                );
               if (beaten) {
-                deploys.set(message.machineId, beaten);
+                binaryUpdateStates.set(message.machineId, beaten);
               }
               // What the machine can do: one beat per connection carries it,
               // sent the moment the daemon's probes finish. It used to ride the
@@ -11978,15 +11939,11 @@ export const createServer = (
             }
           }
           db.markAgentOffline(machineId);
-          // Its deploy verdict was true of a checkout this hub can no longer ask
-          // about; keeping it would be the stale-column defect in a Map.
-          deploys.delete(machineId);
+          // Its update state was true of a connection that has just ended.
+          binaryUpdateStates.delete(machineId);
           machineCustody.delete(machineId);
           addressProtocolMachines.delete(machineId);
           lifecycle.disconnect(machineId);
-          // An unconsumed restart event belonged to the connection that just
-          // ended; the next one to hold this machineId did not just restart.
-          restarts.delete(machineId);
           db.reconcileInstances(machineId, []);
           publishInstances(machineId);
         },

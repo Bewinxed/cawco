@@ -7,7 +7,7 @@
    * machine over `ssh` and follows it step by step; Command hands over the
    * same script as a one-liner to run there by hand and waits for the machine
    * to check in. Either way the script installs Bun if needed, clones CawCo
-   * and ends in `cawco join`, and the fleet is what says it worked.
+   * and ends in `cawco binary-install agent`, and the fleet is what says it worked.
    */
   import type { SshJoinJob } from "@cawco/core";
   import { INSTALL_STEP_PREFIX, machineLabel } from "@cawco/core";
@@ -95,7 +95,7 @@
     return () => clearInterval(timer);
   });
 
-  /** The install script's and `cawco join`'s steps, in the order they ran. */
+  /** The install script's and `cawco binary-install agent`'s steps, in the order they ran. */
   const stepsOf = (run: SshJoinJob): string[] =>
     run.lines
       .filter((line) => line.startsWith(INSTALL_STEP_PREFIX))

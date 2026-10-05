@@ -26,7 +26,7 @@ export * from "./harness";
 export * from "./hooks";
 export * from "./injected";
 // Adding a machine: the join routes' shapes and the install script's step
-// prefix, which `cawco join` prints and the hub reads back off SSH output.
+// prefix, which `cawco binary-install agent` prints and the hub reads back off SSH output.
 export * from "./join";
 // How an `AskUserQuestion` answer is shaped, wherever it is answered from —
 // the dashboard, a parent session's `answer_delegate`, the Telegram bridge.
@@ -281,18 +281,12 @@ export interface SendPayload {
  */
 export interface HeartbeatPayload {
   at: number;
+  /** The machine's binary update state, live on every beat. */
+  binaryUpdate?: import("./binary-updates").BinaryUpdateState;
   browserAvailable?: boolean;
   /** Fresh sessiond custody after an owner-named stop or register recovery. */
   custody?: SessionCustody;
   custodyComplete?: true;
-  /**
-   * Where the machine's deployment clone stands (contract C8), on every beat
-   * for the same reason `instances` is: it is a live fact that changes without
-   * anybody reconnecting. A clone that diverges at 14:02 must reach the board
-   * by 14:02, not at the daemon's next register — which, on a healthy machine,
-   * may be days away. Absent from a daemon whose watcher has never ticked.
-   */
-  deploy?: DeployInfo;
   /**
    * What each harness adapter on the machine can do, and whether it is
    * installed and authenticated. Rides one beat per connection, sent the
@@ -415,6 +409,7 @@ export interface FsEntry {
 export interface AgentRow {
   /** `unknown` until a daemon that probes has registered at least once. */
   auth: import("./harness").AuthState | "unknown";
+  binaryUpdate?: import("./binary-updates").BinaryUpdateState;
   browserAvailable?: boolean;
   /**
    * The cawco build this machine's daemon is running (NEW.md §12).
@@ -422,15 +417,6 @@ export interface AgentRow {
   build?: BuildInfo;
   /** Last register's sessiond read, distinct from an available empty list. */
   custody?: SessionCustody;
-  /**
-   * Where this machine's deployment clone stands against the branch it deploys
-   * from, as its daemon last said (PLAN.md contract C8). Absent from a daemon
-   * that predates the deployment channel and from one whose watcher has never
-   * ticked, which a reader must render as *nothing to report* — never as
-   * "current". Live, not history: the hub holds it only for as long as it holds
-   * the socket that asserted it.
-   */
-  deploy?: DeployInfo;
   /**
    * Last-known fleet-config sync report (NEW.md §11).
    */
@@ -443,17 +429,6 @@ export interface AgentRow {
   machineCapabilities?: import("./capabilities").MachineCapabilities;
   machineId: string;
   os: string;
-  /**
-   * True on exactly the one `instances` frame that follows this machine's
-   * daemon coming back up because the deploy poller's idle-gated restart
-   * fired (update.ts's `restartAgentNow`) — never for a manual restart, a
-   * crash, or a plain boot. The hub deletes its own record of this the
-   * instant it is read, so it never rides a later, unrelated broadcast: a
-   * reader that was not subscribed for that one frame simply never learns
-   * about it, the same as anyone who was not looking at the terminal when it
-   * happened. What the dashboard's per-machine toast is keyed on.
-   */
-  restarted?: true;
   status: string;
   /**
    * Last-known workflow-tool status by tool id (NEW.md §10).
@@ -505,35 +480,6 @@ export function machineLabel(hostname: string): string {
   return suffix ? name.slice(0, -suffix.length) : name;
 }
 
-/**
- * Where a deployment clone stands, flattened for the wire. The kinds are
- * `DeployState['kind']` in packages/agent/src/deploy.ts; the rest of that
- * union's fields are already spoken in {@link DeployInfo.detail}, which is what
- * `describeDeploy` produced for this very state.
- */
-export type DeployKind =
-  | "unmarked"
-  | "unreachable"
-  | "current"
-  | "behind"
-  | "ahead"
-  | "diverged";
-
-export interface DeployInfo {
-  /** One sentence, exactly what `describeDeploy(state)` said about it. */
-  detail?: string;
-  /** What the update flow threw, if it threw. */
-  failure?: string;
-  /**
-   * `diverged` is the one that must survive the trip intact: it means the clone
-   * refused to update because a reset would destroy commits nobody else has,
-   * and a refusal nobody is shown is the same as no refusal at all.
-   */
-  kind: DeployKind;
-  /** Whether the last poll actually ran the update flow. */
-  updated?: boolean;
-}
-
 /** What a daemon reports about the checkout it was started from. */
 export interface BuildInfo {
   /** Short git SHA, when the checkout is a git one. */
@@ -572,8 +518,9 @@ export interface UpdateReport {
 }
 
 /**
- * Turns the machine's checkout into the current one: `git pull`, install,
- * rebuild the dashboard, restart the hub and dashboard services.
+ * Install now: stage the machine's channel build and apply it, answering with
+ * what happened. The same call a person's "Install now" makes; the automatic
+ * path runs the same code when the machine is idle.
  */
 export const UPDATE_CAWCO = "updateCawco";
 
@@ -1009,14 +956,8 @@ export const CAWCO_ENV = {
   telegramAsrMode: "CAWCO_TELEGRAM_ASR_MODE",
   /** Where the hub's SQLite file lives, overriding the default data dir. */
   dbPath: "CAWCO_DB_PATH",
-  /** The deployment clone the daemon watches (PLAN.md contract C8). */
-  deployRoot: "CAWCO_DEPLOY_ROOT",
-  /** How often that clone is polled, in seconds. */
-  deployPoll: "CAWCO_DEPLOY_POLL",
   /** Which service manager the installer targets: `systemd`, `launchd`, … */
   serviceMode: "CAWCO_SERVICE_MODE",
-  /** The npm registry installs and self-updates go through. */
-  registry: "CAWCO_REGISTRY",
 } as const;
 
 /** One of {@link CAWCO_ENV}'s variable names. */
@@ -1042,3 +983,9 @@ export const CAWCO_MDNS_TYPE = "cawco";
 export * from "./image-generation";
 export * from "./workflow";
 export * from "./workflow-compile";
+
+/** Pushed by the hub to an online machine when the fleet's update policy changes. */
+export const CONFIGURE_BINARY_UPDATES = "configureBinaryUpdates";
+
+/** Marks this machine's install-now result as seen by a person. */
+export const ACKNOWLEDGE_BINARY_UPDATE = "acknowledgeBinaryUpdate";

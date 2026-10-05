@@ -14,6 +14,8 @@ export interface ReleaseManifest {
   commit: string;
   notes: string;
   protocol: { min: number; max: number };
+  /** The capability required by this build's agent from its process keeper. */
+  sessiondProtocol: string;
   testSigned: boolean;
   version: string;
 }
@@ -22,10 +24,15 @@ export function signManifest(
   privatePem: string
 ): string {
   const key = createPrivateKey(privatePem);
-  if (key.asymmetricKeyType !== "ed25519") {
-    throw new Error("Release signing requires an Ed25519 PKCS8 private key");
+  if (
+    key.asymmetricKeyType !== "ec" ||
+    key.asymmetricKeyDetails?.namedCurve !== "prime256v1"
+  ) {
+    throw new Error(
+      "Release signing requires an ECDSA P-256 PKCS8 private key"
+    );
   }
-  return sign(null, Buffer.from(JSON.stringify(manifest)), key).toString(
+  return sign("sha256", Buffer.from(JSON.stringify(manifest)), key).toString(
     "base64"
   );
 }
@@ -47,9 +54,10 @@ export function verifyManifest(
   }
   const key = createPublicKey(publicPem);
   if (
-    key.asymmetricKeyType !== "ed25519" ||
+    key.asymmetricKeyType !== "ec" ||
+    key.asymmetricKeyDetails?.namedCurve !== "prime256v1" ||
     !verify(
-      null,
+      "sha256",
       Buffer.from(JSON.stringify(manifest)),
       key,
       Buffer.from(signature, "base64")

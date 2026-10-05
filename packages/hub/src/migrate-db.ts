@@ -22,13 +22,6 @@ export const LEGACY_DB_PATH = fileURLToPath(
  * either path. Once a target file exists this is forever a no-op, so a legacy
  * file reappearing later (a restored backup, a stray checkout) is left alone
  * rather than clobbering a live target.
- *
- * Lives in its own module so `cawco deploy init` can run it too. The hub only
- * ever finds the legacy file relative to ITSELF, and a deployment clone is a
- * different checkout from the one that has been writing the database — so from
- * the clone the module-relative guess points at a file that was never there,
- * the migration silently no-ops, and the hub comes up on an empty database
- * beside a full one. The deploy is the only place that knows both ends.
  */
 export const migrateLegacyDb = (
   target: string,

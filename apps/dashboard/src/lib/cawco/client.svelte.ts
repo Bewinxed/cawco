@@ -88,7 +88,6 @@ import {
 import { type PendingSelection, selectionExtras } from "./preview/selection";
 import { projectsFor } from "./projects";
 import { type ReloadHold, reloadForProtocol } from "./protocol-reload";
-import { checkRestartToast } from "./restart-toast";
 import { spawnDefaults } from "./spawnPrefs.svelte";
 import type {
   CommandRecord,
@@ -2186,9 +2185,6 @@ function handleFrame(frame: FramePayload): void {
           (row) => row.machineId
         )
       );
-    }
-    if (frame.agents) {
-      checkRestartToast(frame.agents);
     }
     // The hub's own record of what each session is carrying. Kept there rather
     // than learnt by watching, so it is the same on every device and survives a

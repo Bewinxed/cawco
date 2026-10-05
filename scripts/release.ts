@@ -3,13 +3,16 @@
 import { createPublicKey } from "node:crypto";
 import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { freemem, homedir } from "node:os";
-import { isAbsolute, join, relative, resolve } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 import {
   type ReleaseManifest,
   signManifest,
   verifyManifest,
 } from "../packages/core/src/release-manifest";
+import { SESSIOND_V1 } from "../packages/core/src/sessiond";
 import { PINNED_BUN, TARGETS } from "./build-binary";
+import { publishRelease } from "./publish-release";
+import { signingPem, takeSigningKey } from "./release-signing";
 
 const repo = resolve(import.meta.dir, "..");
 const argv = Bun.argv.slice(2);
@@ -20,26 +23,18 @@ function argument(name: string): string | undefined {
 const commitInput = argument("--commit");
 const channel = argument("--channel");
 const output = argument("--output");
-const signingKey = argument("--signing-key");
 if (
   !(commitInput && output && isAbsolute(output)) ||
   (channel !== "stable" && channel !== "nightly")
 ) {
   throw new Error(
-    "Usage: bun scripts/release.ts --commit REF --channel stable|nightly --output /absolute/path [--tag vX.Y.Z] [--signing-key /absolute/private.pem] [--mac-host mac]"
-  );
-}
-if (
-  signingKey &&
-  !(isAbsolute(signingKey) && relative(repo, signingKey).startsWith(".."))
-) {
-  throw new Error(
-    "The release signing key must be an explicitly supplied absolute path outside this repository"
+    "Usage: bun scripts/release.ts --commit REF --channel stable|nightly --output /absolute/path [--tag vX.Y.Z] [--mac-host mac]"
   );
 }
 if (Bun.version !== PINNED_BUN) {
   throw new Error(`Release pipeline requires Bun ${PINNED_BUN}`);
 }
+const signingKeyBase64 = await takeSigningKey();
 async function run(
   command: string[],
   cwd = repo,
@@ -67,14 +62,12 @@ const queued = join(state, "queued.json");
 const request: {
   commit: string;
   channel: "stable" | "nightly";
-  signingKey?: string;
   tag?: string;
   macHost: string;
   output: string;
 } = {
   commit,
   channel,
-  signingKey,
   tag: argument("--tag"),
   macHost: argument("--mac-host") ?? "mac",
   output,
@@ -214,6 +207,7 @@ try {
         commit: current.commit,
         channel: current.channel,
         protocol: { min: 1, max: 1 },
+        sessiondProtocol: SESSIOND_V1,
         notes,
         testSigned: false,
         artifacts: [],
@@ -282,14 +276,7 @@ try {
         join(staging, "SHA256SUMS"),
         manifest.artifacts.map((a) => `${a.sha256}  ${a.archive}\n`).join("")
       );
-      if (
-        !(current.signingKey && (await Bun.file(current.signingKey).exists()))
-      ) {
-        throw new Error(
-          "No release signing key supplied or present: stopping before signed manifest publication; artifacts remain in local staging"
-        );
-      }
-      const privatePem = await readFile(current.signingKey, "utf8");
+      const privatePem = signingPem(signingKeyBase64);
       const signature = signManifest(manifest, privatePem);
       verifyManifest(
         manifest,
@@ -298,10 +285,12 @@ try {
           .export({ type: "spki", format: "pem" })
           .toString()
       );
-      await writeFile(
-        join(staging, "release.json"),
-        `${JSON.stringify(manifest, null, 2)}\n`
-      );
+      const manifestText = JSON.stringify(manifest);
+      // The installer reads the version off the front of the signed text.
+      if (!manifestText.startsWith(`{"version":"${version}",`)) {
+        throw new Error("The manifest must begin with its version");
+      }
+      await writeFile(join(staging, "release.json"), manifestText);
       await writeFile(join(staging, "release.json.sig"), `${signature}\n`);
       const next = (await Bun.file(queued).json()) as typeof request;
       if (next.commit !== current.commit) {
@@ -316,9 +305,12 @@ try {
       await rename(staging, published);
       await writeFile(
         join(current.output, "release.json"),
-        `${JSON.stringify(manifest, null, 2)}\n`
+        JSON.stringify(manifest)
       );
       console.log(`Local artifacts ready: ${published}`);
+      if (argv.includes("--publish")) {
+        await publishRelease(published, manifest);
+      }
       break;
     } finally {
       await run(["git", "worktree", "remove", "--force", checkout]);

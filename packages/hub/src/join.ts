@@ -5,7 +5,7 @@
  *
  * The hub never connects out on its own. A machine joins by running
  * `/install.sh`, which installs Bun if needed, clones CawCo and ends in
- * `cawco join`; an SSH add is the same script started over `ssh` from here.
+ * `cawco binary-install agent`; an SSH add is the same script started over `ssh` from here.
  * The hub API has no auth in front of it (anyone who reaches it can already
  * spawn a session), so this adds no trust boundary — but nothing the operator
  * types reaches a shell: the target is one argv entry for `ssh`, and the hub
@@ -23,6 +23,8 @@ import {
   type SshJoinJob,
   type SshJoinProblem,
 } from "@cawco/core";
+import { RELEASE_REPOSITORY } from "@cawco/core/binary-distribution";
+import { readInstallation } from "@cawco/core/binary-installation";
 import { generateInstallScript } from "@cawco/core/install-script";
 import { Elysia, t } from "elysia";
 import { HUB_PORT } from "./config";
@@ -106,10 +108,6 @@ export const sshPublicKey = (): string | null => {
   return first ? readFileSync(join(dir, first), "utf8").trim() : null;
 };
 
-/** The remote the install script clones: the one this hub's own checkout came from. */
-const hubOrigin = (): Promise<string | undefined> =>
-  output(["git", "-C", import.meta.dir, "remote", "get-url", "origin"]);
-
 /**
  * A `Host` header that can be pasted into the script as-is: a name or an
  * address and a port. Anything else is refused before a script is written.
@@ -117,8 +115,12 @@ const hubOrigin = (): Promise<string | undefined> =>
 const HOST_HEADER = /^[A-Za-z0-9.\-[\]:]+$/;
 
 /** The hub and the public site render the same installer body. */
-export const installScript = (hub: string, origin: string): string =>
-  generateInstallScript({ hub, origin });
+export const installScript = (hub: string, releaseHost?: string): string =>
+  generateInstallScript({
+    hub,
+    origin: `https://github.com/${RELEASE_REPOSITORY}`,
+    releaseHost,
+  });
 
 /** How long a finished SSH add stays readable, for a dialog opened late. */
 const JOB_TTL_MS = 60 * 60 * 1000;
@@ -290,15 +292,9 @@ export const joinRoutes = ({ online }: JoinDeps) => {
       if (!(host && HOST_HEADER.test(host))) {
         return status(400, "The request has no usable Host header.");
       }
-      const origin = await hubOrigin();
-      if (!origin) {
-        return status(
-          500,
-          "This hub's checkout has no origin remote, so there is nothing for a new machine to clone."
-        );
-      }
+      const installation = await readInstallation();
       set.headers["content-type"] = "text/x-shellscript; charset=utf-8";
-      return installScript(`http://${host}`, origin);
+      return installScript(`http://${host}`, installation?.releaseHost);
     })
     .get(
       "/api/join",

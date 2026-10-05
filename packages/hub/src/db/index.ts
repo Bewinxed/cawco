@@ -120,7 +120,7 @@ const END_PRIORITY: Record<SessionEndIntent, number> = {
 };
 
 /**
- * Defined only in the published package's bundle (scripts/build-release.mjs),
+ * Defined only in the published package's bundle (scripts/build-binary.ts),
  * where this module is `cli.js` and the migrations sit beside it.
  */
 declare const __CAWCO_RELEASE__: boolean | undefined;

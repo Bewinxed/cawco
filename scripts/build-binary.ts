@@ -117,6 +117,7 @@ export async function buildBinary(options: {
   commit: string;
   proof?: boolean;
   prepare?: boolean;
+  testPublicKey?: string;
 }) {
   if (Bun.version !== PINNED_BUN) {
     throw new Error(
@@ -256,6 +257,15 @@ export async function buildBinary(options: {
       {
         name: "owned-runtime-resources",
         setup(build) {
+          if (options.testPublicKey) {
+            build.onLoad(
+              { filter: /packages\/core\/src\/release-key\.ts$/ },
+              () => ({
+                contents: `export const RELEASE_PUBLIC_KEY=${JSON.stringify(options.testPublicKey)};`,
+                loader: "ts",
+              })
+            );
+          }
           build.onResolve({ filter: /^cawco:pi-runtime$/ }, () => ({
             path: join(ROOT, "packages/agent/src/standalone-setup.ts"),
           }));

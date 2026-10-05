@@ -2,13 +2,13 @@
  * Adding a machine to the fleet: what the hub's join routes answer with, and
  * what the dashboard renders from them. The hub never connects out except for
  * an SSH add the operator started; every machine joins by running the hub's
- * install script, which ends in `cawco join`.
+ * install script, which ends in `cawco binary-install agent`.
  */
 
-/** Every line of progress the install script and `cawco join` print starts with this. */
+/** Every line of progress the install script and `cawco binary-install` print starts with this. */
 export const INSTALL_STEP_PREFIX = "cawco-install: ";
 
-/** The line `cawco join` ends a successful run on, followed by the machine id. */
+/** The line `cawco binary-install agent` ends a successful run on, followed by the machine id. */
 export const INSTALL_JOINED = `${INSTALL_STEP_PREFIX}joined as `;
 
 /**

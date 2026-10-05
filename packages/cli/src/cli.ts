@@ -1,25 +1,16 @@
 #!/usr/bin/env bun
-import { platform } from "node:os";
-import { CONFIG_PATH, readConfig, toHttpBase } from "@cawco/agent";
+import { CONFIG_PATH, readConfig } from "@cawco/agent";
 import type { AgentRow, AuthState } from "@cawco/core";
 import {
   CAWCO_ENV,
   CAWCO_HUB_PORT,
   CAWCO_MDNS_TYPE,
-  INSTALL_STEP_PREFIX,
   readEnv,
 } from "@cawco/core";
 import { protocolRange, runtimeCommit } from "@cawco/core/runtime";
 import { discoverHub, type Hub } from "./discover";
 import { clearToken, LoginError, login, saveToken } from "./login";
 import {
-  awaitFirstMachineReady,
-  CHECKOUT_ROOT,
-  DEPLOY_BRANCH,
-  DEPLOY_MARKER,
-  dashboardUrl,
-  deployInit,
-  deployRoot,
   isServiceAction,
   isServiceId,
   SERVICE_ACTIONS,
@@ -49,10 +40,7 @@ Usage
   cawco status [--hub <url>] [--verbose]  print the hub it found, and the fleet
   cawco service <${SERVICE_ACTIONS.join("|")}> [service...]
                                             run cawco as per-user services
-  cawco update [--check] [--to <version>] install the newest release and restart
-  cawco deploy init [--origin <url>] [--hub <url>]
-                                             developer mode: run from a git clone
-  cawco join --hub <url>                  add this machine to that hub's fleet
+  cawco binary-install <hub|agent> ...    setup step of the install script; not run by hand
   cawco login [--token <token>]           give this machine a Claude Code token
   cawco logout                            forget it
 
@@ -75,43 +63,18 @@ Services
   restarts regardless, and is also the only way through when the hub cannot be
   reached to answer the question at all.
 
-Deploying
-  \`cawco deploy init\` clones ${DEPLOY_BRANCH} into ${deployRoot()} — a checkout
-  that is nobody's working copy — installs it, builds the dashboard, writes a
-  ${DEPLOY_MARKER} marker and installs the services pointing at that clone
-  instead of at your editor's checkout. From then on the daemon fetches
-  ${DEPLOY_BRANCH} every minute and, when the clone is strictly behind, pulls
-  \`--ff-only\`, reinstalls, rebuilds and restarts. Pushing to ${DEPLOY_BRANCH} is
-  the fleet deploy.
-
-  The marker is the whole safety story: a checkout without one is never fetched
-  and never pulled, so a dev tree cannot auto-update no matter what is running
-  in it. A clone that has diverged from origin refuses loudly and is left
-  exactly as it is — resetting it would destroy work nobody else has a copy of.
-
-Joining
-  \`cawco join --hub <url>\` is what the hub's install script runs, from the
-  clone it made at ${deployRoot()}: it saves the hub, makes that clone this
-  machine's deployment clone, installs sessiond and the agent (no hub, no
-  dashboard), turns on lingering on Linux so they outlive the SSH session, and
-  waits for the hub to register the machine. It never prompts. The dashboard's
-  Connect a machine dialog does all of it for you, over SSH or as one command.
-
-  On a machine that already runs them, \`join\` and \`deploy init\` leave a
-  service alone when nothing about it changed, and replace one that did only
-  the way \`service restart --when-idle\` would: the hub is asked, and the
-  machine's sessions get five minutes to finish their turns first.
+Updating
+  A machine updates itself from the app: automatically once it is idle, when
+  auto-update is on, or when a person presses Install now. There is no update
+  command, and running the install script again on an installed machine only
+  reports what is installed.
 
 Options
   --hub <url>     hub to use, as http://host:port or ws://host:port/ws
   --token <token> a \`claude setup-token\` token, for \`login\` without a terminal
   --dev           for \`service install\`: run from the checkout, watching it
-  --check         for \`update\`: say what is available, install nothing
-  --to <version>  for \`update\`: a named release instead of the newest
-  --origin <url>  for \`deploy init\`: the remote to clone (default this one's)
   --when-idle     for \`service restart\`: wait for this machine's sessions first
-  --force         for \`service restart\`, \`join\` and \`deploy init\`: restart the
-                  agent mid-turn anyway
+  --force         for \`service restart\`: restart the agent mid-turn anyway
   --follow, -f    keep printing, for \`service logs\`
   --verbose       narrate the discovery ladder
   --help          this
@@ -154,19 +117,19 @@ see what each step tried.`;
 interface Args {
   /** The verb after the command, for the one command that takes one: `service`. */
   action?: string;
-  /** `update --check`: report what is available and change nothing. */
-  check: boolean;
+  ask: boolean;
+  autoUpdate: boolean;
+  channel?: "stable" | "nightly";
   command?: string;
   dev: boolean;
   follow: boolean;
   force: boolean;
+  held?: number;
   help: boolean;
   hub?: string;
-  origin?: string;
+  releaseHost?: string;
   /** Everything after the verb — the services `service` acts on. */
   rest: string[];
-  /** `update --to <version>`: a specific release rather than the newest. */
-  to?: string;
   token?: string;
   verbose: boolean;
   version: boolean;
@@ -179,7 +142,8 @@ class UsageError extends Error {}
 const parseArgs = (argv: string[]): Args => {
   const args: Args = {
     rest: [],
-    check: false,
+    ask: false,
+    autoUpdate: false,
     dev: false,
     whenIdle: false,
     force: false,
@@ -192,6 +156,37 @@ const parseArgs = (argv: string[]): Args => {
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index] as string;
     switch (arg) {
+      case "--channel": {
+        index += 1;
+        const value = argv[index];
+        if (value !== "stable" && value !== "nightly") {
+          throw new UsageError("--channel needs stable or nightly");
+        }
+        args.channel = value;
+        break;
+      }
+      case "--ask":
+        args.ask = true;
+        break;
+      case "--held": {
+        index += 1;
+        const held = Number(argv[index]);
+        if (!Number.isInteger(held) || held < 0) {
+          throw new UsageError("--held needs a count of held children");
+        }
+        args.held = held;
+        break;
+      }
+      case "--release-host":
+        index += 1;
+        args.releaseHost = argv[index];
+        if (!args.releaseHost) {
+          throw new UsageError("--release-host needs a URL");
+        }
+        break;
+      case "--auto-update":
+        args.autoUpdate = true;
+        break;
       case "--hub":
         index += 1;
         args.hub = argv[index];
@@ -205,23 +200,6 @@ const parseArgs = (argv: string[]): Args => {
         if (!args.token) {
           throw new UsageError("--token needs a token");
         }
-        break;
-      case "--origin":
-        index += 1;
-        args.origin = argv[index];
-        if (!args.origin) {
-          throw new UsageError("--origin needs a git URL");
-        }
-        break;
-      case "--to":
-        index += 1;
-        args.to = argv[index];
-        if (!args.to) {
-          throw new UsageError("--to needs a version");
-        }
-        break;
-      case "--check":
-        args.check = true;
         break;
       case "--dev":
         args.dev = true;
@@ -432,36 +410,10 @@ const up = async (args: Args): Promise<number> => {
 
   // The daemon reads its hub from the environment, so this is the handoff.
   process.env[CAWCO_ENV.hubUrl] = hub.wsUrl;
-  const { currentBusy, runDaemon, watchDeployment } = await import(
-    "@cawco/agent"
-  );
+  const { runDaemon } = await import("@cawco/agent");
   // A hub the operator named is never swapped; only a discovered one may be
   // rediscovered on sustained reconnect failure.
   runDaemon(auth, hub.source !== "flag" && hub.source !== "env");
-  // The git-pull path is DEVELOPER MODE now, and off unless asked for.
-  //
-  // It used to run unconditionally: a machine with a deployment clone tracked
-  // `main` and pulled whatever landed there. That is a fine way for the author
-  // to run their own fleet and the wrong thing to ship — it makes every commit
-  // a release, with no version to name, nothing to roll back to, and no gate
-  // between a push and somebody else's machine. Users update from the registry
-  // (`cawco update`), where a release is a published version that was built
-  // once and can be pinned.
-  //
-  // Kept, rather than deleted, because running the fleet straight from a
-  // checkout is genuinely how this gets developed. It simply has to be chosen:
-  // CAWCO_DEPLOY_POLL=1, or a clone that says so in its own marker.
-  if (readEnv(CAWCO_ENV.deployPoll) === "1") {
-    // `busy` is this same process's own supervisor, read in-process — see
-    // `currentBusy`. Without it, a pull that lands mid-turn would restart
-    // the agent onto it blind; with it, the restart waits for `currentBusy()`
-    // to read 0 and is retried on every 60s tick until it does.
-    watchDeployment({
-      busy: currentBusy,
-      root: CHECKOUT_ROOT,
-      dashboardUrl: dashboardUrl(),
-    });
-  }
   return 0;
 };
 
@@ -493,190 +445,6 @@ const runService = async (args: Args): Promise<number> => {
   return 0;
 };
 
-/**
- * `cawco deploy init` (PLAN.md C8). One verb, and deliberately only one: the
- * clone is created here, and every deploy after it is a push to the deploy
- * branch that the daemon's poller picks up.
- */
-/**
- * What this machine is running, and what it could be.
- *
- * `--check` answers without changing anything, which is what a fleet view and
- * a nervous operator both want first. Without it, the newest release is
- * installed and the services come back on it.
- */
-const runUpdate = async (args: Args): Promise<number> => {
-  const { checkVersion, registryUpdate } = await import("@cawco/agent");
-  const state = await checkVersion(CLI_VERSION);
-
-  if (state.latest === null) {
-    console.error(
-      `cawco: could not reach the registry — ${state.reason ?? "no reason given"}`
-    );
-    console.error(`cawco: this machine stays on ${state.installed}.`);
-    return 1;
-  }
-
-  const wanted = args.to;
-  if (!(wanted || state.behind)) {
-    console.log(`cawco ${state.installed} is the newest release.`);
-    return 0;
-  }
-  if (args.check) {
-    console.log(
-      `cawco ${state.installed} installed; ${state.latest} available.`
-    );
-    console.log("Run `cawco update` to install it.");
-    return 0;
-  }
-
-  console.log(`cawco: ${state.installed} → ${wanted ?? state.latest}`);
-  const report = await registryUpdate({
-    installed: state.installed,
-    ...(wanted ? { to: wanted } : {}),
-    force: args.force,
-  });
-  console.log(`installed ${report.to}`);
-  if (report.restarted.length > 0) {
-    console.log(`restarted ${report.restarted.join(", ")}`);
-  }
-  if (report.skipped) {
-    console.log(`skipped   ${report.skipped}`);
-  }
-  return 0;
-};
-
-const runDeploy = async (args: Args): Promise<number> => {
-  if (args.action !== "init") {
-    throw new UsageError("cawco deploy takes one verb: init");
-  }
-  if (args.hub) {
-    if (!toHttpBase(args.hub)) {
-      throw new UsageError(`--hub ${args.hub} is not a URL`);
-    }
-    // Save the first machine's own hub before its agent starts discovering.
-    await discoverHub({ hub: args.hub });
-    process.env[CAWCO_ENV.hubUrl] = toHttpBase(args.hub) as string;
-  }
-  const result = await deployInit({
-    ...(args.origin === undefined ? {} : { origin: args.origin }),
-    force: args.force,
-    note: (line) => console.log(line),
-  });
-  if (args.hub) {
-    await awaitFirstMachineReady(toHttpBase(args.hub) as string, (line) =>
-      console.log(`${INSTALL_STEP_PREFIX}${line}`)
-    );
-  }
-  console.log("");
-  console.log(
-    `clone    ${result.root} (${result.origin}, ${result.branch}) at ${result.head}`
-  );
-  console.log(`marker   ${result.root}/${DEPLOY_MARKER}`);
-  for (const generated of result.units) {
-    console.log(`unit     ${generated.path}`);
-  }
-  console.log("");
-  console.log(`This machine now deploys on every push to ${result.branch}.`);
-  return 0;
-};
-
-/**
- * How long `join` waits for the hub to list this machine online once its
- * services are up. A fresh agent registers within seconds; the margin covers
- * a slow first start (the SDK loading cold off a new install).
- */
-const JOIN_REGISTER_MS = 90_000;
-
-/**
- * Waits for the hub to hold a live socket from `machineId`: the one thing that
- * makes the join true, as opposed to the services merely having started.
- */
-const awaitRegistration = async (
-  httpUrl: string,
-  machineId: string
-): Promise<void> => {
-  const deadline = Date.now() + JOIN_REGISTER_MS;
-  while (Date.now() < deadline) {
-    // biome-ignore lint/performance/noAwaitInLoops: a poll — each read must see the hub after the previous one
-    const agents = await fetch(`${httpUrl}/api/agents`, {
-      signal: AbortSignal.timeout(5000),
-    })
-      .then((response) =>
-        response.ok ? (response.json() as Promise<AgentRow[]>) : undefined
-      )
-      .catch(() => undefined);
-    if (
-      agents?.some(
-        (agent) => agent.machineId === machineId && agent.status === "online"
-      )
-    ) {
-      return;
-    }
-    await Bun.sleep(1000);
-  }
-  const logs =
-    platform() === "darwin"
-      ? "tail -n 50 ~/Library/Logs/cawco-agent.log"
-      : "journalctl --user -u cawco-agent -n 50";
-  throw new ServiceError(
-    `the agent is installed, but ${httpUrl} has not listed ${machineId} online after ${JOIN_REGISTER_MS / 1000}s. Read why with: ${logs}`
-  );
-};
-
-/**
- * `cawco join --hub <url>`: this machine, into that hub's fleet, in one
- * unattended run. It is `deploy init` for a worker — the same code path, with
- * sessiond and the agent only and lingering required — preceded by saving the
- * hub and followed by waiting for the hub to see the machine.
- */
-const runJoin = async (args: Args): Promise<number> => {
-  if (!args.hub) {
-    throw new UsageError("cawco join needs --hub <url>, the hub to join");
-  }
-  if (!toHttpBase(args.hub)) {
-    throw new UsageError(`--hub ${args.hub} is not a URL`);
-  }
-  const say = (line: string): void =>
-    console.log(`${INSTALL_STEP_PREFIX}${line}`);
-
-  // Through discovery, so the hub is saved exactly as `up` saves one it was
-  // told — the agent unit's `up` finds it there on every start.
-  const hub = (await discoverHub({ hub: args.hub })) as Hub;
-  process.env[CAWCO_ENV.hubUrl] = hub.httpUrl;
-  say(`saved hub ${hub.httpUrl}`);
-
-  say(`setting up ${deployRoot()} as this machine's deployment clone`);
-  await deployInit({
-    command: "cawco join",
-    force: args.force,
-    // The clone moved under this process: the join it pulled finishes the run.
-    onPulled: async () => {
-      say("running the cawco join it just pulled");
-      const next = Bun.spawn(
-        [process.execPath, Bun.main, ...Bun.argv.slice(2)],
-        {
-          stdio: ["inherit", "inherit", "inherit"],
-        }
-      );
-      process.exit(await next.exited);
-    },
-    ids: ["sessiond", "agent"],
-    requireLinger: true,
-    // deployInit's steps are the lines that end in an ellipsis ("bun
-    // install…"); those are progress, and everything else is detail.
-    note: (line) =>
-      console.log(line.endsWith("…") ? `${INSTALL_STEP_PREFIX}${line}` : line),
-  });
-
-  const { machineId } = await import("@cawco/agent");
-  const id = await machineId();
-  say(`waiting for ${hub.httpUrl} to list ${id} online`);
-  await awaitRegistration(hub.httpUrl, id);
-  say(`joined as ${id}`);
-  return 0;
-};
-
 /** Importing the hub boots it: its entry point listens, and then stays up. */
 const hub = async (): Promise<number> => {
   const { startHub } = await import("@cawco/hub");
@@ -693,6 +461,37 @@ const sessiond = async (): Promise<number> => {
   return 0;
 };
 
+const runBinaryInstall = async (args: Args): Promise<number> => {
+  if (args.action !== "hub" && args.action !== "agent") {
+    throw new UsageError("binary-install needs hub or agent");
+  }
+  const { setupBinary } = await import("./binary-install");
+  await setupBinary({
+    role: args.action,
+    hubUrl:
+      args.hub ??
+      `http://127.0.0.1:${readEnv(CAWCO_ENV.hubPort) ?? CAWCO_HUB_PORT}`,
+    policy: {
+      channel: args.channel ?? "stable",
+      autoUpdate: args.autoUpdate,
+    },
+    ask: args.ask,
+    ...(args.releaseHost ? { releaseHost: args.releaseHost } : {}),
+  });
+  return 0;
+};
+
+const runBinaryApply = async (args: Args): Promise<number> => {
+  if (!args.action || args.held === undefined) {
+    throw new UsageError(
+      "binary-apply needs a staged version and --held <count>"
+    );
+  }
+  const { applyBinary } = await import("./binary-apply");
+  await applyBinary(args.action, args.held);
+  return 0;
+};
+
 const run = async (argv: string[]): Promise<number> => {
   const args = parseArgs(argv);
   if (args.help || !(args.command || args.version)) {
@@ -705,6 +504,10 @@ const run = async (argv: string[]): Promise<number> => {
   }
 
   switch (args.command) {
+    case "binary-install":
+      return runBinaryInstall(args);
+    case "binary-apply":
+      return runBinaryApply(args);
     case "build-info":
       console.log(
         JSON.stringify({
@@ -753,12 +556,6 @@ const run = async (argv: string[]): Promise<number> => {
       return status(args);
     case "service":
       return runService(args);
-    case "update":
-      return runUpdate(args);
-    case "deploy":
-      return runDeploy(args);
-    case "join":
-      return runJoin(args);
     case "login":
       if (args.token) {
         await saveToken(args.token);

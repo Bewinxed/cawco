@@ -1,13 +1,11 @@
-import { existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { chmod, mkdir } from "node:fs/promises";
 import { homedir, platform, userInfo } from "node:os";
 import { dirname, join } from "node:path";
 import type { AgentRow } from "@cawco/core";
 import { CAWCO_ENV, CAWCO_HUB_PORT, readEnv } from "@cawco/core";
-import { DEPLOY_BRANCH, DEPLOY_MARKER } from "@cawco/core/install-script";
 import { standalone } from "@cawco/core/runtime";
 import { sessiondEndpoint } from "@cawco/core/sessiond";
-import { migrateLegacyDb } from "@cawco/hub/src/migrate-db";
 
 /**
  * The whole stack, as four services this machine can run for you, in the order
@@ -103,15 +101,9 @@ interface Launch {
 }
 
 /**
- * Every command and path a set of units names, derived from one root. It is a
- * function of the root rather than a set of module constants because
- * {@link deployInit} installs units for a checkout that is *not* the one this
- * CLI is running from: the deployment clone at {@link DEPLOY_ROOT} (C8).
- *
- * There are two shapes of root. A checkout runs each service from its own
- * source; the published package (scripts/build-release.mjs) has one bundled
- * `cli.js` that runs each of them as a verb, and carries the dashboard as
- * `dashboard/` beside it.
+ * Every command and path a set of units names, derived from one root. A
+ * checkout runs each service from its own source; the standalone executable
+ * runs each of them as a verb of itself.
  */
 interface Layout {
   readonly agent: Launch;
@@ -174,25 +166,6 @@ const checkoutLayout = (
   };
 };
 
-const releaseLayout = (
-  root: string,
-  cli: string = join(root, "cli.js")
-): Layout => {
-  const dashboardEntry = join(root, "dashboard", "serve.js");
-  return {
-    root,
-    hub: { command: [process.execPath, cli, "hub"], needs: cli },
-    sessiond: { command: [process.execPath, cli, "sessiond"], needs: cli },
-    agent: { command: [process.execPath, cli, "up"], needs: cli },
-    dashboard: {
-      command: [NODE ?? "node", dashboardEntry],
-      needs: dashboardEntry,
-    },
-    dashboardBuild: join(root, "dashboard", "build", "handler.js"),
-    dashboardCwd: join(root, "dashboard"),
-  };
-};
-
 const isCheckout = (dir: string): boolean => {
   const manifest = join(dir, "package.json");
   return (
@@ -201,22 +174,6 @@ const isCheckout = (dir: string): boolean => {
       (JSON.parse(readFileSync(manifest, "utf8")) as { workspaces?: unknown })
         .workspaces
     )
-  );
-};
-
-const isRelease = (dir: string): boolean =>
-  existsSync(join(dir, "dashboard", "serve.js"));
-
-/** The layout of a root named outright: a checkout or a release, never a guess. */
-const layoutAt = (root: string): Layout => {
-  if (isCheckout(root)) {
-    return checkoutLayout(root);
-  }
-  if (isRelease(root)) {
-    return releaseLayout(root);
-  }
-  throw new ServiceError(
-    `${root} is neither a cawco checkout (a package.json with workspaces) nor a cawco release (dashboard/serve.js)`
   );
 };
 
@@ -246,9 +203,6 @@ const here = (): Layout => {
     };
   }
   const main = realpathSync(Bun.main);
-  if (isRelease(dirname(main))) {
-    return releaseLayout(dirname(main), main);
-  }
   let dir = dirname(main);
   while (dir !== dirname(dir)) {
     if (isCheckout(dir)) {
@@ -257,20 +211,12 @@ const here = (): Layout => {
     dir = dirname(dir);
   }
   throw new ServiceError(
-    `${main} is in neither a cawco checkout (no package.json with workspaces above it) nor a cawco release (no dashboard/serve.js beside it)`
+    `${main} is in neither a cawco checkout (no package.json with workspaces above it) nor a standalone cawco executable`
   );
 };
 
 const HERE = here();
 const ROOT = HERE.root;
-
-/**
- * The checkout this CLI is *running from* — which is not necessarily the
- * deployment clone. The deploy poller needs it: defaulting to
- * {@link deployRoot} means a dev-tree agent polls, fetches and restarts
- * services for a clone it is not part of.
- */
-export const CHECKOUT_ROOT = ROOT;
 
 const LISTEN_STREAM = /^ListenStream=(.+):(\d+)$/m;
 const SOCK_NODE = /<key>SockNodeName<\/key>\s*<string>([^<]*)<\/string>/;
@@ -400,20 +346,6 @@ const joinedHub = async (): Promise<string | undefined> => {
   // the agent never pay for the agent package.
   const { readConfig } = await import("@cawco/agent");
   return (await readConfig())?.hubUrl || undefined;
-};
-
-/** The build this machine's agent reports to its hub, while it is connected. */
-const runningAgentBuild = async (): Promise<AgentRow["build"]> => {
-  const hub = await joinedHub();
-  if (!hub) {
-    return undefined;
-  }
-  const { machineId } = await import("@cawco/agent");
-  const id = await machineId();
-  const agents = await probeJson<AgentRow[]>(`${hub}/api/agents`);
-  return agents?.find(
-    (agent) => agent.machineId === id && agent.status === "online"
-  )?.build;
 };
 
 const probeAgent = async (): Promise<string | undefined> => {
@@ -1206,7 +1138,9 @@ const lingerHint = async (note: (line: string) => void): Promise<void> => {
  * words logind gave, and the one command that fixes it — because a joined
  * machine whose services stop at logout has not joined anything.
  */
-const enableLinger = async (note: (line: string) => void): Promise<void> => {
+export const enableLinger = async (
+  note: (line: string) => void
+): Promise<void> => {
   // sd_booted(3): systemd as PID 1 is exactly when this directory exists.
   // Without it there is no user manager to linger and no unit to install, so
   // the answer is what the machine is missing, not a loginctl command that
@@ -1737,6 +1671,8 @@ const systemdLogs = async (
 };
 
 export interface ServiceOptions {
+  /** Verified binary installer pins sessiond separately from the replaceable roles. */
+  binaryLayout?: { executable: string; sessiondExecutable: string };
   follow: boolean;
   /** `restart` only: interrupt them, or restart without knowing whether it will. */
   force: boolean;
@@ -1755,7 +1691,7 @@ export interface ServiceOptions {
  */
 export const service = async (
   action: ServiceAction,
-  { ids, mode, follow, whenIdle, force, note }: ServiceOptions
+  { ids, mode, follow, whenIdle, force, note, binaryLayout }: ServiceOptions
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one branch per service verb (install/uninstall/restart/status/logs), each already delegating its own logic to a named helper.
 ): Promise<void> => {
   const host = platform();
@@ -1765,7 +1701,37 @@ export const service = async (
     );
   }
   const mac = host === "darwin";
-  const specs = ids.map((id) => specFor(id, mode));
+  const layout: Layout = binaryLayout
+    ? {
+        root: dirname(binaryLayout.executable),
+        hub: {
+          command: [binaryLayout.executable, "hub"],
+          needs: binaryLayout.executable,
+        },
+        agent: {
+          command: [binaryLayout.executable, "up"],
+          needs: binaryLayout.executable,
+        },
+        dashboard: {
+          command: [binaryLayout.executable, "dashboard"],
+          needs: binaryLayout.executable,
+        },
+        sessiond: {
+          command: [binaryLayout.sessiondExecutable, "sessiond"],
+          needs: binaryLayout.sessiondExecutable,
+        },
+        dashboardBuild: binaryLayout.executable,
+        dashboardCwd: homedir(),
+      }
+    : HERE;
+  const specs = ids.map((id) => specFor(id, mode, layout));
+  if (binaryLayout) {
+    for (const spec of specs) {
+      (spec.environment as Record<string, string>).CAWCO_BINARY_ROOT = dirname(
+        dirname(binaryLayout.executable)
+      );
+    }
+  }
 
   switch (action) {
     case "install": {
@@ -1817,32 +1783,6 @@ export const service = async (
     default:
       throw new ServiceError("unreachable: unknown service action");
   }
-};
-
-/**
- * Which init system a spec is rendered for. `service` picks it from
- * {@link platform}; the renderer below takes it as an argument so both
- * artefacts can be read — and tested — from either kind of machine.
- */
-export type ServiceInit = "systemd" | "launchd";
-
-/**
- * The exact text `install` would write for a service, without writing it. The
- * unit and the plist are the contract with the init system, so they are worth
- * being able to read (and diff, and assert on) without touching one.
- *
- * Paths inside it are always *this* machine's — a darwin render on linux still
- * names linux's data dir — because the renderer answers "what would I install
- * here", not "what would a Mac install".
- */
-export const serviceDefinition = (
-  id: ServiceId,
-  mode: ServiceMode,
-  init: ServiceInit,
-  root?: string
-): string => {
-  const spec = specFor(id, mode, root === undefined ? HERE : layoutAt(root));
-  return init === "systemd" ? unit(spec) : plist(spec);
 };
 
 /**
@@ -2004,557 +1944,4 @@ export const sweepSessiondOrphans = async (
       // best effort: the ledger file may already be gone
     });
   return orphans;
-};
-
-/**
- * The PATH a unit already hands its service, read back out of the file, so a
- * reinstall adds to it rather than replacing it. The first install might have
- * come from a desktop terminal and the next over SSH, whose PATH is far
- * thinner; a service whose PATH shrank on reinstall loses tools it had.
- */
-const SYSTEMD_PATH = /^Environment=PATH=(.*)$/m;
-const PLIST_PATH = /<key>PATH<\/key>\s*<string>([^<]*)<\/string>/;
-
-const pathIn = (text: string, mac: boolean): string[] =>
-  ((mac ? PLIST_PATH : SYSTEMD_PATH).exec(text)?.[1] ?? "")
-    .split(":")
-    .filter(Boolean);
-
-/** Whether the init system has this service running right now. */
-const isRunning = async (spec: ServiceSpec, mac: boolean): Promise<boolean> => {
-  if (mac) {
-    const printed = await run([
-      "launchctl",
-      "print",
-      `${guiDomain()}/${label(spec.id)}`,
-    ]);
-    return (
-      printed.exitCode === 0 &&
-      printed.stdout.toString().includes("state = running")
-    );
-  }
-  const active = await run([
-    "systemctl",
-    "--user",
-    "is-active",
-    unitName(spec.id),
-  ]);
-  return active.stdout.toString().trim() === "active";
-};
-
-/**
- * LaunchAgents live in the logged-in user's GUI domain — the one place a
- * service can read the login keychain Claude Code keeps its credentials in.
- * With nobody logged in to the desktop there is no such domain, and nothing
- * can be installed there; that is the platform refusing, said plainly.
- */
-const requireGuiDomain = async (
-  note: (line: string) => void
-): Promise<void> => {
-  note(`launchctl print ${guiDomain()}…`);
-  const printed = await run(["launchctl", "print", guiDomain()]);
-  if (printed.exitCode !== 0) {
-    throw new ServiceError(
-      `launchctl print ${guiDomain()} failed: ${printed.stderr.toString().trim() || `exit ${printed.exitCode}`}\nNobody is logged in to this Mac's desktop, so launchd has no ${guiDomain()} domain for the agent to run in. Log in to the Mac once, and run \`cawco login\` on it so the agent has a token, then run this again.`
-    );
-  }
-};
-
-/**
- * What is installed for a service right now: its unit or plist, and under
- * systemd its listening socket, which is its own unit file — a change to it (a
- * new port) is a change to the service as much as its ExecStart is. Empty for
- * what is not there.
- */
-const installedText = async (
-  spec: ServiceSpec,
-  path: string,
-  mac: boolean
-): Promise<{ current: string; currentSocket: string }> => {
-  const read = (file: string): Promise<string> =>
-    Bun.file(file)
-      .text()
-      .catch(() => "");
-  return {
-    current: await read(path),
-    currentSocket: !mac && spec.socket ? await read(socketPath(spec.id)) : "",
-  };
-};
-
-/** What `install` would write for a service, in the same two parts as {@link installedText}. */
-const renderedText = (
-  spec: ServiceSpec,
-  mac: boolean
-): { socketText: string; text: string } => {
-  if (mac) {
-    return { text: plist(spec), socketText: "" };
-  }
-  return {
-    text: unit(spec),
-    socketText: spec.socket ? socketUnit(spec, spec.socket) : "",
-  };
-};
-
-/**
- * Puts a deployment clone's services in front of the init system without
- * cutting a turn. A service that is not running is installed and started. One
- * that is running is left alone when its unit is unchanged — unless it is the
- * agent and it is running other code than the clone holds. Any other running
- * service is replaced only through {@link clearToRestart}, the same gate
- * `service restart --when-idle` goes through: the hub is asked, the machine's
- * sessions get up to five minutes to finish, and a machine still busy after
- * that is refused with that gate's words, with nothing touched — `force`
- * being the gate's own way through.
- */
-const settleServices = async (
-  specs: readonly ServiceSpec[],
-  {
-    agentStale,
-    force,
-    note,
-  }: { agentStale: boolean; force: boolean; note: (line: string) => void }
-): Promise<RenderedUnit[]> => {
-  const mac = platform() === "darwin";
-  if (mac) {
-    await requireGuiDomain(note);
-  }
-  const start: ServiceSpec[] = [];
-  const replace: ServiceSpec[] = [];
-  const rendered: RenderedUnit[] = [];
-  for (const base of specs) {
-    const path = mac ? launchAgentPath(base.id) : systemdPath(base.id);
-    // biome-ignore lint/performance/noAwaitInLoops: one unit at a time, so each decision is attributable to its service
-    const { current, currentSocket } = await installedText(base, path, mac);
-    const spec: ServiceSpec = {
-      ...base,
-      environment: {
-        PATH: [
-          ...new Set([...servicePath().split(":"), ...pathIn(current, mac)]),
-        ].join(":"),
-        ...base.environment,
-      },
-    };
-    const { text, socketText } = renderedText(spec, mac);
-    const unchanged = current === text && currentSocket === socketText;
-    rendered.push({ id: spec.id, path, text });
-    if (!(await isRunning(spec, mac))) {
-      start.push(spec);
-    } else if (unchanged && !(spec.id === "agent" && agentStale)) {
-      note(`${spec.id} is running and unchanged`);
-    } else {
-      replace.push(spec);
-    }
-  }
-  for (const spec of replace) {
-    // biome-ignore lint/performance/noAwaitInLoops: each session-hosting service asks the hub in turn; nothing restarts until every one is clear
-    await clearToRestart(spec, { whenIdle: true, force }, note);
-  }
-  if (mac) {
-    // A LaunchAgent is replaced by booting it out and back in: that is the
-    // restart, and every one of them has already been cleared above.
-    if (start.length + replace.length > 0) {
-      await installLaunchAgents([...start, ...replace], note);
-    }
-    return rendered;
-  }
-  if (start.length + replace.length > 0) {
-    await installSystemdUnits([...start, ...replace], note);
-  }
-  for (const spec of replace) {
-    // biome-ignore lint/performance/noAwaitInLoops: services restart one at a time so each one's note prints in its own order
-    await restartSystemdUnit(spec, note);
-  }
-  return rendered;
-};
-
-// ---------------------------------------------------------------------------
-// The deployment clone (PLAN.md contract C8)
-// ---------------------------------------------------------------------------
-
-/**
- * Why any of this exists: until now the services on this fleet ran straight out
- * of a dev working tree that several agent sessions edit at once. A restart
- * therefore deployed whatever was half-written at that second, and the update
- * flow rightly refuses a dirty checkout — so the machine could never catch
- * itself up. `deploy init` gives the services a checkout that is nobody's
- * working copy, and after that a push to `main` is the fleet deploy.
- */
-
-/**
- * Where the deployment clone lives. Our choice: per-user so it needs no sudo,
- * under a dotdir so it is nobody's working copy, and deliberately outside every
- * dev checkout. `CAWCO_DEPLOY_ROOT` overrides it — how the tests point at a
- * scratch directory.
- *
- * Named here rather than imported from `@cawco/agent`, exactly as
- * `update.ts` names the unit paths this file writes: the two ends of the deploy
- * channel agree on a constant, and neither package may depend on the other.
- */
-export const deployRoot = (): string =>
-  readEnv(CAWCO_ENV.deployRoot) ?? join(homedir(), ".cawco", "app");
-
-/** The deployment branch and marker shared with both shell installers. */
-// biome-ignore lint/performance/noBarrelFile: preserve service's public deployment constants while sharing their definition with the shell generator.
-export { DEPLOY_BRANCH, DEPLOY_MARKER } from "@cawco/core/install-script";
-
-/** Written to `<root>/.cawco-deploy`, read by the daemon's poller. */
-export interface DeployMarker {
-  readonly branch: string;
-  readonly createdAt: string;
-  readonly createdBy: string;
-  readonly origin: string;
-  readonly root: string;
-}
-
-/** One shelled-out step of the init, so a test can watch the sequence. */
-export interface DeployStep {
-  readonly argv: readonly string[];
-  readonly cwd: string;
-}
-
-export type StepRunner = (
-  step: DeployStep
-) => Promise<{ ok: boolean; said: string }>;
-
-const runStep: StepRunner = async ({ argv, cwd }) => {
-  const ran = await Bun.$`${argv}`.cwd(cwd).quiet().nothrow();
-  const said = (ran.stderr.toString().trim() || ran.stdout.toString().trim())
-    .split("\n")
-    .slice(-4)
-    .join("\n");
-  return { ok: ran.exitCode === 0, said };
-};
-
-/** What the units the init would install look like, without having installed them. */
-export interface RenderedUnit {
-  readonly id: ServiceId;
-  readonly path: string;
-  readonly text: string;
-}
-
-export interface DeployInitResult {
-  readonly branch: string;
-  /** The clone's HEAD after init, short. */
-  readonly head: string;
-  readonly marker: DeployMarker;
-  readonly origin: string;
-  readonly root: string;
-  readonly units: readonly RenderedUnit[];
-}
-
-export interface DeployInitOptions {
-  readonly branch?: string;
-  /** Which verb is setting the clone up, recorded in the marker. */
-  readonly command?: "cawco deploy init" | "cawco join";
-  /**
-   * Where the fleet's database should end up, and where this checkout's legacy
-   * one still sits. Both default to the real paths; named so a test can prove
-   * the move without going near the operator's own database.
-   */
-  readonly dbPath?: string;
-  /** `--force`: replace running services even while their sessions are mid-turn. */
-  readonly force?: boolean;
-  /** Which services this machine runs from the clone. Defaults to all of them. */
-  readonly ids?: readonly ServiceId[];
-  readonly legacyDb?: string;
-  readonly note: (line: string) => void;
-  /**
-   * `join`: called when this run pulled new commits into the checkout it is
-   * running from, once they are installed. It hands the rest of the run to the
-   * code just pulled and does not return.
-   */
-  readonly onPulled?: () => Promise<never>;
-  /** The remote to clone. Defaults to this checkout's `origin`. */
-  readonly origin?: string;
-  /**
-   * `join`: on Linux, turn on lingering before any unit is installed, and fail
-   * if it cannot be turned on. A machine joined over SSH has nobody logged in
-   * once the SSH session closes, and without lingering systemd stops the user
-   * manager — and every service — right then.
-   */
-  readonly requireLinger?: boolean;
-  readonly root?: string;
-  /**
-   * Injected by the tests. This verb clones, installs, builds and then hands
-   * units to systemd; a test has to be able to prove the *layout* it produces
-   * without spending ten minutes on a build or touching an init system.
-   */
-  readonly run?: StepRunner;
-}
-
-const step = async (
-  runner: StepRunner,
-  what: string,
-  argv: readonly string[],
-  cwd: string,
-  note: (line: string) => void
-): Promise<string> => {
-  note(`${what}…`);
-  const ran = await runner({ argv, cwd });
-  if (!ran.ok) {
-    throw new ServiceError(`${what} failed: ${ran.said || argv.join(" ")}`);
-  }
-  return ran.said;
-};
-
-/**
- * `git status` in the clone must stay clean forever, or the update flow's dirty
- * guard locks the machine out of its own deploys. The marker lives inside the
- * clone where an operator will find it, so it is excluded locally — in
- * `.git/info/exclude`, which is per-clone and never committed, rather than in a
- * `.gitignore` that would have to be carried in the repository itself.
- */
-const excludeMarker = async (root: string): Promise<void> => {
-  const path = join(root, ".git", "info", "exclude");
-  const existing = await Bun.file(path)
-    .text()
-    .catch(() => "");
-  if (existing.split("\n").includes(DEPLOY_MARKER)) {
-    return;
-  }
-  await Bun.write(
-    path,
-    `${existing.endsWith("\n") || existing === "" ? existing : `${existing}\n`}${DEPLOY_MARKER}\n`
-  );
-};
-
-/** A directory that exists and holds something is not a place to clone into. */
-const occupied = (root: string): boolean => {
-  if (!existsSync(root)) {
-    return false;
-  }
-  try {
-    return readdirSync(root).length > 0;
-  } catch {
-    return true;
-  }
-};
-
-/**
- * `cawco deploy init` and `cawco join` — the whole of C8's setup, in the
- * order it has to happen: clone `origin/main` into {@link deployRoot}, write
- * the marker, install, build the dashboard when this machine serves it, and
- * install units that point at the clone with the C9 data-dir database path.
- *
- * When `root` is the checkout this CLI is running from — `join`, run by the
- * hub's install script inside the clone it just made — there is nothing to
- * clone and nothing to guard against: that checkout is the one being marked.
- * The script only ever runs `join` in an unmarked root it cloned itself; a
- * root it finds already there without a marker it refuses, with the same
- * words as the guard below.
- *
- * The marker is written before anything slow or fallible (install, build,
- * units), so a run that fails part-way leaves a marked clone, and running it
- * again catches that clone up rather than refusing it.
- *
- * The agent unit it installs carries `CAWCO_DEPLOY_POLL=1`: a deployment
- * clone exists to follow its branch, and `up` only runs the poller when told
- * to. It never restarts a service itself; the first actual deploy is the next
- * push to main.
- */
-/**
- * The clone itself: a marked one is caught up rather than started over —
- * cloning again would throw away a checkout the services are running — and a
- * missing one is cloned. The checkout this CLI runs from is already there.
- */
-const bringClone = async ({
-  marked,
-  running,
-  root,
-  remote,
-  branch,
-  runner,
-  note,
-}: {
-  marked: boolean;
-  running: boolean;
-  root: string;
-  remote: string;
-  branch: string;
-  runner: StepRunner;
-  note: (line: string) => void;
-}): Promise<void> => {
-  if (marked) {
-    note(`${root} is already a deployment clone; bringing it up to ${branch}`);
-    await step(
-      runner,
-      `git fetch origin ${branch}`,
-      ["git", "fetch", "origin", branch],
-      root,
-      note
-    );
-    await step(
-      runner,
-      `git merge --ff-only origin/${branch}`,
-      ["git", "merge", "--ff-only", `origin/${branch}`],
-      root,
-      note
-    );
-    return;
-  }
-  if (!running) {
-    await step(
-      runner,
-      `cloning ${remote} (${branch}) into ${root}`,
-      // `root` is absolute and git creates the leading directories itself, so
-      // the cwd only has to be somewhere that exists.
-      ["git", "clone", "--branch", branch, "--single-branch", remote, root],
-      ROOT,
-      note
-    );
-  }
-};
-
-export const deployInit = async ({
-  root = deployRoot(),
-  origin,
-  branch = DEPLOY_BRANCH,
-  command = "cawco deploy init",
-  force = false,
-  ids = SERVICE_IDS,
-  requireLinger = false,
-  onPulled,
-  note,
-  run: runner = runStep,
-  dbPath = DEFAULT_DB_PATH,
-  legacyDb = join(ROOT, "packages", "hub", "cawco.db"),
-}: DeployInitOptions): Promise<DeployInitResult> => {
-  const host = platform();
-  if (host !== "darwin" && host !== "linux") {
-    throw new ServiceError(
-      `cawco deploy does not know how to install services on ${host}`
-    );
-  }
-
-  const marked = existsSync(join(root, DEPLOY_MARKER));
-  const running = existsSync(root) && realpathSync(root) === realpathSync(ROOT);
-  if (occupied(root) && !(marked || running)) {
-    throw new ServiceError(
-      `${root} already exists and is not a deployment clone (no ${DEPLOY_MARKER}). ` +
-        "Refusing to touch it — move it aside, or point elsewhere with CAWCO_DEPLOY_ROOT."
-    );
-  }
-
-  let remote: string;
-  if (origin === undefined) {
-    const found = await runner({
-      argv: ["git", "remote", "get-url", "origin"],
-      cwd: ROOT,
-    });
-    if (!found.ok) {
-      throw new ServiceError(
-        `no origin remote in ${ROOT}, so there is nothing to clone from`
-      );
-    }
-    remote = found.said.trim();
-  } else {
-    remote = origin;
-  }
-
-  const headOf = async (): Promise<string> =>
-    (
-      await runner({ argv: ["git", "rev-parse", "HEAD"], cwd: root })
-    ).said.trim();
-  /** Where a marked clone stood before catching up. */
-  const pulledFrom = marked ? await headOf() : undefined;
-  await bringClone({ marked, running, root, remote, branch, runner, note });
-
-  await excludeMarker(root);
-
-  // The database, before anything is installed that could open one.
-  //
-  // The hub finds its legacy file relative to ITSELF, and from the clone that
-  // points inside the clone — where such a file has never been. The checkout
-  // that has actually been writing the database is THIS one, and this is the
-  // only moment both ends are known. Without it the hub comes up on a new
-  // empty database beside the full one, which is precisely what a cutover must
-  // not do. An existing target makes it a no-op, so re-running init is safe.
-  if (!existsSync(dbPath) && existsSync(legacyDb)) {
-    migrateLegacyDb(dbPath, legacyDb);
-    note(`moved the database out of the checkout: ${legacyDb} -> ${dbPath}`);
-  }
-
-  const marker: DeployMarker = {
-    root,
-    origin: remote,
-    branch,
-    createdAt: new Date().toISOString(),
-    createdBy: command,
-  };
-  await Bun.write(
-    join(root, DEPLOY_MARKER),
-    `${JSON.stringify(marker, null, 2)}\n`
-  );
-  await chmod(join(root, DEPLOY_MARKER), 0o600);
-  note(`wrote ${join(root, DEPLOY_MARKER)}`);
-
-  // Frozen: the deployment clone must never be modified by its own install,
-  // or the updater later refuses to pull a dirty checkout.
-  await step(
-    runner,
-    "bun install",
-    [process.execPath, "install", "--frozen-lockfile"],
-    root,
-    note
-  );
-  if (ids.includes("dashboard")) {
-    await step(
-      runner,
-      "building the dashboard",
-      [process.execPath, "run", "--filter", "@cawco/dashboard", "build"],
-      root,
-      note
-    );
-  }
-
-  // Everything from here on decides what happens to running services, and
-  // the process deciding is the code the clone held before this run pulled.
-  // When it pulled something into the checkout this very process runs from,
-  // the code that should finish the job is the code just pulled and installed.
-  if (onPulled && running && pulledFrom && pulledFrom !== (await headOf())) {
-    await onPulled();
-  }
-
-  const layout = checkoutLayout(root);
-  const specs = ids.map((id) => {
-    const spec = specFor(id, "prod", layout);
-    return id === "agent"
-      ? {
-          ...spec,
-          environment: { ...spec.environment, [CAWCO_ENV.deployPoll]: "1" },
-        }
-      : spec;
-  });
-  const mac = host === "darwin";
-  if (requireLinger && !mac) {
-    await enableLinger(note);
-  }
-  const cloneHead = await headOf();
-  const agentBuild = await runningAgentBuild();
-  const units = await settleServices(specs, {
-    // What the agent reports running, against what the clone now holds. Not
-    // knowing counts as stale: the gate then asks the hub, and a hub that
-    // cannot be asked refuses there.
-    agentStale: !(
-      agentBuild?.commit &&
-      !agentBuild.dirty &&
-      cloneHead.startsWith(agentBuild.commit)
-    ),
-    force,
-    note,
-  });
-
-  const head = await runner({
-    argv: ["git", "rev-parse", "--short", "HEAD"],
-    cwd: root,
-  });
-
-  return {
-    root,
-    origin: remote,
-    branch,
-    head: head.said.trim(),
-    marker,
-    units,
-  };
 };

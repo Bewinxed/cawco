@@ -3,8 +3,6 @@ import { buildInfo } from "./build";
 import { DB_PATH, HUB_PORT, HUB_VERSION } from "./config";
 import { Db, DbLayer } from "./db";
 import { advertise } from "./mdns";
-// The move itself lives in its own module so `cawco deploy init` can run it
-// from the checkout that actually holds the legacy file. See migrate-db.ts.
 import { migrateLegacyDb } from "./migrate-db";
 import { Pending, PendingLayer } from "./pending";
 import { startPreviewListener } from "./preview";
@@ -12,9 +10,6 @@ import { Registry, RegistryLayer } from "./registry";
 import { createServer } from "./server";
 import { createTelegramBridge } from "./telegram";
 import { backfillUsage } from "./usage-count";
-
-// biome-ignore lint/performance/noBarrelFile: re-exporting one already-imported name is not a barrel; `cawco deploy init` (see migrate-db.ts) needs migrateLegacyDb importable from this entrypoint.
-export { migrateLegacyDb } from "./migrate-db";
 
 const main = Effect.gen(function* () {
   const registry = yield* Registry;

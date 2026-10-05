@@ -15,9 +15,6 @@ if (Bun.argv[2]?.startsWith("proof-")) {
       "Proof runtime requires scratch HOME and explicit isolated loopback hub"
     );
   }
-  if (process.env.CAWCO_DEPLOY_POLL === "1") {
-    throw new Error("Proof may not start a deployment poller");
-  }
   for (const key of Object.keys(process.env)) {
     if (/TOKEN|SECRET|API_KEY/.test(key)) {
       throw new Error("Proof may not receive credentials");

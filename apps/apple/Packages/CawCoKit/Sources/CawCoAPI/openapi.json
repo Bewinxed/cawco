@@ -357,6 +357,198 @@
         }
       }
     },
+    "/api/binary-updates/settings": {
+      "get": {
+        "operationId": "getApiBinaryUpdatesSettings",
+        "responses": {
+          "200": {
+            "description": "getApiBinaryUpdatesSettings 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BinaryUpdatePolicy"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "channel": {
+                    "type": "string",
+                    "enum": [
+                      "stable",
+                      "nightly"
+                    ]
+                  },
+                  "autoUpdate": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "channel",
+                  "autoUpdate"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "putApiBinaryUpdatesSettings",
+        "responses": {
+          "200": {
+            "description": "putApiBinaryUpdatesSettings 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BinaryUpdatePolicy"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "putApiBinaryUpdatesSettings 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/binary-updates/machines": {
+      "get": {
+        "operationId": "getApiBinaryUpdatesMachines",
+        "responses": {
+          "200": {
+            "description": "getApiBinaryUpdatesMachines 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiBinaryUpdatesMachines200"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/binary-updates/check": {
+      "post": {
+        "operationId": "postApiBinaryUpdatesCheck",
+        "responses": {
+          "200": {
+            "description": "postApiBinaryUpdatesCheck 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiBinaryUpdatesCheck200"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/binary-updates/machines/{machineId}/acknowledge": {
+      "post": {
+        "parameters": [
+          {
+            "name": "machineId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "postApiBinaryUpdatesMachinesByMachineIdAcknowledge",
+        "responses": {
+          "200": {
+            "description": "postApiBinaryUpdatesMachinesByMachineIdAcknowledge 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiBinaryUpdatesMachinesByMachineIdAcknowledge200"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/binary-updates/release": {
+      "get": {
+        "operationId": "getApiBinaryUpdatesRelease",
+        "responses": {
+          "200": {
+            "description": "getApiBinaryUpdatesRelease 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiBinaryUpdatesRelease200"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/binary-updates/artifacts/{version}/{archive}": {
+      "get": {
+        "parameters": [
+          {
+            "name": "version",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "archive",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiBinaryUpdatesArtifactsByVersionByArchive",
+        "responses": {
+          "200": {
+            "description": "getApiBinaryUpdatesArtifactsByVersionByArchive 200",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "getApiBinaryUpdatesArtifactsByVersionByArchive 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/workflows": {
       "get": {
         "operationId": "getApiWorkflows",
@@ -6008,6 +6200,69 @@
           "ok"
         ]
       },
+      "getApiBinaryUpdatesMachines200": {
+        "type": "object",
+        "properties": {
+          "machines": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/T"
+            }
+          }
+        },
+        "required": [
+          "machines"
+        ]
+      },
+      "postApiBinaryUpdatesCheck200": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "string"
+          },
+          "channel": {
+            "enum": [
+              "nightly",
+              "stable"
+            ],
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "channel",
+          "notes",
+          "version"
+        ]
+      },
+      "postApiBinaryUpdatesMachinesByMachineIdAcknowledge200": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ]
+      },
+      "getApiBinaryUpdatesRelease200": {
+        "type": "object",
+        "properties": {
+          "manifest": {
+            "$ref": "#/components/schemas/ReleaseManifest"
+          },
+          "signature": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "manifest",
+          "signature"
+        ]
+      },
       "getApiWorkflows200": {
         "type": "object",
         "properties": {
@@ -10600,6 +10855,117 @@
           "target"
         ]
       },
+      "BinaryUpdatePolicy": {
+        "description": "Browser-neutral release policy and machine state consumed by API clients.",
+        "type": "object",
+        "properties": {
+          "autoUpdate": {
+            "description": "One setting for the whole fleet: a machine does not pick its own.",
+            "type": "boolean"
+          },
+          "channel": {
+            "enum": [
+              "nightly",
+              "stable"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "autoUpdate",
+          "channel"
+        ]
+      },
+      "T": {
+        "type": "object"
+      },
+      "ReleaseManifest": {
+        "type": "object",
+        "properties": {
+          "artifacts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "target": {
+                  "type": "string"
+                },
+                "archive": {
+                  "type": "string"
+                },
+                "sha256": {
+                  "type": "string"
+                },
+                "size": {
+                  "type": "number"
+                },
+                "binarySha256": {
+                  "type": "string"
+                },
+                "binarySize": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "archive",
+                "binarySha256",
+                "binarySize",
+                "sha256",
+                "size",
+                "target"
+              ]
+            }
+          },
+          "channel": {
+            "enum": [
+              "nightly",
+              "stable"
+            ],
+            "type": "string"
+          },
+          "commit": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "protocol": {
+            "type": "object",
+            "properties": {
+              "min": {
+                "type": "number"
+              },
+              "max": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "max",
+              "min"
+            ]
+          },
+          "sessiondProtocol": {
+            "description": "The capability required by this build's agent from its process keeper.",
+            "type": "string"
+          },
+          "testSigned": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "artifacts",
+          "channel",
+          "commit",
+          "notes",
+          "protocol",
+          "sessiondProtocol",
+          "testSigned",
+          "version"
+        ]
+      },
       "WorkflowGraph": {
         "type": "object",
         "properties": {
@@ -11670,6 +12036,9 @@
             ],
             "type": "string"
           },
+          "binaryUpdate": {
+            "$ref": "#/components/schemas/BinaryUpdateState"
+          },
           "browserAvailable": {
             "type": "boolean"
           },
@@ -11737,10 +12106,6 @@
               }
             ]
           },
-          "deploy": {
-            "$ref": "#/components/schemas/DeployInfo",
-            "description": "Where this machine's deployment clone stands against the branch it deploys\nfrom, as its daemon last said (PLAN.md contract C8). Absent from a daemon\nthat predates the deployment channel and from one whose watcher has never\nticked, which a reader must render as *nothing to report* — never as\n\"current\". Live, not history: the hub holds it only for as long as it holds\nthe socket that asserted it."
-          },
           "fleet": {
             "$ref": "#/components/schemas/FleetSyncReport",
             "description": "Last-known fleet-config sync report (NEW.md §11)."
@@ -11782,11 +12147,6 @@
           "os": {
             "type": "string"
           },
-          "restarted": {
-            "description": "True on exactly the one `instances` frame that follows this machine's\ndaemon coming back up because the deploy poller's idle-gated restart\nfired (update.ts's `restartAgentNow`) — never for a manual restart, a\ncrash, or a plain boot. The hub deletes its own record of this the\ninstant it is read, so it never rides a later, unrelated broadcast: a\nreader that was not subscribed for that one frame simply never learns\nabout it, the same as anyone who was not looking at the terminal when it\nhappened. What the dashboard's per-machine toast is keyed on.",
-            "const": true,
-            "type": "boolean"
-          },
           "status": {
             "type": "string"
           },
@@ -11803,6 +12163,74 @@
           "os",
           "status"
         ]
+      },
+      "BinaryUpdateState": {
+        "type": "object",
+        "properties": {
+          "availableVersion": {
+            "type": "string"
+          },
+          "channel": {
+            "enum": [
+              "nightly",
+              "stable"
+            ],
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          },
+          "failedVersion": {
+            "description": "The build that failed to come up and was rolled back; not retried by itself.",
+            "type": "string"
+          },
+          "heldChildren": {
+            "description": "Children the session keeper holds, while it is the reason for waiting.",
+            "type": "number"
+          },
+          "installedVersion": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "phase": {
+            "$ref": "#/components/schemas/BinaryUpdatePhase"
+          },
+          "sessiondVersion": {
+            "description": "The version the session keeper is running; differs while it holds children.",
+            "type": "string"
+          },
+          "unseen": {
+            "description": "True from a finished install until a person has acknowledged it.",
+            "type": "boolean"
+          },
+          "updatedAt": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "channel",
+          "installedVersion",
+          "phase",
+          "unseen",
+          "updatedAt"
+        ]
+      },
+      "BinaryUpdatePhase": {
+        "description": "Where a machine stands. `waiting-sessions` is the session keeper's own\nstate: it holds running children and so keeps its old binary; the count is\n`heldChildren`. A machine whose new agent cannot speak to that keeper is in\nthe same state with `installedVersion` still the old one.",
+        "enum": [
+          "available",
+          "downloading",
+          "failed",
+          "failed-rolled-back",
+          "installed",
+          "installing",
+          "none",
+          "ready",
+          "waiting-sessions"
+        ],
+        "type": "string"
       },
       "BuildInfo": {
         "description": "What a daemon reports about the checkout it was started from.",
@@ -11844,42 +12272,6 @@
           "startedAt",
           "version"
         ]
-      },
-      "DeployInfo": {
-        "type": "object",
-        "properties": {
-          "detail": {
-            "description": "One sentence, exactly what `describeDeploy(state)` said about it.",
-            "type": "string"
-          },
-          "failure": {
-            "description": "What the update flow threw, if it threw.",
-            "type": "string"
-          },
-          "kind": {
-            "$ref": "#/components/schemas/DeployKind",
-            "description": "`diverged` is the one that must survive the trip intact: it means the clone\nrefused to update because a reset would destroy commits nobody else has,\nand a refusal nobody is shown is the same as no refusal at all."
-          },
-          "updated": {
-            "description": "Whether the last poll actually ran the update flow.",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "kind"
-        ]
-      },
-      "DeployKind": {
-        "description": "Where a deployment clone stands, flattened for the wire. The kinds are\n`DeployState['kind']` in packages/agent/src/deploy.ts; the rest of that\nunion's fields are already spoken in {@link DeployInfo.detail}, which is what\n`describeDeploy` produced for this very state.",
-        "enum": [
-          "ahead",
-          "behind",
-          "current",
-          "diverged",
-          "unmarked",
-          "unreachable"
-        ],
-        "type": "string"
       },
       "FleetSyncReport": {
         "description": "A machine's answer to `syncFleetConfig`, and what `agents.fleet` stores:\nevery desired entry, by the same keys the config used.",
@@ -12264,6 +12656,9 @@
             "type": "string"
           },
           "reason": {
+            "type": "string"
+          },
+          "version": {
             "type": "string"
           }
         },
@@ -13536,9 +13931,6 @@
           "machineId",
           "sessionKey"
         ]
-      },
-      "T": {
-        "type": "object"
       },
       "Verb": {
         "description": "The whole agent↔hub↔dashboard protocol. Adding a verb is a design decision.",
