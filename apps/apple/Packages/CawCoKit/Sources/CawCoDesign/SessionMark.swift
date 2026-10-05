@@ -73,6 +73,8 @@ public final class SessionMarkView: UIView {
 
     /// What one row under it is, for the switch's name ("3 delegates").
     public var noun = "delegate"
+    /// Nesting lines carry the disclosure in the rail; a hover arrow is unnecessary there.
+    public var showsNestingChevron = true
 
     /// `tile`: the tile's side where a list sets its own (`--mark-size`); the glyph keeps its size.
     public init(tile: Double = SessionMarkView.tile) {
@@ -258,7 +260,7 @@ public final class SessionMarkView: UIView {
     /// it gives way to: open, the chevron points down at the rows; under a
     /// pointer on the switch it stands in the rest's place.
     private func swap(animated: Bool) {
-        let chevrons = (count > 0 && open) || (over && !hit.isHidden)
+        let chevrons = showsNestingChevron && ((count > 0 && open) || (over && !hit.isHidden))
         let rest: UIView = count > 0 ? number : sprite
         let away: UIView = count > 0 ? sprite : number
         away.alpha = 0

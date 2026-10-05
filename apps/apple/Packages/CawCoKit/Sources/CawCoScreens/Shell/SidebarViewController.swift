@@ -73,7 +73,7 @@ final class SidebarViewController: ObservedViewController {
     private var listPins: [String] = []
     private var listSort: RailPrefs.Sort?
     private var listDelegates: Bool?
-    private var shownNodes: [RailBranch] = []
+    private var shownNodes: [(node: RailBranch, row: SessionRailRow)] = []
     private var blockedCount = 0
     private var liveCount = 0
     private var usageAt: Double?
@@ -83,6 +83,88 @@ final class SidebarViewController: ObservedViewController {
     private var olderOpen = Set<String>()
     private var openTrees = Set<String>()
     private let fold = RailFold()
+    #if DEBUG
+    private var probeClock: CADisplayLink?
+    private var probeStart = CACurrentMediaTime()
+    private var probePass = 0
+    private var probePhase = "open"
+    private var probeData = Data()
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        if inSheet && ProcessInfo.processInfo.arguments.contains("-sidebar-probe") {
+            probeStart = CACurrentMediaTime()
+            probePass += 1
+            probePhase = probePass == 1 ? "first-open" : "reopen"
+            probeClock = CADisplayLink(target: self, selector: #selector(probeFrame))
+            probeClock?.add(to: .main, forMode: .common)
+        }
+    }
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        guard inSheet, probePass == 1, ProcessInfo.processInfo.arguments.contains("-sidebar-probe") else { return }
+        let project = lists.first { $0.project.name == "patapon" }!
+        let block = blocks[project.project.id]!
+        func after(_ seconds: Double, phase: String, _ action: @escaping () -> Void) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + seconds) { [weak self] in self?.probePhase = phase; action() }
+        }
+        after(1, phase: "project-close") { [self] in
+            let y = block.convert(block.bounds, to: column).minY
+            scroll.setContentOffset(CGPoint(x: 0, y: min(y, max(0, scroll.contentSize.height - scroll.bounds.height))), animated: false)
+            projectTapped(block.row)
+        }
+        after(1.4, phase: "project-open") { [self] in projectTapped(block.row) }
+        after(2.5, phase: "project-close-again") { [self] in projectTapped(block.row) }
+        after(3, phase: "project-open-again") { [self] in projectTapped(block.row) }
+        let node = project.recent.first { $0.count > 0 }!
+        after(4, phase: "delegate-open") { [self] in toggleTree(node.row.id, row: sessionRows[rowKey(project.project.id, node.row.id)]!) }
+        after(5.5, phase: "delegate-close") { [self] in toggleTree(node.row.id, row: sessionRows[rowKey(project.project.id, node.row.id)]!) }
+        after(6, phase: "delegate-open-again") { [self] in toggleTree(node.row.id, row: sessionRows[rowKey(project.project.id, node.row.id)]!) }
+        after(6.06, phase: "delegate-reverse-close") { [self] in toggleTree(node.row.id, row: sessionRows[rowKey(project.project.id, node.row.id)]!) }
+        after(6.1, phase: "delegate-reverse-open") { [self] in toggleTree(node.row.id, row: sessionRows[rowKey(project.project.id, node.row.id)]!) }
+        after(7, phase: "dismiss") { [self] in
+            probeClock?.invalidate(); probeClock = nil
+            writeProbe()
+            dismiss(animated: true) { [self] in (host as! ShellController).probeReopenRail() }
+        }
+    }
+    private func writeProbe() {
+        let file = URL.documentsDirectory.appendingPathComponent("sidebar-frames-\(probePass).jsonl")
+        try! probeData.write(to: file)
+        probeData = Data()
+    }
+    @objc private func probeFrame() {
+        let rows = sessionRows.values.filter { row in
+            let frame = row.convert(row.bounds, to: view)
+            return frame.intersects(scroll.frame) && row.window != nil
+        }.map { row -> [String: Any] in
+            let frame = row.convert(row.bounds, to: view)
+            let mark = row.mark.superview!.convert(CGRect(x: row.mark.center.x - row.mark.bounds.width / 2,
+                                                         y: row.mark.center.y - row.mark.bounds.height / 2,
+                                                         width: row.mark.bounds.width, height: row.mark.bounds.height), to: view)
+            return ["id": row.id, "view": String(describing: ObjectIdentifier(row)), "title": row.name.text ?? "", "titleWidth": row.name.bounds.width,
+                    "x": frame.minX, "y": frame.minY, "w": frame.width, "h": frame.height, "shift": row.transform.ty,
+                    "mark": [mark.minX, mark.minY, mark.width, mark.height], "ride": [row.mark.transform.tx, row.mark.transform.ty]]
+        }
+        var lines: [[String: Any]] = []
+        func rails(_ part: UIView) {
+            if let rail = part as? NestRailView {
+                let frame = rail.convert(rail.bounds, to: view)
+                lines.append(["x": frame.minX + rail.railX, "y": frame.minY, "head": rail.head.isFinite ? rail.head : -1,
+                              "children": rail.children.map { [frame.minY + $0.glyphY, frame.minX + $0.armEnd] }])
+            }
+            part.subviews.forEach(rails)
+        }
+        rails(projectsBody)
+        let brand = headerRow.arrangedSubviews.first as! RailRow
+        let icon = brand.content.arrangedSubviews[0].convert(brand.content.arrangedSubviews[0].bounds, to: view)
+        let word = brand.content.arrangedSubviews[1].convert(brand.content.arrangedSubviews[1].bounds, to: view)
+        let data = try! JSONSerialization.data(withJSONObject: ["ms": (CACurrentMediaTime() - probeStart) * 1000, "phase": probePhase, "rows": rows,
+                                                              "lines": lines, "viewport": [view.bounds.width, view.bounds.height], "safeTop": view.safeAreaInsets.top,
+                                                              "header": ["icon": [icon.minX, icon.minY, icon.width, icon.height], "word": [word.minX, word.minY, word.width, word.height]]])
+        probeData.append(data); probeData.append(10)
+        if CACurrentMediaTime() - probeStart > 8 { probeClock?.invalidate(); probeClock = nil; writeProbe() }
+    }
+    #endif
 
     init(hub: HubConnection, home: HomeModel, inSheet: Bool) {
         self.hub = hub
@@ -139,6 +221,7 @@ final class SidebarViewController: ObservedViewController {
             rail.sizeNavRows()
         }
         sizeNavRows()
+        fold.onSettled = { [weak self] in self?.requestRefresh() }
     }
 
     /// `--c-nav-h`: 40 under a fine pointer, 44 under a finger.
@@ -187,11 +270,14 @@ final class SidebarViewController: ObservedViewController {
     private func buildHeader() -> UIView {
         let brand = RailRow(height: nil, leading: 10, trailing: 10, gap: 10)
         navConstraint(brand)
-        let word = KitLabel(TypeScale.typeBody.withWeight(.medium), ink: Palette.foreground)
-        word.text = "CawCo"
+        let word = KitLabel(CawCoBrand.wordmarkRole, ink: Palette.foreground)
+        word.text = "Caw&Co"
+        word.setContentHuggingPriority(.required, for: .horizontal)
+        word.heightAnchor.constraint(equalToConstant: TypeScale.typeBody.lineHeight).isActive = true
         brand.content.addArrangedSubview(RailRow.slot(BrandMark()))
         brand.content.addArrangedSubview(word)
-        brand.accessibilityLabel = "CawCo"
+        brand.content.addArrangedSubview(UIView())
+        brand.accessibilityLabel = "Caw&Co"
         brand.addAction(UIAction { [weak self] _ in self?.host?.go(.fleet) }, for: .primaryActionTriggered)
         assistantButton.addAction(UIAction { [weak self] _ in self?.host?.toggleAssistant() }, for: .primaryActionTriggered)
         startButton.addAction(UIAction { [weak self] _ in self?.host?.startSession(machineId: nil, cwd: nil, projectId: nil) }, for: .primaryActionTriggered)
@@ -447,6 +533,7 @@ final class SidebarViewController: ObservedViewController {
         let began = CFAbsoluteTimeGetCurrent()
         defer { Self.performance.debug("rail derivation \((CFAbsoluteTimeGetCurrent() - began) * 1000) ms") }
         #endif
+        if fold.running { return }
         let fleet = hub.fleet
         if usageAt != home.now || usageRead != fleet.limitsRead || claudeReadings != fleet.claudeLimits || goReadings != fleet.openCodeGoLimits {
             usageAt = home.now
@@ -486,15 +573,17 @@ final class SidebarViewController: ObservedViewController {
             rebuild(lists)
         }
         shownNodes = []
-        func keep(_ nodes: [RailBranch]) {
-            for node in nodes where sessionRows[node.row.id] != nil {
-                shownNodes.append(node)
-                if openTrees.contains(node.row.id) { keep(node.children) }
+        func keep(_ nodes: [RailBranch], project: String) {
+            for node in nodes {
+                if let row = sessionRows[rowKey(project, node.row.id)] {
+                    shownNodes.append((node, row))
+                    if openTrees.contains(node.row.id) { keep(node.children, project: project) }
+                }
             }
         }
-        for list in lists {
-            keep(list.recent)
-            if olderShown(list) { keep(list.older) }
+        for list in lists where !prefs.collapsed(list.project.cwd) {
+            keep(list.recent, project: list.project.id)
+            if olderShown(list) { keep(list.older, project: list.project.id) }
         }
     }
 
@@ -587,7 +676,7 @@ final class SidebarViewController: ObservedViewController {
             block.clearSessions()
             if !prefs.collapsed(list.project.cwd) {
                 let sub = block.sessions
-                for node in list.recent { sub.addArrangedSubview(nodeView(node, rows: &keptRows)) }
+                for node in list.recent { sub.addArrangedSubview(nodeView(node, project: list.project.id, rows: &keptRows)) }
                 if !list.older.isEmpty {
                     let shown = olderShown(list)
                     let more = block.olderRow
@@ -597,7 +686,7 @@ final class SidebarViewController: ObservedViewController {
                     sub.addArrangedSubview(more)
                     if shown {
                         let box = OlderBox()
-                        for node in list.older { box.stack.addArrangedSubview(nodeView(node, rows: &keptRows)) }
+                        for node in list.older { box.stack.addArrangedSubview(nodeView(node, project: list.project.id, rows: &keptRows)) }
                         sub.addArrangedSubview(box)
                     }
                 } else if list.recent.isEmpty {
@@ -618,16 +707,22 @@ final class SidebarViewController: ObservedViewController {
     }
 
     /// A session and, when it is open, the sessions it started on a rail of their own.
-    private func nodeView(_ node: RailBranch, rows: inout [String: SessionRailRow]) -> UIView {
-        let row = sessionRows[node.row.id] ?? SessionRailRow(id: node.row.id)
-        rows[node.row.id] = row
+    private func rowKey(_ project: String, _ id: String) -> String { project + "\u{0}" + id }
+
+    private func nodeView(_ node: RailBranch, project: String, rows: inout [String: SessionRailRow]) -> UIView {
+        let key = rowKey(project, node.row.id)
+        let row = sessionRows[key] ?? SessionRailRow(id: node.row.id)
+        rows[key] = row
+        configure(node, row: row)
         row.onOpen = { [weak self] id in self?.host?.openSession(id) }
-        row.onToggle = { [weak self] id in self?.toggleTree(id) }
+        row.onToggle = { [weak self, weak row] id in
+            if let row { self?.toggleTree(id, row: row) }
+        }
         guard openTrees.contains(node.row.id), !node.children.isEmpty else {
             return row
         }
         let list = NestList()
-        for child in node.children { list.stack.addArrangedSubview(nodeView(child, rows: &rows)) }
+        for child in node.children { list.stack.addArrangedSubview(nodeView(child, project: project, rows: &rows)) }
         let unit = UIStackView(arrangedSubviews: [row, list])
         unit.axis = .vertical
         return unit
@@ -638,8 +733,7 @@ final class SidebarViewController: ObservedViewController {
     /// filled again: a session's pulse redraws its own row and no other.
     private func update(_ lists: [RailProjectList]) {
         let active = host?.activeSessionId
-            for node in shownNodes {
-                guard let row = sessionRows[node.row.id] else { continue }
+             for (node, row) in shownNodes {
                 let at = hub.fleet.lastAt(node.row)
                 let title = hub.fleet.title(node.row)
                 let status = HomeViewController.status(node.row, home: home)
@@ -656,8 +750,9 @@ final class SidebarViewController: ObservedViewController {
                 row.ageHint = hint
                 let print = SessionPrint(view: ObjectIdentifier(row), title: title, status: status, place: place,
                                          age: age, count: count, failed: failed, open: open, front: front, word: word)
-                if sessionPrints[node.row.id] != print {
-                    sessionPrints[node.row.id] = print
+                 let key = ObjectIdentifier(row)
+                 if sessionPrints[key] != print {
+                     sessionPrints[key] = print
                     row.configure(title: title, status: status, word: word, place: place, age: age, count: count, failed: failed, open: open)
                     row.active = front
                 }
@@ -673,6 +768,18 @@ final class SidebarViewController: ObservedViewController {
                 block.configure(name: name, running: running, open: open)
             }
         }
+    }
+
+    /// Content is known before a row enters its stack, including its first frame.
+    private func configure(_ node: RailBranch, row: SessionRailRow) {
+        let at = hub.fleet.lastAt(node.row)
+        let status = HomeViewController.status(node.row, home: home)
+        row.configure(title: hub.fleet.title(node.row), status: status,
+                      word: node.row.status == .stopped ? "Stopped" : status.word,
+                      place: node.row.cwd.isEmpty ? node.row.machineId : node.row.cwd,
+                      age: at == 0 ? "" : RailAge.short(at, now: home.now),
+                      count: node.count, failed: node.failed, open: openTrees.contains(node.row.id))
+        row.active = node.row.id == host?.activeSessionId
     }
 
     /// What each rail row and project block last drew.
@@ -694,7 +801,7 @@ final class SidebarViewController: ObservedViewController {
         let running: Int
         let open: Bool
     }
-    private var sessionPrints: [String: SessionPrint] = [:]
+    private var sessionPrints: [ObjectIdentifier: SessionPrint] = [:]
     private var projectPrints: [String: ProjectPrint] = [:]
     #if DEBUG
     private static let performance = Logger(subsystem: "dev.cawco.app", category: "Rail")
@@ -706,29 +813,44 @@ final class SidebarViewController: ObservedViewController {
         guard let block = blocks.first(where: { $0.value.row === row })?.value else { return }
         let project = block.project
         let shut = !prefs.collapsed(project.cwd)
+        if fold.closingBox === block.sessionsBox {
+            fold.open(block.sessionsBox, glyphs: block.sessionGlyphs(), rail: block.rail, in: view)
+            return
+        }
         if shut {
             fold.close(block.sessionsBox, glyphs: block.sessionGlyphs(), rail: block.rail) { [weak self] in
-                self?.prefs.setCollapsed(project.cwd, true)
-                self?.requestRefresh()
+                guard let self else { return }
+                prefs.setCollapsed(project.cwd, true)
+                block.showSessions(false)
+                drawnShape = shape(of: lists)
+                requestRefresh()
             }
         } else {
+            fold.capture(in: view)
             prefs.setCollapsed(project.cwd, false)
             refreshNow()
             fold.open(block.sessionsBox, glyphs: block.sessionGlyphs(), rail: block.rail, in: view)
         }
     }
 
-    private func toggleTree(_ id: String) {
-        guard let row = sessionRows[id] else { return }
+    private func toggleTree(_ id: String, row: SessionRailRow) {
+        if let list = fold.closingBox as? NestList, list.superview === row.superview {
+            fold.open(list, glyphs: list.glyphs(), rail: list.rail, in: view)
+            return
+        }
         if openTrees.contains(id), let unit = row.superview as? UIStackView, let list = unit.arrangedSubviews.last as? NestList {
             fold.close(list, glyphs: list.glyphs(), rail: list.rail) { [weak self] in
-                self?.openTrees.remove(id)
-                self?.requestRefresh()
+                guard let self else { return }
+                openTrees.remove(id)
+                list.isHidden = true
+                drawnShape = shape(of: lists)
+                requestRefresh()
             }
         } else {
+            fold.capture(in: view)
             openTrees.insert(id)
             refreshNow()
-            if let unit = sessionRows[id]?.superview as? UIStackView, let list = unit.arrangedSubviews.last as? NestList {
+            if let unit = row.superview as? UIStackView, let list = unit.arrangedSubviews.last as? NestList {
                 fold.open(list, glyphs: list.glyphs(), rail: list.rail, in: view)
             }
         }

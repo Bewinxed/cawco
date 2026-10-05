@@ -56,7 +56,8 @@ public struct TypeRole: Sendable {
     /// on a mono run), scaled by Dynamic Type the same way.
     public func font(_ size: Double, weight: UIFont.Weight? = nil) -> UIFont {
         let mono = family.first?.hasPrefix("JetBrains Mono") == true
-        let base = UIFont(descriptor: Self.descriptor(weight: weight ?? self.weight, mono: mono), size: size)
+        let base = UIFont(descriptor: Self.descriptor(weight: weight ?? self.weight, mono: mono,
+                                                      wordmark: family.first?.hasPrefix("Nunito") == true), size: size)
         return UIFontMetrics(forTextStyle: textStyle).scaledFont(for: base)
     }
 
@@ -122,13 +123,14 @@ public struct TypeRole: Sendable {
     }
 
     private static let sans = register("Figtree", family: "Figtree")
+    private static let wordmarkFamily = register("Nunito", family: "Nunito")
     /// JetBrains Mono, the mono stack's first choice; its ligatures (`calt`) off.
     private static let monoFamily = register("JetBrainsMono", family: "JetBrains Mono")
 
-    private static func descriptor(weight: UIFont.Weight, mono: Bool) -> UIFontDescriptor {
+    private static func descriptor(weight: UIFont.Weight, mono: Bool, wordmark: Bool) -> UIFontDescriptor {
         var attributes: [UIFontDescriptor.AttributeName: Any] = [
-            .family: mono ? monoFamily : sans,
-            UIFontDescriptor.AttributeName(rawValue: kCTFontVariationAttribute as String): [weightAxis: axis(weight)],
+            .family: wordmark ? wordmarkFamily : (mono ? monoFamily : sans),
+            UIFontDescriptor.AttributeName(rawValue: kCTFontVariationAttribute as String): [weightAxis: wordmark ? TypeScale.weightWordmark : axis(weight)],
         ]
         if mono {
             attributes[.featureSettings] = [[

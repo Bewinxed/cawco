@@ -42,7 +42,10 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     private let compactCluster = TopBarCluster()
     private let burger = BurgerButton()
     private let sheetTransition = RailSheetTransition()
-    private weak var railSheet: SidebarViewController?
+    private var keptRailSheet: SidebarViewController?
+    private var railSheet: SidebarViewController? {
+        keptRailSheet?.presentingViewController == nil ? nil : keptRailSheet
+    }
     /// Places opened once, kept so coming back finds them as they were left.
     private var pages: [ShellDestination: UIViewController] = [:]
     private var watcher: ShellWatcher!
@@ -172,6 +175,11 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     override func viewIsAppearing(_ animated: Bool) {
         super.viewIsAppearing(animated)
         followWorkspace()
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-sidebar-probe") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 15) { [weak self] in self?.showRailSheet() }
+        }
+        #endif
     }
 
     override func viewDidLayoutSubviews() {
@@ -408,13 +416,24 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     // MARK: Rail
 
     private func showRailSheet() {
-        let sheet = SidebarViewController(hub: hub, home: home, inSheet: true)
-        sheet.host = self
-        sheet.modalPresentationStyle = .custom
-        sheet.transitioningDelegate = sheetTransition
-        railSheet = sheet
+        let sheet: SidebarViewController
+        if let kept = keptRailSheet {
+            sheet = kept
+        } else {
+            sheet = SidebarViewController(hub: hub, home: home, inSheet: true)
+            sheet.host = self
+            sheet.modalPresentationStyle = .custom
+            sheet.transitioningDelegate = sheetTransition
+            keptRailSheet = sheet
+        }
         present(sheet, animated: true)
     }
+
+    #if DEBUG
+    func probeReopenRail() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in self?.showRailSheet() }
+    }
+    #endif
 
     func toggleAssistant() {
         railSheet?.dismiss(animated: true)

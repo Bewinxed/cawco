@@ -59,6 +59,7 @@ class RailRow: TapControl {
         content.spacing = gap
         content.isUserInteractionEnabled = false
         content.translatesAutoresizingMaskIntoConstraints = false
+        layer.zPosition = 2
         addSubview(content)
         NSLayoutConstraint.activate([
             pill.leadingAnchor.constraint(equalTo: leadingAnchor),
@@ -179,6 +180,7 @@ final class GhostIconButton: UIButton {
 final class ProjectMarkView: UIView {
     private let overlay = CAGradientLayer()
     private let glyph = GlyphView(.folder, size: 12, tint: Palette.markGlyph)
+    private let count = KitLabel(TypeScale.typeMeta.with(leading: 1), ink: Palette.markGlyph)
 
     init(cwd: String) {
         super.init(frame: .zero)
@@ -188,11 +190,18 @@ final class ProjectMarkView: UIView {
         clipsToBounds = true
         layer.addSublayer(overlay)
         addSubview(glyph)
+        count.translatesAutoresizingMaskIntoConstraints = false
+        count.textAlignment = .center
+        count.tabular = true
+        count.isHidden = true
+        addSubview(count)
         NSLayoutConstraint.activate([
             widthAnchor.constraint(equalToConstant: 18),
             heightAnchor.constraint(equalToConstant: 18),
             glyph.centerXAnchor.constraint(equalTo: centerXAnchor),
             glyph.centerYAnchor.constraint(equalTo: centerYAnchor),
+            count.centerXAnchor.constraint(equalTo: centerXAnchor),
+            count.centerYAnchor.constraint(equalTo: centerYAnchor),
         ])
         backgroundColor = Self.hue(cwd)
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (view: ProjectMarkView, _: UITraitCollection) in view.paint() }
@@ -206,6 +215,12 @@ final class ProjectMarkView: UIView {
 
     private func paint() {
         overlay.colors = Palette.markOverlay.colors(for: traitCollection)
+    }
+
+    func configure(count total: Int) {
+        count.text = total >= 100 ? "99" : "\(total)"
+        count.isHidden = total == 0
+        glyph.isHidden = total > 0
     }
 
     override func layoutSubviews() {
@@ -227,19 +242,23 @@ final class ProjectMarkView: UIView {
 /// stands in for the reader's picture, his edge drawn 1pt inside the tile in
 /// `--image-outline`.
 final class BrandMark: UIView {
-    private let caw = CawMark(status: .ready, side: 18)
+    private let caw = UIImageView(image: CawCoBrand.icon)
 
     init(round: Bool = false) {
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         backgroundColor = Palette.spark
         layer.cornerRadius = round ? 9 : Radius.radiusXs
-        layer.cornerCurve = round ? .circular : .continuous
+        layer.cornerCurve = .circular
         layer.borderWidth = 1
         // He draws a little past his box; the tile keeps its shape.
         clipsToBounds = true
+        caw.translatesAutoresizingMaskIntoConstraints = false
+        caw.contentMode = .scaleAspectFill
         addSubview(caw)
-        NSLayoutConstraint.activate([widthAnchor.constraint(equalToConstant: 18), heightAnchor.constraint(equalToConstant: 18)])
+        NSLayoutConstraint.activate([widthAnchor.constraint(equalToConstant: 18), heightAnchor.constraint(equalToConstant: 18),
+                                     caw.leadingAnchor.constraint(equalTo: leadingAnchor), caw.trailingAnchor.constraint(equalTo: trailingAnchor),
+                                     caw.topAnchor.constraint(equalTo: topAnchor), caw.bottomAnchor.constraint(equalTo: bottomAnchor)])
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (view: BrandMark, _: UITraitCollection) in view.paint() }
         paint()
     }
@@ -300,16 +319,20 @@ enum RailAge {
 /// is the whole way.
 final class NestRailView: UIView {
     private var elbows: [CAShapeLayer] = []
+    private let cover = CAShapeLayer()
+    var marks: [CGRect] = []
     /// The rail's x in this view, how far above the list the parent's glyph
     /// foot is (`--nest-lead`), and each child's glyph centre and arm end.
     var railX = 0.0
     var lead = 0.0
-    var children: [(glyphY: Double, armEnd: Double)] = [] { didSet { setNeedsLayout() } }
+    var children: [(glyphY: Double, armEnd: Double)] = [] { didSet { draw() } }
     var head = Double.infinity { didSet { cut() } }
 
     override init(frame: CGRect) {
         super.init(frame: frame)
         isUserInteractionEnabled = false
+        cover.fillColor = UIColor.black.cgColor
+        layer.mask = cover
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (view: NestRailView, _: UITraitCollection) in view.draw() }
     }
 
@@ -340,7 +363,8 @@ final class NestRailView: UIView {
         }
         while elbows.count > children.count { elbows.removeLast().removeFromSuperlayer() }
         let r = Radius.radiusSm
-        let x = railX + 0.5
+        let scale = traitCollection.displayScale
+        let x = floor((railX - 0.5) * scale) / scale + 0.5
         let ink = Palette.nestInk.resolvedColor(with: traitCollection).cgColor
         CATransaction.begin()
         CATransaction.setDisableActions(true)
@@ -348,12 +372,22 @@ final class NestRailView: UIView {
             let path = UIBezierPath()
             path.move(to: CGPoint(x: x, y: -lead))
             path.addLine(to: CGPoint(x: x, y: child.glyphY - r))
-            path.addArc(withCenter: CGPoint(x: x + r, y: child.glyphY - r + 0.5), radius: r, startAngle: .pi, endAngle: .pi / 2, clockwise: false)
-            path.addLine(to: CGPoint(x: child.armEnd, y: child.glyphY + 0.5))
+            path.addArc(withCenter: CGPoint(x: x + r, y: child.glyphY - r), radius: r, startAngle: .pi, endAngle: .pi / 2, clockwise: false)
+            path.addLine(to: CGPoint(x: child.armEnd, y: child.glyphY))
             elbow.frame = bounds
             elbow.path = path.cgPath
             elbow.strokeColor = ink
         }
+        // The strokes sit over a row's pill, but under every moving mark.
+        // Boolean subtraction preserves overlapping holes on the common trunk.
+        let top = lead + Size.rowMarkBox
+        cover.frame = CGRect(x: 0, y: -top, width: bounds.width, height: bounds.height + top)
+        var visible = CGPath(rect: CGRect(origin: .zero, size: cover.bounds.size), transform: nil)
+        for mark in marks {
+            let hole = UIBezierPath(roundedRect: mark.offsetBy(dx: 0, dy: top), cornerRadius: Radius.radiusXs).cgPath
+            visible = visible.subtracting(hole)
+        }
+        cover.path = visible
         CATransaction.commit()
         cut()
     }
