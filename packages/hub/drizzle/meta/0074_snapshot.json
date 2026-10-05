@@ -1,12 +1,20 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "61f94b4d-d9de-4150-a943-de493d321cdb",
+  "id": "c4e8c8b4-ff81-42da-9656-b31ec622e355",
   "prevId": "5a9d84d6-dbe3-4a57-9bca-1facfa609b5a",
   "tables": {
     "agents": {
       "name": "agents",
       "columns": {
+        "address_contract": {
+          "name": "address_contract",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
         "machine_capabilities": {
           "name": "machine_capabilities",
           "type": "text",
@@ -911,6 +919,73 @@
     "instances": {
       "name": "instances",
       "columns": {
+        "address_required": {
+          "name": "address_required",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "machine_removed": {
+          "name": "machine_removed",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "scratch_worktree": {
+          "name": "scratch_worktree",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "address_protocol": {
+          "name": "address_protocol",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "end_reason": {
+          "name": "end_reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "end_retry_at": {
+          "name": "end_retry_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "end_attempts": {
+          "name": "end_attempts",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "end_intent": {
+          "name": "end_intent",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "end_confirmed_at": {
+          "name": "end_confirmed_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "keep_alive": {
           "name": "keep_alive",
           "type": "integer",
