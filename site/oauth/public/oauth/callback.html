@@ -1,0 +1,21 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>CawCo sign-in</title>
+<body style="font:16px system-ui;margin:2rem;max-width:32rem">
+<p id="out">Reading the sign-in result…</p>
+<pre id="raw" style="white-space:pre-wrap;word-break:break-all"></pre>
+<script>
+  const q = new URLSearchParams(location.search);
+  const out = document.getElementById("out");
+  const raw = document.getElementById("raw");
+  if (q.get("error")) {
+    out.textContent = "The provider said: " + q.get("error");
+  } else if (q.get("code")) {
+    out.textContent = "Sign-in result received (test page, nothing is forwarded yet).";
+    raw.textContent = "code=" + q.get("code") + "\nstate=" + q.get("state");
+  } else {
+    out.textContent = "No sign-in result in this address.";
+  }
+</script>

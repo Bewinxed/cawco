@@ -1,0 +1,9 @@
+{
+  "client_id": "https://cawco.dev/oauth/client.json",
+  "client_name": "CawCo",
+  "client_uri": "https://cawco.dev",
+  "redirect_uris": ["https://cawco.dev/oauth/callback"],
+  "grant_types": ["authorization_code", "refresh_token"],
+  "response_types": ["code"],
+  "token_endpoint_auth_method": "none"
+}
