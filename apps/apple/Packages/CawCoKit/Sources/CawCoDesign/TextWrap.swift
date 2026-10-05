@@ -204,6 +204,9 @@ struct WrapParagraph {
             let space = unit == 0x20
             // A new item: the chunk's first, a space after a word or a word
             // after a space, or a place inside a word where a line may break.
+            // A line may break before a space and before the word after it:
+            // read in Mobile Safari 27.2 on 5 October 2026, where a sentence
+            // in a 1pt box breaks at every space and nowhere else.
             var parts = run == nil || run?.space != space
             if !parts, !space {
                 let before = string.character(at: offset - 1)
@@ -283,8 +286,9 @@ struct WrapParagraph {
     /// before the hyphen: it parts a word from its number, never a sign from
     /// its figure. This rule is taken from Mobile Safari's own layout, read
     /// on 5 October 2026 in Safari 27.2 (iOS simulator), each string an
-    /// unbroken run in a 120pt box under `text-wrap: wrap`:
-    /// PENDING-READS
+    /// unbroken run in a 120pt box and again in a 1pt box, 12px Figtree,
+    /// `text-wrap: wrap`: "a-1" repeated breaks after every hyphen, and so
+    /// does "1-2" repeated; "(-1" repeated and "=-5" repeated never break.
     private static func hyphenBeforeDigit(_ behind: unichar?) -> Bool {
         guard let behind else { return false }
         return (behind >= 0x30 && behind <= 0x39) || (behind >= 0x41 && behind <= 0x5A) || (behind >= 0x61 && behind <= 0x7A)
