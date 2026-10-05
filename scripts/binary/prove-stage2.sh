@@ -425,11 +425,31 @@ case "$1" in
   remove)
     rm -rf "$dir"
     for d in "$root"/versions/*/; do
-      [ -f "${d}cawco.real" ] && mv -f "${d}cawco.real" "${d}cawco"
-    done
-    true ;;
+      if [ -f "${d}cawco.real" ]; then
+        mv -f "${d}cawco.real" "${d}cawco"
+        restart=1
+      fi
+    done ;;
 esac
 systemctl --user daemon-reload
+# Services started while a stub was in place run from `cawco.real`, a path that is gone now: a running agent
+# could not launch an update helper from it. Restart them (the keeper is not one of them: it runs another build,
+# and the checks end its children before this), then wait until the hub answers and its agent holds the keeper.
+if [ "${restart:-0}" = 1 ]; then
+  systemctl --user restart cawco-hub.service cawco-dashboard.service cawco-agent.service
+  cat > /tmp/agent-custody.ts <<'TS'
+const rows = (await (await fetch("http://127.0.0.1:3456/api/agents")).json()) as { hostname: string; status: string; custody?: { state?: string } }[];
+const row = rows.find((r) => r.hostname === process.env.HOST);
+process.exit(row?.status === "online" && row?.custody?.state === "available" ? 0 : 1);
+TS
+  n=0
+  until curl -fsS --max-time 5 http://127.0.0.1:3456/health > /dev/null 2>&1 &&
+    HOST="$(hostname)" BUN_BE_BUN=1 "$HOME/.local/bin/cawco" /tmp/agent-custody.ts 2> /dev/null; do
+    n=$((n + 1))
+    [ "$n" -lt 60 ] || { echo "after the stub was removed the hub or its agent did not come back"; exit 1; }
+    sleep 2
+  done
+fi
 EOF
 cat > "$out/shared/diagnose-machine.sh" <<'EOF'
 binary="$HOME/.local/share/cawco/binary"
@@ -1088,6 +1108,11 @@ check "a slow keeper stage is not undone by the wrapper while the helper lives" 
 
 agent_cannot_start_whole_recovery() {
   keeper_start_state
+  # Only the commanded update below may move the machine: an automatic one (a newer build published by an
+  # earlier check) is stopped, and any that already began is waited out, before the previous build is read.
+  put_policy nightly false
+  sleep 15
+  wait_until 300 '[[ "$(phase $hid)" != installing ]]'
   local previous
   previous=$(current_link "$hubc")
   # The build's agent verb fails and every other verb works; the stub is put on it the moment the update stages it.
