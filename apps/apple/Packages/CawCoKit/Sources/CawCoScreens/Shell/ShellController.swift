@@ -550,9 +550,9 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
             self?.dismiss(animated: true)
             self?.go(.usage)
         }
-        let sheet = UINavigationController(rootViewController: limits)
-        sheet.sheetPresentationController?.detents = [.medium(), .large()]
-        (railSheet ?? self).present(sheet, animated: true)
+        // The house bottom sheet, as the home's usage bar presents it.
+        limits.loadViewIfNeeded()
+        (railSheet ?? self).present(HouseSheetController(limits, title: "Usage limits", scroller: limits.scroll), animated: true)
     }
 
     /// Native only: point this window at another hub (ConnectViewController's change mode).
