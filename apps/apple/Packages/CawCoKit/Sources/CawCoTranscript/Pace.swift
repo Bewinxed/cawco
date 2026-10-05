@@ -59,6 +59,11 @@ enum Pace {
         CFRunLoopAddObserver(CFRunLoopGetMain(), rest, .commonModes)
     }
 
+    /// The Markdown cache let sources go (BlockCache `sweep`).
+    static func swept(_ session: String, held: Int, dropped: Int) {
+        log.info("block cache of \(session.prefix(8), privacy: .public): \(held) sources held, \(dropped) let go")
+    }
+
     /// Rows built since the last frame was counted.
     private static var built = 0
 

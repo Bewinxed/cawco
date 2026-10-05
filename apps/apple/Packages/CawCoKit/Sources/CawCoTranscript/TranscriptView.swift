@@ -565,7 +565,8 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         // Built when the rows, the landed answers' keys or the fold in hand
         // change; a frame that only moves the tail takes them as they are.
         let stamp = "\(folded?.stamp ?? "")|\(keys.count)|\(folding ?? "")|\(env.agentName)"
-        if settled?.stamp != stamp {
+        let rebuilt = settled?.stamp != stamp
+        if rebuilt {
             var (items, rail) = builder.items(rows)
             var fleet: [Int] = []
             for i in items.indices {
@@ -630,6 +631,13 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         if out.isEmpty {
             out = [transcript.loading ? Item(id: "notice:loading", top: 0, kind: .notice("Loading transcript…"), print: "loading")
                 : Item(id: "notice:empty", top: 0, kind: .empty, print: "empty")]
+        }
+        // The Markdown this build did not draw from is let go (BlockCache
+        // `sweep`): turns that changed, lists that were closed, history that
+        // was compacted away.
+        if rebuilt {
+            let swept = env.cache.sweep()
+            if swept.dropped > 0 { Pace.swept(env.sessionId, held: swept.held, dropped: swept.dropped) }
         }
         return out
     }

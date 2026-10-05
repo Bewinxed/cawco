@@ -161,11 +161,18 @@ final class BlockCache {
         return pieces
     }
 
-    /// Drops what the last build did not ask for (and everything, on a theme or size change).
-    func sweep() {
+    /// Drops what nothing has asked for since the last sweep (and everything,
+    /// on a theme or size change). The transcript sweeps after each build that
+    /// set its settled rows again, so what is held is what its rows, its tail
+    /// and the lists opened inside it drew from since the build before.
+    /// Returns how many sources it held and how many it let go.
+    @discardableResult
+    func sweep() -> (held: Int, dropped: Int) {
+        let before = held.count + split.count
         held = held.filter { used.contains($0.key) }
         split = split.filter { used.contains($0.key) }
         used = []
+        return (held.count + split.count, before - held.count - split.count)
     }
 
     func clear() { held = [:]; split = [:]; used = [] }
