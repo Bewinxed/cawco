@@ -18,6 +18,8 @@ python3 -c 'import pexpect' 2> /dev/null || { echo "python3 with pexpect is need
 for need in cawco-1 cawco-2 cawco-3 keys/test-release-private.pem keys/test-release-public.pem; do
   [[ -e "$bins/$need" ]] || { echo "missing $bins/$need: run build-stage2.ts first" >&2; exit 2; }
 done
+free_gb=$(df -BG --output=avail "$out" | tail -n 1 | tr -dc 0-9)
+(( free_gb >= 15 )) || { echo "only ${free_gb}G is free where $out is; the proof needs 15G (a full disk made podman fail with 'database or disk is full' in an earlier run)" >&2; exit 2; }
 mkdir -p "$out/tmp" "$out/config" "$out/cache" "$out/logs" "$out/release" "$out/shared" "$out/image-host" "$out/image-machine"
 export TMPDIR="$out/tmp" XDG_CONFIG_HOME="$out/config" XDG_CACHE_HOME="$out/cache"
 export REGISTRY_AUTH_FILE="$out/config/auth.json"
@@ -27,7 +29,7 @@ rr="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/cawco-proof-stage2-$$"
 mkdir -p "$rr"
 export P="podman --root $out/storage --runroot $rr --storage-driver vfs"
 export out bins here
-prefix="cawco-binary-stage2-$$"
+export prefix="cawco-binary-stage2-$$"
 export net="$prefix-net" hubc="$prefix-hub" joinerc="$prefix-joiner" releasec="$prefix-release" freshc="$prefix-fresh" hub2c="$prefix-hub2"
 export hub_ip=10.89.77.3 joiner_ip=10.89.77.4 release_ip=10.89.77.2 fresh_ip=10.89.77.5 hub2_ip=10.89.77.6
 # The migration count the hub's database really has: fixtures carry it, or no build would be newer than the data.
@@ -75,14 +77,52 @@ check() {
   timeout --kill-after=10 "$limit" bash -ec "$fn" > "$log" 2>&1 < /dev/null || rc=$?
   if [[ $rc == 0 ]]; then
     echo "$name: PASS"
-  elif [[ $rc == 124 || $rc == 137 ]]; then
+    return
+  fi
+  if [[ $rc == 124 || $rc == 137 ]]; then
     echo "$name: FAIL (timed out after ${limit}s, see $log)"
-    status=1
   else
     echo "$name: FAIL (see $log)"
-    status=1
+  fi
+  status=1
+  timeout --kill-after=10 300 bash -c diagnose >> "$log" 2>&1 < /dev/null || true
+}
+
+# What a failed check appends to its log, for every machine container that exists.
+# The state listing runs in the container from /shared/diagnose-machine.sh (written below).
+diagnose() {
+  local c unit
+  asu() { timeout 30 bash -c 'as_user "$@"' _ "$@" 2>&1; }
+  echo
+  echo "================ diagnostics after the failure ================"
+  echo "host disk: $(df -h --output=avail "$out" | tail -n 1 | tr -d ' ') free where $out is"
+  for c in "$hubc" "$joinerc" "$freshc" "$hub2c"; do
+    $P container exists "$c" 2> /dev/null || continue
+    echo
+    echo "################ $c"
+    echo "---- systemctl --user status 'cawco-*' (first 40 lines)"
+    asu "$c" systemctl --user --no-pager status 'cawco-*' | head -n 40
+    for unit in hub dashboard agent sessiond; do
+      echo "---- journal cawco-$unit.service (last 80)"
+      asu "$c" journalctl --user --no-pager -n 80 -u "cawco-$unit.service"
+    done
+    echo "---- update helper log, installation, trial and migration files"
+    asu "$c" sh /shared/diagnose-machine.sh
+  done
+  if $P container exists "$hubc" 2> /dev/null; then
+    echo
+    echo "---- the hub's /api/binary-updates/machines"
+    asu "$hubc" curl -sS --max-time 10 http://127.0.0.1:3456/api/binary-updates/machines || echo "(the hub did not answer)"
+    echo
   fi
 }
+export -f diagnose
+
+# A check that needs the hub starts here.
+need_hub() {
+  as_user "$hubc" curl -fsS --max-time 10 http://127.0.0.1:3456/health > /dev/null 2>&1 || { echo "the hub is not answering"; return 1; }
+}
+export -f need_hub
 
 # Commands as the unprivileged user, inside a machine container's systemd user session.
 as_user() {
@@ -97,7 +137,7 @@ as_user_tty() {
   as_user "$c" script -qec "$*" /dev/null
 }
 hub_api() { as_user "$hubc" curl -fsS "http://127.0.0.1:3456$1" "${@:2}"; }
-json() { bun -e "const d = JSON.parse(await Bun.stdin.text()); const v = ($1)(d); console.log(v === undefined ? '' : v)"; }
+json() { bun -e "const t = await Bun.stdin.text(); if (!t.trim()) process.exit(0); const d = JSON.parse(t); const v = ($1)(d); console.log(v === undefined ? '' : v)"; }
 machine_id() { hub_api /api/agents | json "d => d.find(a => a.hostname === '$1')?.machineId"; }
 build_version() { hub_api /api/agents | json "d => d.find(a => a.machineId === '$1')?.build?.version"; }
 phase() { hub_api /api/binary-updates/machines | json "d => d.machines['$1']?.phase"; }
@@ -230,6 +270,24 @@ setup "publish the unsigned release" "$out/logs/fixture-nosig.log" publish nosig
 setup "write the broken build" "$out/logs/fixture-broken.log" fixture broken-binary "$out/broken-cawco"
 setup "write the workflow the hub keeps" "$out/logs/fixture-workflow.log" bun -e "await Bun.write('$out/shared/workflow.json', JSON.stringify({name: 'kept-through-rollback', program: 'import { z } from \"zod\"; export const inputs=z.object({name:z.string()}); export default async function(w:Workflow<typeof inputs>){await w.checkpoint(\"binary\",w.inputs);return {name:w.inputs.name};}'}))"
 setup "put the session starter where the machines can read it" "$out/logs/starter.log" cp "$here/stage2-start-session.ts" "$out/shared/stage2-start-session.ts"
+cat > "$out/shared/diagnose-machine.sh" <<'EOF'
+binary="$HOME/.local/share/cawco/binary"
+data="$HOME/.local/share/cawco"
+echo "== apply.log (last 60 lines)"
+tail -n 60 "$binary/apply.log" 2>&1
+cd "$binary" 2> /dev/null || { echo "no $binary"; exit 0; }
+for f in installation.json installation.previous.json update-state.json trial.json trial.recovered apply.lock; do
+  if [ -e "$f" ]; then echo "== $f"; cat "$f"; echo; else echo "== $f: absent"; fi
+done
+echo "== current -> $(readlink current)"
+echo "== versions/"
+ls -la versions
+for m in "$data"/cawco.db.migrating "$data"/cawco.db.migrated-* "$data"/cawco.db.pre-*; do
+  [ -e "$m" ] || continue
+  echo "== $m"
+  case "$m" in *.migrating) cat "$m"; echo ;; *) ls -la "$m" ;; esac
+done
+EOF
 setup "write the migrating build" "$out/logs/fixture-migrates.log" fixture broken-binary "$out/migrating-cawco" migrates
 setup "publish the release whose setup cannot run" "$out/logs/fixture-brokeninstall.log" publish brokeninstall stable 0.0.1-test.1 $sha1111 "$out/broken-cawco" "$key" 10 "$schema"
 
@@ -272,6 +330,7 @@ grep -q "command: sudo apt-get install -y openssl" "$LAST_LOG" \
   || { echo "the installer showed the openssl install command and ran it: FAIL (see $LAST_LOG)"; status=1; }
 
 join_machine() {
+  need_hub
   # The hub's own install.sh, the way the app's Connect a machine hands it out; pexpect types an "n" after each prompt appears.
   as_user "$joinerc" curl -fsS "http://$hub_ip:3456/install.sh" -o /tmp/join.sh
   local rc=0
@@ -315,6 +374,7 @@ check "a bad signature is refused and nothing changes" "refuse badsig 'does not 
 check "a missing signature is refused and nothing changes" "refuse nosig 'could not download'"
 
 rerun() {
+  need_hub
   local before after
   before=$(as_user "$hubc" sh -c 'cat ~/.local/share/cawco/binary/installation.json; readlink ~/.local/share/cawco/binary/current')
   as_user "$hubc" sh /shared/installer.sh | tee /dev/stderr | grep -q "Updates are installed from the CawCo app"
@@ -370,6 +430,7 @@ export -f fails_after_placing
 check "an install that fails after placing files leaves nothing behind" fails_after_placing
 
 moves_to_another_hub() {
+  need_hub
   as_user "$hub2c" sh /shared/installer.sh
   as_user "$hub2c" curl -fsS http://127.0.0.1:3456/health | grep -q '"ok":true'
   as_user "$joinerc" curl -fsS "http://$hub2_ip:3456/install.sh" -o /tmp/hub2.sh
@@ -391,6 +452,7 @@ install_now_request() { hub_api "/api/agents/$1/update" -X POST -H 'content-type
 export -f put_policy learn install_now_request
 
 older_refused() {
+  need_hub
   publish ok stable 0.0.1-test.0 0000000000000000000000000000000000000000 "$bins/cawco-1" "$key" 5 "$schema"
   learn
   put_policy stable true
@@ -408,6 +470,7 @@ export -f older_refused
 check "an older signed build is refused on the automatic path and on Install now" older_refused
 
 waits_when_off() {
+  need_hub
   publish ok stable 0.0.1-test.2 2222222222222222222222222222222222222222 "$bins/cawco-2" "$key" 20 "$schema"
   learn
   put_policy stable false
@@ -420,6 +483,7 @@ export -f waits_when_off
 check "with auto-update off a newer build is reported and waits" waits_when_off
 
 joiner_not_ahead() {
+  need_hub
   # The hub still runs test.1: its release route says so, and the joined machine is offered nothing newer.
   [[ "$(hub_api /api/binary-updates/release | json 'd => d.manifest.version')" == 0.0.1-test.1 ]]
   [[ "$(phase $jid)" == none ]]
@@ -429,6 +493,7 @@ export -f joiner_not_ahead
 check "a joined machine is offered only the build its hub runs" joiner_not_ahead
 
 install_now() {
+  need_hub
   install_now_request "$hid"
   wait_until 300 '[[ "$(build_version $hid)" == 0.0.1-test.2 && "$(phase $hid)" == installed ]]'
   as_user "$hubc" curl -fsS http://127.0.0.1:3456/health | grep -q '"ok":true'
@@ -438,6 +503,7 @@ export -f install_now
 check "Install now applies the newer build" install_now
 
 joiner_follows() {
+  need_hub
   wait_until 120 '[[ "$(phase $jid)" == available && "$(field $jid availableVersion)" == 0.0.1-test.2 ]]'
   [[ "$(build_version $jid)" == 0.0.1-test.1 ]]
 }
@@ -445,6 +511,7 @@ export -f joiner_follows
 check "once the hub runs the newer build its joined machine is offered it" joiner_follows
 
 joiner_starts_held() {
+  need_hub
   rm -f "$out/stop-joiner" "$out/accepted-joiner.txt"
   # Sessions already running on the joined machine before its update begins.
   start_before "$jid" "$joinerc" "$out/joiner-before.txt" joinerpre-1 joinerpre-2
@@ -459,11 +526,12 @@ joiner_starts_held() {
 export -f joiner_starts_held
 check "a session start requested while the joined machine installs runs once afterwards, one child, none lost" joiner_starts_held 1200
 
-joiner_survived() { survived "$joinerc" "$out/joiner-before.txt"; }
+joiner_survived() { need_hub; survived "$joinerc" "$out/joiner-before.txt"; }
 export -f joiner_survived
 check "a session already running on the joined machine before its update is the same process afterwards, re-attached and running" joiner_survived
 
 one_helper() {
+  need_hub
   publish ok stable 0.0.1-test.9 9999999999999999999999999999999999999999 "$out/broken-cawco" "$key" 30 "$schema"
   learn
   put_policy stable false
@@ -479,6 +547,7 @@ export -f one_helper
 check "two Install now requests at once produce one helper" one_helper
 
 rolled_back() {
+  need_hub
   publish ok stable 0.0.1-test.10 1010101010101010101010101010101010101010 "$out/broken-cawco" "$key" 31 "$schema"
   learn
   put_policy stable true
@@ -492,6 +561,7 @@ export -f rolled_back
 check "a build that cannot start is rolled back and the failure is recorded" rolled_back
 
 migration_rolled_back() {
+  need_hub
   # Data the hub holds before the update.
   hub_api /api/workflows -X POST -H 'content-type: application/json' -d @/shared/workflow.json > /dev/null
   hub_api /api/workflows | grep -q kept-through-rollback
@@ -510,6 +580,7 @@ export -f migration_rolled_back
 check "a build with a new migration that fails to start is rolled back and the hub opens its restored database" migration_rolled_back
 
 swap_kill_recover() {
+  need_hub
   local version=$1 sequence=$2 plant=$3
   publish ok stable "$version" "$sequence$sequence$sequence$sequence$sequence$sequence$sequence$sequence" "$out/broken-cawco" "$key" "$sequence" "$schema"
   learn
@@ -533,6 +604,7 @@ check "a helper killed right after the swap of a build that cannot start is reco
 check "a stale migration marker left by a killed hub does not hold a failed build in place" "swap_kill_recover 0.0.1-test.6 34 plant" 1200
 
 channel_change() {
+  need_hub
   publish ok nightly "0.0.1-nightly.3+333333333333" 3333333333333333333333333333333333333333 "$bins/cawco-3" "$key" 40 "$schema"
   put_policy nightly false
   wait_until 120 '[[ "$(field $hid channel)" == nightly && "$(phase $hid)" == available && "$(field $hid availableVersion)" == "0.0.1-nightly.3+333333333333" ]]'
@@ -542,6 +614,7 @@ export -f channel_change
 check "changing the channel takes effect" channel_change
 
 auto_with_held_child() {
+  need_hub
   # A child the session keeper holds, as a running session's process would be.
   spawn_child "$hubc" held
   child=$(child_pids "$hubc" boundary-held)
@@ -562,16 +635,18 @@ export -f auto_with_held_child
 check "with auto-update on the build is applied when the machine is idle" auto_with_held_child
 
 hub_starts_held() {
+  need_hub
   accepted_ran_once "$hid" "$hubc" hubstart "$out/accepted-hub.txt"
 }
 export -f hub_starts_held
 check "a session start requested while the hub's own machine installs runs once afterwards, one child, none lost" hub_starts_held 900
 
-hub_survived() { survived "$hubc" "$out/hub-before.txt"; }
+hub_survived() { need_hub; survived "$hubc" "$out/hub-before.txt"; }
 export -f hub_survived
 check "a session already running on the hub's own machine before its update is the same process afterwards, re-attached and running" hub_survived
 
 held_survives() {
+  need_hub
   read -r child keeper < "$out/held.txt"
   as_user "$hubc" kill -0 "$child"
   [[ "$(keeper_pid "$hubc")" == "$keeper" ]]
@@ -582,6 +657,7 @@ export -f held_survives
 check "a child held by the session keeper survives the update and the keeper is untouched" held_survives
 
 session_during_update() {
+  need_hub
   # The joined machine follows its hub to the new build; sessions are started on it throughout.
   n=0
   until [[ "$(build_version $jid)" == "0.0.1-nightly.3+333333333333" ]]; do
@@ -598,6 +674,7 @@ export -f session_during_update
 check "a session started while an update is installing is still alive afterwards" session_during_update 900
 
 keeper_advances() {
+  need_hub
   read -r child keeper < "$out/held.txt"
   # Every session on the machine ends, so the keeper holds nothing.
   for pid in $(keeper_list "$hubc" | json "d => d.procs.filter(p => p.alive).map(p => p.pid).join(' ')"); do
@@ -610,6 +687,7 @@ export -f keeper_advances
 check "the session keeper advances once it holds nothing" keeper_advances
 
 nightly_to_stable_waits() {
+  need_hub
   publish ok stable 0.0.1-test.2 2222222222222222222222222222222222222222 "$bins/cawco-2" "$key" 25 "$schema"
   put_policy stable true
   wait_until 120 '[[ "$(phase $hid)" == waiting-for-channel && "$(field $hid channel)" == stable ]]'
@@ -622,6 +700,7 @@ export -f nightly_to_stable_waits
 check "changing from nightly to stable waits and installs nothing older" nightly_to_stable_waits
 
 capability_report() {
+  need_hub
   # A tool the machine has, and the report says so with its version.
   $P exec "$hubc" sh -c 'printf "#!/bin/sh\necho git version 2.99.0\n" > /usr/local/bin/git; chmod 755 /usr/local/bin/git'
   as_user "$hubc" systemctl --user restart cawco-agent.service

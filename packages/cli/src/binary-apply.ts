@@ -142,7 +142,8 @@ const startAgain = (ids: readonly ServiceId[], keeper: string) =>
 async function pointCurrentAt(version: string): Promise<void> {
   const temporary = join(binaryRoot(), `current.${process.pid}`);
   await rm(temporary, { force: true });
-  await symlink(versionDirectory(version), temporary);
+  // Relative, as the installer and the service wrapper write it: `versions/<version>` inside the binary root.
+  await symlink(join("versions", version), temporary);
   await rename(temporary, join(binaryRoot(), "current"));
 }
 
