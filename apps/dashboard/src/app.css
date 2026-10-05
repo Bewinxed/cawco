@@ -491,8 +491,8 @@
      hover or selected pill, so no pill ever covers a line.
      Drawn in and out by the fold (motion/branch): one head runs the whole
      line as a list opens, down the rail, round each elbow's corner and out
-     along its arm to the child's glyph without a pause, and runs back the
-     same way as it folds. */
+     along its arm to the child's glyph without a pause; as the list folds
+     the group's one clip shortens it from its foot up to the parent. */
   .kit-nest {
     /* Until measured (the frame it mounts, before paint): valid, so nothing
        built on it (`--nest-pad`) drops a whole declaration and then lands a
@@ -606,9 +606,11 @@
   /* A parent's deck (TreeMark) is the rows folded under it. While they
      are out, from the frame their line sets off (a group just mounted
      waits a moment for it, `data-branch-wait`) to the frame their group
-     unmounts, the deck is away: the children's icons left from it and come
-     back to it (motion/branch). And the parent's mark stands over those
-     icons, which start and end their ride under it. That holds only while
+     starts to fold, the deck is away: the children's icons left from it
+     (motion/branch), and it is back under the mark as the group closes
+     beneath it. Back only as the group unmounted, it appeared two frames
+     after the last of the fold. And the parent's mark stands over those
+     icons, which start their ride under it. That holds only while
      nothing between the mark and the row's own element is a stacking
      context: a row's link that is one (a `translate`, a filter, an opacity
      at rest) keeps the mark's level inside it, and the group, drawn after
@@ -616,7 +618,9 @@
      and stopped at the group, so a child's own mark and deck inside it are
      its own affair. */
   @scope (
-    :is(li, [data-nest-host]):has(> [data-flip-anchor]:not([data-branch-wait]))
+    :is(li, [data-nest-host]):has(
+      > [data-flip-anchor]:not([data-branch-wait], [data-state="closing"])
+    )
   ) to ([data-flip-anchor]) {
     .tree-mark .deck {
       visibility: hidden;
