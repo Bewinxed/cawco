@@ -41,7 +41,7 @@ import { permissionSummary } from "../permission-summary";
 import { projectsFor } from "../projects";
 import { questionsOf } from "../question";
 import { rail } from "../rail.svelte";
-import { topsIn } from "../tree";
+import { hasParent, topsIn } from "../tree";
 import { runHref } from "../workflow-runs";
 import { workflowState } from "../workflow-state.svelte";
 import { choices } from "./choices.svelte";
@@ -458,7 +458,7 @@ const enteredWorking = new Map<string, number>();
 
 /** The rail's delegates switch, kept: work handed off is listed only on request. */
 const listed = (row: InstanceRow): boolean =>
-  rail.delegates || !row.parentInstanceId;
+  rail.delegates || !hasParent(row, (id) => cawco.instanceIndex.byId.has(id));
 
 /* ── The machines ──────────────────────────────────────────────────── */
 

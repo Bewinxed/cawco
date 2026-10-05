@@ -217,6 +217,18 @@ export function tree<T extends TreeRow>(
 }
 
 /**
+ * Whether a row is a delegate of a session that exists: its parent is a row
+ * `held` knows. A delegate whose parent is gone (its transcript deleted, its
+ * row aged off the board) is nobody's delegate, a top-level session, so no
+ * list leaves it out for want of a parent: the one rule for every list that
+ * lists work by its parent (the Delegates switch).
+ */
+export const hasParent = (
+  row: TreeRow,
+  held: (id: string) => boolean
+): boolean => !!row.parentInstanceId && held(row.parentInstanceId);
+
+/**
  * The rows of `rows` that hang from a root the list holds: a top-level row,
  * or a child whose whole chain of parents is in `rows` too. What a list
  * shows when it does not list work other sessions started on its own (the
@@ -224,7 +236,10 @@ export function tree<T extends TreeRow>(
  * parent's tree, folded there with the parent's count; one whose parent
  * the list does not hold is left out, not lifted in as a context chain.
  */
-export function rooted<T extends TreeRow>(rows: T[]): T[] {
+export function rooted<T extends TreeRow>(
+  rows: T[],
+  held: (id: string) => boolean
+): T[] {
   const byId = new Map(rows.map((row) => [row.id, row]));
   const kept = new Map<string, boolean>();
   const keeps = (row: T, seen: Set<string>): boolean => {
@@ -232,7 +247,7 @@ export function rooted<T extends TreeRow>(rows: T[]): T[] {
     if (known !== undefined) {
       return known;
     }
-    const parentId = row.parentInstanceId;
+    const parentId = hasParent(row, held) ? row.parentInstanceId : null;
     const parent = parentId ? byId.get(parentId) : undefined;
     let keep = !parentId;
     if (parent && !seen.has(parent.id)) {

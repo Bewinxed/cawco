@@ -325,7 +325,9 @@
     if (!rail.delegates) {
       for (const [id, { live, resting }] of lists) {
         const kept = new Set(
-          rooted([...live, ...resting]).map((row) => row.id)
+          rooted([...live, ...resting], (parent) =>
+            cawco.instanceIndex.byId.has(parent)
+          ).map((row) => row.id)
         );
         lists.set(id, {
           live: live.filter((row) => kept.has(row.id)),
