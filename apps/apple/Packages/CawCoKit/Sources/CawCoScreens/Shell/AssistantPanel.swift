@@ -339,7 +339,7 @@ final class AssistantPanelView: UIView {
         let session: UIView
         if let row = hub.fleet.rows.first(where: { $0.id == event.instanceId }) {
             let leaf = row.cwd.split(separator: "/").last.map(String.init) ?? row.cwd
-            let button = UIButton(type: .system)
+            let button = KitCutButton(type: .system)
             var config = UIButton.Configuration.plain()
             config.contentInsets = .zero
             config.attributedTitle = AttributedString(row.title ?? leaf, attributes: AttributeContainer(TypeScale.typeMeta.attributes(color: Palette.inkStrong)))
