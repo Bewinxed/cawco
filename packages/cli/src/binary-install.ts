@@ -18,6 +18,7 @@ import {
   type BinaryInstallation,
   binaryRoot,
   installationPath,
+  readInstallation,
   updateStatePath,
   versionDirectory,
   writeJsonAtomic,
@@ -194,4 +195,32 @@ export async function setupBinary(
     await rm(installationPath(), { force: true });
     throw error;
   }
+}
+
+/** Moves an installed machine to another hub: the agent is re-pointed and restarted, no build is installed. */
+export async function rejoinBinary(hubUrl: string): Promise<void> {
+  const installed = await readInstallation();
+  if (!installed) {
+    throw new Error("This machine has no binary installation");
+  }
+  const note = (line: string) =>
+    console.log(line.endsWith("…") ? `${INSTALL_STEP_PREFIX}${line}` : line);
+  await writeJsonAtomic(installationPath(), { ...installed, hubUrl });
+  // The agent's unit names its hub, so the unit is rewritten before the agent restarts.
+  await discoverHub({ hub: hubUrl });
+  process.env[CAWCO_ENV.hubUrl] = hubUrl;
+  const layout = binaryLayout(installed.sessiondVersion);
+  const options = {
+    ids: ["agent"] as const,
+    mode: "prod" as const,
+    follow: false,
+    force: true,
+    whenIdle: false,
+    note,
+    binaryLayout: layout,
+  };
+  await service("install", options);
+  await service("restart", options);
+  await awaitJoined(hubUrl);
+  console.log(`${INSTALL_JOINED}${await machineId()}`);
 }

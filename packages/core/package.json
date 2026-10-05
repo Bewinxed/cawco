@@ -7,6 +7,7 @@
     "./runtime": "./src/runtime.ts",
     "./capabilities": "./src/capabilities.ts",
     "./release-manifest": "./src/release-manifest.ts",
+    "./release-key": "./src/release-key.ts",
     "./binary-updates": "./src/binary-updates.ts",
     "./binary-distribution": "./src/binary-distribution.ts",
     "./binary-health": "./src/binary-health.ts",

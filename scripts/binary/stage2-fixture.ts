@@ -108,12 +108,10 @@ if (verb === "keys") {
   ];
   await rm(staging, { recursive: true, force: true });
   if (fault === "tamper") {
-    // The archive no longer matches what the signed manifest names.
-    const file = Bun.file(join(directory, archive));
-    await Bun.write(
-      join(directory, archive),
-      new Blob([await file.bytes(), "tampered"])
-    );
+    // The archive no longer matches what the signed manifest names, at the same size.
+    const bytes = await Bun.file(join(directory, archive)).bytes();
+    bytes[bytes.length - 1] = ((bytes.at(-1) ?? 0) + 1) % 256;
+    await Bun.write(join(directory, archive), bytes);
   }
   const signingKey =
     fault === "bad-signature"

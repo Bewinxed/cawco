@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-import { CONFIG_PATH, readConfig } from "@cawco/agent";
+import { CONFIG_PATH, readConfig, toHttpBase } from "@cawco/agent";
 import type { AgentRow, AuthState } from "@cawco/core";
 import {
   CAWCO_ENV,
@@ -513,6 +513,14 @@ const run = async (argv: string[]): Promise<number> => {
       return runBinaryInstall(args);
     case "binary-apply":
       return runBinaryApply(args);
+    case "binary-rejoin": {
+      if (!args.hub) {
+        throw new UsageError("binary-rejoin needs --hub <url>");
+      }
+      const { rejoinBinary } = await import("./binary-install");
+      await rejoinBinary(toHttpBase(args.hub) ?? args.hub);
+      return 0;
+    }
     case "build-info":
       console.log(
         JSON.stringify({

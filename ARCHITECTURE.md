@@ -284,9 +284,10 @@ the system only make sense once it is: the hub's `/ws` accepts a `register` for 
 `machineId` and relays any `control` verb without a token
 (`packages/hub/src/registry.ts`, `packages/hub/src/server.ts` `case 'register'`); sessiond's
 unix socket authorizes by filesystem permission alone — `0600` inside a `0700` directory,
-which is the whole of design §9 (`packages/sessiond/src/server.ts:151-166`); and the deploy
-poller executes whatever is on `origin/main` (`packages/agent/src/deploy.ts`,
-`packages/agent/src/update.ts`). Anyone who can open a socket to the hub can already spawn a
+which is the whole of design §9 (`packages/sessiond/src/server.ts:151-166`); and anyone who
+can reach the hub's API can change the fleet's update setting or press Install now on a
+machine (`packages/hub/src/binary-updates.ts`), which installs only a build signed with the
+release key. Anyone who can open a socket to the hub can already spawn a
 session with an arbitrary `cwd`, which is arbitrary code execution as the operator. No
 in-band control adds capability beyond that, so adding tokens *inside* the perimeter would
 be ceremony; keeping the perimeter closed is the actual control.
@@ -295,15 +296,13 @@ What follows from that, concretely, and what must stay true:
 
 - **The hub must not be bound to a public interface or port-forwarded.** Everything else in
   this section assumes it is not.
-- **`origin` is pinned.** The poller reads its remote and branch from the `.cawco-deploy`
-  marker (`0600`, written by `cawco deploy init`) and never from the wire; the fast-forward
-  is `git pull --ff-only origin <branch>` with both named explicitly
-  (`packages/agent/src/update.ts` `pullArgs`), and a diverged clone is refused rather than
-  reset (`deploy.ts` `DeployState.diverged`, `update.ts` `deployUpdate`). Push access to
-  `origin/main` is therefore equivalent to root on every machine in the fleet — that is the
-  operator's deliberate choice ("push to main IS the fleet deploy"), and it is the reason
-  the marker is the only thing that licenses a pull: an unmarked checkout does not even
-  fetch (`deploy.ts` `checkDeploy`, which returns `unmarked` before any git command runs).
+- **Updates are signed.** A machine installs only a build whose manifest verifies against
+  the release key embedded in its binary (`packages/core/src/release-manifest.ts`), whose
+  sequence is above the running one, and — for every machine but the hub's own — that is the
+  build its hub runs (`packages/agent/src/binary-update.ts`). Whoever holds the private
+  release key can run code on every machine that follows the release channel; keeping that
+  key out of the repository (`CAWCO_RELEASE_SIGNING_KEY` in an ignored `.env`) is the
+  control. A machine that runs a hub's install script trusts that hub.
 - **The preview is same-origin with the dashboard.** A page an agent wrote is
   served through the dashboard's own origin at `/preview/<id>/`, not on a second
   port or hostname. The tailnet/Access perimeter is the control: anything that

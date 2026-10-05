@@ -4,8 +4,8 @@
  * operator.
  *
  * The hub never connects out on its own. A machine joins by running
- * `/install.sh`, which installs Bun if needed, clones CawCo and ends in
- * `cawco binary-install agent`; an SSH add is the same script started over `ssh` from here.
+ * `/install.sh`, which installs the signed binary release of this hub's
+ * channel and ends in `cawco binary-install agent`; an SSH add is the same script started over `ssh` from here.
  * The hub API has no auth in front of it (anyone who reaches it can already
  * spawn a session), so this adds no trust boundary — but nothing the operator
  * types reaches a shell: the target is one argv entry for `ssh`, and the hub
@@ -26,6 +26,7 @@ import {
 import { RELEASE_REPOSITORY } from "@cawco/core/binary-distribution";
 import { readInstallation } from "@cawco/core/binary-installation";
 import { generateInstallScript } from "@cawco/core/install-script";
+import { RELEASE_PUBLIC_KEY } from "@cawco/core/release-key";
 import { Elysia, t } from "elysia";
 import { HUB_PORT } from "./config";
 
@@ -291,6 +292,12 @@ export const joinRoutes = ({ online }: JoinDeps) => {
       const host = request.headers.get("host");
       if (!(host && HOST_HEADER.test(host))) {
         return status(400, "The request has no usable Host header.");
+      }
+      if (!RELEASE_PUBLIC_KEY) {
+        return status(
+          503,
+          "This hub's build cannot install machines yet: it carries no release key to check a download against, so it would hand out an installer that verifies nothing. Install a released build of CawCo on this hub to enable it."
+        );
       }
       const installation = await readInstallation();
       set.headers["content-type"] = "text/x-shellscript; charset=utf-8";

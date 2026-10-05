@@ -161,8 +161,7 @@ them (the editor cannot import `.riv` files). From `assets/mascot/scripts` (`bun
   `assets/mascot/loops/`, and the same bytes to each app's copies:
   `apps/apple/Packages/CawCoKit/Sources/CawCoMascot/Resources/caw/`, which `CawView` loads, and
   `apps/dashboard/src/lib/assets/caw/`, which the dashboard's `Caw.svelte` loads. Each app keeps
-  its own copy because a deploy rebuilds a service only when its own directories change
-  (`changedServices` in `packages/agent/src/update.ts`). It removes any other `.riv` in those
+  its own copy because each app is built from its own directories. It removes any other `.riv` in those
   folders. rive-mcp-server's exported `buildScene` and
   `writeRiv` write each scene; rive-mcp-server has no view-model authoring, so `build.mjs`
   inserts those objects into its object list before writing, in the shapes Rive's own exports use
