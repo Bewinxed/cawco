@@ -315,6 +315,7 @@
      composer with the keyboard should move focus too. -->
 <section
   class="leaf"
+  data-leaf={leaf.id}
   onfocusincapture={() => workspace.focus(leaf.id)}
   onpointerdowncapture={() => workspace.focus(leaf.id)}
   class:leaf-focused={isFocusedLeaf}

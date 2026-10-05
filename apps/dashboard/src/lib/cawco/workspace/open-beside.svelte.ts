@@ -8,6 +8,7 @@
  * (`dragSession`), and `split` refuses at the layout's group limit or when
  * it would split a group against its only tab.
  */
+import { tick } from "svelte";
 import { MediaQuery } from "svelte/reactivity";
 import { workingSet } from "../working-set.svelte";
 import { layoutPolicy } from "./layout-policy.svelte";
@@ -19,6 +20,31 @@ interface Context {
   cwd?: string;
   harness?: string;
   machine?: string | null;
+}
+
+/**
+ * The group the item put in front, waiting for the menu to finish closing:
+ * a menu hands focus back to its trigger as it closes, which would take it
+ * from the pane the item just opened. `focusAfterMenu` is the menu's
+ * `onCloseAutoFocus`: it keeps the trigger from taking it and puts it in the
+ * group's composer, where typing goes.
+ */
+let focusGroup: string | null = null;
+
+export function focusAfterMenu(event: Event): void {
+  const leafId = focusGroup;
+  if (leafId === null) {
+    return;
+  }
+  focusGroup = null;
+  event.preventDefault();
+  tick().then(() => {
+    document
+      .querySelector<HTMLElement>(
+        `[data-leaf="${leafId}"] textarea[aria-label="Message the agent"]`
+      )
+      ?.focus();
+  });
 }
 
 /** Whether the menu offers the item for this session right now. */
@@ -48,6 +74,7 @@ export function openBeside(sessionId: string, ctx?: Context | null): void {
   const held = workspace.leafOf(sessionId);
   if (held && held.id !== workspace.focusedLeafId) {
     workspace.activate(sessionId, held.id);
+    focusGroup = held.id;
     return;
   }
   // As a drag from the board records it, before the session lands.
@@ -55,4 +82,5 @@ export function openBeside(sessionId: string, ctx?: Context | null): void {
     workingSet.visit(sessionId, ctx);
   }
   workspace.split(workspace.focusedLeafId, "right", sessionId);
+  focusGroup = workspace.focusedLeafId;
 }

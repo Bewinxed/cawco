@@ -32,7 +32,11 @@
   import { continueInNewSession } from "./continue.svelte";
   import { conversationHref, instanceForSession, sessionTitle } from "./links";
   import RenameDialog from "./RenameDialog.svelte";
-  import { canOpenBeside, openBeside } from "./workspace/open-beside.svelte";
+  import {
+    canOpenBeside,
+    focusAfterMenu,
+    openBeside,
+  } from "./workspace/open-beside.svelte";
 
   let {
     machineId,
@@ -136,7 +140,7 @@
     <div {...props}>{@render children()}</div>
   {/snippet}
 
-  <ContextMenu.Content>
+  <ContextMenu.Content onCloseAutoFocus={focusAfterMenu}>
     <ContextMenu.Item onSelect={() => goto(href)}>
       <IconExternal />
       Open

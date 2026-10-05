@@ -40,11 +40,21 @@
   } from "./client.svelte";
   import { confirm } from "./confirm.svelte";
   import { continueInNewSession } from "./continue.svelte";
-  import { archivedRow, unarchive } from "./home/home-state.svelte";
+  import {
+    archive,
+    archivedRow,
+    endedUnseen,
+    home,
+    unarchive,
+  } from "./home/home-state.svelte";
   import { conversationHref } from "./links";
   import RenameDialog from "./RenameDialog.svelte";
   import { sessionName } from "./session-name";
-  import { canOpenBeside, openBeside } from "./workspace/open-beside.svelte";
+  import {
+    canOpenBeside,
+    focusAfterMenu,
+    openBeside,
+  } from "./workspace/open-beside.svelte";
 
   interface Props {
     /** The row, spreading the trigger's props on its root element. */
@@ -173,7 +183,7 @@
     {@render children(props)}
   {/snippet}
 
-  <ContextMenu.Content>
+  <ContextMenu.Content onCloseAutoFocus={focusAfterMenu}>
     <ContextMenu.Item onSelect={() => goto(href)}>
       <IconExternal />
       Open
@@ -219,6 +229,12 @@
       <ContextMenu.Item onSelect={() => unarchive([instance])}>
         <IconUnarchive />
         Unarchive
+      </ContextMenu.Item>
+    {:else if endedUnseen(instance) && home.archivable(instance)}
+      <!-- Ended and listed in Finished, wherever this row is drawn. -->
+      <ContextMenu.Item onSelect={() => archive(home.treeOf(instance.id))}>
+        <IconArchive />
+        Archive
       </ContextMenu.Item>
     {/if}
     <ContextMenu.Item
