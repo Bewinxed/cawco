@@ -1,6 +1,7 @@
 import CawCoCore
 import CawCoDesign
 import CawCoMascot
+import OSLog
 import UIKit
 
 /// The home (home/Home.svelte, its phone page): a status line, a headline,
@@ -106,6 +107,9 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
     private var heldInset = 0.0
     /// The landed list's rows flying in.
     private let flight = Frames()
+    #if DEBUG
+    private static let swipeLog = Logger(subsystem: "dev.cawco.app", category: "HomeTabs")
+    #endif
 
     /// Where the home stands (Home.svelte `variant`): the page, or the rail's own copy.
     enum Variant {
@@ -1133,6 +1137,9 @@ extension HomeViewController: TabSwipeHost {
         // The other tab's list, laid out where this one stands.
         let resting = collectionView.contentOffset
         home.tab = to
+        #if DEBUG
+        Self.swipeLog.debug("model tab preview \(from.rawValue, privacy: .public) -> \(to.rawValue, privacy: .public)")
+        #endif
         commit(build(), animated: false)
         collectionView.layoutIfNeeded()
         hold(resting)
@@ -1185,6 +1192,9 @@ extension HomeViewController: TabSwipeHost {
         guard let swiping else {
             return
         }
+        #if DEBUG
+        Self.swipeLog.debug("model tab landed \(swiping.to.rawValue, privacy: .public)")
+        #endif
         tabsCell?.scrub(from: swiping.from, to: swiping.to, progress: 1)
         if UIAccessibility.isReduceMotionEnabled, let cover {
             // Less motion: the old list cross-fades into the new, nothing travels.
@@ -1214,6 +1224,9 @@ extension HomeViewController: TabSwipeHost {
             return
         }
         home.tab = swiping.from
+        #if DEBUG
+        Self.swipeLog.debug("model tab returned \(swiping.from.rawValue, privacy: .public)")
+        #endif
         commit(build(), animated: false)
         collectionView.layoutIfNeeded()
         tabsCell?.scrub(from: swiping.from, to: swiping.to, progress: 0)

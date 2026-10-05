@@ -1,4 +1,5 @@
 import UIKit
+import OSLog
 
 /// What a tab swipe moves: the host owns its panes and its tabs, the swipe
 /// owns the finger and the settle.
@@ -66,6 +67,14 @@ public final class TabSwipe: NSObject, UIGestureRecognizerDelegate {
     private var offset = 0.0
     private var base = 0.0
     private var past = false
+    #if DEBUG
+    private var traceId = 0
+    private let traceHost: String
+    private static let traceLog = Logger(subsystem: "dev.cawco.app", category: "TabSwipe")
+    private func trace(_ phase: String, target: Double? = nil, velocity: Double? = nil) {
+        Self.traceLog.debug("swipe \(self.traceId) \(self.traceHost, privacy: .public) \(phase, privacy: .public) offset=\(self.offset) side=\(self.side) width=\(self.width) target=\(target ?? .nan) velocity=\(velocity ?? .nan)")
+    }
+    #endif
 
     /// The panes are off their rest: under a finger or settling.
     public var active: Bool { side != 0 || animator != nil }
@@ -73,6 +82,9 @@ public final class TabSwipe: NSObject, UIGestureRecognizerDelegate {
     public init(host: TabSwipeHost, in view: UIView) {
         self.host = host
         self.view = view
+        #if DEBUG
+        traceHost = String(reflecting: type(of: host))
+        #endif
         super.init()
         probe.isUserInteractionEnabled = false
         probe.alpha = 0
@@ -110,6 +122,10 @@ public final class TabSwipe: NSObject, UIGestureRecognizerDelegate {
         }
         switch pan.state {
         case .began:
+            #if DEBUG
+            traceId += 1
+            trace("began")
+            #endif
             hold()
             base = offset
             tick.prepare()
@@ -148,6 +164,9 @@ public final class TabSwipe: NSObject, UIGestureRecognizerDelegate {
             tick.prepare()
         }
         host.swipeDraw(offset: offset, side: side, progress: progress)
+        #if DEBUG
+        trace("drag")
+        #endif
     }
 
     private var progress: Double {
@@ -177,6 +196,9 @@ public final class TabSwipe: NSObject, UIGestureRecognizerDelegate {
     /// A tap on a tab while the panes are off rest: settles on `side` (0:
     /// the current tab) from wherever the panes are, never restarting.
     public func retarget(_ side: Int) {
+        #if DEBUG
+        trace("retarget", target: Double(-side) * width)
+        #endif
         guard active else {
             return
         }
@@ -191,6 +213,9 @@ public final class TabSwipe: NSObject, UIGestureRecognizerDelegate {
 
     private func open(_ side: Int) {
         self.side = side
+        #if DEBUG
+        trace("open")
+        #endif
         host?.swipeOpen(side)
         past = false
         scrubber(at: 0)
@@ -215,6 +240,9 @@ public final class TabSwipe: NSObject, UIGestureRecognizerDelegate {
     /// Stops a settle in flight where it is drawn, and hands the panes back
     /// to a paused scrubber there.
     private func hold() {
+        #if DEBUG
+        trace("hold")
+        #endif
         guard let animator, animator.isRunning else {
             return
         }
@@ -233,6 +261,9 @@ public final class TabSwipe: NSObject, UIGestureRecognizerDelegate {
     private func settle(lands: Bool, velocity: Double) {
         let target = lands ? Double(-side) * width : 0
         let distance = target - offset
+        #if DEBUG
+        trace("release", target: target, velocity: velocity)
+        #endif
         guard abs(distance) >= 0.5 else {
             // Already where it would settle: a spring over no distance has no path.
             animator?.stopAnimation(true)
@@ -260,6 +291,9 @@ public final class TabSwipe: NSObject, UIGestureRecognizerDelegate {
     }
 
     private func landed(on lands: Bool) {
+        #if DEBUG
+        trace(lands ? "landed" : "returned")
+        #endif
         stopLink()
         animator = nil
         let side = side
@@ -292,6 +326,9 @@ public final class TabSwipe: NSObject, UIGestureRecognizerDelegate {
         }
         offset = x
         host?.swipeDraw(offset: offset, side: side, progress: progress)
+        #if DEBUG
+        trace("settle")
+        #endif
     }
 
     // MARK: UIGestureRecognizerDelegate
