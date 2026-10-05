@@ -3039,7 +3039,7 @@ function restoreComposer(
 export function canWithdraw(message: Message): boolean {
   return (
     message.state === "pending" &&
-    session(message.instanceId).harness === "claude"
+    state.sessions[message.instanceId]?.harness === "claude"
   );
 }
 
@@ -3078,7 +3078,10 @@ export function userTurnActions(message: Message): {
   fork: boolean;
   retry: boolean;
 } {
-  const target = session(message.instanceId);
+  const target = state.sessions[message.instanceId];
+  if (!target || message.type !== "user") {
+    return { edit: null, fork: false, retry: false };
+  }
   const machine = cawco.machines.find(
     (entry) => entry.machineId === target.machineId
   );
