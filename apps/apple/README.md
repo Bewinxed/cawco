@@ -45,3 +45,29 @@ on the newest iPhone Pro simulator whose runtime meets the deployment target
 
 The `.xcodeproj` and `CawCo/Info.plist` come from `project.yml`; change that
 file and regenerate.
+
+## TestFlight
+
+From the repository on obelisk:
+
+```sh
+bash apps/apple/scripts/testflight.sh          # clean origin/main archive, upload and internal distribution
+bash apps/apple/scripts/testflight.sh --status # IN_BETA_GROUP <version> (<build>) or exit 1 with what is missing
+bash apps/apple/scripts/build-both.sh both --compile-only
+```
+
+The upload owns `~/build/cawco-testflight` on the Mac and waits for other
+tracks' quiet windows. Build numbers come from App Store Connect: `yyyymmdd`,
+then `.2`, `.3`, and so on. Every upload waits for `VALID`, sets What to Test,
+attaches the build to CawCo's Internal group and verifies group membership.
+The owner is the existing tester in Anbar's Internal group; Anbar is read only.
+
+Team: `FN5LJSPX2R`. Bundle resource: `BS3NP7UWF9` (`dev.cawco.app`).
+Profile: `CawCo App Store 20261005` (`KGL5Q5DZ6A`). The app record and internal
+group IDs are recorded here once created.
+
+Signing is manual for Release on the device SDK only. Credentials stay on the
+Mac: the existing `~/asc.py` and `~/.appstoreconnect/anbar.env` supply API
+access; the existing `anbar-ci.keychain-db` is unlocked using the mode 600
+`~/.appstoreconnect/ci-keychain` file in the same invocation that signs.
+The scripts never create certificates or modify keychain configuration.

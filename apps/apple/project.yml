@@ -30,6 +30,7 @@ targets:
         products: [CawCoAPI, CawCoCore, CawCoDesign, CawCoTranscript, CawCoMascot, CawCoScreens]
     settings:
       base:
+        DEVELOPMENT_TEAM: FN5LJSPX2R
         PRODUCT_BUNDLE_IDENTIFIER: dev.cawco.app
         PRODUCT_NAME: CawCo
         # iPhone, iPad, and the Mac idiom: Catalyst "Optimize for Mac".
@@ -49,10 +50,16 @@ targets:
         ENABLE_APP_SANDBOX: YES
         ENABLE_OUTGOING_NETWORK_CONNECTIONS: YES
         ENABLE_HARDENED_RUNTIME: YES
+      configs:
+        Release:
+          "CODE_SIGN_STYLE[sdk=iphoneos*]": Manual
+          "CODE_SIGN_IDENTITY[sdk=iphoneos*]": Apple Distribution
+          "PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*]": CawCo App Store 20261005
     info:
       path: CawCo/Info.plist
       properties:
         CFBundleDisplayName: CawCo
+        ITSAppUsesNonExemptEncryption: false
         NSUserActivityTypes: [dev.cawco.session, dev.cawco.scene]
         UILaunchScreen: {}
         # Scene life cycle (required from the 27 SDKs): every window is a
