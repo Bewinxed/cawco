@@ -48,6 +48,32 @@ public final class SessionsStore {
 
     init(hub: HubConnection) { self.hub = hub }
 
+    /// A session's error lines that are this client's own (client.svelte.ts
+    /// `notes`): kept apart from what the hub built, and put back under it
+    /// after every page read. Gone when the app is, as the web's are on reload.
+    @ObservationIgnored private var notes: [String: [Components.Schemas.TranscriptBlock]] = [:]
+
+    /// What the hub or a machine answered to an action this client asked of a
+    /// session and could not carry out (client.svelte.ts `addNote(target,
+    /// errorMessage(instanceId, message))`): an error line in that session's
+    /// transcript, after what it holds now.
+    public func noteError(_ id: String, _ text: String) {
+        let fields: [String: Any] = [
+            "id": "local:\(UUID().uuidString.lowercased())", "instanceId": id, "type": "ui.error", "content": text,
+            "timestamp": ISO8601DateFormatter().string(from: Date()),
+        ]
+        guard let data = try? JSONSerialization.data(withJSONObject: fields),
+              let block = try? Wire.decoder().decode(Components.Schemas.TranscriptBlock.self, from: data)
+        else {
+            log.error("could not note an error on \(id, privacy: .public): \(text, privacy: .public)")
+            return
+        }
+        notes[id, default: []].append(block)
+        guard let transcript = transcripts[id] else { return }
+        transcript.blocks.append(block)
+        transcript.blockRevision += 1
+    }
+
     public func open(_ id: String) -> SessionTranscript {
         watches[id, default: 0] += 1
         if let existing = transcripts[id] { return existing }
@@ -127,7 +153,8 @@ public final class SessionsStore {
                 case .unprocessableContent: throw Fault(ReadFault(reason: .failed, machineId: nil, message: "The hub refused the read"))
                 }
                 guard !Task.isCancelled else { return }
-                transcript.blocks = page.blocks
+                // What this client was told about its own actions stays under what the hub holds.
+                transcript.blocks = page.blocks + (notes[id] ?? [])
                 transcript.branches = page.branches
                 transcript.queued = page.queued ?? []
                 transcript.tail = page.tail
