@@ -5810,8 +5810,8 @@ export const createServer = (
    * definition saved here is delegatable out there without anything being
    * restarted.
    *
-   * Unconditional: a definition is a page of markdown, and deciding whether to
-   * write it would cost the read that the write itself costs.
+   * Every reconnect resends definitions without an extra read round-trip. The
+   * daemon skips identical bytes locally before writing or invalidating cache.
    *
    * Phase B: `syncFleetConfig` gets the agents and the daemon owns convergence
    * — and with it removal, which a verb of list/read/write cannot do.

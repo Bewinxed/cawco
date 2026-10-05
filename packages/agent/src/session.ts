@@ -74,12 +74,7 @@ import { isMachineAgent } from "./machine-agent";
 import { prepareFleetMcp } from "./mcp-launcher";
 import { startPreview, stopPreview, stopPreviews } from "./preview";
 import { parseProcId, SESSION_PROC_KINDS } from "./proc-id";
-import {
-  type PromptWriteNotice,
-  promptWrite,
-  promptWriteReason,
-  withPromptWrites,
-} from "./prompt-writes";
+import { type PromptWriteNotice, withPromptWrites } from "./prompt-writes";
 import { acknowledgeSessionCredential } from "./session-identity";
 import { endProc, procEpoch, SessiondClient } from "./sessiond-client";
 import { readHeldProcesses } from "./sessiond-custody";
@@ -2417,15 +2412,9 @@ export class SessionSupervisor {
         kind: "control_result",
         requestId,
         ok: true,
-        result: await withPromptWrites(this.#observePromptWrite, async () => {
-          const reason =
-            payload.op === "write"
-              ? promptWriteReason(expandHome(payload.path))
-              : undefined;
-          return reason
-            ? await promptWrite(reason, () => runFs(payload))
-            : await runFs(payload);
-        }),
+        result: await withPromptWrites(this.#observePromptWrite, () =>
+          runFs(payload)
+        ),
       });
     } catch (error) {
       this.sink({

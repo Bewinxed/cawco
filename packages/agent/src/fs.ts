@@ -8,6 +8,7 @@ import { lstat, readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { extname, join, resolve } from "node:path";
 import type { FsEntry, FsImage, FsPayload } from "@cawco/core";
+import { promptWrite, promptWriteReason } from "./prompt-writes";
 
 /**
  * `~` is the shell's, not a path: anything handed a literal `~` — a spawn's
@@ -127,6 +128,24 @@ const image = async (path: string): Promise<FsImage> => {
   };
 };
 
+/** Reconnect sync resends definitions; identical bytes neither write nor invalidate. */
+const write = async (
+  path: string,
+  content: string
+): Promise<{ bytes: number }> => {
+  const next = Buffer.from(content);
+  const file = Bun.file(path);
+  if (
+    (await file.exists()) &&
+    Buffer.from(await file.arrayBuffer()).equals(next)
+  ) {
+    return { bytes: next.byteLength };
+  }
+  const reason = promptWriteReason(path);
+  const mutate = async () => ({ bytes: await Bun.write(path, next) });
+  return reason ? await promptWrite(reason, mutate) : await mutate();
+};
+
 export const runFs = async ({
   op,
   path,
@@ -139,7 +158,7 @@ export const runFs = async ({
     case "read":
       return await read(target);
     case "write":
-      return { bytes: await Bun.write(target, content ?? "") };
+      return await write(target, content ?? "");
     case "image":
       return await image(target);
     default:
