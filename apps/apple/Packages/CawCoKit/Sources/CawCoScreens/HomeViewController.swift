@@ -150,6 +150,9 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
         collectionView.backgroundColor = variant.ground
         collectionView.delegate = self
         collectionView.keyboardDismissMode = .onDrag
+        // In the rail the home is as tall as what it holds and the whole rail
+        // is the one scroller (Home.svelte `.home.rail`): its list never scrolls.
+        collectionView.isScrollEnabled = variant == .page
         view.addSubview(collectionView)
         // The list ends at the view's foot, or at a docked keyboard's top while it
         // is up: the search field and its results stay above it and scroll to the
