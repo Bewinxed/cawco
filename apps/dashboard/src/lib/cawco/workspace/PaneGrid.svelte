@@ -18,15 +18,12 @@
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Resizable from "#lib/components/ui/resizable/index.js";
   import { IsCoarsePointer } from "#lib/hooks/is-mobile.svelte.js";
+  import { gridView } from "./grid-view.svelte";
   import Self from "./PaneGrid.svelte";
   import PaneLeaf from "./PaneLeaf.svelte";
-  import {
-    type BranchNode,
-    type PaneNode,
-    workspace,
-  } from "./workspace.svelte";
+  import { type PaneNode, workspace } from "./workspace.svelte";
 
-  let { node }: { node: PaneNode } = $props();
+  let { node, nested = false }: { node: PaneNode; nested?: boolean } = $props();
 
   /**
    * The grid is not only a desk any more: a tablet turned landscape gets it
@@ -70,86 +67,11 @@
    * are.
    */
   const ALL = 100;
-  interface Shape {
-    dir: "h" | "v";
-    id: string;
-    kids: PaneNode[];
-    sizes: number[];
-    t: PaneNode["t"];
-  }
-  const shapeOf = (of: PaneNode): Shape =>
-    of.t === "b"
-      ? {
-          t: "b",
-          id: of.id,
-          dir: of.dir,
-          sizes: [...of.sizes],
-          kids: [...of.kids],
-        }
-      : { t: "l", id: of.id, dir: "h", sizes: [], kids: [] };
-  const idsOf = (shape: Shape) => shape.kids.map((kid) => kid.id).join(",");
 
   let group = $state<HTMLElement | null>(null);
-
-  interface Ghost {
-    /** The branch as it was, drawn while the group that left collapses. */
-    branch: BranchNode;
-    /** Where each of its boxes is going. */
-    to: number[];
-  }
-  /** What was last drawn here, to tell what a change took away. */
-  let was: Shape | null = null;
-  /** Kept in step with the tree in the same pass that draws it: a ghost set a step later would be drawn after the tree, and the groups rebuilt. */
-  let held: Ghost | null = null;
-  let released = $state(0);
-  let letGo = 0;
-  const ghost = $derived.by((): Ghost | null => {
-    // The grid draws the tree again once the ghost is let go.
-    if (released !== letGo) {
-      letGo = released;
-      held = null;
-    }
-    const now = shapeOf(node);
-    const before = was;
-    was = now;
-    if (
-      before &&
-      motionOk.current &&
-      (before.t !== now.t || idsOf(before) !== idsOf(now))
-    ) {
-      held = ghostOf(before, now);
-    }
-    return held;
-  });
-  const drawn = $derived(ghost?.branch ?? node);
-
-  /** What a change took away, as a branch to go on drawing, or nothing when it only added or rearranged. */
-  function ghostOf(before: Shape, now: Shape): Ghost | null {
-    if (before.t !== "b") {
-      return null;
-    }
-    const stays = now.t === "l" ? [now.id] : now.kids.map((kid) => kid.id);
-    const ids = before.kids.map((kid) => kid.id);
-    const sameBranch = now.t === "l" || now.id === before.id;
-    const left = ids.filter((id) => !stays.includes(id));
-    if (
-      !sameBranch ||
-      left.length === 0 ||
-      stays.some((id) => !ids.includes(id))
-    ) {
-      return null;
-    }
-    return {
-      branch: {
-        t: "b",
-        id: before.id,
-        dir: before.dir,
-        sizes: before.sizes,
-        kids: before.kids,
-      },
-      to: ids.map((id) => shareAfter(id, stays, now)),
-    };
-  }
+  /** The root draws what the grid view says (a closed split is still drawn while it collapses); a nested branch draws its own. */
+  const ghost = $derived(nested ? null : gridView.ghost);
+  const drawn = $derived(nested ? node : gridView.drawn);
 
   /** The groups' boxes, in order. */
   const panesOf = (el: HTMLElement) => [
@@ -193,14 +115,6 @@
     return Number.parseFloat(getComputedStyle(pane).flexGrow);
   }
 
-  /** A box's share once the grid draws the tree as it now is. */
-  function shareAfter(id: string, stays: string[], now: Shape): number {
-    if (!stays.includes(id)) {
-      return 0;
-    }
-    return now.t === "l" ? ALL : (now.sizes[stays.indexOf(id)] ?? 0);
-  }
-
   $effect(() => {
     const el = group;
     const out = ghost;
@@ -221,7 +135,7 @@
         if (!live) {
           return;
         }
-        released += 1;
+        gridView.release();
         await tick();
         for (const run of runs) {
           run.cancel();
@@ -264,7 +178,7 @@
 
 {#if drawn.t === "l"}
   <PaneLeaf
-    hosted={workspace.root.id === drawn.id}
+    hosted={gridView.hosts(drawn.id)}
     leaf={drawn}
     swipeable={coarse.current && workspace.focusedLeafId === drawn.id}
   />
@@ -288,7 +202,7 @@
         defaultSize={drawn.sizes[i] ?? 100 / drawn.kids.length}
         minSize={12}
       >
-        <Self node={kid} />
+        <Self nested node={kid} />
       </Resizable.Pane>
     {/each}
   </Resizable.PaneGroup>

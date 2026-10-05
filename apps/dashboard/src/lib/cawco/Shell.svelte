@@ -22,6 +22,7 @@
   } from "#lib/cawco/motion/curves.svelte.js";
   import { pageIn, pageOut, route } from "#lib/cawco/motion/route.svelte.js";
   import { reflow } from "#lib/cawco/motion/rows.svelte.js";
+  import { gridView } from "#lib/cawco/workspace/grid-view.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
@@ -483,14 +484,10 @@
     // biome-ignore lint/suspicious/noDocumentCookie: needs the synchronous write; Cookie Store API is async and Safari lacks it
     document.cookie = `cawco-narrow=${narrow ? 1 : 0};path=/;max-age=31536000;samesite=lax`;
   });
-  /** The one group's strip the bar carries, once the session has shown, on any route. */
-  const barLeaf = $derived(
-    surfaceMounted && !narrow && workspace.root.t === "l"
-      ? workspace.root
-      : null
-  );
-  /** Whether the bar shows it: on a session page. */
-  const hostedLeaf = $derived(onSession ? barLeaf : null);
+  /** The groups whose tabs the bar carries, once the session has shown, on any route: those along the workspace's top edge. */
+  const barLeaves = $derived(surfaceMounted && !narrow ? gridView.tops : []);
+  /** Whether the bar shows them: on a session page. */
+  const hosting = $derived(onSession && barLeaves.length > 0);
 
   /* ── The bar's slot ──────────────────────────────────────────────────
      The hosted tabs, the crumb and Configure's back link take turns in one
@@ -509,6 +506,54 @@
         ? `opacity: ${t}; transform: translateY(${4 * u}px)`
         : `opacity: ${t}`,
   });
+
+  /**
+   * Each column of the bar stands exactly over its group: its left edge and
+   * width are the group's (the width held to what the bar's own controls
+   * leave). They are read off the groups themselves, in the frame a size
+   * observer reports a change, so whatever moves a group (a split opening, a
+   * divider dragged, the window) moves its column with it, and nothing here
+   * knows a size.
+   */
+  const followPanes: Attachment<HTMLElement> = (slot) => {
+    const place = () => {
+      const area = slot.getBoundingClientRect();
+      for (const col of slot.querySelectorAll<HTMLElement>(":scope > .col")) {
+        const group = document.querySelector(
+          `[data-leaf="${col.dataset.col}"]`
+        );
+        if (!group) {
+          continue;
+        }
+        const box = group.getBoundingClientRect();
+        col.style.setProperty("--col-x", `${box.left - area.left}px`);
+        col.style.setProperty(
+          "--col-w",
+          `${Math.max(0, Math.min(box.width, area.right - box.left))}px`
+        );
+      }
+    };
+    const sizes = new ResizeObserver(place);
+    sizes.observe(slot);
+    // A column that comes or goes is a group that does: watch the groups the
+    // columns stand over.
+    $effect(() => {
+      const groups = barLeaves.flatMap((leaf) => {
+        const group = document.querySelector(`[data-leaf="${leaf.id}"]`);
+        return group ? [group] : [];
+      });
+      for (const group of groups) {
+        sizes.observe(group);
+      }
+      place();
+      return () => {
+        for (const group of groups) {
+          sizes.unobserve(group);
+        }
+      };
+    });
+    return () => sizes.disconnect();
+  };
 
   function barTabs(shown: () => boolean) {
     return (node: HTMLElement) => {
@@ -740,7 +785,7 @@
     </Sheet.Root>
 
     <div class="main">
-      <header class="top" class:hosting={hostedLeaf !== null}>
+      <header class="top" class:hosting={hosting}>
         <button
           aria-label="Open navigation"
           class="burger min-[900px]:hidden"
@@ -755,16 +800,30 @@
            lives in the rail, and the crumb is what the top bar owes a reader
            who arrived by URL. -->
         <div class="slot">
-          {#if barLeaf}
-            <div class="slot-tabs" {@attach barTabs(() => hostedLeaf !== null)}>
-              <PaneTabs hosted leaf={barLeaf} />
+          {#if barLeaves.length > 0}
+            <div
+              class="slot-tabs"
+              {@attach barTabs(() => hosting)}
+              {@attach followPanes}
+            >
+              {#each barLeaves as leaf, i (leaf.id)}
+                <!-- Each group's tabs, standing over the group they belong
+                   to: its box follows the group's (followPanes). -->
+                <div
+                  class="col"
+                  data-col={leaf.id}
+                  data-focused={workspace.focusedLeafId === leaf.id ||
+                    undefined}
+                  class:seam={i > 0}
+                >
+                  <span aria-hidden="true" class="col-rail"></span>
+                  <PaneTabs hosted {leaf} />
+                </div>
+              {/each}
             </div>
           {/if}
-          {#if hostedLeaf}
-            <!-- The strip above has the slot. -->
-          {:else if onSession && workspace.root.t === "b"}
-            <!-- A split: each group has its own strip, and the rail already
-               names the section, so the slot says nothing. -->
+          {#if hosting}
+            <!-- The strips above have the slot. -->
           {:else if narrow && page.url.pathname.startsWith("/config/")}
             <!-- Inside a section on a phone the rail is its own page, so the bar
                leads back to it. -->
@@ -1044,10 +1103,45 @@
     min-width: 0;
   }
   .slot-tabs {
-    display: flex;
+    position: relative;
     flex: 1 1 0;
     align-self: stretch;
     min-width: 0;
+  }
+  /* A group's tabs, over the group: left and width are the group's, written
+     by followPanes. The divider between two groups goes on up through the
+     bar as the line between their columns, where the grid's own stands (the
+     1px between the groups): the column's shadow, outside its box. */
+  .col {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-start: var(--col-x, 0px);
+    inline-size: var(--col-w, 100%);
+    display: flex;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .col.seam {
+    box-shadow: -1px 0 0 var(--border-hairline);
+  }
+  /* The group the keyboard belongs to, as the group says it: a hairline rail
+     down the leading edge. */
+  .col-rail {
+    position: absolute;
+    inset: 0 auto 0 0;
+    inline-size: 2px;
+    background: var(--ink-muted);
+    opacity: 0;
+    z-index: 2;
+    pointer-events: none;
+  }
+  .col[data-focused] .col-rail {
+    opacity: 0.5;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .col-rail {
+      transition: opacity var(--dur-control) var(--ease-out);
+    }
   }
   /* Leaving, the strip keeps its box but gives up the row; gone, it is
      not drawn. */
