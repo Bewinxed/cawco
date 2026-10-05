@@ -85,6 +85,7 @@ import {
   transcriptUrl,
 } from "./links";
 import { type PendingSelection, selectionExtras } from "./preview/selection";
+import { projectsFor } from "./projects";
 import { reloadForProtocol } from "./protocol-reload";
 import { checkRestartToast } from "./restart-toast";
 import { spawnDefaults } from "./spawnPrefs.svelte";
@@ -232,10 +233,6 @@ export const isResumable = (row: InstanceRow): boolean =>
  * carve back out of it.
  */
 export const isFailed = (row: InstanceRow): boolean => row.status === "error";
-
-/** A side quest's worktree sits under the project's checkout, so it counts as in it. */
-const under = (root: string, path: string): boolean =>
-  path === root || path.startsWith(`${root}/`);
 
 /**
  * A side quest is history nobody asked for until they keep it, and the agent
@@ -5296,9 +5293,8 @@ export const cawco = {
         return false;
       }
       const top = topOf(row);
-      return (
-        top.projectId === project.id ||
-        (top.machineId === project.machineId && under(project.cwd, top.cwd))
+      return projectsFor(state.projects, top).some(
+        (held) => held.id === project.id
       );
     });
   },
@@ -5306,7 +5302,18 @@ export const cawco = {
   storedIn: (project: ProjectRow): NeutralSessionInfo[] =>
     (catalog[project.machineId] ?? []).filter(
       (info) =>
-        listedInHistory(info) && info.cwd && under(project.cwd, info.cwd)
+        listedInHistory(info) &&
+        info.cwd &&
+        projectsFor(
+          state.projects,
+          instanceForSession(instanceIndex, info.sessionId, {
+            machineId: project.machineId,
+            cwd: info.cwd,
+          }) ?? {
+            machineId: project.machineId,
+            cwd: info.cwd,
+          }
+        ).some((held) => held.id === project.id)
     ),
   session: (instanceId: string): SessionState | null =>
     state.sessions[instanceId] ?? null,

@@ -255,13 +255,7 @@
       ? cwd.trim()
       : `${cwd.trim().replace(/\/+$/, "")}/${repoPath(repo).split("/").pop() ?? ""}`
   );
-  const project = $derived(
-    cawco.projects.find(
-      (row) =>
-        row.id === projectId ||
-        (row.machineId === machineId && row.cwd === workdir)
-    )
-  );
+  const project = $derived(cawco.projects.find((row) => row.id === projectId));
   const locked = $derived(
     Boolean(
       (prefill?.machineId ||

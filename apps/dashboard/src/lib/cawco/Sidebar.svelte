@@ -72,6 +72,7 @@
   } from "./older";
   import { openTrees } from "./open-trees.svelte";
   import ProjectMark from "./ProjectMark.svelte";
+  import { projectsFor } from "./projects";
   import { type RailSort, rail } from "./rail.svelte";
   import SessionHover from "./SessionHover.svelte";
   import SessionRow, { ROW_PILL } from "./SessionRow.svelte";
@@ -233,12 +234,12 @@
 
   /** Which folders are shut is the reader's, kept in folder-prefs, so a reload keeps it. */
   function toggle(project: ProjectRow) {
-    folderPrefs.setCollapsed(project.cwd, !folderPrefs.collapsed(project.cwd));
+    folderPrefs.setCollapsed(project.id, !folderPrefs.collapsed(project.id));
   }
 
   function collapseOthers(id: string) {
     for (const project of orderedProjects) {
-      folderPrefs.setCollapsed(project.cwd, project.id !== id);
+      folderPrefs.setCollapsed(project.id, project.id !== id);
     }
   }
 
@@ -259,51 +260,14 @@
     })
   );
 
-  /** A folder on a machine, as the lookups below key it. */
-  const folderKey = (machineId: string, cwd: string): string =>
-    `${machineId}\u0000${cwd}`;
-
-  /** The projects in each folder, by machine and folder. */
-  const projectsAt = $derived.by(() => {
-    const at = new Map<string, string[]>();
-    for (const project of cawco.projects) {
-      const key = folderKey(project.machineId, project.cwd);
-      at.set(key, [...(at.get(key) ?? []), project.id]);
+  $effect(() => {
+    if (cawco.fleetRead) {
+      folderPrefs.migrateProjects(cawco.projects);
     }
-    return at;
   });
-  const projectIds = $derived(
-    new Set(cawco.projects.map((project) => project.id))
-  );
 
-  /**
-   * The projects a row belongs to: the one its `projectId` names, and every
-   * project on its machine whose folder is its folder or holds it — nested
-   * project folders both claim it. Found by walking the row's folder up its
-   * path, one lookup per level, rather than testing it against every
-   * project: a folder `p` holds `cwd` exactly when `cwd` is `p` or starts
-   * with `p/`, which is `p` being `cwd` or `cwd` cut at one of its slashes.
-   */
-  function projectsOf(row: InstanceRow): Set<string> {
-    const found = new Set<string>();
-    if (row.projectId && projectIds.has(row.projectId)) {
-      found.add(row.projectId);
-    }
-    const { cwd } = row;
-    if (!cwd) {
-      return found;
-    }
-    const claim = (folder: string) => {
-      for (const id of projectsAt.get(folderKey(row.machineId, folder)) ?? []) {
-        found.add(id);
-      }
-    };
-    claim(cwd);
-    for (let at = cwd.indexOf("/"); at !== -1; at = cwd.indexOf("/", at + 1)) {
-      claim(cwd.slice(0, at));
-    }
-    return found;
-  }
+  const projectsOf = (row: InstanceRow): string[] =>
+    projectsFor(cawco.projects, row).map((project) => project.id);
 
   /**
    * Every project's sessions, live and resting, as the rail lists them, in
@@ -1031,7 +995,7 @@
           >
             {#each orderedProjects as project (project.id)}
               {@const runningCount = runningIn(project)}
-              {@const expanded = !folderPrefs.collapsed(project.cwd)}
+              {@const expanded = !folderPrefs.collapsed(project.id)}
               <li
                 class="group/menu-item relative"
                 data-flip="box"

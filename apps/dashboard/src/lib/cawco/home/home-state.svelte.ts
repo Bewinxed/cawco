@@ -38,6 +38,7 @@ import {
 import { signInWarning } from "../machine";
 import { heldOrder } from "../motion/held-order.svelte";
 import { permissionSummary } from "../permission-summary";
+import { projectsFor } from "../projects";
 import { questionsOf } from "../question";
 import { rail } from "../rail.svelte";
 import { topsIn } from "../tree";
@@ -259,11 +260,7 @@ export function projectOf(
   cwd: string | null | undefined
 ): string {
   const folder = cwd ?? "";
-  const project = cawco.projects.find(
-    (p) =>
-      p.machineId === machineId &&
-      (folder === p.cwd || folder.startsWith(`${p.cwd}/`))
-  );
+  const [project] = projectsFor(cawco.projects, { machineId, cwd: folder });
   return (
     project?.name ??
     (folder.split("/").filter(Boolean).pop() ?? "").replace(WORKSPACE_ID, "")
@@ -278,7 +275,10 @@ export function projectOf(
  */
 export function projectOfRow(row: InstanceRow): string {
   const top = topsIn(cawco.instanceIndex.byId)(row);
-  return projectOf(top.machineId, top.cwd);
+  return (
+    projectsFor(cawco.projects, top)[0]?.name ??
+    projectOf(top.machineId, top.cwd)
+  );
 }
 
 /** "machine · project". */

@@ -8,6 +8,8 @@
  * also what `identity.ts` hashes: an override and the default it replaces are
  * always talking about the same thing.
  */
+
+import type { ProjectRow } from "./client.svelte";
 import { identityHue } from "./identity";
 import { readJson, writeJson } from "./storage";
 
@@ -31,6 +33,8 @@ function read(): Record<string, FolderPref> {
 // Module scope, so every surface that draws a folder — rail, board, peek pane,
 // tabs — is reading the same answer rather than its own copy of it.
 const prefs = $state<Record<string, FolderPref>>(read());
+const PROJECT_KEY = "cawco-project-folds";
+const folds = $state<Record<string, true>>(readJson(PROJECT_KEY, {}));
 
 const save = (): void => {
   writeJson(KEY, prefs);
@@ -53,10 +57,45 @@ function edit(cwd: string, patch: FolderPref): void {
 }
 
 export const folderPrefs = {
-  /** The reader shut this directory's folder in the rail. */
-  collapsed: (cwd: string): boolean => prefs[cwd]?.collapsed === true,
-  setCollapsed(cwd: string, collapsed: boolean): void {
-    edit(cwd, { collapsed: collapsed ? true : undefined });
+  /** Consume old folder folds once, assigning each to its oldest project. */
+  migrateProjects(projects: ProjectRow[]): void {
+    if (projects.length === 0) {
+      return;
+    }
+    let changed = false;
+    for (const [cwd, pref] of Object.entries(prefs)) {
+      if (!pref.collapsed) {
+        continue;
+      }
+      const [owner] = projects
+        .filter((project) => project.cwd === cwd)
+        .sort(
+          (a, b) =>
+            a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id)
+        );
+      if (owner) {
+        folds[owner.id] = true;
+      }
+      // biome-ignore lint/performance/noDelete: one-time migration must remove the old field from persisted JSON.
+      delete pref.collapsed;
+      if (Object.keys(pref).length === 0) {
+        delete prefs[cwd];
+      }
+      changed = true;
+    }
+    if (changed) {
+      save();
+      writeJson(PROJECT_KEY, folds);
+    }
+  },
+  collapsed: (id: string): boolean => folds[id] === true,
+  setCollapsed(id: string, collapsed: boolean): void {
+    if (collapsed) {
+      folds[id] = true;
+    } else {
+      delete folds[id];
+    }
+    writeJson(PROJECT_KEY, folds);
   },
   /** The hue this directory wears: the chosen one, else the hashed one. */
   hue: (cwd: string): number => prefs[cwd]?.hue ?? identityHue(cwd),
