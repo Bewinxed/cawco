@@ -112,7 +112,6 @@ import {
   MESSAGES_READ,
   MESSAGES_STORED,
   memoryDocProblem,
-  OPEN_MCP_AUTHORIZATION,
   PREVIEW_START,
   PREVIEW_STOP,
   PROVIDER_RETRY,
@@ -167,7 +166,7 @@ import { hashHookMaterial } from "./db";
 import { delegateTypesRoutes, makeDelegateTypes } from "./delegate-types";
 import { hubHttpUrl } from "./delegation-actions";
 import { createDelegationMcp } from "./delegation-mcp";
-import { FleetMcp } from "./fleet-mcp";
+import { FleetMcp, MCP_CALLBACK_PATH } from "./fleet-mcp";
 import { hidden } from "./hidden";
 import { joinRoutes } from "./join";
 import {
@@ -8887,67 +8886,33 @@ export const createServer = (
         announceMcp();
         return { ok: true };
       })
-      .get("/api/fleet/mcp/:name/sign-in-machines", ({ request, server }) => {
-        const machines = withPresence(db.listAgents()).filter(
-          (machine) => machine.status === "online" && machine.browserAvailable
-        );
-        const address = (
-          request.headers.get("X-Cawco-Client-Address") ??
-          server?.requestIP(request)?.address
-        )?.replace("::ffff:", "");
-        const matches = machines.filter(
-          (machine) =>
-            registry.address(machine.machineId)?.replace("::ffff:", "") ===
-            address
-        );
-        const last = db.lastMcpSignInMachine();
-        return {
-          machines,
-          selectedMachineId:
-            matches.length === 1
-              ? matches[0].machineId
-              : (machines.find((machine) => machine.machineId === last)
-                  ?.machineId ?? null),
-        };
-      })
       .post(
         "/api/fleet/mcp/:name/sign-in",
-        { body: t.Object({ machineId: t.String({ minLength: 1 }) }) },
+        { body: t.Object({ origin: t.String({ minLength: 1 }) }) },
         async ({ params, body, status }) => {
-          const machine = withPresence(db.listAgents()).find(
-            (row) => row.machineId === body.machineId
-          );
-          if (!(machine?.status === "online" && machine.browserAvailable)) {
+          // The authorization server redirects the browser that signs in, so the
+          // redirect is under the origin that browser reached the dashboard by:
+          // a phone's tailnet address works where a loopback port never could.
+          let origin: URL;
+          try {
+            origin = new URL(body.origin);
+          } catch {
             return status(
               400,
-              "This machine cannot open a desktop browser. Pick an online computer with a desktop session."
+              "The browser did not say where it reached CawCo."
+            );
+          }
+          if (origin.protocol !== "http:" && origin.protocol !== "https:") {
+            return status(
+              400,
+              "Sign-in needs an HTTP or HTTPS dashboard address."
             );
           }
           try {
-            const { authorizationUrl } = await fleetMcp.start(
+            return await fleetMcp.start(
               params.name,
-              machine.machineId
+              `${origin.origin}${MCP_CALLBACK_PATH}`
             );
-            const opened = await callAgent(
-              machine.machineId,
-              OPEN_MCP_AUTHORIZATION,
-              [authorizationUrl],
-              30_000
-            );
-            if (opened === "offline" || opened === "timeout") {
-              return status(
-                503,
-                "The machine did not confirm opening its browser. Check its desktop before retrying sign-in."
-              );
-            }
-            if (!opened.ok) {
-              return status(
-                400,
-                opened.error ??
-                  "The browser could not open. Check the selected computer and retry sign-in."
-              );
-            }
-            return { ok: true, machineId: machine.machineId };
           } catch (error) {
             return status(
               400,
@@ -8958,28 +8923,40 @@ export const createServer = (
           }
         }
       )
-      .post(
-        "/api/fleet/mcp/oauth/complete",
-        {
-          body: t.Object({
-            code: t.String({ minLength: 1 }),
-            state: t.String({ minLength: 1 }),
-          }),
-        },
-        async ({ body, status }) => {
-          try {
-            await fleetMcp.complete(body.code, body.state);
-            return { ok: true };
-          } catch (error) {
-            return status(
-              400,
-              error instanceof Error
-                ? error.message
-                : "Sign-in could not finish. Start sign-in again."
-            );
-          }
+      .get(MCP_CALLBACK_PATH, async ({ query }) => {
+        const page = (text: string, ok: boolean) =>
+          new Response(
+            `<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><title>CawCo sign-in</title><body style="font:16px system-ui;margin:2rem;max-width:32rem"><p>${text.replace(/[&<>]/g, "")}</p><p><a href="/config/mcp">Back to CawCo</a></p>`,
+            {
+              status: ok ? 200 : 400,
+              headers: {
+                "Content-Type": "text/html; charset=utf-8",
+                "Cache-Control": "no-store",
+                "Referrer-Policy": "no-referrer",
+              },
+            }
+          );
+        if (!(query.code && query.state) || query.error) {
+          return page(
+            "Sign-in was not completed. Start sign-in again from Configure → MCP servers.",
+            false
+          );
         }
-      )
+        try {
+          await fleetMcp.complete(query.code, query.state);
+          return page(
+            "Signed in for the whole fleet. You can close this tab.",
+            true
+          );
+        } catch (error) {
+          return page(
+            error instanceof Error
+              ? error.message
+              : "Sign-in could not finish. Start sign-in again.",
+            false
+          );
+        }
+      })
       /**
        * Rules: standing instructions the hub enforces on the frame stream. The
        * shape is validated loosely here and strictly by `ruleProblem`, which is
@@ -10909,10 +10886,6 @@ export const createServer = (
               // everything that reads a machine's harnesses or tools runs here,
               // off the report it reads.
               const reported = peekHarnesses(message.payload);
-              const { browserAvailable } = message.payload as HeartbeatPayload;
-              if (typeof browserAvailable === "boolean") {
-                db.setAgentBrowser(message.machineId, browserAvailable);
-              }
               if (reported) {
                 db.setAgentHarnesses(message.machineId, reported);
                 capabilityReports.delete(message.machineId);

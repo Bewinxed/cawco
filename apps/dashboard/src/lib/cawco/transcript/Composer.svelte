@@ -30,6 +30,7 @@
    */
   import { type Snippet, tick, untrack } from "svelte";
   import type { TransitionConfig } from "svelte/transition";
+  import { toast } from "svelte-sonner";
   import { autosize } from "#lib/cawco/motion/autosize.svelte.js";
   import {
     CURVE,
@@ -48,8 +49,9 @@
   import * as Command from "#lib/components/ui/command/index.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import { IconClose, IconPlus, IconSend, IconStop } from "#lib/icons.js";
-  import type { SendExtras } from "../client.svelte";
+  import { cawco, type SendExtras } from "../client.svelte";
   import { cleanDetail } from "../command-detail";
+  import { signInToMcp } from "../fleet";
   import { newId } from "../id";
   import SelectionChip from "../preview/SelectionChip.svelte";
   import SelectionPopover from "../preview/SelectionPopover.svelte";
@@ -975,6 +977,8 @@
   let sendBlock = $state("");
   const sendNotice = $derived(sendError || sendBlock);
 
+  const MCP_AUTH_RE = /^\/mcp\s+(?:auth|login)\s+(\S+)$/;
+
   function submit(
     via: (text: string, extras: SendExtras, id: string) => void = onsubmit
   ): void {
@@ -987,6 +991,16 @@
       return;
     }
     sendBlock = "";
+    // `/mcp auth <server>` for a fleet server is this browser's own sign-in,
+    // not a message: the agent's machine may have no browser at all (a phone is
+    // the browser here), and the hub holds the credentials either way.
+    const mcpAuth = draft.text.trim().match(MCP_AUTH_RE);
+    if (mcpAuth && cawco.fleetMcp?.some((s) => s.name === mcpAuth[1])) {
+      signInToMcp(mcpAuth[1]).catch((error) =>
+        toast.error(error instanceof Error ? error.message : String(error))
+      );
+      return;
+    }
     // The text leaves the field for the one row it becomes (motion/share),
     // keyed by the id the message is sent under. The field is measured
     // before it redraws empty.

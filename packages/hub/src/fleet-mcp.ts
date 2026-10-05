@@ -1,4 +1,4 @@
-import { CAWCO_MCP_CALLBACK_PORT, type FleetConfig } from "@cawco/core";
+import type { FleetConfig } from "@cawco/core";
 import {
   discoverAuthorizationServerMetadata,
   discoverOAuthProtectedResourceMetadata,
@@ -11,7 +11,8 @@ import {
 import { LATEST_PROTOCOL_VERSION } from "@modelcontextprotocol/sdk/types.js";
 import type { DbShape } from "./db";
 
-const REDIRECT = `http://127.0.0.1:${CAWCO_MCP_CALLBACK_PORT}/mcp-oauth/callback`;
+/** Where the hub receives the authorization server's redirect, under the origin the signing-in browser reached the dashboard by. */
+export const MCP_CALLBACK_PATH = "/api/fleet/mcp/oauth/callback";
 const MCP_HEADERS = [
   "Mcp-Session-Id",
   "MCP-Protocol-Version",
@@ -198,13 +199,13 @@ export class FleetMcp {
 
   start(
     name: string,
-    machineId: string
+    redirectUri: string
   ): Promise<{ authorizationUrl: string }> {
     const running = this.#signingIn.get(name);
     if (running) {
       return running;
     }
-    const starting = this.#start(name, machineId).finally(() =>
+    const starting = this.#start(name, redirectUri).finally(() =>
       this.#signingIn.delete(name)
     );
     this.#signingIn.set(name, starting);
@@ -213,7 +214,7 @@ export class FleetMcp {
 
   async #start(
     name: string,
-    machineId: string
+    redirectUri: string
   ): Promise<{ authorizationUrl: string }> {
     await this.#probing.get(name);
     const server = this.#server(name);
@@ -227,13 +228,14 @@ export class FleetMcp {
       );
     }
     let { client } = row;
-    if (!client) {
+    // A client registered for another origin cannot be redirected to this one.
+    if (!client?.redirect_uris.includes(redirectUri)) {
       try {
         client = await registerClient(row.issuer, {
           metadata: row.metadata,
           clientMetadata: {
             client_name: "CawCo fleet",
-            redirect_uris: [REDIRECT],
+            redirect_uris: [redirectUri],
             grant_types: ["authorization_code", "refresh_token"],
             response_types: ["code"],
             token_endpoint_auth_method: "none",
@@ -252,7 +254,7 @@ export class FleetMcp {
       {
         metadata: row.metadata,
         clientInformation: client,
-        redirectUrl: REDIRECT,
+        redirectUrl: redirectUri,
         state,
         scope: row.resource.scopes_supported?.join(" "),
         resource: new URL(row.resource.resource),
@@ -269,9 +271,9 @@ export class FleetMcp {
     this.#db.putMcpOauth({
       ...row,
       client,
-      lastMachineId: machineId,
       lastOpenedAt: new Date(),
       pending: {
+        redirectUri,
         state,
         verifier: codeVerifier,
         expiresAt: Date.now() + 10 * 60_000,
@@ -295,7 +297,7 @@ export class FleetMcp {
         clientInformation: row.client,
         authorizationCode: code,
         codeVerifier: row.pending.verifier,
-        redirectUri: REDIRECT,
+        redirectUri: row.pending.redirectUri,
         resource: new URL(row.resource.resource),
       });
     } catch {

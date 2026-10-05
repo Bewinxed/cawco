@@ -399,19 +399,24 @@ export const saveMcpServer = (
 export const removeMcpServer = (name: string): Promise<void> =>
   erase(`/api/fleet/mcp/${encodeURIComponent(name)}`, `remove ${name}`);
 
-export const startMcpSignIn = (
-  name: string,
-  machineId: string
-): Promise<{ ok: true; machineId: string }> =>
-  send(
+/**
+ * Signs this browser in to a fleet MCP server: the hub answers with the
+ * authorization page, which this window goes to, and the authorization server
+ * sends it back to the hub under the address it is already using. That is what
+ * lets a phone, or any browser, finish it, whichever machine runs the agent.
+ */
+export const signInToMcp = async (name: string): Promise<void> => {
+  const { authorizationUrl } = await send<{ authorizationUrl: string }>(
     `/api/fleet/mcp/${encodeURIComponent(name)}/sign-in`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ machineId }),
+      body: JSON.stringify({ origin: window.location.origin }),
     },
     `start sign-in to ${name}`
   );
+  window.location.assign(authorizationUrl);
+};
 
 export const saveMarketplace = (
   name: string,

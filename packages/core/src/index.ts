@@ -281,7 +281,6 @@ export interface SendPayload {
  */
 export interface HeartbeatPayload {
   at: number;
-  browserAvailable?: boolean;
   /** Fresh sessiond custody after an owner-named stop or register recovery. */
   custody?: SessionCustody;
   custodyComplete?: true;
@@ -415,7 +414,6 @@ export interface FsEntry {
 export interface AgentRow {
   /** `unknown` until a daemon that probes has registered at least once. */
   auth: import("./harness").AuthState | "unknown";
-  browserAvailable?: boolean;
   /**
    * The cawco build this machine's daemon is running (NEW.md §12).
    */
@@ -985,8 +983,6 @@ export const CAWCO_SCRATCH_TAG = "cawco-scratch";
  * the opencode child process).
  */
 export const CAWCO_ENV = {
-  /** Isolated OAuth proof only: follow the demo authorization redirect through the callback. */
-  mcpOauthProofFetch: "CAWCO_MCP_OAUTH_PROOF_FETCH",
   hubUrl: "CAWCO_HUB_URL",
   hubPort: "CAWCO_HUB_PORT",
   previewPort: "CAWCO_PREVIEW_PORT",

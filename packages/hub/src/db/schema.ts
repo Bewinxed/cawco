@@ -197,9 +197,6 @@ export const agents = sqliteTable("agents", {
   machineCapabilities: text("machine_capabilities", {
     mode: "json",
   }).$type<MachineCapabilities>(),
-  browserAvailable: integer("browser_available", { mode: "boolean" })
-    .notNull()
-    .default(false),
   machineId: text("machine_id").primaryKey(),
   hostname: text("hostname").notNull(),
   os: text("os").notNull(),
@@ -756,11 +753,11 @@ export const fleetMcpOauth = sqliteTable("fleet_mcp_oauth", {
   tokens: text("tokens", { mode: "json" }).$type<OAuthTokens>(),
   expiresAt: timestamp("expires_at"),
   pending: text("pending", { mode: "json" }).$type<{
+    redirectUri: string;
     verifier: string;
     state: string;
     expiresAt: number;
   }>(),
-  lastMachineId: text("last_machine_id"),
   lastOpenedAt: timestamp("last_opened_at"),
 });
 

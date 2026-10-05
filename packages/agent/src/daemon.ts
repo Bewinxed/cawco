@@ -20,7 +20,6 @@ import {
   CONTROL_WORKSPACE_BOUNDARY,
   CONTROL_WORKSPACE_CREATE,
   CONTROL_WORKSPACE_MIGRATE,
-  OPEN_MCP_AUTHORIZATION,
 } from "@cawco/core";
 import { sessiondEndpoint } from "@cawco/core/sessiond";
 import { fetchClaudeLimits } from "@cawco/core/usage/limits";
@@ -39,11 +38,7 @@ import type { PiHarness } from "./harnesses/pi";
 import { PI_AUTH_CHECK_INTERVAL_MS } from "./harnesses/pi-auth";
 import { cache as transcriptCache } from "./harnesses/transcript-cache";
 import { machineId } from "./machine-id";
-import {
-  canOpenDesktopBrowser,
-  openMcpAuthorization,
-  startMcpGateway,
-} from "./mcp-oauth";
+import { startMcpGateway } from "./mcp-oauth";
 import { servingPreviews } from "./preview";
 import { parseProcId, SESSION_PROC_KINDS } from "./proc-id";
 import { TranscriptSearchService } from "./search";
@@ -709,7 +704,6 @@ const attach = (
             instances: supervisor.instanceIds,
             ...(latestDeploy() ? { deploy: latestDeploy() } : {}),
             harnesses: detected,
-            browserAvailable: canOpenDesktopBrowser(),
             tools,
           } satisfies HeartbeatPayload,
         });
@@ -1255,10 +1249,6 @@ export const startDaemon = (auth?: AuthState, rediscover = false) =>
     );
     search.start();
     supervisor.registerDaemonFunction(CONTROL_RUN_COMMAND, runWorkflowCommand);
-    supervisor.registerDaemonFunction(
-      OPEN_MCP_AUTHORIZATION,
-      (authorizationUrl) => openMcpAuthorization(authorizationUrl as string)
-    );
     supervisor.registerDaemonFunction(
       CONTROL_WORKSPACE_CREATE,
       createWorkspace

@@ -1073,6 +1073,9 @@ const splitModel = (
   return { providerID: model.slice(0, slash), modelID: model.slice(slash + 1) };
 };
 
+const WHITESPACE_RE = /\s+/;
+const MCP_USAGE = "Usage: /mcp auth|logout|connect|disconnect <server>";
+
 /** `/name rest` → its parts; undefined for anything that is not a slash command. */
 const parseCommand = (
   text: string
@@ -3023,6 +3026,12 @@ export class OpencodeSession implements HarnessSession {
       await this.#summarize(uuid);
       return;
     }
+    // `/mcp` is a TUI dialog in opencode, not a registered command: it is the
+    // server's mcp.* calls, so it never reaches the model as a prompt.
+    if (name === "mcp" && !names.has(name)) {
+      await this.#mcpCommand(args, uuid);
+      return;
+    }
     if (!names.has(name)) {
       this.#prompt(parts, messageID, uuid, model);
       return;
@@ -3053,6 +3062,64 @@ export class OpencodeSession implements HarnessSession {
           this.#ctx.rejected(uuid, new Error(errorText(res.error)));
         }
       });
+  }
+
+  /**
+   * `/mcp auth|logout|connect|disconnect <server>`: opencode's `mcp` CLI
+   * verbs as one command, since its TUI dialog is not a server
+   * command. `auth` runs opencode's own OAuth flow, which opens a browser on
+   * this machine, so it needs a desktop session here; a fleet server is signed
+   * in by the hub instead (the dashboard answers `/mcp auth` for those itself).
+   * The send `uuid` fails with the reason when a step is refused.
+   */
+  async #mcpCommand(args: string, uuid: string): Promise<void> {
+    const [verb = "", server = ""] = args.trim().split(WHITESPACE_RE);
+    const target = { name: server, directory: this.#directory };
+    this.#ctx.frame({
+      type: "system",
+      subtype: MESSAGES_READ,
+      read: [uuid],
+      session_id: this.sessionId ?? undefined,
+    });
+    try {
+      if (!(verb && server)) {
+        throw new Error(MCP_USAGE);
+      }
+      const res = await (() => {
+        switch (verb) {
+          case "auth":
+          case "login":
+            return this.#client.mcp.auth.authenticate(target);
+          case "logout":
+            return this.#client.mcp.auth.remove(target);
+          case "connect":
+          case "reconnect":
+            return this.#client.mcp.connect(target);
+          case "disconnect":
+            return this.#client.mcp.disconnect(target);
+          default:
+            throw new Error(`Unknown /mcp verb "${verb}". ${MCP_USAGE}`);
+        }
+      })();
+      if (res.error) {
+        const reason = errorText(res.error);
+        throw new Error(
+          reason.includes("does not support OAuth")
+            ? `${reason}. A fleet server signs in from the dashboard: Configure → MCP servers, or /mcp auth ${server} in its composer.`
+            : reason
+        );
+      }
+      if (verb === "auth" || verb === "login") {
+        const connected = await this.#client.mcp.connect(target);
+        if (connected.error) {
+          throw new Error(errorText(connected.error));
+        }
+      }
+    } catch (error) {
+      this.#ctx.rejected(uuid, error);
+    } finally {
+      this.#ctx.busy(false);
+    }
   }
 
   /** Compacts the session with its current model; the send `uuid` fails if opencode refuses. */
@@ -3122,7 +3189,7 @@ export class OpencodeSession implements HarnessSession {
       return [];
     }
     // The server supplies source; the installed SDK's Command type omits it.
-    return (result.data as (Command & { source?: string })[]).map(
+    const listed = (result.data as (Command & { source?: string })[]).map(
       (command): SlashCommand => ({
         name: command.name,
         description: command.description ?? "",
@@ -3130,6 +3197,19 @@ export class OpencodeSession implements HarnessSession {
         kind: COMMAND_KINDS[command.source ?? ""] ?? "custom",
       })
     );
+    // The server does not list `/mcp` (a TUI dialog there); #mcpCommand answers it.
+    return listed.some((command) => command.name === "mcp")
+      ? listed
+      : [
+          ...listed,
+          {
+            name: "mcp",
+            description:
+              "Sign in to, sign out of, connect or disconnect an MCP server",
+            argumentHint: "auth|logout|connect|disconnect <server>",
+            kind: "builtin",
+          },
+        ];
   }
 
   async control(method: string, args: unknown[]): Promise<unknown> {

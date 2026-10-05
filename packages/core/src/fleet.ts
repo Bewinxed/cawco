@@ -79,7 +79,6 @@ export interface FleetMcpServer extends FleetPlacement {
 
 /** OAuth redirects finish on the computer running the browser. */
 export const CAWCO_MCP_CALLBACK_PORT = 43_879;
-export const OPEN_MCP_AUTHORIZATION = "openMcpAuthorization";
 
 /**
  * One linked plugin marketplace. `source` is whatever

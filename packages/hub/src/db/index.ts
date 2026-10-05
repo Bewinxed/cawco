@@ -406,7 +406,6 @@ export interface DbShape {
     reason: string,
     at: number
   ) => void;
-  readonly lastMcpSignInMachine: () => string | undefined;
   /** Keys a send to the id its harness stores it under. */
   readonly linkSend: (uuid: string, harnessId: string) => void;
   /**
@@ -856,7 +855,6 @@ export interface DbShape {
   readonly sessionOwnership: (
     machineId?: string
   ) => (typeof instances.$inferSelect)[];
-  readonly setAgentBrowser: (machineId: string, available: boolean) => void;
   /** A machine's own account of what it came to, from the sync it just answered. */
   readonly setAgentFleet: (machineId: string, report: FleetSyncReport) => void;
   /** What each harness on the machine can do, as its daemon's report beat said. */
@@ -1912,19 +1910,6 @@ const make = (path: string): DbShape => {
     },
     getMcpServer: (name) =>
       db.select().from(mcpServers).where(eq(mcpServers.name, name)).get(),
-    lastMcpSignInMachine: () =>
-      db
-        .select({ machineId: fleetMcpOauth.lastMachineId })
-        .from(fleetMcpOauth)
-        .where(isNotNull(fleetMcpOauth.lastMachineId))
-        .orderBy(desc(fleetMcpOauth.lastOpenedAt))
-        .get()?.machineId ?? undefined,
-    setAgentBrowser: (machineId, browserAvailable) => {
-      db.update(agents)
-        .set({ browserAvailable })
-        .where(eq(agents.machineId, machineId))
-        .run();
-    },
     getMcpOauth: (name) =>
       db.select().from(fleetMcpOauth).where(eq(fleetMcpOauth.name, name)).get(),
     putMcpOauth: (row) => {

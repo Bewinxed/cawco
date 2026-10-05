@@ -526,6 +526,13 @@
       "when": 1791180054067,
       "tag": "0074_machine_capabilities",
       "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "6",
+      "when": 1791180054068,
+      "tag": "0075_mcp_oauth_hub_callback",
+      "breakpoints": true
     }
   ]
 }
