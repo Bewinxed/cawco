@@ -582,6 +582,12 @@
   [data-branch-hold] [data-branch-item] {
     clip-path: inset(0 100% 0 0);
   }
+  /* A list measured for the first time as its tree opens: only its first
+     row is laid out while its insets are read (motion/branch
+     `measureFirst`), so they are written before its other rows are styled. */
+  [data-branch-probe] > li ~ li {
+    display: none;
+  }
   /* A line drawing in or running back: each stretch is cut where the line's
      head is, by two lengths the fold moves (--nest-cut-r, --nest-cut-b). The
      stretch itself is painted where it stands at rest, in every frame. With

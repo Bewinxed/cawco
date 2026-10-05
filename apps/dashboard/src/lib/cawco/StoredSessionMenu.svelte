@@ -52,6 +52,12 @@
   /** Built the first time it is asked for, as LiveSessionMenu's is. */
   let renameAsked = $state(false);
   let confirmingDelete = $state(false);
+  /**
+   * The confirm is built the first time Delete transcript is chosen, then
+   * kept. Built with every row, its Root and Content were made for each
+   * stored row a list drew, and never opened for nearly all of them.
+   */
+  let deleteAsked = $state(false);
   let busy = $state(false);
 
   /** The hub's row for this conversation, when the hub keeps one. */
@@ -181,6 +187,7 @@
 
     <ContextMenu.Item
       onSelect={() => {
+        deleteAsked = true;
         confirmingDelete = true;
       }}
       variant="destructive"
@@ -195,32 +202,34 @@
   <RenameDialog current={title} onrename={rename} bind:open={renaming} />
 {/if}
 
-<AlertDialog.Root bind:open={confirmingDelete}>
-  <AlertDialog.Content>
-    <AlertDialog.Header>
-      <AlertDialog.Title>Delete this transcript?</AlertDialog.Title>
-      <AlertDialog.Description>
-        “{title}” is removed from {info.cwd || "this machine"}, for good.
-        Nothing else on the machine is touched.
-      </AlertDialog.Description>
-    </AlertDialog.Header>
-    <AlertDialog.Footer>
-      <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-      <AlertDialog.Action variant="destructive">
-        {#snippet child({
-          props,
-        })}
-          <Button
-            {...props}
-            failed={!removed}
-            label="Delete transcript"
-            onclick={remove}
-            pending={busy}
-            pendingLabel="Deleting…"
-            variant="destructive"
-          />
-        {/snippet}
-      </AlertDialog.Action>
-    </AlertDialog.Footer>
-  </AlertDialog.Content>
-</AlertDialog.Root>
+{#if deleteAsked}
+  <AlertDialog.Root bind:open={confirmingDelete}>
+    <AlertDialog.Content>
+      <AlertDialog.Header>
+        <AlertDialog.Title>Delete this transcript?</AlertDialog.Title>
+        <AlertDialog.Description>
+          “{title}” is removed from {info.cwd || "this machine"}, for good.
+          Nothing else on the machine is touched.
+        </AlertDialog.Description>
+      </AlertDialog.Header>
+      <AlertDialog.Footer>
+        <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
+        <AlertDialog.Action variant="destructive">
+          {#snippet child({
+            props,
+          })}
+            <Button
+              {...props}
+              failed={!removed}
+              label="Delete transcript"
+              onclick={remove}
+              pending={busy}
+              pendingLabel="Deleting…"
+              variant="destructive"
+            />
+          {/snippet}
+        </AlertDialog.Action>
+      </AlertDialog.Footer>
+    </AlertDialog.Content>
+  </AlertDialog.Root>
+{/if}
