@@ -1,5 +1,6 @@
 import CawCoCore
 import CawCoDesign
+import OSLog
 import UIKit
 
 /// What the rail asks of the shell it sits in.
@@ -61,6 +62,10 @@ final class SidebarViewController: ObservedViewController {
     /// The rail's session card (SessionHover): its `tail` takes the transcript's tail view.
     private(set) var sessionHover: SessionHover?
     private var drawnShape = ""
+    /// The web's derived project trees. Pulses belong to the rows pass,
+    /// not the membership/split/order derivation.
+    private var lists: [RailProjectList] = []
+    private var projectsReady = false
     private var olderOpen = Set<String>()
     private var openTrees = Set<String>()
     private let fold = RailFold()
@@ -397,6 +402,54 @@ final class SidebarViewController: ObservedViewController {
     // MARK: Content
 
     override func refreshContent() {
+        #if DEBUG
+        let began = CFAbsoluteTimeGetCurrent()
+        defer { Self.performance.debug("rail content \((CFAbsoluteTimeGetCurrent() - began) * 1000) ms") }
+        #endif
+        let fleet = hub.fleet
+        projectsReady = fleet.catalogsRead || hub.state == .unreachable
+        // Track the inputs of Sidebar.svelte's listed/splits/branches, apart
+        // from lastAt and the row's age. A tool/time pulse changes none of
+        // these; an activity transition, row or preference change does.
+        _ = fleet.projects
+        _ = prefs.pins
+        _ = prefs.sort
+        _ = home.delegates
+        _ = home.now
+        _ = host?.activeSessionId
+        _ = fleet.machines.isEmpty
+        for project in fleet.projects { _ = prefs.collapsed(project.cwd) }
+        for row in fleet.rows + fleet.runRows where row.isListed {
+            _ = home.activity(row.id)
+        }
+    }
+
+    override func drawContent() {
+        #if DEBUG
+        let began = CFAbsoluteTimeGetCurrent()
+        defer { Self.performance.debug("rail derivation \((CFAbsoluteTimeGetCurrent() - began) * 1000) ms") }
+        #endif
+        guard projectsReady else {
+            lists = []
+            showPending()
+            return
+        }
+        // As on the web, keep the derived trees between changes of their
+        // inputs. This pass is unobserved: sampling recency for their order
+        // must not subscribe the derivation to each session's pulse.
+        lists = RailModel.lists(hub: hub, home: home, prefs: prefs)
+        let shape = shape(of: lists)
+        if shape != drawnShape {
+            drawnShape = shape
+            rebuild(lists)
+        }
+    }
+
+    override func refreshRows() {
+        #if DEBUG
+        let began = CFAbsoluteTimeGetCurrent()
+        defer { Self.performance.debug("rail rows \((CFAbsoluteTimeGetCurrent() - began) * 1000) ms") }
+        #endif
         guard let host else { return }
         let fleet = hub.fleet
         // Places.
@@ -413,18 +466,6 @@ final class SidebarViewController: ObservedViewController {
         fleetBadgeBox.backgroundColor = blocked > 0 ? Palette.statusAttnBg : Palette.statusLiveBg
         fleetBadge.textColor = blocked > 0 ? Palette.statusAttnInk : Palette.statusLiveInk
         usage.configure(home.usage)
-        // Projects, once every read they need is in.
-        let ready = fleet.catalogsRead || hub.state == .unreachable
-        guard ready else {
-            showPending()
-            return
-        }
-        let lists = RailModel.lists(hub: hub, home: home, prefs: prefs)
-        let shape = shape(of: lists)
-        if shape != drawnShape {
-            drawnShape = shape
-            rebuild(lists)
-        }
         update(lists)
     }
 
@@ -594,6 +635,9 @@ final class SidebarViewController: ObservedViewController {
 
     /// What each rail row and project block last drew.
     private var drawnRows = RowPrints<String>()
+    #if DEBUG
+    private static let performance = Logger(subsystem: "dev.cawco.app", category: "Rail")
+    #endif
 
     // MARK: Folding
 
@@ -637,6 +681,8 @@ final class SidebarViewController: ObservedViewController {
     /// Lays the rail out now, so a fold can measure what it opens.
     private func refreshNow() {
         refreshContent()
+        drawContent()
+        refreshRows()
         view.layoutIfNeeded()
     }
 

@@ -124,8 +124,9 @@ enum RailModel {
         var shown = recent
         var rest = older
         if shown.count < shownAtLeast, !rest.isEmpty {
-            let byRecency = rest.sorted { hub.fleet.lastAt($0.row) > hub.fleet.lastAt($1.row) }
-            let lifted = Set(byRecency.prefix(shownAtLeast - shown.count).map(\.row.id))
+            let byRecency = rest.enumerated().map { (index: $0.offset, node: $0.element, at: hub.fleet.lastAt($0.element.row)) }
+                .sorted { $0.at != $1.at ? $0.at > $1.at : $0.index < $1.index }
+            let lifted = Set(byRecency.prefix(shownAtLeast - shown.count).map(\.node.row.id))
             shown += rest.filter { lifted.contains($0.row.id) }
             rest.removeAll { lifted.contains($0.row.id) }
         }
@@ -165,19 +166,26 @@ enum RailModel {
     /// One comparator for every list in the rail (`sorted`); recency breaks every tie.
     static func sorted(_ rows: [InstanceRow], hub: HubConnection, home: HomeModel, by sort: RailPrefs.Sort) -> [InstanceRow] {
         let rank: [Activity: Int] = [.blocked: 0, .working: 1, .idle: 2]
-        return rows.sorted { a, b in
+        // Read each key once, not on every comparator call (the fleet's
+        // pulse and generated row accessors were the sort's measured cost).
+        // Original position explicitly preserves the stable order on ties.
+        let keys = rows.enumerated().map { index, row in
+            (index: index, row: row, at: hub.fleet.lastAt(row),
+             name: sort == .name ? hub.fleet.title(row) : "",
+             rank: sort == .state ? (rank[home.activity(row.id)] ?? 2) : 0)
+        }
+        return keys.sorted { a, b in
             switch sort {
             case .name:
-                let order = hub.fleet.title(a).localizedCompare(hub.fleet.title(b))
+                let order = a.name.localizedCompare(b.name)
                 if order != .orderedSame { return order == .orderedAscending }
             case .state:
-                let ra = rank[home.activity(a.id)] ?? 2, rb = rank[home.activity(b.id)] ?? 2
-                if ra != rb { return ra < rb }
+                if a.rank != b.rank { return a.rank < b.rank }
             case .recent:
                 break
             }
-            return hub.fleet.lastAt(a) > hub.fleet.lastAt(b)
-        }
+            return a.at != b.at ? a.at > b.at : a.index < b.index
+        }.map(\.row)
     }
 
     /// `branches`: the rows as the tree they are, siblings in the rail's order at every depth.
