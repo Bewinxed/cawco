@@ -4894,7 +4894,6 @@ export function rewindableTurns(target: SessionState): Set<string> {
   for (const message of target.messages) {
     if (
       message.type === "user" &&
-      message.sdkUuid &&
       anchored &&
       message.state !== "sending" &&
       message.state !== "pending" &&
