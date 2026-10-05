@@ -12,7 +12,12 @@ console.debug = console.error;
 const output = (event: PiHostEvent): void => {
   process.stdout.write(`${JSON.stringify(event)}\n`);
 };
-const state: PiHostState = { sessionId: null, busy: false, held: [] };
+const state: PiHostState = {
+  sessionId: null,
+  busy: false,
+  held: [],
+  capabilities: ["handed", "exact-held"],
+};
 let session: HarnessSession | undefined;
 let starting: Promise<void> | undefined;
 

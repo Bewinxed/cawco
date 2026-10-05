@@ -135,7 +135,10 @@ export const startMcpGateway = (hubUrl: () => string) => {
             { status: 503 }
           );
         }
-        const release = holdRestart("mcp-relay", crypto.randomUUID());
+        const release =
+          request.method === "GET"
+            ? () => undefined
+            : holdRestart("mcp-relay", crypto.randomUUID());
         try {
           const response = await serve(request);
           if (!response.body) {

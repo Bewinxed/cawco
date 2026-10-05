@@ -647,6 +647,14 @@ export class SessionSupervisor {
     if (probe) {
       return () => undefined;
     }
+    // Custody inspection owns only each executing adapter attempt. Its retry
+    // wait is not an in-flight spawn; the machine recovery barrier remains.
+    if (
+      envelope.verb === "spawn" &&
+      (envelope.payload as SpawnPayload).reattachOnly
+    ) {
+      return () => undefined;
+    }
     let reason = `request:${envelope.verb}`;
     if (envelope.verb === "spawn") {
       reason = "spawn";
@@ -821,7 +829,7 @@ export class SessionSupervisor {
 
   restartReadiness(): Promise<AgentRestartReadiness> {
     const extra: AgentRestartReadiness["holds"] = [];
-    if (!this.custodyReady) {
+    if (this.#custodyState === "recovering") {
       extra.push({
         reason: `custody:${this.#custodyState}`,
         ids: [...this.#custodyInstances, "agent"],
@@ -1711,6 +1719,7 @@ export class SessionSupervisor {
           }
         }
         if (
+          // biome-ignore lint/suspicious/noUnnecessaryConditions: closure may fire before the asynchronous adapter installs its nullable handle.
           holder.session &&
           this.#sessions.get(instanceId) === holder.session
         ) {
@@ -2234,6 +2243,7 @@ export class SessionSupervisor {
       }
       this.#touch(instanceId);
     }
+    this.#handed(message.uuid);
     this.#unhanded.set(message.uuid, {
       instanceId,
       release: holdRestart("send", `${instanceId}/${message.uuid}`),

@@ -24,12 +24,9 @@ export function checkRestartToast(agents: readonly AgentRow[]): void {
       continue;
     }
     const name = agent.hostname || agent.machineId;
-    toast.info(
-      `${name} updated and restarted. Sessions carried on in sessiond.`,
-      {
-        id: `restart-${agent.machineId}-${Date.now()}`,
-        duration: 6000,
-      }
-    );
+    toast.info(`${name} updated and restarted. Running sessions carried on.`, {
+      id: `restart-${agent.machineId}-${Date.now()}`,
+      duration: 6000,
+    });
   }
 }

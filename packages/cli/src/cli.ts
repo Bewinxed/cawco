@@ -105,7 +105,7 @@ Options
   --check         for \`update\`: say what is available, install nothing
   --to <version>  for \`update\`: a named release instead of the newest
   --origin <url>  for \`deploy init\`: the remote to clone (default this one's)
-  --when-idle     for \`service restart\`: wait for this machine's sessions first
+  --when-idle     for \`service restart\`: wait for agent requests or sessiond turns
    --force         for \`service restart sessiond\`, \`join\` and \`deploy init\`:
                    override the destructive sessiond restart gate
   --follow, -f    keep printing, for \`service logs\`

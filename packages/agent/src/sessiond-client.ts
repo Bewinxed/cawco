@@ -690,15 +690,15 @@ export const sessiondBridge = (
         | undefined;
       client
         .write(procId, data)
-        .then(() => {
+        .then(() => callback())
+        // A write to a child that already died is the child's death, not a
+        // stream error the SDK should throw on: the exit event is the truth.
+        .catch(() => callback())
+        .finally(() => {
           if (response?.response?.request_id) {
             endHarnessAnswer(`${procId}/${response.response.request_id}`);
           }
-          callback();
-        })
-        // A write to a child that already died is the child's death, not a
-        // stream error the SDK should throw on: the exit event is the truth.
-        .catch(() => callback());
+        });
     },
     final(callback) {
       client

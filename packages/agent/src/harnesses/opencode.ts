@@ -3927,11 +3927,8 @@ export class OpencodeHarness implements Harness {
       ...(this.#mutatingMcp ? ["mcp-mutation"] : []),
       ...(this.#applyGate || this.#checkingPublication ? ["publication"] : []),
       ...[...this.#migrations.keys()].map((id) => `migration:${id}`),
-      ...[...this.#pendingRecoveries.keys()].map((id) => `recovery:${id}`),
       // biome-ignore lint/suspicious/noUnnecessaryConditions: recovery slots mutate across async operations.
-      ...(this.#recovering || this.#recoveryWaiters.length
-        ? ["reconcile"]
-        : []),
+      ...(this.#recovering ? ["reconcile"] : []),
     ];
   }
 

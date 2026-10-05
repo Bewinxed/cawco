@@ -28,6 +28,7 @@ export type PiHostCommand =
 
 export interface PiHostState {
   busy: boolean;
+  capabilities?: string[];
   held: string[];
   sessionId: string | null;
 }
@@ -76,6 +77,7 @@ export class PiRemoteSession implements HarnessSession {
   #seq: number;
   #ready = false;
   #busy = false;
+  #reportsHanded = false;
   readonly #frames: { seq: number; message: NeutralMessage }[] = [];
 
   constructor(
@@ -179,6 +181,7 @@ export class PiRemoteSession implements HarnessSession {
   }
 
   applyState(state: PiHostState): void {
+    this.#reportsHanded = state.capabilities?.includes("handed") ?? false;
     this.sessionId = state.sessionId;
     this.#setBusy(state.busy);
     if (state.sessionId) {
@@ -228,9 +231,13 @@ export class PiRemoteSession implements HarnessSession {
     extras: Pick<SendPayload, "attachments" | "images" | "urgent">
   ): void {
     this.#setBusy(true);
-    this.write({ type: "send", message, extras }).catch((error: unknown) =>
-      this.#ctx.rejected(message.uuid, error)
-    );
+    this.write({ type: "send", message, extras })
+      .then(() => {
+        if (!this.#reportsHanded) {
+          this.#ctx.handed?.(message.uuid);
+        }
+      })
+      .catch((error: unknown) => this.#ctx.rejected(message.uuid, error));
   }
   control(method: string, args: unknown[]): Promise<unknown> {
     return this.request({ type: "control", method, args });
