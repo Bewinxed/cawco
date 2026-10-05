@@ -557,17 +557,18 @@ export class BinaryUpdater {
     this.#staged = undefined;
     this.#flags.commanded = false;
     const target = waitsForChannel ? "waiting-for-channel" : "none";
-    if (
-      this.#state.phase !== target &&
-      [
-        "failed",
-        "available",
-        "downloading",
-        "ready",
-        "waiting-for-channel",
-        "none",
-      ].includes(this.#state.phase)
-    ) {
+    // A finished install stays `installed` until the next update, except that a change of channel is what
+    // the machine is now waiting on.
+    const settles = [
+      "failed",
+      "available",
+      "downloading",
+      "ready",
+      "waiting-for-channel",
+      "none",
+      ...(waitsForChannel ? (["installed"] as const) : []),
+    ];
+    if (this.#state.phase !== target && settles.includes(this.#state.phase)) {
       await this.#set({
         phase: target,
         availableVersion: undefined,
