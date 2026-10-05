@@ -63,8 +63,8 @@ attaches the build to CawCo's Internal group and verifies group membership.
 The owner is the existing tester in Anbar's Internal group; Anbar is read only.
 
 Team: `FN5LJSPX2R`. Bundle resource: `BS3NP7UWF9` (`dev.cawco.app`).
-Profile: `CawCo App Store 20261005` (`KGL5Q5DZ6A`). The app record and internal
-group IDs are recorded here once created.
+Profile: `CawCo App Store 20261005` (`KGL5Q5DZ6A`). App record: `6819139448`.
+Internal group: `e873c55b-558a-4473-a2ae-a2bdb9780c49`.
 
 Signing is manual for Release on the device SDK only. Credentials stay on the
 Mac: the existing `~/asc.py` and `~/.appstoreconnect/anbar.env` supply API

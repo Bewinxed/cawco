@@ -59,6 +59,8 @@ targets:
       path: CawCo/Info.plist
       properties:
         CFBundleDisplayName: CawCo
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        CFBundleShortVersionString: $(MARKETING_VERSION)
         ITSAppUsesNonExemptEncryption: false
         NSUserActivityTypes: [dev.cawco.session, dev.cawco.scene]
         UILaunchScreen: {}

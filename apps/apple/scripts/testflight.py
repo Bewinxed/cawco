@@ -96,15 +96,25 @@ def ship(app):
         suffixes = [1 if v == today else int(v.split(".")[1]) for v in used if v == today or (v.startswith(today + ".") and v.split(".")[1].isdigit())]
         number = today if not suffixes else f"{today}.{max(suffixes) + 1}"
         source = ROOT / "source/apps/apple"
-        os.chdir(source)
-        subprocess.run(["/opt/homebrew/bin/xcodegen", "generate", "--quiet"], check=True)
         archive = ROOT / "CawCo.xcarchive"
         derived = ROOT / "DerivedData"
-        for path in [archive, derived, ROOT / "export"]:
-            if path.exists():
-                shutil.rmtree(path)
+        existing = sys.argv[1:] == ["--upload-archive"]
+        if existing:
+            number = plistlib.loads((archive / "Info.plist").read_bytes())["ApplicationProperties"]["CFBundleVersion"]
+            if number in used:
+                raise RuntimeError(f"Archive build {number} already exists in App Store Connect")
+        else:
+            os.chdir(source)
+            subprocess.run(["/opt/homebrew/bin/xcodegen", "generate", "--quiet"], check=True)
+            for path in [archive, derived, ROOT / "export"]:
+                if path.exists():
+                    shutil.rmtree(path)
         print(f"BUILD_NUMBER {number}", flush=True)
-        signed(["xcodebuild", "-project", "CawCo.xcodeproj", "-scheme", "CawCo", "-configuration", "Release", "-destination", "generic/platform=iOS", "-skipPackagePluginValidation", "-derivedDataPath", str(derived), "-archivePath", str(archive), f"CURRENT_PROJECT_VERSION={number}", "clean", "archive"], ROOT / "archive.log")
+        if not existing:
+            signed(["xcodebuild", "-project", "CawCo.xcodeproj", "-scheme", "CawCo", "-configuration", "Release", "-destination", "generic/platform=iOS", "-skipPackagePluginValidation", "-derivedDataPath", str(derived), "-archivePath", str(archive), f"CURRENT_PROJECT_VERSION={number}", "clean", "archive"], ROOT / "archive.log")
+            archived_number = plistlib.loads((archive / "Info.plist").read_bytes())["ApplicationProperties"]["CFBundleVersion"]
+            if archived_number != number:
+                raise RuntimeError(f"Archive build number {archived_number} does not match requested {number}")
         if sys.argv[1:] == ["--archive"]:
             return
         options = ROOT / "ExportOptions.plist"
@@ -134,7 +144,9 @@ def ship(app):
             internal = api("POST", "/v1/betaGroups", {"data": {"type": "betaGroups", "attributes": {"name": "Internal", "isInternalGroup": True}, "relationships": {"app": relationship("apps", app)}}})["data"]
         testers = listed("/v1/betaGroups/18bd36fb-1016-42b2-bc5a-e080c46f1c23/betaTesters?limit=200")
         owner = next(t for t in testers if t["id"] == "7ca9213a-a5dd-4a65-a37d-927043b3780e")
-        api("POST", f"/v1/betaGroups/{internal['id']}/relationships/betaTesters", {"data": [{"type": "betaTesters", "id": owner["id"]}]})
+        members = listed(f"/v1/betaGroups/{internal['id']}/betaTesters?limit=200")
+        if not any(t["attributes"]["email"] == owner["attributes"]["email"] for t in members):
+            api("POST", "/v1/betaTesters", {"data": {"type": "betaTesters", "attributes": {key: owner["attributes"][key] for key in ["email", "firstName", "lastName"]}, "relationships": {"betaGroups": {"data": [{"type": "betaGroups", "id": internal["id"]}]}}}})
         api("POST", "/v1/betaBuildLocalizations", {"data": {"type": "betaBuildLocalizations", "attributes": {"locale": "en-US", "whatsNew": "Connect to your CawCo hub and check the live fleet, sessions and transcripts.\nTry approvals, steering, workflows and configuration; report any issues."}, "relationships": {"build": relationship("builds", build["id"])}}})
         api("POST", f"/v1/betaGroups/{internal['id']}/relationships/builds", {"data": [{"type": "builds", "id": build["id"]}]})
         print(f"APP_ID {app} GROUP_ID {internal['id']} BUILD_ID {build['id']}")
@@ -150,7 +162,7 @@ try:
     app = apps[0]["id"] if apps else None
     if sys.argv[1:] == ["--status"]:
         status(app)
-    elif not sys.argv[1:] or sys.argv[1:] == ["--archive"]:
+    elif not sys.argv[1:] or sys.argv[1:] in [["--archive"], ["--upload-archive"]]:
         ship(app)
     else:
         raise RuntimeError("usage: testflight.py [--status]")
