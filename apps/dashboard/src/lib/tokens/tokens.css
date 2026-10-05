@@ -595,6 +595,12 @@
     --c-suggest-room: calc(var(--c-suggest-row) + var(--space-2));
     /* The delegate tray's row: a chip, and the step down to the pill. */
     --c-tray-chip: 28px;
+    /* A delegate chip's shrink floor, shared by layout and overflow accounting. */
+    --c-tray-min: 120px;
+    --c-tray-max: 224px;
+    --c-tray-more: 52px;
+    /* The delegate detail's height cap; a touch fan leaves this much room above it. */
+    --c-tray-panel-cap: 320px;
     --c-tray-gap: var(--space-2);
     --c-tray-row: calc(var(--c-tray-chip) + var(--c-tray-gap));
     --icon-sm: 12px;
