@@ -204,6 +204,9 @@ private final class UsageStripCell: UIView {
 final class UsageSheetController: ObservedViewController {
     private let home: HomeModel
     private let stack = UIStackView()
+    private var naturalHeight: NSLayoutConstraint!
+    private var measuredWidth = 0.0
+    private var needsMeasure = true
     let scroll = UIScrollView()
     /// Opens the Usage page (`.pop-foot`); the foot shows only where a page can be opened.
     var onPage: (() -> Void)?
@@ -227,6 +230,14 @@ final class UsageSheetController: ObservedViewController {
         scroll.contentInsetAdjustmentBehavior = .never
         view.addSubview(scroll)
         scroll.addSubview(stack)
+        naturalHeight = stack.heightAnchor.constraint(equalToConstant: 0)
+        naturalHeight.priority = .required - 1
+        registerForTraitChanges([UITraitPreferredContentSizeCategory.self]) { (controller: UsageSheetController, _: UITraitCollection) in
+            controller.needsMeasure = true
+            controller.view.setNeedsLayout()
+        }
+        let fit = scroll.heightAnchor.constraint(equalTo: stack.heightAnchor)
+        fit.priority = .defaultHigh - 1
         // The sheet allocates the viewport. Its list keeps its natural height,
         // so navigation chrome cannot push the foot beyond the visible scroll area.
         NSLayoutConstraint.activate([
@@ -238,10 +249,25 @@ final class UsageSheetController: ObservedViewController {
             stack.bottomAnchor.constraint(equalTo: scroll.contentLayoutGuide.bottomAnchor),
             stack.leadingAnchor.constraint(equalTo: scroll.frameLayoutGuide.leadingAnchor),
             stack.trailingAnchor.constraint(equalTo: scroll.frameLayoutGuide.trailingAnchor),
+            fit,
         ])
     }
 
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        guard scroll.bounds.width > 0, needsMeasure || measuredWidth != scroll.bounds.width else { return }
+        needsMeasure = false
+        measuredWidth = scroll.bounds.width
+        naturalHeight.isActive = false
+        let measured = stack.systemLayoutSizeFitting(CGSize(width: scroll.bounds.width, height: 0),
+                                                     withHorizontalFittingPriority: .required, verticalFittingPriority: .fittingSizeLevel).height
+        naturalHeight.constant = measured
+        naturalHeight.isActive = true
+    }
+
     override func refreshContent() {
+        needsMeasure = true
+        view.setNeedsLayout()
         let usage = home.usage
         let now = home.now
         stack.arrangedSubviews.forEach { $0.removeFromSuperview() }
