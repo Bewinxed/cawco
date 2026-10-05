@@ -542,7 +542,11 @@ joiner_starts_held() {
   install_now_request "$jid" > /dev/null
   start_loop "$jid" joinerstart "$out/accepted-joiner.txt" "$out/stop-joiner" &
   loop=$!
-  wait_until 300 '[[ "$(build_version $jid)" == 0.0.1-test.2 && "$(phase $jid)" == installed ]]'
+  # The machine's sessions are held by its session keeper, which is never restarted while it holds a child:
+  # the update is complete when the new build runs and the phase is waiting-sessions (the keeper stays on
+  # the old build), or installed when nothing was held. It is not complete while the phase is installing.
+  wait_until 300 '[[ "$(build_version $jid)" == 0.0.1-test.2 && ( "$(phase $jid)" == installed || "$(phase $jid)" == waiting-sessions ) ]]'
+  [[ "$(field $jid installedVersion)" == 0.0.1-test.2 ]]
   touch "$out/stop-joiner"
   wait "$loop"
   accepted_ran_once "$jid" "$joinerc" joinerstart "$out/accepted-joiner.txt"
