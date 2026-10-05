@@ -38,8 +38,8 @@ export const UPDATE_TIMEOUT_MS = 180_000;
 export const INSTALL_TIMEOUT_MS = 300_000;
 
 /**
- * Blocks per older transcript page, read one page per task once the newest
- * page is on screen. The newest page is the hub's own size (`TRANSCRIPT_PAGE`,
- * @cawco/core): small, so a tab paints from its first read.
+ * Blocks per older transcript page, read one page at a time as the reader
+ * nears the first rows on screen. The newest page is the hub's own size
+ * (`TRANSCRIPT_PAGE`, @cawco/core): small, so a tab paints from its first read.
  */
 export const TRANSCRIPT_OLDER_PAGE = 250;

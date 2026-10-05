@@ -353,7 +353,7 @@ export interface SessionState {
   effort: SessionEffort | null;
   /** Which harness owns {@link sessionId} — what a resume and a catalog read route on. */
   harness: HarnessKind;
-  /** An older page of the transcript is being read. */
+  /** An older page of the transcript is being read: one at a time (see {@link readOlderPage}). */
   hydrating: boolean;
   /** The `system.init` banner is re-emitted every turn; render it once. */
   initialized: boolean;
@@ -403,6 +403,12 @@ export interface SessionState {
    */
   notes: { after: string | null; message: Message }[];
   /**
+   * Why the last read of an older page failed, until it is asked for again.
+   * Apart from {@link readFault}: the rows already read stay on screen, and
+   * {@link cursor} stays where it was, so asking again asks for the same page.
+   */
+  olderFault: ReadFault | null;
+  /**
    * Which content block the main loop has open right now, from the partials —
    * `null` between blocks and outside a turn. This is the only evidence of what
    * the session is doing while it does it, and the tail says nothing the
@@ -426,6 +432,12 @@ export interface SessionState {
    * and leave the pane on its loading state for the life of the tab.
    */
   readFault: ReadFault | null;
+  /**
+   * How many newest pages this view has taken. An older page is asked for
+   * under one of them, and its answer is dropped when another has landed
+   * since: it belongs to the transcript that read replaced.
+   */
+  reads: number;
   /** The hub's record of every send this view has heard of, by uuid. */
   records: Record<string, SendRecord>;
   /** Started again in place for a mode it could not switch into; ends at the next init. */
@@ -785,6 +797,8 @@ export function blankSession(instanceId: string): SessionState {
     loading: false,
     hydrating: false,
     readFault: null,
+    olderFault: null,
+    reads: 0,
     initialized: false,
     permissionMode: null,
     model: null,
@@ -1293,6 +1307,10 @@ function adoptTranscriptPage(target: SessionState, page: TranscriptPage): void {
   );
   target.notes = [];
   target.cursor = page.cursor;
+  // A new newest page is a new read: an older page still on its way belongs
+  // to the transcript this one replaced, and so does what was said of one.
+  target.reads += 1;
+  target.olderFault = null;
   const { tail } = page;
   target.subagents = Object.fromEntries(
     page.branches.map((branch) => [
@@ -4326,9 +4344,9 @@ export function readTranscript(
 }
 
 /**
- * The newest page into the view, its stream resumed from the page's `seq`, and
- * the older pages after it, each in a task of its own so the reader scrolls
- * and types through them.
+ * The newest page into the view, and its stream resumed from the page's
+ * `seq`. Nothing older is read here: the view asks for it a page at a time,
+ * as its reader nears the first rows it holds ({@link readOlderPage}).
  */
 async function readNewestPage(
   target: SessionState
@@ -4370,37 +4388,62 @@ async function readNewestPage(
   } finally {
     target.loading = false;
   }
-  // biome-ignore lint/complexity/noVoid: the older pages fill in behind the newest; the read's outcome is the newest page's
-  void readOlder(target);
   return { ok: true };
 }
 
-/**
- * Every page older than what the view holds, oldest last, each prepended in a
- * task of its own. Stops at the conversation's start, or when the view's
- * transcript is read again under it.
- */
-async function readOlder(target: SessionState): Promise<void> {
-  target.hydrating = true;
-  let { cursor } = target;
+/** The page that ends at `cursor`, or why it could not be read. */
+async function olderPage(
+  viewId: string,
+  cursor: string
+): Promise<TranscriptPage | ReadFault> {
   try {
-    while (cursor) {
-      // biome-ignore lint/performance/noAwaitInLoops: each page starts where the last one ended
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      const response = await fetch(
-        transcriptUrl(target.instanceId, {
-          cursor,
-          limit: TRANSCRIPT_OLDER_PAGE,
-        })
-      );
-      if (!response.ok || target.cursor !== cursor) {
-        return;
-      }
-      prependTranscriptPage(target, (await response.json()) as TranscriptPage);
-      ({ cursor } = target);
+    const response = await fetch(
+      transcriptUrl(viewId, { cursor, limit: TRANSCRIPT_OLDER_PAGE })
+    );
+    if (response.ok) {
+      return (await response.json()) as TranscriptPage;
     }
-  } finally {
-    target.hydrating = false;
+    const { detail } = await hubFailure(response);
+    return readFaultOf(
+      detail,
+      response.status === 503 ? response.headers.get("x-cawco-machine") : null
+    );
+  } catch (error) {
+    return {
+      reason: "failed",
+      message: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+/**
+ * The one page older than what a view holds, put in front of it. Asked for by
+ * whoever is reading near the first rows held — never ahead of a reader. One
+ * page is out at a time, and nothing is asked once the conversation's start
+ * is in hand or while the newest page is itself being read. An answer that
+ * comes back to a transcript read again since, or to a cursor that has moved,
+ * is dropped. A page that could not be read leaves the cursor where it was
+ * and says why ({@link SessionState.olderFault}): asking again asks for the
+ * same page.
+ */
+export async function readOlderPage(viewId: string): Promise<void> {
+  const target = state.sessions[viewId];
+  const cursor = target?.cursor;
+  if (!(target && cursor) || target.hydrating || target.loading) {
+    return;
+  }
+  const { reads } = target;
+  target.hydrating = true;
+  target.olderFault = null;
+  const answer = await olderPage(viewId, cursor);
+  target.hydrating = false;
+  if (target.reads !== reads || target.cursor !== cursor) {
+    return;
+  }
+  if ("blocks" in answer) {
+    prependTranscriptPage(target, answer);
+  } else {
+    target.olderFault = answer;
   }
 }
 

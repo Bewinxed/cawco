@@ -19,9 +19,10 @@ export interface SessionName {
 /**
  * `served` is what the layout server resolved for every open tab before the
  * first paint, so the very first render already carries the right name and a
- * reload morphs nothing. The transcript names a session only once it is fully
- * read: the fetch streams newest-first, so the first user message a half-read
- * transcript holds is one from the middle of the conversation. And the
+ * reload morphs nothing. The transcript names a session only once its start is
+ * in hand (no page older than what the view holds): it is read newest-first, a
+ * page at a time as its reader scrolls up, so the first user message a
+ * part-read transcript holds is one from the middle of the conversation. And the
  * transcript's name is only taken once the fleet has answered: the hub's own
  * title arrives with the socket snapshot, later than a short transcript
  * settles, and a name derived in that window is exactly the flash the served
@@ -37,7 +38,7 @@ export function sessionName(
   const ctx = contextOf(id);
   const title = row?.title;
   const settled =
-    !!view && !view.loading && !view.hydrating && view.messages.length > 0;
+    !!view && !view.loading && view.cursor === null && view.messages.length > 0;
   const firstMessage = settled
     ? view.messages.find((m) => m.type === "user" && m.content.trim())?.content
     : undefined;
