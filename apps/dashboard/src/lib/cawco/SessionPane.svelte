@@ -79,6 +79,7 @@
     composerBindings,
   } from "./workspace/composer-dock.svelte";
   import { rebuildScheduler } from "./workspace/scheduler.svelte";
+  import { workspace } from "./workspace/workspace.svelte";
 
   let {
     viewId,
@@ -350,17 +351,26 @@
   });
 
   /**
+   * Whether the reader is on this conversation: on screen, and the tab its
+   * group is showing. A phone paints the neighbours of the showing tab parked
+   * either side, so `visible` alone stays true across a swipe to one.
+   */
+  const here = $derived(
+    visible && (workspace.leafOf(viewId)?.active ?? viewId) === viewId
+  );
+
+  /**
    * A reader who left this conversation while its transcript was still on its
    * way and came back is not owed that read's remaining wait: it is ended and
    * read afresh, the same one read the pane's first look made. A pane never
    * shown has not been left, so a background read that is moving is not cut.
    */
-  let seenBefore = untrack(() => visible);
+  let seenBefore = untrack(() => here);
   let leftUnread = false;
   $effect(() => {
-    const shownNow = visible;
+    const present = here;
     untrack(() => {
-      if (!shownNow) {
+      if (!present) {
         const held = cawco.session(viewId);
         leftUnread =
           seenBefore && !(held?.initialized && held.messages.length > 0);
