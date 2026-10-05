@@ -531,13 +531,14 @@
     }
     const leaves = [...fan.querySelectorAll<HTMLElement>(".leaf")];
     const w = Math.max(0, ...leaves.map((leaf) => leaf.offsetWidth));
-    const x = Math.max(0, Math.min(more.offsetLeft, root.clientWidth - w));
+    const at = (more.parentElement as HTMLElement).offsetLeft;
+    const x = Math.max(0, Math.min(at, root.clientWidth - w));
     const room = roomOver(root);
     fanBox = {
       x,
       w,
       room,
-      dx: more.offsetLeft - x,
+      dx: at - x,
       // The stack's own height: the fan's scroll height also counts the
       // folded chips, which stand a chip below it.
       tall: (fan.firstElementChild as HTMLElement).offsetHeight > room,
@@ -955,51 +956,54 @@
           {@render chipButton(chip, i, false)}
         {/each}
         {#if hidden.length}
-          <button
-            aria-controls={fanId}
-            aria-expanded={fanOpen}
-            aria-label="{hidden.length} more delegates"
-            class="chip more touch-hit"
-            data-flip="pop"
-            data-key="more"
-            onclick={onmorepress}
-            onfocus={() => {
-              current = shown.length;
-            }}
-            onmousedown={(event) => event.preventDefault()}
-            onpointerenter={() => onchipenter("more")}
-            tabindex={current === shown.length ? 0 : -1}
-            type="button"
-            class:needs={hidden.some((chip) => chip.tone === "needs")}
-          >
-            +{hidden.length}
-          </button>
-        {/if}
-      </div>
+          <!-- "+N" and its fan are one box in the row: the fan stands on it,
+               so it travels with "+N" through a resize or a chip joining
+               or leaving, on the one slide the row gives it. -->
+          <div class="morebox" data-flip="pop">
+            <button
+              aria-controls={fanId}
+              aria-expanded={fanOpen}
+              aria-label="{hidden.length} more delegates"
+              class="chip more touch-hit"
+              data-key="more"
+              onclick={onmorepress}
+              onfocus={() => {
+                current = shown.length;
+              }}
+              onmousedown={(event) => event.preventDefault()}
+              onpointerenter={() => onchipenter("more")}
+              tabindex={current === shown.length ? 0 : -1}
+              type="button"
+              class:needs={hidden.some((chip) => chip.tone === "needs")}
+            >
+              +{hidden.length}
+            </button>
 
-      <!-- The fan: what "+N" holds, as chips, in a column over it. Always
-           laid out, folded into "+N" until it opens, so opening and closing
-           are one transition a pointer can turn round half-way. -->
-      <div
-        class="fan"
-        id={fanId}
-        inert={held || !fanOpen}
-        bind:this={fan}
-        style:--dx="{fanBox.dx}px"
-        style:--fan-w="{fanBox.w}px"
-        style:--fan-x="{fanBox.x}px"
-        style:--n={hidden.length}
-        style:--room="{fanBox.room}px"
-        class:open={fanOpen}
-        class:tall={fanBox.tall}
-      >
-        <ul aria-label="More delegates" class="stack">
-          {#each hidden as chip, j (chip.item.id)}
-            <li class="leaf" style:--i={j} out:fanOut>
-              {@render chipButton(chip, shown.length + 1 + j, true)}
-            </li>
-          {/each}
-        </ul>
+            <!-- The fan: what "+N" holds, as chips, in a column over it. Always
+                 laid out, folded into "+N" until it opens, so opening and
+                 closing are one transition a pointer can turn round half-way. -->
+            <div
+              class="fan"
+              id={fanId}
+              inert={held || !fanOpen}
+              bind:this={fan}
+              style:--dx="{fanBox.dx}px"
+              style:--fan-w="{fanBox.w}px"
+              style:--n={hidden.length}
+              style:--room="{fanBox.room}px"
+              class:open={fanOpen}
+              class:tall={fanBox.tall}
+            >
+              <ul aria-label="More delegates" class="stack">
+                {#each hidden as chip, j (chip.item.id)}
+                  <li class="leaf" style:--i={j} out:fanOut>
+                    {@render chipButton(chip, shown.length + 1 + j, true)}
+                  </li>
+                {/each}
+              </ul>
+            </div>
+          </div>
+        {/if}
       </div>
 
       <!-- The house hover panel; its mousedown is swallowed so a phone's
@@ -1254,6 +1258,12 @@
     }
   }
 
+  /* "+N"'s box in the row, and what the fan stands on. */
+  .morebox {
+    position: relative;
+    flex: none;
+    display: flex;
+  }
   .more {
     flex: none;
     min-inline-size: 0;
@@ -1383,8 +1393,8 @@
     gap: var(--space-2);
   }
 
-  /* The fan. It stands on the row's top edge at "+N" (--fan-x: pulled back
-     inside the row's end by its widest chip) and is as tall as its chips,
+  /* The fan. It stands on "+N"'s box (pulled back inside the row's end by
+     its widest chip: --dx) and is as tall as its chips,
      each a step (a chip and the row's gap) over the last. A leaf is placed
      by translate alone, from the stack's foot: folded, on "+N"'s own box
      and clipped to its width, so the stack reads as "+N" itself; open, in
@@ -1398,7 +1408,7 @@
     inset-inline-start: 0;
     inline-size: var(--fan-w);
     block-size: min(calc(var(--n) * var(--step)), var(--room));
-    translate: var(--fan-x) 0;
+    translate: calc(var(--dx) * -1) 0;
     pointer-events: none;
   }
   /* Taller than the room over the tray: it scrolls there, from "+N" up. */
