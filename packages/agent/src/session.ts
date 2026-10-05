@@ -677,6 +677,14 @@ export class SessionSupervisor {
   /** Settles once the envelope has been handled, success or failure alike. */
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: address ACK bypasses the queue waiting on that same ACK
   dispatch(envelope: Envelope): Promise<void> {
+    if (envelope.verb === "stop") {
+      const stop = envelope.payload as StopPayload;
+      Effect.runFork(
+        Effect.logInfo(
+          `[agent] stop session=${stop.instanceId} request=${stop.requestId ?? "none"} machine=${envelope.machineId} outcome=received elapsedMs=0`
+        )
+      );
+    }
     const control =
       envelope.verb === "control"
         ? (envelope.payload as ControlPayload)
@@ -2470,6 +2478,7 @@ export class SessionSupervisor {
     claimedSessionIds = [],
     scratchWorktree,
   }: StopPayload): Promise<void> {
+    const stopStartedAt = Date.now();
     const processGeneration =
       namedGeneration ?? this.#generations.get(instanceId);
     // A stop is a decision about the session: nothing waits for its wake now.
@@ -2593,6 +2602,11 @@ export class SessionSupervisor {
           await this.#removeQuestSession(instanceId);
         }
       }
+      Effect.runFork(
+        Effect.logInfo(
+          `[agent] stop session=${instanceId} request=${requestId ?? "none"} outcome=runner-gone elapsedMs=${Date.now() - stopStartedAt}`
+        )
+      );
       this.sink({
         kind: "stopped",
         instanceId,
@@ -2605,6 +2619,9 @@ export class SessionSupervisor {
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      warn(
+        `[agent] stop session=${instanceId} request=${requestId ?? "none"} outcome=failed elapsedMs=${Date.now() - stopStartedAt}`
+      );
       if (requestId) {
         this.sink({
           kind: "control_result",

@@ -4224,6 +4224,27 @@ export const createServer = (
         }
       );
   const recoveringRemoved = new Set<string>();
+  const stopDispatches = new Map<
+    string,
+    {
+      instanceId: string;
+      machineId: string;
+      requestId: string | undefined;
+      at: number;
+      timer: ReturnType<typeof setTimeout>;
+    }
+  >();
+  const finishStopDispatch = (key: string, outcome: string): void => {
+    const sent = stopDispatches.get(key);
+    if (!sent) {
+      return;
+    }
+    clearTimeout(sent.timer);
+    stopDispatches.delete(key);
+    console.info(
+      `[hub] stop session=${sent.instanceId} request=${sent.requestId ?? "none"} machine=${sent.machineId} outcome=${outcome} elapsedMs=${Date.now() - sent.at}`
+    );
+  };
   const lifecycle = createSessionLifecycle({
     db,
     machineName: (machineId) => {
@@ -4321,6 +4342,23 @@ export const createServer = (
         instanceId: payload.instanceId,
         ...(payload.requestId ? { requestId: payload.requestId } : {}),
         payload,
+      });
+      const key =
+        payload.requestId ?? `${payload.instanceId}:${payload.stopSequence}`;
+      finishStopDispatch(key, "redelivered");
+      const at = Date.now();
+      console.info(
+        `[hub] stop session=${payload.instanceId} request=${payload.requestId ?? "none"} machine=${machineId} outcome=dispatched elapsedMs=0`
+      );
+      stopDispatches.set(key, {
+        instanceId: payload.instanceId,
+        machineId,
+        requestId: payload.requestId,
+        at,
+        timer: setTimeout(
+          () => finishStopDispatch(key, "timed-out"),
+          payload.discard ? 30_000 : READ_TIMEOUT_MS
+        ),
       });
       return true;
     },
@@ -4437,6 +4475,86 @@ export const createServer = (
       };
       observe();
     });
+
+  /** A stored Stop survives reconnects; its caller still gets a bounded receipt. */
+  const stopFromDashboard = (dashboard: HubSocket, message: Envelope): void => {
+    const { instanceId } = message;
+    if (!instanceId) {
+      toDashboard(
+        dashboard,
+        failure(message, "No session was named. Refresh, then retry.")
+      );
+      return;
+    }
+    const requestId =
+      message.requestId ??
+      peek(message.payload, "requestId") ??
+      crypto.randomUUID();
+    const discard = peekDiscard(message.payload);
+    const at = Date.now();
+    const reply = (frame: ControlResult, outcome = "failed"): void => {
+      clearTimeout(timer);
+      waiting.delete(requestId);
+      lifecycle.answered(requestId, frame.ok);
+      if (!frame.ok) {
+        if (stopDispatches.has(requestId)) {
+          finishStopDispatch(requestId, outcome);
+        } else {
+          console.info(
+            `[hub] stop session=${instanceId} request=${requestId} machine=${message.machineId} outcome=${outcome} elapsedMs=${Date.now() - at}`
+          );
+        }
+      }
+      toDashboard(dashboard, {
+        ...message,
+        verb: "frames",
+        requestId,
+        payload: frame,
+      });
+    };
+    const timer = setTimeout(
+      () =>
+        reply(
+          {
+            kind: "control_result",
+            requestId,
+            ok: false,
+            error:
+              "Stop got no answer in time. The machine may be offline. Check the machine, then retry.",
+          },
+          "timed-out"
+        ),
+      discard ? 30_000 : READ_TIMEOUT_MS
+    );
+    waiting.set(requestId, reply);
+    try {
+      endSession(instanceId, discard ? "discard" : "stop", requestId);
+      if (db.ownedInstance(instanceId)?.endConfirmedAt) {
+        reply({ kind: "control_result", requestId, ok: true });
+      } else if (!registry.agent(message.machineId)) {
+        reply(
+          {
+            kind: "control_result",
+            requestId,
+            ok: false,
+            error:
+              "Stop is recorded, but the machine is offline. Check the machine, then retry.",
+          },
+          "offline"
+        );
+      }
+    } catch (error) {
+      reply(
+        {
+          kind: "control_result",
+          requestId,
+          ok: false,
+          error: error instanceof Error ? error.message : String(error),
+        },
+        "refused"
+      );
+    }
+  };
 
   /**
    * A summariser the continuation is done with: stopped on its machine, and
@@ -10888,6 +11006,14 @@ export const createServer = (
                 ) {
                   break;
                 }
+                for (const [key, sent] of stopDispatches) {
+                  if (
+                    sent.instanceId === message.instanceId &&
+                    sent.machineId === message.machineId
+                  ) {
+                    finishStopDispatch(key, "runner-gone");
+                  }
+                }
                 turnWaiters
                   .get(message.instanceId)
                   ?.reject(
@@ -11893,34 +12019,7 @@ export const createServer = (
               // heartbeat case). Only a send brings it back (`ensureAlive`).
               // Both Stop and Discard wait for the machine's teardown receipt.
               // Persisting intent is not proof that the runner has ended.
-              if (message.instanceId) {
-                const requestId =
-                  message.requestId ?? peek(message.payload, "requestId");
-                const discard = peekDiscard(message.payload);
-                if (requestId) {
-                  registry.rememberRequester(requestId, ws);
-                }
-                endSession(
-                  message.instanceId,
-                  discard ? "discard" : "stop",
-                  requestId
-                );
-                if (
-                  requestId &&
-                  db.ownedInstance(message.instanceId)?.endConfirmedAt
-                ) {
-                  lifecycle.answered(requestId, true);
-                  registry.takeRequester(requestId);
-                  toDashboard(ws, {
-                    ...message,
-                    verb: "frames",
-                    requestId,
-                    payload: { kind: "control_result", requestId, ok: true },
-                  });
-                }
-                forgetPending(message.instanceId, UNREAD.stopped);
-                publishInstances(message.machineId);
-              }
+              stopFromDashboard(ws, message);
               // A stop cuts the turn it lands in, as an interrupt does.
               if (message.instanceId) {
                 noteInterrupt(message.instanceId);
