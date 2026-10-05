@@ -251,6 +251,15 @@ final class SidebarViewController: ObservedViewController {
 
     // MARK: Home
 
+    /// Watches the home list's content height, which the home's slot follows.
+    private var homeHeight: NSKeyValueObservation?
+    private var homeFits: NSLayoutConstraint?
+
+    private func fitHome(_ height: Double) {
+        guard let homeFits, height > 0, abs(homeFits.constant - height) > 0.5 else { return }
+        homeFits.constant = height
+    }
+
     private func mountHome(_ old: UIViewController?) {
         guard isViewLoaded else { return }
         if let old {
@@ -270,10 +279,25 @@ final class SidebarViewController: ObservedViewController {
             content.trailingAnchor.constraint(equalTo: homeSlot.trailingAnchor),
             content.bottomAnchor.constraint(equalTo: homeSlot.bottomAnchor, constant: -5),
         ])
-        // Until the home's rail variant lands it scrolls on its own: give it the
-        // column's height so the rail stays one scroller under it.
-        let tall = content.heightAnchor.constraint(equalTo: scroll.frameLayoutGuide.heightAnchor, multiplier: 0.6)
-        tall.isActive = true
+        // The home is as tall as what it holds, as the web's is in the rail:
+        // on a hub with nothing running, Caw and his line, and the projects
+        // straight under them. It scrolls on its own, so past six tenths of
+        // the rail it stops growing and the projects stay in reach.
+        // It starts at the cap: a list with no height lays nothing out and reports none.
+        let fits = content.heightAnchor.constraint(equalToConstant: 10000)
+        fits.priority = .defaultHigh
+        NSLayoutConstraint.activate([
+            fits,
+            content.heightAnchor.constraint(lessThanOrEqualTo: scroll.frameLayoutGuide.heightAnchor, multiplier: 0.6),
+        ])
+        homeFits = fits
+        homeHeight?.invalidate()
+        if let list = content.subviews.compactMap({ $0 as? UIScrollView }).first {
+            homeHeight = list.observe(\.contentSize, options: [.initial, .new]) { [weak self] _, change in
+                guard let size = change.newValue else { return }
+                MainActor.assumeIsolated { self?.fitHome(size.height) }
+            }
+        }
         // The seam under the home: a pixel above the gap that follows it.
         let seam = UIView()
         seam.backgroundColor = Palette.seam
@@ -439,10 +463,21 @@ final class SidebarViewController: ObservedViewController {
         var keptBlocks: [String: ProjectBlock] = [:]
         var keptRows: [String: SessionRailRow] = [:]
         guard !lists.isEmpty else {
-            let note = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted, lines: 0)
-            note.text = hub.fleet.machines.isEmpty
+            // `text-meta text-muted-foreground`; the command's name in the
+            // mono face at label size, in the foreground ink.
+            let note = UILabel()
+            let said = hub.fleet.machines.isEmpty
                 ? "Run cawco on a machine, then group its checkouts here."
                 : "No projects yet — name a checkout to group its sessions."
+            let words = NSMutableAttributedString(string: said, attributes: TypeScale.typeMeta.attributes(color: Palette.mutedForeground))
+            let command = (said as NSString).range(of: "cawco")
+            if command.location != NSNotFound {
+                words.addAttributes([.font: TypeScale.typeCode.with(points: TypeScale.typeLabel.points).font,
+                                     .foregroundColor: Palette.foreground], range: command)
+            }
+            note.attributedText = words
+            note.numberOfLines = 0
+            note.lineBreakMode = .byWordWrapping
             let box = UIStackView(arrangedSubviews: [note])
             box.isLayoutMarginsRelativeArrangement = true
             box.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 0, leading: 10, bottom: 0, trailing: 10)
@@ -566,14 +601,14 @@ final class SidebarViewController: ObservedViewController {
         let project = block.project
         let shut = !prefs.collapsed(project.cwd)
         if shut {
-            fold.close(block.sessionsBox, glyphs: block.sessionGlyphs()) { [weak self] in
+            fold.close(block.sessionsBox, glyphs: block.sessionGlyphs(), rail: block.rail) { [weak self] in
                 self?.prefs.setCollapsed(project.cwd, true)
                 self?.requestRefresh()
             }
         } else {
             prefs.setCollapsed(project.cwd, false)
             refreshNow()
-            fold.open(block.sessionsBox, glyphs: block.sessionGlyphs(), in: view)
+            fold.open(block.sessionsBox, glyphs: block.sessionGlyphs(), rail: block.rail, in: view)
         }
     }
 

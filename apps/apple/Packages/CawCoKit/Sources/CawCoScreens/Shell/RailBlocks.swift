@@ -3,13 +3,21 @@ import CawCoDesign
 import UIKit
 
 /// A project in the rail: its row (`LIST_ROW`: 30pt, mark, name, what is
-/// running in it), and while open its sessions under it, set in a step
-/// (`MenuSub` at `pl-(--space-4)`, rows 4pt apart, 2pt above and below).
+/// running in it), and while open its sessions under it on a rail of their
+/// own (`.kit-nest`: `--nest-pad` in, `--tree-gap` apart and under the row,
+/// the line from the project's mark down to each one).
 final class ProjectBlock: UIStackView, UIContextMenuInteractionDelegate {
     let project: ProjectRow
     let row = RailRow(height: 30, leading: 10, trailing: 8, gap: 10)
     let sessionsBox = UIView()
     let sessions = UIStackView()
+    let rail = NestRailView()
+    /// The project mark's centre from the block's left edge (the row's 10pt lead and half its 18pt mark): `--nest-x`.
+    private static let railX = 10.0 + 9
+    /// `--nest-pad`: the rail's x, then a tree step less half a mark and the sub row's own lead.
+    private static let pad = railX + (Space.space1 + Space.space2 + Space.space3) - 9 - 6
+    /// The mark's foot to the list's top: 6pt left in its 30pt row, then `--tree-gap`.
+    private static let lead = 6.0 + Space.space1
     let olderRow = RailTextRow()
     let emptyRow = RailTextRow()
     var onMenu: () -> UIMenu = { UIMenu() }
@@ -33,11 +41,20 @@ final class ProjectBlock: UIStackView, UIContextMenuInteractionDelegate {
         sessions.spacing = 4
         sessions.translatesAutoresizingMaskIntoConstraints = false
         sessionsBox.addSubview(sessions)
+        rail.translatesAutoresizingMaskIntoConstraints = false
+        rail.railX = Self.railX
+        rail.lead = Self.lead
+        sessionsBox.addSubview(rail)
+        sessionsBox.clipsToBounds = false
         NSLayoutConstraint.activate([
-            sessions.topAnchor.constraint(equalTo: sessionsBox.topAnchor, constant: 2),
-            sessions.bottomAnchor.constraint(equalTo: sessionsBox.bottomAnchor, constant: -2),
-            sessions.leadingAnchor.constraint(equalTo: sessionsBox.leadingAnchor, constant: Space.space4),
+            sessions.topAnchor.constraint(equalTo: sessionsBox.topAnchor, constant: Space.space1),
+            sessions.bottomAnchor.constraint(equalTo: sessionsBox.bottomAnchor),
+            sessions.leadingAnchor.constraint(equalTo: sessionsBox.leadingAnchor, constant: Self.pad),
             sessions.trailingAnchor.constraint(equalTo: sessionsBox.trailingAnchor),
+            rail.topAnchor.constraint(equalTo: sessionsBox.topAnchor),
+            rail.bottomAnchor.constraint(equalTo: sessionsBox.bottomAnchor),
+            rail.leadingAnchor.constraint(equalTo: sessionsBox.leadingAnchor),
+            rail.trailingAnchor.constraint(equalTo: sessionsBox.trailingAnchor),
         ])
         addArrangedSubview(row)
         addArrangedSubview(sessionsBox)
@@ -57,6 +74,15 @@ final class ProjectBlock: UIStackView, UIContextMenuInteractionDelegate {
         row.accessibilityValue = running > 0 ? "\(running) running session\(running == 1 ? "" : "s")" : nil
         row.accessibilityTraits = [.button]
         row.accessibilityHint = open ? "Folds its sessions" : "Opens its sessions"
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        sessionsBox.layoutIfNeeded()
+        // Each row's glyph centre (its first line's middle) and the arm's end at its glyph's left edge.
+        rail.children = sessions.arrangedSubviews.filter { !$0.isHidden }.map { view in
+            (glyphY: sessions.frame.minY + view.frame.minY + 14, armEnd: Self.pad + 6)
+        }
     }
 
     func clearSessions() {
