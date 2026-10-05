@@ -49,7 +49,6 @@
    * stands in as a quiet context line, not counted and taking no room.
    */
   import { flushSync, untrack } from "svelte";
-  import type { Attachment } from "svelte/attachments";
   import { Button } from "#lib/components/ui/button/index.js";
   import {
     TabItem,
@@ -81,7 +80,6 @@
   import OlderRows from "../OlderRows.svelte";
   import OsMark from "../OsMark.svelte";
   import { failedWords } from "../older";
-  import { openTrees } from "../open-trees.svelte";
   import { rail } from "../rail.svelte";
   import SessionRow, { ROW_PILL } from "../SessionRow.svelte";
   import { type TreeLine, tree } from "../tree";
@@ -523,39 +521,6 @@
     });
   }
 
-  /**
-   * → opens the tree of the row with focus, ← folds it; ← on a row that is
-   * not open goes up to its parent, the way a tree view walks.
-   */
-  const arrowKeys: Attachment<HTMLElement> = (node) => {
-    node.addEventListener("keydown", onkey);
-    return () => node.removeEventListener("keydown", onkey);
-  };
-  function onkey(event: KeyboardEvent): void {
-    if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") {
-      return;
-    }
-    const id = (event.target as Element).closest<HTMLElement>("[data-key]")
-      ?.dataset.key;
-    const line = id ? shapeOf(shown, id) : undefined;
-    if (!(id && line)) {
-      return;
-    }
-    const parent = line.descendants.length > 0;
-    const open = event.key === "ArrowRight";
-    if (parent && openTrees.has(id, "home") !== open) {
-      event.preventDefault();
-      openTrees.set(id, open, "home");
-    } else if (!open && line.parent) {
-      event.preventDefault();
-      listEl
-        ?.querySelector<HTMLElement>(
-          `[data-key="${CSS.escape(line.parent)}"] [data-rail-row]`
-        )
-        ?.focus();
-    }
-  }
-
   /** Shows one machine's group in full, or back to its first few. */
   function fold(machineId: string): void {
     const whole = new Set(workTab.shownWhole(shown));
@@ -828,7 +793,7 @@
           {@attach highlight(ROW_PILL)}
           {@attach echoBeat()}
           {@attach holdWhileInside("home:")}
-          {@attach arrowKeys}
+          {@attach views[shown].keys}
         >
           {#each drawn as entry (entry.group.machineId)}
             {@const id = entry.group.machineId}

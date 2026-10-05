@@ -5,6 +5,7 @@
  * lines (tree.ts) and answers what each row's place is, what a parent folds
  * under its "N older" row (older.ts), and which lines are out.
  */
+import type { Attachment } from "svelte/attachments";
 import type { InstanceRow } from "../client.svelte";
 import { DELEGATE_WINDOW, failedIn, listedOf, runningIds } from "../older";
 import { openTrees, type TreeList } from "../open-trees.svelte";
@@ -125,6 +126,42 @@ export class TreeView {
   /** The rows of `rows` that hang directly under `parent` (null: the tops). */
   under = (rows: InstanceRow[], parent: string | null): InstanceRow[] =>
     rows.filter((row) => (this.shapeOf(row.id)?.parent ?? null) === parent);
+
+  /**
+   * The tree's keys, for the box a list draws its trees in: → opens the
+   * tree of the row with focus, ← folds it; ← on a row that is not open
+   * goes up to its parent, the way a tree view walks. A row is found by
+   * its line (SessionTree `data-key`), so a row of the list that is no
+   * session of this tree takes neither key.
+   */
+  keys: Attachment<HTMLElement> = (box) => {
+    const onkey = (event: KeyboardEvent): void => {
+      if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") {
+        return;
+      }
+      const id = (event.target as Element).closest<HTMLElement>("[data-key]")
+        ?.dataset.key;
+      const line = id ? this.shapeOf(id) : undefined;
+      if (!(id && line)) {
+        return;
+      }
+      const parent = line.descendants.length > 0;
+      const open = event.key === "ArrowRight";
+      if (parent && openTrees.has(id, this.list) !== open) {
+        event.preventDefault();
+        openTrees.set(id, open, this.list);
+      } else if (!open && line.parent) {
+        event.preventDefault();
+        box
+          .querySelector<HTMLElement>(
+            `[data-key="${CSS.escape(line.parent)}"] [data-rail-row]`
+          )
+          ?.focus();
+      }
+    };
+    box.addEventListener("keydown", onkey);
+    return () => box.removeEventListener("keydown", onkey);
+  };
 
   /** A parent's folded rows, for its row's count; null otherwise. */
   foldOf = (

@@ -118,6 +118,7 @@
         data-flip
         {@attach highlight(ROW_PILL)}
         {@attach echoBeat()}
+        {@attach view.keys}
       >
         <label class="search touch-hit">
           <IconSearch aria-hidden="true" />
