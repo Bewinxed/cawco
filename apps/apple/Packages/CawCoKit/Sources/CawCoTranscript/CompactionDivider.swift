@@ -19,6 +19,8 @@ final class CompactionDividerView: UIView, RowContent, Disclosing {
     private let reveal: Reveal
     private var lead: NSLayoutConstraint!
     private var key = ""
+    /// The summary's source, drawn once the divider is opened.
+    private var brief = ""
 
     init(env: RowEnv) {
         self.env = env
@@ -53,6 +55,7 @@ final class CompactionDividerView: UIView, RowContent, Disclosing {
     required init?(coder _: NSCoder) { fatalError("built in code") }
 
     func toggled(open: Bool) -> (() -> Void, () -> Void) {
+        if open { text.configure(brief, style: .muted) }
         button.set(open: open, animated: true)
         return reveal.toggle(open: open)
     }
@@ -66,8 +69,11 @@ final class CompactionDividerView: UIView, RowContent, Disclosing {
         let line = compaction.facts
         facts.attributedText = Styled.string(line, TypeScale.typeMeta, color: Palette.inkMuted, lineBreak: .byWordWrapping)
         facts.isHidden = line.isEmpty
-        text.configure(compaction.brief ?? "", style: .muted)
         let open = compaction.brief != nil && env.isOpen(key)
+        // The summary is drawn when it is opened: shut, it is pages of text
+        // nobody sees, and building them was the dearest row of a first screen.
+        brief = compaction.brief ?? ""
+        text.configure(open ? brief : "", style: .muted)
         button.set(enabled: compaction.brief != nil, animated: same)
         button.set(open: open, animated: false)
         reveal.set(open: open)

@@ -67,6 +67,22 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     private var dirty = true
     private var following = true
     private var landed = false
+    /// How many rows of the first screen the list holds, until it holds every
+    /// row. A screen of rows built and measured in one go held the main thread
+    /// a quarter of a second, so a first screen is built a few rows a frame
+    /// from where the reader is to stand, out of sight until it is whole, and
+    /// the rest (rows off the screen, which cost nothing) joins it at once.
+    private var fed: Int? = 0
+    /// How many of the hub's blocks, counted from the newest, the list draws so far.
+    private var taken = 0
+    /// Blocks of history a frame adds.
+    private static let stretch = 80
+    /// Whether the last commit added a row to a first screen.
+    private var feeding = false
+    /// The items the last commit drew from, for a first screen's next row.
+    private var drawn: [Item] = []
+    /// What a frame of a first screen may take of the main thread's turn.
+    private static let budget = 0.04
     private var known = Set<String>()
     private var arriving: [String: Double] = [:]
     private var gliding = false
@@ -88,8 +104,55 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     private let compacting = DockPill(glyph: nil, title: "Compacting context…", pill: true)
     private let signposter = OSSignposter(subsystem: "dev.cawco.app", category: "Transcript")
 
+    /// The list's layout, which is asked where the list stands when rows join it.
+    private final class Layout: UICollectionViewCompositionalLayout {
+        /// Where the list is to stand once an update's rows are in; nil leaves it.
+        var stand: (() -> CGFloat?)?
+
+        /// The offset that stands the list's foot at the foot of its view.
+        var foot: CGFloat {
+            guard let view = collectionView else { return 0 }
+            let inset = view.adjustedContentInset
+            return max(-inset.top, collectionViewContentSize.height - view.bounds.height + inset.bottom)
+        }
+
+        /// The list is moved to where it is to stand as soon as the rows have
+        /// their places and before any is built, so only rows it shows are.
+        override func prepare() {
+            super.prepare()
+            guard let view = collectionView, let y = stand?(), abs(view.contentOffset.y - y) > 0.5 else { return }
+            view.contentOffset.y = y
+        }
+
+        override func targetContentOffset(forProposedContentOffset proposed: CGPoint) -> CGPoint {
+            guard let y = stand?() else { return super.targetContentOffset(forProposedContentOffset: proposed) }
+            return CGPoint(x: proposed.x, y: y)
+        }
+    }
+
+    private let layout: Layout
+
+    private static var warmed = false
+
+    /// What the first row of the first transcript otherwise pays for under the
+    /// reader, once an app's life: the code grammars, and the text system (its
+    /// classes, the faces, the Markdown parser). Each takes a turn of the main
+    /// thread of its own while the first page is still on its way.
+    private static func warm() {
+        guard !warmed else { return }
+        warmed = true
+        Highlight.warm()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            for block in MarkdownRender.blocks("Warm **up** `code`") {
+                let view = blockView(block)
+                _ = view.systemLayoutSizeFitting(CGSize(width: 320, height: 0), withHorizontalFittingPriority: .required,
+                                                 verticalFittingPriority: .fittingSizeLevel)
+            }
+        }
+    }
+
     public override init(frame: CGRect) {
-        let layout = UICollectionViewCompositionalLayout { _, environment in
+        let layout = Layout { _, environment in
             let size = NSCollectionLayoutSize(widthDimension: .fractionalWidth(1), heightDimension: .estimated(44))
             let section = NSCollectionLayoutSection(group: .vertical(layoutSize: size, subitems: [NSCollectionLayoutItem(layoutSize: size)]))
             // The ledger's asymmetric inset: 25 at the start, 21 at the end; 18 both 900pt wide and under.
@@ -98,8 +161,10 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
                                           trailing: narrow ? Space.space5 : Space.space6)
             return section
         }
+        self.layout = layout
         collection = UICollectionView(frame: .zero, collectionViewLayout: layout)
         super.init(frame: frame)
+        Self.warm()
         // The session pane's ground (SessionPane.svelte `.pane`): the recess, not the page.
         backgroundColor = Palette.surfaceRecess
         collection.backgroundColor = Palette.surfaceRecess
@@ -140,7 +205,12 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             UICollectionView.CellRegistration<HostCell<V>, String> { [weak self] cell, _, id in
                 guard let self, let item = items[id] else { return }
                 cell.install(env: env)
+                // A row spans the list less its section's inset (the layout above).
+                let width = Double(collection.bounds.width)
+                let inset = width <= 900 ? 2 * Space.space5 : Space.space7 + Space.space6
+                (cell.row as? PieceView)?.fitWidth = width > inset ? CGFloat(width - inset) : nil
                 cell.configure(item)
+                Pace.row()
             }
         }
         let piece = registration(PieceView.self), user = registration(UserTurnView.self), tool = registration(ToolLineView.self)
@@ -228,6 +298,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             link.add(to: .main, forMode: .common)
             self.link = link
             lastTick = 0
+            Pace.watch()
         } else {
             // Off the screen, every delegate card this view drew has left it.
             for cell in collection.visibleCells { (cell as? HostCell<DelegateView>)?.row.untrack() }
@@ -282,7 +353,8 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     private func honourTray() {
         let tray = DelegateTrayState.shared
         let id = env.sessionId
-        if let want = tray.reveal[id] {
+        // A report is brought into view once the history it may stand in is in the list.
+        if taken >= blocks.count, let want = tray.reveal[id] {
             tray.reveal[id] = nil
             if let target = centred(want), abs(target - collection.contentOffset.y) > 0.5 {
                 pendingPosition = nil
@@ -345,12 +417,15 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             prints = [:]
             dirty = true
         }
+        // A first screen waiting on the view's size has it now.
+        if fed != nil { dirty = true }
     }
 
     // MARK: Reading the transcript
 
     public func configure(_ transcript: SessionTranscript) {
         self.transcript = transcript
+        facts = nil
         env.sessionId = transcript.id
         joinTray()
         env.machineId = transcript.location?.machineId
@@ -393,7 +468,16 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     /// unanswered question is the composer's while asks reach the reader).
     private func settledRows() -> [Row] {
         let bypass = factsValue("permissionMode") as? String == "bypassPermissions"
-        let drawn = blocks.filter { block in
+        // History joins the list a stretch a frame, newest first: a long
+        // session's older page set as Markdown in one go was 80 ms of a frame
+        // for rows far above the reader. A reader restored to a row is given
+        // all of it, so the row is there to stand at.
+        if taken < blocks.count {
+            let anchored = pendingPosition.map { !$0.following } ?? false
+            taken = anchored ? blocks.count : min(blocks.count, taken + Self.stretch)
+            if taken < blocks.count { dirty = true }
+        }
+        let drawn = blocks.suffix(taken).filter { block in
             !(Fold.isQuestion(block) && block.toolStatus == "pending" && !bypass)
                 && block.type != "send.ref" && block.type != "system.init"
         }
@@ -404,10 +488,15 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     }
 
     private func factsValue(_ key: String) -> Any? {
-        guard let facts = transcript?.facts, let data = try? JSONEncoder().encode(facts),
-              let raw = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
-        return raw[key]
+        if let facts { return facts[key] }
+        let read = transcript?.facts.flatMap { try? JSONEncoder().encode($0) }
+            .flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] } ?? [:]
+        facts = read
+        return read[key]
     }
+
+    /// The session's facts as the hub sent them, read once per transcript handed in.
+    private var facts: [String: Any]?
 
     // MARK: Building items
 
@@ -448,12 +537,15 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         var builder = Builder(agentName: env.agentName, cache: env.cache)
         builder.keys = keys
         var (out, rail) = builder.items(rows)
+        // Read once a build: a fleet row is a large value, and going through
+        // them all for every report in a long session was most of a build.
+        let sessions = hub?.fleet.rows.map(\.id) ?? []
         for i in out.indices {
             if case let .thinking(r) = out[i].kind, r.key == "think:\(folding ?? "")" {
                 out[i] = Item(id: out[i].id, top: out[i].top, kind: .thinking(.init(key: r.key, text: r.text, live: false, folding: true)),
                               print: out[i].print + "folding")
             }
-            out[i].print += fleetPrint(out[i])
+            out[i].print += fleetPrint(out[i], sessions: sessions)
         }
 
         // The tail: the sends drawn ahead of it, the live row, the call in flight, the rest.
@@ -504,7 +596,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     }
 
     /// What a delegate or run row reads off the fleet, so it redraws when that moves.
-    private func fleetPrint(_ item: Item) -> String {
+    private func fleetPrint(_ item: Item, sessions: [String]) -> String {
         guard let fleet = hub?.fleet else { return "" }
         switch item.kind {
         case let .delegate(block):
@@ -519,7 +611,8 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             let steps = hub?.workflowRuns.details[id]?.run.map { "\($0.steps.count)" } ?? ""
             return "\(run.status.rawValue)\(run.endedAt ?? 0)\(run.failure ?? "")\(steps)"
         case let .peer(block) where block.string("reportKind") != nil:
-            return fleet.rows.contains { $0.id.hasPrefix(block.string("peerSession") ?? "-") } ? "linked" : ""
+            let peer = block.string("peerSession") ?? "-"
+            return sessions.contains { $0.hasPrefix(peer) } ? "linked" : ""
         default:
             return ""
         }
@@ -578,6 +671,12 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         }
         if received.isEmpty, !currentTail.isEmpty { currentTail = "" }
         if dirty { dirty = false; commit() }
+        // A first screen takes a row at a time for as long as the frame has
+        // time for one: rows cost anything from a millisecond to a frame's worth.
+        while feeding, CACurrentMediaTime() - now < Self.budget / 2 {
+            collection.layoutIfNeeded()
+            commit(fresh: false)
+        }
         restoreIfReady()
         // The tail is not held under the reader's finger, nor while the list
         // coasts: a slow drag moves less in a frame than the distance that lets
@@ -599,16 +698,24 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         }
         honourTray()
         updateDock()
+        // The rows this frame asked for are built inside it, so its cost is whole.
+        collection.layoutIfNeeded()
+        let took = CACurrentMediaTime() - now
+        Pace.spent(took, in: env.sessionId, items: items.count, cells: collection.visibleCells.count)
     }
 
-    private func commit() {
+    /// `fresh`: the items are built again from the transcript; a first
+    /// screen's next row within a frame is taken from the ones just built.
+    private func commit(fresh: Bool = true) {
+        feeding = false
         let interval = signposter.beginInterval("transcriptFrame")
         defer { signposter.endInterval("transcriptFrame", interval) }
         // Watched means on screen (Transcript `active`): a pane beside the one
         // being read is in the window too, and what lands in it is simply there
         // when the reader comes to it, not an arrival played where nothing draws.
         env.watched = landed && onScreen
-        let built = build()
+        if fresh { drawn = build() }
+        let built = drawn
         // A named state stands in the area instead of the transcript (SessionPane `namedState`).
         if let transcript {
             let blank = !transcript.loading && transcript.fault == nil && !transcript.missing && blocks.isEmpty
@@ -621,7 +728,9 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         }
         var next: [String: Item] = [:]
         for item in built { next[item.id] = item }
-        let ids = built.map(\.id)
+        let all = built.map(\.id)
+        let ids = firstScreen(of: all)
+        collection.alpha = fed == nil || rows.isEmpty ? 1 : 0
         let old = dataSource.snapshot()
         let previous = Set(old.itemIdentifiers)
         var changed: [String] = []
@@ -637,7 +746,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
                 arriving[id] = now + Double(min(slot, 3)) * Motion.durStagger
             }
         }
-        known.formUnion(ids)
+        known.formUnion(all)
         if old.itemIdentifiers == ids, changed.isEmpty { return }
         var snapshot = NSDiffableDataSourceSnapshot<Int, String>()
         snapshot.appendSections([0])
@@ -652,7 +761,12 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             guard let id = dataSource.itemIdentifier(for: index), let frame = collection.layoutAttributesForItem(at: index)?.frame else { return nil }
             return (id, collection.contentOffset.y - frame.minY)
         }
-        dataSource.apply(snapshot, animatingDifferences: false) { [weak self] in
+        // A first screen built down from a restored anchor stands at it.
+        var pivot: (id: String, into: CGFloat)?
+        if let position = pendingPosition, !position.following, let id = position.anchor {
+            pivot = (id, CGFloat(position.offset))
+        }
+        let settle = { [weak self] in
             guard let self else { return }
             collection.layoutIfNeeded()
             if let anchor, let index = dataSource.indexPath(for: anchor.id),
@@ -665,7 +779,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
                 folding = nil
                 animate(cell.row, open: false, in: cell)
             }
-            if !landed, transcript?.loading == false { landed = true }
+            if !landed, fed == nil || rows.isEmpty, transcript?.loading == false { landed = true }
             guard follow else { return }
             if grew {
                 // The rows above make room on the place's clock rather than jumping.
@@ -676,7 +790,52 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
                 animator.startAnimation()
             } else { latest() }
         }
+        // With no row in common there is nothing to work a difference out from.
+        if previous.isDisjoint(with: ids) {
+            dataSource.applySnapshotUsingReloadData(snapshot, completion: settle)
+        } else {
+            // Where the list stands once the rows are in is settled before any
+            // row is built: rows joining in front otherwise leave the list at
+            // its old offset, among rows nobody is to read, and build those.
+            layout.stand = { [weak self] in
+                guard let self else { return nil }
+                if follow, !grew { return layout.foot }
+                guard let anchor = anchor ?? pivot, let index = dataSource.indexPath(for: anchor.id),
+                      let frame = layout.layoutAttributesForItem(at: index)?.frame else { return nil }
+                return frame.minY + anchor.into
+            }
+            dataSource.apply(snapshot, animatingDifferences: false, completion: settle)
+            layout.stand = nil
+        }
         announce(built)
+    }
+
+    /// The rows the list holds this frame. Once the first screen is whole that
+    /// is every row; until then it is a few more than last frame, from the row
+    /// the reader is to stand at: down from a restored anchor, up from the tail.
+    private func firstScreen(of all: [String]) -> [String] {
+        guard let count = fed else { return all }
+        // No rows yet (a page not read, an empty session): the notice stands alone.
+        guard !rows.isEmpty else { return all }
+        let view = visibleBox.height
+        let pivot = pendingPosition.flatMap { $0.following ? nil : $0.anchor }.flatMap { all.firstIndex(of: $0) }
+        let reach = pivot.map { all.count - $0 } ?? all.count
+        func window(_ size: Int) -> [String] {
+            pivot.map { Array(all[$0 ..< $0 + size]) } ?? Array(all.suffix(size))
+        }
+        // The view has no size to fill yet: `layoutSubviews` asks again.
+        guard view > 0 else { return window(min(count, reach)) }
+        if count >= reach || (count > 0 && collection.contentSize.height >= view) {
+            fed = nil
+            return all
+        }
+        dirty = true
+        // Another pane's frame has had this turn of the main thread.
+        guard Pace.taken < Self.budget else { return window(count) }
+        let next = min(reach, count + 1)
+        fed = next
+        feeding = true
+        return window(next)
     }
 
     public func collectionView(_: UICollectionView, willDisplay cell: UICollectionViewCell, forItemAt index: IndexPath) {
@@ -802,7 +961,8 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         if position.following { pendingPosition = nil; latest(); return }
         guard let id = position.anchor, let index = dataSource.indexPath(for: id),
               let frame = collection.layoutAttributesForItem(at: index)?.frame else { return }
-        pendingPosition = nil
+        // A first screen is built down from the anchor: it is kept until every row is in.
+        if fed == nil { pendingPosition = nil }
         collection.setContentOffset(CGPoint(x: 0, y: frame.minY + position.offset), animated: false)
     }
 

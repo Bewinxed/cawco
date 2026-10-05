@@ -118,6 +118,9 @@ final class PieceView: UIView, RowContent {
     private let who = WhoView()
     private let float = FloatNote()
     private var blocks: [UIView] = []
+    /// The width the row stands at in the list, which its blocks span
+    /// (ProseView `fitWidth`); nil where the piece is drawn inside another row.
+    var fitWidth: CGFloat?
 
     init(env: RowEnv) {
         self.env = env
@@ -157,13 +160,16 @@ final class PieceView: UIView, RowContent {
             let view = blocks[i]
             switch block.kind {
             case let .text(text):
+                (view as? ProseView)?.fitWidth = fitWidth
                 (view as? ProseView)?.show(text, fading: piece.streaming && env.watched)
             case let .code(language, text):
                 (view as? CodeWell)?.configure(language: language, text: text)
                 (view as? CodeWell)?.join(above: piece.joinsAbove && i == 0, below: piece.joinsBelow && i == piece.blocks.count - 1)
             case let .table(head, rows):
+                (view as? TableBlock)?.fitWidth = fitWidth
                 (view as? TableBlock)?.configure(head: head, rows: rows)
             case let .quote(text):
+                (view as? QuoteBlock)?.text.fitWidth = fitWidth.map { $0 - QuoteBlock.inset }
                 (view as? QuoteBlock)?.text.attributedText = text
             case .rule: break
             }

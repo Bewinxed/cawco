@@ -132,7 +132,7 @@ struct Builder {
 
     /// A settled turn: one piece per top-level block.
     func pieces(id: String, source: String, grouped: Bool, date: Date?) -> [Item] {
-        pieces(id: id, sources: MarkdownRender.topLevel(source).map { Source(text: $0) }, grouped: grouped, date: date, streaming: false)
+        pieces(id: id, sources: cache.pieces(source).map { Source(text: $0) }, grouped: grouped, date: date, streaming: false)
     }
 }
 
@@ -150,11 +150,23 @@ final class BlockCache {
         return blocks
     }
 
+    /// A settled turn's top-level blocks, split once per source.
+    private var split: [String: [String]] = [:]
+
+    func pieces(_ source: String) -> [String] {
+        used.insert(source)
+        if let pieces = split[source] { return pieces }
+        let pieces = MarkdownRender.topLevel(source)
+        split[source] = pieces
+        return pieces
+    }
+
     /// Drops what the last build did not ask for (and everything, on a theme or size change).
     func sweep() {
         held = held.filter { used.contains($0.key) }
+        split = split.filter { used.contains($0.key) }
         used = []
     }
 
-    func clear() { held = [:]; used = [] }
+    func clear() { held = [:]; split = [:]; used = [] }
 }

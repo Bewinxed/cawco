@@ -81,7 +81,7 @@ class ProseView: UITextView, NSTextLayoutManagerDelegate {
         closeLastLine()
         // Widths keyed by where lines start never outlive the text they were chosen for.
         if bounds.width > 0 {
-            rewrap()
+            rewrap(at: bounds.width - textContainerInset.left - textContainerInset.right)
         } else {
             wrap.widths = [:]
             wrap.codeStarts = [:]
@@ -124,10 +124,27 @@ class ProseView: UITextView, NSTextLayoutManagerDelegate {
     @available(*, unavailable)
     required init?(coder _: NSCoder) { fatalError("built in code") }
 
+    /// The width the text will stand at, where whoever places it knows that
+    /// before layout does (a row of the list, a table's cell). A text view
+    /// asked its height without one lays its text out for the asking and
+    /// again for the drawing, at a width it has to be told twice; that was
+    /// most of what a row took to build. A view that comes to stand at
+    /// another width lets go of it.
+    var fitWidth: CGFloat? { didSet { if fitWidth != oldValue { invalidateIntrinsicContentSize() } } }
+
     /// The text's own height, as CSS keeps a block's: a text view rounds its
     /// height up to a whole point, which over a run of blocks puts each a
     /// fraction lower than the web's (a 16.2pt line took 17).
     override var intrinsicContentSize: CGSize {
+        // At a width known beforehand the text is laid out once, in its own
+        // container, and that layout is the one it is then drawn from.
+        if let width = fitWidth, width > 0, floatSize == .zero, textStorage.length > 0, let manager = textLayoutManager {
+            if abs(textContainer.size.width - width) > 0.01 { textContainer.size = CGSize(width: width, height: 0) }
+            rewrap(at: width, measuring: true)
+            manager.ensureLayout(for: manager.documentRange)
+            fitted = manager.usageBoundsForTextContainer.height + textContainerInset.top + textContainerInset.bottom
+            return CGSize(width: UIView.noIntrinsicMetric, height: fitted)
+        }
         let size = super.intrinsicContentSize
         guard size.height != UIView.noIntrinsicMetric, textStorage.length > 0, let manager = textLayoutManager else { return size }
         manager.ensureLayout(for: manager.documentRange)
@@ -152,7 +169,8 @@ class ProseView: UITextView, NSTextLayoutManagerDelegate {
             textContainer.exclusionPaths = paths
             invalidateIntrinsicContentSize()
         }
-        rewrap()
+        if let fit = fitWidth, bounds.width > 0, abs(bounds.width - fit) > 0.5 { fitWidth = nil }
+        rewrap(at: bounds.width - textContainerInset.left - textContainerInset.right)
         // The frame is snapped to whole pixels and can come out a fraction
         // shorter than the text (LineWrap.Container `size`): said once a text.
         if bounds.height > 0, fitted - bounds.height > 0.01, shortFor != version {
@@ -169,8 +187,9 @@ class ProseView: UITextView, NSTextLayoutManagerDelegate {
 
     /// Chooses the constrained paragraphs' line widths for the width the text
     /// has, when the width or the text changed since they were last chosen.
-    private func rewrap() {
-        let width = bounds.width - textContainerInset.left - textContainerInset.right
+    /// `measuring`: called from the height's own getter, which is not told its
+    /// answer has changed.
+    private func rewrap(at width: CGFloat, measuring: Bool = false) {
         guard width > 0 else { return }
         if let last = wrappedFor, abs(last.width - width) < 0.5, last.version == version { return }
         wrappedFor = (width, version)
@@ -180,7 +199,7 @@ class ProseView: UITextView, NSTextLayoutManagerDelegate {
         wrap.widths = widths
         wrap.codeStarts = codeStarts
         if let manager = textLayoutManager { manager.invalidateLayout(for: manager.documentRange) }
-        invalidateIntrinsicContentSize()
+        if !measuring { invalidateIntrinsicContentSize() }
     }
 
     /// The text, replacing only what changed from the first differing paragraph
@@ -329,7 +348,11 @@ final class TableBlock: UIView {
     private var extents: [(least: Double, most: Double)] = []
     /// Every cell's width, by column.
     private var columnWidths: [[NSLayoutConstraint]] = []
+    /// Every cell's text, by column, with the padding either side of it.
+    private var columnTexts: [[(text: ProseView, padding: Double)]] = []
     private var laidWidth: CGFloat = -1
+    /// The width the table will stand at, where its row knows it (ProseView `fitWidth`).
+    var fitWidth: CGFloat?
 
     /// th and td: 1em inline, the first cell's start and the last's end flush;
     /// .666em below, and above a body cell.
@@ -366,6 +389,7 @@ final class TableBlock: UIView {
             for constraint in constraints where abs(constraint.constant - widths[column]) > 0.25 {
                 constraint.constant = widths[column]
             }
+            for cell in columnTexts[column] { cell.text.fitWidth = widths[column] - cell.padding }
         }
     }
 
@@ -416,7 +440,9 @@ final class TableBlock: UIView {
             }
         }
         columnWidths = Array(repeating: [], count: columns)
-        let start = Self.columns(extents, fitting: bounds.width > 0 ? bounds.width : extents.reduce(0) { $0 + $1.most })
+        columnTexts = Array(repeating: [], count: columns)
+        let known = bounds.width > 0 ? bounds.width : fitWidth
+        let start = Self.columns(extents, fitting: known ?? extents.reduce(0) { $0 + $1.most })
         /// One row. `ruled`: the 1pt rule under it, which stands below the
         /// row's cells and adds to its height, as a collapsed border does.
         func line(_ cells: [NSAttributedString], head: Bool, ruled: Bool) -> UIView {
@@ -427,6 +453,9 @@ final class TableBlock: UIView {
                 let label = ProseView()
                 label.attributedText = i < cells.count ? cells[i] : NSAttributedString()
                 let box = UIView()
+                let padding = (i == 0 ? 0 : Self.cellInline) + (i == columns - 1 ? 0 : Self.cellInline)
+                if known != nil { label.fitWidth = start[i] - padding }
+                columnTexts[i].append((label, padding))
                 box.pin(label, insets: UIEdgeInsets(top: head ? 0 : Self.cellBlock, left: i == 0 ? 0 : Self.cellInline,
                                                     bottom: Self.cellBlock, right: i == columns - 1 ? 0 : Self.cellInline))
                 let width = box.widthAnchor.constraint(equalToConstant: start[i])
@@ -460,6 +489,8 @@ final class TableBlock: UIView {
 /// words 1.11em past it.
 final class QuoteBlock: UIView {
     let text = ProseView()
+    /// The rule and the gap after it, which the words stand past.
+    static let inset = Space.space1 + TypeScale.textBody * TypeScale.proseSmQuoteInset
 
     init() {
         super.init(frame: .zero)
@@ -468,8 +499,7 @@ final class QuoteBlock: UIView {
         bar.backgroundColor = Palette.border
         bar.translatesAutoresizingMaskIntoConstraints = false
         addSubview(bar)
-        let inset = Space.space1 + TypeScale.textBody * TypeScale.proseSmQuoteInset
-        pin(text, insets: UIEdgeInsets(top: 0, left: inset, bottom: 0, right: 0))
+        pin(text, insets: UIEdgeInsets(top: 0, left: Self.inset, bottom: 0, right: 0))
         NSLayoutConstraint.activate([
             bar.leadingAnchor.constraint(equalTo: leadingAnchor),
             bar.topAnchor.constraint(equalTo: topAnchor),

@@ -630,6 +630,13 @@ enum Highlight {
         return hljs?.isUndefined == false ? hljs : nil
     }()
 
+    /// Reads the grammars in a turn of the main thread of their own, ahead of
+    /// the first listing: read under the first row that has one, they were
+    /// 50 ms on top of what that row takes to build.
+    static func warm() {
+        DispatchQueue.main.async { _ = hljs }
+    }
+
     private static var cache: [String: [(NSRange, String)]] = [:]
 
     /// Vitesse's inks by role: light, dark (shiki vitesse-light / vitesse-dark).

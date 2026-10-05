@@ -61,8 +61,15 @@ struct Block {
 
     var date: Date? {
         guard let timestamp else { return nil }
-        return Block.iso.date(from: timestamp) ?? Block.isoPlain.date(from: timestamp)
+        if let read = Block.read[timestamp] { return read }
+        let date = Block.iso.date(from: timestamp) ?? Block.isoPlain.date(from: timestamp)
+        Block.read[timestamp] = date
+        return date
     }
+
+    /// Timestamps already read, by their text: every build asks for every
+    /// turn's, and reading one is slow. Blocks are only read on the main actor.
+    private nonisolated(unsafe) static var read: [String: Date] = [:]
 
     private nonisolated(unsafe) static let iso: ISO8601DateFormatter = {
         let format = ISO8601DateFormatter()
