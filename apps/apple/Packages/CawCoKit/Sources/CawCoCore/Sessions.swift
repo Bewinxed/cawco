@@ -15,7 +15,14 @@ public final class SessionTranscript {
     public internal(set) var location: Components.Schemas.TranscriptWhere?
     public internal(set) var cursor: String?
     public internal(set) var loading = true
+    /// One older page is being read (`SessionsStore.readOlder`).
     public internal(set) var loadingOlder = false
+    /// Why the last older page could not be read; the cursor is kept, so
+    /// asking again asks for the same page.
+    public internal(set) var olderFault: ReadFault?
+    /// Counts the reads of the newest page: an older page that lands after a
+    /// read again under it belongs to a transcript that is no longer there.
+    @ObservationIgnored var generation = 0
     /// Why the read failed, when it did (client.svelte.ts `readFault`).
     public internal(set) var fault: ReadFault?
     /// The hub answered 404: nothing it or any machine holds goes by this id.
@@ -97,6 +104,9 @@ public final class SessionsStore {
         transcript.loading = true
         transcript.fault = nil
         transcript.missing = false
+        transcript.generation += 1
+        transcript.loadingOlder = false
+        transcript.olderFault = nil
         hub.ledger.beginRead(id)
         hub.tasks.refresh(id)
         hub.workItems.load(parent: id)
@@ -140,9 +150,7 @@ public final class SessionsStore {
                 // The history page and its seq are one atomic view of the hub.
                 // Resume after it, including events that arrived during the read.
                 if let seq = page.seq { hub.ledger.adoptPage(id, seq: seq) }
-                log.info("page adopted for \(id, privacy: .public): \(page.blocks.count) blocks at seq \(page.seq ?? -1)")
-                // The older pages fill in behind the newest (client.svelte.ts `readOlder`).
-                await readOlder(transcript, client: client)
+                log.info("page adopted for \(id, privacy: .public): \(page.blocks.count) blocks at seq \(page.seq ?? -1), older \(page.cursor == nil ? "none" : "to come", privacy: .public)")
             } catch {
                 guard !Task.isCancelled else { return }
                 transcript.loading = false
@@ -158,22 +166,55 @@ public final class SessionsStore {
         ReadFault(reason: .failed, machineId: nil, message: try await String(collecting: body, upTo: 64_000))
     }
 
-    /// Every page older than what the transcript holds, each prepended as it
-    /// lands, until the conversation's start or a read again under it.
-    private func readOlder(_ transcript: SessionTranscript, client: Client) async {
+    #if DEBUG
+    private static var failedOnce = false
+    #endif
+
+    /// One page older than what the transcript holds, prepended when it
+    /// lands. History is read a page at a time as its reader nears the first
+    /// rows it has (the transcript's view asks); nothing nobody scrolled to is
+    /// fetched. Asked while a page is on its way, or with no older page left,
+    /// it does nothing. A page that fails leaves the cursor where it was and
+    /// says why (`olderFault`): asking again is the retry.
+    public func readOlder(_ id: String) {
+        guard let transcript = transcripts[id], let client = hub.client, let before = transcript.cursor,
+              !transcript.loading, !transcript.loadingOlder else { return }
         transcript.loadingOlder = true
-        defer { transcript.loadingOlder = false }
-        while let before = transcript.cursor, !Task.isCancelled {
-            await Task.yield()
-            // TRANSCRIPT_OLDER_PAGE (apps/dashboard/src/lib/config.ts): 250 rows a page behind the newest.
-            guard case let .ok(ok) = try? await client.getApiInstancesByIdTranscript(path: .init(id: transcript.id),
-                                                                                       query: .init(limit: "250", before: before)),
-                  let page = try? ok.body.json, transcript.cursor == before, !Task.isCancelled else { return }
+        transcript.olderFault = nil
+        let generation = transcript.generation
+        log.info("older page asked for \(id, privacy: .public) before \(before, privacy: .public)")
+        Task { [weak self] in
+            guard let self else { return }
+            var page: Components.Schemas.TranscriptPage?
+            var why = "The hub did not answer with the earlier page"
+            do {
+                #if DEBUG
+                // `-failOlderPage YES` at launch fails the first older page of the
+                // run, so the failed line and its retry can be seen on a healthy hub.
+                if UserDefaults.standard.bool(forKey: "failOlderPage"), !Self.failedOnce {
+                    Self.failedOnce = true
+                    throw URLError(.timedOut)
+                }
+                #endif
+                // TRANSCRIPT_OLDER_PAGE (apps/dashboard/src/lib/config.ts): 250 rows a page behind the newest.
+                if case let .ok(ok) = try await client.getApiInstancesByIdTranscript(path: .init(id: id), query: .init(limit: "250", before: before)) {
+                    page = try ok.body.json
+                }
+            } catch { why = error.localizedDescription }
+            // A read again under it, or the transcript closed: the page is nobody's.
+            guard transcripts[id] === transcript, transcript.generation == generation else { return }
+            transcript.loadingOlder = false
+            guard let page, transcript.cursor == before else {
+                transcript.olderFault = ReadFault(reason: .failed, machineId: nil, message: why)
+                log.error("older page for \(id, privacy: .public) failed: \(why, privacy: .public)")
+                return
+            }
             let held = Set(transcript.blocks.map(\.id))
             transcript.blocks.insert(contentsOf: page.blocks.filter { !held.contains($0.id) }, at: 0)
             transcript.branches.insert(contentsOf: page.branches, at: 0)
             transcript.cursor = page.cursor
             transcript.blockRevision += 1
+            log.info("older page landed for \(id, privacy: .public): \(page.blocks.count) blocks, older \(page.cursor == nil ? "none" : "to come", privacy: .public)")
         }
     }
 

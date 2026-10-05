@@ -27,6 +27,9 @@ struct Item {
         case compaction(Compaction)
         case livetool(name: String, glance: String)
         case notice(String)
+        /// An older page could not be read: why, on the notice's line in the
+        /// fail ink; pressing it asks for the page again.
+        case retry(String)
         /// The read said the conversation is empty (EmptyState).
         case empty
     }

@@ -22,7 +22,7 @@ enum RowFactory {
         case .run: RunView(env: env)
         case .compaction: CompactionDividerView(env: env)
         case .livetool: LiveToolView(env: env)
-        case .notice, .empty: NoticeView(env: env)
+        case .notice, .retry, .empty: NoticeView(env: env)
         }
     }
 
@@ -40,7 +40,7 @@ enum RowFactory {
         case .run: view is RunView
         case .compaction: view is CompactionDividerView
         case .livetool: view is LiveToolView
-        case .notice, .empty: view is NoticeView
+        case .notice, .retry, .empty: view is NoticeView
         }
     }
 }
@@ -945,6 +945,14 @@ final class NoticeView: UIView, RowContent {
             line.attributedText = Styled.string(text, TypeScale.typeMeta, color: Palette.inkMuted, lineBreak: .byWordWrapping)
             inset.top.constant = Space.space5
             inset.bottom.constant = -Space.space5
+        case let .retry(why):
+            mark.isHidden = true
+            title.isHidden = true
+            titleViewport = nil
+            line.attributedText = Styled.string("Couldn't read the earlier messages. \(why) Try again.", TypeScale.typeMeta,
+                                                color: Palette.statusFailInk, lineBreak: .byWordWrapping)
+            inset.top.constant = Space.space5
+            inset.bottom.constant = -Space.space5
         case .empty:
             mark.isHidden = false
             title.isHidden = false
@@ -955,7 +963,15 @@ final class NoticeView: UIView, RowContent {
             inset.bottom.constant = -Space.space6
         default: return
         }
-        accessibilityElements = [title, line].filter { !$0.isHidden }
+        // A failed page's line is one thing to press.
+        if case .retry = item.kind {
+            isAccessibilityElement = true
+            accessibilityLabel = line.text
+            accessibilityTraits = .button
+        } else {
+            isAccessibilityElement = false
+            accessibilityElements = [title, line].filter { !$0.isHidden }
+        }
     }
 
     private func setTitle() {
