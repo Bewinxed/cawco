@@ -1404,9 +1404,9 @@ export const createWorkItems = ({
      * An item with checks ends only through {@link finishItem}, or here when
      * its turn failed. A turn that ends it quietly, with nothing queued for
      * the session, nothing handed to it since, and none of its own delegated
-      * work live, gets the "still open" message and reports its unexplained
-      * stop to the parent; the third in a row fails it. A declared wait stays
-      * on the tray and is summarized only with the next actionable message.
+     * work live, gets the "still open" message and reports its unexplained
+     * stop to the parent; the third in a row fails it. A declared wait stays
+     * on the tray and is summarized only with the next actionable message.
      *
      * An item filed before checks existed, and a delegate from before work
      * items, end as they always did: on a turn nothing answers, with that
