@@ -109,7 +109,13 @@ import {
   motionOk,
   numberOf,
 } from "./curves.svelte";
-import { atTravel, BLEED, beforeReflow, heldToTravel } from "./rows.svelte";
+import {
+  atTravel,
+  BLEED,
+  beforeReflow,
+  heldToTravel,
+  skippedAt,
+} from "./rows.svelte";
 
 export interface BranchOptions {
   /** A row's glyph, a selector inside the row: its line ends there. */
@@ -309,10 +315,16 @@ function measureNests(lists: Iterable<Element>): void {
   }
 }
 
-/** The lists drawn in this update, but those a group holds out of the layout (`open` measures them as it shows them). */
+/**
+ * The lists drawn in this update, but those a group holds out of the layout
+ * (`open` measures them as it shows them) and those in a list that is not
+ * rendered (`skippedAt`): measured there, each read laid out content nobody
+ * is shown. Such a list keeps the insets it started out with, and the size
+ * observer measures it when it is rendered.
+ */
 function settleDrawn(): void {
   const lists = [...drawnNow].filter(
-    (list) => list.isConnected && !isUnshown(list)
+    (list) => list.isConnected && !isUnshown(list) && !skippedAt(list)
   );
   drawnNow.clear();
   measureNests(lists);
@@ -1716,7 +1728,34 @@ const stateFor = (shape: Shape, from: HTMLElement[], now: State): State => {
   };
 };
 
+/**
+ * A turn in a list that is not rendered (`skippedAt`: the same tree is open
+ * in the phone's sheet and in the home board put away under the
+ * conversation behind it): the group is simply there, or gone. Nothing of it
+ * is measured, held or animated. Opened and folded as a list in view is,
+ * a tree of six cost every opening 24 drawn boxes, 20 heights and 23
+ * computed styles read in a board the page does not lay out, and 39
+ * animations started on rows it does not draw; a fold, much the same.
+ */
+function unseenTurn(group: HTMLElement, opening: boolean): TransitionConfig {
+  const { held } = stopFlight(group, itemsOf(group));
+  for (const animation of held) {
+    animation.cancel();
+  }
+  group.removeAttribute(HELD);
+  group.removeAttribute(DRAWN);
+  group.removeAttribute(WAITS);
+  if (opening) {
+    inFlow(group);
+    group.dataset.state = "open";
+  }
+  return { duration: 0 };
+}
+
 function open(group: HTMLElement, options: BranchOptions): TransitionConfig {
+  if (skippedAt(group)) {
+    return unseenTurn(group, true);
+  }
   const items = itemsOf(group);
   const turning = flights.has(group);
   const stopped = stopFlight(group, items);
@@ -1857,6 +1896,9 @@ function open(group: HTMLElement, options: BranchOptions): TransitionConfig {
 }
 
 function fold(group: HTMLElement, options: BranchOptions): TransitionConfig {
+  if (skippedAt(group)) {
+    return unseenTurn(group, false);
+  }
   const items = itemsOf(group);
   const exit = dur("--dur-exit");
   group.removeAttribute(WAITS);

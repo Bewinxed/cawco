@@ -1505,6 +1505,22 @@ export function beforeReflow(settle: () => void): void {
   settling.add(settle);
 }
 
+/** Each `reflow` container's state, by its element (`skippedAt`). */
+const states = new WeakMap<HTMLElement, Reflow>();
+
+/**
+ * Whether the `reflow` container around `node` is not being rendered (an
+ * ancestor skips its content: the home board put away under a conversation).
+ * Nothing in it can be seen moving, and measuring it lays it out. Asked by
+ * whatever moves rows of its own inside a container (motion/branch), and
+ * answered from what the container already knows, with nothing read off the
+ * page.
+ */
+export function skippedAt(node: Element): boolean {
+  const container = node.closest<HTMLElement>("[data-reflow]");
+  return (container && states.get(container)?.skipped) ?? false;
+}
+
 /** How many elements up to the root: a container's nesting. */
 const depthOf = (node: Element): number => {
   let depth = 0;
@@ -1525,6 +1541,7 @@ export function reflow() {
     node.style.overflowAnchor = "none";
     const watching = watchRendered(node, (on) => state.rendered(on));
     const state = new Reflow(node, watching.rendered);
+    states.set(node, state);
     const depth = depthOf(node);
     const watcher = new MutationObserver(() => heard(state, depth));
     watcher.observe(node, {
