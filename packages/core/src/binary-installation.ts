@@ -11,6 +11,7 @@ import {
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import type { BinaryUpdateState } from "./binary-updates";
+import { markerIsLive } from "./process-identity";
 import type { ReleaseManifest } from "./release-manifest";
 import { runtimeVersion } from "./runtime";
 
@@ -144,15 +145,6 @@ const linkedVersion = async (path: string): Promise<string | undefined> => {
   }
 };
 
-const alive = (pid: number): boolean => {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return (error as NodeJS.ErrnoException).code === "EPERM";
-  }
-};
-
 /**
  * Deletes the directories under `versions/` nothing needs. Kept: what `current`
  * and `keeper` name, what a pending update trial would restore or has swapped
@@ -175,10 +167,10 @@ export async function prune(): Promise<void> {
   const keeperTrial = await readKeeperTrial();
   add(keeperTrial?.from);
   add(keeperTrial?.to);
-  const lock = await readJson<{ pid?: number; version?: string }>(
-    lockFilePath()
-  );
-  if (lock?.pid && alive(lock.pid)) {
+  const lock = await readJson<
+    { version?: string } & Parameters<typeof markerIsLive>[0]
+  >(lockFilePath());
+  if (lock && markerIsLive(lock)) {
     add(lock.version);
   }
   const versions = join(binaryRoot(), "versions");

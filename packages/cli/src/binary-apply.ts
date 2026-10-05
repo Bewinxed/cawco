@@ -43,7 +43,7 @@ import {
   writeJsonAtomic,
 } from "@cawco/core/binary-installation";
 import type { BinaryUpdateState } from "@cawco/core/binary-updates";
-import { markerIsLive } from "@cawco/core/process-identity";
+import { markerIsLive, ownIdentity } from "@cawco/core/process-identity";
 import {
   type ReleaseManifest,
   verifyManifest,
@@ -65,15 +65,6 @@ const note = (line: string) =>
     `${new Date().toISOString()} ${process.pid} ${line}\n`
   );
 
-const alive = (pid: number): boolean => {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return (error as NodeJS.ErrnoException).code === "EPERM";
-  }
-};
-
 /** Exclusive-create the lock; a lock whose process is gone is stale and taken over. The build being applied is named in it, so `prune` keeps it. */
 async function takeLock(version: string): Promise<boolean> {
   for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -81,7 +72,7 @@ async function takeLock(version: string): Promise<boolean> {
       // biome-ignore lint/performance/noAwaitInLoops: at most one retry, after clearing a stale lock
       const handle = await open(lockPath(), "wx", 0o600);
       await handle.writeFile(
-        JSON.stringify({ pid: process.pid, startedAt: Date.now(), version })
+        JSON.stringify({ ...ownIdentity(), startedAt: Date.now(), version })
       );
       await handle.close();
       return true;
@@ -91,8 +82,9 @@ async function takeLock(version: string): Promise<boolean> {
       }
       const held = JSON.parse(
         await readFile(lockPath(), "utf8").catch(() => "{}")
-      ) as { pid?: number };
-      if (held.pid && alive(held.pid)) {
+      ) as Parameters<typeof markerIsLive>[0];
+      // Live only if that very process is still running: a killed helper's pid may be reused.
+      if (markerIsLive(held)) {
         return false;
       }
       await rm(lockPath(), { force: true });

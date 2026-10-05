@@ -393,6 +393,11 @@ case "$1" in
   fail-on)
     mkdir -p "$dir"
     printf '[Service]\nExecStartPost=/bin/sh -c '"'"'[ "$$(readlink %s/keeper)" != versions/%s ]'"'"'\n' "$root" "$2" > "$dir/proof.conf" ;;
+  slow-fail-on)
+    # Fails on the build named, but only after $3 seconds: the restart job stays open that long, so a helper
+    # waiting on it can be killed while the keeper link names the build.
+    mkdir -p "$dir"
+    printf '[Service]\nExecStartPre=/bin/sh -c '"'"'[ "$$(readlink %s/keeper)" != versions/%s ] || sleep %s'"'"'\nExecStartPost=/bin/sh -c '"'"'[ "$$(readlink %s/keeper)" != versions/%s ]'"'"'\n' "$root" "$2" "$3" "$root" "$2" > "$dir/proof.conf" ;;
   delay)
     mkdir -p "$dir"
     printf '[Service]\nExecStartPre=/bin/sleep %s\n' "$2" > "$dir/proof.conf" ;;
@@ -989,15 +994,16 @@ helper_killed_mid_keeper_move() {
   local before
   before=$(keeper_link "$hubc")
   [[ "$before" != "versions/$(nb 7)" ]]
-  keeper_dropin fail-on "$(nb 7)"
+  keeper_dropin slow-fail-on "$(nb 7)" 30
   end_all_sessions "$hubc"
-  # The keeper-only helper moves the link; it is killed while it waits for the keeper.
+  # The keeper-only helper moves the link; the keeper's restart then stays open for 30 s before it fails, and the
+  # helper is killed while it waits (a fast failure would be put back by the helper itself within a second).
   wait_until 400 '[[ "$(keeper_link "$hubc")" == "versions/$(nb 7)" ]]'
   sleep 4
   as_user "$hubc" pkill -9 -f binary-apply
   has_file "$hubc" keeper-trial.json
   # The keeper's own restarts go through the wrapper; after the trial's deadline the first of them puts the previous build back.
-  wait_until 200 'has_file "$hubc" keeper-trial.recovered'
+  wait_until 240 'has_file "$hubc" keeper-trial.recovered'
   wait_until 60 '! has_file "$hubc" keeper-trial.recovered'
   [[ "$(keeper_link "$hubc")" == "$before" ]]
   ! has_file "$hubc" keeper-trial.json

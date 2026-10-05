@@ -13,11 +13,22 @@
 export const BINARY_WRAPPER = `#!/bin/sh
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 TRIAL="$ROOT/trial.json"
-# A helper is live when the lock names a pid that answers.
+# A helper is live when the lock names a process that is still the one that wrote it: same start time, same
+# boot (a killed helper leaves its lock, and its pid can be reused).
 helper_live() {
   [ -f "$ROOT/apply.lock" ] || return 1
   lock_pid="$(sed -n 's/.*"pid":\\([0-9][0-9]*\\).*/\\1/p' "$ROOT/apply.lock")"
-  [ -n "$lock_pid" ] && kill -0 "$lock_pid" 2>/dev/null
+  lock_start="$(sed -n 's/.*"procStart":"\\([^"]*\\)".*/\\1/p' "$ROOT/apply.lock")"
+  lock_boot="$(sed -n 's/.*"bootId":"\\([^"]*\\)".*/\\1/p' "$ROOT/apply.lock")"
+  [ -n "$lock_pid" ] && [ -n "$lock_start" ] && kill -0 "$lock_pid" 2>/dev/null || return 1
+  if [ -r "/proc/$lock_pid/stat" ]; then
+    live_start="$(sed 's/^.*) //' "/proc/$lock_pid/stat" | cut -d ' ' -f 20)"
+    live_boot="$(cat /proc/sys/kernel/random/boot_id 2>/dev/null)"
+  else
+    live_start="$(ps -o lstart= -p "$lock_pid" | sed 's/^ *//;s/ *$//')"
+    live_boot="$(sysctl -n kern.boottime 2>/dev/null)"
+  fi
+  [ -n "$live_start" ] && [ "$live_start" = "$lock_start" ] && [ "$live_boot" = "$lock_boot" ]
 }
 # Atomic: a temporary link, then a rename onto the link (GNU mv -T, BSD mv -h).
 swap_link() {
