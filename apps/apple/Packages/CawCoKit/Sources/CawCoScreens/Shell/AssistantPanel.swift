@@ -306,15 +306,11 @@ final class AssistantPanelView: UIView {
         logBox.spacing = 1
         let list = events
         guard !list.isEmpty else {
-            let mark = GlyphView(.assistant, size: 20, tint: Palette.inkMuted)
-            let title = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong)
-            title.text = "No interventions yet"
-            let line = note("When the supervisor acts on a session, every verdict appears here — replies, escalations, and the ones it let pass.", role: TypeScale.typeLabel.withWeight(.regular))
-            let empty = UIStackView(arrangedSubviews: [mark, title, line])
-            empty.axis = .vertical
-            empty.spacing = Space.space2
-            empty.alignment = .leading
-            logBox.addArrangedSubview(empty)
+            // The kit's one empty state (ui/empty), as the web's panel uses it unchanged.
+            logBox.addArrangedSubview(KitEmptyState(
+                icon: .assistant, title: "No interventions yet",
+                line: "When the supervisor acts on a session, every verdict appears here — replies, escalations, and the ones it let pass."
+            ))
             return
         }
         for event in list { logBox.addArrangedSubview(logRow(event)) }
