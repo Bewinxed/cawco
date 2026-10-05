@@ -30,7 +30,7 @@
    * through `whileIdle`. An icon-only button passes no `label`: only its
    * icon slot changes, and its name stays its aria-label.
    */
-  import type { Component } from "svelte";
+  import { type Component, untrack } from "svelte";
   import type { SVGAttributes } from "svelte/elements";
   import { TextMorph } from "torph/svelte";
   import { CURVE, dur } from "#lib/cawco/motion/curves.svelte.js";
@@ -82,14 +82,43 @@
   const text = $derived(pending && pendingLabel ? pendingLabel : (label ?? ""));
 
   /**
-   * The label is plain text as the server draws it, and TextMorph once the
-   * page is live (it draws its text only in the browser, so a server-drawn
-   * TextMorph would be empty and grow on hydration).
+   * The label is plain text at rest, so it is in the tree once: TextMorph
+   * draws a plain copy for screen readers beside its aria-hidden letters, and
+   * both land in textContent. TextMorph is mounted only while the label
+   * swaps: it takes the words the label had, then the new ones on the next
+   * frame, and the plain label returns when the morph has run.
    */
   let morphMs = $state(0);
   $effect(() => {
     morphMs = dur("--dur-morph");
   });
+  let morphing = $state(false);
+  let morphText = $state("");
+  let shownText = untrack(() => text);
+  let morphTimer: ReturnType<typeof setTimeout> | undefined;
+  $effect.pre(() => {
+    const next = text;
+    if (next === shownText) {
+      return;
+    }
+    const was = shownText;
+    shownText = next;
+    if (!morphMs) {
+      return;
+    }
+    clearTimeout(morphTimer);
+    if (!morphing) {
+      morphText = was;
+      morphing = true;
+    }
+    requestAnimationFrame(() => {
+      morphText = next;
+    });
+    morphTimer = setTimeout(() => {
+      morphing = false;
+    }, morphMs + 80);
+  });
+  $effect(() => () => clearTimeout(morphTimer));
 </script>
 
 <span
@@ -117,11 +146,14 @@
 </span>
 {#if label === undefined}
   <!-- Icon only: nothing to morph. -->
-{:else if morphMs}
-  <!-- TextMorph hides its letters from screen readers and names itself with
-       one plain copy of the words. -->
+{:else if morphing}
   <span class="kit-label"
-    ><TextMorph as="span" duration={morphMs} ease={CURVE.out} {text} /></span
+    ><TextMorph
+      as="span"
+      duration={morphMs}
+      ease={CURVE.out}
+      text={morphText}
+    /></span
   >
 {:else}
   <span class="kit-label">{text}</span>
