@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 import type { AgentRow } from "@cawco/core";
 import { CAWCO_ENV, CAWCO_HUB_PORT, readEnv } from "@cawco/core";
 import { DEPLOY_BRANCH, DEPLOY_MARKER } from "@cawco/core/install-script";
+import { standalone } from "@cawco/core/runtime";
 import { sessiondEndpoint } from "@cawco/core/sessiond";
 import { migrateLegacyDb } from "@cawco/hub/src/migrate-db";
 
@@ -228,6 +229,22 @@ const layoutAt = (root: string): Layout => {
  * this very process's entry point, which is what testing a branch means.
  */
 const here = (): Layout => {
+  if (standalone) {
+    const executable = realpathSync(process.execPath);
+    const launch = (verb: string): Launch => ({
+      command: [executable, verb],
+      needs: executable,
+    });
+    return {
+      root: dirname(executable),
+      hub: launch("hub"),
+      agent: launch("up"),
+      sessiond: launch("sessiond"),
+      dashboard: launch("dashboard"),
+      dashboardBuild: executable,
+      dashboardCwd: homedir(),
+    };
+  }
   const main = realpathSync(Bun.main);
   if (isRelease(dirname(main))) {
     return releaseLayout(dirname(main), main);
@@ -651,7 +668,7 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
       // checkout or release, and the thing that can actually be absent is the
       // `build/handler.js` it imports.
       check: (): void => {
-        if (!NODE) {
+        if (!(standalone || NODE)) {
           throw new ServiceError(
             "the dashboard's server runs under node, and there is no node on PATH."
           );

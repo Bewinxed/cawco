@@ -9,6 +9,7 @@ import {
   INSTALL_STEP_PREFIX,
   readEnv,
 } from "@cawco/core";
+import { protocolRange, runtimeCommit } from "@cawco/core/runtime";
 import { discoverHub, type Hub } from "./discover";
 import { clearToken, LoginError, login, saveToken } from "./login";
 import {
@@ -43,6 +44,8 @@ Usage
   cawco up [--hub <url>] [--verbose]      run the agent daemon on this machine
   cawco hub [--verbose]                   run the hub here
   cawco sessiond                          run this machine's session keeper
+  cawco dashboard                         serve the built dashboard on its inherited socket
+  cawco capabilities                      report optional machine tools and install commands
   cawco status [--hub <url>] [--verbose]  print the hub it found, and the fleet
   cawco service <${SERVICE_ACTIONS.join("|")}> [service...]
                                             run cawco as per-user services
@@ -702,6 +705,44 @@ const run = async (argv: string[]): Promise<number> => {
   }
 
   switch (args.command) {
+    case "build-info":
+      console.log(
+        JSON.stringify({
+          version: CLI_VERSION,
+          commit: runtimeCommit,
+          protocol: protocolRange,
+        })
+      );
+      return 0;
+    case "verify-release": {
+      if (!(args.action && args.rest[0])) {
+        throw new UsageError(
+          "verify-release needs manifest.json and its signature file, then an optional explicit public-key file"
+        );
+      }
+      const { verifyManifest } = await import("@cawco/core/release-manifest");
+      verifyManifest(
+        await Bun.file(args.action).json(),
+        (await Bun.file(args.rest[0]).text()).trim(),
+        args.rest[1] ? await Bun.file(args.rest[1]).text() : undefined
+      );
+      console.log("Release manifest signature verified");
+      return 0;
+    }
+    case "dashboard":
+      await import("../../../apps/dashboard/serve.js");
+      return 0;
+    case "pi-host":
+      await import("@cawco/agent/pi-host");
+      return 0;
+    case "boundary-hook":
+      await import("@cawco/agent/boundary-hook");
+      return 0;
+    case "capabilities": {
+      const { probeCapabilities } = await import("@cawco/agent/capabilities");
+      console.log(JSON.stringify(probeCapabilities(), null, 2));
+      return 0;
+    }
     case "up":
       return up(args);
     case "hub":
