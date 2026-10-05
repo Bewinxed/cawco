@@ -1205,6 +1205,8 @@
     block-size: 18px;
     padding-inline: calc(3px - var(--tight) * 0.03);
     margin-inline-start: var(--space-1);
+    /* A press on the count is a press on its tab: it reaches the hit. */
+    pointer-events: none;
     margin-inline-end: max(0px, 2px - var(--tight) * 0.06);
     border-radius: var(--radius-xs);
     background: var(--wash);
