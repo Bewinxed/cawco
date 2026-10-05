@@ -270,12 +270,14 @@ public final class KitLabel: UILabel {
 
     override public var text: String? {
         get { attributedText?.string }
-        set { content = newValue ?? ""; render() }
+        set { content = newValue ?? ""; given = false; render() }
     }
 
+    /// A string of the caller's own making (two faces, a marked match): the
+    /// label wraps and cuts it as it stands and no longer restyles it.
     override public var attributedText: NSAttributedString? {
         get { super.attributedText }
-        set { place(newValue) }
+        set { given = true; place(newValue) }
     }
 
     override public var numberOfLines: Int { didSet { forget() } }
@@ -292,6 +294,8 @@ public final class KitLabel: UILabel {
     }
 
     private var content = ""
+    /// Whether the label holds a string the caller attributed itself.
+    private var given = false
     /// Whether text that does not fit ends in an ellipsis at its tail.
     private var cutsTail = true
     private var placing = false
@@ -321,6 +325,7 @@ public final class KitLabel: UILabel {
     }
 
     private func render() {
+        guard !given else { return }
         var attributes = role.attributes(color: ink, tracking: tracking, alignment: textAlignment)
         if tabular, let font = attributes[.font] as? UIFont {
             let descriptor = font.fontDescriptor.addingAttributes([
@@ -343,12 +348,14 @@ public final class KitLabel: UILabel {
         shown = nil
     }
 
-    /// A view dump says what the label draws when that is not its string.
-    override public nonisolated var description: String {
-        let own = super.description
-        guard Thread.isMainThread else { return own }
-        let drawn = MainActor.assumeIsolated { shown.flatMap { shown in shown.text.map { "drawn at \(shown.width): \($0.string.debugDescription)" } } }
-        return drawn.map { "\(own) \($0)" } ?? own
+    /// What the label draws when that is not its own string, and the width
+    /// it was made for (" drawn at 352.0: \"…\""), or nothing: for reading a
+    /// running app from a debugger (`[label drawnText]`). A method of its
+    /// own, not an override of `description`: a nonisolated override on this
+    /// main-actor class cost the class its Sendable conformance.
+    @objc public func drawnText() -> String {
+        guard let shown, let string = shown.text?.string else { return "" }
+        return " drawn at \(shown.width): \(string.debugDescription)"
     }
 
     // MARK: Lines and the tail cut

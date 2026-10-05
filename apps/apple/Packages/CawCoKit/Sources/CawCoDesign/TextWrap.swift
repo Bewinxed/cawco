@@ -68,6 +68,18 @@ public enum TextWrap: Sendable {
         WrapParagraph(text).lineStarts(width: width, wrap: wrap)
     }
 
+    /// Every line of `text` in a box `width` wide: where it starts (UTF-16)
+    /// and the width WebKit would limit it to, for a layout that lays each
+    /// line greedily inside its own width. Under `greedy` these are the
+    /// greedy lines; under `pretty` and `balance`, nil when the rule leaves
+    /// the paragraph alone. `leading` gives, by the offset of the item it
+    /// opens, the width of an inline box's opening padding that the text
+    /// carries on the space before that item: it is counted with the item.
+    public static func lines(of text: NSAttributedString, width: Double, wrap: TextWrap,
+                             leading: [Int: Double] = [:]) -> [(start: Int, width: Double)]? {
+        WrapParagraph(text, leading: leading).lines(width: width, wrap: wrap)
+    }
+
     /// How many UTF-16 units of `line` stay before a U+2026 when the line is
     /// cut at its tail in a box `width` wide; nil when no ellipsis is due.
     /// A line that `continues` is the last visible one of a clamped box: it
@@ -141,6 +153,9 @@ struct WrapParagraph {
         var breaks: [Int]
         /// The UTF-16 offset one past the chunk's last item.
         var end: Int
+        /// Whether a forced break ends the chunk: WebKit counts that break
+        /// as the chunk's last inline item.
+        var broken = false
     }
 
     /// A line as the greedy pass leaves it: break indices and its width.
@@ -159,7 +174,7 @@ struct WrapParagraph {
     /// A soft hyphen or a tab: WebKit leaves such a paragraph alone.
     private let unconstrainable: Bool
 
-    init(_ text: NSAttributedString) {
+    init(_ text: NSAttributedString, leading: [Int: Double] = [:]) {
         let string = text.string as NSString
         let length = string.length
         var items: [Item] = []
@@ -185,11 +200,12 @@ struct WrapParagraph {
             widest = max(widest, width)
             run = nil
         }
-        func finish(_ end: Int) {
+        func finish(_ end: Int, broken: Bool) {
             close(end)
             if !chunk.breaks.isEmpty {
                 chunk.breaks.append(items.count)
                 chunk.end = end
+                chunk.broken = broken
                 chunks.append(chunk)
             }
             chunk = Chunk(breaks: [], end: 0)
@@ -197,7 +213,7 @@ struct WrapParagraph {
         for offset in 0 ..< length {
             let unit = string.character(at: offset)
             if unit == 0x0A || unit == 0x0D || unit == 0x2028 || unit == 0x2029 {
-                finish(offset)
+                finish(offset, broken: true)
                 continue
             }
             if unit == 0x00AD || unit == 0x09 { plain = false }
@@ -222,7 +238,26 @@ struct WrapParagraph {
                 run = (offset, space)
             }
         }
-        finish(length)
+        finish(length, broken: false)
+        // An inline box's opening padding, carried as kern on the space
+        // before the box, is the box's own: it moves to the item it opens.
+        if !leading.isEmpty {
+            for index in items.indices {
+                guard let pad = leading[items[index].start].map(Float.init), pad > 0 else { continue }
+                if index == 0 {
+                    items[0] = Item(start: items[0].start, width: items[0].width + pad, space: items[0].space)
+                } else if items[index - 1].space, items[index - 1].width >= pad {
+                    items[index - 1] = Item(start: items[index - 1].start, width: items[index - 1].width - pad, space: true)
+                    items[index] = Item(start: items[index].start, width: items[index].width + pad, space: items[index].space)
+                }
+            }
+            sums = [0]
+            widest = 0
+            for item in items {
+                sums.append(sums[sums.count - 1] + Double(item.width))
+                widest = max(widest, item.width)
+            }
+        }
         self.items = items
         self.sums = sums
         self.chunks = chunks
@@ -317,13 +352,20 @@ struct WrapParagraph {
         let last = chunk.breaks.count - 1
         var start = 0
         while start < last {
-            var end = start + 1
-            // A line takes what fits, and never only the spaces that lead it.
-            while end < last, trimmed(chunk, start, end + 1) <= box || trimmed(chunk, start, end) == 0 { end += 1 }
+            let end = greedyEnd(chunk, from: start, last: last, box: box)
             lines.append(Line(start: start, end: end, width: candidate(chunk, start, end)))
             start = end
         }
         return lines
+    }
+
+    /// The entry the next line starts at when one greedy line is laid from
+    /// `start` in a box `box` wide, over the entries up to `last`.
+    private func greedyEnd(_ chunk: Chunk, from start: Int, last: Int, box: Float) -> Int {
+        var end = start + 1
+        // A line takes what fits, and never only the spaces that lead it.
+        while end < last, trimmed(chunk, start, end + 1) <= box || trimmed(chunk, start, end) == 0 { end += 1 }
+        return end
     }
 
     /// Where the line that starts at a break entry puts its first character:
@@ -369,6 +411,7 @@ struct WrapParagraph {
                     let end = greedyLines[index][left - 1].end
                     ranges[index].end = offset(ranges[index], end)
                     ranges[index].breaks.removeSubrange((end + 1)...)
+                    ranges[index].broken = false
                 }
                 left -= greedyLines[index].count
             }
@@ -380,17 +423,7 @@ struct WrapParagraph {
         for (index, chunk) in ranges.enumerated() {
             let lines = greedyLines[index]
             if index > 0 { starts.append(offset(chunk, 0)) }
-            let chosen: [Int]?
-            switch wrap {
-            case .greedy:
-                chosen = nil
-            case .pretty:
-                chosen = pretty(chunk, ideal: box - 45, box: box)
-            case .balance:
-                let ideal = lines.reduce(0) { $0 + $1.width } / Float(lines.count)
-                chosen = total <= 12 ? balance(chunk, ideal: ideal, box: box, lines: lines.count) : balance(chunk, ideal: ideal, box: box)
-            }
-            if let chosen {
+            if let chosen = choose(chunk, greedy: lines, total: total, wrap: wrap, box: box) {
                 constrained = true
                 starts += chosen.map { offset(chunk, $0) }
             } else {
@@ -402,6 +435,45 @@ struct WrapParagraph {
         return starts.enumerated().filter { $0.offset == 0 || starts[$0.offset - 1] != $0.element }.map(\.element)
     }
 
+    /// The entries a chunk's lines after the first start at under `wrap`,
+    /// or nil where the rule leaves the chunk to greedy wrapping. `total` is
+    /// the paragraph's greedy line count.
+    private func choose(_ chunk: Chunk, greedy lines: [Line], total: Int, wrap: TextWrap, box: Float) -> [Int]? {
+        switch wrap {
+        case .greedy:
+            return nil
+        case .pretty:
+            return pretty(chunk, ideal: box - 45, box: box)
+        case .balance:
+            let ideal = lines.reduce(0) { $0 + $1.width } / Float(lines.count)
+            return total <= 12 ? balance(chunk, ideal: ideal, box: box, lines: lines.count) : balance(chunk, ideal: ideal, box: box)
+        }
+    }
+
+    /// Every line's start and the width WebKit limits it to (see
+    /// `TextWrap.lines`).
+    func lines(width: Double, wrap: TextWrap) -> [(start: Int, width: Double)]? {
+        guard wrap == .greedy || !unconstrainable else { return nil }
+        let box = Float(width)
+        let greedyLines = chunks.map { greedy($0, box: box) }
+        let total = greedyLines.reduce(0) { $0 + $1.count }
+        guard wrap == .greedy || total > 1 else { return nil }
+        var out: [(start: Int, width: Double)] = []
+        var constrained = wrap == .greedy
+        for (index, chunk) in chunks.enumerated() {
+            var entries = greedyLines[index].map(\.start)
+            if let chosen = choose(chunk, greedy: greedyLines[index], total: total, wrap: wrap, box: box) {
+                constrained = true
+                entries = [0] + chosen
+            }
+            for (line, entry) in entries.enumerated() {
+                let next = line + 1 < entries.count ? entries[line + 1] : chunk.breaks.count - 1
+                out.append((offset(chunk, entry), Double(candidate(chunk, entry, next))))
+            }
+        }
+        return constrained ? out : nil
+    }
+
     /// `computeRaggedness`: the cube of the distance from the ideal, in
     /// units of 15 (stretchability and shrinkability are both 15).
     private static func raggedness(_ width: Float, _ ideal: Float) -> Float {
@@ -409,13 +481,30 @@ struct WrapParagraph {
         return 100 * abs(powf(difference / 15, 3))
     }
 
-    /// `prettifyRange`, without its hyphenation fallback: where WebKit would
-    /// force a line through its line builder, this returns nil and the chunk
-    /// wraps greedily.
+    /// `prettifyRange`. Where no line can end inside the window, WebKit lays
+    /// one line through its line builder and goes on from its end
+    /// (`layoutSingleLineForPretty`); `forced` is that line. The line builder
+    /// would hyphenate there under `hyphens: auto`, which the web app sets
+    /// nowhere, so the forced line is a greedy one.
+    ///
+    /// WebKit itself leaves a paragraph alone when its widest item is wider
+    /// than the ideal line (the box less 45): that case returns nil here too.
     private func pretty(_ chunk: Chunk, ideal: Float, box: Float) -> [Int]? {
         guard ideal >= widest else { return nil }
         let count = chunk.breaks.count
         guard count > 2 else { return nil }
+        // Counted in inline items, of which a closing forced break is one.
+        let rangeEnd = count - 1 + (chunk.broken ? 1 : 0)
+        // One line at the box's width from `start`, leaving the last items
+        // for the final line when the line would otherwise strand too few.
+        func forced(from start: Int) -> Int {
+            let line = greedyEnd(chunk, from: start, last: count - 1, box: box)
+            let laidAll = line == count - 1
+            let enoughHere = rangeEnd - start > 5
+            let enoughNext = line + 5 < rangeEnd
+            if !enoughHere || laidAll || enoughNext { return line }
+            return greedyEnd(chunk, from: start, last: rangeEnd - 5, box: box)
+        }
         // A line ending before the last five entries must stand within
         // 3 x 15 of the ideal; the last lines only pay their raggedness.
         func cost(_ width: Float, _ entry: Int) -> Float {
@@ -425,24 +514,42 @@ struct WrapParagraph {
         var accumulated = [Float](repeating: .infinity, count: count)
         var previous = [Int](repeating: 0, count: count)
         accumulated[0] = 0
-        var lastValid: Int?
+        var firstLine: Int?
         for entry in 1 ..< count {
             let width = candidate(chunk, 0, entry)
             if width > box { break }
             let total = cost(width, entry)
             if total < accumulated[entry] {
                 accumulated[entry] = total
-                lastValid = entry
+                firstLine = entry
             }
         }
-        guard var lastValid else { return nil }
+        // The last state a line can start from. When no first line ends
+        // inside the window, the first line is forced.
+        var lastValid: Int
+        if let firstLine {
+            lastValid = firstLine
+        } else {
+            lastValid = forced(from: 0)
+            accumulated[lastValid] = 0
+            previous[lastValid] = 0
+        }
         var firstStart = 1
         for entry in 2 ..< count {
             while candidate(chunk, firstStart, entry) > box {
                 firstStart += 1
                 if firstStart >= entry { break }
             }
-            if firstStart > lastValid { return nil }
+            // Every line that could end here starts past the last state a
+            // line can start from: the line after that state is forced, at
+            // that state's cost.
+            if firstStart > lastValid {
+                let next = forced(from: lastValid)
+                guard next != lastValid else { return nil }
+                accumulated[next] = accumulated[lastValid]
+                previous[next] = lastValid
+                lastValid = next
+            }
             guard firstStart < entry else { continue }
             for start in firstStart ..< entry where accumulated[start] != .infinity {
                 let total = accumulated[start] + cost(candidate(chunk, start, entry), entry)
