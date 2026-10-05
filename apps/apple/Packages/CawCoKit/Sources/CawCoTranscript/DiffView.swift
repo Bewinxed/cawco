@@ -1,5 +1,5 @@
 import CawCoDesign
-import UIKit
+public import UIKit
 
 /// One line of a unified diff.
 struct DiffLine {
@@ -74,7 +74,7 @@ enum DiffModel {
 /// A file's diff inline (DiffView.svelte over @pierre/diffs): the path on a
 /// card header, then the unified rows — numbers, markers, the code in its
 /// colours — in a box up to 400pt tall that scrolls both ways.
-final class DiffView: UIView {
+public final class DiffView: UIView {
     private let env: RowEnv
     private let header = UIView()
     private let path = WrapLabel()
@@ -83,6 +83,20 @@ final class DiffView: UIView {
     private let rows = UIView()
     private var fit: NSLayoutConstraint!
     private var source: (path: String, old: String, new: String)?
+
+    /// The same measured diff outside a transcript. With no custom action,
+    /// Expand opens the transcript's existing lightbox from this view's window.
+    public convenience init(path: String, old: String, new: String, onExpand: ((UIView) -> Void)? = nil) {
+        let env = RowEnv()
+        env.openLightbox = { [weak env] item, source in
+            if let onExpand { onExpand(source); return }
+            guard let env, var host = source.window?.rootViewController else { return }
+            while let shown = host.presentedViewController { host = shown }
+            host.present(Lightbox(item, env: env), animated: !UIAccessibility.isReduceMotionEnabled)
+        }
+        self.init(env: env)
+        configure(path: path, old: old, new: new)
+    }
 
     init(env: RowEnv) {
         self.env = env
