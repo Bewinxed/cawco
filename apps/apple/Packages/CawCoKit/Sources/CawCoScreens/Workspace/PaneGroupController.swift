@@ -12,19 +12,19 @@ import UIKit
 /// first, one at a time, once the strip has been left alone for 800ms
 /// (120ms where the group swipes) and 300ms apart. Where the group swipes,
 /// the two neighbours are painted parked either side and a finger drags the
-/// panes 1:1 (TabSwipe); a tab chosen any other way lands on the same
+/// panes 1:1 (UIKit paging); a tab chosen any other way lands on the same
 /// settle. Elsewhere the arriving transcript glides 40pt in from the side
 /// of the tab it came from and fades up from 0.4 over 260ms on the drawer
 /// curve. A hairline rail down the leading edge marks the group the
 /// keyboard belongs to, graphite, never the accent.
-final class PaneGroupController: UIViewController, TabSwipeHost, UIDropInteractionDelegate {
+final class PaneGroupController: UIViewController, UIDropInteractionDelegate {
     let leafId: String
     private let workspace: Workspace
     private let panes: PaneHost
     private let context: ShellContext
     /// The strip, unless the top bar hosts it.
     let strip: PaneTabsView
-    private let stack = UIView()
+    private let stack = PagingScrollView()
     private let rail = UIView()
     private let preview = UIView()
     private var slots: [String: UIView] = [:]
@@ -32,14 +32,14 @@ final class PaneGroupController: UIViewController, TabSwipeHost, UIDropInteracti
     private var queue: DispatchWorkItem?
     private var shownId: String?
     private var shownTabs: [String] = []
-    private var swipe: TabSwipe?
     private var dock: ComposerDock!
     /// The tab a swipe landed on: its switch is already drawn.
     private var flip: String?
-    private var openSide = 0
+    var onSwipeEnded: () -> Void = {}
     var swipeable = false {
         didSet {
-            swipe?.pan.isEnabled = swipeable
+            guard swipeable != oldValue else { return }
+            stack.isScrollEnabled = swipeable
             layoutPanes()
         }
     }
@@ -141,13 +141,10 @@ final class PaneGroupController: UIViewController, TabSwipeHost, UIDropInteracti
 
         strip.onSelect = { [weak self] id in
             guard let self else { return }
-            // A tap mid-settle retargets it rather than restarting it.
-            if let swipe, swipe.active, let at = activeIndex, let to = index(of: id) {
-                swipe.retarget(to == at ? 0 : (to > at ? 1 : -1))
-            }
-            // An open details card goes with the tab that was clicked; otherwise it closes.
             if let tab = strip.tabView(id) { tabDetails.click(id, tab: tab, chosen: false) }
-            workspace.activate(id, in: leafId)
+            guard let at = shownTabs.firstIndex(of: id) else { return }
+            if !mounted.contains(id) { mount(id) }
+            stack.choose(at, animated: swipeable)
         }
         strip.onClose = { [weak self] id in
             guard let self else { return }
@@ -171,8 +168,27 @@ final class PaneGroupController: UIViewController, TabSwipeHost, UIDropInteracti
         let tap = UITapGestureRecognizer(target: self, action: #selector(touched))
         tap.cancelsTouchesInView = false
         view.addGestureRecognizer(tap)
-        swipe = TabSwipe(host: self, in: stack)
-        swipe?.pan.isEnabled = swipeable
+        stack.traceName = "sessions:\(leafId)"
+        stack.isScrollEnabled = swipeable
+        stack.onBegin = { [weak self] in
+            guard let self else { return }
+            dock.held = true
+            if let at = activeIndex {
+                for i in max(0, at - 1)...min(shownTabs.count - 1, at + 1) where !mounted.contains(shownTabs[i]) { mount(shownTabs[i]) }
+            }
+        }
+        stack.onScroll = { [weak self] position in self?.pagingMoved(position) }
+        stack.onLand = { [weak self] page in
+            guard let self, shownTabs.indices.contains(page) else { return }
+            strip.ride(toward: nil, fraction: 0)
+            dock.held = false
+            let id = shownTabs[page]
+            if leaf?.active != id {
+                flip = id
+                workspace.activate(id, in: leafId)
+            }
+            onSwipeEnded()
+        }
     }
 
     private var leaf: PaneLeaf? { workspace.leaf(leafId) }
@@ -189,6 +205,11 @@ final class PaneGroupController: UIViewController, TabSwipeHost, UIDropInteracti
     /// Reads the group from the workspace and the fleet; the switch animates.
     func refresh(animated: Bool) {
         guard isViewLoaded, let leaf else { return }
+        // Titles/state and model-selected transitions wait until the gesture
+        // releases its pair. No pulse or second animator resets their offsets.
+        guard !stack.active else { return }
+        let tabsBefore = shownTabs
+        shownTabs = leaf.tabs
         strip.configure(leaf.tabs.map { tab(for: $0) }, active: leaf.active, animated: animated)
         let focused = workspace.focusedLeaf == leafId
         Motion.easeOut.animator(Motion.durControl) { self.rail.alpha = focused ? 0.5 : 0 }.startAnimation()
@@ -197,8 +218,6 @@ final class PaneGroupController: UIViewController, TabSwipeHost, UIDropInteracti
         let from = shownId
         let to = leaf.active
         shownId = to
-        let tabsBefore = shownTabs
-        shownTabs = leaf.tabs
         layoutPanes()
         // Which way the switch went along the strip, read off the strip as
         // it was, else as it is; and how long its transcript motion has left,
@@ -210,7 +229,7 @@ final class PaneGroupController: UIViewController, TabSwipeHost, UIDropInteracti
             if let order, let a = order.firstIndex(of: from), let b = order.firstIndex(of: to) { direction = b > a ? 1 : -1 }
             let landedBySwipe = flip == to
             if animated, !landedBySwipe, direction != 0, !UIAccessibility.isReduceMotionEnabled {
-                landing = swipeable && tabsBefore.contains(to) ? TabSwipe.settle : 0.26
+                landing = 0.26
             }
             if animated {
                 switchPanes(from: from, to: to, order: order ?? leaf.tabs)
@@ -252,6 +271,13 @@ final class PaneGroupController: UIViewController, TabSwipeHost, UIDropInteracti
         controller.view.translatesAutoresizingMaskIntoConstraints = true
         controller.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         slot.addSubview(controller.view)
+        // The two-finger deck owns a pair of fingers; transcript lists keep
+        // their one-finger scroll without waiting for the deck recognizer.
+        func singleFingerLists(_ view: UIView) {
+            if let list = view as? UICollectionView { list.panGestureRecognizer.maximumNumberOfTouches = 1 }
+            for child in view.subviews { singleFingerLists(child) }
+        }
+        singleFingerLists(controller.view)
         controller.didMove(toParent: self)
         (controller as? SessionViewController)?.composerInset = dock.inset
         layoutPanes()
@@ -301,19 +327,19 @@ final class PaneGroupController: UIViewController, TabSwipeHost, UIDropInteracti
     private func layoutPanes() {
         let width = stack.bounds.width
         let active = leaf?.active
-        let at = activeIndex
         for (id, slot) in slots {
             slot.bounds = CGRect(origin: .zero, size: stack.bounds.size)
-            slot.center = CGPoint(x: stack.bounds.midX, y: stack.bounds.midY)
+            let page = shownTabs.firstIndex(of: id) ?? 0
+            slot.center = CGPoint(x: (Double(page) + 0.5) * width, y: stack.bounds.midY)
             for pane in slot.subviews { pane.frame = slot.bounds }
-            let delta = at.flatMap { a in index(of: id).map { $0 - a } }
-            let shown = id == active || (swipeable && delta.map { abs($0) <= 1 } == true)
+            let shown = id == active || abs(Double(page) - stack.position) <= 1
             slot.isHidden = !shown
             slot.isUserInteractionEnabled = id == active
             // A neighbour parked a width aside is drawn for the swipe, not read out.
             slot.accessibilityElementsHidden = id != active
-            if swipe?.active != true, let delta { slot.transform = swipeable ? CGAffineTransform(translationX: CGFloat(delta) * width, y: 0) : .identity }
+            slot.transform = .identity
         }
+        stack.configure(count: shownTabs.count, selected: activeIndex ?? 0)
     }
 
     override func viewDidLayoutSubviews() {
@@ -332,21 +358,7 @@ final class PaneGroupController: UIViewController, TabSwipeHost, UIDropInteracti
         guard let a = order.firstIndex(of: from), let b = order.firstIndex(of: to), let slot = slots[to] else { return }
         let dir = b > a ? 1.0 : -1.0
         guard !UIAccessibility.isReduceMotionEnabled else { return }
-        if swipeable, let out = slots[from] {
-            let width = stack.bounds.width
-            out.isHidden = false
-            out.transform = .identity
-            slot.transform = CGAffineTransform(translationX: dir * width, y: 0)
-            let spring = UISpringTimingParameters(duration: 0.4, bounce: 0)
-            let settle = UIViewPropertyAnimator(duration: 0.4, timingParameters: spring)
-            settle.addAnimations {
-                slot.transform = .identity
-                out.transform = CGAffineTransform(translationX: -dir * width, y: 0)
-            }
-            settle.addCompletion { [weak self] _ in self?.layoutPanes() }
-            settle.startAnimation()
-            return
-        }
+        if swipeable { return }
         slot.transform = CGAffineTransform(translationX: dir * 40, y: 0)
         slot.alpha = 0.4
         Motion.easeDrawer.animator(0.26) {
@@ -355,55 +367,18 @@ final class PaneGroupController: UIViewController, TabSwipeHost, UIDropInteracti
         }.startAnimation()
     }
 
-    // MARK: TabSwipeHost
+    // MARK: System paging progress
 
-    private func neighbour(_ side: Int) -> String? {
-        guard let leaf, let at = activeIndex else { return nil }
-        let index = at + side
-        return leaf.tabs.indices.contains(index) ? leaf.tabs[index] : nil
-    }
-
-    func swipeHasTab(_ side: Int) -> Bool { neighbour(side) != nil }
-
-    func swipeMayBegin(at point: CGPoint, side: Int) -> Bool {
-        // On the first tab a rightward drag is the way back to the board.
-        guard swipeable, stack.bounds.contains(point) else { return false }
-        return !(side == -1 && activeIndex == 0)
-    }
-
-    func swipeOpen(_ side: Int) {
-        openSide = side
-        // Nothing sends while a swipe carries the conversation.
-        dock.held = true
-        guard let id = neighbour(side) else { return }
-        if !mounted.contains(id) { mount(id) }
-        slots[id]?.isHidden = false
-    }
-
-    func swipeDraw(offset: Double, side: Int, progress: Double) {
-        let width = stack.bounds.width
-        if let active = leaf?.active { slots[active]?.transform = CGAffineTransform(translationX: offset, y: 0) }
-        if side != 0, let id = neighbour(side) {
-            slots[id]?.transform = CGAffineTransform(translationX: Double(side) * width + offset, y: 0)
-            strip.ride(toward: id, fraction: progress)
-        } else {
-            strip.ride(toward: nil, fraction: 0)
+    private func pagingMoved(_ position: Double) {
+        guard stack.active, let from = activeIndex, !shownTabs.isEmpty else { return }
+        let target = position > Double(from) ? Int(position.rounded(.up)) : Int(position.rounded(.down))
+        for i in [Int(position.rounded(.down)), Int(position.rounded(.up))] where shownTabs.indices.contains(i) && !mounted.contains(shownTabs[i]) { mount(shownTabs[i]) }
+        for (id, slot) in slots {
+            if let at = shownTabs.firstIndex(of: id) { slot.isHidden = abs(Double(at) - position) > 1 }
         }
-    }
-
-    func swipeLanded(_ side: Int) {
-        strip.ride(toward: nil, fraction: 0)
-        dock.held = false
-        guard let id = neighbour(side) else { return }
-        flip = id
-        workspace.activate(id, in: leafId)
-        layoutPanes()
-    }
-
-    func swipeReturned(_: Int) {
-        strip.ride(toward: nil, fraction: 0)
-        dock.held = false
-        layoutPanes()
+        if shownTabs.indices.contains(target), target != from {
+            strip.ride(toward: shownTabs[target], fraction: min(1, abs(position - Double(from)) / Double(abs(target - from))))
+        } else { strip.ride(toward: nil, fraction: 0) }
     }
 
     // MARK: Menu

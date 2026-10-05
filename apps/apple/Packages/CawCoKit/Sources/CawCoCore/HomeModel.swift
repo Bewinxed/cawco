@@ -436,7 +436,7 @@ public final class HomeModel {
         public let recent: [RecentItem]
     }
 
-    public var board: Board {
+    public func board(for tab: Tab) -> Board {
         let working = working
         let finished = finished
         let workingRows = rows(of: working)

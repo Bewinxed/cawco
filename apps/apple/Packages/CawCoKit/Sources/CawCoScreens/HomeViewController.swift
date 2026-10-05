@@ -1,7 +1,6 @@
 import CawCoCore
 import CawCoDesign
 import CawCoMascot
-import OSLog
 import UIKit
 
 /// The home (home/Home.svelte, its phone page): a status line, a headline,
@@ -51,6 +50,9 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
 
     private let hub: HubConnection
     private let home: HomeModel
+    /// The snapshot's tab, which can preview a neighbour without committing
+    /// the shared model while a finger still owns the transition.
+    private var drawnTab: HomeModel.Tab
     var onOpen: (String) -> Void = { _ in }
     var onSelectTab: (HomeModel.Tab) -> Void = { _ in }
     /// Opens the Usage page from the strip's corner link.
@@ -98,7 +100,7 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
     private let relay = RelayMotion()
     private let branch = BranchMotion()
     /// The swipe between Working and Finished, and what it has open.
-    private var swipe: TabSwipe!
+    private var paging: PagingScrollView!
     private var swiping: (from: HomeModel.Tab, to: HomeModel.Tab)?
     private var cover: UIView?
     private var leavingPane: UIView?
@@ -107,9 +109,6 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
     private var heldInset = 0.0
     /// The landed list's rows flying in.
     private let flight = Frames()
-    #if DEBUG
-    private static let swipeLog = Logger(subsystem: "dev.cawco.app", category: "HomeTabs")
-    #endif
 
     /// Where the home stands (Home.svelte `variant`): the page, or the rail's own copy.
     enum Variant {
@@ -133,6 +132,7 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
     init(hub: HubConnection, home: HomeModel, variant: Variant) {
         self.hub = hub
         self.home = home
+        drawnTab = home.tab
         self.variant = variant
         super.init(nibName: nil, bundle: nil)
     }
@@ -154,13 +154,25 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
         collectionView.backgroundColor = variant.ground
         collectionView.delegate = self
         collectionView.keyboardDismissMode = .onDrag
-        view.addSubview(collectionView)
+        paging = PagingScrollView()
+        paging.traceName = "home"
+        paging.frame = view.bounds
+        paging.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        paging.backgroundColor = variant.ground
+        view.addSubview(paging)
+        paging.addSubview(collectionView)
+        paging.mayBegin = { [weak self] point in
+            guard let self, !branch.running, let tabs = tabsCell else { return false }
+            return paging.convert(point, to: view).y >= tabs.convert(tabs.bounds, to: view).maxY
+        }
+        paging.onBegin = { [weak self] in self?.preparePages() }
+        paging.onScroll = { [weak self] position in self?.drawPagingChrome(position) }
+        paging.onLand = { [weak self] page in self?.finishPaging(page) }
         // The list ends at the view's foot, or at a docked keyboard's top while it
         // is up: the search field and its results stay above it and scroll to the
         // last. Sized by frame: the rail lays this view out by its own constraints.
         NotificationCenter.default.addObserver(self, selector: #selector(keyboardMoved(_:)), name: UIResponder.keyboardWillChangeFrameNotification, object: nil)
         dataSource = makeDataSource()
-        swipe = TabSwipe(host: self, in: view)
         if onStart != nil { installDock() }
     }
 
@@ -210,13 +222,14 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
     /// what the keyboard leaves, with its results under it.
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
+        paging.configure(count: 2, selected: home.tab == .working ? 0 : 1)
         var tall = view.bounds.height
         if let keyboard, let window = view.window {
             let top = view.convert(window.convert(keyboard, from: window.screen.coordinateSpace), from: window).minY
             tall = max(0, min(tall, top))
         }
         if collectionView.frame.height != tall || collectionView.frame.width != view.bounds.width {
-            collectionView.frame = CGRect(x: 0, y: 0, width: view.bounds.width, height: tall)
+            collectionView.frame = CGRect(x: paging.contentOffset.x, y: 0, width: view.bounds.width, height: tall)
         }
         // The rail's grip moved: the tabs tighten or loosen with its width.
         if tight != tightenedAt {
@@ -386,7 +399,7 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
         let tabs = UICollectionView.CellRegistration<TabsCell, Item> { [weak self] cell, _, _ in
             guard let self else { return }
             cell.tight = tight
-            cell.configure(tab: home.tab, working: counts.working, finished: counts.finished, finishedFailed: counts.finishedFailed, delegatesOn: home.delegates)
+            cell.configure(tab: drawnTab, working: counts.working, finished: counts.finished, finishedFailed: counts.finishedFailed, delegatesOn: home.delegates)
             cell.onTab = { [weak self] tab in self?.choose(tab) }
             cell.onDelegates = { [weak self] in
                 guard let self else { return }
@@ -395,7 +408,7 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
         }
         let machine = UICollectionView.CellRegistration<MachineCell, Item> { [weak self] cell, _, item in
             guard let self, case let .machine(id) = item, let entry = groups[id] else { return }
-            let finished = home.tab == .finished ? home.finishedOn(id) : []
+            let finished = drawnTab == .finished ? home.finishedOn(id) : []
             cell.configure(entry.group, seam: entry.seam, archivable: finished.count)
             cell.onArchiveAll = { [weak self] in
                 guard let self else { return }
@@ -515,7 +528,7 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
 
     /// A driven motion owns the list until it lands, and asks again then.
     private var listIsFree: Bool {
-        dataSource != nil && !relay.running && !branch.running && swipe?.active != true && !flight.running
+        dataSource != nil && !relay.running && !branch.running && paging?.active != true && !flight.running
     }
 
     /// What the model says stands on the board now, read under observation.
@@ -626,7 +639,9 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
     }
 
     /// The snapshot the model says now, and the lookups its cells read.
-    private func build() -> NSDiffableDataSourceSnapshot<Section, Item> {
+    private func build(tab preview: HomeModel.Tab? = nil) -> NSDiffableDataSourceSnapshot<Section, Item> {
+        let tab = preview ?? home.tab
+        drawnTab = tab
         contentRevision += 1
         var snapshot = NSDiffableDataSourceSnapshot<Section, Item>()
         let live = home.live
@@ -655,7 +670,7 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
             snapshot.appendItems(needList.map { .need($0.id) }, toSection: .needs)
         }
 
-        let board = home.board
+        let board = home.board(for: tab)
         let working = board.working
         let finished = board.finished
         counts = (working.count, finished.count, finished.contains(where: \.isFailed))
@@ -676,10 +691,10 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
                     let depth = line.line.depth
                     let through = depth > 1 ? (1 ..< depth).filter { lastAt[$0] == false } : []
                     lastAt[depth] = line.line.last
-                    rows[line.id] = RowLine(line: line, tab: home.tab, group: group.machineId, through: through)
+                    rows[line.id] = RowLine(line: line, tab: tab, group: group.machineId, through: through)
                     items.append(.row(line.id))
                     // The list's echoes, top to bottom: a working tile and a needs-you dot each take a beat.
-                    let status = Self.status(line.line.row, home: home, done: home.tab == .finished)
+                    let status = Self.status(line.line.row, home: home, done: tab == .finished)
                     if status == .live || status == .attn {
                         echoing[line.id] = echoing.count
                     }
@@ -785,8 +800,8 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
     /// arriving from the other. Everything above the rows stays where it is.
     private func choose(_ tab: HomeModel.Tab) {
         // A swipe in flight is retargeted from where it is, never restarted.
-        if swipe.active {
-            swipe.retarget(swiping.map { $0.to == tab ? swipe.side : 0 } ?? 0)
+        if paging.active {
+            paging.choose(tab == .working ? 0 : 1, animated: true)
             return
         }
         guard tab != home.tab else {
@@ -1012,9 +1027,14 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
     /// selects right after this), then the board catches up on the next turn.
     func collectionView(_ collectionView: UICollectionView, didUnhighlightItemAt _: IndexPath) {
         pressed = false
-        if !collectionView.isDragging, !collectionView.isDecelerating { home.holding = false }
+        if !collectionView.isDragging, !collectionView.isDecelerating, !paging.active { home.holding = false }
         DispatchQueue.main.async { [weak self] in
             guard let self, !pressed else { return }
+            guard listIsFree else {
+                pending = nil
+                rowsWaiting = false
+                return
+            }
             if rowsWaiting {
                 rowsWaiting = false
                 requestRows()
@@ -1078,69 +1098,37 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
 
 // MARK: The swipe between Working and Finished
 
-/// The swipe moves the list region under the tab row (TabSwipe): the list
+/// UIKit paging moves the list region under the tab row: the list
 /// there now drags off and the other tab's drags on beside it, in lockstep
 /// under the finger, while the status line, usage strip, needs cards and tab
 /// row stay where they are and the tab strip's sheet follows the finger.
 /// The neighbour comes on with its machines and what is under the list, its
 /// rows not yet there; once it lands they fly in, staggered, from the side
 /// it came from (list-swap's numbers, Relay.swift).
-extension HomeViewController: TabSwipeHost {
-    private func tab(on side: Int, of tab: HomeModel.Tab) -> HomeModel.Tab? {
-        switch (tab, side) {
-        case (.working, 1): .finished
-        case (.finished, -1): .working
-        default: nil
-        }
-    }
-
+extension HomeViewController {
     private var tabsCell: TabsCell? {
         dataSource.indexPath(for: .tabs).flatMap { collectionView.cellForItem(at: $0) as? TabsCell }
     }
 
-    func swipeHasTab(_ side: Int) -> Bool {
-        tab(on: side, of: swiping?.from ?? home.tab) != nil
-    }
-
-    func swipeMayBegin(at point: CGPoint, side: Int) -> Bool {
-        if swipe.active {
-            return true
-        }
-        guard !branch.running, let tabs = tabsCell else {
-            return false
-        }
-        // The region under the tab row: never the chrome above it.
-        guard point.y >= tabs.convert(tabs.bounds, to: view).maxY else {
-            return false
-        }
-        // A finished row's own swipe to archive goes the same way past the last tab.
-        let inList = view.convert(point, to: collectionView)
-        if tab(on: side, of: home.tab) == nil, let indexPath = collectionView.indexPathForItem(at: inList),
-           archiveSwipe(at: indexPath) != nil {
-            return false
-        }
-        return true
-    }
-
-    func swipeOpen(_ side: Int) {
+    private func preparePages() {
+        guard swiping == nil else { return }
         relay.end()
         flight.stop()
         let from = home.tab
-        guard let to = tab(on: side, of: from), let tabs = tabsCell else {
-            return
-        }
+        let to: HomeModel.Tab = from == .working ? .finished : .working
+        guard let tabs = tabsCell else { return }
         swiping = (from, to)
+        pressed = false
+        pending = nil
+        rowsWaiting = false
+        home.holding = true
         let top = max(0, tabs.convert(tabs.bounds, to: view).maxY)
         let region = CGRect(x: 0, y: top, width: view.bounds.width, height: max(0, view.bounds.height - top))
         let leaving = view.resizableSnapshotView(from: region, afterScreenUpdates: false, withCapInsets: .zero) ?? UIView()
 
         // The other tab's list, laid out where this one stands.
         let resting = collectionView.contentOffset
-        home.tab = to
-        #if DEBUG
-        Self.swipeLog.debug("model tab preview \(from.rawValue, privacy: .public) -> \(to.rawValue, privacy: .public)")
-        #endif
-        commit(build(), animated: false)
+        commit(build(tab: to), animated: false)
         collectionView.layoutIfNeeded()
         hold(resting)
         let arriving = UIView(frame: CGRect(origin: .zero, size: region.size))
@@ -1158,55 +1146,53 @@ extension HomeViewController: TabSwipeHost {
             shot.frame = frame.offsetBy(dx: 0, dy: -region.minY)
             arriving.addSubview(shot)
         }
-        let cover = UIView(frame: region)
+        let cover = UIView(frame: CGRect(x: 0, y: region.minY, width: region.width * 2, height: region.height))
         cover.clipsToBounds = true
         cover.backgroundColor = variant.ground
         cover.isUserInteractionEnabled = false
         cover.addSubview(leaving)
         cover.addSubview(arriving)
-        leaving.frame.origin = .zero
-        arriving.frame.origin.x = Double(side) * region.width
-        view.addSubview(cover)
+        leaving.frame.origin = CGPoint(x: from == .working ? 0 : region.width, y: 0)
+        arriving.frame.origin.x = to == .working ? 0 : region.width
+        paging.addSubview(cover)
         self.cover = cover
         leavingPane = leaving
         arrivingPane = arriving
         tabs.scrub(from: from, to: to, progress: 0)
     }
 
-    func swipeDraw(offset: Double, side: Int, progress: Double) {
-        guard let cover, let swiping else {
-            // Past the edge with no tab there: the region under the tab row
-            // gives a little, banded, and nothing above it moves.
-            for cell in collectionView.visibleCells {
-                guard let indexPath = collectionView.indexPath(for: cell), underTabs(indexPath) else { continue }
-                cell.transform = offset == 0 ? .identity : CGAffineTransform(translationX: offset, y: 0)
-            }
-            return
-        }
-        leavingPane?.frame.origin.x = offset
-        arrivingPane?.frame.origin.x = Double(side) * cover.bounds.width + offset
+    private func drawPagingChrome(_ position: Double) {
+        // Only the under-tabs pages slide. The live chrome stays at the
+        // viewport's origin while UIKit scrolls the snapshot pages below it.
+        collectionView.frame.origin.x = paging.contentOffset.x
+        guard let swiping else { return }
+        let from = swiping.from == .working ? 0.0 : 1.0
+        let to = swiping.to == .working ? 0.0 : 1.0
+        let progress = min(1, max(0, (position - from) / (to - from)))
         tabsCell?.scrub(from: swiping.from, to: swiping.to, progress: progress)
     }
 
-    func swipeLanded(_ side: Int) {
+    private func finishPaging(_ page: Int) {
         guard let swiping else {
             return
         }
-        #if DEBUG
-        Self.swipeLog.debug("model tab landed \(swiping.to.rawValue, privacy: .public)")
-        #endif
+        let destination: HomeModel.Tab = page == 0 ? .working : .finished
+        if destination == swiping.from {
+            commit(build(tab: swiping.from), animated: false)
+            collectionView.layoutIfNeeded()
+            tabsCell?.scrub(from: swiping.from, to: swiping.to, progress: 0)
+            close()
+            requestRefresh()
+            return
+        }
+        home.tab = swiping.to
         tabsCell?.scrub(from: swiping.from, to: swiping.to, progress: 1)
-        if UIAccessibility.isReduceMotionEnabled, let cover {
-            // Less motion: the old list cross-fades into the new, nothing travels.
-            arrivingPane?.removeFromSuperview()
-            leavingPane?.frame.origin.x = 0
-            self.cover = nil
-            fadeAway(cover)
+        if UIAccessibility.isReduceMotionEnabled {
             close()
             requestRefresh()
         } else {
             close()
-            flyIn(from: side)
+            flyIn(from: swiping.to == .finished ? 1 : -1)
         }
         onSelectTab(swiping.to)
     }
@@ -1219,27 +1205,13 @@ extension HomeViewController: TabSwipeHost {
         return true
     }
 
-    func swipeReturned(_: Int) {
-        guard let swiping else {
-            return
-        }
-        home.tab = swiping.from
-        #if DEBUG
-        Self.swipeLog.debug("model tab returned \(swiping.from.rawValue, privacy: .public)")
-        #endif
-        commit(build(), animated: false)
-        collectionView.layoutIfNeeded()
-        tabsCell?.scrub(from: swiping.from, to: swiping.to, progress: 0)
-        close()
-        requestRefresh()
-    }
-
     private func close() {
         swiping = nil
         cover?.removeFromSuperview()
         cover = nil
         leavingPane = nil
         arrivingPane = nil
+        home.holding = false
         letGoOfOffset()
     }
 
@@ -1325,13 +1297,13 @@ extension HomeViewController: TabSwipeHost {
 }
 
 /// The board's list. Its own scroll pan never starts on a mostly sideways
-/// drag: that drag is the tab swipe's (TabSwipe), so vertical scrolling
+/// drag: that drag is the system page scroll's, so vertical scrolling
 /// stays immediate and a sideways one never nudges the page.
 final class BoardList: UICollectionView {
     override func gestureRecognizerShouldBegin(_ recognizer: UIGestureRecognizer) -> Bool {
         if recognizer === panGestureRecognizer {
             let v = panGestureRecognizer.velocity(in: self)
-            if abs(v.y) <= abs(v.x) * TabSwipe.slope {
+            if abs(v.y) <= abs(v.x) * PagingScrollView.slope {
                 return false
             }
         }

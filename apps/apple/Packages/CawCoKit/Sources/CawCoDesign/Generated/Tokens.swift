@@ -287,6 +287,8 @@ public enum Shadow {
 }
 
 public enum FontFamily {
+    /// Caw&Co wordmark: the approved landing's Nunito Variable face.
+    public static let fontWordmark: [String] = ["Nunito Variable", "ui-rounded", "system-ui", "sans-serif"]
     /// Figtree for UI and transcript prose, 400 and 500 only.
     public static let fontSans: [String] = ["Figtree Variable", "ui-sans-serif", "system-ui", "-apple-system", "Segoe UI", "sans-serif"]
     public static let fontBody: [String] = ["Figtree Variable", "ui-sans-serif", "system-ui", "-apple-system", "Segoe UI", "sans-serif"]
@@ -297,6 +299,11 @@ public enum FontFamily {
 }
 
 public enum TypeScale {
+    /// The landing wordmark's variable-font weight. Brand only.
+    public static let weightWordmark: Double = 1000
+    /// The landing wordmark's tracking; the ampersand shares its face and size.
+    /// In em: multiply by the font size for points.
+    public static let trackWordmark: Double = -0.045
     /// The six sizes text takes. Dense roles hold one size at every width; title and kpi scale with the viewport between 390 and 1024px.
     public static let textMeta: Double = 12
     public static let textLabel: Double = 13
@@ -596,6 +603,9 @@ public enum Motion {
     public static let durPop: TimeInterval = 0.26
     /// In seconds.
     public static let durPanel: TimeInterval = 0.28
+    /// The existing motion/spring.ts response for non-paging surface settlement. Paging uses UIScrollView's system mechanics.
+    /// In seconds.
+    public static let durSettle: TimeInterval = 0.4
     /// A disclosure growing open (collapsible-content); it folds shut over dur-exit.
     /// In seconds.
     public static let durReveal: TimeInterval = 0.24

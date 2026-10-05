@@ -148,6 +148,7 @@ final class WorkspaceController: ObservedViewController, BackSwipeGate {
     private func group(for leaf: PaneLeaf) -> PaneGroupController {
         if let kept = groups[leaf.id] { return kept }
         let made = PaneGroupController(leafId: leaf.id, workspace: workspace, panes: panes, context: context, hosted: false)
+        made.onSwipeEnded = { [weak self] in self?.requestRefresh() }
         groups[leaf.id] = made
         return made
     }
@@ -210,9 +211,9 @@ final class WorkspaceController: ObservedViewController, BackSwipeGate {
     // MARK: Back swipe
 
     var allowsBackSwipe: Bool {
-        let leaf = workspace.focused
-        guard let active = leaf.active else { return true }
-        return leaf.tabs.firstIndex(of: active) == 0
+        // The whole pane gesture belongs to its tab strip, including its
+        // first/last edge. Back remains the navigation bar's explicit action.
+        !coarse || workspace.focused.active == nil
     }
 }
 
@@ -377,23 +378,35 @@ final class SplitView: UIView {
 /// `durPanel` on the in-out curve; the page dots show while it is lifted.
 /// A release projected 0.1s ahead past 35% of the height, or a flick past
 /// 110pt/s, moves to the neighbour; a no-bounce spring settles it.
-final class DeckView: UIView, UIGestureRecognizerDelegate {
+final class DeckView: UIView {
     static let gap = 12.0
     var onFocus: (Int) -> Void = { _ in }
     private var cards: [Card] = []
     private var index = 0
-    private var offset = 0.0
-    private var base = 0.0
+    private let paging = PagingScrollView(axis: .vertical, touches: 2)
     private let dots = UIStackView()
     private var dotViews: [UIView] = []
-    private var settle: UIViewPropertyAnimator?
 
     init(cards views: [UIView]) {
         super.init(frame: .zero)
         backgroundColor = Palette.surfaceRecess
         clipsToBounds = true
         cards = views.map { Card(content: $0) }
-        for card in cards { addSubview(card) }
+        paging.traceName = "deck"
+        addSubview(paging)
+        for card in cards { paging.addSubview(card) }
+        paging.onBegin = { [weak self] in self?.lift(true) }
+        paging.onScroll = { [weak self] position in
+            guard let self else { return }
+            for (i, card) in cards.enumerated() { card.isHidden = abs(Double(i) - position) > 1 }
+        }
+        paging.onLand = { [weak self] page in
+            guard let self else { return }
+            index = page
+            paint()
+            onFocus(page)
+            lift(false)
+        }
         dots.axis = .vertical
         dots.spacing = 6
         dots.alpha = 0
@@ -410,11 +423,6 @@ final class DeckView: UIView, UIGestureRecognizerDelegate {
             dotViews.append(dot)
             dots.addArrangedSubview(dot)
         }
-        let pan = UIPanGestureRecognizer(target: self, action: #selector(dragged(_:)))
-        pan.minimumNumberOfTouches = 2
-        pan.maximumNumberOfTouches = 2
-        pan.delegate = self
-        addGestureRecognizer(pan)
     }
 
     @available(*, unavailable)
@@ -422,18 +430,22 @@ final class DeckView: UIView, UIGestureRecognizerDelegate {
         fatalError("DeckView is built in code")
     }
 
-    private var height: Double { max(1, bounds.height) }
-    private var step: Double { height + Self.gap }
-
     func focus(_ next: Int, animated _: Bool) {
-        guard settle == nil, next != index || cards.indices.contains(next) else { return }
-        index = max(0, min(next, cards.count - 1))
+        guard !paging.active else { return }
+        index = next
+        paging.configure(count: cards.count, selected: index)
         paint()
     }
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        for card in cards { card.bounds = CGRect(origin: .zero, size: bounds.size) }
+        // UIKit pages by its bounds. Extending the viewport by the artwork's
+        // gap preserves the 12pt space; this deck clips it at the screen foot.
+        paging.frame = CGRect(x: 0, y: 0, width: bounds.width, height: bounds.height + Self.gap)
+        for (i, card) in cards.enumerated() {
+            card.frame = CGRect(x: 0, y: Double(i) * paging.bounds.height, width: bounds.width, height: bounds.height)
+        }
+        paging.configure(count: cards.count, selected: index)
         dots.frame.size = dots.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize)
         dots.center = CGPoint(x: bounds.maxX - Space.space3 - 3, y: bounds.midY)
         paint()
@@ -441,10 +453,8 @@ final class DeckView: UIView, UIGestureRecognizerDelegate {
 
     private func paint() {
         for (at, card) in cards.enumerated() {
-            let delta = Double(at - index)
-            card.center = CGPoint(x: bounds.midX, y: bounds.midY + delta * step + offset)
-            card.isHidden = abs(delta) > 1
-            card.isUserInteractionEnabled = delta == 0
+            card.isHidden = abs(Double(at) - paging.position) > 1
+            card.isUserInteractionEnabled = true
         }
         for (at, dot) in dotViews.enumerated() {
             let on = at == index
@@ -455,59 +465,6 @@ final class DeckView: UIView, UIGestureRecognizerDelegate {
     }
 
     private var dotHeights: [NSLayoutConstraint] = []
-
-    func gestureRecognizer(_: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith _: UIGestureRecognizer) -> Bool {
-        false
-    }
-
-    override func gestureRecognizerShouldBegin(_ recognizer: UIGestureRecognizer) -> Bool {
-        guard let pan = recognizer as? UIPanGestureRecognizer, cards.count > 1 else { return false }
-        let v = pan.velocity(in: self)
-        return abs(v.x) <= abs(v.y) * 0.7 + 1
-    }
-
-    @objc private func dragged(_ pan: UIPanGestureRecognizer) {
-        let dy = pan.translation(in: self).y
-        switch pan.state {
-        case .began:
-            settle?.stopAnimation(true)
-            settle = nil
-            base = offset
-            lift(true)
-        case .changed:
-            let raw = base + dy
-            let open = raw < 0 ? index < cards.count - 1 : index > 0
-            offset = open ? max(-step, min(step, raw)) : (raw < 0 ? -1 : 1) * min(abs(raw) * 0.35, height * 0.25)
-            paint()
-        case .ended, .cancelled, .failed:
-            let velocity = pan.state == .ended ? pan.velocity(in: self).y : 0
-            let projected = offset + velocity * 0.1
-            let up = projected < 0
-            let target = up ? index + 1 : index - 1
-            let far = abs(projected) > height * 0.35
-            let flicked = up ? velocity < -110 : velocity > 110
-            if cards.indices.contains(target), far || flicked {
-                index = target
-                offset += up ? step : -step
-                paint()
-                onFocus(index)
-            }
-            let spring = UISpringTimingParameters(duration: 0.4, bounce: 0, initialVelocity: CGVector(dx: 0, dy: offset == 0 ? 0 : velocity / -offset))
-            let animator = UIViewPropertyAnimator(duration: 0.4, timingParameters: spring)
-            animator.addAnimations { [weak self] in
-                self?.offset = 0
-                self?.paint()
-            }
-            animator.addCompletion { [weak self] _ in
-                self?.settle = nil
-                self?.lift(false)
-            }
-            settle = animator
-            animator.startAnimation()
-        default:
-            break
-        }
-    }
 
     private func lift(_ up: Bool) {
         let still = UIAccessibility.isReduceMotionEnabled

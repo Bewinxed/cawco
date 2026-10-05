@@ -1245,7 +1245,7 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
             if pan.state == .ended, card.transform.ty > height * 0.3 || velocity > 0.3 {
                 close()
             } else {
-                UIViewPropertyAnimator(duration: TabSwipe.settle, timingParameters: UISpringTimingParameters(duration: TabSwipe.settle, bounce: 0)).run {
+                UIViewPropertyAnimator(duration: Motion.durSettle, timingParameters: UISpringTimingParameters(duration: Motion.durSettle, bounce: 0)).run {
                     self.card.transform = .identity
                 }
             }

@@ -230,10 +230,10 @@ public final class HouseSheetController: UIViewController, UIViewControllerTrans
     private func settle(leaving: Bool, from y: Double, height: Double, velocity: Double) {
         let target = leaving ? height + Space.space2 : 0
         let distance = target - y
-        let spring = UISpringTimingParameters(duration: TabSwipe.settle, bounce: 0,
+        let spring = UISpringTimingParameters(duration: Motion.durSettle, bounce: 0,
             initialVelocity: CGVector(dx: 0, dy: abs(distance) > 0.5 ? velocity / distance : 0))
         let scrim = (presentationController as? HouseSheetPresentation)?.scrim
-        let animator = UIViewPropertyAnimator(duration: TabSwipe.settle, timingParameters: spring)
+        let animator = UIViewPropertyAnimator(duration: Motion.durSettle, timingParameters: spring)
         animator.addAnimations {
             self.card.transform = self.offset(target)
             scrim?.alpha = leaving ? 0 : 1

@@ -2517,6 +2517,11 @@
       "$type": "duration",
       "$value": "280ms"
     },
+    "dur-settle": {
+      "$type": "duration",
+      "$value": "400ms",
+      "$description": "The existing motion/spring.ts response for non-paging surface settlement. Paging uses UIScrollView's system mechanics."
+    },
     "dur-reveal": {
       "$type": "duration",
       "$value": "240ms",

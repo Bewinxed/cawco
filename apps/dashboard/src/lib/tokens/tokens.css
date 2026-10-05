@@ -725,6 +725,8 @@
     --dur-wait-grace: 1000ms;
     --dur-pop: 260ms;
     --dur-panel: 280ms;
+    /* The existing motion/spring.ts response for non-paging surface settlement. Paging uses UIScrollView's system mechanics. */
+    --dur-settle: 400ms;
     /* A disclosure growing open (collapsible-content); it folds shut over dur-exit. */
     --dur-reveal: 240ms;
     /* How long a done state stays up. */
