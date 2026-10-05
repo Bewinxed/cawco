@@ -74,7 +74,18 @@ check() {
   local name=$1 fn=$2 limit=${3:-600} log rc=0
   log="$out/logs/$(echo "$name" | tr -cs 'A-Za-z0-9' '-').log"
   LAST_LOG=$log
-  timeout --kill-after=10 "$limit" bash -ec "$fn" > "$log" 2>&1 < /dev/null || rc=$?
+  {
+    echo "check: $name"
+    echo "function: $fn"
+    echo "time limit: ${limit}s"
+    echo "started: $(date -u +%FT%TZ)"
+    echo "---- trace: every command the check runs is printed after a '+', with its output below it;"
+    echo "---- a command that fails prints 'ERR: exit N from: <command>'"
+  } > "$log"
+  # -x prints each command, the ERR trap prints each failing command's exit status (-E: inside functions too).
+  PS4='+ [${FUNCNAME[0]:-main}:${LINENO}] ' timeout --kill-after=10 "$limit" \
+    bash -eEx -c "trap 'echo \"ERR: exit \$? from: \$BASH_COMMAND\" >&2' ERR; $fn" >> "$log" 2>&1 < /dev/null || rc=$?
+  echo "---- the check ended with exit status $rc at $(date -u +%FT%TZ)" >> "$log"
   if [[ $rc == 0 ]]; then
     echo "$name: PASS"
     return
@@ -355,18 +366,31 @@ declined() {
 export -f declined
 check "declining the optional tools still completes the install" declined
 
+# The installer run against a feed that must be refused, inside the spare hub machine
+# (a real systemd machine the installer gets past its service-manager check on, and which stays
+# untouched: the second-hub check installs on it later). Everything is written to the check's log.
 refuse() {
-  local feedname=$1 phrase=$2 log="$out/logs/refuse-$1.log"
-  set +e
-  $P run --rm --network "$net" --user cawco --env HOME=/home/cawco --env CAWCO_RELEASE_HOST="http://$release_ip:8000/$feedname" \
-    --mount "type=bind,src=$out/shared,dst=/shared,ro" "localhost/$prefix-machine:latest" \
-    sh -c 'sh /shared/installer.sh; rc=$?; if [ -e "$HOME/.local/share/cawco" ] || [ -e "$HOME/.local/bin/cawco" ]; then echo CHANGED-A-MACHINE; else echo NOTHING-WAS-CHANGED; fi; exit $rc' > "$log" 2>&1
-  local rc=$?
-  set -e
-  [[ $rc != 0 ]]
-  grep -q "$phrase" "$log"
-  grep -q NOTHING-WAS-CHANGED "$log"
-  ! grep -q CHANGED-A-MACHINE "$log"
+  local feedname=$1 phrase=$2 rc=0 diffrc=0 dir="$out/refuse-$1"
+  mkdir -p "$dir"
+  listing() { as_user "$hub2c" sh -c 'find "$HOME" -xdev -not -path "$HOME/.cache/*" | sort; echo "-- user units:"; systemctl --user list-unit-files "cawco-*" --no-legend'; }
+  listing > "$dir/before.txt"
+  echo "== listing before ($(wc -l < "$dir/before.txt") lines)"
+  cat "$dir/before.txt"
+  echo "== running the installer on $hub2c against the $feedname feed (release host $release_ip:8000/$feedname)"
+  FEED_OVERRIDE="http://$release_ip:8000/$feedname" as_user "$hub2c" sh /shared/installer.sh > "$dir/installer.txt" 2>&1 || rc=$?
+  echo "== the installer's full output"
+  cat "$dir/installer.txt"
+  echo "== the installer's exit status: $rc"
+  listing > "$dir/after.txt"
+  echo "== listing after ($(wc -l < "$dir/after.txt") lines)"
+  cat "$dir/after.txt"
+  echo "== diff before after"
+  diff "$dir/before.txt" "$dir/after.txt" || diffrc=$?
+  [[ $diffrc == 0 ]] && echo "(no difference)"
+  echo "== assertions: exit status not 0 (was $rc); output holds '$phrase'; before and after identical (diff status $diffrc)"
+  [[ $rc != 0 ]] || { echo "ASSERTION FAILED: the installer exited 0"; return 1; }
+  grep -q "$phrase" "$dir/installer.txt" || { echo "ASSERTION FAILED: the output does not hold: $phrase"; return 1; }
+  [[ $diffrc == 0 ]] || { echo "ASSERTION FAILED: the machine changed"; return 1; }
 }
 export -f refuse
 check "a tampered archive is refused and nothing changes" "refuse tampered 'does not match the signed checksum'"
