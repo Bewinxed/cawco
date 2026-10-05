@@ -28,18 +28,57 @@ ${hub ? `HUB=${shellQuote(hub)}\n` : ""}ORIGIN=${shellQuote(origin)}
 say() { printf '${INSTALL_STEP_PREFIX}%s\\n' "$*"; }
 fail() { printf 'cawco: %s\\n' "$*" >&2; exit 1; }
 
-main() {
-  say "checking for git, curl and unzip"
+prerequisites() {
+  say "checking installer prerequisites"
   missing=""
-  for tool in git curl; do
+  for tool in git curl unzip bash tar grep; do
     command -v "$tool" >/dev/null 2>&1 || missing="$missing $tool"
   done
-  if [ "$(uname -s)" = Linux ] && ! command -v unzip >/dev/null 2>&1; then
-    missing="$missing unzip"
+  for tool in id uname ls mktemp tail sleep mkdir rm mv chmod cat basename; do
+    if ! command -v "$tool" >/dev/null 2>&1; then
+      missing="$missing coreutils"
+      break
+    fi
+  done
+  if [ "$(uname -s)" = Darwin ] && ! xcode-select -p >/dev/null 2>&1; then
+    case " $missing " in *" git "*) ;; *) missing="$missing git" ;; esac
   fi
-  if [ -n "$missing" ]; then
-    fail "this machine is missing:$missing. Install them with its package manager, then run this again."
+  [ -n "$missing" ] || return 0
+  if [ "$(uname -s)" = Darwin ]; then
+    extra=""
+    for package in $missing; do
+      [ "$package" = git ] || extra="$extra $package"
+    done
+    guidance="Install Apple's command line tools with: xcode-select --install."
+    [ -z "$extra" ] || guidance="$guidance Install the other missing tools with: brew install$extra."
+    fail "this machine is missing:$missing. $guidance Then run this again."
   fi
+  if command -v apt-get >/dev/null 2>&1; then
+    INSTALL="apt-get install -y"
+  elif command -v dnf >/dev/null 2>&1; then
+    INSTALL="dnf install -y"
+  elif command -v yum >/dev/null 2>&1; then
+    INSTALL="yum install -y"
+  elif command -v zypper >/dev/null 2>&1; then
+    INSTALL="zypper --non-interactive install"
+  elif command -v pacman >/dev/null 2>&1; then
+    INSTALL="pacman --noconfirm -S"
+  else
+    fail "this machine is missing:$missing. No supported package manager found. On Debian or Ubuntu the command is: sudo apt-get install -y$missing. Install these packages with this system's package manager, then run this again."
+  fi
+  SUDO=""
+  if [ "$(id -u)" != 0 ]; then
+    command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null || fail "this machine is missing:$missing. Administrator access is required. Ask an administrator to run: sudo $INSTALL$missing, then run this again."
+    SUDO="sudo "
+  fi
+  say "installing missing packages:$missing; command: $SUDO$INSTALL$missing"
+  if command -v apt-get >/dev/null 2>&1; then
+    $SUDO apt-get update || fail "refreshing package indexes failed; run: $SUDO apt-get update, then run this again."
+  fi
+  $SUDO $INSTALL $missing || fail "installing prerequisites failed; run: $SUDO$INSTALL$missing, then run this again."
+}
+
+main() {
 
   PATH="$HOME/.bun/bin:$PATH"
   export PATH
@@ -131,6 +170,7 @@ ${
 }
 
 # A dropped session loses only the follower; the install ignores hangup.
+prerequisites
 trap '' HUP
 LOG="$(mktemp)"
 main > "$LOG" 2>&1 &
