@@ -36,6 +36,8 @@ struct HubSocket: Sendable {
         var parts = URLComponents(url: hub, resolvingAgainstBaseURL: false) ?? URLComponents()
         parts.scheme = parts.scheme == "https" ? "wss" : "ws"
         parts.path = "/ws/dashboard"
+        // Names the wire this client reads (WIRE_PROTOCOL, 5): board deltas, not a snapshot per change.
+        parts.queryItems = [URLQueryItem(name: "protocol", value: "5")]
         let (events, continuation) = AsyncThrowingStream<Event, any Error>.makeStream()
         let delegate = Delegate(continuation)
         let session = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
