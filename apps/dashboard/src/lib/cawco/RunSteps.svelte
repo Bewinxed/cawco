@@ -16,9 +16,10 @@
    * their own. On the rail's hover card they are only read.
    */
   import type { WorkflowStep } from "@cawco/core";
-  import { onMount, type Snippet } from "svelte";
+  import type { Snippet } from "svelte";
   import type { Attachment } from "svelte/attachments";
   import { SvelteSet } from "svelte/reactivity";
+  import { tickingClock } from "#lib/cawco/motion/clock.svelte.js";
   import { duration } from "#lib/components/features/workflows/workflow-ui.js";
   import { IconExternal } from "#lib/icons.js";
   import {
@@ -152,17 +153,10 @@
       return () => unwatchDelegate(id);
     };
 
-  // A running step's time counts up; once nothing runs the clock stops.
-  let now = $state(Date.now());
+  // A running step's time counts up; once nothing runs the clock stops, and
+  // while the steps are off screen it stands still (motion/clock).
   const ticking = $derived(steps.some((step) => step.status === "running"));
-  onMount(() => {
-    const tick = setInterval(() => {
-      if (ticking) {
-        now = Date.now();
-      }
-    }, 1000);
-    return () => clearInterval(tick);
-  });
+  const clock = tickingClock(() => ticking);
 </script>
 
 {#snippet line(
@@ -176,6 +170,7 @@
     class="kit-nest run-steps"
     {@attach nestFrom(glyph, STEP_GLYPH)}
     {@attach reflow()}
+    {@attach clock.watch}
   >
     {#each steps as step (step.id)}
       {@const result = interactive ? returned(step) : null}
@@ -220,7 +215,7 @@
             </a>
           {/if}
           <span class="num time"
-            >{duration(step.startedAt, step.endedAt, now)}</span
+            >{duration(step.startedAt, step.endedAt, clock.now)}</span
           >
           {#if foldable}
             <TreeCount

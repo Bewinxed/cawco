@@ -15,6 +15,7 @@
   import type { Snippet } from "svelte";
   import { formatDuration } from "#lib/utils/time.js";
   import { cawco } from "../client.svelte";
+  import { tickingClock } from "../motion/clock.svelte.js";
   import { morph } from "../motion/morph.svelte";
   import RunSteps from "../RunSteps.svelte";
   import type { Message } from "../types";
@@ -65,23 +66,16 @@
   const going = $derived(
     run?.status === "running" || run?.status === "waiting"
   );
-  // The clock runs while the run does, and stops at its end.
-  let now = $state(Date.now());
-  $effect(() => {
-    if (!going) {
-      return;
-    }
-    const tick = setInterval(() => {
-      now = Date.now();
-    }, 1000);
-    return () => clearInterval(tick);
-  });
+  // The clock runs while the run does, and stops at its end — and only while the
+  // block is on show, or a transcript nobody is reading spends a second
+  // re-writing its figures (motion/clock).
+  const clock = tickingClock(() => going);
   /** How far along: the steps passed of those it has, and how long it has run. */
   const progress = $derived.by(() => {
     if (!run) {
       return refused ? "" : "starting";
     }
-    const end = run.endedAt ? new Date(run.endedAt).getTime() : now;
+    const end = run.endedAt ? new Date(run.endedAt).getTime() : clock.now;
     const took = formatDuration(
       Math.max(0, end - new Date(run.startedAt).getTime())
     );
@@ -99,7 +93,7 @@
 <div class="run-block rail-row" data-nest-host {@attach morph({ rows: true })}>
   {#snippet words()}
     <span class="name">{name}</span>
-    <span class="num progress">{progress}</span>
+    <span class="num progress" {@attach clock.watch}>{progress}</span>
   {/snippet}
   <!-- The glyph stands before the link, in its own cell: the steps' line
        leaves its foot outside any control. -->

@@ -11,6 +11,7 @@
   import type { Attachment } from "svelte/attachments";
   import { MediaQuery } from "svelte/reactivity";
   import { TextMorph } from "torph/svelte";
+  import { navSheet } from "#lib/cawco/motion/clock.svelte.js";
   import {
     crossOut,
     dur,
@@ -452,6 +453,16 @@
      brings it back as it was left. */
   const drawerQuery = new MediaQuery(DRAWER_QUERY);
   const railed = $derived(browser ? !drawerQuery.current : true);
+
+  /**
+   * The sheet's own open state, published for the clocks under it: an elapsed
+   * label nobody can see does not tick or morph (motion/clock). It is the state
+   * the `Sheet.Root` below already binds, read by the clocks rather than kept
+   * twice.
+   */
+  $effect(() => {
+    navSheet.open = railOpen && !railed;
+  });
 
   /** Where each of the rail's scroll boxes stood, by name ("" its own). */
   const railScroll = new Map<string, number>();

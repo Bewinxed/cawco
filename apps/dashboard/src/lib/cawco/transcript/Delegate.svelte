@@ -22,6 +22,7 @@
   import { conversationHref, delegateHandle } from "../links";
   import { markHue, sessionSprite } from "../mark";
   import { modelLabel } from "../models.svelte";
+  import { tickingClock } from "../motion/clock.svelte.js";
   import { CURVE, dur, easeOut } from "../motion/curves.svelte";
   import { reflow } from "../motion/rows.svelte";
   import type {
@@ -268,21 +269,14 @@
   );
 
   // Elapsed is a clock: while it runs the card re-reads it on its own, and once
-  // it has settled the last report is the end of the run.
-  let now = $state(Date.now());
-  $effect(() => {
-    if (!inFlight) {
-      return;
-    }
-    const tick = setInterval(() => {
-      now = Date.now();
-    }, 1000);
-    return () => clearInterval(tick);
-  });
+  // it has settled the last report is the end of the run. A clock nobody can
+  // see neither ticks nor morphs (motion/clock), and comes back to the time
+  // now in plain text.
+  const clock = tickingClock(() => inFlight);
   const startedAt = $derived(
     message.timestamp ? Date.parse(message.timestamp) : undefined
   );
-  const endedAt = $derived(inFlight ? now : report?.at);
+  const endedAt = $derived(inFlight ? clock.now : report?.at);
   const elapsed = $derived(
     startedAt && endedAt && endedAt > startedAt
       ? formatDuration(endedAt - startedAt)
@@ -306,8 +300,9 @@
 
   /**
    * The pill's words and clock morph letter by letter (TextMorph, over
-   * --dur-morph) once the page is live; the server draws them as plain text,
-   * which TextMorph would draw empty.
+   * --dur-morph) once the page is live, the clock only while the card is on
+   * show; the server draws them as plain text, which TextMorph would draw
+   * empty.
    */
   let morphMs = $state(0);
   $effect(() => {
@@ -427,13 +422,23 @@
               />
               {#if elapsed}
                 {pillWords ? " · " : ""}
-                <span class="elapsed" class:ticking={inFlight}
-                  ><TextMorph
-                    as="span"
-                    duration={morphMs}
-                    ease={CURVE.out}
-                    text={elapsed}
-                  /></span
+                <!-- The clock's own figure: a catch-up lands as text
+                     (motion/clock), so only a second the reader could see
+                     morphs into the next. -->
+                <span
+                  class="elapsed"
+                  class:ticking={inFlight}
+                  {@attach clock.watch}
+                  >{#if clock.morph}
+                    <TextMorph
+                      as="span"
+                      duration={morphMs}
+                      ease={CURVE.out}
+                      text={elapsed}
+                    />
+                  {:else}
+                    {elapsed}
+                  {/if}</span
                 >
               {/if}</span
             >

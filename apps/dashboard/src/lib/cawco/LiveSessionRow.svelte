@@ -1,29 +1,3 @@
-<script lang="ts" module>
-  /**
-   * One clock for the whole board. A row that ticked for itself would put a
-   * timer per session on a card of thirty, and they all read the same second.
-   */
-  let now = $state(Date.now());
-  let watchers = 0;
-  let ticker: ReturnType<typeof setInterval> | undefined;
-
-  function watchClock(): () => void {
-    const first = watchers === 0;
-    watchers += 1;
-    if (first) {
-      ticker = setInterval(() => {
-        now = Date.now();
-      }, 1000);
-    }
-    return () => {
-      watchers -= 1;
-      if (watchers === 0) {
-        clearInterval(ticker);
-      }
-    };
-  }
-</script>
-
 <script lang="ts">
   /** One live session, as the session index and a project home both list it. */
   import { TextMorph } from "torph/svelte";
@@ -40,6 +14,7 @@
   import { identityVar } from "./folder-prefs.svelte";
   import LiveSessionMenu from "./LiveSessionMenu.svelte";
   import { conversationHref, sessionTitle } from "./links";
+  import { tickingClock } from "./motion/clock.svelte.js";
   import { CURVE, crossIn, dur } from "./motion/curves.svelte";
   import SessionMark, { sessionStatus, statusWord } from "./SessionMark.svelte";
   import TaskRing from "./TaskRing.svelte";
@@ -95,19 +70,18 @@
     !(progress || failed || sleeping || stale) && activity === "working"
   );
 
-  $effect(() => {
-    if (!unmeasured) {
-      return;
-    }
-    return watchClock();
-  });
+  // The time on this step, and no plan to measure it by. One second for the
+  // whole board (motion/clock): a row that ticked for itself would put a timer
+  // per session on a card of thirty, and they all read the same second — and
+  // this row's reading only moves while the row is on show.
+  const clock = tickingClock(() => unmeasured);
 
   // The daemon stamps the pulse from its own clock, so a machine a few seconds
   // out from this browser must not read as a run that started in the future.
   const pulseAt = $derived(cawco.pulseAt(instance.id));
   const onStepFor = $derived(
     unmeasured && pulseAt !== undefined
-      ? formatDuration(Math.max(0, now - pulseAt))
+      ? formatDuration(Math.max(0, clock.now - pulseAt))
       : null
   );
 
@@ -230,18 +204,20 @@
           >
         {/if}
         <!-- How far its plan has got, or, with no plan to measure while the
-           session runs, a turning arc and how long it has been on this step,
-           which is what is actually known. At a glance and nothing more: the
-           row is already a link, and a control inside one is two targets
-           sharing a 36px band. It stands at the row's end (`ml-auto`). One
-           element for both, so the arc eases from turning to counted
-           (TaskRing) and the figure morphs, and it fades in and out as a
-           whole. -->
+             session runs, a turning arc and how long it has been on this step,
+             which is what is actually known. At a glance and nothing more: the
+             row is already a link, and a control inside one is two targets
+             sharing a 36px band. It stands at the row's end (`ml-auto`). One
+             element for both, so the arc eases from turning to counted
+             (TaskRing) and the figure morphs, and it fades in and out as a
+             whole. The figure morphs only while the row is on show: off it,
+             the clock does not move at all (motion/clock). -->
         {#if progress || unmeasured}
           <span
             class="num ml-auto flex shrink-0 items-center gap-1.5 text-meta text-muted-foreground"
             title={progress ? undefined : stepHint}
             transition:crossIn
+            {@attach clock.watch}
           >
             <span
               class="identity-ink flex items-center"
@@ -254,7 +230,7 @@
                 total={progress?.total}
               />
             </span>
-            {#if morphMs}
+            {#if morphMs && clock.morph}
               <TextMorph
                 as="span"
                 duration={morphMs}

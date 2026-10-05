@@ -7,6 +7,7 @@
   import { formatDuration } from "#lib/utils/time.js";
   import { markHue, sessionSprite } from "../mark";
   import { modelLabel } from "../models.svelte";
+  import { tickingClock } from "../motion/clock.svelte.js";
   /**
    * A harness subagent — the run a Task call spawned in-process, folded onto
    * the parent's spine as a branch you can watch rather than a paragraph you
@@ -49,20 +50,13 @@
   });
 
   // Elapsed is a clock, not a frame: a running branch has to re-read it on its
-  // own, or the pill freezes at whatever second its last message arrived.
-  let now = $state(Date.now());
-  $effect(() => {
-    if (!view.running) {
-      return;
-    }
-    const tick = setInterval(() => {
-      now = Date.now();
-    }, 1000);
-    return () => clearInterval(tick);
-  });
+  // own, or the pill freezes at whatever second its last message arrived — and
+  // only while the card is on show, or a page nobody is looking at spends a
+  // second a row re-writing text (motion/clock).
+  const clock = tickingClock(() => view.running);
   const elapsed = $derived(
     formatDuration(
-      (branch.completedAt ? Date.parse(branch.completedAt) : now) -
+      (branch.completedAt ? Date.parse(branch.completedAt) : clock.now) -
         Date.parse(branch.startedAt)
     )
   );
@@ -92,7 +86,7 @@
       {#if model}
         <span class="model">{modelLabel(model)}</span>
       {/if}
-      <span class="pill {phase}">
+      <span class="pill {phase}" {@attach clock.watch}>
         {phase}
         {#if view.steps}
           · {view.steps} step{view.steps === 1 ? "" : "s"}
