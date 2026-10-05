@@ -1309,6 +1309,7 @@ function adoptTranscriptPage(target: SessionState, page: TranscriptPage): void {
   // thing a later resume is sent under, and the hub resolved it.
   target.machineId ||= where.machineId;
   target.cwd ||= where.cwd;
+  target.harness = where.harness as HarnessKind;
   if (where.sessionKey) {
     target.sessionId = where.sessionKey;
   }
