@@ -21,50 +21,231 @@ public struct WorkflowField: Decodable, Sendable, Equatable {
     }
 }
 
-/// A workflow as the Workflows page and its launch form read it: its name
-/// and description, the inputs a program declared, and of a drawn graph only
-/// the Start node's inputs and the launch defaults.
-public struct WorkflowRow: Decodable, Sendable, Equatable, Identifiable {
-    public struct Graph: Decodable, Sendable, Equatable {
-        public struct Node: Decodable, Sendable, Equatable {
-            public let kind: String
-            /// The Start node's inputs. A `workflow` node's `inputs` is an
-            /// object of templates and reads as nil here.
-            public let inputs: [WorkflowField]?
+/// One node of a workflow's graph (core `WorkflowNode`): what every node has,
+/// and what its kind adds. Read by `kind`; a kind this build does not know
+/// keeps its place on the canvas as `.other`.
+public struct WorkflowNode: Decodable, Sendable, Equatable, Identifiable {
+    public enum Kind: Sendable, Equatable {
+        case start(inputs: [WorkflowField])
+        /// The names of the outputs it returns.
+        case end(outputs: [String])
+        case step(harness: String, model: String, prompt: String)
+        /// How many rules it checks.
+        case check(rules: Int)
+        /// The ports of its cases, the last being the else.
+        case branch(ports: [String])
+        case map(over: String, body: WorkflowGraph)
+        /// The child workflow's id and how many inputs it is handed.
+        case workflow(workflowId: String, inputs: Int)
+        case ask(question: String, options: [String], allowOther: Bool)
+        /// Each question's type (`noul`, `choice`, `score`).
+        case jev(questions: [String])
+        case other(String)
 
-            private enum CodingKeys: String, CodingKey { case kind, inputs }
-
-            public init(from decoder: any Decoder) throws {
-                let container = try decoder.container(keyedBy: CodingKeys.self)
-                kind = try container.decode(String.self, forKey: .kind)
-                inputs = kind == "start" ? try container.decode([WorkflowField].self, forKey: .inputs) : nil
+        /// The kind's own word (`start`, `step`, …).
+        public var name: String {
+            switch self {
+            case .start: "start"
+            case .end: "end"
+            case .step: "step"
+            case .check: "check"
+            case .branch: "branch"
+            case .map: "map"
+            case .workflow: "workflow"
+            case .ask: "ask"
+            case .jev: "jev"
+            case let .other(name): name
             }
         }
-
-        public struct Settings: Decodable, Sendable, Equatable {
-            public struct Supervisor: Decodable, Sendable, Equatable {
-                public let delegateType: String?
-            }
-
-            public let defaultProject: String?
-            public let defaultMachine: String?
-            public let defaultSupervisor: Supervisor?
-        }
-
-        public let nodes: [Node]
-        public let settings: Settings?
     }
+
+    public let id: String
+    public let title: String
+    public let x: Double
+    public let y: Double
+    public let kind: Kind
+
+    /// The ports a node leaves by (core `workflowPorts`): `fail` is taken
+    /// when the node's call rejects; unwired, the failure fails the run.
+    public var ports: [String] {
+        switch kind {
+        case .start: ["out"]
+        case .step, .map, .workflow, .jev: ["out", "fail"]
+        case .check: ["pass", "fail"]
+        case let .branch(ports): ports
+        case let .ask(_, options, allowOther): options + (allowOther ? ["other"] : [])
+        case .end, .other: []
+        }
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, title, position, kind, inputs, outputs, harness, model, prompt, rules, cases, over, body, workflowId, question, options, allowOther, questions
+    }
+
+    private struct Position: Decodable { let x: Double; let y: Double }
+    private struct Case: Decodable { let port: String }
+    private struct Option: Decodable { let label: String }
+    private struct Question: Decodable { let type: String }
+    private struct Anything: Decodable { init(from _: any Decoder) throws {} }
+    private struct Name: CodingKey {
+        let stringValue: String
+        var intValue: Int? { nil }
+        init?(stringValue: String) { self.stringValue = stringValue }
+        init?(intValue _: Int) { nil }
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        title = try container.decodeIfPresent(String.self, forKey: .title) ?? ""
+        let position = try container.decodeIfPresent(Position.self, forKey: .position)
+        x = position?.x ?? 0
+        y = position?.y ?? 0
+        /// An object's own keys. JSON decoding does not keep their order, so they are read sorted.
+        func keys(_ key: CodingKeys) -> [String] {
+            ((try? container.nestedContainer(keyedBy: Name.self, forKey: key))?.allKeys.map(\.stringValue) ?? []).sorted()
+        }
+        let name = try container.decode(String.self, forKey: .kind)
+        switch name {
+        case "start":
+            kind = .start(inputs: try container.decodeIfPresent([WorkflowField].self, forKey: .inputs) ?? [])
+        case "end":
+            kind = .end(outputs: keys(.outputs))
+        case "step":
+            kind = .step(
+                harness: try container.decodeIfPresent(String.self, forKey: .harness) ?? "",
+                model: try container.decodeIfPresent(String.self, forKey: .model) ?? "",
+                prompt: try container.decodeIfPresent(String.self, forKey: .prompt) ?? ""
+            )
+        case "check":
+            kind = .check(rules: (try container.decodeIfPresent([Anything].self, forKey: .rules) ?? []).count)
+        case "branch":
+            kind = .branch(ports: (try container.decodeIfPresent([Case].self, forKey: .cases) ?? []).map(\.port))
+        case "map":
+            kind = .map(
+                over: try container.decodeIfPresent(String.self, forKey: .over) ?? "",
+                body: try container.decodeIfPresent(WorkflowGraph.self, forKey: .body) ?? WorkflowGraph(nodes: [], edges: [], settings: nil)
+            )
+        case "workflow":
+            kind = .workflow(workflowId: try container.decodeIfPresent(String.self, forKey: .workflowId) ?? "", inputs: keys(.inputs).count)
+        case "ask":
+            kind = .ask(
+                question: try container.decodeIfPresent(String.self, forKey: .question) ?? "",
+                options: (try container.decodeIfPresent([Option].self, forKey: .options) ?? []).map(\.label),
+                allowOther: try container.decodeIfPresent(Bool.self, forKey: .allowOther) ?? false
+            )
+        case "jev":
+            kind = .jev(questions: (try container.decodeIfPresent([Question].self, forKey: .questions) ?? []).map(\.type))
+        default:
+            kind = .other(name)
+        }
+    }
+}
+
+/// One edge of a workflow's graph (core `WorkflowEdge`): from a node's port
+/// to a node, on a condition or always, and for a cycle at most so many times.
+public struct WorkflowEdge: Decodable, Sendable, Equatable, Identifiable {
+    public struct Source: Decodable, Sendable, Equatable {
+        public let node: String
+        public let port: String
+    }
+
+    public struct Target: Decodable, Sendable, Equatable {
+        public let node: String
+    }
+
+    public struct When: Decodable, Sendable, Equatable {
+        public let path: String
+        public let op: String
+        /// What it compares with, as the JSON the web would print; nil when it compares with nothing.
+        public let value: String?
+
+        private enum CodingKeys: String, CodingKey { case path, op, value }
+
+        public init(from decoder: any Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            path = try container.decode(String.self, forKey: .path)
+            op = try container.decode(String.self, forKey: .op)
+            if container.contains(.value), let held = try? container.decode(OpenAPIValueContainer.self, forKey: .value) {
+                let encoder = JSONEncoder()
+                encoder.outputFormatting = [.withoutEscapingSlashes, .sortedKeys]
+                value = (try? encoder.encode(held)).flatMap { String(data: $0, encoding: .utf8) }
+            } else {
+                value = nil
+            }
+        }
+    }
+
+    public let id: String
+    public let from: Source
+    public let to: Target
+    public let when: When?
+    public let maxIterations: Double?
+}
+
+/// A workflow's graph: its nodes, its edges and the defaults a launch starts from.
+public struct WorkflowGraph: Decodable, Sendable, Equatable {
+    public struct Settings: Decodable, Sendable, Equatable {
+        public struct Supervisor: Decodable, Sendable, Equatable {
+            public let delegateType: String?
+        }
+
+        public let defaultProject: String?
+        public let defaultMachine: String?
+        public let defaultSupervisor: Supervisor?
+    }
+
+    public let nodes: [WorkflowNode]
+    public let edges: [WorkflowEdge]
+    public let settings: Settings?
+
+    /// A graph of nothing, for a canvas before its workflow is read.
+    public static let empty = WorkflowGraph(nodes: [], edges: [], settings: nil)
+}
+
+/// A workflow: its name and description, how it is authored, its program,
+/// the inputs a program declared, and a drawn workflow's graph.
+public struct WorkflowRow: Decodable, Sendable, Equatable, Identifiable {
+    /// A graph the editor compiles, or a program written by hand; fixed at creation.
+    public enum Origin: String, Decodable, Sendable { case editor, code }
 
     public let id: String
     public let name: String
     public let description: String
+    public let origin: Origin
+    public let program: String
     public let inputs: [WorkflowField]
-    public let graph: Graph?
+    public let graph: WorkflowGraph?
 
     /// What the launch form asks for: the Start node's inputs for a graph;
     /// for a program, the `inputs` export the hub evaluated at save.
     public var fields: [WorkflowField] {
-        graph?.nodes.first { $0.kind == "start" }?.inputs ?? inputs
+        for node in graph?.nodes ?? [] {
+            if case let .start(inputs) = node.kind { return inputs }
+        }
+        return inputs
+    }
+}
+
+/// What the hub's compiler or typechecker said about a workflow: the node,
+/// the edge or the program line it belongs to, when it names one.
+public struct WorkflowProblem: Decodable, Sendable, Equatable {
+    public let message: String
+    public let nodeId: String?
+    public let edgeId: String?
+    public let line: Double?
+}
+
+/// A workflow as its own page reads it: the workflow, and the hub's problems with it as saved.
+public struct WorkflowDetail: Decodable, Sendable, Equatable {
+    public let workflow: WorkflowRow
+    public let problems: [WorkflowProblem]
+
+    private enum CodingKeys: String, CodingKey { case problems }
+
+    public init(from decoder: any Decoder) throws {
+        workflow = try WorkflowRow(from: decoder)
+        problems = try decoder.container(keyedBy: CodingKeys.self).decodeIfPresent([WorkflowProblem].self, forKey: .problems) ?? []
     }
 }
 
@@ -142,6 +323,18 @@ public final class WorkflowsStore {
                 store.hub.fleet.runsRead = true
             }
         }
+    }
+
+    /// One workflow whole, with what the hub's compiler said about it as saved (workflows.ts `loadWorkflow`).
+    public func load(_ id: String) async throws -> WorkflowDetail {
+        let response = try await hub.api.workflows.read(.init(path: .init(id: id)))
+        guard case let .ok(ok) = response else {
+            if case let .undocumented(statusCode, _) = response {
+                throw HubConnection.ControlError(message: "The hub answered \(statusCode).")
+            }
+            throw HubConnection.ControlError(message: "The hub could not read this workflow.")
+        }
+        return try Wire.transcode(ok.body.json)
     }
 
     /// What a **New program** starts from (workflow-ui.ts `STARTER_PROGRAM`).
