@@ -128,8 +128,10 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         workspaceController.onHost = { [weak self] strip in self?.barTabs.host(strip) }
         // Back on the board (a back swipe), the focused group shows nothing; its tabs stay.
         compactMotion.didShow = { [weak self] shown in
-            guard let self, shown === compactNav.viewControllers.first, compact, workspace.activeSessionId != nil else { return }
-            workspace.showBoard()
+            guard let self, shown === compactNav.viewControllers.first, compact else { return }
+            // Back on the place the conversations were opened from: the shell is there again.
+            if let under = compactUnder { settle(on: under) }
+            if workspace.activeSessionId != nil { workspace.showBoard() }
         }
 
         preferredDisplayMode = .oneBesideSecondary
@@ -180,26 +182,56 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     // MARK: Places
 
     func go(_ next: ShellDestination) {
+        move(to: next, opening: false)
+    }
+
+    /// The place a compact width's conversations were opened from, while it
+    /// is the page under them: Back goes there, as the web's does.
+    private var compactUnder: ShellDestination?
+
+    /// Changes place. `opening`: a conversation is being opened from another
+    /// place. On a compact width that is one push over the page in front,
+    /// which stays under it; a navigation controller given two animated
+    /// stacks in one turn (the board, then the conversations) keeps neither.
+    private func move(to next: ShellDestination, opening: Bool) {
         railSheet?.dismiss(animated: true)
         guard next != destination else {
-            if next == .fleet, compact { compactNav.popToRootViewController(animated: true) }
+            guard next == .fleet, compact else { return }
+            if compactUnder != nil {
+                // Fleet asked for while another place is under the conversations: the board takes its place.
+                compactUnder = nil
+                compactCrumb.set(next.crumb, animated: true)
+                TopBar.install(on: board.navigationItem, crumb: compactCrumb, cluster: compactCluster, burger: burger)
+                compactNav.setViewControllers([board], animated: true)
+            } else {
+                compactNav.popToRootViewController(animated: true)
+            }
             return
         }
         let travel = Travel.route(from: destination, to: next)
+        let from = destination
         // The last place outside a project home, where forgetting one goes back to (route.svelte.ts `spoke`).
         if case .project = destination {} else { spoke = destination }
         destination = next
         mainCrumb.set(next.crumb, animated: true)
-        compactCrumb.set(next.crumb, animated: true)
         let regularPage = next == .fleet ? detail : page(for: next)
-        let compactPage = next == .fleet ? board : page(for: next, compact: true)
         // The bar's crumb and cluster move with the place, so they stay one bar.
         TopBar.install(on: regularPage.navigationItem, crumb: mainCrumb, cluster: mainCluster, burger: nil)
-        TopBar.install(on: compactPage.navigationItem, crumb: compactCrumb, cluster: compactCluster, burger: burger)
         mainMotion.route = travel
         mainNav.setViewControllers([regularPage], animated: !compact)
         compactMotion.route = travel
-        compactNav.setViewControllers([compactPage], animated: compact)
+        if opening, compact, let under = compactNav.viewControllers.first {
+            // The page in front keeps its bar and stays in the stack.
+            compactUnder = from
+            if workspaceController.parent != nil, workspaceController.parent !== compactNav { detail.show(nil) }
+            compactNav.setViewControllers([under, workspaceController], animated: true)
+        } else {
+            compactUnder = nil
+            let compactPage = next == .fleet ? board : page(for: next, compact: true)
+            compactCrumb.set(next.crumb, animated: true)
+            TopBar.install(on: compactPage.navigationItem, crumb: compactCrumb, cluster: compactCluster, burger: burger)
+            compactNav.setViewControllers([compactPage], animated: compact)
+        }
         hostTabs()
         // The bar re-homes its items with the page: the hosted strip is measured against them again.
         barTabs.relayout()
@@ -207,6 +239,20 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         DispatchQueue.main.async { [weak self] in self?.barTabs.relayout() }
         rail.requestRefresh()
         railSheet?.requestRefresh()
+    }
+
+    /// The compact stack is back on the place under the conversations: the
+    /// shell's place, the wide screen's page and the rail follow it there.
+    private func settle(on under: ShellDestination) {
+        compactUnder = nil
+        guard under != destination else { return }
+        destination = under
+        mainCrumb.set(under.crumb, animated: false)
+        let regularPage = under == .fleet ? detail : page(for: under)
+        TopBar.install(on: regularPage.navigationItem, crumb: mainCrumb, cluster: mainCluster, burger: nil)
+        mainNav.setViewControllers([regularPage], animated: false)
+        hostTabs()
+        rail.requestRefresh()
     }
 
     private func page(for destination: ShellDestination, compact: Bool = false) -> UIViewController {
@@ -239,8 +285,11 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     /// over the board on a compact width, the grid in the detail on a wide one.
     func openSession(_ id: String) {
         railSheet?.dismiss(animated: true)
-        if destination != .fleet { go(.fleet) }
         workspace.open(id)
+        // From another place the board and the conversations arrive as one
+        // stack; `showWorkspace` then finds them in front on a compact width
+        // and does the wide screen's part.
+        if destination != .fleet { move(to: .fleet, opening: true) }
         showWorkspace(animated: true)
         hostTabs()
         rail.requestRefresh()
@@ -335,7 +384,15 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
                 detail.show(nil)
                 if workspace.activeSessionId != nil { showWorkspace(animated: false) }
             } else {
-                compactNav.setViewControllers([compactNav.viewControllers.first ?? board], animated: false)
+                if compactUnder != nil {
+                    // The wide screen is on Fleet with the conversations: the compact stack rests on the board.
+                    compactUnder = nil
+                    compactCrumb.set(destination.crumb, animated: false)
+                    TopBar.install(on: board.navigationItem, crumb: compactCrumb, cluster: compactCluster, burger: burger)
+                    compactNav.setViewControllers([board], animated: false)
+                } else {
+                    compactNav.setViewControllers([compactNav.viewControllers.first ?? board], animated: false)
+                }
                 showWorkspace(animated: false)
             }
             hostTabs()
