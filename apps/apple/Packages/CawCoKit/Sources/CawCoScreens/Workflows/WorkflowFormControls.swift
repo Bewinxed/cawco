@@ -11,9 +11,6 @@ enum WorkflowForm {
     static var height: Double { coarse ? Size.cBtnHLg : Size.cBtnH }
     /// One line of the control's text at the page's line height.
     static var line: Double { text(role()).lineHeight }
-    /// A select under a finger is its line and its padding (Mobile Safari
-    /// holds it to that, 37pt, whatever `min-height` says); under a pointer 36pt.
-    static var selectHeight: Double { coarse ? line + Space.space2 * 2 : Size.cBtnH }
     /// A text area is its two rows inside its padding and border under a
     /// finger (the 44pt floor replaces the 90pt one there), 90pt under a pointer.
     static var areaHeight: Double { coarse ? line * 2 + (Space.space2 + 1) * 2 : 90 }
@@ -53,6 +50,7 @@ enum WorkflowForm {
 final class WorkflowInput: UITextField, UITextFieldDelegate {
     /// A required value was asked for and is not there yet.
     var missing = false { didSet { paint() } }
+    var ringed = false { didSet { paint() } }
 
     init(mono: Bool = false) {
         super.init(frame: .zero)
@@ -99,13 +97,26 @@ final class WorkflowInput: UITextField, UITextFieldDelegate {
     }
 
     private func paint() {
-        WorkflowForm.edge(layer, focused: isFirstResponder, missing: missing, traits: traitCollection)
+        WorkflowForm.edge(layer, focused: isFirstResponder || ringed, missing: missing, traits: traitCollection)
     }
 }
+
+/// A form control that can wear the focus ring without holding the keyboard:
+/// the web focuses a dialog's first control as it opens, and Mobile Safari
+/// draws the ring there without raising the keys.
+@MainActor
+protocol WorkflowRinged: UIView {
+    var ringed: Bool { get set }
+}
+
+extension WorkflowInput: WorkflowRinged {}
+extension WorkflowTextArea: WorkflowRinged {}
+extension WorkflowSelect: WorkflowRinged {}
 
 /// `.wf textarea`: two rows tall at the least, growing with what is written.
 final class WorkflowTextArea: UITextView, UITextViewDelegate {
     var missing = false { didSet { paint() } }
+    var ringed = false { didSet { paint() } }
     /// The control's face at the page's line height, wrapping by word.
     private let attributes: [NSAttributedString.Key: Any] = {
         var attributes = WorkflowForm.text(WorkflowForm.role()).attributes(color: Palette.inkStrong)
@@ -151,7 +162,7 @@ final class WorkflowTextArea: UITextView, UITextViewDelegate {
     func textViewDidEndEditing(_: UITextView) { paint() }
 
     private func paint() {
-        WorkflowForm.edge(layer, focused: isFirstResponder, missing: missing, traits: traitCollection)
+        WorkflowForm.edge(layer, focused: isFirstResponder || ringed, missing: missing, traits: traitCollection)
     }
 }
 
@@ -165,6 +176,7 @@ final class WorkflowSelect: UIButton {
 
     var onChange: (String) -> Void = { _ in }
     var missing = false { didSet { paint() } }
+    var ringed = false { didSet { paint() } }
     private(set) var value = ""
     private var options: [Option] = []
 
@@ -185,7 +197,7 @@ final class WorkflowSelect: UIButton {
         houseStyle()
         layer.cornerRadius = Radius.radiusSm
         layer.cornerCurve = .continuous
-        heightAnchor.constraint(equalToConstant: WorkflowForm.selectHeight).isActive = true
+        heightAnchor.constraint(equalToConstant: WorkflowForm.height).isActive = true
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (select: WorkflowSelect, _: UITraitCollection) in select.paint() }
         paint()
     }
@@ -213,6 +225,6 @@ final class WorkflowSelect: UIButton {
     }
 
     private func paint() {
-        WorkflowForm.edge(layer, focused: false, missing: missing, traits: traitCollection)
+        WorkflowForm.edge(layer, focused: ringed, missing: missing, traits: traitCollection)
     }
 }

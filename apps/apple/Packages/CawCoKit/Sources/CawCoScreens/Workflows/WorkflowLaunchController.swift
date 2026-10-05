@@ -116,6 +116,17 @@ final class WorkflowLaunchController: KitDialogController {
         foot.alignment = .center
         body.addArrangedSubview(foot)
 
+        // The form opens with its first control focused (bits-ui's dialog):
+        // the ring, and under a pointer the keyboard's caret too. A select
+        // that is opened takes the ring; a field that is typed in draws its own.
+        moveRing(to: (inputs.first?.control as? any WorkflowRinged) ?? projectSelect)
+        for select in inputs.compactMap({ $0.control as? WorkflowSelect }) + [projectSelect, machineSelect, supervisorSelect] {
+            select.addAction(UIAction { [weak self, weak select] _ in self?.moveRing(to: select) }, for: .menuActionTriggered)
+        }
+        for name in [UITextField.textDidBeginEditingNotification, UITextView.textDidBeginEditingNotification] {
+            NotificationCenter.default.addObserver(self, selector: #selector(fieldTookFocus(_:)), name: name, object: nil)
+        }
+
         sync()
         Task {
             do {
@@ -125,6 +136,25 @@ final class WorkflowLaunchController: KitDialogController {
                 say(error.localizedDescription)
             }
         }
+    }
+
+    private weak var ring: (any WorkflowRinged)?
+
+    private func moveRing(to control: (any WorkflowRinged)?) {
+        ring?.ringed = false
+        ring = control
+        control?.ringed = true
+    }
+
+    @objc private func fieldTookFocus(_ note: Notification) {
+        guard let field = note.object as? UIView, field.isDescendant(of: body) else { return }
+        moveRing(to: nil)
+    }
+
+    /// Under a pointer the web's focus is the keyboard's: the first control takes it when it is a field.
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        if !WorkflowForm.coarse, let field = ring, !(field is WorkflowSelect) { field.becomeFirstResponder() }
     }
 
     /// An input's control by its type: a menu of its options, one line for a
