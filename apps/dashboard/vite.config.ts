@@ -263,6 +263,7 @@ export default defineConfig({
       "@fontsource-variable/figtree",
       "@fontsource-variable/jetbrains-mono",
       "@fontsource/fredoka",
+      "@fontsource-variable/nunito",
       "@xyflow/svelte",
       "virtua",
       "@hugeicons/svelte",

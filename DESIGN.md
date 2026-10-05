@@ -563,7 +563,8 @@ Live, done and fail chips are the hue's 3-step mixed 24% toward its 9-step, with
 
 **UI font:** Figtree Variable (`@fontsource-variable/figtree`, with ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif), at 400 and 500 only
 **Mono font:** JetBrains Mono Variable (`@fontsource-variable/jetbrains-mono`, with ui-monospace, SF Mono, monospace), ligatures off
-**Display font:** Fredoka 600 (`@fontsource/fredoka`), brand display only: the wordmark, marketing, a brand moment in an empty state. Never product chrome.
+**Wordmark font:** Nunito Variable (`--font-wordmark`, `@fontsource-variable/nunito`), “Caw&Co” at weight 1000, −0.045em tracking and 1 leading, with the ampersand in the same face and size, as on the approved landing. The dashboard keeps its existing body-size slot and box height. This brand mark is exempt from the product's 500 ceiling.
+**Display font:** Fredoka 600 (`@fontsource/fredoka`), brand display only: marketing, a brand moment in an empty state. Never product chrome.
 
 **Character:** Figtree has round forms that sit near the Caw&Co wordmark and stays crisp at 12 to 13px in dense rows. JetBrains Mono has a tall x-height and a clear 0/O and 1/l/I in diffs. It sets large, so code runs at 12px (`--text-code`). Ligatures are off for every code, path and ID run (`font-variant-ligatures: none`). Figtree's and JetBrains Mono's latin variable faces are inlined into the stylesheet at build time (`vite.config.ts` INLINE_FACES), and `app.html` starts their decode before the body is parsed, so the first paint never swaps fonts.
 

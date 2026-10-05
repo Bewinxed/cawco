@@ -1,5 +1,7 @@
 # WORDS.md — Voice, tone, and terminology for Caw&Co ("CawCo")
 
+**UI wordmark:** “Caw&Co”, set in the landing's Nunito Variable face. Product names in sentences, page titles and notices remain “CawCo”.
+
 **Date:** 2026-08-21 · **Status:** confirmed
 **Doctorate authority:** `content-design` (design-for-ai 4.2.0) — voice/tone per Podmajersky (2019), error
 formula per Yifrah (2017), plain language per Redish (2007), destructive confirmation per Nielsen

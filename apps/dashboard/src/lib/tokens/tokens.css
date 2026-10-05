@@ -440,6 +440,8 @@
       inset 0 1px 6px
       light-dark(oklch(58.5% 0.17 33 / 0.06), oklch(66% 0.16 34 / 0.1));
     --selected-shadow: none;
+    /* Caw&Co wordmark: the approved landing's Nunito Variable face. */
+    --font-wordmark: "Nunito Variable", ui-rounded, system-ui, sans-serif;
     /* Figtree for UI and transcript prose, 400 and 500 only. */
     --font-sans:
       "Figtree Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
@@ -450,6 +452,10 @@
     /* Fredoka 600: brand display only. */
     --font-display:
       "Fredoka", "Figtree Variable", ui-rounded, system-ui, sans-serif;
+    /* The landing wordmark's variable-font weight. Brand only. */
+    --weight-wordmark: 1000;
+    /* The landing wordmark's tracking; the ampersand shares its face and size. */
+    --track-wordmark: -0.045em;
     /* The six sizes text takes. Dense roles hold one size at every width; title and kpi scale with the viewport between 390 and 1024px. */
     --text-meta: 0.75rem;
     --text-label: 0.8125rem;
