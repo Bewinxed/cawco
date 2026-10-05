@@ -26,6 +26,7 @@
     dur,
     ease,
   } from "#lib/cawco/motion/curves.svelte.js";
+  import { echoBeat } from "#lib/cawco/motion/echo.svelte.js";
   import { fold } from "#lib/cawco/motion/fold.svelte.js";
   import { route } from "#lib/cawco/motion/route.svelte.js";
   import { reflow } from "#lib/cawco/motion/rows.svelte.js";
@@ -972,9 +973,13 @@
           <header class="px-[var(--space-4)] py-[var(--space-3)]">
             <h2 class="text-title">Sessions</h2>
           </header>
+          <!-- Its working sessions echo in turn, top to bottom, as the
+               sidebar's do (motion/echo): a mark's echo runs only on its
+               list's beat, and without one a working row drew nothing. -->
           <div
             class="flex flex-col gap-1.5 px-[var(--space-3)] pb-[var(--space-3)]"
             {@attach highlight({ rows: "a" })}
+            {@attach echoBeat()}
             {@attach rowsWatched && reflow()}
           >
             <!-- Each answer takes the place of the skeleton that stood for it:
