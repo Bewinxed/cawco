@@ -536,7 +536,7 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
         content.translatesAutoresizingMaskIntoConstraints = false
         scroll.addSubview(content)
 
-        let heading = KitLabel(TypeScale.typeTitle, ink: Palette.inkStrong, tracking: -0.01)
+        let heading = KitLabel(TypeScale.typeTitle, ink: Palette.inkStrong)
         heading.text = "New Session"
         heading.accessibilityTraits = .header
         content.addArrangedSubview(heading)
