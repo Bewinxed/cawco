@@ -1132,13 +1132,7 @@
 
 <style>
   .work {
-    /* How far under 260px the rail is: none there and wider, 33px at the
-       narrowest rail (227px). The header's own spacing gives that room back
-       (the gap to the Delegates switch, a tab's inset, the room round a
-       count), so both labels stand whole beside their counts at any width
-       the rail takes: at 227px "Working" and "Finished" were each cut by a
-       pixel beside two-digit counts, and read "Worki…" and "Finish…". */
-    --tight: clamp(0px, 260px - var(--rail-w, 260px), 33px);
+    container-type: inline-size;
     display: flex;
     flex-direction: column;
   }
@@ -1146,6 +1140,15 @@
      sheet is the only mark, the section's seam runs under the row, and the
      delegates button stands at its end, centred on the tabs. */
   .head {
+    /* How far the row is under a 260px rail's: none there and wider, 33px
+       at the narrowest rail (227px). Read off the row's own width, not the
+       desktop rail's (`--rail-w`), so the phone's sheet, which is its own
+       width whatever the rail was dragged to, is told as it is. The header's
+       own spacing gives that room back (the gap to the Delegates switch, a
+       tab's inset, the room round a count), so both labels stand whole
+       beside their counts at any width: at 227px "Working" and "Finished"
+       were each cut by a pixel beside two-digit counts. */
+    --tight: clamp(0px, calc(260px - 100cqw - var(--space-4)), 33px);
     display: flex;
     align-items: flex-end;
     justify-content: space-between;
@@ -1182,6 +1185,11 @@
   :global(.work-tabs[data-slot="tabs"] .ff-tabs-list .ff-tab) {
     --gap: max(0px, 2px - var(--tight) * 0.06);
   }
+  /* A tab is as wide as its label and its count together: the count never
+     stands outside the tab, whatever the row's width. */
+  :global(.work-tabs[data-slot="tabs"] .ff-tabs-list .ff-tab) {
+    min-inline-size: max-content;
+  }
   /* A label never gives way: the header's spacing does. */
   :global(.work-tabs[data-slot="tabs"] .ff-tabs-list .hit) {
     flex-shrink: 0;
@@ -1196,6 +1204,7 @@
     min-inline-size: 18px;
     block-size: 18px;
     padding-inline: calc(3px - var(--tight) * 0.03);
+    margin-inline-start: var(--space-1);
     margin-inline-end: max(0px, 2px - var(--tight) * 0.06);
     border-radius: var(--radius-xs);
     background: var(--wash);
