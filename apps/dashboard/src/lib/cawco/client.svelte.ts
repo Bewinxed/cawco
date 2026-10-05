@@ -691,8 +691,22 @@ const inflight = new Map<string, Waiter>();
  */
 const opening = new Map<string, string>();
 
-/** The newest-page read in flight per view: a second ask joins it. */
-const pageReads = new Map<string, Promise<TranscriptOutcome>>();
+/**
+ * How long one transcript page request may go without an answer: the time to
+ * its response, then again the time to read its body. Past it the request is
+ * aborted and made once more ({@link readPage}); a phone on a flaky link
+ * otherwise leaves a request hanging, and the pane waiting on it, forever.
+ */
+const TRANSCRIPT_READ_LIMIT_MS = 15_000;
+
+/**
+ * The newest-page read in flight per view: a second ask joins it. `cancel`
+ * ends it without an answer — the view's own reader is asking for a fresh one.
+ */
+const pageReads = new Map<
+  string,
+  { read: Promise<TranscriptOutcome>; cancel: () => void }
+>();
 
 // Lets the store be asserted from the console while developing.
 if (import.meta.env.DEV && typeof window !== "undefined") {
@@ -4401,40 +4415,111 @@ async function pageFault(response: Response): Promise<TranscriptOutcome> {
  * stream from the `seq` that page was read at. `again` reads it whether or not
  * the view already holds one — the hub said the transcript changed under it,
  * or its stream could not replay a gap. A read already in flight answers for
- * any ask that lands meanwhile.
+ * any ask that lands meanwhile, unless `fresh`: its reader left the view and
+ * came back, so that read is ended unanswered and a new one starts.
  */
 export function readTranscript(
   viewId: string,
-  again = false
+  again = false,
+  fresh = false
 ): Promise<TranscriptOutcome> {
   // A workflow run's tab has no transcript of its own: its steps' do.
   if (runIdOf(viewId)) {
     return Promise.resolve({ ok: true, skipped: true });
   }
   const inFlight = pageReads.get(viewId);
-  if (inFlight) {
-    return inFlight;
+  if (inFlight && !fresh) {
+    return inFlight.read;
   }
+  inFlight?.cancel();
   // A stream this view already follows carries everything after the page it
   // was read at — or, for a session this tab just started, everything there
   // is.
   if (!again && streamState.cursors[viewId]?.subscribed) {
     return Promise.resolve({ ok: true, skipped: true });
   }
-  const read = readNewestPage(session(viewId)).finally(() =>
-    pageReads.delete(viewId)
-  );
-  pageReads.set(viewId, read);
+  const controller = new AbortController();
+  const read: Promise<TranscriptOutcome> = readNewestPage(
+    session(viewId),
+    controller.signal
+  ).finally(() => {
+    // Only this read's own entry: a fresh one may have taken the slot.
+    if (pageReads.get(viewId)?.read === read) {
+      pageReads.delete(viewId);
+    }
+  });
+  pageReads.set(viewId, { read, cancel: () => controller.abort() });
   return read;
+}
+
+/**
+ * One request for a transcript page, aborted when its response, or its body,
+ * takes longer than {@link TRANSCRIPT_READ_LIMIT_MS}, or when `cancel` fires.
+ * `parse` runs while the body can still be cut off.
+ */
+async function requestPage<T>(
+  url: string,
+  parse: (response: Response) => Promise<T>,
+  cancel?: AbortSignal
+): Promise<T> {
+  const request = new AbortController();
+  const stop = () => request.abort(cancel?.reason);
+  cancel?.addEventListener("abort", stop, { once: true });
+  const limit = () =>
+    setTimeout(
+      () =>
+        request.abort(
+          new Error(
+            `The hub did not answer within ${TRANSCRIPT_READ_LIMIT_MS / 1000} seconds`
+          )
+        ),
+      TRANSCRIPT_READ_LIMIT_MS
+    );
+  let timer = limit();
+  try {
+    const response = await fetch(url, { signal: request.signal });
+    // The response is in; the body gets a limit of its own, so a page that is
+    // slow but moving is not mistaken for one that never came.
+    clearTimeout(timer);
+    timer = limit();
+    return await parse(response);
+  } finally {
+    clearTimeout(timer);
+    cancel?.removeEventListener("abort", stop);
+  }
+}
+
+/**
+ * A transcript page, requested and — when that request fails or times out —
+ * requested once more at once. A hub that answers, with a page or a refusal,
+ * is an answer and is not asked twice. The second failure is thrown.
+ */
+async function readPage<T>(
+  url: string,
+  parse: (response: Response) => Promise<T>,
+  cancel?: AbortSignal
+): Promise<T> {
+  try {
+    return await requestPage(url, parse, cancel);
+  } catch (error) {
+    if (cancel?.aborted) {
+      throw error;
+    }
+    return await requestPage(url, parse, cancel);
+  }
 }
 
 /**
  * The newest page into the view, and its stream resumed from the page's
  * `seq`. Nothing older is read here: the view asks for it a page at a time,
  * as its reader nears the first rows it holds ({@link readOlderPage}).
+ *
+ * `cancel` fires when a fresh read took this one's place: whatever this one
+ * would have said is dropped, and it answers `skipped`.
  */
 async function readNewestPage(
-  target: SessionState
+  target: SessionState,
+  cancel: AbortSignal
 ): Promise<TranscriptOutcome> {
   const viewId = target.instanceId;
   beginRead(streamState, viewId);
@@ -4457,25 +4542,42 @@ async function readNewestPage(
       );
     });
   try {
-    const response = await fetch(transcriptUrl(viewId));
-    if (!response.ok) {
-      const fault = await pageFault(response);
-      if (!fault.ok) {
-        target.readFault = fault;
-      }
-      return fault;
+    const answer = await readPage<
+      | { page: TranscriptPage; fault?: undefined }
+      | { fault: TranscriptOutcome; page?: undefined }
+    >(
+      transcriptUrl(viewId),
+      async (response) =>
+        response.ok
+          ? { page: (await response.json()) as TranscriptPage }
+          : { fault: await pageFault(response) },
+      cancel
+    );
+    if (cancel.aborted) {
+      return { ok: true, skipped: true };
     }
-    const page = (await response.json()) as TranscriptPage;
+    if (answer.fault) {
+      if (!answer.fault.ok) {
+        target.readFault = answer.fault;
+      }
+      return answer.fault;
+    }
     target.readFault = null;
-    adoptTranscriptPage(target, page);
-    adoptPage(streamState, streamHost, viewId, page.seq ?? 0);
+    adoptTranscriptPage(target, answer.page);
+    adoptPage(streamState, streamHost, viewId, answer.page.seq ?? 0);
     trackWorking(target);
   } catch (error) {
+    if (cancel.aborted) {
+      return { ok: true, skipped: true };
+    }
     const message = error instanceof Error ? error.message : String(error);
     target.readFault = { reason: "failed", message };
     return { ok: false, reason: "failed", message };
   } finally {
-    target.loading = false;
+    // A read that was replaced leaves `loading` to the one that replaced it.
+    if (!cancel.aborted) {
+      target.loading = false;
+    }
   }
   return { ok: true };
 }
@@ -4486,16 +4588,20 @@ async function olderPage(
   cursor: string
 ): Promise<TranscriptPage | ReadFault> {
   try {
-    const response = await fetch(
-      transcriptUrl(viewId, { cursor, limit: TRANSCRIPT_OLDER_PAGE })
-    );
-    if (response.ok) {
-      return (await response.json()) as TranscriptPage;
-    }
-    const { detail } = await hubFailure(response);
-    return readFaultOf(
-      detail,
-      response.status === 503 ? response.headers.get("x-cawco-machine") : null
+    return await readPage(
+      transcriptUrl(viewId, { cursor, limit: TRANSCRIPT_OLDER_PAGE }),
+      async (response) => {
+        if (response.ok) {
+          return (await response.json()) as TranscriptPage;
+        }
+        const { detail } = await hubFailure(response);
+        return readFaultOf(
+          detail,
+          response.status === 503
+            ? response.headers.get("x-cawco-machine")
+            : null
+        );
+      }
     );
   } catch (error) {
     return {

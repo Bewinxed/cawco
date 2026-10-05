@@ -248,8 +248,12 @@
    * whichever machine holds the file — and every way this ends is a named
    * state.
    */
-  async function readHistory(id: string, running: boolean): Promise<void> {
-    const outcome = await readTranscript(id);
+  async function readHistory(
+    id: string,
+    running: boolean,
+    fresh = false
+  ): Promise<void> {
+    const outcome = await readTranscript(id, false, fresh);
     // Each outcome replaces what the last read said, and only an outcome
     // does: a read in flight leaves the pane showing what it showed.
     readAnswered = true;
@@ -342,6 +346,32 @@
     untrack(() => {
       // biome-ignore lint/complexity/noVoid: fire-and-forget inside untrack — readHistory reports its outcome through the store fields this effect reads
       void readHistory(id, running);
+    });
+  });
+
+  /**
+   * A reader who left this conversation while its transcript was still on its
+   * way and came back is not owed that read's remaining wait: it is ended and
+   * read afresh, the same one read the pane's first look made. A pane never
+   * shown has not been left, so a background read that is moving is not cut.
+   */
+  let seenBefore = untrack(() => visible);
+  let leftUnread = false;
+  $effect(() => {
+    const shownNow = visible;
+    untrack(() => {
+      if (!shownNow) {
+        const held = cawco.session(viewId);
+        leftUnread =
+          seenBefore && !(held?.initialized && held.messages.length > 0);
+        return;
+      }
+      seenBefore = true;
+      if (leftUnread) {
+        leftUnread = false;
+        // biome-ignore lint/complexity/noVoid: fire-and-forget inside untrack — readHistory reports its outcome through the store fields the pane reads
+        void readHistory(viewId, isLive, true);
+      }
     });
   });
 
@@ -911,7 +941,12 @@
 
   /** Whether this conversation takes messages from here at all. */
   const writable = $derived(
-    !!session && !fault && !(unaddressable || readOnly)
+    !!session &&
+      !(unaddressable || readOnly) &&
+      // A transcript that could not be read leaves the conversation as
+      // writable as it was; only a machine that is offline cannot be written
+      // to, and a send needs a machine to go to.
+      (!fault || (fault.reason !== "offline" && !!machineId))
   );
 
   /**
@@ -1042,6 +1077,7 @@
     class={STATEFUL}
     icon={fault.reason === "offline" ? IconLaptop : IconAlert}
     line={faultLine}
+    role="alert"
     title={fault.reason === "offline"
       ? "This machine is offline"
       : "This transcript couldn't be read"}
