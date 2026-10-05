@@ -430,6 +430,22 @@ final class DeckView: UIView {
         fatalError("DeckView is built in code")
     }
 
+    /// Where a finger lands, the scroll views under it hand two-finger drags to the deck: with more than
+    /// one group their pans take one touch (`maximumNumberOfTouches`), so the deck's two-touch pan is the
+    /// only recogniser a pair of fingers can start; with one group they take any number again.
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        let hit = super.hitTest(point, with: event)
+        let limit = cards.count > 1 ? 1 : Int.max
+        var view = hit
+        while let current = view, current !== self {
+            if let scroll = current as? UIScrollView, scroll !== paging, scroll.panGestureRecognizer.maximumNumberOfTouches != limit {
+                scroll.panGestureRecognizer.maximumNumberOfTouches = limit
+            }
+            view = current.superview
+        }
+        return hit
+    }
+
     func focus(_ next: Int, animated _: Bool) {
         guard !paging.active else { return }
         index = next
