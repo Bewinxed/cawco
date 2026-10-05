@@ -4,6 +4,7 @@
  * this registers it with the service manager, brings the machine up, and tells
  * the person what is missing and offers to install it.
  */
+import { closeSync, constants, openSync, readSync } from "node:fs";
 import { chmod, rm } from "node:fs/promises";
 import { platform } from "node:os";
 import { machineId } from "@cawco/agent";
@@ -78,6 +79,54 @@ async function awaitJoined(hubUrl: string): Promise<void> {
   );
 }
 
+const ANSWER_TIMEOUT_MS = 60_000;
+const ANSWER_POLL_MS = 25;
+
+/**
+ * Reads one line, and only one, from the terminal this process is attached to,
+ * a byte at a time so the rest of the input stays queued for the next prompt.
+ * No terminal, end of input, a read error or `timeoutMs` without a newline
+ * returns null (a no); the caller ends the unanswered prompt line.
+ */
+async function readTerminalLine(
+  timeoutMs = ANSWER_TIMEOUT_MS
+): Promise<string | null> {
+  let fd: number;
+  try {
+    fd = openSync("/dev/tty", constants.O_NONBLOCK);
+  } catch {
+    return null;
+  }
+  try {
+    const deadline = Date.now() + timeoutMs;
+    const byte = Buffer.alloc(1);
+    const line: number[] = [];
+    while (Date.now() < deadline) {
+      let count: number;
+      try {
+        count = readSync(fd, byte, 0, 1, null);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "EAGAIN") {
+          // biome-ignore lint/performance/noAwaitInLoops: a poll of one descriptor; each read follows the previous
+          await Bun.sleep(ANSWER_POLL_MS);
+          continue;
+        }
+        return null;
+      }
+      if (count === 0) {
+        return null;
+      }
+      if (byte[0] === 10) {
+        return Buffer.from(line).toString("utf8");
+      }
+      line.push(byte[0] as number);
+    }
+    return null;
+  } finally {
+    closeSync(fd);
+  }
+}
+
 /** Says what is missing and offers each fix; a no, or no terminal, installs nothing. */
 async function offerTools(ask: boolean): Promise<boolean> {
   let installed = false;
@@ -92,9 +141,13 @@ async function offerTools(ask: boolean): Promise<boolean> {
     if (!(ask && (OFFERED as readonly string[]).includes(item.id))) {
       continue;
     }
-    // biome-ignore lint/suspicious/noAlert: a terminal CLI; Bun's prompt() reads a line from the terminal
-    const answer = prompt("Run that command now? [y/N]");
-    if (answer?.trim().toLowerCase() !== "y") {
+    process.stdout.write("Run that command now? [y/N] ");
+    // biome-ignore lint/performance/noAwaitInLoops: one prompt at a time, each reading its own line
+    const answer = await readTerminalLine();
+    if (answer === null) {
+      process.stdout.write("\n");
+    }
+    if (!answer?.trim().toLowerCase().startsWith("y")) {
       console.log(`${item.id}: skipped. CawCo works without it.`);
       continue;
     }

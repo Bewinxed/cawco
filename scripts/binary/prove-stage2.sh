@@ -64,14 +64,19 @@ setup() {
 }
 export -f setup 2>/dev/null || true
 
-# One check: runs the function in its own shell (so set -e applies inside it),
-# keeps its output in a log, prints one line.
+# One check: runs the function in its own shell (so set -e applies inside it) under a time limit
+# (third argument, seconds, default 600), keeps its output in a log, prints one line.
+# A check that runs out of time fails and the next one runs.
 check() {
-  local name=$1 fn=$2 log
+  local name=$1 fn=$2 limit=${3:-600} log rc=0
   log="$out/logs/$(echo "$name" | tr -cs 'A-Za-z0-9' '-').log"
   LAST_LOG=$log
-  if bash -ec "$fn" > "$log" 2>&1 < /dev/null; then
+  timeout --kill-after=10 "$limit" bash -ec "$fn" > "$log" 2>&1 < /dev/null || rc=$?
+  if [[ $rc == 0 ]]; then
     echo "$name: PASS"
+  elif [[ $rc == 124 || $rc == 137 ]]; then
+    echo "$name: FAIL (timed out after ${limit}s, see $log)"
+    status=1
   else
     echo "$name: FAIL (see $log)"
     status=1
@@ -266,9 +271,29 @@ grep -q "command: sudo apt-get install -y openssl" "$LAST_LOG" \
   || { echo "the installer showed the openssl install command and ran it: FAIL (see $LAST_LOG)"; status=1; }
 
 join_machine() {
-  # The hub's own install.sh, the way the app's Connect a machine hands it out; answers typed at a terminal.
+  # The hub's own install.sh, the way the app's Connect a machine hands it out. The answers are typed at a
+  # terminal one prompt at a time: each "n" is sent only after its prompt has been printed.
   as_user "$joinerc" curl -fsS "http://$hub_ip:3456/install.sh" -o /tmp/join.sh
-  printf 'n\nn\nn\nn\n' | as_user_tty "$joinerc" "sh /tmp/join.sh"
+  local fifo="$out/join.in" screen="$out/join.out" sent=0 seen pid end=$((SECONDS + 420))
+  rm -f "$fifo" "$screen"
+  mkfifo "$fifo"
+  : > "$screen"
+  exec 3<> "$fifo"
+  as_user_tty "$joinerc" "sh /tmp/join.sh" <&3 > "$screen" 2>&1 &
+  pid=$!
+  while kill -0 "$pid" 2> /dev/null; do
+    seen=$(grep -c 'Run that command now?' "$screen" || true)
+    if (( seen > sent )); then
+      printf 'n\n' >&3
+      sent=$((sent + 1))
+    fi
+    (( SECONDS < end )) || { kill "$pid"; cat "$screen"; echo "the install did not finish; prompts answered: $sent"; return 1; }
+    sleep 0.5
+  done
+  wait "$pid" || { cat "$screen"; echo "the install failed"; return 1; }
+  cat "$screen"
+  echo "prompts answered: $sent"
+  [[ "$sent" -ge 1 ]]
   [[ "$(hub_api /api/agents | json 'd => d.filter(a => a.status === "online").length')" == 2 ]]
 }
 export -f join_machine
@@ -445,7 +470,7 @@ joiner_starts_held() {
   accepted_ran_once "$jid" "$joinerc" joinerstart "$out/accepted-joiner.txt"
 }
 export -f joiner_starts_held
-check "a session start requested while the joined machine installs runs once afterwards, one child, none lost" joiner_starts_held
+check "a session start requested while the joined machine installs runs once afterwards, one child, none lost" joiner_starts_held 1200
 
 joiner_survived() { survived "$joinerc" "$out/joiner-before.txt"; }
 export -f joiner_survived
@@ -517,8 +542,8 @@ swap_kill_recover() {
   as_user "$hubc" rm -f /home/cawco/.local/share/cawco/cawco.db.migrating
 }
 export -f swap_kill_recover
-check "a helper killed right after the swap of a build that cannot start is recovered at the next start" "swap_kill_recover 0.0.1-test.7 33 none"
-check "a stale migration marker left by a killed hub does not hold a failed build in place" "swap_kill_recover 0.0.1-test.6 34 plant"
+check "a helper killed right after the swap of a build that cannot start is recovered at the next start" "swap_kill_recover 0.0.1-test.7 33 none" 1200
+check "a stale migration marker left by a killed hub does not hold a failed build in place" "swap_kill_recover 0.0.1-test.6 34 plant" 1200
 
 channel_change() {
   publish ok nightly "0.0.1-nightly.3+333333333333" 3333333333333333333333333333333333333333 "$bins/cawco-3" "$key" 40 "$schema"
@@ -553,7 +578,7 @@ hub_starts_held() {
   accepted_ran_once "$hid" "$hubc" hubstart "$out/accepted-hub.txt"
 }
 export -f hub_starts_held
-check "a session start requested while the hub's own machine installs runs once afterwards, one child, none lost" hub_starts_held
+check "a session start requested while the hub's own machine installs runs once afterwards, one child, none lost" hub_starts_held 900
 
 hub_survived() { survived "$hubc" "$out/hub-before.txt"; }
 export -f hub_survived
@@ -583,7 +608,7 @@ session_during_update() {
   [[ "$(children_with "$joinerc" during)" == "$n" ]]
 }
 export -f session_during_update
-check "a session started while an update is installing is still alive afterwards" session_during_update
+check "a session started while an update is installing is still alive afterwards" session_during_update 900
 
 keeper_advances() {
   read -r child keeper < "$out/held.txt"
