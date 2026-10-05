@@ -59,6 +59,7 @@ import {
   isEffortLevel,
   RESOLVE_PERMISSION,
   runDoing,
+  WIRE_PROTOCOL,
 } from "@cawco/core";
 import { toast } from "svelte-sonner";
 import {
@@ -86,7 +87,7 @@ import {
 } from "./links";
 import { type PendingSelection, selectionExtras } from "./preview/selection";
 import { projectsFor } from "./projects";
-import { reloadForProtocol } from "./protocol-reload";
+import { type ReloadHold, reloadForProtocol } from "./protocol-reload";
 import { checkRestartToast } from "./restart-toast";
 import { spawnDefaults } from "./spawnPrefs.svelte";
 import type {
@@ -577,6 +578,12 @@ const state = $state({
    * close starts, cleared on the next open. Retries in between leave it set.
    */
   outage: false,
+  /**
+   * This page was built for an older wire than the hub's, so it reads nothing
+   * more off the socket ({@link olderThanHub}): `reloading` while its reload
+   * is on the way, or what that reload is waiting on. Null on the hub's wire.
+   */
+  older: null as "reloading" | ReloadHold | null,
   /** When the next reconnect attempt fires, so the banner can count it down. */
   retryAt: null as number | null,
   /** The first REST read of the fleet (machines, sessions, projects) is in. */
@@ -2218,8 +2225,6 @@ function handleFrame(frame: FramePayload): void {
       if (!equal(state.hubBuild, frame.hubBuild)) {
         state.hubBuild = frame.hubBuild;
       }
-      // biome-ignore lint/complexity/noVoid: fire-and-forget — a reload ends this page, and one that is not due changes nothing
-      void reloadForProtocol(frame.protocol);
     }
     return;
   }
@@ -3575,7 +3580,9 @@ function connect(): void {
   teardown();
   state.status = "connecting";
 
-  const socket = new WebSocket(hubSocketUrl());
+  // The page names the wire it was built for, so the hub sends a page on an
+  // older one the snapshot that reloads it and no delta it would misread.
+  const socket = new WebSocket(`${hubSocketUrl()}?protocol=${WIRE_PROTOCOL}`);
 
   socket.onopen = () => {
     state.status = "connected";
@@ -3603,6 +3610,36 @@ function connect(): void {
 }
 
 /**
+ * Whether this page was built for an older wire than the hub's, settled on
+ * the board snapshot before anything in it is applied. The snapshot is the
+ * first message on every socket, reconnects included, and the hub sends it
+ * again in place of each delta to a page it knows is older; `kind` and
+ * `protocol` are the two fields of it no wire version moves (`WIRE_PROTOCOL`).
+ *
+ * An older page reads nothing more off the socket, the snapshot included,
+ * and reloads. The check used to sit at the end of the board handler, after
+ * the frame was applied: the first change-only delta left `state.machines`
+ * undefined, and every later board frame threw on it before the check ran,
+ * so those tabs never reloaded.
+ */
+function olderThanHub(message: unknown): boolean {
+  const { payload } = message as { payload?: FramePayload };
+  if (payload?.kind !== "instances") {
+    return state.older !== null;
+  }
+  if (payload.protocol <= WIRE_PROTOCOL) {
+    state.older = null;
+    return false;
+  }
+  state.older ??= "reloading";
+  // biome-ignore lint/complexity/noVoid: fire-and-forget — a reload ends this page, and one that is held says what holds it
+  void reloadForProtocol((hold) => {
+    state.older = hold;
+  });
+  return true;
+}
+
+/**
  * Points a socket's handlers at *this* module's state.
  *
  * The socket is stored on `globalThis` so a module reload never orphans it, but
@@ -3615,6 +3652,9 @@ function connect(): void {
 function bind(socket: WebSocket): void {
   socket.onmessage = (event) => {
     const message = JSON.parse(String(event.data)) as unknown;
+    if (olderThanHub(message)) {
+      return;
+    }
     // A session's own frames are sequenced; everything else — the board,
     // pulses, permissions, replies — is broadcast as an envelope.
     if (handleStreamMessage(streamState, streamHost, message)) {
@@ -5454,6 +5494,14 @@ export const cawco = {
   },
   get retryAt() {
     return state.retryAt;
+  },
+  /**
+   * What holds the reload of a page built for an older wire than the hub's;
+   * null on the hub's wire and while the reload is on its way. Such a page
+   * has stopped reading the hub, so the connection band says so.
+   */
+  get reloadHold(): ReloadHold | null {
+    return state.older === "reloading" ? null : state.older;
   },
   /** What a session has been handed and not yet answered; `null` for most. */
   handoffFor: (instanceId: string): { from: string; at: number } | null =>

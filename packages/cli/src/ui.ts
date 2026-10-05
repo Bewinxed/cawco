@@ -33,6 +33,8 @@ interface Relay {
   hub: WebSocket | null;
   /** Frames the browser sent before the hub socket opened. */
   queued: string[];
+  /** The page's own query: it names the wire the page was built for. */
+  search: string;
 }
 
 export async function serveUi({
@@ -82,7 +84,11 @@ export async function serveUi({
 
       // The dashboard's one socket, relayed to the hub's `/ws/dashboard`.
       if (url.pathname.startsWith("/ws")) {
-        if (self.upgrade(request, { data: { hub: null, queued: [] } })) {
+        if (
+          self.upgrade(request, {
+            data: { hub: null, queued: [], search: url.search },
+          })
+        ) {
           return;
         }
         return new Response("expected a websocket upgrade", { status: 426 });
@@ -144,7 +150,9 @@ export async function serveUi({
     websocket: {
       open(browser) {
         const wsOrigin = hub.origin.replace(HTTP_PREFIX, "ws");
-        const upstream = new WebSocket(`${wsOrigin}/ws/dashboard`);
+        const upstream = new WebSocket(
+          `${wsOrigin}/ws/dashboard${browser.data.search}`
+        );
         browser.data.hub = upstream;
 
         upstream.onopen = () => {

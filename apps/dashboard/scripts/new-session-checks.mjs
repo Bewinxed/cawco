@@ -46,39 +46,43 @@ await page.routeWebSocket(
   }
 );
 // No dashboard socket reaches the hub. Spawn frames are captured locally.
-await page.routeWebSocket("**/ws/dashboard", (socket) => {
-  socket.onMessage(async (message) => {
-    const frame = JSON.parse(String(message));
-    frames.push(frame);
-    if (!["fs", "control"].includes(frame.verb)) {
-      return;
-    }
-    const { payload } = frame;
-    if (fsDelay) {
-      await new Promise((resolve) => setTimeout(resolve, fsDelay));
-    }
-    const ok = !payload.path?.startsWith("/definitely");
-    const result =
-      payload.method === "listRepos"
-        ? [{ nameWithOwner: "checks/repo", visibility: "PUBLIC" }]
-        : [
-            { name: "project", kind: "dir" },
-            { name: "work", kind: "dir" },
-          ];
-    socket.send(
-      JSON.stringify({
-        verb: "frames",
-        payload: {
-          kind: "control_result",
-          requestId: payload.requestId,
-          ok,
-          result,
-          error: ok ? undefined : "ENOENT: directory does not exist",
-        },
-      })
-    );
-  });
-});
+// Matched by path: the socket's URL also names the page's wire protocol.
+await page.routeWebSocket(
+  (url) => url.pathname === "/ws/dashboard",
+  (socket) => {
+    socket.onMessage(async (message) => {
+      const frame = JSON.parse(String(message));
+      frames.push(frame);
+      if (!["fs", "control"].includes(frame.verb)) {
+        return;
+      }
+      const { payload } = frame;
+      if (fsDelay) {
+        await new Promise((resolve) => setTimeout(resolve, fsDelay));
+      }
+      const ok = !payload.path?.startsWith("/definitely");
+      const result =
+        payload.method === "listRepos"
+          ? [{ nameWithOwner: "checks/repo", visibility: "PUBLIC" }]
+          : [
+              { name: "project", kind: "dir" },
+              { name: "work", kind: "dir" },
+            ];
+      socket.send(
+        JSON.stringify({
+          verb: "frames",
+          payload: {
+            kind: "control_result",
+            requestId: payload.requestId,
+            ok,
+            result,
+            error: ok ? undefined : "ENOENT: directory does not exist",
+          },
+        })
+      );
+    });
+  }
+);
 await page.route("**/api/**", async (route) => {
   const request = route.request();
   const path = new URL(request.url()).pathname;

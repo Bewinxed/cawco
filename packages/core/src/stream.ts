@@ -27,8 +27,18 @@
  *    its drafts; what the wire carries is 2's.
  * 4: board deltas carry changed machines and optional metadata, with pulse
  *    snapshots only on connect. Older tabs must reload before reading deltas.
+ * 5: a page names the protocol it was built for when it opens its socket
+ *    (`/ws/dashboard?protocol=5`), and reads the snapshot's `protocol` before
+ *    it applies anything. The hub sends a page on an older wire the snapshot
+ *    alone, never a delta. Pages built for 3 and 4 name nothing, took the
+ *    first change-only delta as `state.machines = undefined`, and from then
+ *    on threw on every board frame before reaching the reload at its end.
+ *
+ * Two things hold across every version, because an older page finds its way
+ * out through them: the snapshot is `kind: "instances"`, and it carries
+ * `protocol`.
  */
-export const WIRE_PROTOCOL = 4;
+export const WIRE_PROTOCOL = 5;
 
 /**
  * What a session's stream carries: the changes each frame made to its

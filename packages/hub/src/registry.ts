@@ -24,10 +24,18 @@ export const toDashboard = (socket: HubSocket, frame: unknown): unknown =>
   socket.send(frame, true);
 
 export interface RegistryShape {
-  readonly addDashboard: (socket: HubSocket) => void;
+  /** `older`: the page behind the socket was built for a wire before this hub's. */
+  readonly addDashboard: (socket: HubSocket, older: boolean) => void;
   readonly address: (machineId: string) => string | undefined;
   readonly agent: (machineId: string) => HubSocket | undefined;
   readonly broadcast: (envelope: Envelope) => void;
+  /**
+   * A move of the board. A page on this hub's wire gets `delta`. An older one
+   * cannot read it and gets the snapshot instead: the one frame every build
+   * reads, and the one whose `protocol` reloads it. Built once, and only when
+   * an older page is connected.
+   */
+  readonly broadcastBoard: (delta: Envelope, snapshot: () => Envelope) => void;
   /** The most recent usable dashboard origin, or nothing if none has connected. */
   readonly dashboardOrigin: () => string | undefined;
   /** Returns the machine the socket was registered as, if it was an agent. */
@@ -103,6 +111,8 @@ const make = (): RegistryShape => {
   const addresses = new Map<string, string>();
   /** One entry per dashboard socket. A session's own frames reach it through `stream.ts`. */
   const dashboards = new Map<string, HubSocket>();
+  /** The dashboard sockets whose page was built for an older wire, by id. */
+  const older = new Set<string>();
   const requesters = new Map<string, { socket: HubSocket; at: number }>();
   /**
    * The last origin a dashboard reached this hub from. Kept rather than derived
@@ -141,11 +151,15 @@ const make = (): RegistryShape => {
     agent: (machineId) => agents.get(machineId),
     address: (machineId) => addresses.get(machineId),
     machineIds: () => [...agents.keys()],
-    addDashboard: (socket) => {
+    addDashboard: (socket, isOlder) => {
       dashboards.set(socket.id, socket);
+      if (isOlder) {
+        older.add(socket.id);
+      }
     },
     dropDashboard: (socket) => {
       dashboards.delete(socket.id);
+      older.delete(socket.id);
       for (const [requestId, entry] of requesters) {
         if (entry.socket.id === socket.id) {
           requesters.delete(requestId);
@@ -155,6 +169,17 @@ const make = (): RegistryShape => {
     broadcast: (envelope) => {
       for (const socket of dashboards.values()) {
         toDashboard(socket, envelope);
+      }
+    },
+    broadcastBoard: (delta, snapshot) => {
+      let whole: Envelope | undefined;
+      for (const socket of dashboards.values()) {
+        if (older.has(socket.id)) {
+          whole ??= snapshot();
+          toDashboard(socket, whole);
+        } else {
+          toDashboard(socket, delta);
+        }
       }
     },
     noteDashboardOrigin: (origin) => {

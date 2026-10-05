@@ -5718,11 +5718,9 @@ export const createServer = (
     ) {
       return;
     }
-    registry.broadcast({
-      verb: "frames",
-      machineId,
-      payload: delta,
-    });
+    registry.broadcastBoard({ verb: "frames", machineId, payload: delta }, () =>
+      instancesFrame(machineId)
+    );
   };
 
   /** No pulse snapshots on publishes: each session already has its own stream. */
@@ -11998,7 +11996,20 @@ export const createServer = (
         // which sets the flag Bun compresses on.
         perMessageDeflate: true,
         open(ws) {
-          registry.addDashboard(ws);
+          // A page names the wire it was built for (WIRE_PROTOCOL, 5). One
+          // that names none was built before pages did: a browser sends
+          // `Origin` on every socket it opens, and the clients that are not
+          // pages (the Apple app, scripts) send none and read this wire.
+          const named = Number(ws.query.protocol);
+          const older = Number.isFinite(named)
+            ? named < WIRE_PROTOCOL
+            : Boolean(ws.headers.origin);
+          if (older) {
+            console.warn(
+              `[hub] dashboard page at ${ws.headers.origin ?? ws.remoteAddress} is on wire ${Number.isFinite(named) ? named : "4 or older"}, this hub on ${WIRE_PROTOCOL}: it is sent the snapshot only, until it reloads`
+            );
+          }
+          registry.addDashboard(ws, older);
           // The one moment the hub learns a URL that reaches its own dashboard:
           // this browser just used one. See `dashboardUrl` in telegram.ts.
           registry.noteDashboardOrigin(ws.headers.origin);
