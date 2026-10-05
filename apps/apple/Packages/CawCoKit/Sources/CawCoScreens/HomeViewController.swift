@@ -102,6 +102,8 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
     /// The swipe between Working and Finished, and what it has open.
     private var paging: PagingScrollView!
     private var swiping: (from: HomeModel.Tab, to: HomeModel.Tab)?
+    /// The tab whose rows already started flying in, decided before the page settles.
+    private var arrivedTab: HomeModel.Tab?
     private var cover: UIView?
     private var leavingPane: UIView?
     private var arrivingPane: UIView?
@@ -167,6 +169,7 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
         }
         paging.onBegin = { [weak self] in self?.preparePages() }
         paging.onScroll = { [weak self] position in self?.drawPagingChrome(position) }
+        paging.onTarget = { [weak self] page in self?.arrive(at: page) }
         paging.onLand = { [weak self] page in self?.finishPaging(page) }
         // The list ends at the view's foot, or at a docked keyboard's top while it
         // is up: the search field and its results stay above it and scroll to the
@@ -802,6 +805,7 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
         // A swipe in flight is retargeted from where it is, never restarted.
         if paging.active {
             paging.choose(tab == .working ? 0 : 1, animated: true)
+            arrive(at: tab == .working ? 0 : 1)
             return
         }
         guard tab != home.tab else {
@@ -1118,6 +1122,7 @@ extension HomeViewController {
         let to: HomeModel.Tab = from == .working ? .finished : .working
         guard let tabs = tabsCell else { return }
         swiping = (from, to)
+        arrivedTab = nil
         pressed = false
         pending = nil
         rowsWaiting = false
@@ -1178,6 +1183,12 @@ extension HomeViewController {
         }
         let destination: HomeModel.Tab = page == 0 ? .working : .finished
         if destination == swiping.from {
+            // Rows already in flight for a landing that did not happen come to rest where they are.
+            if flight.running {
+                flight.stop()
+                layout.adjust = nil
+                collectionView.settleFrame()
+            }
             commit(build(tab: swiping.from), animated: false)
             collectionView.layoutIfNeeded()
             tabsCell?.scrub(from: swiping.from, to: swiping.to, progress: 0)
@@ -1191,10 +1202,26 @@ extension HomeViewController {
             close()
             requestRefresh()
         } else {
+            // The rows left their gate at the decision (`arrive`); only a landing nobody saw coming starts them here.
+            if arrivedTab != swiping.to { arrive(at: page) }
             close()
-            flyIn(from: swiping.to == .finished ? 1 : -1)
         }
         onSelectTab(swiping.to)
+    }
+
+    /// The page the swipe is going to settle on is decided: its rows start
+    /// flying in now, while the page is still sliding into place. The page
+    /// slides in empty and the live list, which already holds the arriving
+    /// tab, shows through where it comes on.
+    private func arrive(at page: Int) {
+        guard let swiping, arrivedTab == nil, !UIAccessibility.isReduceMotionEnabled else { return }
+        let destination: HomeModel.Tab = page == 0 ? .working : .finished
+        guard destination == swiping.to else { return }
+        arrivedTab = destination
+        arrivingPane?.subviews.forEach { $0.removeFromSuperview() }
+        arrivingPane?.backgroundColor = .clear
+        cover?.backgroundColor = .clear
+        flyIn(from: destination == .finished ? 1 : -1)
     }
 
     /// Whether a line stands under the tab row (the swipe's region).
@@ -1207,6 +1234,7 @@ extension HomeViewController {
 
     private func close() {
         swiping = nil
+        arrivedTab = nil
         cover?.removeFromSuperview()
         cover = nil
         leavingPane = nil

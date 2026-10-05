@@ -9,6 +9,8 @@ public final class PagingScrollView: UIScrollView, UIScrollViewDelegate {
     public var onBegin: () -> Void = {}
     public var onScroll: (Double) -> Void = { _ in }
     public var onLand: (Int) -> Void = { _ in }
+    /// The page the system will settle on, told the moment the finger lets go.
+    public var onTarget: (Int) -> Void = { _ in }
     public var mayBegin: (CGPoint) -> Bool = { _ in true }
     public var traceName = "pages"
     private var moving = false
@@ -95,7 +97,11 @@ public final class PagingScrollView: UIScrollView, UIScrollViewDelegate {
     public func scrollViewDidEndScrollingAnimation(_ scrollView: UIScrollView) { land() }
 
     public func scrollViewWillEndDragging(_ scrollView: UIScrollView, withVelocity velocity: CGPoint, targetContentOffset: UnsafeMutablePointer<CGPoint>) {
-        trace("target", target: axis == .horizontal ? targetContentOffset.pointee.x : targetContentOffset.pointee.y)
+        let target = axis == .horizontal ? targetContentOffset.pointee.x : targetContentOffset.pointee.y
+        trace("target", target: target)
+        if !UIAccessibility.isReduceMotionEnabled, length > 0, count > 0 {
+            onTarget(min(count - 1, max(0, Int((target / length).rounded()))))
+        }
         if UIAccessibility.isReduceMotionEnabled {
             let target = targetContentOffset.pointee
             targetContentOffset.pointee = contentOffset
