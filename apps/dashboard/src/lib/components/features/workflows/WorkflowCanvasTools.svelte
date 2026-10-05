@@ -8,6 +8,8 @@
     zoom,
     pan,
     onpan,
+    onzoom,
+    onfit,
     undo,
     redo,
     canUndo,
@@ -16,6 +18,10 @@
     zoom: number;
     pan: boolean;
     onpan: () => void;
+    /** The person zoomed with a button: the view is theirs. */
+    onzoom: () => void;
+    /** The person asked for the fit: the view is a fit again. */
+    onfit: () => void;
     undo?: () => void;
     redo?: () => void;
     canUndo: boolean;
@@ -27,7 +33,14 @@
     duration: motionOk.current ? dur("--dur-panel") : 0,
     ease: easeInOut,
   });
-  const fit = () => fitView({ padding: 0.2, ...glide() });
+  const fit = () => {
+    onfit();
+    fitView({ padding: 0.2, ...glide() });
+  };
+  const zoomBy = (step: typeof zoomIn) => {
+    onzoom();
+    step(glide());
+  };
 </script>
 <svelte:window
   onkeydown={(event) => {
@@ -56,7 +69,7 @@
         {...tip}
         aria-label="Zoom out"
         class="wf-btn"
-        onclick={() => zoomOut(glide())}
+        onclick={() => zoomBy(zoomOut)}
         type="button"
       >
         −
@@ -71,7 +84,7 @@
         {...tip}
         aria-label="Zoom in"
         class="wf-btn"
-        onclick={() => zoomIn(glide())}
+        onclick={() => zoomBy(zoomIn)}
         type="button"
       >
         <IconPlus class="size-4" />

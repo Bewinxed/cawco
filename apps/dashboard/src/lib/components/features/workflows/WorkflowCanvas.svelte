@@ -57,6 +57,11 @@
   let mounted = $state(false);
   let zoom = $state(1);
   let pan = $state(false);
+  /**
+   * The view is the person's own: they have panned or zoomed since the last
+   * fit. Until then a change of the canvas's size fits the graph again.
+   */
+  let held = $state(false);
   /** The node a right-click (or a long press) opened the menu on. */
   let menuNode = $state<string | null>(null);
   const menuTarget = $derived(
@@ -180,6 +185,12 @@
             {nodeTypes}
             onconnect={connect}
             onedgeclick={({ edge }) => onselect(edge.id)}
+            onmovestart={(event) => {
+              // A move with no event behind it is a fit or a tool's glide.
+              if (event) {
+                held = true;
+              }
+            }}
             onnodeclick={({ node }) => onselect(node.id)}
             onnodedragstop={() =>
               onchange?.({
@@ -199,7 +210,7 @@
             bind:nodes
           >
             <Background gap={16} size={1} variant={BackgroundVariant.Dots} />
-            <FlowAutoFit nodeCount={graph.nodes.length} />
+            <FlowAutoFit {held} nodeCount={graph.nodes.length} />
             <FlowZoomTracker
               onZoomChange={(value) => {
                 zoom = value;
@@ -209,8 +220,14 @@
               ><WorkflowCanvasTools
                 {canRedo}
                 {canUndo}
+                onfit={() => {
+                  held = false;
+                }}
                 onpan={() => {
                   pan = !pan;
+                }}
+                onzoom={() => {
+                  held = true;
                 }}
                 {pan}
                 {redo}
