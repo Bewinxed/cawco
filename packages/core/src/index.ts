@@ -172,7 +172,8 @@ export interface SpawnPayload {
   /**
    * Re-open (or fork) a stored session. `sessionKey` is the harness's own
    * session id; `fork` reads the origin conversation into a new one; `atMessage`
-   * resumes up to and including that assistant turn (a rewind anchor).
+   * resumes through that assistant turn in Claude; OpenCode reverts from
+   * the selected user turn. A fork includes its anchor in either harness.
    */
   resume?: { sessionKey: string; fork?: boolean; atMessage?: string };
   /**

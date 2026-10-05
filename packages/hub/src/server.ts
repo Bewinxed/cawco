@@ -6314,6 +6314,13 @@ export const createServer = (
     };
   };
 
+  const includesRewindAnchor = (
+    where: TranscriptWhere,
+    entry: SessionMessage,
+    at: string | undefined
+  ): boolean =>
+    at === undefined || where.harness !== "opencode" || entry.type !== "user";
+
   /**
    * A session's whole stored transcript, from its machine, with the records of
    * the sends it holds — cut after the entry `at` when given (a rewind, a fork
@@ -6337,7 +6344,10 @@ export const createServer = (
     if (cut) {
       const end = transcript.findIndex((entry) => entry.uuid === cut);
       if (end >= 0) {
-        transcript = transcript.slice(0, end + 1);
+        transcript = transcript.slice(
+          0,
+          end + Number(includesRewindAnchor(where, transcript[end], at))
+        );
       }
     }
     // Pictures as references to the media store, before a send's record is

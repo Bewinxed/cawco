@@ -4961,11 +4961,14 @@ export async function editAndResend(
       `no session key on record for ${instanceId}; cannot resume`
     );
   }
-  const point = await rewindPointBehind(target, id);
+  // OpenCode reverts the selected user turn; Claude resumes through the
+  // preceding completed assistant frame.
+  const point =
+    target.harness === "opencode"
+      ? target.messages.find((message) => message.id === id)?.sdkUuid
+      : await rewindPointBehind(target, id);
   if (!point) {
-    throw new Error(
-      "There is no answered turn behind this message to go back to."
-    );
+    throw new Error("This message has no stored rewind point.");
   }
 
   const requestId = newId();
