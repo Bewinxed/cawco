@@ -4445,13 +4445,17 @@ async function readNewestPage(
   // The `/` palette's servers and tools are read beside the transcript: the
   // board's rows do not carry them. A session with no hub row has none.
   // biome-ignore lint/complexity/noVoid: runs beside the transcript read; the palette reads it off the session when it lands
-  void fetch(`/api/instances/${encodeURIComponent(viewId)}/tooling`).then(
-    async (answer) => {
+  void fetch(`/api/instances/${encodeURIComponent(viewId)}/tooling`)
+    .then(async (answer) => {
       if (answer.ok) {
         target.tooling = (await answer.json()) as SessionTooling;
       }
-    }
-  );
+    })
+    .catch((error: unknown) => {
+      console.warn(
+        `[cawco] Could not read session tooling: ${messageOf(error)}`
+      );
+    });
   try {
     const response = await fetch(transcriptUrl(viewId));
     if (!response.ok) {

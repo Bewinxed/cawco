@@ -455,7 +455,11 @@
    * itself — a socket backfill, a peek — reports through the session's
    * `readFault`. Either one is a card with a button, never a skeleton.
    */
-  const fault = $derived(failure ?? session?.readFault ?? servedFault);
+  const fault = $derived(
+    session?.messages.length
+      ? null
+      : (failure ?? session?.readFault ?? servedFault)
+  );
 
   /**
    * The read finished and there is nothing in it: a named state, not a list.
