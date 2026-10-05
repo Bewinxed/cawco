@@ -81,11 +81,15 @@ open class KitDialogController: UIViewController, UIViewControllerTransitioningD
 
         let wanted = frameView.widthAnchor.constraint(equalToConstant: width.points)
         wanted.priority = .defaultHigh
-        let centred = frameView.centerYAnchor.constraint(equalTo: view.centerYAnchor)
-        centred.priority = .defaultHigh
-        // As tall as what it holds, until the screen (or the keyboard) stops it.
+        // As tall as what it holds, until the screen (or the keyboard) stops it;
+        // centred only where that leaves it room. Its height outranks its
+        // centring: a tall dialog rises above the keyboard whole instead of
+        // shrinking round the screen's middle, behind the keys.
         let fits = scroll.heightAnchor.constraint(equalTo: scroll.contentLayoutGuide.heightAnchor)
+        // Under a label's resistance to being squeezed, so a body too tall for the room scrolls and keeps its lines.
         fits.priority = .defaultHigh - 1
+        let centred = frameView.centerYAnchor.constraint(equalTo: view.centerYAnchor)
+        centred.priority = .defaultHigh - 2
         NSLayoutConstraint.activate([
             frameView.centerXAnchor.constraint(equalTo: view.centerXAnchor),
             wanted,
@@ -109,6 +113,13 @@ open class KitDialogController: UIViewController, UIViewControllerTransitioningD
             body.trailingAnchor.constraint(equalTo: scroll.frameLayoutGuide.trailingAnchor, constant: -18),
         ])
         view.keyboardLayoutGuide.followsUndockedKeyboard = true
+        // The field being typed in stays in view: when one takes the keyboard,
+        // and again once the keyboard has taken its room from the dialog.
+        let centre = NotificationCenter.default
+        for name in [UITextField.textDidBeginEditingNotification, UITextView.textDidBeginEditingNotification] {
+            centre.addObserver(self, selector: #selector(fieldTookKeyboard(_:)), name: name, object: nil)
+        }
+        centre.addObserver(self, selector: #selector(keyboardSettled), name: UIResponder.keyboardDidShowNotification, object: nil)
 
         if closable {
             let close = KitGhostButton(.close, label: "Close")
@@ -119,6 +130,25 @@ open class KitDialogController: UIViewController, UIViewControllerTransitioningD
                 close.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -12),
             ])
         }
+    }
+
+    private weak var typing: UIView?
+
+    @objc private func fieldTookKeyboard(_ note: Notification) {
+        guard let field = note.object as? UIView, field.isDescendant(of: body) else { return }
+        typing = field
+        reveal(animated: true)
+    }
+
+    @objc private func keyboardSettled() {
+        reveal(animated: true)
+    }
+
+    /// Scrolls the field being typed in into the body, 12pt clear of its edges.
+    private func reveal(animated: Bool) {
+        guard let typing, typing.window != nil else { return }
+        view.layoutIfNeeded()
+        scroll.scrollRectToVisible(typing.convert(typing.bounds, to: scroll).insetBy(dx: 0, dy: -12), animated: animated && !UIAccessibility.isReduceMotionEnabled)
     }
 
     /// Runs `change`, then moves the dialog to its new height (`morph()`:
