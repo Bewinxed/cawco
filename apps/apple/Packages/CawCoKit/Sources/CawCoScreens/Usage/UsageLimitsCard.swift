@@ -82,6 +82,7 @@ final class UsageLimitsCard: UsageCard {
         percent.text = "\(Int(row.meter.used.rounded()))%"
         percent.setContentHuggingPriority(.required, for: .horizontal)
         let of = KitLabel(TypeScale.typeBody, ink: Palette.inkMuted, lines: 0)
+        of.wrap = .pretty
         of.text = "of \(limits.leadName)"
         let headline = UIStackView(arrangedSubviews: [percent, of])
         headline.spacing = Space.space2
@@ -93,6 +94,7 @@ final class UsageLimitsCard: UsageCard {
         stack.spacing = Space.space1
         if !limits.sentence.isEmpty {
             let sentence = KitLabel(TypeScale.typeBody, ink: Palette.inkStrong, lines: 0)
+            sentence.wrap = .pretty
             sentence.text = limits.sentence
             stack.addArrangedSubview(sentence)
         }
@@ -302,6 +304,7 @@ final class UsageLimitsCard: UsageCard {
     /// `.unknown`: why there is no Claude bar, and the way to sign in where that is the cure.
     private func unknown(_ unknown: UsageLimits.Unknown) -> UIView {
         let reason = KitLabel(TypeScale.typeBody, ink: Palette.inkMuted, lines: 0)
+        reason.wrap = .pretty
         reason.text = unknown.reason
         reason.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         let row = UIStackView(arrangedSubviews: [reason])
@@ -319,6 +322,7 @@ final class UsageLimitsCard: UsageCard {
         let name = Self.name("Spend")
         let said = KitLabel(TypeScale.typeBody, ink: Palette.inkStrong, lines: 0)
         said.tabular = true
+        said.wrap = .pretty
         said.text = figures
         let row = UIStackView(arrangedSubviews: [name, said])
         if narrow {

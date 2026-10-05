@@ -324,9 +324,10 @@ extension HubConnection {
     /// One summary read: a harness's spend from `since`, grouped. Throws
     /// "The hub answered 500." as the web's read does.
     public func usageSummary(harness: UsageHarness, groupBy: UsageGroupBy, since: Double) async throws -> UsageSummary {
-        let answer = try await api.usage.summary(.init(query: .init(since: since, harness: harness.rawValue, groupBy: groupBy)))
+        let answer = try await api.usage.summary(.init(query: .init(since: .init(value1: since), harness: harness.rawValue, groupBy: groupBy)))
         switch answer {
         case let .ok(ok): return try ok.body.json
+        case .unprocessableContent: throw ControlError(message: "The hub answered 422.")
         case let .undocumented(status, _): throw ControlError(message: "The hub answered \(status).")
         }
     }

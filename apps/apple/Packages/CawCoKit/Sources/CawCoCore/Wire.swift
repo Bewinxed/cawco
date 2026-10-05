@@ -45,22 +45,23 @@ enum Wire {
     }
 }
 
-/// A date the generated types carry as `Date`-or-string: as ms epoch, 0 when absent.
-func epochMs(_ date: Date?, _ text: String?) -> Double {
+/// A date the generated types carry as `Date`, string or a number of
+/// milliseconds: as ms epoch, 0 when absent.
+func epochMs(_ date: Date?, _ text: String?, _ number: Double? = nil) -> Double {
     if let date {
         return date.timeIntervalSince1970 * 1000
     }
     if let text, let date = Wire.parseDate(text) {
         return date.timeIntervalSince1970 * 1000
     }
-    return 0
+    return number ?? 0
 }
 
 extension Components.Schemas.InstanceRow {
     /// When the hub last moved the row, ms epoch (0 when it never said).
-    var updatedMs: Double { epochMs(updatedAt?.value1, updatedAt?.value2) }
+    var updatedMs: Double { epochMs(updatedAt?.value1, updatedAt?.value2, updatedAt?.value3) }
     /// When the owner last looked at it or archived it, on any device, ms epoch.
-    var seenMs: Double { epochMs(seenAt?.value1, seenAt?.value2) }
+    var seenMs: Double { epochMs(seenAt?.value1, seenAt?.value2, seenAt?.value3) }
 }
 
 /// One socket message, as the hub's two dialects put it on `/ws/dashboard`: a
