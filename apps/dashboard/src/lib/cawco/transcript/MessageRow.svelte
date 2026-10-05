@@ -461,6 +461,8 @@
                         {...tip}
                         aria-busy={forkPending || undefined}
                         aria-disabled={forkPending || undefined}
+                        aria-label="Fork from here"
+                        class="[--btn-icon:var(--icon-md)]"
                         onclick={whileIdle<MouseEvent>(
                           () => forkPending,
                           branch
