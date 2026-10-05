@@ -349,6 +349,11 @@
     .item:focus-within .row-action {
       opacity: 1;
     }
+    /* The words yield the button's room while it shows, so the title never
+       runs under it; a row without Archive reserves nothing. */
+    .item[data-archivable]:is(:hover, :focus-within) .words {
+      margin-inline-end: calc(var(--action-size) + var(--space-1));
+    }
     /* It stands on the row's ghost, by day the hover step itself: its own
        hover is the step past it. */
     .row-action:hover {
