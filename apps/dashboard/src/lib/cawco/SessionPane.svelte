@@ -457,8 +457,15 @@
    */
   const fault = $derived(failure ?? session?.readFault ?? servedFault);
 
-  /** The read finished and there is nothing in it: a named state, not a list. */
-  const blank = $derived(empty && session?.messages.length === 0);
+  /**
+   * The read finished and there is nothing in it: a named state, not a list.
+   * Only once the conversation's start is in hand: a newest page with no
+   * blocks and a page still before it is a transcript being read, and the
+   * list asks for that page (`Transcript`).
+   */
+  const blank = $derived(
+    empty && session?.messages.length === 0 && session.cursor === null
+  );
   /** Nothing to draw yet: the history is still on its way. */
   const waiting = $derived(
     !!session && !session.initialized && session.messages.length === 0

@@ -4426,12 +4426,32 @@ async function olderPage(
  * and says why ({@link SessionState.olderFault}): asking again asks for the
  * same page.
  */
-export async function readOlderPage(viewId: string): Promise<void> {
+export function readOlderPage(viewId: string): Promise<void> {
+  // The page already out answers for any ask that lands meanwhile.
+  const inFlight = olderReads.get(viewId);
+  if (inFlight) {
+    return inFlight;
+  }
   const target = state.sessions[viewId];
   const cursor = target?.cursor;
-  if (!(target && cursor) || target.hydrating || target.loading) {
-    return;
+  if (!(target && cursor) || target.loading) {
+    return Promise.resolve();
   }
+  const read = readOlderInto(target, cursor).finally(() =>
+    olderReads.delete(viewId)
+  );
+  olderReads.set(viewId, read);
+  return read;
+}
+
+/** The older-page reads in flight, by view: one page is out at a time. */
+const olderReads = new Map<string, Promise<void>>();
+
+async function readOlderInto(
+  target: SessionState,
+  cursor: string
+): Promise<void> {
+  const viewId = target.instanceId;
   const { reads } = target;
   target.hydrating = true;
   target.olderFault = null;
@@ -4823,6 +4843,31 @@ function rewindPoint(target: SessionState, id: string): string | null {
   return null;
 }
 
+/**
+ * Where a rewind lands, read back to when the rows held do not reach it. A
+ * view holds the newest page and what its reader scrolled up to, so the
+ * answered turn before one of its first messages can be on a page not read
+ * yet: the pages before are read, one at a time, until one holds it. Null
+ * only once the conversation's start is in hand, or a page could not be read.
+ */
+async function rewindPointBehind(
+  target: SessionState,
+  id: string
+): Promise<string | null> {
+  let point = rewindPoint(target, id);
+  while (!point && target.cursor && !target.loading) {
+    const { cursor } = target;
+    // biome-ignore lint/performance/noAwaitInLoops: each page starts where the last one ended
+    await readOlderPage(target.instanceId);
+    point = rewindPoint(target, id);
+    // The cursor did not move: the page failed, or its answer was dropped.
+    if (target.cursor === cursor) {
+      break;
+    }
+  }
+  return point;
+}
+
 /** The uuids of assistant frames that asked for a tool — never a rewind anchor. */
 function toolFrames(messages: Message[]): Set<string | undefined> {
   return new Set(
@@ -4833,40 +4878,6 @@ function toolFrames(messages: Message[]): Set<string | undefined> {
       )
       .map((message) => message.sdkUuid)
   );
-}
-
-/**
- * Which of a session's turns can be rewound to, by the message's id — what
- * decides whether the transcript offers the edit and fork affordances at all.
- * One pass over the transcript, because every message on screen asks the same
- * question.
- */
-export function rewindableTurns(instanceId: string): Set<string> {
-  const turns = new Set<string>();
-  const target = state.sessions[instanceId];
-  if (!target) {
-    return turns;
-  }
-  const calls = toolFrames(target.messages);
-  let anchored = false;
-  for (const message of target.messages) {
-    // A send the session read, or a turn it stored with no send behind it.
-    if (
-      message.type === "user" &&
-      (message.state === "read" || message.state === undefined) &&
-      anchored
-    ) {
-      turns.add(message.id as string);
-    }
-    if (
-      message.type === "assistant" &&
-      message.sdkUuid &&
-      !calls.has(message.sdkUuid)
-    ) {
-      anchored = true;
-    }
-  }
-  return turns;
 }
 
 /**
@@ -4894,7 +4905,7 @@ export async function editAndResend(
       `no session key on record for ${instanceId}; cannot resume`
     );
   }
-  const point = rewindPoint(target, id);
+  const point = await rewindPointBehind(target, id);
   if (!point) {
     throw new Error(
       "There is no answered turn behind this message to go back to."
