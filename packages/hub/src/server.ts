@@ -11885,24 +11885,23 @@ export const createServer = (
               // no beat promotes it, and the first beat that still lists a
               // process for it ends that process (`endStopped`, in the
               // heartbeat case). Only a send brings it back (`ensureAlive`).
-              // A discard waits for the teardown's answer as before: its
-              // caller is told either way.
+              // Both Stop and Discard wait for the machine's teardown receipt.
+              // Persisting intent is not proof that the runner has ended.
               if (message.instanceId) {
                 const requestId =
                   message.requestId ?? peek(message.payload, "requestId");
                 const discard = peekDiscard(message.payload);
-                if (discard && requestId) {
+                if (requestId) {
                   registry.rememberRequester(requestId, ws);
                 }
                 endSession(
                   message.instanceId,
                   discard ? "discard" : "stop",
-                  discard ? requestId : undefined
+                  requestId
                 );
                 if (
                   requestId &&
-                  (!discard ||
-                    db.ownedInstance(message.instanceId)?.endConfirmedAt)
+                  db.ownedInstance(message.instanceId)?.endConfirmedAt
                 ) {
                   lifecycle.answered(requestId, true);
                   registry.takeRequester(requestId);
