@@ -61,6 +61,7 @@ import {
   READ_HOOK_SCRIPT,
   READ_MEMORY_FILE,
   READ_SKILL_FILES,
+  resumeCursor,
   settledQuestionResult,
 } from "@cawco/core";
 import { sessiondEndpoint } from "@cawco/core/sessiond";
@@ -1860,13 +1861,15 @@ export class ClaudeHarness implements Harness {
     spec: SpawnPayload,
     ctx: HarnessContext
   ): Promise<HarnessSession | undefined> {
-    const proc = (await this.custodyCandidates()).procs.find(
+    const welcome = await this.custodyCandidates();
+    const proc = welcome.procs.find(
       (child) => child.procId === ctx.instanceId && child.alive
     );
     if (!proc) {
       return undefined;
     }
     return this.adopt(ctx.instanceId, ctx, {
+      afterSeq: resumeCursor(procEpoch(welcome.epoch, proc.pid), ctx.ingested),
       head: proc.head,
       sessionId: spec.resume?.sessionKey ?? null,
       turnRunning: await this.turnRunning(ctx.instanceId, proc.head),

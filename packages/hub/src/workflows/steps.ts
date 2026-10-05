@@ -74,7 +74,6 @@ export interface StepContext {
     payload: SpawnPayload,
     fallbackMode: PermissionMode
   ) => Promise<void>;
-  readonly stopSession: (run: WorkflowRunRow, instanceId: string) => void;
   /** Whether the run has a supervisor, live now to take a decision. */
   readonly supervisorLive: (run: WorkflowRunRow) => boolean;
   readonly write: (
@@ -90,9 +89,19 @@ export const HOLD_DEADLINE_MS = 60 * 60_000;
 const MAX_HOLDS = 2;
 
 const active = (run: WorkflowRunRow) =>
-  run.status === "running" || run.status === "waiting";
+  !run.state.__ending && (run.status === "running" || run.status === "waiting");
 const reason = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
+
+interface HeldStop {
+  action?: "fail" | "retry";
+  deadline: number;
+  error?: string;
+  failure: string;
+}
+
+const heldStops = (run: WorkflowRunRow): Record<string, HeldStop> =>
+  (run.state.__heldStops as Record<string, HeldStop> | undefined) ?? {};
 
 /** The StepError a failed step hands its program, after `attempts` attempts. */
 export function stepError(
@@ -308,7 +317,13 @@ export function createSteps(ctx: StepContext) {
                 return;
               }
               if (currentStep.instanceId) {
-                await ctx.halt(current.machineId, currentStep.instanceId);
+                await haltAttempt(
+                  current,
+                  currentStep,
+                  deadline,
+                  "attempt-timeout"
+                );
+                return;
               }
               await ended(current, currentStep, "attempt-timeout");
             })
@@ -323,12 +338,9 @@ export function createSteps(ctx: StepContext) {
     );
   };
 
-  /** Stops a step's session and its timer: its run ended, or was cancelled. */
-  const stop = (run: WorkflowRunRow, step: WorkflowStepRow) => {
+  /** Retires a step timer; session end is awaited through the run's halt transaction. */
+  const stop = (_run: WorkflowRunRow, step: WorkflowStepRow) => {
     clearTimer(step.id);
-    if (step.instanceId) {
-      ctx.stopSession(run, step.instanceId);
-    }
   };
 
   /** A run's running steps whose session is no longer alive, and why it went. */
@@ -340,11 +352,16 @@ export function createSteps(ctx: StepContext) {
           step.kind !== "step" ||
           step.status !== "running" ||
           !step.instanceId ||
-          ctx.custodyPending(run.machineId, step.instanceId)
+          ctx.custodyPending(run.machineId, step.instanceId) ||
+          heldStops(run)[step.id]
         ) {
           return [];
         }
         const [instance] = db.getInstancesByIds([step.instanceId]);
+        const owner = db.ownedInstance(step.instanceId);
+        if (owner?.endIntent && !owner.endConfirmedAt) {
+          return [];
+        }
         return instance &&
           ["sleeping", "error", "stopped"].includes(instance.status)
           ? [
@@ -450,7 +467,7 @@ export function createSteps(ctx: StepContext) {
     step: WorkflowStepRow,
     error?: string
   ) => {
-    if (!active(run) || step.status !== "running") {
+    if (!active(runOf(run.id)) || step.status !== "running") {
       return;
     }
     const attempt = latest(step);
@@ -479,6 +496,70 @@ export function createSteps(ctx: StepContext) {
       return;
     }
     exhausted(run, step, attempt, spec);
+  };
+
+  const haltAttempt = async (
+    run: WorkflowRunRow,
+    step: WorkflowStepRow,
+    deadline: number,
+    failure: string,
+    action?: "fail" | "retry"
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: recording, refusal receipt and confirmed deferred action remain one serialized attempt-ownership transaction
+  ): Promise<void> => {
+    if (!active(runOf(run.id)) || step.status !== "running") {
+      return;
+    }
+    const held = heldStops(run);
+    const decision = held[step.id] ?? { deadline, failure };
+    if (action) {
+      decision.action = action;
+    }
+    run.state = { ...run.state, __heldStops: { ...held, [step.id]: decision } };
+    clearTimer(step.id);
+    ctx.write(run, step);
+    try {
+      if (step.instanceId) {
+        await ctx.halt(run.machineId, step.instanceId);
+      }
+    } catch (error) {
+      const refusal = reason(error);
+      const receipt = `Attempt timed out at ${new Date(decision.deadline).toISOString()}; its session could not be ended because ${refusal}. No retry starts until it is confirmed ended.${decision.action ? ` Recorded ${decision.action}; it takes effect after confirmation.` : ""}`;
+      step.failure = receipt;
+      const tell = decision.error !== refusal || !!action;
+      decision.error = refusal;
+      ctx.write(run, step);
+      if (tell) {
+        ctx.notify(
+          run,
+          `${workflowNoticeMarker(ctx.nameOf(run), `step ${specOf(step).title} stop held`)}${receipt}`
+        );
+      }
+      return;
+    }
+    if (!active(runOf(run.id))) {
+      return;
+    }
+    const remaining = { ...heldStops(run) };
+    delete remaining[step.id];
+    run.state = { ...run.state, __heldStops: remaining };
+    step.failure = null;
+    ctx.write(run, step);
+    if (!decision.action) {
+      await ended(run, step, decision.failure);
+      return;
+    }
+    const attempt = latest(step);
+    if (!attempt || attempt.endedAt) {
+      return;
+    }
+    attempt.failure = decision.failure;
+    attempt.endedAt = new Date();
+    ctx.write(run, step, attempt);
+    if (decision.action === "retry") {
+      await attemptStep(run, step, specOf(step), decision.failure);
+    } else {
+      ctx.settled(run, step, { failure: closeFailed(run, step, attempt) });
+    }
   };
 
   /** A step waiting on its supervisor's decision, or refused with why not. */
@@ -570,6 +651,9 @@ export function createSteps(ctx: StepContext) {
       ctx
         .serial(workflowRunId, async () => {
           const current = stepOf(workflowStepId);
+          if (heldStops(runOf(workflowRunId))[current.id]) {
+            return;
+          }
           if (latest(current)?.id !== observedAttempt) {
             return;
           }
@@ -619,7 +703,16 @@ export function createSteps(ctx: StepContext) {
             return;
           }
           if (current.instanceId) {
-            await ctx.halt(run.machineId, current.instanceId);
+            if (heldStops(run)[current.id]) {
+              return;
+            }
+            await haltAttempt(
+              run,
+              current,
+              deadline,
+              `${retry.message} — the provider's next attempt is at ${new Date(retry.nextAttemptAt).toISOString()}, past this attempt's deadline (${new Date(deadline).toISOString()})`
+            );
+            return;
           }
           await ended(
             run,
@@ -644,6 +737,22 @@ export function createSteps(ctx: StepContext) {
       step.failure = null;
       await attemptStep(run, step, specOf(step), last.failure ?? "");
       return stepOf(step.id);
+    },
+    async heldStopAction(
+      run: WorkflowRunRow,
+      step: WorkflowStepRow,
+      action: "fail" | "retry"
+    ): Promise<boolean> {
+      const decision = heldStops(run)[step.id];
+      if (!decision) {
+        return false;
+      }
+      ctx.notify(
+        run,
+        `${workflowNoticeMarker(ctx.nameOf(run), `step ${specOf(step).title} stop held`)}Recorded ${action}; no retry starts until session ${step.instanceId} is confirmed ended.`
+      );
+      await haltAttempt(run, step, decision.deadline, decision.failure, action);
+      return true;
     },
     /** The supervisor's decision on a held step: the program gets its StepError now. */
     fail(run: WorkflowRunRow, step: WorkflowStepRow) {
@@ -710,6 +819,17 @@ export function createSteps(ctx: StepContext) {
         .filter((row) => active(row) && row.machineId === machineId)) {
         ctx
           .serial(run.id, async () => {
+            for (const [id, decision] of Object.entries(
+              heldStops(runOf(run.id))
+            )) {
+              // biome-ignore lint/performance/noAwaitInLoops: a held stop settles before its next attempt may start
+              await haltAttempt(
+                runOf(run.id),
+                stepOf(id),
+                decision.deadline,
+                decision.failure
+              );
+            }
             for (const [step, why] of deadAttempts(run)) {
               // biome-ignore lint/performance/noAwaitInLoops: each dead attempt settles before the next is looked at
               await ended(runOf(run.id), step, why);
@@ -726,7 +846,12 @@ export function createSteps(ctx: StepContext) {
       for (const run of db.listWorkflowRuns().filter(active)) {
         for (const step of db.listWorkflowSteps(run.id)) {
           const attempt = step.status === "running" ? latest(step) : undefined;
-          if (step.kind !== "step" || !attempt || attempt.endedAt) {
+          if (
+            step.kind !== "step" ||
+            !attempt ||
+            attempt.endedAt ||
+            heldStops(run)[step.id]
+          ) {
             continue;
           }
           arm(

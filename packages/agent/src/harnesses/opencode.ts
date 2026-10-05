@@ -98,7 +98,7 @@ import {
 import { workspacesDir } from "../boundary";
 import { delegationHubUrl, harnessMcpUrl } from "../delegation";
 import type { Harness, HarnessContext, HarnessSession } from "../harness";
-import { HarnessRecoveryRefused } from "../harness";
+import { HarnessRecoveryRefused, SessionAddressRefused } from "../harness";
 import { isMachineAgent } from "../machine-agent";
 import { OPENCODE_SERVER_PROC_ID, parseProcId } from "../proc-id";
 import { ensureSessiond, SessiondClient } from "../sessiond-client";
@@ -3902,6 +3902,8 @@ export class OpencodeHarness implements Harness {
   #operationsPending(): boolean {
     return (
       !this.#custodyReadiness() ||
+      this.#applyGate !== null ||
+      this.#pendingSpawns.length > 0 ||
       this.#opening > 0 ||
       this.#mutatingMcp > 0 ||
       this.#migrations.size > 0 ||
@@ -5010,15 +5012,40 @@ export class OpencodeHarness implements Harness {
   }
 
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: runner idle and last-directory-owner confirmation must remain one ordered transaction
-  async endSession(sessionKey: string, dir: string): Promise<void> {
-    const generations = await this.#serverOwner.liveGenerations();
+  async endSession(
+    sessionKey: string,
+    dir: string,
+    instanceId?: string,
+    claimed: readonly string[] = []
+  ): Promise<void> {
+    if (
+      claimed.includes(sessionKey) ||
+      [...this.#sessions].some(
+        ([id, session]) => id !== instanceId && session.sessionId === sessionKey
+      ) ||
+      [...this.#pendingSessionAddresses].some(
+        ([id, address]) => id !== instanceId && address.sessionId === sessionKey
+      )
+    ) {
+      // Drop only A's routing; S's turn, handles and directory resources belong to B.
+      if (instanceId) {
+        const owner = this.#sessionOwners.get(instanceId);
+        this.#sessions.delete(instanceId);
+        this.#sessionOwners.delete(instanceId);
+        if (owner) {
+          this.#activity(owner).unbind(sessionKey, instanceId);
+        }
+      }
+      return;
+    }
+    const generations = await this.#completeGenerations(true);
     for (const identity of generations) {
       const client = this.#clientForGeneration(identity);
       const scope = { directory: dir };
       const options = { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) };
       // biome-ignore lint/performance/noAwaitInLoops: each generation owns distinct runners
       const before = await reached(client.session.status(scope, options));
-      if (before.error || !before.data) {
+      if (before.error || !before.data || !before.response?.ok) {
         throw new Error(`Could not read OpenCode custody for ${sessionKey}`);
       }
       if (
@@ -5038,12 +5065,13 @@ export class OpencodeHarness implements Harness {
       if (
         after.error ||
         !after.data ||
+        !after.response?.ok ||
         (after.data[sessionKey] && after.data[sessionKey]?.type !== "idle")
       ) {
         throw new Error(`OpenCode turn ${sessionKey} has not ended`);
       }
-      for (const session of this.#sessions.values()) {
-        if (session.sessionId === sessionKey) {
+      for (const [id, session] of this.#sessions) {
+        if (id === instanceId && session.sessionId === sessionKey) {
           // biome-ignore lint/performance/noAwaitInLoops: release each handle of exactly this conversation
           await session.dispose();
         }
@@ -5066,11 +5094,73 @@ export class OpencodeHarness implements Harness {
         this.#pumpConnected.delete(key);
         // Directory exit is part of this positive end receipt.
         const released = await reached(client.instance.dispose(scope, options));
-        if (released.error) {
+        if (released.error || !released.response?.ok) {
           throw new Error(`OpenCode directory resources did not close: ${dir}`);
         }
       }
     }
+    if (this.#operationsPending()) {
+      throw new Error("OpenCode ownership changed during its end reading.");
+    }
+  }
+
+  async #completeGenerations(
+    requireGeneration = false
+  ): Promise<ServerIdentity[]> {
+    if (this.#operationsPending()) {
+      throw new Error(
+        "OpenCode runner reading is incomplete while ownership operations are pending."
+      );
+    }
+    const generations = await this.#serverOwner.liveGenerations();
+    const held = await (await this.sessiond()).list();
+    if (
+      (requireGeneration && generations.length === 0) ||
+      held.procs.some(
+        (proc) =>
+          proc.alive &&
+          parseProcId(proc.procId).kind === "opencode-server" &&
+          !generations.some(
+            (identity) =>
+              identity.procId === proc.procId &&
+              identity.pid === proc.pid &&
+              identity.epoch === held.epoch
+          )
+      )
+    ) {
+      throw new Error(
+        "OpenCode runner reading is incomplete: no complete recorded generation custody."
+      );
+    }
+    return generations;
+  }
+
+  async sessionPresent(
+    sessionKey: string,
+    directory: string
+  ): Promise<boolean> {
+    const generations = await this.#completeGenerations(true);
+    const readings = await Promise.all(
+      generations.map(async (identity) => {
+        const reading = await reached(
+          this.#clientForGeneration(identity).session.get(
+            { directory, sessionID: sessionKey },
+            { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
+          )
+        );
+        if (reading.response?.status === 404) {
+          return false;
+        }
+        if (!reading.response?.ok || reading.error || !reading.data) {
+          throw new Error("OpenCode session reading is incomplete.");
+        }
+        return true;
+      })
+    );
+    if (this.#operationsPending()) {
+      throw new Error("OpenCode ownership changed during its session reading.");
+    }
+    return readings.some(Boolean);
   }
 
   sessionAddresses(): import("@cawco/core").SessionAddress[] {
@@ -5088,25 +5178,7 @@ export class OpencodeHarness implements Harness {
     claimed: readonly string[]
   ): Promise<{ count: number; readStartedAt: number }> {
     const readStartedAt = Date.now();
-    if (this.#operationsPending()) {
-      throw new Error(
-        "OpenCode runner reading is incomplete while ownership operations are pending."
-      );
-    }
-    const generations = await this.#serverOwner.liveGenerations();
-    const held = await (await this.sessiond()).list();
-    if (
-      held.procs.some(
-        (proc) =>
-          proc.alive &&
-          parseProcId(proc.procId).kind === "opencode-server" &&
-          !generations.some((generation) => generation.procId === proc.procId)
-      )
-    ) {
-      throw new Error(
-        "OpenCode runner reading is incomplete: a held generation has no recorded address."
-      );
-    }
+    const generations = await this.#completeGenerations();
     const known = new Set(claimed);
     const unclaimed = new Set<string>();
     const readings = await Promise.all(
@@ -5182,7 +5254,10 @@ export class OpencodeHarness implements Harness {
         // biome-ignore lint/performance/noAwaitInLoops: unresolved custody is retried, never converted to spawn failure
         return await this.#reattachOnce(spec, ctx, wave.round);
       } catch (error) {
-        if (error instanceof HarnessRecoveryRefused) {
+        if (
+          error instanceof HarnessRecoveryRefused ||
+          error instanceof SessionAddressRefused
+        ) {
           throw error;
         }
         const delay = Math.min(250 * 2 ** Math.min(attempt, 5), 5000);

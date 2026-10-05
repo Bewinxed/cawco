@@ -7,7 +7,8 @@
  * as neutral messages, with the harness's `raw` event riding along.
  */
 
-import { mkdir, stat } from "node:fs/promises";
+import { mkdir, rm, stat } from "node:fs/promises";
+import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import type {
   AgentBusyReport,
@@ -67,8 +68,9 @@ import { harnessMcpUrl } from "./delegation";
 import { DEPLOY_BRANCH } from "./deploy";
 import { expandHome, runFs } from "./fs";
 import type { Harness, HarnessContext, HarnessSession } from "./harness";
-import { HarnessRecoveryRefused } from "./harness";
+import { HarnessRecoveryRefused, SessionAddressRefused } from "./harness";
 import { harnesses, harness as harnessOf } from "./harnesses";
+import { hashText, readJson, writeJson } from "./harnesses/fleet-common";
 import { generateImage } from "./image-generation";
 import { isMachineAgent } from "./machine-agent";
 import { prepareFleetMcp } from "./mcp-launcher";
@@ -443,6 +445,19 @@ export const agreedHashes = (
 };
 
 export class SessionSupervisor {
+  #stopSequence = 0;
+
+  get stopSequence(): number {
+    return this.#stopSequence;
+  }
+
+  resetStopSequence(): void {
+    this.#stopSequence = 0;
+  }
+
+  receivedStop(sequence: number): void {
+    this.#stopSequence = Math.max(this.#stopSequence, sequence);
+  }
   #custodyState: AgentBusyReport["recovery"] = "recovering";
   #custodyError: string | undefined;
   #custodyEpoch = 0;
@@ -455,6 +470,35 @@ export class SessionSupervisor {
         warn(`the idle sweep failed: ${error}`)
       );
     }, IDLE_SWEEP_MS).unref();
+  }
+
+  async removedSessionCustody(
+    rows: { id: string; sessionId: string | null; cwd: string }[],
+    claimed: string[]
+  ): Promise<{ id: string; present: boolean | null }[]> {
+    const adapter = this.#adapter("opencode");
+    return await Promise.all(
+      rows.map(async (row) => {
+        try {
+          if (row.sessionId) {
+            if (!adapter.sessionPresent) {
+              throw new Error("No complete server-session reading available.");
+            }
+            return {
+              id: row.id,
+              present: await adapter.sessionPresent(row.sessionId, row.cwd),
+            };
+          }
+          if (!adapter.unclaimedRunners) {
+            throw new Error("No complete runner reading available.");
+          }
+          const reading = await adapter.unclaimedRunners(row.cwd, claimed);
+          return { id: row.id, present: reading.count === 0 ? false : null };
+        } catch {
+          return { id: row.id, present: null };
+        }
+      })
+    );
   }
   readonly #sessions = new Map<string, HarnessSession>();
   /**
@@ -632,7 +676,9 @@ export class SessionSupervisor {
         } else {
           this.#addressCancelled.add(id);
           pending.ack.reject(
-            new Error("The session ended before its address was acknowledged.")
+            new SessionAddressRefused(
+              "The session ended before its address was acknowledged."
+            )
           );
         }
       }
@@ -1383,20 +1429,51 @@ export class SessionSupervisor {
     return false;
   }
 
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: shared spawn transaction rechecks recovery after asynchronous adoption and workdir preparation
   async #spawn(payload: SpawnPayload): Promise<void> {
-    const { instanceId, cwd, harness: kind, scratch, requestId: ack } = payload;
-    if (payload.reattachOnly || payload.resume) {
-      await this.#adopting.get(instanceId);
+    const id = payload.instanceId;
+    const prior = this.#adopting.get(id);
+    if (prior) {
+      await prior;
       if (this.#reuseRecovery(payload)) {
         return;
       }
+      return this.#spawn(payload);
+    }
+    if (this.#reuseRecovery(payload)) {
+      return;
+    }
+    // Claim before the first await: register adoption and direct spawns share it.
+    const claim = Promise.withResolvers<void>();
+    this.#adopting.set(id, claim.promise);
+    try {
+      await this.#spawnClaimed(payload);
+    } finally {
+      if (this.#adopting.get(id) === claim.promise) {
+        this.#adopting.delete(id);
+      }
+      claim.resolve();
+    }
+  }
+
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one claimed spawn owns preparation, address acknowledgement, publication and refusal cleanup
+  async #spawnClaimed(payload: SpawnPayload): Promise<void> {
+    const { instanceId, cwd, harness: kind, scratch, requestId: ack } = payload;
+    if (payload.processGeneration) {
+      this.#generations.set(instanceId, payload.processGeneration);
     }
     const adapter = this.#adapter(kind);
+    if (payload.resume && !payload.resume.fork) {
+      this.#resumable.set(instanceId, {
+        adapter,
+        sessionKey: payload.resume.sessionKey,
+        cwd: expandHome(cwd),
+      });
+    }
     try {
-      let workdir = payload.reattachOnly
-        ? expandHome(payload.cwd)
-        : await this.#workdir(payload);
+      if (payload.scratchWorktree) {
+        this.#worktrees.set(instanceId, payload.scratchWorktree);
+      }
+      let workdir = await this.#workdir(payload);
       if (workdir === undefined) {
         this.#recoveryUnavailable(
           payload,
@@ -1471,6 +1548,9 @@ export class SessionSupervisor {
       // A work item's session runs every shell command inside its workspace's
       // boundary, and does not start without one: the refusal is the spawn's.
       const boundary = await boundaryFor(payload.workspace);
+      if (payload.ingested) {
+        this.#ingested.set(instanceId, payload.ingested);
+      }
       const holder: { session: HarnessSession | null } = { session: null };
       const ctx = this.#context(
         instanceId,
@@ -1543,7 +1623,8 @@ export class SessionSupervisor {
         });
       }
     } catch (error) {
-      if (payload.reattachOnly || this.#addressCancelled.delete(instanceId)) {
+      const cancelled = this.#addressCancelled.delete(instanceId);
+      if (cancelled || payload.reattachOnly) {
         return;
       }
       const message = error instanceof Error ? error.message : String(error);
@@ -1640,6 +1721,9 @@ export class SessionSupervisor {
       instanceId,
       cwd: workdir,
       ...(boundary ? { boundary } : {}),
+      ...(this.#ingested.get(instanceId)
+        ? { ingested: this.#ingested.get(instanceId) }
+        : {}),
       ...(sessionCredential ? { sessionCredential } : {}),
       /**
        * The sessiond line the NEXT frame is derived from. Optional on purpose:
@@ -2028,6 +2112,13 @@ export class SessionSupervisor {
     { row, proc, running, settle }: Claimed,
     ingested: Record<string, IngestMark> | undefined
   ): Promise<void> {
+    if (!(await isDirectory(expandHome(row.cwd)))) {
+      this.#recoveryUnavailable(
+        { ...row, reattachOnly: true },
+        "The recovery directory is no longer available."
+      );
+      return;
+    }
     // THE HONEST-LOSS RULE (design §7). A mark in THIS child's sequence space
     // — sessiond's current boot and this process — is a cursor: replay
     // exactly the gap the hub named. Anything else is replayed as NOTHING and
@@ -2292,6 +2383,7 @@ export class SessionSupervisor {
     sessionId,
     cwd,
     claimedSessionIds = [],
+    scratchWorktree,
   }: StopPayload): Promise<void> {
     const processGeneration =
       namedGeneration ?? this.#generations.get(instanceId);
@@ -2305,6 +2397,7 @@ export class SessionSupervisor {
       const session = this.#sessions.get(instanceId);
       const kind = harness ?? session?.harness;
       let ended: Extract<FramePayload, { kind: "stopped" }>["ended"];
+      let sharedConversation = false;
       if (kind === "opencode") {
         const key = sessionId ?? session?.sessionId;
         const directory = cwd ?? this.#resumable.get(instanceId)?.cwd;
@@ -2315,11 +2408,32 @@ export class SessionSupervisor {
           );
         }
         if (key) {
-          await adapter.endSession(key, directory);
+          const shared =
+            claimedSessionIds.includes(key) ||
+            [...this.#sessions].some(
+              ([id, held]) =>
+                id !== instanceId &&
+                held.harness === "opencode" &&
+                held.sessionId === key
+            ) ||
+            [...this.#resumable].some(
+              ([id, held]) =>
+                id !== instanceId &&
+                held.adapter.kind === "opencode" &&
+                held.sessionKey === key
+            );
+          sharedConversation = shared;
+          await adapter.endSession(
+            key,
+            directory,
+            instanceId,
+            shared ? [...claimedSessionIds, key] : claimedSessionIds
+          );
           ended = {
             harness: "opencode",
             sessionId: key,
             resourcesClosed: true,
+            ...(shared ? { reason: "conversation held by another row" } : {}),
           };
         } else {
           if (!adapter.unclaimedRunners) {
@@ -2364,8 +2478,11 @@ export class SessionSupervisor {
         ended = { harness: kind ?? "claude", resourcesClosed: true };
       }
       this.#resumable.delete(instanceId);
-      if (discard) {
-        await this.#removeWorktree(instanceId, cwd);
+      if (discard && !sharedConversation) {
+        if (scratchWorktree) {
+          this.#worktrees.set(instanceId, scratchWorktree);
+        }
+        await this.#removeWorktree(instanceId);
         if (!this.#quests.has(instanceId) && sessionId && cwd) {
           this.#quests.set(instanceId, {
             dir: cwd,
@@ -2373,7 +2490,9 @@ export class SessionSupervisor {
             harness: harness ?? "claude",
           });
         }
-        await this.#removeQuestSession(instanceId);
+        if (!(sessionId && claimedSessionIds.includes(sessionId))) {
+          await this.#removeQuestSession(instanceId);
+        }
       }
       this.sink({
         kind: "stopped",
@@ -2452,6 +2571,12 @@ export class SessionSupervisor {
    * no commit to check out (not a repo, or an empty one) runs as it is.
    */
   async #addWorktree(instanceId: string, baseCwd: string): Promise<string> {
+    const recorded = await readJson<Worktree>(this.#worktreeRecord(instanceId));
+    if (recorded) {
+      this.#worktrees.set(instanceId, recorded);
+      this.#recordWorktree(instanceId, recorded);
+      return recorded.dir;
+    }
     const repository =
       await Bun.$`git -C ${baseCwd} rev-parse --show-toplevel --show-prefix HEAD`
         .quiet()
@@ -2469,6 +2594,11 @@ export class SessionSupervisor {
       .quiet()
       .text();
     const reused = listed.split("\n").includes(`worktree ${path}`);
+    if (reused) {
+      throw new Error(
+        `Refusing to claim an unrecorded existing worktree: ${path}`
+      );
+    }
     let base: string | undefined;
     if (!reused) {
       // The remote's default branch as the remote has it now, not the local
@@ -2492,38 +2622,52 @@ export class SessionSupervisor {
     }
 
     const dir = join(path, prefix);
-    this.#worktrees.set(instanceId, {
+    const worktree = {
       path,
       root,
       dir,
       ...(reused ? {} : { announce: { cwd: baseCwd, base } }),
-    });
+    };
+    await mkdir(dirname(this.#worktreeRecord(instanceId)), { recursive: true });
+    await writeJson(this.#worktreeRecord(instanceId), worktree);
+    this.#worktrees.set(instanceId, worktree);
+    this.#recordWorktree(instanceId, worktree);
     return dir;
   }
 
-  async #removeWorktree(instanceId: string, cwd?: string): Promise<void> {
-    let worktree = this.#worktrees.get(instanceId);
-    if (!worktree && cwd && (await isDirectory(cwd))) {
-      const git =
-        await Bun.$`git -C ${cwd} rev-parse --path-format=absolute --show-toplevel --git-common-dir`
-          .quiet()
-          .nothrow();
-      if (git.exitCode === 0) {
-        const [path, common] = git.text().trim().split("\n");
-        if (
-          path &&
-          common &&
-          basename(common) === ".git" &&
-          (await stat(join(path, ".git")).catch(() => undefined))?.isFile()
-        ) {
-          worktree = { path, root: dirname(common), dir: cwd };
-        }
-      }
+  #worktreeRecord(instanceId: string): string {
+    return join(
+      homedir(),
+      ".cawco",
+      "scratch-worktrees",
+      `${hashText(instanceId)}.json`
+    );
+  }
+
+  #recordWorktree(instanceId: string, worktree: Worktree): void {
+    const processGeneration = this.#generations.get(instanceId);
+    if (processGeneration) {
+      this.sink({
+        kind: "scratch_worktree",
+        instanceId,
+        processGeneration,
+        worktree,
+      });
     }
+  }
+
+  async #removeWorktree(instanceId: string): Promise<void> {
+    const worktree =
+      this.#worktrees.get(instanceId) ??
+      (await readJson<Worktree>(this.#worktreeRecord(instanceId)));
     if (!worktree) {
       return;
     }
-    this.#worktrees.delete(instanceId);
+    if (!(await isDirectory(worktree.path))) {
+      this.#worktrees.delete(instanceId);
+      await rm(this.#worktreeRecord(instanceId), { force: true });
+      return;
+    }
 
     const removed =
       await Bun.$`git -C ${worktree.root} worktree remove --force ${worktree.path}`
@@ -2535,6 +2679,8 @@ export class SessionSupervisor {
       );
     }
     await Bun.$`git -C ${worktree.root} worktree prune`.quiet().nothrow();
+    this.#worktrees.delete(instanceId);
+    await rm(this.#worktreeRecord(instanceId), { force: true });
   }
 
   /** Discarding a side quest throws its transcript away too. */

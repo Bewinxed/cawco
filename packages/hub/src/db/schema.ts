@@ -190,6 +190,9 @@ export const workflowAttempts = sqliteTable("workflow_attempts", {
 
 /** Machines running an agent daemon, keyed by their stable hardware fingerprint. */
 export const agents = sqliteTable("agents", {
+  addressContract: integer("address_contract", { mode: "boolean" })
+    .notNull()
+    .default(false),
   browserAvailable: integer("browser_available", { mode: "boolean" })
     .notNull()
     .default(false),
@@ -247,10 +250,23 @@ export const projects = sqliteTable("projects", {
 
 /** A running or resumable `query()`. Messages live in SDK session storage, not here. */
 export const instances = sqliteTable("instances", {
+  /** Birth contract, immutable on retries; acknowledgement is recorded separately. */
+  addressRequired: integer("address_required", { mode: "boolean" })
+    .notNull()
+    .default(false),
+  /** Removed machines keep ownership hidden without an end decision. */
+  machineRemoved: integer("machine_removed", { mode: "boolean" })
+    .notNull()
+    .default(false),
+  scratchWorktree: text("scratch_worktree", { mode: "json" }).$type<
+    import("@cawco/core").ScratchWorktree
+  >(),
   addressProtocol: integer("address_protocol", { mode: "boolean" })
     .notNull()
     .default(false),
   endReason: text("end_reason"),
+  endRetryAt: timestamp("end_retry_at"),
+  endAttempts: integer("end_attempts").notNull().default(0),
   /** The hub's decision, independent of process presence and attachment. */
   endIntent: text("end_intent").$type<
     "stop" | "discard" | "delete" | "delete-transcript"

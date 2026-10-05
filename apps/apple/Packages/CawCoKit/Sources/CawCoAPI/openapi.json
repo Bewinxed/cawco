@@ -9425,6 +9425,9 @@
             "$ref": "#/components/schemas/SessionAddressFrame"
           },
           {
+            "$ref": "#/components/schemas/ScratchWorktreeFrame"
+          },
+          {
             "$ref": "#/components/schemas/UserMessageFrame"
           },
           {
@@ -9466,6 +9469,7 @@
             "control_result": "#/components/schemas/ControlResultFrame",
             "error": "#/components/schemas/ErrorFrame",
             "session_address": "#/components/schemas/SessionAddressFrame",
+            "scratch_worktree": "#/components/schemas/ScratchWorktreeFrame",
             "user_message": "#/components/schemas/UserMessageFrame",
             "pulse": "#/components/schemas/PulseFrame",
             "work_item": "#/components/schemas/WorkItemFrame",
@@ -9529,6 +9533,10 @@
               "pi"
             ],
             "type": "string"
+          },
+          "ingested": {
+            "$ref": "#/components/schemas/IngestMark",
+            "description": "Hub ingest cursor for a recovery sent after the registration handover."
           },
           "instanceId": {
             "type": "string"
@@ -9626,6 +9634,10 @@
               }
             }
           },
+          "scratchWorktree": {
+            "$ref": "#/components/schemas/ScratchWorktree",
+            "description": "Creation provenance, stored by the agent and carried durably on its hub row."
+          },
           "sessionCredential": {
             "description": "Hub-minted session credential: delivery only, never transcript or instance metadata.",
             "type": "string"
@@ -9711,8 +9723,16 @@
             "description": "Correlates the `control_result` frame confirming stop/discard or its failure.",
             "type": "string"
           },
+          "scratchWorktree": {
+            "$ref": "#/components/schemas/ScratchWorktree",
+            "description": "Creation provenance, stored by the agent and carried durably on its hub row."
+          },
           "sessionId": {
             "type": "string"
+          },
+          "stopSequence": {
+            "description": "Connection-local hub order, echoed by reads begun after receipt.",
+            "type": "number"
           }
         },
         "required": [
@@ -11680,6 +11700,15 @@
                   },
                   "readStartedAt": {
                     "type": "number"
+                  },
+                  "stopSequence": {
+                    "type": "number"
+                  },
+                  "pending": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
                   }
                 },
                 "required": [
@@ -17468,6 +17497,52 @@
           "sessionId"
         ]
       },
+      "ScratchWorktreeFrame": {
+        "type": "object",
+        "properties": {
+          "instanceId": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "scratch_worktree"
+            ]
+          },
+          "processGeneration": {
+            "type": "string"
+          },
+          "worktree": {
+            "$ref": "#/components/schemas/ScratchWorktree"
+          }
+        },
+        "required": [
+          "instanceId",
+          "kind",
+          "processGeneration",
+          "worktree"
+        ]
+      },
+      "ScratchWorktree": {
+        "description": "Creation provenance, stored by the agent and carried durably on its hub row.",
+        "type": "object",
+        "properties": {
+          "dir": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "root": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "dir",
+          "path",
+          "root"
+        ]
+      },
       "UserMessageFrame": {
         "type": "object",
         "properties": {
@@ -18060,6 +18135,22 @@
           "startedAt",
           "status",
           "title"
+        ]
+      },
+      "IngestMark": {
+        "description": "The hub's word on how far it has ingested one instance: the last line it\nturned into a frame. Handed back on the register ack so a reattaching agent\nreplays exactly the gap the hub names — the mark is the hub's own, so the\nagent's death loses nothing it needs.",
+        "type": "object",
+        "properties": {
+          "epoch": {
+            "type": "string"
+          },
+          "srcSeq": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "epoch",
+          "srcSeq"
         ]
       },
       "WorkspaceRef": {

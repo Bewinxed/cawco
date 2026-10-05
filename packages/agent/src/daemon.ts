@@ -472,7 +472,10 @@ export const custodyRow = (
  * What the register says about this machine's sessions: what sessiond is still
  * holding, and what each harness could resume.
  */
-const readCustody = async (): Promise<SessionCustody> => {
+const readCustody = async (
+  stopSequence = 0,
+  pending: string[] = []
+): Promise<SessionCustody> => {
   const readStartedAt = Date.now();
   try {
     const client = await SessiondClient.connect(
@@ -483,6 +486,8 @@ const readCustody = async (): Promise<SessionCustody> => {
       return {
         state: "available",
         readStartedAt,
+        stopSequence,
+        pending,
         instances: held.flatMap((proc) => {
           const id = parseProcId(proc.procId);
           return id.kind === "claude" || id.kind === "pi"
@@ -559,10 +564,13 @@ const attach = (
     // see {@link sessionsReader}.
     const reading = sessions();
     const socket = yield* connection(url);
+    supervisor.resetStopSequence();
     process.env[CAWCO_ENV.hubUrl] = url;
     const { catalog } = yield* Effect.promise(() => reading);
     // Catalog reads may be cached across reconnects; process absence may not.
-    const custody = yield* Effect.promise(readCustody);
+    const custody = yield* Effect.promise(() =>
+      readCustody(supervisor.stopSequence, supervisor.custodyInstanceIds)
+    );
     const build = yield* Effect.promise(() => buildInfo());
     // Consumed, not just read: true only the first register after THIS
     // process came up because a deploy restarted it onto `build.commit`, and
@@ -580,7 +588,7 @@ const attach = (
     ): RegisterPayload => ({
       ...identity,
       sessionAddresses: supervisor.sessionAddresses,
-      instances: supervisor.custodyInstanceIds,
+      instances: supervisor.instanceIds,
       previews: servingPreviews(),
       custody: snapshot.custody,
       ...(snapshot.catalog
@@ -649,6 +657,7 @@ const attach = (
     socket.addEventListener(
       "close",
       () => {
+        supervisor.resetStopSequence();
         clearTimeout(registrationDeadline);
         recoveryController?.abort(new Error("Custody connection was lost."));
         supervisor.failCustody(
@@ -849,9 +858,20 @@ const attach = (
      */
     const reattaching: Promise<void>[] = [];
     supervisor.registerDaemonFunction("sessionCustody", async () => ({
-      custody: await readCustody(),
-      attached: supervisor.custodyInstanceIds,
+      custody: await readCustody(
+        supervisor.stopSequence,
+        supervisor.custodyInstanceIds
+      ),
+      attached: supervisor.instanceIds,
     }));
+    supervisor.registerDaemonFunction(
+      "removedSessionCustody",
+      (rows, claimed) =>
+        supervisor.removedSessionCustody(
+          rows as { id: string; sessionId: string | null; cwd: string }[],
+          claimed as string[]
+        )
+    );
 
     const takeCustody = (ackPayload: unknown, spawns: Envelope[]): void => {
       clearTimeout(registrationDeadline);
@@ -884,14 +904,17 @@ const attach = (
             .splice(0)
             .map((envelope) => supervisor.dispatch(envelope))
         );
-        const freshCustody = await readCustody();
+        const freshCustody = await readCustody(
+          supervisor.stopSequence,
+          supervisor.custodyInstanceIds
+        );
         signal.throwIfAborted();
         send(socket, {
           verb: "heartbeat",
           machineId: identity.machineId,
           payload: {
             at: Date.now(),
-            instances: supervisor.custodyInstanceIds,
+            instances: supervisor.instanceIds,
             custody: freshCustody,
           } satisfies HeartbeatPayload,
         });
@@ -982,6 +1005,20 @@ const attach = (
 
     socket.addEventListener("message", (event) => {
       const envelope = JSON.parse(String(event.data)) as Envelope;
+      if (envelope.verb === "stop") {
+        supervisor.receivedStop(
+          (envelope.payload as import("@cawco/core").StopPayload)
+            .stopSequence ?? 0
+        );
+      }
+      if (
+        envelope.verb === "control" &&
+        (envelope.payload as import("@cawco/core").ControlPayload).method ===
+          "acknowledgeSessionAddress"
+      ) {
+        supervisor.dispatch(envelope);
+        return;
+      }
       if (awaitingRegisterAck && beforeAck(envelope)) {
         return;
       }
@@ -1017,8 +1054,11 @@ const attach = (
             payload: {
               at: Date.now(),
               sessionAddresses: supervisor.sessionAddresses,
-              instances: supervisor.custodyInstanceIds,
-              custody: await readCustody(),
+              instances: supervisor.instanceIds,
+              custody: await readCustody(
+                supervisor.stopSequence,
+                supervisor.custodyInstanceIds
+              ),
               ...(changedPiAuth() ? { harnesses: reportedHarnesses } : {}),
               ...(latestDeploy() ? { deploy: latestDeploy() } : {}),
             } satisfies HeartbeatPayload,

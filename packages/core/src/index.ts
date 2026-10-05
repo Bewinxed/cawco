@@ -134,6 +134,8 @@ export interface SpawnPayload {
   effort?: import("./harness").EffortLevel;
   /** Which harness runs the session. Absent = `claude`. */
   harness?: import("./harness").HarnessKind;
+  /** Hub ingest cursor for a recovery sent after the registration handover. */
+  ingested?: import("./stream").IngestMark;
   instanceId: string;
   /** The in-flight maintenance send a surviving Claude process is answering. */
   keepAliveTurn?: string;
@@ -181,6 +183,7 @@ export interface SpawnPayload {
    * experiment cannot touch the checkout the mainline session is using.
    */
   scratch?: { worktree?: boolean; baseCwd?: string };
+  scratchWorktree?: ScratchWorktree;
   /** Hub-minted session credential: delivery only, never transcript or instance metadata. */
   sessionCredential?: string;
   /**
@@ -336,7 +339,10 @@ export interface StopPayload {
   processGeneration?: string;
   /** Correlates the `control_result` frame confirming stop/discard or its failure. */
   requestId?: string;
+  scratchWorktree?: ScratchWorktree;
   sessionId?: string;
+  /** Connection-local hub order, echoed by reads begun after receipt. */
+  stopSequence?: number;
 }
 
 /**
@@ -458,6 +464,8 @@ export type SessionCustody =
       instances: string[];
       opencode: boolean;
       readStartedAt?: number;
+      stopSequence?: number;
+      pending?: string[];
     }
   | { state: "unavailable"; error: string };
 
@@ -472,6 +480,13 @@ export type SessionEndIntent =
   | "discard"
   | "delete"
   | "delete-transcript";
+
+/** Creation provenance, stored by the agent and carried durably on its hub row. */
+export interface ScratchWorktree {
+  dir: string;
+  path: string;
+  root: string;
+}
 
 /** mDNS and router suffixes: they say "same network", which the fleet already implies. */
 const LOCAL_SUFFIXES = [".local", ".lan", ".home"];
@@ -893,6 +908,7 @@ export type FramePayload =
   | import("./frames").ControlResultFrame
   | import("./frames").ErrorFrame
   | import("./frames").SessionAddressFrame
+  | import("./frames").ScratchWorktreeFrame
   | import("./frames").UserMessageFrame
   | import("./frames").PulseFrame
   | import("./frames").WorkItemFrame

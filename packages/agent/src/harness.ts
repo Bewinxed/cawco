@@ -33,6 +33,8 @@ import type {
 
 /** Known surviving custody requires an operator decision, not another probe or a replacement. */
 export class HarnessRecoveryRefused extends Error {}
+/** A refusal is final for its launch attempt, including recovery attempts. */
+export class SessionAddressRefused extends Error {}
 
 /** Everything a harness needs from the supervisor while it owns a session. */
 export interface HarnessContext {
@@ -59,6 +61,7 @@ export interface HarnessContext {
   /** Ship one neutral frame toward the hub. */
   // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
   frame(message: NeutralMessage): void;
+  readonly ingested?: import("@cawco/core").IngestMark;
   readonly instanceId: string;
   /** Park a permission request; the supervisor forwards it and tracks the reply. */
   // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
@@ -149,7 +152,12 @@ export interface Harness {
   dispose?(): Promise<void>;
   /** Confirm a server session's turn and resources ended without adopting it. */
   // biome-ignore lint/style/useConsistentMethodSignatures: matches adapter methods
-  endSession?(sessionKey: string, dir: string): Promise<void>;
+  endSession?(
+    sessionKey: string,
+    dir: string,
+    instanceId?: string,
+    claimed?: readonly string[]
+  ): Promise<void>;
   /** What the harness has of what cawco last put on it, without changing it. */
   // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
   fleetStatus?(): Promise<FleetSyncReport>;
@@ -190,6 +198,10 @@ export interface Harness {
   /** Exact addresses retained by this adapter, never reconstructed by guessing. */
   // biome-ignore lint/style/useConsistentMethodSignatures: matches adapter methods
   sessionAddresses?(): import("@cawco/core").SessionAddress[];
+  readonly sessionPresent?: (
+    sessionKey: string,
+    dir: string
+  ) => Promise<boolean>;
   /** Lifecycle guards read the supervisor's one machine recovery barrier. */
   readonly setCustodyReadiness?: (read: () => boolean) => void;
   /** Start a session; resolves once the runtime handle is in place. */

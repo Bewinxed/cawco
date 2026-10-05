@@ -849,6 +849,14 @@ const peekCustody = (payload: unknown): SessionCustody => {
     state: "available",
     instances: peekInstances(value),
     opencode: (value as { opencode?: unknown } | null)?.opencode === true,
+    ...(Number.isSafeInteger((value as { stopSequence?: unknown }).stopSequence)
+      ? { stopSequence: (value as { stopSequence: number }).stopSequence }
+      : {}),
+    pending: Array.isArray((value as { pending?: unknown }).pending)
+      ? (value as { pending: unknown[] }).pending.filter(
+          (id): id is string => typeof id === "string"
+        )
+      : [],
     ...(typeof (value as { readStartedAt?: unknown }).readStartedAt === "number"
       ? { readStartedAt: (value as { readStartedAt: number }).readStartedAt }
       : {}),
@@ -1691,24 +1699,26 @@ export const createServer = (
     agent: HubSocket,
     machineId: string,
     claim: SessionAddress
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: persist, verify, acknowledge or refuse, then re-address an end as one generation-fenced transaction
   ): void => {
-    const row = db
-      .sessionOwnership(machineId)
-      .find((owner) => owner.id === claim.instanceId);
+    const row = db.ownedInstance(claim.instanceId, machineId);
     const acknowledged =
       row &&
       (!claim.processGeneration ||
         claim.processGeneration === processGeneration(row)) &&
       row.harness === "opencode" &&
       !row.endConfirmedAt &&
-      !(row.endIntent && row.addressProtocol && !row.sessionId);
+      !(row.endIntent && row.addressRequired && !row.sessionId);
     if (acknowledged) {
       db.noteInstanceSession(row.id, claim.sessionId, undefined, "opencode");
-      if (
-        db.sessionOwnership(machineId).find((owner) => owner.id === row.id)
-          ?.sessionId !== claim.sessionId
-      ) {
+      if (db.ownedInstance(row.id, machineId)?.sessionId !== claim.sessionId) {
         return;
+      }
+      if (!row.endIntent) {
+        db.acknowledgeAddress(row.id);
+      } else if (row.sessionId !== claim.sessionId) {
+        // A legacy carried address changes the coordinates of an already queued end.
+        lifecycle.deliveryFailed(row.id);
       }
     }
     agent.send({
@@ -1726,6 +1736,9 @@ export const createServer = (
         ],
       },
     });
+    if (acknowledged && row.endIntent && row.sessionId !== claim.sessionId) {
+      lifecycle.reconcile(machineId);
+    }
   };
 
   /**
@@ -2877,7 +2890,12 @@ export const createServer = (
     payload: SpawnPayload,
     knownRow?: InstanceRow
   ): SpawnPayload => {
-    const { sessionCredential: _callerCredential, ...asked } = payload;
+    const {
+      sessionCredential: _callerCredential,
+      scratchWorktree: _callerWorktree,
+      ...asked
+    } = payload;
+    const owned = db.ownedInstance(payload.instanceId);
     const [stored] = db.getInstancesByIds([payload.instanceId]);
     if (!stored) {
       throw new Error("A spawn has no recorded process generation.");
@@ -2896,6 +2914,9 @@ export const createServer = (
         : undefined;
     return {
       ...asked,
+      ...(owned?.scratchWorktree
+        ? { scratchWorktree: owned.scratchWorktree }
+        : {}),
       processGeneration: processGeneration(stored),
       ...(stored.keepAliveTurn ? { keepAliveTurn: stored.keepAliveTurn } : {}),
       ...(workspace ? { workspace } : {}),
@@ -3733,16 +3754,7 @@ export const createServer = (
    */
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: resolves a session's location from the cache, the stored row, or a live ask across every machine and harness in one place; splitting it would scatter the fallback order this depends on.
   const locateSession = async (id: string): Promise<SessionLocation | null> => {
-    if (
-      db
-        .sessionOwnership()
-        .some(
-          (owner) =>
-            (owner.id === id || owner.sessionId === id) &&
-            owner.endIntent &&
-            owner.endIntent !== "stop"
-        )
-    ) {
+    if (db.hiddenSession(id)) {
       return null;
     }
     const known = locations.get(id);
@@ -4096,11 +4108,125 @@ export const createServer = (
   };
 
   const refreshingCustody = new Set<string>();
+  const guardedDashboardMessage =
+    <
+      S extends HubSocket & {
+        headers: Record<string, string | undefined>;
+        remoteAddress: string;
+      },
+    >(
+      handle: (ws: S, message: unknown) => void
+    ) =>
+    (ws: S, message: unknown): void => {
+      try {
+        handle(ws, message);
+      } catch (error) {
+        if (isEnvelope(message)) {
+          toDashboard(
+            ws,
+            failure(
+              message,
+              error instanceof Error ? error.message : String(error)
+            )
+          );
+        }
+      }
+    };
+  const guardedAgentMessage =
+    <
+      S extends HubSocket & {
+        remoteAddress: string;
+        close: (code?: number, reason?: string) => unknown;
+      },
+    >(
+      handle: (ws: S, message: unknown) => Promise<void>
+    ) =>
+    (ws: S, message: unknown): Promise<void> =>
+      handle(ws, message).catch((error: unknown) => {
+        const reason = error instanceof Error ? error.message : String(error);
+        console.error(`[hub] agent websocket handler failed: ${reason}`);
+        ws.close(
+          1011,
+          "Agent registration or message failed; reconnect to retry custody."
+        );
+      });
+  const recoveringRemoved = new Set<string>();
   const lifecycle = createSessionLifecycle({
     db,
+    ready: (machineId) =>
+      registry.agent(machineId)
+        ? addressProtocolMachines.has(machineId)
+        : db.agentAddressContract(machineId),
+    recoverRemoved: (machineId) => {
+      if (recoveringRemoved.has(machineId) || !registry.agent(machineId)) {
+        return;
+      }
+      const connection = registry.agent(machineId);
+      const rows = db
+        .sessionOwnership(machineId)
+        .filter((row) => row.machineRemoved && row.harness === "opencode");
+      if (rows.length === 0) {
+        return;
+      }
+      recoveringRemoved.add(machineId);
+      const claimed = db
+        .sessionOwnership(machineId)
+        .flatMap((row) => (row.sessionId ? [row.sessionId] : []));
+      callAgent(
+        machineId,
+        "removedSessionCustody",
+        [
+          rows.map((row) => ({
+            id: row.id,
+            sessionId: row.sessionId,
+            cwd: row.cwd,
+          })),
+          claimed,
+        ],
+        READ_TIMEOUT_MS
+      )
+        .then(
+          // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: each complete removed-row result must be checked against the same connection before drop or restore
+          (answer) => {
+            if (registry.agent(machineId) !== connection) {
+              return;
+            }
+            if (typeof answer === "string" || !answer.ok) {
+              return;
+            }
+            for (const result of answer.result as {
+              id: string;
+              present: boolean | null;
+            }[]) {
+              if (
+                result.present !== null &&
+                db.ownedInstance(result.id, machineId)?.machineRemoved
+              ) {
+                db.settleRemovedSession(result.id, result.present);
+                if (result.present) {
+                  const row = db.ownedInstance(result.id, machineId);
+                  const agent = registry.agent(machineId);
+                  if (row && agent && !row.endIntent) {
+                    restore(agent, row, true);
+                  }
+                } else {
+                  forgetInstances([result.id]);
+                }
+              }
+            }
+            publishInstances(machineId);
+          }
+        )
+        .catch((error: unknown) =>
+          console.warn(
+            `[hub] removed-machine custody remains unknown: ${String(error)}`
+          )
+        )
+        .finally(() => recoveringRemoved.delete(machineId));
+    },
     send: (machineId, payload) => {
       const agent = registry.agent(machineId);
-      if (!agent) {
+      if (!(agent && addressProtocolMachines.has(machineId))) {
         return false;
       }
       agent.send({
@@ -4127,6 +4253,23 @@ export const createServer = (
       if (!row.sessionId) {
         return true;
       }
+      const info = await callAgent(
+        row.machineId,
+        CONTROL_GET_SESSION_INFO,
+        [row.sessionId, row.cwd],
+        READ_TIMEOUT_MS,
+        row.harness as HarnessKind | undefined
+      );
+      if (typeof info === "string" || !info.ok) {
+        throw new Error(
+          typeof info === "string"
+            ? info
+            : (info.error ?? "Transcript lookup failed.")
+        );
+      }
+      if (!info.result) {
+        return true;
+      }
       const result = await callAgent(
         row.machineId,
         "deleteSession",
@@ -4134,10 +4277,31 @@ export const createServer = (
         READ_TIMEOUT_MS,
         row.harness as HarnessKind | undefined
       );
-      return typeof result !== "string" && result.ok;
+      if (typeof result !== "string" && result.ok) {
+        return true;
+      }
+      const after = await callAgent(
+        row.machineId,
+        CONTROL_GET_SESSION_INFO,
+        [row.sessionId, row.cwd],
+        READ_TIMEOUT_MS,
+        row.harness as HarnessKind | undefined
+      );
+      if (typeof after !== "string" && after.ok && !after.result) {
+        return true;
+      }
+      throw new Error(
+        typeof result === "string"
+          ? result
+          : (result.error ?? "Transcript deletion failed.")
+      );
     },
     refresh: (machineId) => {
-      if (refreshingCustody.has(machineId) || !registry.agent(machineId)) {
+      if (
+        refreshingCustody.has(machineId) ||
+        !registry.agent(machineId) ||
+        !addressProtocolMachines.has(machineId)
+      ) {
         return;
       }
       refreshingCustody.add(machineId);
@@ -4155,7 +4319,7 @@ export const createServer = (
     },
   });
   const endSession = (instanceId: string, intent: SessionEndIntent): void => {
-    const row = db.sessionOwnership().find((owner) => owner.id === instanceId);
+    const row = db.ownedInstance(instanceId);
     lifecycle.endSession(instanceId, intent);
     if (row) {
       workItems.cancelled(row);
@@ -4167,9 +4331,7 @@ export const createServer = (
     new Promise((resolve, reject) => {
       const deadline = Date.now() + SPAWN_START_TIMEOUT_MS;
       const observe = () => {
-        const row = db
-          .sessionOwnership()
-          .find((owner) => owner.id === instanceId);
+        const row = db.ownedInstance(instanceId);
         if (!row || row.endConfirmedAt) {
           resolve();
         } else if (Date.now() >= deadline) {
@@ -4941,8 +5103,9 @@ export const createServer = (
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: builds the restore payload from the stored row in one place
   ): void => {
     if (
-      db.sessionOwnership(row.machineId).find((owner) => owner.id === row.id)
-        ?.endIntent ||
+      !addressProtocolMachines.has(row.machineId) ||
+      db.ownedInstance(row.id, row.machineId)?.machineRemoved ||
+      db.ownedInstance(row.id, row.machineId)?.endIntent ||
       (!reattachOnly && row.lastError === CLAUDE_CONVERSATION_GONE)
     ) {
       return;
@@ -4972,11 +5135,15 @@ export const createServer = (
     };
     // Held custody is already configured; launch-mode and transcript refusals cannot skip it.
     if (reattachOnly) {
+      lifecycle.restoring(row.id);
       agent.send({
         verb: "spawn",
         machineId: row.machineId,
         instanceId: row.id,
-        payload: bounded(asked, row),
+        payload: {
+          ...bounded(asked, row),
+          ingested: streams.ingestedFor([row.id])[row.id],
+        },
       });
       return;
     }
@@ -6681,7 +6848,7 @@ export const createServer = (
   });
   // A hub crash after intent persistence cannot leave its work item reading live.
   for (const row of db.sessionOwnership()) {
-    if (row.endIntent) {
+    if (row.endIntent && !row.endConfirmedAt) {
       workItems.cancelled(row);
     }
   }
@@ -6714,9 +6881,7 @@ export const createServer = (
         endSession(instanceId, "stop");
         const deadline = Date.now() + 30_000;
         const observe = () => {
-          const row = db
-            .sessionOwnership(machineId)
-            .find((owner) => owner.id === instanceId);
+          const row = db.ownedInstance(instanceId, machineId);
           if (!row || row.endConfirmedAt) {
             resolve();
           } else if (Date.now() >= deadline) {
@@ -7574,9 +7739,6 @@ export const createServer = (
             `${row.hostname} is online. Stop its agent first, then remove it.`
           );
         }
-        for (const owner of db.sessionOwnership(params.machineId)) {
-          endSession(owner.id, "delete");
-        }
         const gone = db.deleteMachine(params.machineId);
         forgetInstances(gone.instanceIds);
         // The frame that carries the machine list: every dashboard drops the
@@ -7591,10 +7753,25 @@ export const createServer = (
       // with the same delete Remove machine runs per session. Whether the
       // transcript is there is its machine's to say: the row's key only says
       // one was named once.
+      // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one refusal-checked removal covers live custody, transcript presence, and the persisted end decision
       .delete("/api/instances/:id", async ({ params, status }) => {
-        const row = db.listInstances().find((r) => r.id === params.id);
+        const [row] = db.getInstancesByIds([params.id]);
         if (!row) {
           return status(404, "No session with that id on this hub.");
+        }
+        if (
+          ["running", "starting"].includes(row.status) ||
+          (machineCustody.get(row.machineId)?.state === "available" &&
+            (
+              machineCustody.get(row.machineId) as Extract<
+                SessionCustody,
+                { state: "available" }
+              >
+            ).instances.includes(row.id)) ||
+          heldSessions.has(row.id) ||
+          inCustody.has(row.id)
+        ) {
+          return status(409, "This session is still running. Stop it first");
         }
         if (row.sessionId) {
           const stored = await callAgent(
@@ -9953,14 +10130,21 @@ export const createServer = (
         // default the socket is closed under the reply and the machine drops.
         maxPayloadLength: AGENT_FRAME_LIMIT_BYTES,
         // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: dispatches every agent socket verb (register, frames, pulse, control_result, etc.) through one handler; splitting it would scatter the ordering guarantees across several functions.
-        async message(ws, message) {
+        message: guardedAgentMessage(async (ws, message) => {
           if (!isEnvelope(message)) {
             console.warn("[hub] dropped malformed frame", message);
+            return;
+          }
+          if (
+            message.verb !== "register" &&
+            registry.agent(message.machineId)?.id !== ws.id
+          ) {
             return;
           }
 
           switch (message.verb) {
             case "register": {
+              lifecycle.disconnect(message.machineId);
               const claims = addressClaims(message.payload);
               if (claims) {
                 addressProtocolMachines.add(message.machineId);
@@ -10013,6 +10197,10 @@ export const createServer = (
                 auth: peekAuth(message.payload),
                 build: peekBuild(message.payload),
               });
+              db.noteAgentAddressContract(
+                message.machineId,
+                claims !== undefined
+              );
               // A register from a daemon whose watcher has not ticked carries no
               // deploy state, so it leaves standing what the beats said — the
               // same tolerance `build` gets on the row itself.
@@ -10027,6 +10215,17 @@ export const createServer = (
               // the reply would arrive at a daemon with no such session. Drop them
               // with the sessions they belonged to, or they replay to every
               // dashboard that connects and fail on click.
+              const registrationCustody = peekCustody(message.payload);
+              db.restoreRemovedSessions(
+                message.machineId,
+                [
+                  ...peekInstances(message.payload),
+                  ...(registrationCustody.state === "available"
+                    ? registrationCustody.instances
+                    : []),
+                ],
+                registrationCustody.state === "available"
+              );
               const settled = db.settleInstances(
                 message.machineId,
                 peekInstances(message.payload),
@@ -10259,7 +10458,9 @@ export const createServer = (
               );
               ws.send(registerAck(message, streams.ingestedFor(reattaching)));
               for (const row of toEnd) {
-                endSession(row.id, "stop");
+                if (addressProtocolMachines.has(message.machineId)) {
+                  endSession(row.id, "stop");
+                }
               }
               lifecycle.reconcile(
                 message.machineId,
@@ -10453,6 +10654,23 @@ export const createServer = (
                 // Cache bookkeeping is neither a turn nor fleet attention.
                 break;
               }
+              if (kind === "control_result" && !message.requestId) {
+                message.requestId = peek(message.payload, "requestId");
+              }
+              if (kind === "scratch_worktree" && message.instanceId) {
+                const row = db.ownedInstance(
+                  message.instanceId,
+                  message.machineId
+                );
+                const frame = message.payload as Extract<
+                  FramePayload,
+                  { kind: "scratch_worktree" }
+                >;
+                if (row && frame.processGeneration === processGeneration(row)) {
+                  db.recordScratchWorktree(row.id, frame.worktree);
+                }
+                break;
+              }
               if (kind === "session_address" && message.instanceId) {
                 recordSessionAddress(ws, message.machineId, {
                   instanceId: message.instanceId,
@@ -10462,15 +10680,17 @@ export const createServer = (
                 break;
               }
               const ownedSession = message.instanceId
-                ? db
-                    .sessionOwnership(message.machineId)
-                    .find((row) => row.id === message.instanceId)
+                ? db.ownedInstance(message.instanceId, message.machineId)
                 : undefined;
-              if (message.instanceId && !ownedSession) {
+              if (
+                message.instanceId &&
+                !ownedSession &&
+                kind !== "control_result"
+              ) {
                 break;
               }
               if (
-                ownedSession?.endIntent &&
+                ownedSession?.endConfirmedAt &&
                 (kind === "frame" ||
                   kind === "pulse" ||
                   kind === "permission_request" ||
@@ -10501,9 +10721,7 @@ export const createServer = (
               if (
                 kind === "error" &&
                 peek(message.payload, "verb") === "stop" &&
-                db
-                  .sessionOwnership(message.machineId)
-                  .some((row) => row.id === message.instanceId && row.endIntent)
+                ownedSession?.endIntent
               ) {
                 break;
               }
@@ -10525,9 +10743,7 @@ export const createServer = (
                 break;
               }
               if (kind === "stopped" && message.instanceId) {
-                const ended = db
-                  .sessionOwnership(message.machineId)
-                  .find((row) => row.id === message.instanceId);
+                const ended = ownedSession;
                 if (
                   !lifecycle.confirm(
                     message.machineId,
@@ -10578,6 +10794,7 @@ export const createServer = (
                 ) {
                   break;
                 }
+                lifecycle.unavailable(message.instanceId);
                 db.settleUnavailableRecovery(message.instanceId);
                 forgetPending(message.instanceId, UNREAD.ended);
                 publishInstances(message.machineId);
@@ -11339,7 +11556,7 @@ export const createServer = (
                 `[hub] unhandled verb ${message.verb} from ${message.machineId}`
               );
           }
-        },
+        }),
         // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: releases each kind of machine-owned state when its socket goes away.
         close(ws) {
           const machineId = registry.dropAgent(ws.id);
@@ -11440,7 +11657,7 @@ export const createServer = (
           });
         },
         // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: dispatches every dashboard socket message shape (stream protocol, control, send, ack) through one handler; splitting it would scatter the ordering guarantees across several functions.
-        message(ws, message) {
+        message: guardedDashboardMessage((ws, message) => {
           // The Ledger Protocol's own shapes are not envelopes and must be read
           // before the envelope check, which would otherwise log them as junk.
           if (streams.handleClientMessage(ws, message)) {
@@ -11576,7 +11793,7 @@ export const createServer = (
                 `[hub] unhandled dashboard verb ${message.verb} from ${ws.headers["user-agent"] ?? "a client with no user agent"} at ${ws.headers.origin ?? ws.remoteAddress}`
               );
           }
-        },
+        }),
         close(ws) {
           registry.dropDashboard(ws);
           // Follows nothing, awaits nothing: a stream subscription and a command

@@ -115,8 +115,8 @@ Table continues below.
 
 | Status | Meaning |
 |---|---|
-| `stopped` | Deliberately ended — the operator or an automated policy asked for it, and the daemon complied. Not a failure and not resumable in the way `sleeping` is. |
-| `discarded` | Removed from active consideration entirely; terminal, unchanged from prior behavior. Once a row reaches `discarded` it is excluded from restore, reconciliation, and presence overlays alike. |
+| `stopped` | The operator or an automated policy recorded a stop decision. Machine confirmation is separate internal ownership state; a plain Stop preserves its conversation and can be woken. |
+| `discarded` | Removed from public consideration. Its hidden ownership remains until confirmed exit and requested session-owned teardown. |
 | `unknown` | The machine that would know is unreachable — the hub has no live socket for it, so it cannot ask. This is the presence-overlay value: `withSessionPresence` serves any row on a machine absent from the socket registry as `unknown` without touching the stored column, exactly mirroring what `withPresence()` already does for machines. It means "the hub cannot currently find out," not "the hub knows this is broken." |
 | `error` | A real failure, distinct from `sleeping`: `lastError` is required and non-null. The old `RESTART_LOST` condition — a row the heartbeat should have listed but didn't, with no `sessionId` to resume from — lands here, not in `sleeping`, because there is nothing left to resume. |
 
@@ -177,6 +177,42 @@ OpenCode skills and turns wait for the hub to store and acknowledge the server-m
 address. An unacknowledged new session has never run work; ending it records "never started".
 Legacy missing addresses are supplied by exact retained handles. A complete post-stop directory
 reading can confirm no unclaimed runners; ambiguous or incomplete readings never stop anything.
+
+Stop/read causality is connection-local sequence order, not a comparison of machine clocks.
+Each read reports the highest hub stop sequence received before it began; disconnect resets
+both that counter and the hub's issued-stop references. Heartbeats list only live handles;
+pending custody operations are separate and cannot promote a queued operation to running.
+Register and subsequent recovery share one adoption claim per instance, acquired before any
+await. A refused address acknowledgement ends that attempt and frees its recovery slot and queue.
+
+Agents declare the address contract at register. A connected agent that has not restarted onto
+this build receives no lifecycle traffic; operations requiring its confirmation refuse immediately.
+Historical stopped/discarded rows are migrated confirmed without new stops, except the bounded
+legacy OpenCode missing-address set. Address-required birth provenance is immutable on reopen;
+addressProtocol is recorded only on acknowledgement, so a failed legacy retry remains legacy.
+
+Removing an offline machine is a forget operation, never a stop. Its rows are hidden with no
+end intent. Exact held Claude/pi rows return on register and absent rows are dropped. OpenCode
+rows wait for a complete post-register server reading: present stored IDs return, absent IDs
+are dropped, and missing-ID legacy rows are dropped only after complete absence of unclaimed
+runners in their directory. Incomplete or ambiguous readings retain hidden ownership and retry
+only at ordinary reconciliation triggers. An unresolved row may remain hidden indefinitely.
+
+An OpenCode end protects a conversation held by another running, starting or attached row.
+No abort or disposal of that other row's conversation is authorized. Both known-ID end and
+legacy runner reads refuse incomplete generation custody and pending ownership operations.
+Scratch cleanup uses creation provenance written by the agent and carried on the hub row;
+the shape of a directory's .git file never grants removal authority. A never-started discard
+still removes its recorded scratch tree before it is confirmed discarded.
+
+A refused workflow halt is a held stop, not a failed attempt. The running attempt and session
+remain owned, a receipt names the deadline and refusal, and no retry starts before positive end
+confirmation. Ordinary machine recovery and supervisor action re-evaluate the same deadline;
+deferred fail/retry is recorded and applied only afterwards. Cancel rewrites the run's state
+before requesting any session end, launches nothing further, and remains waiting until every
+session and child run has confirmed its end. Refusals use the existing supervisor notice and
+step receipt paths. Transcript cleanup accepts confirmed absence and otherwise records its
+error with durable exponential retry backoff.
 
 ## Who writes what
 

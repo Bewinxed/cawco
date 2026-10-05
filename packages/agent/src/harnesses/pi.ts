@@ -1,7 +1,8 @@
 /** Pi's agent adapter owns only custody and transport, never a running SDK turn. */
-import type { SpawnPayload } from "@cawco/core";
+import { resumeCursor, type SpawnPayload } from "@cawco/core";
 import type { Harness, HarnessContext, HarnessSession } from "../harness";
 import { parseProcId, procIdFor } from "../proc-id";
+import { procEpoch } from "../sessiond-client";
 import { PiProfile } from "./pi-services";
 import { adoptPi, piSessiond, piSnapshot, spawnPi } from "./pi-sessiond";
 
@@ -43,11 +44,18 @@ export class PiHarness extends PiProfile implements Harness {
     spec: SpawnPayload,
     ctx: HarnessContext
   ): Promise<HarnessSession | undefined> {
-    const proc = (await this.custodyCandidates()).procs.find(
+    const welcome = await this.custodyCandidates();
+    const proc = welcome.procs.find(
       (one) => one.alive && one.procId === procIdFor("pi", spec.instanceId)
     );
     return proc
-      ? await this.adopt(spec.instanceId, ctx, { head: proc.head })
+      ? await this.adopt(spec.instanceId, ctx, {
+          head: proc.head,
+          afterSeq: resumeCursor(
+            procEpoch(welcome.epoch, proc.pid),
+            ctx.ingested
+          ),
+        })
       : undefined;
   }
 }

@@ -69,6 +69,7 @@ if (role === "sessiond") {
     Effect.provide(
       Effect.gen(function* () {
         const db = yield* Db;
+        const registry = yield* Registry;
         const sql = new Database(process.env.CAWCO_DB_PATH);
         const originalEnd = db.endInstance;
         const originalSession = db.noteInstanceSession;
@@ -93,7 +94,7 @@ if (role === "sessiond") {
         return createServer(
           {
             db: faultDb,
-            registry: yield* Registry,
+            registry,
             pending: yield* Pending,
             build: { version: "private", startedAt: Date.now() },
           },
@@ -105,6 +106,7 @@ if (role === "sessiond") {
               harness?: "claude" | "pi" | "opencode";
               status?: string;
               session?: boolean;
+              sessionKey?: string;
               parent?: string;
               error?: string;
               mode?: string;
@@ -125,7 +127,9 @@ if (role === "sessiond") {
               addressProtocol: data.addressProtocol ?? false,
               machineId: machine,
               cwd: data.workspace ?? data.directory ?? scratch,
-              sessionId: data.session ? `conversation-${data.id}` : undefined,
+              sessionId:
+                data.sessionKey ??
+                (data.session ? `conversation-${data.id}` : undefined),
               harness: data.harness ?? "claude",
               kind: "mainline",
               model: "stand-in",
@@ -147,7 +151,7 @@ if (role === "sessiond") {
             if (data.status === "discarded") {
               sql
                 .query(
-                  "UPDATE instances SET end_intent = 'discard' WHERE id = ?"
+                  "UPDATE instances SET end_intent = 'discard', end_confirmed_at = CASE WHEN harness = 'opencode' AND session_id IS NULL THEN NULL ELSE updated_at END WHERE id = ?"
                 )
                 .run(data.id);
             }
@@ -176,6 +180,45 @@ if (role === "sessiond") {
               db.patchInstance(data.id, { workItemId: itemId });
             }
             return { ok: true };
+          })
+          .post("/proof/reattach", ({ body }) => {
+            const row = db.ownedInstance((body as { id: string }).id);
+            assert.ok(row);
+            registry.agent(machine)?.send({
+              verb: "spawn",
+              machineId: machine,
+              instanceId: row.id,
+              payload: {
+                instanceId: row.id,
+                cwd: row.cwd,
+                harness: row.harness ?? "claude",
+                reattachOnly: true,
+                processGeneration: JSON.stringify([row.id, row.spawnedAt]),
+                ...(row.sessionId
+                  ? { resume: { sessionKey: row.sessionId } }
+                  : {}),
+              },
+            });
+            return { ok: true };
+          })
+          .post("/proof/workflow", ({ body }) => {
+            const data = body as {
+              name: string;
+              timeoutMinutes: number;
+              prompt: string;
+            };
+            const id = crypto.randomUUID();
+            db.putWorkflow({
+              id,
+              name: data.name,
+              slug: `private-${id}`,
+              description: "Private ownership integration",
+              graph: null,
+              origin: "code",
+              inputs: [],
+              program: `import { z } from "zod"; export const inputs = z.object({}); export default async function(w) { return await w.run({ title: ${JSON.stringify(data.name)}, harness: "claude", model: "stand-in", prompt: ${JSON.stringify(data.prompt)}, timeoutMinutes: ${data.timeoutMinutes}, retries: 1, output: z.object({ ok: z.boolean() }) }); }`,
+            });
+            return { id };
           })
           .get("/proof/rows", () => db.sessionOwnership())
           .get("/proof/visible", () => ({
@@ -247,23 +290,42 @@ if (role === "sessiond") {
   };
   for (const kind of ["claude", "pi", "opencode"] as const) {
     const session = (
-      ctx: import("../packages/agent/src/harness").HarnessContext
+      ctx: import("../packages/agent/src/harness").HarnessContext,
+      sessionKey = `conversation-${ctx.instanceId}`
     ) => ({
       harness: kind,
-      sessionId: `conversation-${ctx.instanceId}`,
+      sessionId: sessionKey,
       attached: () =>
         ctx.frame({
           type: "system",
           subtype: "init",
-          session_id: `conversation-${ctx.instanceId}`,
+          session_id: sessionKey,
           cwd: ctx.cwd,
         }),
       control: async () => undefined,
       resolvePermission: () => undefined,
       interrupt: async () => undefined,
       dispose: async () => undefined,
-      send: () => {
+      send: (message) => {
         log(`TURN ${ctx.instanceId}`).catch(console.error);
+        const { content } = message.message;
+        if (typeof content === "string" && content.includes("[Workflow ")) {
+          log(`NOTICE ${ctx.instanceId} ${content}`).catch(console.error);
+        }
+        if (
+          typeof content === "string" &&
+          content.includes("private-provider-retry") &&
+          !content.includes("Previous attempt:")
+        ) {
+          ctx.frame({
+            type: "system",
+            subtype: "provider_retry",
+            retry: {
+              message: "private provider wait exceeds deadline",
+              nextAttemptAt: Date.now() + 120_000,
+            },
+          });
+        }
       },
       stop: async () => {
         await endProc(client, procId(kind, ctx.instanceId));
@@ -305,7 +367,11 @@ if (role === "sessiond") {
         }
         await rm(transcript(key), { force: true });
       },
-      endSession: async (key) => {
+      endSession: async (key, _directory, _instanceId, claimed = []) => {
+        if (claimed.includes(key)) {
+          await log(`SHARED_NOT_ENDED ${key}`);
+          return;
+        }
         const id = key.replace("conversation-", "");
         await endProc(client, procId(kind, id));
         await until(
@@ -322,7 +388,21 @@ if (role === "sessiond") {
         const file = Bun.file(join(scratch, "legacy-live-addresses.json"));
         return file.size > 0 ? JSON.parse(readFileSync(file.name, "utf8")) : [];
       },
+      sessionPresent: async (key, directory) => {
+        if (
+          await Bun.file(join(scratch, "incomplete-server-reading")).exists()
+        ) {
+          throw new Error("private incomplete server reading");
+        }
+        await log(`READ_PRESENT ${key} ${directory}`);
+        return await Bun.file(transcript(key)).exists();
+      },
       unclaimedRunners: async (directory, claimed) => {
+        if (
+          await Bun.file(join(scratch, "incomplete-server-reading")).exists()
+        ) {
+          throw new Error("private incomplete server reading");
+        }
         await log(`READ_UNCLAIMED ${directory}`);
         const listing = await client.list();
         const count = listing.procs.filter(
@@ -357,12 +437,22 @@ if (role === "sessiond") {
         }
         return session(ctx);
       },
-      reattach: async (_spec, ctx) => adapter.adopt(ctx.instanceId, ctx),
-      spawn: async (_spec, ctx) => {
+      reattach: async (_spec, ctx) => {
+        if (
+          kind === "opencode" &&
+          ctx.instanceId === "refused-address-review"
+        ) {
+          await ctx.recordSessionAddress?.(`conversation-${ctx.instanceId}`);
+        }
+        return await adapter.adopt(ctx.instanceId, ctx);
+      },
+      spawn: async (spec, ctx) => {
         await log(`SPAWN_BEGIN ${ctx.instanceId}`);
         if (kind === "opencode") {
           await log(`CREATED_SESSION ${ctx.instanceId}`);
-          await ctx.recordSessionAddress?.(`conversation-${ctx.instanceId}`);
+          await ctx.recordSessionAddress?.(
+            spec.resume?.sessionKey ?? `conversation-${ctx.instanceId}`
+          );
           await log(`SKILL ${ctx.instanceId}`);
         }
         while (
@@ -379,7 +469,10 @@ if (role === "sessiond") {
           env: pathEnv,
         });
         await log(`SPAWN ${ctx.instanceId}`);
-        return session(ctx);
+        return session(
+          ctx,
+          spec.resume?.sessionKey ?? `conversation-${ctx.instanceId}`
+        );
       },
     };
     registerHarness(adapter);
@@ -627,6 +720,8 @@ if (role === "sessiond") {
     );
     await startHub();
     await seed("offline-stop");
+    await startAgent();
+    await disconnect();
     await held("offline-stop");
     end("offline-stop");
     await until(
@@ -643,6 +738,12 @@ if (role === "sessiond") {
     await disconnect();
     await seed("unknown-delete", { status: "unknown" });
     await held("unknown-delete");
+    end("unknown-delete");
+    await until(
+      "explicit stop before removal",
+      () => row("unknown-delete"),
+      (owner) => owner?.endIntent === "stop"
+    );
     await api("/api/instances/unknown-delete", undefined, "DELETE");
     assert.ok(await row("unknown-delete"));
     const visible = await api("/proof/visible");
@@ -700,22 +801,61 @@ if (role === "sessiond") {
     await seed("remove-machine-a");
     await seed("remove-machine-b");
     await held("remove-machine-a");
-    await held("remove-machine-b");
+    await seed("removed-code-present", { harness: "opencode", session: true });
+    await seed("removed-code-absent", { harness: "opencode", session: true });
+    await seed("removed-code-legacy", { harness: "opencode" });
+    await writeFile(
+      join(scratchDir, "conversation-removed-code-present.transcript"),
+      "private retained session"
+    );
+    await writeFile(
+      join(scratchDir, "incomplete-server-reading"),
+      "private reading fault"
+    );
     await api(`/api/agents/${machine}`, undefined, "DELETE");
     assert.equal((await api("/api/agents")).length, 0);
     assert.ok(
       (await rows())
         .filter((owner) => owner.id.startsWith("remove-machine"))
-        .every((owner) => owner.endIntent === "delete")
+        .every((owner) => owner.endIntent === null)
     );
     await startAgent();
-    await gone("remove-machine-a");
+    await until(
+      "removed held row returns",
+      () => api("/proof/visible"),
+      (snapshot) => JSON.stringify(snapshot).includes("remove-machine-a")
+    );
     await gone("remove-machine-b");
-    assert.equal(await alive("remove-machine-a"), false);
-    assert.equal(await alive("remove-machine-b"), false);
+    assert.equal(await alive("remove-machine-a"), true);
+    const removedRows = await api("/proof/rows");
+    for (const id of [
+      "removed-code-present",
+      "removed-code-absent",
+      "removed-code-legacy",
+    ]) {
+      const owner = removedRows.find((item: { id: string }) => item.id === id);
+      assert.equal(owner.machineRemoved, true);
+      assert.equal(owner.endIntent, null);
+    }
+    await rm(join(scratchDir, "incomplete-server-reading"));
+    // A normal lifecycle trigger repeats the reading; no bespoke reconciliation loop.
+    end("offline-stop");
+    await until(
+      "present server session returns",
+      () => api("/proof/visible"),
+      (snapshot) => JSON.stringify(snapshot).includes("removed-code-present")
+    );
+    await gone("removed-code-absent");
+    await gone("removed-code-legacy");
     pass(
       4,
-      "offline machine removal retains hidden ownership until both processes exit"
+      "removed machine restores exact held children, drops absent children, and never ends either"
+    );
+    console.log(
+      "REVIEW 3-known complete server reading restores present SDK id, drops absent SDK id, and incomplete reading settles neither"
+    );
+    console.log(
+      "REVIEW 3-legacy complete empty-directory reading drops a hidden NULL-id row without an end intent"
     );
 
     await seed("parent");
@@ -744,6 +884,23 @@ if (role === "sessiond") {
     });
     await until("spawn pending", events, (text) =>
       text.includes("SPAWN_BEGIN late-spawn")
+    );
+    const refusedRemove = await fetch(`${base}/api/instances/late-spawn`, {
+      method: "DELETE",
+    });
+    assert.equal(refusedRemove.status, 409);
+    assert.equal(
+      await refusedRemove.text(),
+      "This session is still running. Stop it first"
+    );
+    console.log(
+      "REVIEW 19 removing a starting session refuses with 409 Stop it first"
+    );
+    end("late-spawn");
+    await until(
+      "late-spawn end intent",
+      () => row("late-spawn"),
+      (owner) => owner?.endIntent === "stop"
     );
     await api("/api/instances/late-spawn", undefined, "DELETE");
     await delay(300);
@@ -803,6 +960,32 @@ if (role === "sessiond") {
     pass(
       7,
       "held conversation-gone and refused-mode rows attach without launch validation"
+    );
+
+    const singleAdoption = async (kind: "claude" | "pi") => {
+      await disconnect();
+      const id = `review-one-adopt-${kind}`;
+      await seed(id, { harness: kind });
+      await held(kind === "pi" ? `pi:${id}` : id);
+      const beforeAttach = (await events()).length;
+      await startAgent();
+      await until("one reviewed adoption", events, (text) =>
+        text.slice(beforeAttach).includes(`ATTACH ${id} 1`)
+      );
+      await api("/proof/reattach", { id });
+      await delay(300);
+      assert.equal(
+        (await events()).slice(beforeAttach).split(`ATTACH ${id} `).length - 1,
+        1
+      );
+      assert.equal(await alive(kind === "pi" ? `pi:${id}` : id), true);
+    };
+    for (const kind of ["claude", "pi"] as const) {
+      // biome-ignore lint/performance/noAwaitInLoops: each restart and duplicate-envelope check owns the same private agent sequentially
+      await singleAdoption(kind);
+    }
+    console.log(
+      "REVIEW 1 register restart and a duplicate reattach create exactly one Claude/pi adoption"
     );
 
     await disconnect();
@@ -925,7 +1108,7 @@ if (role === "sessiond") {
       () => row("discarded-before"),
       (owner) => !!owner?.endConfirmedAt
     );
-    assert.equal(await alive("discarded-before"), false);
+    assert.equal(await alive("discarded-before"), true);
     assert.equal(
       (await events())
         .slice(before.length)
@@ -934,7 +1117,7 @@ if (role === "sessiond") {
     );
     pass(
       11,
-      "discard survives hub crash; pre-existing discarded row ends without repeated teardown"
+      "discard survives hub crash; historically confirmed discard sends no stop or repeated teardown"
     );
 
     await disconnect();
@@ -962,20 +1145,16 @@ if (role === "sessiond") {
       (owner) => owner?.endIntent === "discard"
     );
     await startAgent(true);
-    await until(
-      "old Claude physically stopped",
-      () => alive("skew-claude"),
-      (running) => !running
-    );
-    await until(
-      "old pi physically stopped",
-      () => alive("pi:skew-pi"),
-      (running) => !running
-    );
-    await until("old agent attached", events, (text) =>
-      text.includes("ATTACH skew-kept")
-    );
     await delay(1000);
+    assert.equal(await alive("skew-claude"), true);
+    assert.equal(await alive("pi:skew-pi"), true);
+    end("skew-kept");
+    await until(
+      "old-agent refusal is immediate",
+      async () => JSON.stringify(dashboardFrames),
+      (text) => text.includes("has not restarted onto this build yet")
+    );
+    assert.equal((await row("skew-kept"))?.endIntent, null);
     assert.equal((await row("skew-claude"))?.endConfirmedAt, null);
     assert.equal((await row("skew-pi"))?.endConfirmedAt, null);
     assert.equal((await row("skew-discard"))?.endConfirmedAt, null);
@@ -1019,7 +1198,7 @@ if (role === "sessiond") {
     assert.equal(await alive("opencode-server-turn-skew-opencode"), false);
     pass(
       12,
-      "old agent stops and attaches; discarded row hides immediately; only new-agent evidence confirms and tears down"
+      "old agent receives no lifecycle stop; confirmation-dependent operations refuse immediately; updated agent confirms pending intent"
     );
     await writeFile(
       join(scratchDir, "pause-address-address-agent-crash"),
@@ -1107,6 +1286,239 @@ if (role === "sessiond") {
       "hub restart re-acknowledges stored address before one skill and exactly one turn"
     );
 
+    await seed("refused-address-review", {
+      harness: "opencode",
+      session: true,
+    });
+    await held("opencode-server-turn-refused-address-review");
+    await writeFile(
+      join(scratchDir, "pause-address-refused-address-review"),
+      "private address gate"
+    );
+    await api("/proof/reattach", { id: "refused-address-review" });
+    await delay(100);
+    end("refused-address-review");
+    await confirmed("refused-address-review");
+    assert.equal(
+      await alive("opencode-server-turn-refused-address-review"),
+      false
+    );
+    await rm(join(scratchDir, "pause-address-refused-address-review"));
+    send("send", "refused-address-review", {
+      message: {
+        type: "user",
+        uuid: crypto.randomUUID(),
+        message: {
+          role: "user",
+          content: "wake after refused acknowledgement",
+        },
+        origin: { kind: "human" },
+      },
+    });
+    await until("wake behind refused acknowledgement", events, (text) =>
+      text.includes("TURN refused-address-review")
+    );
+    end("refused-address-review");
+    await confirmed("refused-address-review");
+    console.log(
+      "REVIEW 2 refusal releases the instance queue; queued stop completes and a later wake works without restart"
+    );
+
+    await seed("legacy-retry-review", { harness: "opencode", status: "error" });
+    await writeFile(
+      join(scratchDir, "pause-address-legacy-retry-review"),
+      "private address gate"
+    );
+    send("spawn", "legacy-retry-review", {
+      cwd: scratchDir,
+      harness: "opencode",
+      model: "stand-in",
+    });
+    await until("legacy retry awaiting acknowledgement", events, (text) =>
+      text.includes("CREATED_SESSION legacy-retry-review")
+    );
+    await disconnect();
+    const retried = (await api("/proof/rows")).find(
+      (owner: { id: string }) => owner.id === "legacy-retry-review"
+    );
+    assert.equal(retried.addressProtocol, false);
+    assert.equal(retried.addressRequired, false);
+    assert.equal(retried.sessionId, null);
+    await holder?.spawnProc("opencode-server-turn-unclaimed", {
+      command: "/bin/sleep",
+      args: ["600"],
+      cwd: scratchDir,
+      env: pathEnv,
+    });
+    end("legacy-retry-review");
+    await startAgent();
+    await until(
+      "legacy retry still needs directory reading",
+      () => api("/proof/rows"),
+      (owners) =>
+        owners.some(
+          (owner: { id: string; endReason?: string }) =>
+            owner.id === "legacy-retry-review" &&
+            owner.endReason?.startsWith("waiting: 1 unclaimed runner")
+        )
+    );
+    assert.equal((await row("legacy-retry-review"))?.endConfirmedAt, null);
+    assert.equal(await alive("opencode-server-turn-unclaimed"), true);
+    const { endProc } = await import("../packages/agent/src/sessiond-client");
+    assert.ok(holder);
+    await endProc(holder, "opencode-server-turn-unclaimed");
+    await rm(join(scratchDir, "pause-address-legacy-retry-review"));
+    end("legacy-retry-review");
+    await confirmed("legacy-retry-review");
+    console.log(
+      "REVIEW 4 failed retry leaves a legacy row legacy; an unclaimed runner blocks confirmation"
+    );
+
+    await seed("shared-owner-a", { harness: "opencode", session: true });
+    await api("/proof/reattach", { id: "shared-owner-a" });
+    await until("shared A attached", events, (text) =>
+      text.includes("ATTACH shared-owner-a")
+    );
+    end("shared-owner-a");
+    await confirmed("shared-owner-a");
+    await seed("shared-owner-b", {
+      harness: "opencode",
+      sessionKey: "conversation-shared-owner-a",
+    });
+    send("spawn", "shared-owner-b", {
+      cwd: scratchDir,
+      harness: "opencode",
+      model: "stand-in",
+      resume: { sessionKey: "conversation-shared-owner-a" },
+    });
+    await until("shared B started", events, (text) =>
+      text.includes("SPAWN shared-owner-b")
+    );
+    const beforeShared = (await events()).length;
+    end("shared-owner-a", true);
+    await until(
+      "shared A discard confirmed",
+      () => row("shared-owner-a"),
+      (owner) => !!owner?.endConfirmedAt
+    );
+    assert.equal(await alive("opencode-server-turn-shared-owner-b"), true);
+    assert.ok(
+      !(await events())
+        .slice(beforeShared)
+        .includes("RESOURCES_CLOSED conversation-shared-owner-a")
+    );
+    console.log(
+      "REVIEW 6 ending a stopped row preserves the other row using its SDK conversation"
+    );
+
+    const repository = join(scratchDir, "scratch-review-repository");
+    await mkdir(repository);
+    const git = async (...args: string[]) => {
+      const proc = Bun.spawn(["git", "-C", repository, ...args], {
+        env: pathEnv,
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const output = await new Response(proc.stderr).text();
+      assert.equal(await proc.exited, 0, output);
+    };
+    await git("init");
+    await writeFile(join(repository, "kept.txt"), "private fixture");
+    await git("add", "kept.txt");
+    await git(
+      "-c",
+      "user.name=Private Proof",
+      "-c",
+      "user.email=proof@example.invalid",
+      "commit",
+      "-m",
+      "Private fixture"
+    );
+    const manual = join(scratchDir, "manual-review-worktree");
+    await git("worktree", "add", "--detach", manual, "HEAD");
+    await writeFile(join(manual, "dirty.txt"), "must survive discard");
+    await seed("manual-worktree-review", { directory: manual });
+    await held("manual-worktree-review");
+    end("manual-worktree-review", true);
+    await until(
+      "manual-directory discard confirmed",
+      () => row("manual-worktree-review"),
+      (owner) => !!owner?.endConfirmedAt
+    );
+    assert.equal(
+      await Bun.file(join(manual, "dirty.txt")).text(),
+      "must survive discard"
+    );
+    await seed("created-worktree-review", { directory: repository });
+    send("spawn", "created-worktree-review", {
+      cwd: repository,
+      harness: "claude",
+      model: "stand-in",
+      scratch: { worktree: true },
+    });
+    const created = await until(
+      "durable creation provenance",
+      () => api("/proof/rows"),
+      (owners) =>
+        owners.some(
+          (owner: { id: string; scratchWorktree?: object }) =>
+            owner.id === "created-worktree-review" && owner.scratchWorktree
+        )
+    );
+    const ownedTree = created.find(
+      (owner: { id: string }) => owner.id === "created-worktree-review"
+    ).scratchWorktree;
+    await disconnect();
+    end("created-worktree-review", true);
+    await startAgent();
+    await until(
+      "recorded-tree discard confirmed after restart",
+      () => row("created-worktree-review"),
+      (owner) => !!owner?.endConfirmedAt
+    );
+    assert.equal(await Bun.file(join(ownedTree.path, ".git")).exists(), false);
+    assert.equal(await Bun.file(join(manual, "dirty.txt")).exists(), true);
+    console.log(
+      "REVIEW 7 manual worktree and dirty work survive; durable session-created worktree is removed after restart"
+    );
+    await writeFile(
+      join(scratchDir, "pause-address-never-started-tree-review"),
+      "private pre-address gate"
+    );
+    send("spawn", "never-started-tree-review", {
+      cwd: repository,
+      harness: "opencode",
+      model: "stand-in",
+      scratch: { worktree: true },
+    });
+    const prepared = await until(
+      "never-started scratch preparation is durable",
+      () => api("/proof/rows"),
+      (owners) =>
+        owners.some(
+          (owner: { id: string; scratchWorktree?: object }) =>
+            owner.id === "never-started-tree-review" && owner.scratchWorktree
+        )
+    );
+    await until("never-started SDK session awaits address", events, (text) =>
+      text.includes("CREATED_SESSION never-started-tree-review")
+    );
+    const unusedTree = prepared.find(
+      (owner: { id: string }) => owner.id === "never-started-tree-review"
+    ).scratchWorktree;
+    end("never-started-tree-review", true);
+    await until(
+      "never-started scratch discard confirmed",
+      () => row("never-started-tree-review"),
+      (owner) => owner?.status === "discarded" && !!owner.endConfirmedAt
+    );
+    assert.equal(await Bun.file(join(unusedTree.path, ".git")).exists(), false);
+    assert.ok(!(await events()).includes("SKILL never-started-tree-review"));
+    await rm(join(scratchDir, "pause-address-never-started-tree-review"));
+    console.log(
+      "REVIEW 16 never-started discard is recorded discarded and removes only its recorded scratch worktree"
+    );
+
     await seed("legacy-empty", { harness: "opencode" });
     const beforeLegacy = (await events()).split("READ_UNCLAIMED").length;
     end("legacy-empty");
@@ -1186,6 +1598,151 @@ if (role === "sessiond") {
       "legacy retained runner supplies exact address at register and ends by normal confirmation"
     );
 
+    await seed("workflow-supervisor-review");
+    send("spawn", "workflow-supervisor-review", {
+      cwd: scratchDir,
+      harness: "claude",
+      model: "stand-in",
+    });
+    await until(
+      "private workflow supervisor live",
+      () => api("/api/instances"),
+      (owners) =>
+        owners.some(
+          (owner: { id: string; status: string }) =>
+            owner.id === "workflow-supervisor-review" &&
+            owner.status === "running"
+        )
+    );
+    const workflowCase = async (kind: "timeout" | "provider" | "cancel") => {
+      await disconnect();
+      await startAgent(true);
+      send("spawn", "workflow-supervisor-review", {
+        cwd: scratchDir,
+        harness: "claude",
+        model: "stand-in",
+      });
+      await until(
+        "old-agent workflow supervisor live",
+        () => api("/api/instances"),
+        (owners) =>
+          owners.some(
+            (owner: { id: string; status: string }) =>
+              owner.id === "workflow-supervisor-review" &&
+              owner.status === "running"
+          )
+      );
+      const definition = await api("/proof/workflow", {
+        name: `Private ${kind} held stop`,
+        timeoutMinutes: kind === "cancel" ? 60 : 0.1,
+        prompt:
+          kind === "provider"
+            ? "private-provider-retry"
+            : `private-${kind}-halt`,
+      });
+      const { runId } = await api(`/api/workflows/${definition.id}/runs`, {
+        workspace: { machineId: machine, path: scratchDir },
+        supervisor: { instanceId: "workflow-supervisor-review" },
+      });
+      const detail = () => api(`/api/workflow-runs/${runId}`);
+      await until(
+        "workflow attempt starts",
+        detail,
+        (run) =>
+          run.attempts.length === 1 &&
+          run.steps.some(
+            (candidate: { status: string }) => candidate.status === "running"
+          )
+      );
+      const started = await detail();
+      const [step] = started.steps;
+      if (kind === "cancel") {
+        await api(`/api/workflow-runs/${runId}/cancel`, {});
+        await until(
+          "cancel remains held",
+          detail,
+          (run) => run.status === "waiting" && !!run.state.__ending
+        );
+        await until(
+          "cancel refusal receipt",
+          events,
+          (text) =>
+            text.includes(
+              `Session ${step.instanceId} could not be ended because`
+            ) && text.includes("has not restarted onto this build yet")
+        );
+        assert.equal((await detail()).attempts[0].endedAt, null);
+      } else {
+        await until(
+          "halt refusal is held not failed",
+          detail,
+          (run) =>
+            run.steps[0].failure?.includes(
+              "has not restarted onto this build yet"
+            ) && run.state.__heldStops?.[step.id]
+        );
+        const heldRun = await detail();
+        assert.equal(heldRun.attempts.length, 1);
+        assert.equal(heldRun.attempts[0].endedAt, null);
+        assert.equal(heldRun.attempts[0].failure, null);
+        assert.equal(heldRun.steps[0].status, "running");
+        assert.ok(heldRun.steps[0].failure.includes("Attempt timed out at"));
+        if (kind === "timeout") {
+          await api(`/api/workflow-runs/${runId}/steer`, {
+            instanceId: "workflow-supervisor-review",
+            action: { type: "retry", stepId: step.id },
+          });
+          const deferred = await detail();
+          assert.equal(deferred.state.__heldStops[step.id].action, "retry");
+          assert.equal(deferred.attempts.length, 1);
+          assert.equal(deferred.attempts[0].endedAt, null);
+        }
+      }
+      assert.equal(await alive(step.instanceId), true);
+      await disconnect();
+      await startAgent();
+      if (kind === "cancel") {
+        const endedRun = await until(
+          "cancel waits for positive end",
+          detail,
+          (run) => run.status === "cancelled"
+        );
+        assert.equal(endedRun.attempts.length, 1);
+        assert.equal(await alive(step.instanceId), false);
+        console.log(
+          "WORKFLOW cancel refused stop launches nothing further, publishes receipt, and becomes cancelled only after confirmation"
+        );
+      } else {
+        const retryRun = await until(
+          "held deadline recovers exactly once",
+          detail,
+          (run) => run.attempts.length === 2
+        );
+        assert.ok(retryRun.attempts[0].endedAt);
+        assert.ok(
+          retryRun.attempts[0].failure.includes(
+            kind === "timeout"
+              ? "attempt-timeout"
+              : "private provider wait exceeds deadline"
+          )
+        );
+        await api(`/api/workflow-runs/${runId}/cancel`, {});
+        await until(
+          "retry fixture cleanup confirmed",
+          detail,
+          (run) => run.status === "cancelled"
+        );
+        assert.equal((await detail()).attempts.length, 2);
+        console.log(
+          `WORKFLOW ${kind} refused halt keeps its running attempt with receipt; recovery confirms stop and starts exactly one retry`
+        );
+      }
+    };
+    for (const kind of ["timeout", "provider", "cancel"] as const) {
+      // biome-ignore lint/performance/noAwaitInLoops: each full-stack scenario owns the same private agent version cutover sequentially
+      await workflowCase(kind);
+    }
+
     const legacyFile = Bun.file(
       join(root, ".context", "ownership", "legacy-null-metadata.json")
     );
@@ -1217,6 +1774,18 @@ if (role === "sessiond") {
         (classified[`15a ${copied.status}`] ?? 0) + 1;
     }
     console.log(`PRIVATE_COPY_LEGACY_COUNTS ${JSON.stringify(classified)}`);
+    const nativeProof = Bun.spawn(
+      [process.execPath, join(root, "scripts/probe-opencode-end-custody.ts")],
+      { cwd: root, env: pathEnv, stdout: "pipe", stderr: "pipe" }
+    );
+    const nativeOutput = await new Response(nativeProof.stdout).text();
+    const nativeError = await new Response(nativeProof.stderr).text();
+    assert.equal(
+      await nativeProof.exited,
+      0,
+      `${nativeOutput}\n${nativeError}`
+    );
+    console.log(nativeOutput.trim());
     console.log("ownership-proofs-pass");
   } finally {
     dashboard?.close();

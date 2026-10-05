@@ -179,7 +179,18 @@ const WAITS: ReadonlySet<WorkflowEffectKind> = new Set([
 ]);
 
 const active = (run: WorkflowRunRow) =>
-  run.status === "running" || run.status === "waiting";
+  !run.state.__ending && (run.status === "running" || run.status === "waiting");
+
+interface Ending {
+  children: string[];
+  failure: string | null;
+  pending: string[];
+  result: unknown;
+  status: "done" | "failed" | "cancelled";
+}
+
+const endingOf = (run: WorkflowRunRow): Ending | undefined =>
+  run.state.__ending as Ending | undefined;
 const reason = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
 
@@ -426,6 +437,16 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
     attempt?: WorkflowAttemptRow,
     checkpoint?: { data: unknown; label: string }
   ) => {
+    const stored = db.getWorkflowRun(run.id);
+    if (
+      stored?.state.__ending &&
+      !run.state.__ending &&
+      ["running", "waiting"].includes(run.status)
+    ) {
+      run.state = { ...run.state, __ending: stored.state.__ending };
+      run.status = "waiting";
+      run.endedAt = null;
+    }
     db.workflowTransition(run, step, attempt);
     announce(run, step, attempt, checkpoint);
   };
@@ -610,14 +631,6 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
     send,
     serial,
     spawn: deps.spawn,
-    stopSession: (run, instanceId) => {
-      deps.emit({
-        verb: "stop",
-        machineId: run.machineId,
-        instanceId,
-        payload: { instanceId },
-      });
-    },
     supervisorLive,
     write,
     settled: (run, step, outcome) => {
@@ -807,31 +820,117 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
     failure: string | null = null,
     result: unknown = null
   ) => {
-    if (!active(run)) {
+    if (!active(run) || endingOf(runOf(run.id))) {
       return;
     }
-    run.status = status;
-    run.failure = failure;
-    run.result = result;
-    run.endedAt = new Date();
-    closeSteps(run, status);
-    write(run);
-    for (const child of db
+    const children = db
       .listWorkflowRuns()
-      .filter((entry) => entry.parentRunId === run.id && active(entry))) {
-      finish(child, "cancelled");
-      interrupt(child.id);
+      .filter(
+        (entry) =>
+          entry.parentRunId === run.id && (active(entry) || endingOf(entry))
+      );
+    const pending = [
+      ...new Set(
+        db
+          .listWorkflowSteps(run.id)
+          .flatMap((step) => (step.instanceId ? [step.instanceId] : []))
+      ),
+    ];
+    // Rewrite first. No synchronous stop callback may overwrite this decision.
+    run.state = {
+      ...run.state,
+      __ending: {
+        status,
+        failure,
+        result,
+        pending,
+        children: children.map((child) => child.id),
+      } satisfies Ending,
+    };
+    run.status = "waiting";
+    run.failure = null;
+    run.result = null;
+    run.endedAt = null;
+    for (const step of db.listWorkflowSteps(run.id)) {
+      steps.stop(run, step);
     }
+    write(run);
+    interrupt(run.id);
+    for (const child of children) {
+      finish(child, "cancelled");
+    }
+    serial(run.id, () => endRunSessions(run.id)).catch((error) => {
+      notify(
+        runOf(run.id),
+        `${workflowNoticeMarker(nameOf(run), "stop held")}The run could not finish stopping: ${reason(error)}.`
+      );
+    });
+  };
+
+  const endRunSessions = async (runId: string): Promise<void> => {
+    let run = runOf(runId);
+    const ending = endingOf(run);
+    if (!ending) {
+      return;
+    }
+    const pending = (
+      await Promise.all(
+        ending.pending.map(async (instanceId) => {
+          try {
+            await deps.halt(run.machineId, instanceId);
+            return null;
+          } catch (error) {
+            notify(
+              run,
+              `${workflowNoticeMarker(nameOf(run), "stop held")}Session ${instanceId} could not be ended because ${reason(error)}. The run launches nothing more and is not fully cancelled until its sessions are confirmed ended.`
+            );
+            return instanceId;
+          }
+        })
+      )
+    ).filter((id): id is string => id !== null);
+    run = runOf(runId);
+    const current = endingOf(run);
+    if (!current) {
+      return;
+    }
+    current.pending = pending;
+    run.state = { ...run.state, __ending: current };
+    if (
+      pending.length ||
+      current.children.some((id) => {
+        const child = db.getWorkflowRun(id);
+        return child && (endingOf(child) || active(child));
+      })
+    ) {
+      write(run);
+      return;
+    }
+    const { __ending: _ending, ...state } = run.state;
+    run.state = state;
+    run.status = current.status;
+    run.failure = current.failure;
+    run.result = current.result;
+    run.endedAt = new Date();
+    closeSteps(run, current.status);
+    write(run);
     const took = durationText(Date.now() - run.startedAt.getTime());
     const outcome =
-      status === "done"
-        ? receiptOf(result, "result")
-        : failureText(failure ?? status);
+      current.status === "done"
+        ? receiptOf(current.result, "result")
+        : failureText(current.failure ?? current.status);
     notify(
       run,
-      `${workflowNoticeMarker(nameOf(run), status)}run ${run.id} · ${took} · ${outcome}`
+      `${workflowNoticeMarker(nameOf(run), current.status)}run ${run.id} · ${took} · ${outcome}`
     );
     reportToParent(run);
+    if (run.parentRunId && endingOf(runOf(run.parentRunId))) {
+      serial(run.parentRunId, () =>
+        endRunSessions(run.parentRunId as string)
+      ).catch((error) =>
+        notify(run, `Parent stop remains held: ${reason(error)}`)
+      );
+    }
   };
 
   // ------------------------------------------------------------------ launch
@@ -1322,7 +1421,22 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
         const run = db.getWorkflowRun(instance.workflowRunId);
         const step = db.getWorkflowStep(instance.workflowStepId);
         if (run && step && !active(run)) {
-          steps.stop(run, step);
+          if (endingOf(run)) {
+            serial(run.id, () => endRunSessions(run.id)).catch((error) =>
+              notify(run, `Stop remains held: ${reason(error)}`)
+            );
+          } else {
+            const status =
+              run.status === "done" || run.status === "failed"
+                ? run.status
+                : "cancelled";
+            finish(
+              { ...run, status: "running" },
+              status,
+              run.failure,
+              run.result
+            );
+          }
         }
       }
     },
@@ -1533,6 +1647,7 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
      * the run itself is read with workflow_read or the dashboard.
      */
     steer(id: string, action: WorkflowAction, caller?: string) {
+      // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: supervisor actions share one serialized ownership gate including deferred fail/retry behind a held stop
       return serial(id, async () => {
         const run = runOf(id);
         if (caller && caller !== run.supervisorInstanceId) {
@@ -1555,7 +1670,7 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
           case "cancel":
             finish(run, "cancelled");
             interrupt(id);
-            return `Cancelled run ${id}.`;
+            return `Cancellation requested for run ${id}; waiting for confirmed session ends.`;
           case "answer": {
             const step = runStep(id, action.stepId);
             if (step.status !== "waiting") {
@@ -1569,6 +1684,15 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
             return `Answered step ${step.id}; the run goes on.`;
           }
           case "retry": {
+            if (
+              await steps.heldStopAction(
+                run,
+                runStep(id, action.stepId),
+                "retry"
+              )
+            ) {
+              return `Recorded retry for step ${action.stepId}; it starts only after confirmed end.`;
+            }
             const step = await steps.retry(run, runStep(id, action.stepId));
             const attempt = db.listWorkflowAttempts(step.id).at(-1);
             return step.status === "running"
@@ -1576,6 +1700,15 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
               : `Step ${step.id}'s new attempt did not start (${attempt?.failure}); the step is ${step.status}.`;
           }
           case "fail":
+            if (
+              await steps.heldStopAction(
+                run,
+                runStep(id, action.stepId),
+                "fail"
+              )
+            ) {
+              return `Recorded fail for step ${action.stepId}; it applies only after confirmed end.`;
+            }
             steps.fail(run, runStep(id, action.stepId));
             return `Step ${action.stepId} failed; the program has its StepError.`;
           default:
@@ -1590,6 +1723,13 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
      * end, and its supervisors get the notices kept while it was gone.
      */
     recover(machineId: string) {
+      for (const run of db
+        .listWorkflowRuns()
+        .filter((row) => row.machineId === machineId && endingOf(row))) {
+        serial(run.id, () => endRunSessions(run.id)).catch((error) =>
+          notify(run, `Stop remains held: ${reason(error)}`)
+        );
+      }
       steps.recover(machineId);
       flushNotices();
     },

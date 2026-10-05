@@ -17,30 +17,38 @@ export const createSessionLifecycle = (ports: {
   send: (machineId: string, payload: StopPayload) => boolean;
   restore: (row: InstanceRow) => void;
   deleteTranscript: (row: InstanceRow) => Promise<boolean>;
+  ready: (machineId: string) => boolean;
+  recoverRemoved: (machineId: string) => void;
   changed: (machineId: string, removed?: string) => void;
   refresh: (machineId: string) => void;
 }) => {
   const snapshots = new Map<string, Snapshot>();
   const attaching = new Map<string, { at: number; attempts: number }>();
   const deleting = new Set<string>();
-  const issued = new Map<string, { generation: string; at: number }>();
+  const issued = new Map<string, { generation: string; sequence: number }>();
   const delivering = new Map<string, string>();
+  const unavailable = new Set<string>();
+  let sequence = 0;
   const generation = (row: ReturnType<DbShape["sessionOwnership"]>[number]) =>
     JSON.stringify([row.id, row.spawnedAt]);
 
   const finishTranscript = (
     row: ReturnType<DbShape["sessionOwnership"]>[number]
   ) => {
-    if (deleting.has(row.id)) {
+    if (
+      deleting.has(row.id) ||
+      (row.endRetryAt && row.endRetryAt.getTime() > Date.now())
+    ) {
       return;
     }
     deleting.add(row.id);
     ports
       .deleteTranscript(row)
       .then((done) => {
-        const current = ports.db
-          .sessionOwnership(row.machineId)
-          .find((owner) => owner.id === row.id);
+        const current = ports.db.ownedInstance(row.id, row.machineId);
+        if (!done) {
+          throw new Error("The machine refused to delete the transcript.");
+        }
         if (
           done &&
           current?.endIntent === "delete-transcript" &&
@@ -51,7 +59,13 @@ export const createSessionLifecycle = (ports: {
           ports.changed(row.machineId, row.id);
         }
       })
-      .catch(() => undefined)
+      .catch((error: unknown) => {
+        ports.db.noteEndFailure(
+          row.id,
+          error instanceof Error ? error.message : String(error)
+        );
+        ports.changed(row.machineId);
+      })
       .finally(() => deleting.delete(row.id));
   };
 
@@ -61,6 +75,9 @@ export const createSessionLifecycle = (ports: {
     confirmAbsent = true
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: total keep/end decision table reads current durable rows on every run, with positive custody required for absence
   ): void => {
+    if (!ports.ready(machineId)) {
+      return;
+    }
     if (fresh) {
       snapshots.set(machineId, fresh);
     }
@@ -70,14 +87,20 @@ export const createSessionLifecycle = (ports: {
     }
     const held = new Set(snapshot.custody.instances);
     const attached = new Set(snapshot.attached);
-    for (const row of ports.db.sessionOwnership(machineId)) {
+    const pending = new Set(snapshot.custody.pending ?? []);
+    const rows = ports.db.sessionOwnership(machineId);
+    ports.recoverRemoved(machineId);
+    for (const row of rows) {
+      if (row.machineRemoved) {
+        continue;
+      }
       if (row.endIntent) {
         attaching.delete(row.id);
         const sent = issued.get(row.id);
         const postStopRead =
           sent?.generation === generation(row) &&
-          snapshot.custody.readStartedAt !== undefined &&
-          snapshot.custody.readStartedAt > sent.at;
+          snapshot.custody.stopSequence !== undefined &&
+          snapshot.custody.stopSequence >= sent.sequence;
         if (row.endConfirmedAt) {
           if (row.endIntent === "delete-transcript") {
             finishTranscript(row);
@@ -92,6 +115,7 @@ export const createSessionLifecycle = (ports: {
           row.harness !== "opencode" &&
           !held.has(row.id) &&
           !attached.has(row.id) &&
+          !pending.has(row.id) &&
           (row.endIntent !== "discard" || row.status === "discarded")
         ) {
           ports.db.confirmInstanceEnd(row.id);
@@ -108,30 +132,39 @@ export const createSessionLifecycle = (ports: {
         if (delivering.get(row.id) === generation(row)) {
           continue;
         }
-        const sentAt = Date.now();
+        sequence += 1;
         const delivered = ports.send(machineId, {
+          stopSequence: sequence,
           instanceId: row.id,
+          ...(row.scratchWorktree
+            ? { scratchWorktree: row.scratchWorktree }
+            : {}),
           processGeneration: generation(row),
           ...(row.harness
             ? { harness: row.harness as StopPayload["harness"] }
             : {}),
           ...(row.sessionId ? { sessionId: row.sessionId } : {}),
           cwd: row.cwd,
-          ...(row.harness === "opencode" && !row.sessionId
+          ...(row.harness === "opencode"
             ? {
-                claimedSessionIds: ports.db
-                  .sessionOwnership(machineId)
-                  .flatMap((owner) =>
-                    owner.harness === "opencode" && owner.sessionId
-                      ? [owner.sessionId]
-                      : []
-                  ),
+                claimedSessionIds: rows.flatMap((owner) =>
+                  owner.id !== row.id &&
+                  owner.harness === "opencode" &&
+                  owner.sessionId &&
+                  (!row.sessionId ||
+                    ["running", "starting"].includes(owner.status) ||
+                    attached.has(owner.id) ||
+                    pending.has(owner.id) ||
+                    attaching.has(owner.id))
+                    ? [owner.sessionId]
+                    : []
+                ),
               }
             : {}),
           discard: row.endIntent === "discard" && row.status !== "discarded",
         });
-        if (delivered && sent?.generation !== generation(row)) {
-          issued.set(row.id, { generation: generation(row), at: sentAt });
+        if (delivered) {
+          issued.set(row.id, { generation: generation(row), sequence });
         }
         if (delivered) {
           delivering.set(row.id, generation(row));
@@ -142,7 +175,7 @@ export const createSessionLifecycle = (ports: {
       delivering.delete(row.id);
       if (attached.has(row.id)) {
         attaching.delete(row.id);
-      } else if (held.has(row.id)) {
+      } else if (held.has(row.id) && !unavailable.has(row.id)) {
         const prior = attaching.get(row.id);
         if (!prior || Date.now() >= prior.at) {
           const attempts = (prior?.attempts ?? 0) + 1;
@@ -159,6 +192,12 @@ export const createSessionLifecycle = (ports: {
   };
 
   const endSession = (instanceId: string, intent: SessionEndIntent): void => {
+    const owner = ports.db.ownedInstance(instanceId);
+    if (owner && !ports.ready(owner.machineId)) {
+      throw new Error(
+        `Machine ${owner.machineId}'s agent has not restarted onto this build yet.`
+      );
+    }
     const row = ports.db.endInstance(instanceId, intent);
     if (row) {
       ports.changed(
@@ -184,9 +223,7 @@ export const createSessionLifecycle = (ports: {
       };
     }
   ): boolean => {
-    const row = ports.db
-      .sessionOwnership(machineId)
-      .find((owner) => owner.id === id);
+    const row = ports.db.ownedInstance(id, machineId);
     if (
       !(row?.endIntent && payload.ended?.resourcesClosed) ||
       payload.ended.harness !== (row.harness ?? "claude") ||
@@ -222,6 +259,17 @@ export const createSessionLifecycle = (ports: {
   };
 
   return {
+    restoring: (id: string) => {
+      const prior = attaching.get(id);
+      if (!prior) {
+        attaching.set(id, { at: Date.now() + 1000, attempts: 1 });
+      }
+      unavailable.delete(id);
+    },
+    unavailable: (id: string) => {
+      unavailable.add(id);
+      attaching.delete(id);
+    },
     endSession,
     reconcile,
     confirm,
@@ -230,6 +278,9 @@ export const createSessionLifecycle = (ports: {
       snapshots.delete(machineId);
       for (const row of ports.db.sessionOwnership(machineId)) {
         delivering.delete(row.id);
+        issued.delete(row.id);
+        attaching.delete(row.id);
+        unavailable.delete(row.id);
       }
     },
   };

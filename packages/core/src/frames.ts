@@ -172,6 +172,13 @@ export interface SessionAddressFrame {
   sessionId: string;
 }
 
+export interface ScratchWorktreeFrame {
+  instanceId: string;
+  kind: "scratch_worktree";
+  processGeneration: string;
+  worktree: import("./index").ScratchWorktree;
+}
+
 export interface UserMessageFrame {
   /** Absolute paths of images on the session's machine to send alongside. */
   attachments?: string[];

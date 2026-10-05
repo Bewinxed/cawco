@@ -135,7 +135,15 @@ const MIGRATIONS_DIR = Bun.fileURLToPath(
 export type InstanceKind = (typeof instances.$inferSelect)["kind"];
 export type PublicInstanceRow = Omit<
   typeof instances.$inferSelect,
-  "endIntent" | "endConfirmedAt" | "addressProtocol" | "endReason"
+  | "endIntent"
+  | "endConfirmedAt"
+  | "addressProtocol"
+  | "endReason"
+  | "addressRequired"
+  | "machineRemoved"
+  | "scratchWorktree"
+  | "endRetryAt"
+  | "endAttempts"
 >;
 export type BoardInstanceRow = Omit<PublicInstanceRow, "tooling">;
 export type ContinuationRow = typeof continuations.$inferSelect;
@@ -224,6 +232,7 @@ export type UsageLimitRow = typeof usageLimits.$inferSelect;
 export type UsageLimitHistoryRow = typeof usageLimitHistory.$inferSelect;
 
 export interface DbShape {
+  readonly acknowledgeAddress: (id: string) => void;
   readonly acknowledgeSessionIdentity: (
     instanceId: string,
     hash: string
@@ -240,6 +249,7 @@ export interface DbShape {
     }[]
   ) => void;
   /** A machine's last-known tool status by id; empty for one that never reported. */
+  readonly agentAddressContract: (machineId: string) => boolean;
   readonly agentHarnesses: (machineId: string) => HarnessReport[] | undefined;
   readonly agentTools: (machineId: string) => Record<string, ToolStatus>;
   /** Records ownership before sending a create; a restart discards anything still unfiled. */
@@ -378,6 +388,7 @@ export interface DbShape {
   ) => WorkflowLogRow | undefined;
   readonly getWorkflowRun: (id: string) => WorkflowRunRow | undefined;
   readonly getWorkflowStep: (id: string) => WorkflowStepRow | undefined;
+  readonly hiddenSession: (id: string) => boolean;
   readonly insertContinuation: (
     row: Omit<ContinuationRow, "createdAt" | "updatedAt">
   ) => ContinuationRow;
@@ -512,6 +523,10 @@ export interface DbShape {
     | { named: false; row: PublicInstanceRow }
     | undefined;
   /** Records the window a claude turn reported for its model. */
+  readonly noteAgentAddressContract: (
+    machineId: string,
+    supported: boolean
+  ) => void;
   readonly noteClaudeContextWindow: (
     model: string,
     contextWindow: number
@@ -523,6 +538,7 @@ export interface DbShape {
    * only re-publishes when something actually moved.
    */
   readonly noteDerivedTitle: (id: string, derivedTitle: string) => boolean;
+  readonly noteEndFailure: (id: string, error: string) => void;
   readonly noteEndReason: (id: string, reason: string) => void;
   /**
    * The effort the session's agent read back from its harness (`EFFORT_READ`).
@@ -584,6 +600,10 @@ export interface DbShape {
    * delegate's session takes on a follow-up: its new work item, and the
    * session that delegated it.
    */
+  readonly ownedInstance: (
+    id: string,
+    machineId?: string
+  ) => typeof instances.$inferSelect | undefined;
   readonly patchInstance: (
     id: string,
     patch: {
@@ -766,6 +786,10 @@ export interface DbShape {
     path?: string;
   }) => void;
   /** Files a send's record as the hub accepted it: pending, or failed at once. */
+  readonly recordScratchWorktree: (
+    id: string,
+    worktree: import("@cawco/core").ScratchWorktree
+  ) => void;
   readonly recordSend: (
     send: typeof sentMessages.$inferInsert
   ) => SentMessageRow;
@@ -780,6 +804,11 @@ export interface DbShape {
     model?: string;
     latencyMs?: number;
   }) => SupervisorEvent;
+  readonly restoreRemovedSessions: (
+    machineId: string,
+    held: string[],
+    complete: boolean
+  ) => void;
   /** Where a rule stands with a session; absent means it has never fired there. */
   readonly ruleStateFor: (
     ruleId: string,
@@ -885,6 +914,7 @@ export interface DbShape {
      */
     resumableAt?: Record<string, number>
   ) => SettledInstance[];
+  readonly settleRemovedSession: (id: string, present: boolean) => void;
   readonly settleUnavailableRecovery: (id: string) => boolean;
   /** Names of fleet skills installed at or after `since`. */
   readonly skillsInstalledSince: (since: Date) => string[];
@@ -1212,6 +1242,11 @@ const make = (path: string): DbShape => {
   mkdirSync(dirname(path), { recursive: true });
   const db = drizzle(path);
   const {
+    endRetryAt: _endRetryAt,
+    endAttempts: _endAttempts,
+    addressRequired: _addressRequired,
+    machineRemoved: _machineRemoved,
+    scratchWorktree: _scratchWorktree,
     addressProtocol: _addressProtocol,
     endReason: _endReason,
     endIntent: _endIntent,
@@ -1221,6 +1256,7 @@ const make = (path: string): DbShape => {
   const { tooling: _tooling, ...boardColumns } = publicColumns;
   const listedInstances = () =>
     and(
+      eq(instances.machineRemoved, false),
       ne(instances.status, "discarded"),
       or(isNull(instances.endIntent), eq(instances.endIntent, "stop")),
       or(
@@ -1502,6 +1538,7 @@ const make = (path: string): DbShape => {
           eq(instances.machineId, machineId),
           // Not the live ones: a running session's own frames are fresher than
           // any file the catalog looked at.
+          eq(instances.machineRemoved, false),
           liveIds.length > 0 ? notInArray(instances.id, liveIds) : undefined,
           isNotNull(instances.sessionId)
         )
@@ -1545,6 +1582,121 @@ const make = (path: string): DbShape => {
         )
         .run();
     },
+    agentAddressContract: (machineId) =>
+      db
+        .select({ addressContract: agents.addressContract })
+        .from(agents)
+        .where(eq(agents.machineId, machineId))
+        .get()?.addressContract ?? false,
+    noteAgentAddressContract: (machineId, addressContract) => {
+      db.update(agents)
+        .set({ addressContract })
+        .where(eq(agents.machineId, machineId))
+        .run();
+    },
+    ownedInstance: (id, machineId) =>
+      db
+        .select()
+        .from(instances)
+        .where(
+          and(
+            eq(instances.id, id),
+            machineId === undefined
+              ? undefined
+              : eq(instances.machineId, machineId)
+          )
+        )
+        .get(),
+    hiddenSession: (id) =>
+      !!db
+        .select({ id: instances.id })
+        .from(instances)
+        .where(
+          and(
+            or(eq(instances.id, id), eq(instances.sessionId, id)),
+            or(
+              eq(instances.machineRemoved, true),
+              and(
+                isNotNull(instances.endIntent),
+                ne(instances.endIntent, "stop")
+              )
+            )
+          )
+        )
+        .get(),
+    acknowledgeAddress: (id) => {
+      db.update(instances)
+        .set({ addressProtocol: true })
+        .where(eq(instances.id, id))
+        .run();
+    },
+    recordScratchWorktree: (id, scratchWorktree) => {
+      db.update(instances)
+        .set({ scratchWorktree, cwd: scratchWorktree.dir })
+        .where(eq(instances.id, id))
+        .run();
+    },
+    noteEndFailure: (id, error) => {
+      const row = db.select().from(instances).where(eq(instances.id, id)).get();
+      if (!row?.endIntent) {
+        return;
+      }
+      db.update(instances)
+        .set({
+          lastError: error,
+          endReason: error,
+          endAttempts: row.endAttempts + 1,
+          endRetryAt: new Date(
+            Date.now() +
+              Math.min(300_000, 30_000 * 2 ** Math.min(row.endAttempts, 4))
+          ),
+        })
+        .where(eq(instances.id, id))
+        .run();
+    },
+    settleRemovedSession: (id, present) =>
+      db.transaction((tx) => {
+        const row = tx
+          .select()
+          .from(instances)
+          .where(eq(instances.id, id))
+          .get();
+        if (!row?.machineRemoved) {
+          return;
+        }
+        if (present) {
+          tx.update(instances)
+            .set({ machineRemoved: false })
+            .where(eq(instances.id, id))
+            .run();
+        } else {
+          dropInstances(tx, [id]);
+        }
+      }),
+    restoreRemovedSessions: (machineId, held, complete) =>
+      db.transaction((tx) => {
+        const removed = tx
+          .select()
+          .from(instances)
+          .where(
+            and(
+              eq(instances.machineId, machineId),
+              eq(instances.machineRemoved, true)
+            )
+          )
+          .all();
+        const present = new Set(held);
+        for (const row of removed) {
+          if (present.has(row.id)) {
+            tx.update(instances)
+              .set({ machineRemoved: false })
+              .where(eq(instances.id, row.id))
+              .run();
+          } else if (complete && row.harness !== "opencode") {
+            dropInstances(tx, [row.id]);
+          }
+        }
+      }),
     sessionOwnership: (machineId) =>
       db
         .select()
@@ -1572,7 +1724,11 @@ const make = (path: string): DbShape => {
               ? row.endIntent
               : intent;
           const neverStarted =
-            row.harness === "opencode" && row.addressProtocol && !row.sessionId;
+            row.harness === "opencode" &&
+            row.addressRequired &&
+            !row.sessionId &&
+            !row.scratchWorktree &&
+            next !== "discard";
           const ended = tx
             .update(instances)
             .set({
@@ -1580,6 +1736,8 @@ const make = (path: string): DbShape => {
               endConfirmedAt:
                 row.endIntent === next ? row.endConfirmedAt : null,
               endReason: neverStarted ? "never started" : row.endReason,
+              endRetryAt: null,
+              endAttempts: 0,
               ...(neverStarted ? { endConfirmedAt: new Date() } : {}),
               status: row.status === "discarded" ? "discarded" : "stopped",
               updatedAt: new Date(),
@@ -1991,6 +2149,11 @@ const make = (path: string): DbShape => {
           `Instance ${id} belongs to machine ${existing.machineId}, not ${machineId}.`
         );
       }
+      if (existing?.machineRemoved) {
+        throw new Error(
+          `Instance ${id} is awaiting its removed machine's complete custody reading.`
+        );
+      }
       if (existing?.endIntent && existing.endIntent !== "stop") {
         throw new Error(
           `Instance ${id} is being deleted and cannot be reopened.`
@@ -2026,7 +2189,7 @@ const make = (path: string): DbShape => {
       }
       db.insert(instances)
         .values({
-          addressProtocol,
+          addressRequired: addressProtocol,
           id,
           machineId,
           cwd,
@@ -2077,7 +2240,8 @@ const make = (path: string): DbShape => {
             endIntent: null,
             endConfirmedAt: null,
             endReason: null,
-            addressProtocol,
+            endRetryAt: null,
+            endAttempts: 0,
             lastError: null,
             ...(cleanSessionId ? { sessionId: cleanSessionId } : {}),
             ...(harness ? { harness } : {}),
@@ -2103,6 +2267,7 @@ const make = (path: string): DbShape => {
           and(
             eq(instances.id, id),
             ne(instances.status, "discarded"),
+            eq(instances.machineRemoved, false),
             or(isNull(instances.endIntent), eq(instances.endIntent, "stop"))
           )
         )
@@ -2291,6 +2456,7 @@ const make = (path: string): DbShape => {
           .where(
             and(
               eq(instances.machineId, machineId),
+              eq(instances.machineRemoved, false),
               or(eq(instances.harness, "claude"), isNull(instances.harness)),
               isNotNull(instances.sessionId),
               notInArray(instances.status, ["stopped", "discarded"]),
@@ -2343,6 +2509,7 @@ const make = (path: string): DbShape => {
         .where(
           and(
             eq(instances.machineId, machineId),
+            eq(instances.machineRemoved, false),
             inArray(instances.status, ["running", "starting", "unknown"]),
             liveIds.length > 0 ? notInArray(instances.id, liveIds) : undefined
           )
@@ -2397,6 +2564,7 @@ const make = (path: string): DbShape => {
               .where(
                 and(
                   eq(instances.machineId, machineId),
+                  eq(instances.machineRemoved, false),
                   inArray(instances.id, liveIds),
                   // Note the omission of `running`: a row already at `running`
                   // that the beat lists has not moved, and writing it anyway
@@ -2423,6 +2591,7 @@ const make = (path: string): DbShape => {
         .where(
           and(
             eq(instances.machineId, machineId),
+            eq(instances.machineRemoved, false),
             inArray(instances.status, ["running", "starting"]),
             liveIds.length > 0 ? notInArray(instances.id, liveIds) : undefined
           )
@@ -3195,12 +3364,20 @@ const make = (path: string): DbShape => {
         .select()
         .from(agents)
         .all()
-        .map(({ fleet, build, harnesses, ...agent }) => ({
-          ...agent,
-          ...(fleet ? { fleet } : {}),
-          ...(build ? { build } : {}),
-          ...(harnesses ? { harnesses } : {}),
-        })),
+        .map(
+          ({
+            addressContract: _addressContract,
+            fleet,
+            build,
+            harnesses,
+            ...agent
+          }) => ({
+            ...agent,
+            ...(fleet ? { fleet } : {}),
+            ...(build ? { build } : {}),
+            ...(harnesses ? { harnesses } : {}),
+          })
+        ),
     // A discarded side quest is gone for good, and a row that has not moved in a
     // day is history no rail has a use for — a running one stays whatever its
     // age, and so does a sleeping one: it is a conversation the fleet can pick
@@ -3232,6 +3409,7 @@ const make = (path: string): DbShape => {
         .where(
           and(
             inArray(instances.id, ids),
+            eq(instances.machineRemoved, false),
             ne(instances.status, "discarded"),
             or(isNull(instances.endIntent), eq(instances.endIntent, "stop"))
           )
@@ -3245,6 +3423,7 @@ const make = (path: string): DbShape => {
         .where(
           and(
             eq(instances.sessionId, sessionId),
+            eq(instances.machineRemoved, false),
             ne(instances.status, "discarded"),
             or(isNull(instances.endIntent), eq(instances.endIntent, "stop"))
           )
@@ -3281,7 +3460,19 @@ const make = (path: string): DbShape => {
           .where(eq(instances.machineId, machineId))
           .all()
           .map((row) => row.id);
-        // Ownership remains until each machine confirms the stored delete.
+        // Removing a machine never touches its processes or records end intent.
+        tx.update(instances)
+          .set({
+            machineRemoved: true,
+            projectId: null,
+            endIntent: null,
+            endConfirmedAt: null,
+            endReason: null,
+            endRetryAt: null,
+            endAttempts: 0,
+          })
+          .where(eq(instances.machineId, machineId))
+          .run();
         const projectCount = tx
           .delete(projects)
           .where(eq(projects.machineId, machineId))

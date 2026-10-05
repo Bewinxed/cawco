@@ -27,7 +27,6 @@ REMOTE=build/cawco-apple/$BUILD/apps/apple
 [[ -f apps/apple/project.yml ]] || { echo "run from the repo root" >&2; exit 2; }
 PLATFORM=${1:-both}
 COMPILE_ONLY=${2:-}
-if [[ $PLATFORM == --compile-only ]]; then PLATFORM=both; COMPILE_ONLY=--compile-only; fi
 [[ -z $COMPILE_ONLY || $COMPILE_ONLY == --compile-only ]] || { echo "usage: build-both.sh [ios|macos|both] [--compile-only]" >&2; exit 2; }
 case $PLATFORM in
   ios | macos | both) ;;
