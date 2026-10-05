@@ -40,6 +40,12 @@
   font: inherit;
   min-height: 36px;
 }
+/* A select is one line and never grows, and Safari sizes one to its content
+   whatever `min-height` says (37px for the 44 asked under a finger): its
+   height is set outright. */
+.wf select {
+  height: 36px;
+}
 .wf textarea {
   resize: vertical;
   min-height: 90px;
@@ -173,5 +179,8 @@
   .wf textarea {
     font-size: 16px;
     min-height: 44px;
+  }
+  .wf select {
+    height: 44px;
   }
 }
