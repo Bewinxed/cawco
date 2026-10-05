@@ -166,6 +166,17 @@ enum Fold {
         block.type == "ui.system_note" && block.string("noteKind") == "Session continued"
     }
 
+    /// rows.ts `newestCompaction`: where the newest compaction in `blocks`
+    /// begins (its boundary, or its summary read back without one); nil when
+    /// they hold none.
+    static func newestCompaction(_ blocks: [Block]) -> Int? {
+        for i in blocks.indices.reversed() {
+            if blocks[i].type == "system.compact_boundary" { return i }
+            if isCompactSummary(blocks[i]) { return i > 0 && blocks[i - 1].type == "system.compact_boundary" ? i - 1 : i }
+        }
+        return nil
+    }
+
     /// rows.ts `compactionAt`: the compaction that begins at `blocks[i]` and
     /// how many blocks it is — a boundary with the summary right after it, a
     /// boundary whose summary has not arrived, or a summary read back alone.

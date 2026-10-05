@@ -20,6 +20,8 @@ final class RowEnv {
     var openLightbox: (Lightbox.Item, UIView) -> Void = { _, _ in }
     /// The transcripts of delegates opened in this one (Delegate.svelte).
     var delegateTranscript: (String) -> SessionTranscript? = { _ in nil }
+    /// Asks for the page before the ones a transcript holds (`SessionsStore.readOlder`).
+    var readOlder: (String) -> Void = { _ in }
     /// A delegate's card opened or folded: its transcript is wanted, or not.
     var watchDelegate: (String, Bool) -> Void = { _, _ in }
     /// This transcript's own blocks, for what a delegate card reads back out of them.

@@ -700,20 +700,30 @@ final class DelegateView: RailRow, RowContent, Disclosing {
         guard open else { return }
         let builder = Builder(agentName: f.row?.harness ?? (block.toolInput["harness"] as? String) ?? "delegate", cache: env.cache)
         if let id, let transcript = env.delegateTranscript(id) {
-            let blocks = transcript.blocks.compactMap(Block.init)
+            let held = transcript.blocks.compactMap(Block.init)
+            // The well begins at the session's newest compaction, or its first
+            // turn (InlineTranscript `from`, `wanting`): an open well reads
+            // back to there a page at a time and draws nothing until it has it,
+            // so no page replaces the rows it had just drawn.
+            let from = Fold.newestCompaction(held)
+            let wanting = transcript.cursor != nil && (from == nil || (from == 0 && held[0].type != "system.compact_boundary"))
+            let fault = transcript.fault ?? transcript.olderFault
+            if wanting, !transcript.loading, !transcript.loadingOlder, transcript.olderFault == nil { env.readOlder(id) }
+            let waiting = transcript.loading || (wanting && transcript.olderFault == nil)
+            let blocks = waiting ? [] : Array(held[(from ?? 0)...])
             var branches: [String: Branch] = [:]
             for page in transcript.branches {
                 if let branch = Branch(page, blocks: page.value2.blocks.compactMap(Block.init), streaming: "") { branches[branch.toolUseId] = branch }
             }
             var voices = Voices()
             var items = builder.items(Fold.rows(blocks, branches: branches, voices: &voices)).items
-            if let streaming = transcript.tail?.streaming, !streaming.isEmpty {
+            if !waiting, let streaming = transcript.tail?.streaming, !streaming.isEmpty {
                 items += builder.pieces(id: "delegate:stream", sources: [.init(text: streaming)], grouped: true, date: nil, streaming: true)
             }
             inner.rows.configure(items)
-            let said: String? = transcript.loading && blocks.isEmpty ? "Loading its transcript…"
-                : transcript.fault.map { "\($0.reason == .offline ? "Its machine is offline" : "Its transcript couldn't be read"): \($0.message)" }
-                ?? (blocks.isEmpty ? "Nothing in its transcript yet." : nil)
+            let said: String? = waiting ? "Loading its transcript…"
+                : blocks.isEmpty ? fault.map { "\($0.reason == .offline ? "Its machine is offline" : "Its transcript couldn't be read"): \($0.message)" }
+                ?? "Nothing in its transcript yet." : nil
             empty.attributedText = said.map { Styled.string($0, TypeScale.typeMeta, color: Palette.inkMuted, lineBreak: .byWordWrapping) }
             empty.isHidden = said == nil
         } else {
@@ -911,6 +921,7 @@ final class NoticeView: UIView, RowContent {
     /// `.kit-empty-title` balances; the line and `.empty` are `p`s, pretty.
     private let title = WrapLabel(wrap: .balance)
     private let line = WrapLabel(wrap: .pretty)
+    private let retry = ChipLabel(insets: UIEdgeInsets(top: 0, left: Space.space3, bottom: 0, right: Space.space3), radius: Radius.radiusSm)
     private let column = UIStackView()
     private var inset: (top: NSLayoutConstraint, bottom: NSLayoutConstraint)!
     /// The window width the title's fluid size was set for, while it shows.
@@ -921,8 +932,17 @@ final class NoticeView: UIView, RowContent {
         column.axis = .vertical
         column.alignment = .leading
         column.spacing = Space.space2
-        for view in [mark, title, line] { column.addArrangedSubview(view) }
+        for view in [mark, title, line, retry] { column.addArrangedSubview(view) }
         column.setCustomSpacing(Space.space2 + Space.space1, after: mark)
+        // "Try again" under a page that could not be read: the outline
+        // button's look (Button `outline`, `sm`); the row it stands in is
+        // what is pressed.
+        retry.attributedText = Styled.string("Try again", TypeScale.typeLabel, color: Palette.inkStrong, leading: 1)
+        retry.backgroundColor = Palette.surfaceRaised
+        retry.layer.borderWidth = 1
+        retry.layer.borderColor = Palette.borderControl.resolvedColor(with: traitCollection).cgColor
+        retry.minHeight = Size.cBtnHSm
+        retry.isHidden = true
         column.translatesAutoresizingMaskIntoConstraints = false
         addSubview(column)
         let top = column.topAnchor.constraint(equalTo: topAnchor)
@@ -937,6 +957,7 @@ final class NoticeView: UIView, RowContent {
     required init?(coder _: NSCoder) { fatalError("built in code") }
 
     func configure(_ item: Item) {
+        retry.isHidden = true
         switch item.kind {
         case let .notice(text):
             mark.isHidden = true
@@ -949,8 +970,8 @@ final class NoticeView: UIView, RowContent {
             mark.isHidden = true
             title.isHidden = true
             titleViewport = nil
-            line.attributedText = Styled.string("Couldn't read the earlier messages. \(why) Try again.", TypeScale.typeMeta,
-                                                color: Palette.statusFailInk, lineBreak: .byWordWrapping)
+            line.attributedText = Styled.string(why, TypeScale.typeMeta, color: Palette.inkMuted, lineBreak: .byWordWrapping)
+            retry.isHidden = false
             inset.top.constant = Space.space5
             inset.bottom.constant = -Space.space5
         case .empty:
