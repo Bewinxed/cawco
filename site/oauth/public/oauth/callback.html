@@ -1,41 +1,105 @@
 <!doctype html>
+<html lang="en">
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="referrer" content="no-referrer">
-<title>CawCo sign-in</title>
-<body style="font:16px system-ui;margin:2rem;max-width:32rem">
-<p id="out">Reading the sign-in result…</p>
-<button id="go" hidden style="font:inherit;padding:.6rem 1rem;min-height:44px">Continue</button>
+<meta name="color-scheme" content="light dark">
+<title>Finish signing in · Caw&amp;Co</title>
+<style>
+  :root { --paper:#f4f0e6; --raised:#fbf8f1; --ink:#171715; --soft:#5b574d; --line:#ddd6c6; --brand:#e65d46; --chip:#ebe5d6; }
+  @media (prefers-color-scheme: dark) {
+    :root { --paper:#171715; --raised:#201f1c; --ink:#f4f0e6; --soft:#a8a295; --line:#34322d; --chip:#2a2824; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; min-height:100dvh; background:var(--paper); color:var(--ink);
+    font:17px/1.45 ui-rounded, "SF Pro Rounded", system-ui, sans-serif;
+    padding:max(24px, env(safe-area-inset-top)) 20px max(24px, env(safe-area-inset-bottom)); }
+  main { max-width:26rem; margin:0 auto; }
+  .mark { font-weight:800; font-size:1.15rem; letter-spacing:-.01em; margin:4px 0 28px; }
+  .mark b { color:var(--brand); font-weight:800; }
+  .card { background:var(--raised); border:1px solid var(--line); border-radius:16px; padding:24px; }
+  h1 { font-size:1.45rem; line-height:1.2; margin:0 0 10px; letter-spacing:-.015em; }
+  p { margin:0 0 18px; color:var(--soft); }
+  .label { display:block; font-size:.78rem; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--soft); margin:0 0 6px; }
+  .hub { font:600 .95rem/1.35 ui-monospace, "SF Mono", Menlo, Consolas, monospace; background:var(--chip);
+    border-radius:10px; padding:12px 14px; margin:0 0 20px; overflow-wrap:anywhere; color:var(--ink); }
+  button { width:100%; min-height:52px; border:0; border-radius:12px; background:var(--ink); color:var(--paper);
+    font:700 1rem ui-rounded, system-ui, sans-serif; cursor:pointer; }
+  button:focus-visible { outline:3px solid var(--brand); outline-offset:3px; }
+  button:active { transform:scale(.985); }
+  .note { font-size:.88rem; margin:14px 0 0; }
+  [hidden] { display:none !important; }
+  @media (prefers-reduced-motion: no-preference) { button { transition: transform 120ms cubic-bezier(.23,1,.32,1); } }
+</style>
+<body>
+<main>
+  <div class="mark">Caw<b>&amp;</b>Co</div>
+  <section class="card" aria-live="polite">
+    <h1 id="title">Finish signing in</h1>
+    <p id="msg">Reading the sign-in result…</p>
+    <div id="target" hidden>
+      <span class="label">Your hub</span>
+      <div class="hub" id="hub"></div>
+      <button id="go" type="button" hidden>Continue to your hub</button>
+      <p class="note" id="note"></p>
+    </div>
+  </section>
+</main>
 <script>
   // The provider sends the person here with a one-time code. The code is
   // useless without the verifier that stays on the install, and goes on only
-  // to the install that started this sign-in, after a tap.
-  const out = document.getElementById("out");
-  const go = document.getElementById("go");
+  // to the install this browser started the sign-in from. The first time for
+  // a hub it asks; after one approval the hub is remembered in this browser
+  // and later sign-ins return on their own, with a moment to cancel.
+  const $ = (id) => document.getElementById(id);
   const q = new URLSearchParams(location.search);
   const code = q.get("code");
   const state = q.get("state");
   history.replaceState(null, "", location.pathname);
   const key = state ? "cawco-oauth:" + state : "";
-  const saved = key ? localStorage.getItem(key) : null;
+  const TRUST = "cawco-oauth:trusted";
+  const trusted = () => { try { return JSON.parse(localStorage.getItem(TRUST) || "[]"); } catch { return []; } };
   let origin = "";
   try {
-    const entry = saved ? JSON.parse(saved) : null;
+    const entry = key ? JSON.parse(localStorage.getItem(key) || "null") : null;
     if (entry && Date.now() - entry.at < 10 * 60 * 1000) origin = new URL(entry.origin).origin;
   } catch {}
+  const stop = (title, msg) => { $("title").textContent = title; $("msg").textContent = msg; };
+  const forward = () => {
+    localStorage.removeItem(key);
+    const back = new URL("/api/fleet/mcp/oauth/callback", origin);
+    back.searchParams.set("code", code);
+    back.searchParams.set("state", state);
+    location.assign(back.href);
+  };
   if (q.get("error")) {
-    out.textContent = "The provider did not complete the sign-in (" + q.get("error") + "). Start again from CawCo.";
+    stop("Sign-in wasn't completed", "The provider didn't finish the sign-in (" + q.get("error") + "). Start it again from CawCo.");
   } else if (!code || !origin) {
-    out.textContent = "This sign-in has expired or was started on another device. Start sign-in again from CawCo.";
+    stop("This sign-in can't continue", "It expired, or you started it on another device. Start it again from CawCo.");
   } else {
-    out.textContent = "Send this sign-in to the CawCo hub at " + origin + "?";
-    go.hidden = false;
-    go.onclick = () => {
-      localStorage.removeItem(key);
-      const back = new URL("/api/fleet/mcp/oauth/callback", origin);
-      back.searchParams.set("code", code);
-      back.searchParams.set("state", state);
-      location.assign(back.href);
+    $("hub").textContent = origin;
+    $("target").hidden = false;
+    const ask = () => {
+      $("title").textContent = "Finish signing in";
+      $("msg").textContent = "You approved access. Send it back to your hub to finish.";
+      $("go").textContent = "Continue to your hub";
+      $("go").hidden = false;
+      $("note").textContent = "Only continue if you just started this sign-in from your own CawCo. This hub is remembered in this browser, so next time it continues on its own.";
+      $("go").onclick = () => {
+        localStorage.setItem(TRUST, JSON.stringify([...new Set([...trusted(), origin])]));
+        forward();
+      };
     };
+    if (trusted().includes(origin)) {
+      $("title").textContent = "Signed in";
+      $("msg").textContent = "Returning to your hub…";
+      $("go").textContent = "Cancel";
+      $("go").hidden = false;
+      $("note").textContent = "";
+      const timer = setTimeout(forward, 1200);
+      $("go").onclick = () => { clearTimeout(timer); ask(); };
+    } else {
+      ask();
+    }
   }
 </script>
