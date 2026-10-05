@@ -90,7 +90,8 @@ export function tickingClock(running: () => boolean): Clock {
   let now = $state(Date.now());
   let caught = $state(true);
   let drawn = $state(false);
-  const onShow = $derived(drawn && !tabHidden && !navSheet.open);
+  let inView = $state(false);
+  const onShow = $derived(drawn && inView && !tabHidden && !navSheet.open);
 
   $effect(() => {
     if (!(running() && onShow)) {
@@ -124,13 +125,30 @@ export function tickingClock(running: () => boolean): Clock {
     },
     watch: (node: Element) => {
       hear();
+      // Rendered and on screen are two questions, and a clock asks both.
+      // `watchRendered` answers only the first: content an ancestor skips has
+      // no layout, and one merely scrolled past the fold is still laid out
+      // (utils/rendered). So the viewport is watched here as well — a clock
+      // scrolled out of view is nobody's clock, laid out or not.
       const watching = watchRendered(node, (rendered) => {
         drawn = rendered;
       });
+      const box = node.getBoundingClientRect();
+      inView =
+        box.bottom > 0 &&
+        box.top < innerHeight &&
+        box.right > 0 &&
+        box.left < innerWidth;
+      const seen = new IntersectionObserver(([entry]) => {
+        inView = entry.isIntersecting;
+      });
+      seen.observe(node);
       drawn = watching.rendered;
       return () => {
         drawn = false;
+        inView = false;
         watching.stop();
+        seen.disconnect();
       };
     },
   };
