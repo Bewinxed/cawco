@@ -521,7 +521,7 @@ final class SidebarViewController: ObservedViewController {
         _ = fleet.claudeLimits
         _ = fleet.openCodeGoLimits
         _ = fleet.limitsRead
-        for project in fleet.projects { _ = prefs.collapsed(project.cwd) }
+        for project in fleet.projects { _ = prefs.collapsed(project.id) }
         let inputs = RailModel.inputs(hub: hub, home: home, sort: prefs.sort)
         rowInputs = inputs.rows
         liveCount = inputs.live
@@ -581,7 +581,7 @@ final class SidebarViewController: ObservedViewController {
                 }
             }
         }
-        for list in lists where !prefs.collapsed(list.project.cwd) {
+        for list in lists where !prefs.collapsed(list.project.id) {
             keep(list.recent, project: list.project.id)
             if olderShown(list) { keep(list.older, project: list.project.id) }
         }
@@ -623,7 +623,7 @@ final class SidebarViewController: ObservedViewController {
             list.map { "\($0.row.id)\(openTrees.contains($0.row.id) ? "[\(nodes($0.children))]" : "")" }.joined(separator: ",")
         }
         return lists.map { list in
-            let open = !prefs.collapsed(list.project.cwd)
+            let open = !prefs.collapsed(list.project.id)
             guard open else { return "\(list.project.id)-" }
             return "\(list.project.id)+\(nodes(list.recent))|\(olderShown(list) ? nodes(list.older) : "\(list.older.count)")"
         }.joined(separator: ";") + "#\(hub.fleet.machines.isEmpty)"
@@ -674,7 +674,7 @@ final class SidebarViewController: ObservedViewController {
             block.onMenu = { [weak self] in self?.folderMenu(list.project) ?? UIMenu() }
             keptBlocks[list.project.id] = block
             block.clearSessions()
-            if !prefs.collapsed(list.project.cwd) {
+            if !prefs.collapsed(list.project.id) {
                 let sub = block.sessions
                 for node in list.recent { sub.addArrangedSubview(nodeView(node, project: list.project.id, rows: &keptRows)) }
                 if !list.older.isEmpty {
@@ -761,7 +761,7 @@ final class SidebarViewController: ObservedViewController {
             guard let block = blocks[list.project.id] else { continue }
             let name = list.project.name
             let running = list.running
-            let open = !prefs.collapsed(list.project.cwd)
+            let open = !prefs.collapsed(list.project.id)
             let print = ProjectPrint(view: ObjectIdentifier(block), name: name, running: running, open: open)
             if projectPrints[list.project.id] != print {
                 projectPrints[list.project.id] = print
@@ -812,7 +812,7 @@ final class SidebarViewController: ObservedViewController {
     @objc private func projectTapped(_ row: RailRow) {
         guard let block = blocks.first(where: { $0.value.row === row })?.value else { return }
         let project = block.project
-        let shut = !prefs.collapsed(project.cwd)
+        let shut = !prefs.collapsed(project.id)
         if fold.closingBox === block.sessionsBox {
             fold.open(block.sessionsBox, glyphs: block.sessionGlyphs(), rail: block.rail, in: view)
             return
@@ -820,14 +820,14 @@ final class SidebarViewController: ObservedViewController {
         if shut {
             fold.close(block.sessionsBox, glyphs: block.sessionGlyphs(), rail: block.rail) { [weak self] in
                 guard let self else { return }
-                prefs.setCollapsed(project.cwd, true)
+                prefs.setCollapsed(project.id, true)
                 block.showSessions(false)
                 drawnShape = shape(of: lists)
                 requestRefresh()
             }
         } else {
             fold.capture(in: view)
-            prefs.setCollapsed(project.cwd, false)
+            prefs.setCollapsed(project.id, false)
             refreshNow()
             fold.open(block.sessionsBox, glyphs: block.sessionGlyphs(), rail: block.rail, in: view)
         }
@@ -856,9 +856,27 @@ final class SidebarViewController: ObservedViewController {
         }
     }
 
+    /// A project's "N older": the same fold a project and a tree open and shut by.
     private func toggleOlder(_ id: String) {
-        if olderOpen.contains(id) { olderOpen.remove(id) } else { olderOpen.insert(id) }
-        requestRefresh()
+        func box() -> OlderBox? { blocks[id]?.sessions.arrangedSubviews.last as? OlderBox }
+        if let shut = fold.closingBox as? OlderBox, shut === box() {
+            fold.open(shut, glyphs: [], rail: nil, in: view)
+            return
+        }
+        if olderOpen.contains(id), let open = box() {
+            fold.close(open, glyphs: [], rail: nil) { [weak self] in
+                guard let self else { return }
+                olderOpen.remove(id)
+                open.isHidden = true
+                drawnShape = shape(of: lists)
+                requestRefresh()
+            }
+        } else {
+            fold.capture(in: view)
+            olderOpen.insert(id)
+            refreshNow()
+            if let open = box() { fold.open(open, glyphs: [], rail: nil, in: view) }
+        }
     }
 
     /// Lays the rail out now, so a fold can measure what it opens.
@@ -914,7 +932,7 @@ final class SidebarViewController: ObservedViewController {
     }
 
     private func collapseOthers(_ id: String) {
-        for project in hub.fleet.projects { prefs.setCollapsed(project.cwd, project.id != id) }
+        for project in hub.fleet.projects { prefs.setCollapsed(project.id, project.id != id) }
         requestRefresh()
     }
 

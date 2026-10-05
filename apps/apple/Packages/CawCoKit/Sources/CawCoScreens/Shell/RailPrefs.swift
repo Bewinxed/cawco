@@ -27,11 +27,12 @@ final class RailPrefs {
     private enum Keys {
         static let layout = "cawco-rail-layout"
         static let folders = "cawco-folder-prefs"
+        static let folds = "cawco-project-folds"
     }
 
     private(set) var sort: Sort
     private(set) var pins: [String]
-    /// Per cwd: shut in the rail, and a hand-picked identity hue.
+    /// Shut in the rail (per project id, as the web keys it: two projects may share a directory), and a hand-picked identity hue per cwd.
     private var collapsedFolders: Set<String>
     private var hues: [String: Double]
 
@@ -41,7 +42,7 @@ final class RailPrefs {
         sort = (layout["sort"] as? String).flatMap(Sort.init(rawValue:)) ?? .recent
         pins = layout["pins"] as? [String] ?? []
         let folders = defaults.dictionary(forKey: Keys.folders) as? [String: [String: Any]] ?? [:]
-        collapsedFolders = Set(folders.filter { $0.value["collapsed"] as? Bool == true }.keys)
+        collapsedFolders = Set((defaults.dictionary(forKey: Keys.folds) as? [String: Bool] ?? [:]).filter(\.value).keys)
         hues = folders.compactMapValues { $0["hue"] as? Double }
     }
 
@@ -57,11 +58,11 @@ final class RailPrefs {
         saveLayout()
     }
 
-    func collapsed(_ cwd: String) -> Bool { collapsedFolders.contains(cwd) }
+    func collapsed(_ projectId: String) -> Bool { collapsedFolders.contains(projectId) }
 
-    func setCollapsed(_ cwd: String, _ shut: Bool) {
-        if shut { collapsedFolders.insert(cwd) } else { collapsedFolders.remove(cwd) }
-        saveFolders()
+    func setCollapsed(_ projectId: String, _ shut: Bool) {
+        if shut { collapsedFolders.insert(projectId) } else { collapsedFolders.remove(projectId) }
+        UserDefaults.standard.set(Dictionary(uniqueKeysWithValues: collapsedFolders.map { ($0, true) }), forKey: Keys.folds)
     }
 
     /// The hue this directory wears: the chosen one, else the hashed one.
@@ -81,7 +82,6 @@ final class RailPrefs {
 
     private func saveFolders() {
         var out: [String: [String: Any]] = [:]
-        for cwd in collapsedFolders { out[cwd, default: [:]]["collapsed"] = true }
         for (cwd, hue) in hues { out[cwd, default: [:]]["hue"] = hue }
         UserDefaults.standard.set(out, forKey: Keys.folders)
     }
