@@ -962,6 +962,33 @@ const peekBuild = (payload: unknown): BuildInfo | undefined => {
     : undefined;
 };
 
+const peekMachineCapabilities = (
+  payload: unknown
+): import("@cawco/core/capabilities").MachineCapabilities | undefined => {
+  const value = (
+    payload as {
+      machineCapabilities?: import("@cawco/core/capabilities").MachineCapabilities;
+    } | null
+  )?.machineCapabilities;
+  if (
+    !value ||
+    typeof value.platform !== "string" ||
+    !Number.isFinite(value.at) ||
+    !Array.isArray(value.items)
+  ) {
+    return undefined;
+  }
+  return value.items.every(
+    (item) =>
+      item &&
+      typeof item.id === "string" &&
+      typeof item.available === "boolean" &&
+      typeof item.installCommand === "string"
+  )
+    ? value
+    : undefined;
+};
+
 /** The kinds a daemon may claim for its deployment clone; anything else is not one. */
 const DEPLOY_KINDS: readonly DeployKind[] = [
   "unmarked",
@@ -10286,6 +10313,7 @@ export const createServer = (
                 os: peek(message.payload, "os") ?? "unknown",
                 auth: peekAuth(message.payload),
                 build: peekBuild(message.payload),
+                machineCapabilities: peekMachineCapabilities(message.payload),
               });
               db.noteAgentAddressContract(
                 message.machineId,

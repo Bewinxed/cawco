@@ -44,6 +44,7 @@ import {
   RESTART_LOST,
   resolveRates,
 } from "@cawco/core";
+import { materializeTree, standalone } from "@cawco/core/runtime";
 import {
   and,
   asc,
@@ -125,12 +126,14 @@ const END_PRIORITY: Record<SessionEndIntent, number> = {
 declare const __CAWCO_RELEASE__: boolean | undefined;
 
 /** Shipped with the package so a fresh boot never needs a drizzle-kit step. */
-const MIGRATIONS_DIR = Bun.fileURLToPath(
-  new URL(
-    typeof __CAWCO_RELEASE__ === "boolean" ? "./drizzle" : "../../drizzle",
-    import.meta.url
-  )
-);
+const MIGRATIONS_DIR = standalone
+  ? materializeTree("drizzle")
+  : Bun.fileURLToPath(
+      new URL(
+        typeof __CAWCO_RELEASE__ === "boolean" ? "./drizzle" : "../../drizzle",
+        import.meta.url
+      )
+    );
 
 export type InstanceKind = (typeof instances.$inferSelect)["kind"];
 export type PublicInstanceRow = Omit<
@@ -1058,6 +1061,7 @@ export interface DbShape {
     auth: AgentAuth;
     /** Absent from a register with nothing new to say about it; the row keeps what it had. */
     build?: BuildInfo;
+    machineCapabilities?: import("@cawco/core/capabilities").MachineCapabilities;
   }) => void;
   /** Returns the limit-history series for a machine, optionally filtered by kind and time range. */
   readonly usageLimitHistory: (q: {
@@ -2083,7 +2087,14 @@ const make = (path: string): DbShape => {
             .run();
         }
       }),
-    upsertAgent: ({ machineId, hostname, os, auth, build }) => {
+    upsertAgent: ({
+      machineId,
+      hostname,
+      os,
+      auth,
+      build,
+      machineCapabilities,
+    }) => {
       const lastSeenAt = new Date();
       db.insert(agents)
         .values({
@@ -2094,6 +2105,7 @@ const make = (path: string): DbShape => {
           status: "online",
           lastSeenAt,
           build,
+          machineCapabilities,
         })
         .onConflictDoUpdate({
           target: agents.machineId,
@@ -2104,6 +2116,7 @@ const make = (path: string): DbShape => {
             status: "online",
             lastSeenAt,
             ...(build ? { build } : {}),
+            ...(machineCapabilities ? { machineCapabilities } : {}),
           },
         })
         .run();
@@ -3377,12 +3390,14 @@ const make = (path: string): DbShape => {
             fleet,
             build,
             harnesses,
+            machineCapabilities,
             ...agent
           }) => ({
             ...agent,
             ...(fleet ? { fleet } : {}),
             ...(build ? { build } : {}),
             ...(harnesses ? { harnesses } : {}),
+            ...(machineCapabilities ? { machineCapabilities } : {}),
           })
         ),
     // A discarded side quest is gone for good, and a row that has not moved in a

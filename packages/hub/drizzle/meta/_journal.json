@@ -519,6 +519,13 @@
       "when": 1791060000007,
       "tag": "0073_session_end_intent",
       "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "6",
+      "when": 1791180054067,
+      "tag": "0074_machine_capabilities",
+      "breakpoints": true
     }
   ]
 }

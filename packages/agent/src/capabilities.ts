@@ -1,0 +1,143 @@
+import { existsSync, readdirSync } from "node:fs";
+import { homedir, platform } from "node:os";
+import { join } from "node:path";
+import type {
+  MachineCapabilities,
+  MachineCapability,
+} from "@cawco/core/capabilities";
+import { resolveBin } from "./tools";
+
+export function browserExecutable(): string | undefined {
+  const candidates =
+    platform() === "darwin"
+      ? [
+          "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+          "/Applications/Chromium.app/Contents/MacOS/Chromium",
+        ]
+      : [
+          "google-chrome",
+          "google-chrome-stable",
+          "chromium",
+          "chromium-browser",
+        ];
+  return (
+    candidates
+      .map((name) => {
+        if (name.startsWith("/")) {
+          return existsSync(name) ? name : undefined;
+        }
+        return resolveBin(name);
+      })
+      .find(Boolean) ?? playwrightBrowser()
+  );
+}
+
+function playwrightBrowser(): string | undefined {
+  const root =
+    platform() === "darwin"
+      ? join(homedir(), "Library/Caches/ms-playwright")
+      : join(homedir(), ".cache/ms-playwright");
+  if (!existsSync(root)) {
+    return undefined;
+  }
+  for (const name of readdirSync(root)
+    .filter((entry) => entry.startsWith("chromium-"))
+    .sort()
+    .reverse()) {
+    for (const suffix of [
+      "chrome-linux64/chrome",
+      "chrome-linux/chrome",
+      "chrome-mac/Chromium.app/Contents/MacOS/Chromium",
+      "chrome-mac-arm64/Chromium.app/Contents/MacOS/Chromium",
+    ]) {
+      const path = join(root, name, suffix);
+      if (existsSync(path)) {
+        return path;
+      }
+    }
+  }
+  return undefined;
+}
+
+function linuxInstall(pkg: string): string {
+  if (resolveBin("apt-get")) {
+    return `sudo apt-get update && sudo apt-get install -y ${pkg}`;
+  }
+  if (resolveBin("dnf")) {
+    return `sudo dnf install -y ${pkg}`;
+  }
+  if (resolveBin("pacman")) {
+    return `sudo pacman -S --needed ${pkg}`;
+  }
+  if (resolveBin("apk")) {
+    return `sudo apk add ${pkg}`;
+  }
+  return `Install ${pkg} with this Linux distribution's package manager`;
+}
+
+/** Presence is read fresh on registration and every explicit probe. */
+export function probeCapabilities(): MachineCapabilities {
+  const mac = platform() === "darwin";
+  const git = resolveBin("git");
+  const node = resolveBin("node");
+  const browser = browserExecutable();
+  let service: string | undefined;
+  if (mac) {
+    service = resolveBin("launchctl");
+  } else if (existsSync("/run/systemd/system")) {
+    service = resolveBin("systemctl");
+  }
+  const nodeInstall =
+    'curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash && . "$HOME/.nvm/nvm.sh" && nvm install 24';
+  const items: MachineCapability[] = [
+    {
+      id: "git",
+      available: !!git,
+      path: git,
+      installCommand: mac ? "xcode-select --install" : linuxInstall("git"),
+    },
+    {
+      id: "opencode",
+      available: !!resolveBin("opencode"),
+      path: resolveBin("opencode"),
+      installCommand: "curl -fsSL https://opencode.ai/install | bash",
+    },
+    {
+      id: "pi",
+      available: !!resolveBin("pi"),
+      path: resolveBin("pi"),
+      installCommand: "npm install -g @earendil-works/pi-coding-agent",
+    },
+    {
+      id: "node",
+      available: !!node,
+      path: node,
+      installCommand: mac ? "brew install node@24" : nodeInstall,
+    },
+    {
+      id: "browser",
+      available: !!browser && !!node,
+      path: browser,
+      installCommand: mac
+        ? "brew install --cask google-chrome && brew install node@24"
+        : `${node ? "node --version" : nodeInstall} && npx --yes playwright install --with-deps chromium`,
+      ...(node ? {} : { reason: "Browser tools also require Node/npm" }),
+    },
+    {
+      id: "service-manager",
+      available: !!service,
+      path: service,
+      installCommand: mac
+        ? "launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/dev.cawco.agent.plist"
+        : `${linuxInstall("systemd")} && sudo loginctl enable-linger "$(id -un)"`,
+      ...(service
+        ? {}
+        : {
+            reason: mac
+              ? "launchd is unavailable"
+              : "systemd must be running as the service manager; installing its package alone does not change PID 1",
+          }),
+    },
+  ];
+  return { at: Date.now(), platform: platform(), items };
+}

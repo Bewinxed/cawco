@@ -31,6 +31,7 @@ import { Socket } from "node:net";
 import { dirname, join } from "node:path";
 import { Readable, Writable } from "node:stream";
 import { fileURLToPath } from "node:url";
+import { standalone } from "@cawco/core/runtime";
 // The protocol lives behind its own subpath on purpose: `sessiond.ts` reaches
 // for `node:os`, and the core barrel is imported by the browser bundle.
 import {
@@ -135,22 +136,27 @@ export const probeEndpoint = (
 declare const __CAWCO_RELEASE__: boolean | undefined;
 
 /** The ad-hoc sessiond command: this repo's own entry point, run under bun. */
-const adhocCommand = (): { command: string; args: string[] } => ({
-  command: process.execPath,
-  args:
-    typeof __CAWCO_RELEASE__ === "boolean"
-      ? [fileURLToPath(import.meta.url), "sessiond"]
-      : [
-          join(
-            dirname(fileURLToPath(import.meta.url)),
-            "..",
-            "..",
-            "sessiond",
-            "src",
-            "main.ts"
-          ),
-        ],
-});
+const adhocCommand = (): { command: string; args: string[] } => {
+  if (standalone) {
+    return { command: process.execPath, args: ["sessiond"] };
+  }
+  return {
+    command: process.execPath,
+    args:
+      typeof __CAWCO_RELEASE__ === "boolean"
+        ? [fileURLToPath(import.meta.url), "sessiond"]
+        : [
+            join(
+              dirname(fileURLToPath(import.meta.url)),
+              "..",
+              "..",
+              "sessiond",
+              "src",
+              "main.ts"
+            ),
+          ],
+  };
+};
 
 /**
  * Guarantee a sessiond is listening, or explain why there will not be one.

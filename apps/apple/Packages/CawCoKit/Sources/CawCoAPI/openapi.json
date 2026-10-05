@@ -11771,6 +11771,9 @@
               }
             ]
           },
+          "machineCapabilities": {
+            "$ref": "#/components/schemas/MachineCapabilities"
+          },
           "machineId": {
             "type": "string"
           },
@@ -11810,6 +11813,21 @@
           "dirty": {
             "description": "Whether that checkout has uncommitted changes.",
             "type": "boolean"
+          },
+          "protocol": {
+            "type": "object",
+            "properties": {
+              "min": {
+                "type": "number"
+              },
+              "max": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "max",
+              "min"
+            ]
           },
           "startedAt": {
             "description": "When this daemon started, ms epoch.",
@@ -12196,6 +12214,62 @@
           "xhigh"
         ],
         "type": "string"
+      },
+      "MachineCapabilities": {
+        "type": "object",
+        "properties": {
+          "at": {
+            "type": "number"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MachineCapability"
+            }
+          },
+          "platform": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "at",
+          "items",
+          "platform"
+        ]
+      },
+      "MachineCapability": {
+        "description": "Optional machine tools. Reporting never installs or impersonates a tool.",
+        "type": "object",
+        "properties": {
+          "available": {
+            "type": "boolean"
+          },
+          "id": {
+            "enum": [
+              "browser",
+              "git",
+              "node",
+              "opencode",
+              "pi",
+              "service-manager"
+            ],
+            "type": "string"
+          },
+          "installCommand": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "available",
+          "id",
+          "installCommand"
+        ]
       },
       "GeneratedImage": {
         "type": "object",

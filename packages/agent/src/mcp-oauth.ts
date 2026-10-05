@@ -116,7 +116,9 @@ export const startMcpGateway = (hubUrl: () => string) => {
   try {
     return Bun.serve({
       hostname: "127.0.0.1",
-      port: CAWCO_MCP_CALLBACK_PORT,
+      port: Number(
+        process.env.CAWCO_MCP_CALLBACK_PORT ?? CAWCO_MCP_CALLBACK_PORT
+      ),
       idleTimeout: 0,
       async fetch(request) {
         const url = new URL(request.url);

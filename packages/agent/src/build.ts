@@ -6,6 +6,12 @@
 
 import { resolve } from "node:path";
 import type { BuildInfo } from "@cawco/core";
+import {
+  protocolRange,
+  runtimeCommit,
+  runtimeVersion,
+  standalone,
+} from "@cawco/core/runtime";
 
 /** The checkout this daemon runs out of — up from `packages/agent/src`. */
 export const REPO_ROOT = resolve(
@@ -28,6 +34,15 @@ const git = async (args: string[]): Promise<string | undefined> => {
 declare const __CAWCO_RELEASE__: boolean | undefined;
 
 const read = async (): Promise<BuildInfo> => {
+  if (standalone) {
+    return {
+      version: runtimeVersion,
+      commit: runtimeCommit,
+      protocol: protocolRange,
+      dirty: false,
+      startedAt: STARTED_AT,
+    };
+  }
   const manifest = (await Bun.file(
     Bun.fileURLToPath(
       new URL(

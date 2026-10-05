@@ -2,7 +2,9 @@ import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import { homedir, platform } from "node:os";
 import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
+import { extractFromBunfs } from "@anthropic-ai/claude-agent-sdk/extract";
 import type { AuthState } from "@cawco/core";
+import { embeddedFile, standalone } from "@cawco/core/runtime";
 
 /** The keychain item Claude Code keeps its OAuth credentials in on macOS. */
 const KEYCHAIN_SERVICE = "Claude Code-credentials";
@@ -29,6 +31,13 @@ export const idle: AsyncIterable<SDKUserMessage> = {
 
 /** The native CLI selected by the SDK's default platform-package resolution. */
 export const resolveClaudeExecutable = (): string | undefined => {
+  if (standalone) {
+    const path = extractFromBunfs(embeddedFile("native/claude"));
+    if (path.includes("$bunfs") || !existsSync(path)) {
+      throw new Error("Embedded Claude CLI extraction failed");
+    }
+    return path;
+  }
   const require = createRequire(
     import.meta.resolve("@anthropic-ai/claude-agent-sdk")
   );
@@ -59,6 +68,10 @@ export const resolveClaudeExecutable = (): string | undefined => {
   }
   return undefined;
 };
+
+/** Source callers retain SDK options; binaries always select their embedded CLI. */
+export const claudeExecutableOptions = () =>
+  standalone ? { pathToClaudeCodeExecutable: resolveClaudeExecutable() } : {};
 
 /**
  * Whether macOS is holding credentials this process is not allowed to read.

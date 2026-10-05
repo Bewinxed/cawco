@@ -22,7 +22,7 @@
     "lint:fix": "ultracite fix",
     "release:build": "bun scripts/build-release.mjs",
     "release:pack": "bun scripts/build-release.mjs && cd release && npm pack",
-    "typecheck": "bun run --filter '*' typecheck && bun run --filter '@cawco/hub' openapi:check"
+    "typecheck": "bun run --filter '*' typecheck && bun run --filter '@cawco/hub' openapi:check && bunx tsc --project scripts/tsconfig.binary.json"
   },
   "overrides": {
     "@types/bun": "^1.4.2",

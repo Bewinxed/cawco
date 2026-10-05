@@ -6,6 +6,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import ts from "typescript";
+import { materializeTree, standalone } from "./runtime";
 import type { Problem, WorkflowGraph, WorkflowInput } from "./workflow";
 import { compileWorkflow, inputsFromZodShape } from "./workflow-compile";
 import type { WorkerOut, WorkerStart } from "./workflow-worker";
@@ -19,6 +20,11 @@ const ALLOWED_IMPORTS = new Set(["zod"]);
  * so nothing a program leaves behind lands in the source tree.
  */
 const programDir = (): string => {
+  if (standalone) {
+    const dir = join(materializeTree("workflow"), "programs");
+    mkdirSync(dir, { recursive: true });
+    return dir;
+  }
   const dir = new URL("../node_modules/.cawco-programs/", import.meta.url)
     .pathname;
   mkdirSync(dir, { recursive: true });
@@ -34,13 +40,18 @@ declare const __CAWCO_RELEASE__: boolean | undefined;
 const RELEASE = typeof __CAWCO_RELEASE__ === "boolean";
 
 /** The ambient declarations every program is typechecked against. */
-const AMBIENT = new URL("./workflow-globals.d.ts", import.meta.url).pathname;
+const AMBIENT = standalone
+  ? join(materializeTree("workflow"), "workflow-globals.d.ts")
+  : new URL("./workflow-globals.d.ts", import.meta.url).pathname;
 
 /** Where the hub finds the sandbox worker module. */
-export const WORKER_URL = new URL(
-  RELEASE ? "./workflow-worker.js" : "./workflow-worker.ts",
-  import.meta.url
-).href;
+function workerPath(): string {
+  if (standalone) {
+    return "./scripts/binary/workflow-worker.js";
+  }
+  return RELEASE ? "./workflow-worker.js" : "./workflow-worker.ts";
+}
+export const WORKER_URL = new URL(workerPath(), import.meta.url).href;
 
 const hashOf = (program: string) =>
   new Bun.CryptoHasher("sha256").update(program).digest("hex").slice(0, 32);
@@ -96,6 +107,7 @@ const COMPILER_OPTIONS: ts.CompilerOptions = {
   skipLibCheck: true,
   allowImportingTsExtensions: true,
   types: [],
+  ...(standalone ? { baseUrl: materializeTree("workflow") } : {}),
 };
 
 /**
@@ -117,6 +129,12 @@ export function typecheckProgram(program: string): Problem[] {
   cachedHost ??= ts.createCompilerHost(COMPILER_OPTIONS, true);
   const host: ts.CompilerHost = {
     ...cachedHost,
+    ...(standalone
+      ? {
+          getDefaultLibFileName: () =>
+            join(materializeTree("workflow"), "lib", "lib.esnext.d.ts"),
+        }
+      : {}),
     getSourceFile: (fileName, languageVersion, onError, shouldCreate) =>
       fileName === entry
         ? ts.createSourceFile(fileName, program, languageVersion, true)

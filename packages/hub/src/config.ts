@@ -1,7 +1,8 @@
 import { CAWCO_ENV, CAWCO_HUB_PORT, readEnv } from "@cawco/core";
+import { runtimeVersion, standalone } from "@cawco/core/runtime";
 
 /** Reported by `GET /health`; keep in sync with package.json. */
-export const HUB_VERSION = "0.1.0";
+export const HUB_VERSION = standalone ? runtimeVersion : "0.1.0";
 
 export const HUB_PORT = Number(readEnv(CAWCO_ENV.hubPort) ?? CAWCO_HUB_PORT);
 

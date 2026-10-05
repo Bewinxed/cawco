@@ -28,6 +28,7 @@ import { mergeObserved } from "@cawco/core/usage/observed";
 import { fetchOpenCodeGoLimits } from "@cawco/core/usage/opencode-go";
 import { Data, Duration, Effect, Fiber, Schedule } from "effect";
 import { buildInfo } from "./build";
+import { probeCapabilities } from "./capabilities";
 import { convertWorktrees } from "./clone";
 import { readConfig } from "./config";
 import { convergeDeniedTools } from "./denied-tools";
@@ -104,6 +105,7 @@ export interface RegisterPayload extends MachineIdentity {
    */
   deploy?: DeployInfo;
   instances: string[];
+  machineCapabilities: ReturnType<typeof probeCapabilities>;
   /**
    * The preview listeners this process is serving. A hub that restarted has
    * no targets and takes these as they are; one that only lost the socket
@@ -589,6 +591,7 @@ const attach = (
     ): RegisterPayload => ({
       ...identity,
       sessionAddresses: supervisor.sessionAddresses,
+      machineCapabilities: probeCapabilities(),
       instances: supervisor.instanceIds,
       previews: servingPreviews(),
       custody: snapshot.custody,
@@ -1235,6 +1238,7 @@ export const startDaemon = (auth?: AuthState, rediscover = false) =>
     // The usage scanner outlives connections too: its dedup set is rebuilt only
     // on start (USAGE-SPEC.md §5.1), so a reconnect must not reset it.
     const scanner = yield* Effect.promise(() => UsageScanner.load());
+    supervisor.registerDaemonFunction("probeCapabilities", probeCapabilities);
 
     // Transcript search index: FTS5-backed BM25 search over transcripts.
     // Created once, syncs every 30s in the background, outlives reconnects.

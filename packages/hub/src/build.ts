@@ -7,6 +7,12 @@
 
 import { resolve } from "node:path";
 import type { BuildInfo } from "@cawco/core";
+import {
+  protocolRange,
+  runtimeCommit,
+  runtimeVersion,
+  standalone,
+} from "@cawco/core/runtime";
 import { HUB_VERSION } from "./config";
 
 /** The checkout this hub runs out of — up from `packages/hub/src`. */
@@ -25,6 +31,15 @@ const git = async (args: string[]): Promise<string | undefined> => {
 
 /** Read once, at boot, before the hub serves: a running hub is whatever it started as. */
 export const buildInfo = async (): Promise<BuildInfo> => {
+  if (standalone) {
+    return {
+      version: runtimeVersion,
+      commit: runtimeCommit,
+      protocol: protocolRange,
+      dirty: false,
+      startedAt: STARTED_AT,
+    };
+  }
   const commit = await git(["rev-parse", "--short", "HEAD"]);
   const status = commit ? await git(["status", "--porcelain"]) : undefined;
   return {

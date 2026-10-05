@@ -39,6 +39,12 @@ import { extname, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import sockets from "socket-activation";
 
+const standalone = typeof Bun !== "undefined" && Bun.isStandaloneExecutable;
+const resources = standalone ? await import("@cawco/core/runtime") : undefined;
+const relayRuntime = standalone
+  ? await import("./inherited-relay.js")
+  : undefined;
+
 /**
  * adapter-node needs the browser's scheme and host for SvelteKit's CSRF check,
  * including mutating requests with no body (preview Close and other deletes).
@@ -53,10 +59,15 @@ const PROTOCOL_HEADER = "x-cawco-protocol";
 const HOST_HEADER = "x-cawco-host";
 process.env.PROTOCOL_HEADER = PROTOCOL_HEADER;
 process.env.HOST_HEADER = HOST_HEADER;
+if (standalone && !process.env.ADDRESS_HEADER) {
+  process.env.ADDRESS_HEADER = "x-cawco-peer-address";
+}
 const { handler } = await import("./build/handler.js");
 // Captured once: version.json on disk changes during a build before this process restarts.
 const runningVersion = readFileSync(
-  new URL("./build/client/_app/version.json", import.meta.url),
+  standalone
+    ? `${resources.materializeTree("dashboard/client")}/_app/version.json`
+    : new URL("./build/client/_app/version.json", import.meta.url),
   "utf8"
 );
 
@@ -197,7 +208,9 @@ function proxyPreviewHttp(req, res, info) {
  * disappears between that check and sirv's open, where the 200 head is already
  * committed and the response can only be cut off.
  */
-const CLIENT_DIR = fileURLToPath(new URL("./build/client", import.meta.url));
+const CLIENT_DIR = standalone
+  ? resources.materializeTree("dashboard/client")
+  : fileURLToPath(new URL("./build/client", import.meta.url));
 const IMMUTABLE_PREFIX = "/_app/immutable/";
 
 /**
@@ -341,6 +354,9 @@ function serveApp(req, res) {
 }
 
 const server = http.createServer((req, res) => {
+  if (standalone) {
+    relayRuntime.applyRelayPeer(req);
+  }
   const origin = publicOrigin(req);
   req.headers[PROTOCOL_HEADER] = origin.protocol;
   req.headers[HOST_HEADER] = origin.host;
@@ -356,6 +372,9 @@ const server = http.createServer((req, res) => {
 const relayed = new Set();
 
 server.on("upgrade", (req, socket, head) => {
+  if (standalone) {
+    relayRuntime.applyRelayPeer(req);
+  }
   relayed.add(socket);
   socket.on("close", () => relayed.delete(socket));
   // `http.Server` drops a socket's error handling the moment it emits
@@ -435,9 +454,15 @@ server.on("upgrade", (req, socket, head) => {
 
 // One socket: the unit and the plist each name a single address for it.
 const [fd] = sockets.collect("dashboard");
-server.listen({ fd }, () => {
+const ready = () => {
   console.log(`dashboard on inherited fd ${fd} — /ws -> ${target.origin}`);
-});
+};
+const relay = standalone
+  ? await relayRuntime.listenInherited(server, fd, ready)
+  : undefined;
+if (!standalone) {
+  server.listen({ fd }, ready);
+}
 
 /**
  * How long a request already being answered gets to finish once a restart has
@@ -458,6 +483,7 @@ const DRAIN_MS = 5000;
  * once the requests in flight are answered.
  */
 process.once("SIGTERM", () => {
+  relay?.stopAccepting();
   server.close(() => process.exit(0));
   server.closeIdleConnections();
   for (const socket of relayed) {

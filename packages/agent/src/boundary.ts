@@ -43,6 +43,7 @@ import { basename, dirname, join } from "node:path";
 import type { WorkspaceRef } from "@cawco/core";
 import { WORKSPACE_BOUNDARY_START_TIMEOUT_MS } from "@cawco/core";
 import { sessionIdentityDir } from "@cawco/core/paths";
+import { standalone } from "@cawco/core/runtime";
 import { type ProcSpec, sessiondEndpoint } from "@cawco/core/sessiond";
 import { cloneInPlace } from "./clone";
 import { procIdFor } from "./proc-id";
@@ -166,7 +167,9 @@ export const claudeBoundaryOptions = (boundary: Boundary | undefined) =>
                     type: "command" as const,
                     command: [
                       process.execPath,
-                      join(import.meta.dir, "boundary-hook.ts"),
+                      standalone
+                        ? "boundary-hook"
+                        : join(import.meta.dir, "boundary-hook.ts"),
                       boundary.exec,
                       boundary.scratch,
                     ]

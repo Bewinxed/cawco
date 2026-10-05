@@ -66,7 +66,12 @@ import {
 } from "@cawco/core";
 import { sessiondEndpoint } from "@cawco/core/sessiond";
 import { observeRateLimit } from "@cawco/core/usage/observed";
-import { probeAuth, resolveClaudeExecutable, unlockKeychain } from "../auth";
+import {
+  claudeExecutableOptions,
+  probeAuth,
+  resolveClaudeExecutable,
+  unlockKeychain,
+} from "../auth";
 import { claudeBoundaryOptions } from "../boundary";
 import {
   callDelegationTool,
@@ -765,6 +770,7 @@ class ClaudeSession implements HarnessSession {
         forwardSubagentText: true,
         agentProgressSummaries: true,
         ...(options as Record<string, unknown> | undefined),
+        ...claudeExecutableOptions(),
         extraArgs,
         mcpServers,
         // What the CLI holds for later, said at each turn's end: the SDK's
@@ -1670,7 +1676,11 @@ async function probeModels(): Promise<ModelInfo[] | undefined> {
       try {
         const handle = query({
           prompt: "",
-          options: { maxTurns: 0, persistSession: false },
+          options: {
+            maxTurns: 0,
+            persistSession: false,
+            ...claudeExecutableOptions(),
+          },
         });
         try {
           const models = await handle.supportedModels();

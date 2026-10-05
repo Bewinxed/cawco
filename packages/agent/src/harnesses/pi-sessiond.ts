@@ -9,6 +9,7 @@ import type {
   SpawnPayload,
 } from "@cawco/core";
 import { CAWCO_ENV, CONTROL_INTERRUPT, MESSAGES_HELD } from "@cawco/core";
+import { standalone } from "@cawco/core/runtime";
 import { sessiondEndpoint } from "@cawco/core/sessiond";
 import type { HarnessContext, HarnessSession } from "../harness";
 import { procIdFor } from "../proc-id";
@@ -257,7 +258,7 @@ export async function spawnPi(
   );
   await client.spawnProc(procIdFor("pi", ctx.instanceId), {
     command: process.execPath,
-    args: [host],
+    args: standalone ? ["pi-host"] : [host],
     cwd: ctx.cwd,
     // Session credentials arrive solely via the request-scoped stdin control.
     ...(process.env[CAWCO_ENV.hubUrl]

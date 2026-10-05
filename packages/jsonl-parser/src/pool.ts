@@ -10,6 +10,7 @@
 
 import { stat } from "node:fs/promises";
 import { runTask, type WorkerFileResult, type WorkerTask } from "./worker.ts";
+const STANDALONE = typeof Bun !== "undefined" && Bun.isStandaloneExecutable;
 
 export interface ParseManyOptions extends Omit<WorkerTask, "files"> {
   /** Worker count (default: min(16, files, availableParallelism)). */
@@ -65,16 +66,17 @@ export async function parseMany(
   const settled = await Promise.all(
     shards.map(
       (shard) =>
-        new Promise<WorkerFileResult[]>((resolve) => {
+        new Promise<WorkerFileResult[]>((resolve, reject) => {
           // Running from source (Bun, .ts) or from dist (built .js).
-          const workerFile = import.meta.url.endsWith(".ts") ? "./worker.ts" : "./worker.js";
+          const workerFile = STANDALONE ? "./scripts/binary/transcript-worker.js" : import.meta.url.endsWith(".ts") ? "./worker.ts" : "./worker.js";
           const worker = new Worker(new URL(workerFile, import.meta.url));
           worker.onmessage = (event: MessageEvent) => {
             worker.terminate();
             resolve(event.data as WorkerFileResult[]);
           };
-          worker.onerror = () => {
+          worker.onerror = (event) => {
             worker.terminate();
+            if (STANDALONE) { reject(new Error(`Transcript worker unavailable: ${event.message}`)); return; }
             // Worker crashed: fall back to in-process for this shard.
             resolve(runTask({ ...task, files: shard }));
           };

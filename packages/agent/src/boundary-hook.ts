@@ -16,11 +16,12 @@
  */
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
+import { standalone } from "@cawco/core/runtime";
 
 const quote = (value: string): string => `'${value.replaceAll("'", "'\\''")}'`;
 
 try {
-  const [exec, scratch] = process.argv.slice(2);
+  const [exec, scratch] = process.argv.slice(standalone ? 3 : 2);
   if (!(exec && scratch)) {
     throw new Error("the hook was registered without its executor");
   }

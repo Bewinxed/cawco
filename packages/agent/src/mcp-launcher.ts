@@ -2,7 +2,8 @@ import { accessSync, constants, readFileSync, realpathSync } from "node:fs";
 import { platform } from "node:os";
 import { basename, delimiter, dirname, join, resolve } from "node:path";
 import type { FleetMcpConfig } from "@cawco/core";
-import { chromium } from "playwright-core";
+import { standalone } from "@cawco/core/runtime";
+import { browserExecutable } from "./capabilities";
 import { resolveBin, toolEnv, toolPath } from "./tools";
 
 type McpLauncher =
@@ -150,6 +151,29 @@ export const prepareFleetMcp = async (
   ) {
     return launcher;
   }
+  if (standalone) {
+    const executable = browserExecutable();
+    if (!executable) {
+      return {
+        unavailable:
+          "Install a Chromium browser with the command in this machine's capability report.",
+      };
+    }
+    return {
+      config: {
+        ...launcher.config,
+        args: [
+          ...(launcher.config.args ?? []).filter(
+            (arg) => !arg.startsWith("--executablePath=")
+          ),
+          `--executablePath=${executable}`,
+        ],
+      },
+    };
+  }
+  // Source installs retain their pinned Playwright revision. Standalone uses the
+  // user's explicitly installed browser; this import is never evaluated there.
+  const { chromium } = await import("playwright-core");
   const executable = chromium.executablePath();
   try {
     if (!(await Bun.file(executable).exists())) {

@@ -440,6 +440,7 @@ export interface AgentRow {
   hostname: string;
   /** A `Date` inside the hub, the ISO string it serialises to everywhere else. */
   lastSeenAt: string | number | Date | null;
+  machineCapabilities?: import("./capabilities").MachineCapabilities;
   machineId: string;
   os: string;
   /**
@@ -539,6 +540,7 @@ export interface BuildInfo {
   commit?: string;
   /** Whether that checkout has uncommitted changes. */
   dirty?: boolean;
+  protocol?: { min: number; max: number };
   /** When this daemon started, ms epoch. */
   startedAt: number;
   /** `@cawco/agent`'s package version. */

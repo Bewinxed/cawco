@@ -4,6 +4,9 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./runtime": "./src/runtime.ts",
+    "./capabilities": "./src/capabilities.ts",
+    "./release-manifest": "./src/release-manifest.ts",
     "./install-script": "./src/install-script.ts",
     "./preview-proxy": "./src/preview-proxy.ts",
     "./paths": "./src/paths.ts",

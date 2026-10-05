@@ -7,6 +7,7 @@ import {
   proxyHeaders,
   upgradePreview,
 } from "@cawco/core/preview-proxy";
+import { embeddedFile, standalone } from "@cawco/core/runtime";
 import type { Server } from "bun";
 
 /**
@@ -34,6 +35,9 @@ let overlay: Promise<string> | undefined;
  * dependency are not shipped. The sibling wins when it is there.
  */
 async function buildOverlay(): Promise<string> {
+  if (standalone) {
+    return Bun.file(embeddedFile("preview/overlay.js")).text();
+  }
   const prebuilt = Bun.file(new URL("./preview-overlay.js", import.meta.url));
   if (await prebuilt.exists()) {
     return await prebuilt.text();

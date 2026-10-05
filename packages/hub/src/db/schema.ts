@@ -34,6 +34,7 @@ import type {
   WorkflowRunStatus,
   WorkflowStepStatus,
 } from "@cawco/core";
+import type { MachineCapabilities } from "@cawco/core/capabilities";
 import type {
   AuthorizationServerMetadata,
   OAuthClientInformationFull,
@@ -193,6 +194,9 @@ export const agents = sqliteTable("agents", {
   addressContract: integer("address_contract", { mode: "boolean" })
     .notNull()
     .default(false),
+  machineCapabilities: text("machine_capabilities", {
+    mode: "json",
+  }).$type<MachineCapabilities>(),
   browserAvailable: integer("browser_available", { mode: "boolean" })
     .notNull()
     .default(false),
