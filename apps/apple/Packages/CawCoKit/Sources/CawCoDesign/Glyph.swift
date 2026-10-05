@@ -342,9 +342,11 @@ public final class KitLabel: UILabel {
     }
 
     /// A view dump says what the label draws when that is not its string.
-    override public var description: String {
-        guard let shown, let string = shown.text?.string else { return super.description }
-        return "\(super.description) drawn at \(shown.width): \(string.debugDescription)"
+    override public nonisolated var description: String {
+        let own = super.description
+        guard Thread.isMainThread else { return own }
+        let drawn = MainActor.assumeIsolated { shown.flatMap { shown in shown.text.map { "drawn at \(shown.width): \($0.string.debugDescription)" } } }
+        return drawn.map { "\(own) \($0)" } ?? own
     }
 
     // MARK: Lines and the tail cut
