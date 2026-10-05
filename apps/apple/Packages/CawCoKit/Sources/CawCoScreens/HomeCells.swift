@@ -90,7 +90,7 @@ final class StatusCell: HomeCell {
 /// "N need(s) you", by its spark: the loudest thing on the screen.
 final class HeadlineCell: HomeCell {
     private let spark = UIView()
-    private let words = KitLabel(TypeScale.typeTitle, ink: Palette.inkStrong, tracking: TypeScale.trackTitle)
+    private let words = KitLabel(TypeScale.typeTitle, ink: Palette.inkStrong)
     private var count = -1
 
     override init(frame: CGRect) {

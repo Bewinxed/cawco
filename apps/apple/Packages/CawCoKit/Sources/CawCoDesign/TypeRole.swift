@@ -20,13 +20,18 @@ public struct TypeRole: Sendable {
     public let family: [String]
     /// How a fluid role (title, kpi) grows with the viewport between its bounds.
     public let fluid: Fluid?
+    /// The letter-spacing the role is set with, in em: the token its web
+    /// utility carries (`--text-title--letter-spacing`), zero for a role
+    /// the web sets untracked.
+    public let tracking: Double
 
-    init(weight: UIFont.Weight, size: ClosedRange<Double>, leading: Double, family: [String], fluid: Fluid? = nil) {
+    init(weight: UIFont.Weight, size: ClosedRange<Double>, leading: Double, family: [String], fluid: Fluid? = nil, tracking: Double = 0) {
         self.weight = weight
         self.size = size
         self.leading = leading
         self.family = family
         self.fluid = fluid
+        self.tracking = tracking
     }
 
     /// The role's size on a compact screen: a fluid role's smallest.
@@ -58,8 +63,9 @@ public struct TypeRole: Sendable {
     /// The role's line height in points, at the font's scaled size.
     public var lineHeight: Double { font.pointSize * leading }
 
-    /// Text attributes that set a string in this role, with `tracking` in em.
-    public func attributes(color: UIColor, tracking: Double = 0, alignment: NSTextAlignment = .natural) -> [NSAttributedString.Key: Any] {
+    /// Text attributes that set a string in this role. `tracking`, in em,
+    /// is the role's own unless the element it ports restates it.
+    public func attributes(color: UIColor, tracking: Double? = nil, alignment: NSTextAlignment = .natural) -> [NSAttributedString.Key: Any] {
         let font = font
         let line = LineBox.label(font, height: font.pointSize * leading)
         line.paragraph.alignment = alignment
@@ -67,7 +73,7 @@ public struct TypeRole: Sendable {
         return [
             .font: font,
             .foregroundColor: color,
-            .kern: tracking * font.pointSize,
+            .kern: (tracking ?? self.tracking) * font.pointSize,
             .paragraphStyle: line.paragraph,
             .baselineOffset: line.baselineOffset,
         ]

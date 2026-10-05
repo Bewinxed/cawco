@@ -548,8 +548,34 @@ function swiftString(s: string): string {
   return `"${s.replace(BACKSLASH, "\\\\").replace(DOUBLE_QUOTE, '\\"')}"`;
 }
 
+/** The letter-spacing a type role is set with, named by its token:
+    `$extensions["dev.cawco.type"].tracking`, a reference to a `track-*`. */
+const TRACK_REF = /^\{type\.(track-[a-z0-9-]+)\}$/;
+
+function roleTracking(
+  token: TransformedToken,
+  tokens: Tokens,
+  where: string
+): string {
+  const authoredRef = token.original.$extensions?.["dev.cawco.type"]?.tracking;
+  if (authoredRef === undefined) {
+    return "";
+  }
+  const ref = TRACK_REF.exec(String(authoredRef));
+  if (!ref?.[1]) {
+    throw new Error(`${where}: tracking must reference a type.track-* token`);
+  }
+  tokens.lookup(`type.${ref[1]}`, where);
+  return `, tracking: ${swiftName(ref[1])}`;
+}
+
 /** `400 {type.text-meta} / 1.35 {font.font-body}` as a TypeRole. */
-function typeRole(raw: string, tokens: Tokens, where: string): string {
+function typeRole(
+  raw: string,
+  tokens: Tokens,
+  where: string,
+  tracking: string
+): string {
   const parts = splitTop(raw, " ");
   const [weight, size, slash, leading, family] = parts;
   const familyRef = FONT_REF.exec(family ?? "");
@@ -567,7 +593,7 @@ function typeRole(raw: string, tokens: Tokens, where: string): string {
   const fluid = preferred
     ? `, fluid: .init(base: ${swiftNumber(preferred.base)}, perViewport: ${swiftNumber(preferred.perViewport)})`
     : "";
-  return `TypeRole(weight: ${WEIGHTS[weight]}, size: ${swiftNumber(min)}...${swiftNumber(max)}, leading: ${swiftNumber(tokens.numeric(leading, where))}, family: FontFamily.${swiftName(familyRef[1])}${fluid})`;
+  return `TypeRole(weight: ${WEIGHTS[weight]}, size: ${swiftNumber(min)}...${swiftNumber(max)}, leading: ${swiftNumber(tokens.numeric(leading, where))}, family: FontFamily.${swiftName(familyRef[1])}${fluid}${tracking})`;
 }
 
 /** A colour as an `Ink`: its light and dark values in Display P3. */
@@ -745,7 +771,9 @@ function declare(token: TransformedToken, tokens: Tokens): Declaration[] {
       ];
     case "typography":
       return [
-        one(`public static let ${name} = ${typeRole(raw, tokens, where)}`),
+        one(
+          `public static let ${name} = ${typeRole(raw, tokens, where, roleTracking(token, tokens, where))}`
+        ),
       ];
     case "shadow":
       return [

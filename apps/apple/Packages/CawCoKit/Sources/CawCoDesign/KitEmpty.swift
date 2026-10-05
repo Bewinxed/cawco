@@ -13,7 +13,7 @@ public final class KitEmptyState: UIStackView {
         isLayoutMarginsRelativeArrangement = true
         directionalLayoutMargins = NSDirectionalEdgeInsets(top: Space.space6, leading: 0, bottom: Space.space6, trailing: 0)
         let mark = GlyphView(icon, size: 20, tint: Palette.inkMuted)
-        let heading = KitLabel(TypeScale.typeTitle, ink: Palette.inkStrong, tracking: -0.01, lines: 0)
+        let heading = KitLabel(TypeScale.typeTitle, ink: Palette.inkStrong, lines: 0)
         heading.text = title
         heading.wrap = .balance
         heading.accessibilityTraits = .header

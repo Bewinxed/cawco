@@ -1870,7 +1870,13 @@
     },
     "type-title": {
       "$type": "typography",
-      "$value": "500 {type.text-title} / 1.25 {font.font-body}"
+      "$value": "500 {type.text-title} / 1.25 {font.font-body}",
+      "$description": "Set with its tracking: the web's `text-title` utility carries it (app.css @theme, `--text-title--letter-spacing`), and the native role carries the same token.",
+      "$extensions": {
+        "dev.cawco.type": {
+          "tracking": "{type.track-title}"
+        }
+      }
     },
     "type-kpi": {
       "$type": "typography",

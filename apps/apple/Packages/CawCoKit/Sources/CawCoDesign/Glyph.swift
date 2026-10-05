@@ -252,7 +252,9 @@ public final class GlyphView: UIImageView {
 public final class KitLabel: UILabel {
     public var role: TypeRole { didSet { render() } }
     public var ink: UIColor { didSet { render() } }
-    public var tracking: Double { didSet { render() } }
+    /// Letter-spacing in em that the element this label ports sets over its
+    /// role's; nil draws the role's own.
+    public var tracking: Double? { didSet { render() } }
     /// Tabular figures, for times and counts that line up down a list.
     public var tabular = false { didSet { render() } }
     /// How a label of more than one line chooses its lines: the web's
@@ -301,7 +303,7 @@ public final class KitLabel: UILabel {
     /// the label's own would.
     private static let canvas = UILabel()
 
-    public init(_ role: TypeRole, ink: UIColor = Palette.inkStrong, tracking: Double = 0, lines: Int = 1) {
+    public init(_ role: TypeRole, ink: UIColor = Palette.inkStrong, tracking: Double? = nil, lines: Int = 1) {
         self.role = role
         self.ink = ink
         self.tracking = tracking

@@ -69,7 +69,7 @@ final class ConnectViewController: ObservedViewController, UITextFieldDelegate {
             ])
         }
 
-        let title = KitLabel(TypeScale.typeTitle, ink: Palette.inkStrong, tracking: TypeScale.trackTitle, lines: 0)
+        let title = KitLabel(TypeScale.typeTitle, ink: Palette.inkStrong, lines: 0)
         title.text = mode == .reconnecting ? "Your hub" : "Connect to your hub"
         title.accessibilityTraits = .header
         let body = KitLabel(TypeScale.typeBody, ink: Palette.inkMuted, lines: 0)

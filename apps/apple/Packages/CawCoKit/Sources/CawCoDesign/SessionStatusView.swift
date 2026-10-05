@@ -1,10 +1,12 @@
 import UIKit
 
 public extension TypeRole {
-    /// This role with another weight, leading, size or face: the web's
-    /// `font-weight` / `line-height` / `font-family` set on top of a role.
-    func with(weight: UIFont.Weight? = nil, points: Double? = nil, leading: Double? = nil, family: [String]? = nil) -> TypeRole {
-        TypeRole(weight: weight ?? self.weight, size: points.map { $0 ... $0 } ?? size, leading: leading ?? self.leading, family: family ?? self.family)
+    /// This role with another weight, leading, size, face or tracking: the
+    /// web's `font-weight` / `line-height` / `font-family` /
+    /// `letter-spacing` set on top of a role.
+    func with(weight: UIFont.Weight? = nil, points: Double? = nil, leading: Double? = nil, family: [String]? = nil, tracking: Double? = nil) -> TypeRole {
+        TypeRole(weight: weight ?? self.weight, size: points.map { $0 ... $0 } ?? size, leading: leading ?? self.leading, family: family ?? self.family,
+                 tracking: tracking ?? self.tracking)
     }
 }
 

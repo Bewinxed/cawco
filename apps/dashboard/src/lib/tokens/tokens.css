@@ -504,6 +504,7 @@
     --type-body: 400 var(--text-body) / 1.45 var(--font-body);
     --type-prose: 400 var(--text-body) / 1.55 var(--font-body);
     --type-button: 500 var(--text-body) / 1 var(--font-body);
+    /* Set with its tracking: the web's `text-title` utility carries it (app.css @theme, `--text-title--letter-spacing`), and the native role carries the same token. */
     --type-title: 500 var(--text-title) / 1.25 var(--font-body);
     --type-kpi: 500 var(--text-kpi) / 1 var(--font-body);
     --type-code: 400 var(--text-code) / 1.6 var(--font-mono);

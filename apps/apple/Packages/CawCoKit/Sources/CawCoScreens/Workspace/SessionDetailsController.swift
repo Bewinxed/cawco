@@ -91,7 +91,9 @@ public final class SessionDetailsController: ObservedViewController {
     // MARK: Views
 
     private let phone: Bool
-    private let titleWrap = KitLabel(TypeScale.typeTitle.with(weight: .medium, leading: TypeScale.leadingBody), ink: Palette.inkStrong, lines: 3)
+    /// The web's `h2` restates the title's size, weight and leading one by one and sets no
+    /// letter-spacing (SessionDetails.svelte:696-702), so this title is untracked.
+    private let titleWrap = KitLabel(TypeScale.typeTitle.with(weight: .medium, leading: TypeScale.leadingBody), ink: Palette.inkStrong, tracking: 0, lines: 3)
     private let harnessBox = UIView()
     private var harnessShown: String?
     private let meta = NsFlow()

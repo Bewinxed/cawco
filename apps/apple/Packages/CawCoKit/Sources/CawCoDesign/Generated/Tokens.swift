@@ -356,7 +356,8 @@ public enum TypeScale {
     public static let typeBody = TypeRole(weight: .regular, size: 14...14, leading: 1.45, family: FontFamily.fontBody)
     public static let typeProse = TypeRole(weight: .regular, size: 14...14, leading: 1.55, family: FontFamily.fontBody)
     public static let typeButton = TypeRole(weight: .medium, size: 14...14, leading: 1, family: FontFamily.fontBody)
-    public static let typeTitle = TypeRole(weight: .medium, size: 18...20, leading: 1.25, family: FontFamily.fontBody, fluid: .init(base: 16.768, perViewport: 0.003155))
+    /// Set with its tracking: the web's `text-title` utility carries it (app.css @theme, `--text-title--letter-spacing`), and the native role carries the same token.
+    public static let typeTitle = TypeRole(weight: .medium, size: 18...20, leading: 1.25, family: FontFamily.fontBody, fluid: .init(base: 16.768, perViewport: 0.003155), tracking: trackTitle)
     public static let typeKpi = TypeRole(weight: .medium, size: 20...24, leading: 1, family: FontFamily.fontBody, fluid: .init(base: 17.5392, perViewport: 0.006309))
     public static let typeCode = TypeRole(weight: .regular, size: 12...12, leading: 1.6, family: FontFamily.fontMono)
     public static let typeCaps = TypeRole(weight: .medium, size: 11...11, leading: 1, family: FontFamily.fontBody)
