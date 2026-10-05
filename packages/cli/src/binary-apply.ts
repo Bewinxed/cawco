@@ -319,8 +319,11 @@ async function advanceKeeper(version: string): Promise<void> {
     // The agent needs the keeper: restarting one restarts the other, so it is asked outright.
     await svc("restart", ["agent"], version);
     await awaitKeeperEpoch(second.epoch);
+    // Only the keeper and the agent were restarted: on a hub's machine the hub and dashboard keep running
+    // from before the swap, so what must have started after it is the agent's registration, which is
+    // what probing as an agent-only machine checks.
     await awaitHealthy(
-      installed,
+      { ...installed, role: "agent" },
       installed.installedVersion,
       sinceMs,
       undefined
