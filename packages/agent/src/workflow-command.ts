@@ -74,7 +74,7 @@ export async function runWorkflowCommand(
     : ["/bin/sh", ["-c", cmd]];
   return withRestartHold(
     "command",
-    String(cmd),
+    crypto.randomUUID(),
     () =>
       new Promise((resolve, reject) => {
         const child = spawn(file, args, {

@@ -1517,7 +1517,6 @@ const HOSTS_SESSIONS: readonly ServiceId[] = ["sessiond"];
  * answers for both of them: they are the two ends of the same sessions, so
  * `--when-idle` and `--force` mean the same thing on either.
  */
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: agent fencing and destructive sessiond retirement are distinct policies at the same service boundary.
 const clearToRestart = async (
   spec: ServiceSpec,
   { whenIdle, force }: Pick<RestartRequest, "whenIdle" | "force">,
@@ -1536,7 +1535,7 @@ const clearToRestart = async (
     const deadline = Date.now() + IDLE_TIMEOUT_MS;
     for (;;) {
       // biome-ignore lint/performance/noAwaitInLoops: readiness belongs to the running agent on each attempt.
-      const report = await probeJson<AgentRestartReadiness>(
+      let report = await probeJson<AgentRestartReadiness>(
         `${base}/restart-readiness`
       );
       if (!report) {
@@ -1558,6 +1557,12 @@ const clearToRestart = async (
         if (decision.scheduled) {
           note("agent restart scheduled; sessions carry on in sessiond");
           return true;
+        }
+        report = decision;
+        if (report.ready) {
+          throw new ServiceError(
+            "No agent service was restarted on this machine. Install its service before retrying."
+          );
         }
       }
       const reasons = report.holds
@@ -2141,7 +2146,6 @@ const renderedText = (
  * that is refused with that gate's words, with nothing touched — `force`
  * being the gate's own way through.
  */
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: install and fenced retirement retain one ordered service transaction.
 const settleServices = async (
   specs: readonly ServiceSpec[],
   {

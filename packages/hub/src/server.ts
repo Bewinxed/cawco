@@ -3300,6 +3300,56 @@ export const createServer = (
   const requestIdOf = (request: Envelope): string | undefined =>
     request.requestId ?? (request.payload as { requestId?: string }).requestId;
 
+  const expireAwaitedRequest = (id: string, machineId: string): void => {
+    const refused: ControlResult = {
+      kind: "control_result",
+      requestId: id,
+      ok: false,
+      error:
+        "The agent did not register within the restart grace. The request was not started.",
+    };
+    waiting.get(id)?.(refused);
+    if (!streams.settleCommand(id, refused)) {
+      registry
+        .takeRequester(id)
+        ?.send({ verb: "frames", machineId, requestId: id, payload: refused });
+    }
+  };
+
+  const releaseAwaitedSend = (
+    sent: Envelope<SendPayload>,
+    agent: HubSocket | undefined
+  ): void => {
+    const { uuid } = sent.payload.message;
+    if (agent) {
+      if (notStartedSends.has(uuid)) {
+        agent.send(sent);
+      } else {
+        deliverSend(sent);
+      }
+      return;
+    }
+    notStartedSends.delete(uuid);
+    const reason =
+      "The agent did not register within the restart grace. The send was not started.";
+    const known = db.sendRecord(uuid);
+    if (known) {
+      failSend(known, reason);
+      return;
+    }
+    publishSend(
+      db.recordSend({
+        uuid,
+        instanceId: sent.payload.instanceId,
+        acceptedAt: new Date(),
+        body: externalizeImages(sentFrame(sent.payload)),
+        mode: sendMode(sent.payload),
+        state: "failed",
+        reason,
+      })
+    );
+  };
+
   /**
    * What waited on a machine, sent now through {@link deliverSend}: after its
    * register, where it reaches the agent behind the restores (the agent holds
@@ -3316,44 +3366,11 @@ export const createServer = (
       }
       const agent = registered ? registry.agent(machineId) : undefined;
       if (envelope.verb === "send") {
-        const sent = envelope as Envelope<SendPayload>;
-        if (notStartedSends.has(sent.payload.message.uuid)) {
-          if (agent) {
-            agent.send(sent);
-          } else {
-            notStartedSends.delete(sent.payload.message.uuid);
-            const record = db.sendRecord(sent.payload.message.uuid);
-            if (record) {
-              failSend(
-                record,
-                "The agent did not register within the restart grace. The send was not started."
-              );
-            }
-          }
-        } else {
-          deliverSend(sent);
-        }
+        releaseAwaitedSend(envelope as Envelope<SendPayload>, agent);
       } else if (agent) {
         agent.send(envelope);
       } else if (id) {
-        const failure: ControlResult = {
-          kind: "control_result",
-          requestId: id,
-          ok: false,
-          error:
-            "The agent did not register within the restart grace. The request was not started.",
-        };
-        waiting.get(id)?.(failure);
-        if (!streams.settleCommand(id, failure)) {
-          registry
-            .takeRequester(id)
-            ?.send({
-              verb: "frames",
-              machineId,
-              requestId: id,
-              payload: failure,
-            });
-        }
+        expireAwaitedRequest(id, machineId);
       }
     }
   };
@@ -3787,6 +3804,7 @@ export const createServer = (
             | { sessionId?: string; cwd?: string; harness?: string }
             | undefined
             | null;
+          // biome-ignore lint/suspicious/noUnnecessaryConditions: the machine's wire result can be null or absent despite inference.
           return info?.sessionId
             ? { harness, sessionId: info.sessionId, info }
             : null;
