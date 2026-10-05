@@ -421,6 +421,23 @@ export interface SessionMessage {
   uuid: string;
 }
 
+/** Display history on the conversation's own line; never model context or an archive index. */
+export interface SessionHistoryOptions {
+  before?: string;
+  dir?: string;
+  limit?: number;
+}
+
+export interface SessionHistory {
+  /** True only when this page reaches the real start of the conversation. */
+  complete: boolean;
+  /** Exclusive storage cursor, opaque to the hub's block pager. */
+  cursor: string | null;
+  entries: SessionMessage[];
+  /** The reachable line ends at an unlinked boundary, not the conversation's start. */
+  incomplete?: string;
+}
+
 /**
  * One task of a session's plan, as every harness can express. Claude Code keeps
  * a ledger file per task; opencode has a native `todo` list; pi has neither.
@@ -977,6 +994,7 @@ export const CONTROL_QUERIES: ReadonlySet<string> = new Set([
 export const CONTROL_LIST_SESSIONS = "listSessions";
 export const CONTROL_GET_SESSION_INFO = "getSessionInfo";
 export const CONTROL_GET_SESSION_MESSAGES = "getSessionMessages";
+export const CONTROL_GET_SESSION_HISTORY = "getSessionHistory";
 export const CONTROL_READ_SESSION_CONTEXT = "readSessionContext";
 export const CONTROL_RENAME_SESSION = "renameSession";
 export const CONTROL_TAG_SESSION = "tagSession";

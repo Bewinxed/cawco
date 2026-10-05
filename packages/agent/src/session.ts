@@ -363,6 +363,7 @@ const CATALOG_METHODS = new Set([
   "listSessions",
   "getSessionInfo",
   "getSessionMessages",
+  "getSessionHistory",
   "renameSession",
   "tagSession",
   "deleteSession",
@@ -2745,6 +2746,35 @@ export class SessionSupervisor {
               (args[1] as { tail?: number } | undefined)?.tail,
               (args[1] as { whole?: boolean } | undefined)?.whole
             );
+          case "getSessionHistory": {
+            if (typeof adapter.getSessionHistory !== "function") {
+              throw new Error(
+                `getSessionHistory unavailable: ${adapter.kind} agent has no display-history reader`
+              );
+            }
+            if (
+              typeof args[0] !== "string" ||
+              !args[0] ||
+              typeof args[1] !== "object" ||
+              args[1] === null
+            ) {
+              throw new Error(
+                "getSessionHistory needs a session key and options"
+              );
+            }
+            const options =
+              args[1] as import("@cawco/core").SessionHistoryOptions;
+            if (
+              (options.dir !== undefined && typeof options.dir !== "string") ||
+              (options.before !== undefined &&
+                typeof options.before !== "string")
+            ) {
+              throw new Error(
+                "getSessionHistory dir and before must be strings"
+              );
+            }
+            return await adapter.getSessionHistory(args[0], options);
+          }
           case "renameSession":
             return await adapter.renameSession(
               args[0] as string,

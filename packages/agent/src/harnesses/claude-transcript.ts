@@ -22,6 +22,7 @@
 import type { NeutralSystemMessage } from "@cawco/core";
 import type { LocatedRecord } from "@cawco/jsonl-parser";
 import { readTranscriptEnd, typeFilter } from "@cawco/jsonl-parser";
+import { historyLimit, historyStart } from "./history-page";
 import { cache } from "./transcript-cache.ts";
 
 /** The shape the SDK's `getSessionMessages` returns — kept structurally identical. */
@@ -82,6 +83,7 @@ export interface RawRecord {
   compactMetadata?: CompactMetadata;
   isMeta?: boolean;
   isSidechain?: boolean;
+  logicalParentUuid?: string | null;
   message?: unknown;
   parentUuid?: string | null;
   sessionId?: string;
@@ -253,7 +255,8 @@ function findTips(
  */
 function findActiveChain(
   byUuid: Map<string, RawRecord>,
-  records: RawRecord[]
+  records: RawRecord[],
+  tip?: string
 ): { chain: RawRecord[]; chainSet: Set<string> } {
   const indexMap = buildIndexMap(records);
 
@@ -282,7 +285,7 @@ function findActiveChain(
   // Walk the chain back from best tip.
   const chain: RawRecord[] = [];
   const chainSet = new Set<string>();
-  let node: RawRecord | undefined = byUuid.get(best.uuid);
+  let node: RawRecord | undefined = byUuid.get(tip ?? best.uuid);
   while (node) {
     if (chainSet.has(node.uuid)) {
       break;
@@ -848,6 +851,144 @@ export async function readSessionWhole(
     const msg = toSDKMessage(located.record as unknown as RawRecord);
     return msg ? [msg] : [];
   });
+}
+
+/**
+ * Each compaction opens a new context chain but names the prior line with
+ * logicalParentUuid. Rebuild that prior segment without the newer boundary's
+ * preserved-message relinks: otherwise a kept record loops back into the new
+ * summary. Order selected records at their original positions, once.
+ */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: each compact segment has its own relinks, missing-link and cycle decision
+function historyChain(
+  raw: RawRecord[],
+  windowed: boolean
+): {
+  records: RawRecord[];
+  complete: boolean;
+  incomplete?: string;
+} {
+  const selected = new Set<string>();
+  let segment = raw;
+  let tip: string | undefined;
+  let complete = false;
+  let incomplete: string | undefined;
+  const boundaries = new Set<string>();
+  while (segment.length > 0) {
+    const byUuid = buildUuidMap(segment);
+    relinkCompactBoundaries(byUuid);
+    const active = findActiveChain(byUuid, segment, tip);
+    const chain = spliceOrphans(active.chain, active.chainSet, byUuid);
+    for (const record of chain) {
+      selected.add(record.uuid);
+    }
+    const boundary = chain.find(
+      (record) =>
+        record.type === "system" && record.subtype === "compact_boundary"
+    );
+    if (!boundary) {
+      const [root] = chain;
+      complete = !(windowed || root?.parentUuid);
+      if (!(complete || windowed)) {
+        incomplete = `History incomplete: missing parent ${root?.parentUuid ?? tip}`;
+      }
+      break;
+    }
+    if (boundaries.has(boundary.uuid)) {
+      incomplete = `History incomplete: cyclic compaction link at ${boundary.uuid}`;
+      break;
+    }
+    boundaries.add(boundary.uuid);
+    if (!boundary.logicalParentUuid) {
+      incomplete = `History incomplete: Claude compact_boundary ${boundary.uuid} lacks logicalParentUuid`;
+      break;
+    }
+    const at = segment.findIndex((record) => record.uuid === boundary.uuid);
+    tip = boundary.logicalParentUuid;
+    segment = segment.slice(0, at);
+    if (!segment.some((record) => record.uuid === tip)) {
+      if (!windowed) {
+        incomplete = `History incomplete: missing logical parent ${tip} of ${boundary.uuid}`;
+      }
+      break;
+    }
+  }
+  const original = buildUuidMap(raw);
+  return {
+    records: raw.filter(
+      (record) =>
+        selected.has(record.uuid) && original.get(record.uuid) === record
+    ),
+    complete,
+    ...(incomplete ? { incomplete } : {}),
+  };
+}
+
+/** The same joins and hook keys as a context read, over the display line. */
+function historyMessages(raw: RawRecord[], windowed: boolean) {
+  const chain = historyChain(raw, windowed);
+  const joined = joinedCounts(raw);
+  const messages = keyHookFailures(
+    chain.records.flatMap((record) => {
+      const message = toSDKMessage(record);
+      const count = joined.get(record.uuid);
+      return message ? [count ? { ...message, joined: count } : message] : [];
+    })
+  );
+  return { ...chain, messages };
+}
+
+export async function readSessionHistory(
+  path: string,
+  options: import("@cawco/core").SessionHistoryOptions
+): Promise<
+  Omit<import("@cawco/core").SessionHistory, "entries"> & {
+    entries: SDKSessionMessage[];
+  }
+> {
+  const count = historyLimit(options.limit);
+  if (options.before !== undefined) {
+    const stored = await cache.get(path);
+    const chain = historyMessages(
+      stored.records.map((record) => record.record as unknown as RawRecord),
+      false
+    );
+    const end = chain.messages.findIndex(
+      (message) => message.uuid === options.before
+    );
+    if (end < 0) {
+      throw new Error(
+        "getSessionHistory cursor is no longer on Claude's conversation line"
+      );
+    }
+    const start = historyStart(chain.messages, end, count);
+    return {
+      entries: chain.messages.slice(start, end),
+      cursor: start > 0 ? chain.messages[start].uuid : null,
+      complete: start === 0 && chain.complete,
+      ...(chain.incomplete ? { incomplete: chain.incomplete } : {}),
+    };
+  }
+  // First paint uses exactly the existing bounded EOF primitive, never a full
+  // cache populate. The full read is paid only by an older-page request.
+  const stored = await readTranscriptEnd(path, {
+    records: count,
+    prefilter: CHAIN_TYPES,
+  });
+  const chain = historyMessages(
+    stored.records.map((record) => record.record as unknown as RawRecord),
+    !stored.complete
+  );
+  const start = historyStart(chain.messages, chain.messages.length, count);
+  return {
+    entries: chain.messages.slice(start),
+    cursor:
+      start > 0 || !chain.complete
+        ? (chain.messages[start]?.uuid ?? null)
+        : null,
+    complete: start === 0 && chain.complete,
+    ...(chain.incomplete ? { incomplete: chain.incomplete } : {}),
+  };
 }
 
 /**

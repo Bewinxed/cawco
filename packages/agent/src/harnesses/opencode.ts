@@ -109,6 +109,7 @@ import {
   syncSkillFiles,
   writeJson,
 } from "./fleet-common";
+import { historyLimit } from "./history-page";
 import { managedMcpMismatches } from "./managed-mcp";
 import { OpencodeActivity } from "./opencode-activity";
 import { OpencodeServerOwner, type ServerIdentity } from "./opencode-server";
@@ -5561,6 +5562,98 @@ export class OpencodeHarness implements Harness {
     }
     const tags = await readTags();
     return sessionToInfo(result.data as Session, tags[sessionKey]);
+  }
+
+  /** Real 1.18.34 paging: oldest-first rows and X-Next-Cursor, exclusive before. */
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one paged read must preserve revert, empty segments, compaction seams and child ownership
+  async getSessionHistory(
+    sessionKey: string,
+    options: import("@cawco/core").SessionHistoryOptions
+  ): Promise<import("@cawco/core").SessionHistory> {
+    assertOpencodeKey(sessionKey, "getSessionHistory");
+    const client = await this.#ensure();
+    const scope = { sessionID: sessionKey, directory: options.dir };
+    const session = await reached(client.session.get(scope));
+    if (session.error || !session.data) {
+      throw new Error(`getSessionHistory: ${errorText(session.error)}`);
+    }
+    const revert = session.data.revert?.messageID;
+    let { before } = options;
+    let seekingRevert = before === undefined && revert !== undefined;
+    let rows: { info: Message; parts: Part[] }[] = [];
+    let cursor: string | null = null;
+    do {
+      // biome-ignore lint/performance/noAwaitInLoops: the server's prior page supplies the next opaque cursor
+      const page = await reached(
+        client.session.messages({
+          ...scope,
+          limit: rows.length > 0 ? 1 : historyLimit(options.limit),
+          before,
+        })
+      );
+      if (page.error || !page.data) {
+        throw new Error(`getSessionHistory: ${errorText(page.error)}`);
+      }
+      let batch = page.data;
+      cursor = page.response?.headers.get("x-next-cursor") ?? null;
+      if (seekingRevert) {
+        const at = batch.findIndex((row) => row.info.id === revert);
+        if (at >= 0) {
+          batch = batch.slice(0, at);
+          seekingRevert = false;
+        } else {
+          batch = [];
+        }
+      }
+      rows = [...batch, ...rows];
+      if (!cursor) {
+        if (seekingRevert) {
+          throw new Error(
+            "getSessionHistory: OpenCode revert point is missing from storage"
+          );
+        }
+        break;
+      }
+      if (cursor === before) {
+        throw new Error(
+          "getSessionHistory: OpenCode history cursor did not advance"
+        );
+      }
+      before = cursor;
+      // Keep a compaction opener and its summary in the same source segment.
+    } while (
+      rows.length === 0 ||
+      (rows[0].info.role === "assistant" && rows[0].info.summary)
+    );
+    const entries = toTranscript(sessionKey, rows);
+    for (const row of rows) {
+      for (const part of row.parts) {
+        if (part.type !== "tool" || part.tool !== "task") {
+          continue;
+        }
+        const child = (part.state as { metadata?: { sessionId?: string } })
+          .metadata?.sessionId;
+        if (!child) {
+          continue;
+        }
+        // biome-ignore lint/performance/noAwaitInLoops: only child branches whose parent calls occur on this page are read
+        const history = await reached(
+          client.session.messages({ sessionID: child, directory: options.dir })
+        );
+        if (history.error || !history.data) {
+          throw new Error(
+            `getSessionHistory child: ${errorText(history.error)}`
+          );
+        }
+        entries.push(
+          ...toTranscript(child, history.data).map((entry) => ({
+            ...entry,
+            parent_tool_use_id: part.callID,
+          }))
+        );
+      }
+    }
+    return { entries, cursor, complete: cursor === null };
   }
 
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: reads the session, its revert point, and its subagent children in one pass; not refactored in this pass

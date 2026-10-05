@@ -23,6 +23,7 @@ import {
   type AgentSessionServices,
   createAgentSessionServices,
   ModelRuntime,
+  parseSessionEntries,
   SessionManager,
 } from "@earendil-works/pi-coding-agent";
 import { resolveBin } from "../tools";
@@ -33,6 +34,7 @@ import {
   syncSkillFiles,
   writeJson,
 } from "./fleet-common";
+import { historyPage } from "./history-page";
 import { checkPiProxyCredential, type PiCredentialState } from "./pi-auth";
 import { piOpenTurns } from "./pi-sessiond";
 
@@ -416,6 +418,24 @@ export class PiProfile {
     sessionKey: string,
     dir?: string
   ): Promise<SessionMessage[]> {
+    return await this.#messages(sessionKey, dir);
+  }
+
+  async getSessionHistory(
+    sessionKey: string,
+    options: import("@cawco/core").SessionHistoryOptions
+  ): Promise<import("@cawco/core").SessionHistory> {
+    return historyPage(
+      await this.#messages(sessionKey, options.dir, true),
+      options
+    );
+  }
+
+  async #messages(
+    sessionKey: string,
+    dir?: string,
+    ownLine = false
+  ): Promise<SessionMessage[]> {
     if (!dir) {
       return [];
     }
@@ -423,9 +443,16 @@ export class PiProfile {
     if (!path) {
       return [];
     }
-    const manager = SessionManager.open(path, undefined, dir);
+    // Pinned pi 1.0.1 open() persists migrations and repairs a missing newline.
+    // Parse bytes without the SDK's file loader; inMemory normalizes the same
+    // formats and builds the same branch index with persistence disabled.
+    const manager = SessionManager.inMemory(
+      dir,
+      undefined,
+      parseSessionEntries(await Bun.file(path).text())
+    );
     const entries: SessionMessage[] = [];
-    const stored = manager.getEntries();
+    const stored = ownLine ? manager.getBranch() : manager.getEntries();
     const placeOf = new Map(stored.map((entry, index) => [entry.id, index]));
     /** The first transcript entry each stored entry made, in stored order. */
     const made: { index: number; uuid: string }[] = [];

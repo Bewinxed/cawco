@@ -27,6 +27,8 @@ import type {
   PermissionUpdate,
   SendPayload,
   SentMessage,
+  SessionHistory,
+  SessionHistoryOptions,
   SessionMessage,
   SpawnPayload,
 } from "@cawco/core";
@@ -144,6 +146,11 @@ export interface Harness {
   /** What the harness has of what cawco last put on it, without changing it. */
   // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
   fleetStatus?(): Promise<FleetSyncReport>;
+  // biome-ignore lint/style/useConsistentMethodSignatures: preserves adapter method variance
+  getSessionHistory(
+    sessionKey: string,
+    options: SessionHistoryOptions
+  ): Promise<SessionHistory>;
   // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
   getSessionInfo(
     sessionKey: string,

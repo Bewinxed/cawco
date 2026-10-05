@@ -110,6 +110,7 @@ import {
   readSessionContext,
   readSessionEnd,
   readSessionFull,
+  readSessionHistory,
   readSessionWhole,
   type SDKSessionMessage,
 } from "./claude-transcript";
@@ -1538,6 +1539,22 @@ const endsTurn = (message: unknown): boolean => {
   return reason === "end_turn" || reason === "stop_sequence";
 };
 
+/** Shared normalization for context and display reads: questions keep their answers. */
+function transcriptEntries(rows: SDKSessionMessage[]): SessionMessage[] {
+  return rows.map((entry) => {
+    const result =
+      entry.toolUseResult === undefined
+        ? null
+        : normalizeQuestionResult(entry.toolUseResult);
+    return result
+      ? {
+          ...toEntry(entry),
+          message: attachQuestionResult(entry.message, result),
+        }
+      : toEntry(entry);
+  });
+}
+
 const parseLine = (data: string): RingLine | undefined => {
   try {
     return JSON.parse(data) as RingLine;
@@ -2068,32 +2085,21 @@ export class ClaudeHarness implements Harness {
     const rows = tailCount
       ? (await readSessionEnd(file, tailCount)).messages
       : await readSessionFull(file);
-    // `readSessionFull` preserves `toolUseResult` on each record, so
-    // `AskUserQuestion` answers can be folded without re-reading the file.
-    // Only entries whose assistant message contained an `AskUserQuestion`
-    // tool_use need the sidecar attached — build a uuid→result map inline.
-    const sidecars = new Map<string, UserQuestionResult>();
-    for (const entry of rows) {
-      if (entry.toolUseResult !== undefined) {
-        const result = normalizeQuestionResult(entry.toolUseResult);
-        if (result) {
-          sidecars.set(entry.uuid, result);
-        }
-      }
+    return transcriptEntries(rows);
+  }
+
+  async getSessionHistory(
+    sessionKey: string,
+    options: import("@cawco/core").SessionHistoryOptions
+  ): Promise<import("@cawco/core").SessionHistory> {
+    const file = await claudeSessionFile(sessionKey, options.dir);
+    if (!file) {
+      throw new Error(
+        `getSessionHistory: Claude transcript ${sessionKey} is missing`
+      );
     }
-    if (sidecars.size === 0) {
-      return rows.map(toEntry);
-    }
-    return rows.map((entry) => {
-      const result = sidecars.get(entry.uuid);
-      if (!result) {
-        return toEntry(entry);
-      }
-      return {
-        ...toEntry(entry),
-        message: attachQuestionResult(entry.message, result),
-      };
-    });
+    const history = await readSessionHistory(file, options);
+    return { ...history, entries: transcriptEntries(history.entries) };
   }
 
   renameSession(
