@@ -3741,11 +3741,13 @@ export async function forkSession({
   cwd,
   sessionId,
   harness = "claude",
+  at,
 }: {
   machineId: string;
   cwd: string;
   sessionId: string;
   harness?: HarnessKind;
+  at?: string;
 }): Promise<string> {
   // The branch runs on what its source runs on, never on the machine's
   // defaults: the hub's row for the conversation says what that is.
@@ -3757,7 +3759,11 @@ export async function forkSession({
     machineId,
     cwd,
     harness,
-    resume: { sessionKey: sessionId, fork: true },
+    resume: {
+      sessionKey: sessionId,
+      fork: true,
+      ...(at ? { atMessage: at } : {}),
+    },
     scratch: {},
     ...(source?.model ? { model: source.model } : {}),
     ...(source?.permissionMode
@@ -4878,6 +4884,60 @@ function toolFrames(messages: Message[]): Set<string | undefined> {
       )
       .map((message) => message.sdkUuid)
   );
+}
+
+export function rewindableTurns(target: SessionState): Set<string> {
+  const turns = new Set<string>();
+  const calls = toolFrames(target.messages);
+  // An anchor on an older page is resolved by rewindPointBehind on demand.
+  let anchored = target.cursor !== null;
+  for (const message of target.messages) {
+    if (
+      message.type === "user" &&
+      message.sdkUuid &&
+      anchored &&
+      message.state !== "sending" &&
+      message.state !== "pending" &&
+      message.state !== "failed" &&
+      message.state !== "unreached"
+    ) {
+      turns.add(message.id);
+    }
+    if (
+      message.type === "assistant" &&
+      message.sdkUuid &&
+      !calls.has(message.sdkUuid)
+    ) {
+      anchored = true;
+    }
+  }
+  return turns;
+}
+
+export async function forkFrom(
+  instanceId: string,
+  id: string
+): Promise<string> {
+  const target = session(instanceId);
+  const sessionKey = resumeKeyFor(instanceId);
+  if (!(target.machineId && sessionKey)) {
+    throw new Error(
+      "This session has not named itself yet. Try again in a moment."
+    );
+  }
+  const point = await rewindPointBehind(target, id);
+  if (!point) {
+    throw new Error(
+      "There is no answered turn behind this message to branch from."
+    );
+  }
+  return forkSession({
+    machineId: target.machineId,
+    cwd: target.cwd,
+    sessionId: sessionKey,
+    harness: target.harness,
+    at: point,
+  });
 }
 
 /**

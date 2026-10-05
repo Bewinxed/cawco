@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { untrack } from "svelte";
+  import { tick, untrack } from "svelte";
   import { CURVE, dur, motionOk } from "#lib/cawco/motion/curves.svelte.js";
+  import { morph } from "#lib/cawco/motion/morph.svelte.js";
   import {
     departBox,
     waiting as departed,
@@ -10,9 +11,15 @@
   import PendingContent, {
     whileIdle,
   } from "#lib/components/ui/button/pending-content.svelte";
+  import { Textarea } from "#lib/components/ui/textarea/index.js";
+  import { IconFork, IconPenLine } from "#lib/icons.js";
+  import { goto } from "$app/navigation";
   import {
     canResend,
     canWithdraw,
+    cawco,
+    editAndResend,
+    forkFrom,
     latestCommandFor,
     restoreDraft,
     retryFailed,
@@ -20,6 +27,7 @@
     retrySend,
     withdrawQueued,
   } from "../client.svelte";
+  import { conversationHref } from "../links";
   /** Dispatches one stand-alone transcript message to its renderer by type. */
   import type { Message } from "../types";
   import DocThumb from "./DocThumb.svelte";
@@ -44,6 +52,8 @@
     folding = false,
     grouped = false,
     runsOn = false,
+    canEdit = false,
+    canFork = false,
   }: {
     message: Message;
     agentName: string;
@@ -56,9 +66,76 @@
     runsOn?: boolean;
     /** A thinking message that is the live reasoning, settled: it folds shut. */
     folding?: boolean;
+    canEdit?: boolean;
+    canFork?: boolean;
   } = $props();
 
   const kind = $derived(message.type);
+  let editing = $state(false);
+  let editContent = $state("");
+  let editPending = $state(false);
+  let forkPending = $state(false);
+  let editError = $state("");
+  let editor = $state<HTMLTextAreaElement | null>(null);
+
+  async function startEditing(): Promise<void> {
+    editContent = message.content;
+    editError = "";
+    editing = true;
+    await tick();
+    editor?.focus();
+  }
+
+  function cancelEditing(): void {
+    if (editPending) {
+      return;
+    }
+    editing = false;
+    editError = "";
+  }
+
+  async function submitEdit(): Promise<void> {
+    if (!canEdit || editPending || !editContent.trim()) {
+      return;
+    }
+    editPending = true;
+    editError = "";
+    try {
+      await editAndResend(message.instanceId, message.id, editContent.trim());
+      editing = false;
+    } catch (error) {
+      editError = error instanceof Error ? error.message : String(error);
+    } finally {
+      editPending = false;
+    }
+  }
+
+  async function branch(): Promise<void> {
+    if (!canFork || forkPending) {
+      return;
+    }
+    forkPending = true;
+    editError = "";
+    try {
+      const forked = await forkFrom(message.instanceId, message.id);
+      await goto(conversationHref(forked, cawco.instanceIndex));
+    } catch (error) {
+      editError = error instanceof Error ? error.message : String(error);
+    } finally {
+      forkPending = false;
+    }
+  }
+
+  function editKeydown(event: KeyboardEvent): void {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      cancelEditing();
+    } else if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+      event.preventDefault();
+      // biome-ignore lint/complexity/noVoid: the row owns pending and failure state
+      void submitEdit();
+    }
+  }
   const hidden = $derived(
     kind === "result.success" ||
       (kind === "assistant" && !message.content.trim())
@@ -318,7 +395,80 @@
             you
           />
         {/if}
-        <MessageBody source={message.content} />
+        <div {@attach morph()}>
+          {#if editing}
+            <Textarea
+              aria-label="Edit message"
+              disabled={editPending}
+              onkeydown={editKeydown}
+              bind:ref={editor}
+              bind:value={editContent}
+            />
+            <div class="actions">
+              <button
+                class="pressable action"
+                disabled={editPending}
+                onclick={cancelEditing}
+                type="button"
+              >
+                Cancel edit
+              </button>
+              <button
+                aria-busy={editPending || undefined}
+                aria-disabled={editPending || undefined}
+                class="pressable action"
+                disabled={!(canEdit && editContent.trim())}
+                onclick={whileIdle(() => editPending, submitEdit)}
+                type="button"
+              >
+                <PendingContent
+                  failed={!!editError}
+                  label="Send edited message"
+                  pending={editPending}
+                  pendingLabel="Sending…"
+                />
+              </button>
+            </div>
+          {:else}
+            <MessageBody source={message.content} />
+            {#if canEdit || canFork}
+              <div class="actions">
+                {#if canEdit}
+                  <button
+                    class="pressable action"
+                    onclick={startEditing}
+                    type="button"
+                  >
+                    <PendingContent
+                      icon={IconPenLine}
+                      label="Edit and resend"
+                    />
+                  </button>
+                {/if}
+                {#if canFork}
+                  <button
+                    aria-busy={forkPending || undefined}
+                    aria-disabled={forkPending || undefined}
+                    class="pressable action"
+                    onclick={whileIdle(() => forkPending, branch)}
+                    type="button"
+                  >
+                    <PendingContent
+                      failed={!!editError}
+                      icon={IconFork}
+                      label="Fork from here"
+                      pending={forkPending}
+                      pendingLabel="Forking…"
+                    />
+                  </button>
+                {/if}
+              </div>
+            {/if}
+          {/if}
+          {#if editError}
+            <p class="reason" role="alert">{editError}</p>
+          {/if}
+        </div>
         {#if message.metadata?.attachments?.length ||
           message.metadata?.images?.length}
           <div class="chips" data-gallery>
