@@ -90,5 +90,18 @@ export const failedIn = (rows: Iterable<InstanceRow>): number => {
   return failed;
 };
 
+/**
+ * What a folded line keeps out of sight, as its words say it after its own
+ * count: "· 3 failed", "· 2 running". One form for every line that folds
+ * rows away (an "N older" row, a machine's "Show N more", a closed Recent).
+ */
+const foldedWords = (count: number, word: string): string =>
+  `· ${count} ${word}`;
+
 /** The failures a folded line keeps out of sight, as its words say them. */
-export const failedWords = (failed: number): string => `· ${failed} failed`;
+export const failedWords = (failed: number): string =>
+  foldedWords(failed, "failed");
+
+/** The sessions with a live process a folded line keeps out of sight. */
+export const runningWords = (running: number): string =>
+  foldedWords(running, "running");

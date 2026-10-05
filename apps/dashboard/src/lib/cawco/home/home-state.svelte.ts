@@ -41,7 +41,7 @@ import { permissionSummary } from "../permission-summary";
 import { projectsFor } from "../projects";
 import { questionsOf } from "../question";
 import { rail } from "../rail.svelte";
-import { hasParent, topsIn } from "../tree";
+import { hasParent, rooted, topsIn, tree } from "../tree";
 import { runHref } from "../workflow-runs";
 import { workflowState } from "../workflow-state.svelte";
 import { choices } from "./choices.svelte";
@@ -292,7 +292,7 @@ export function placeOf(
     : machineName(machineId);
 }
 
-function placeOfRow(row: InstanceRow): string {
+export function placeOfRow(row: InstanceRow): string {
   const where = projectOfRow(row);
   return where
     ? `${machineName(row.machineId)} · ${where}`
@@ -833,8 +833,8 @@ class Home {
   });
 
   /**
-   * The listed sessions Recent lists, in order: every one no other group
-   * shows, whatever its status or activity. Recent is the list of last
+   * The listed sessions Recent holds, newest first: every one no other
+   * group shows, whatever its status or activity. Recent is the list of last
    * resort, so it asks nothing more of a row. Asking that it be idle, asleep
    * or failed left two with no row anywhere, and so no menu to stop or
    * remove them by: a live session whose pulse says it waits on the reader
@@ -842,14 +842,56 @@ class Home {
    * and one stopped before it had a transcript whose pulse or delegates
    * still say working.
    */
-  readonly #recentLive = $derived.by<RecentItem[]>(() => {
+  readonly #recentRows = $derived.by<InstanceRow[]>(() => {
     const shown = new Set([
       ...this.working.map((row) => row.id),
       ...this.finished.map((row) => row.id),
       ...cawco.blocked.map((item) => item.instanceId),
     ]);
-    return cawco.listedInstances
-      .filter((row) => listed(row) && !shown.has(row.id))
+    const rows = cawco.listedInstances.filter((row) => !shown.has(row.id));
+    const known = (id: string) => cawco.instanceIndex.byId.has(id);
+    // What the Delegates switch means in every home list (WorkTabs
+    // `rowsOf`): off, a delegate is held only under a parent the list holds
+    // too, in that parent's tree; on, every one is held, under its parent.
+    return (rail.delegates ? rows : rooted(rows, known)).sort(
+      (a, b) => lastAt(b) - lastAt(a) || compareIds(a.id, b.id)
+    );
+  });
+
+  /**
+   * Recent's sessions as their trees (tree.ts), newest first: each one
+   * followed by its delegates, and with the Delegates switch on each
+   * ancestor Recent does not hold as a context line in its delegates' place,
+   * as Working and Finished draw theirs. Read only where Recent is open.
+   */
+  readonly recentLines = $derived.by(() =>
+    tree(this.#recentRows, {
+      context: rail.delegates
+        ? (id) => cawco.instanceIndex.byId.get(id)
+        : undefined,
+    })
+  );
+
+  /**
+   * How many of the sessions Recent holds, its delegates among them, have a
+   * live process (running or starting): what its closed header says, since
+   * nothing else on a closed list says something inside can still be stopped.
+   */
+  readonly recentRunning = $derived(
+    this.#recentRows.filter(
+      (row) => row.status === "running" || row.status === "starting"
+    ).length
+  );
+
+  /**
+   * Recent's own rows among the sessions, in order: the top of each tree.
+   * A delegate is in its parent's tree, never a row of the list, so the
+   * list's count and its cap are of these.
+   */
+  readonly #recentLive = $derived.by<RecentItem[]>(() => {
+    const topOf = topsIn(cawco.instanceIndex.byId);
+    const tops = new Set(this.#recentRows.map(topOf));
+    return [...tops]
       .map(
         (row): RecentItem => ({
           key: row.id,
