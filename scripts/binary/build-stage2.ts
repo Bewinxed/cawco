@@ -1,5 +1,5 @@
 /**
- * Builds what prove-stage2.sh needs: a throwaway key pair, and eight real
+ * Builds what prove-stage2.sh needs: a throwaway key pair, and nine real
  * linux-x64 builds of the repository's own entry point with that key's public
  * half embedded as the release key. Usage:
  *   bun scripts/binary/build-stage2.ts /ABSOLUTE/OUTPUT/DIR
@@ -58,6 +58,11 @@ const builds = [
     "8",
     "0.0.1-nightly.8+888888888888",
     "8888888888888888888888888888888888888888",
+  ],
+  [
+    "9",
+    "0.0.1-nightly.9+999999999999",
+    "9999999999999999999999999999999999999999",
   ],
 ] as const;
 for (const [index, [name, version, commit]] of builds.entries()) {

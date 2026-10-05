@@ -91,7 +91,7 @@ if [ -f "$TRIAL" ] && ! helper_live && [ ! -f "$ROOT/keeper-trial.json" ]; then
           cp "$backup" "$db"
         fi
         printf '%s\\n' "$version" > "$ROOT/trial.recovered"
-        rm -f "$TRIAL" "$ROOT/installation.previous.json"
+        rm -f "$TRIAL" "$ROOT/installation.previous.json" "$ROOT/apply.lock"
       fi
     fi
   fi

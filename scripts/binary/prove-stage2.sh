@@ -15,7 +15,7 @@ bins=$(realpath "$2")
 [[ "$out" != *" "* ]] || { echo "output path may not contain spaces" >&2; exit 2; }
 here=$(dirname "$(realpath "$0")")
 python3 -c 'import pexpect' 2> /dev/null || { echo "python3 with pexpect is needed to answer the installer's prompts (pip install pexpect)" >&2; exit 2; }
-for need in cawco-1 cawco-2 cawco-3 cawco-4 cawco-5 cawco-6 cawco-7 cawco-8 keys/test-release-private.pem keys/test-release-public.pem; do
+for need in cawco-1 cawco-2 cawco-3 cawco-4 cawco-5 cawco-6 cawco-7 cawco-8 cawco-9 keys/test-release-private.pem keys/test-release-public.pem; do
   [[ -e "$bins/$need" ]] || { echo "missing $bins/$need: run build-stage2.ts first" >&2; exit 2; }
 done
 free_gb=$(df -BG --output=avail "$out" | tail -n 1 | tr -dc 0-9)
@@ -402,14 +402,24 @@ case "$1" in
   delay)
     mkdir -p "$dir"
     printf '[Service]\nExecStartPre=/bin/sleep %s\n' "$2" > "$dir/proof.conf" ;;
-  break-build)
-    # The keeper cannot start on one build because that build's own `sessiond` verb fails: its executable is
-    # replaced by a stub that fails for `sessiond` and runs the real program (kept under a second name, the same
-    # file) for every other verb. The unit is untouched, so the wrapper runs at every start and the keeper
-    # then fails, as a real build whose keeper cannot start would.
+  break-build|break-when-staged)
+    # A build cannot run one verb because its executable is replaced by a stub that fails for that verb ($3,
+    # `sessiond` by default) and runs the real program (kept as a hard link, `cawco.real`) for every other verb.
+    # No unit is touched, so the wrapper runs at every start and the verb then fails, as a real build that cannot
+    # run it would. `break-when-staged` first waits for the update to put the build on disk (the extracted
+    # directory appears whole, by rename) and stubs it in a few milliseconds, long before the swap.
     v="$root/versions/$2"
+    verb="${3:-sessiond}"
+    if [ "$1" = break-when-staged ]; then
+      n=0
+      until [ -f "$v/cawco" ] && [ -f "$v/release.json" ]; do
+        n=$((n + 1))
+        [ "$n" -lt 30000 ] || exit 1
+        sleep 0.02
+      done
+    fi
     [ -f "$v/cawco.real" ] || ln "$v/cawco" "$v/cawco.real"
-    printf '#!/bin/sh\n[ "$1" = sessiond ] && exit 1\nexec "$(dirname "$0")/cawco.real" "$@"\n' > "$v/cawco.stub"
+    printf '#!/bin/sh\n[ "$1" = %s ] && exit 1\nexec "$(dirname "$0")/cawco.real" "$@"\n' "$verb" > "$v/cawco.stub"
     chmod 700 "$v/cawco.stub"
     mv "$v/cawco.stub" "$v/cawco" ;;
   remove)
@@ -1074,6 +1084,34 @@ slow_keeper_stage_not_undone() {
 }
 export -f slow_keeper_stage_not_undone
 check "a slow keeper stage is not undone by the wrapper while the helper lives" slow_keeper_stage_not_undone 900 "Install now applies the newer build" "$(printf '0.0.1-nightly.8+%s' 888888888888)"
+
+agent_cannot_start_whole_recovery() {
+  keeper_start_state
+  local previous
+  previous=$(current_link "$hubc")
+  # The build's agent verb fails and every other verb works; the stub is put on it the moment the update stages it.
+  as_user "$hubc" sh -c 'rm -f /tmp/stub-9.done; sh /shared/keeper-dropin.sh break-when-staged "$1" up && touch /tmp/stub-9.done' _ "$(nb 9)" > /dev/null 2>&1 &
+  publish_nightly 9 46
+  learn
+  install_now_request "$hid" > /dev/null
+  wait_until 300 '[[ "$(current_link "$hubc")" == "versions/$(nb 9)" ]]'
+  wait_until 20 'as_user "$hubc" test -e /tmp/stub-9.done'
+  # Killed right after the swap: the new build's hub runs, its agent cannot stay up, and nothing is left to confirm it.
+  as_user "$hubc" pkill -9 -f binary-apply
+  # Within the trial's deadline (150 s) plus 60 s: the hub, which is the designated service, restarts itself
+  # and the wrapper puts the previous build back whole.
+  wait_until 240 '[[ "$(current_link "$hubc")" == "'"$previous"'" ]]'
+  wait_until 60 'as_user "$hubc" curl -fsS http://127.0.0.1:3456/health | grep -q "\"version\":\"${previous#versions/}\""'
+  wait_until 60 '[[ "$(hub_api /api/agents | json "d => d.find(a => a.machineId === \"$hid\")?.status")" == online ]]'
+  wait_until 60 '[[ "$(custody_of $hid)" == available ]]'
+  wait_until 60 '[[ "$(phase $hid)" == failed-rolled-back && "$(field $hid failedVersion)" == "$(nb 9)" ]]'
+  ! has_file "$hubc" trial.json
+  ! has_file "$hubc" apply.lock
+  start_session "$hid" keeperlive-9
+  wait_until 60 'session_running keeperlive-9'
+}
+export -f agent_cannot_start_whole_recovery
+check "a helper killed after the swap of a build whose agent cannot start is put back whole, though its hub runs" agent_cannot_start_whole_recovery 900 "Install now applies the newer build"
 
 echo "Evidence: $out"
 exit $status

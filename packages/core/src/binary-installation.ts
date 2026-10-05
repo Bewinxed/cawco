@@ -145,6 +145,36 @@ const linkedVersion = async (path: string): Promise<string | undefined> => {
   }
 };
 
+/** Whether an update helper is running: the lock names a process that is still the one that wrote it. */
+export async function helperIsLive(): Promise<boolean> {
+  const lock = await readJson<Parameters<typeof markerIsLive>[0]>(
+    lockFilePath()
+  );
+  return lock !== undefined && markerIsLive(lock);
+}
+
+/**
+ * The update trial of `running` when it is unresolved: its deadline has passed,
+ * no keeper move is pending (a failing keeper is not the build's fault) and no
+ * helper is live (a live helper owns the outcome). Undefined otherwise.
+ */
+export async function expiredTrial(
+  running: string
+): Promise<TrialMarker | undefined> {
+  const trial = await readTrial();
+  if (
+    !trial ||
+    trial.version !== running ||
+    trial.deadline > Date.now() / 1000
+  ) {
+    return undefined;
+  }
+  if ((await readKeeperTrial()) || (await helperIsLive())) {
+    return undefined;
+  }
+  return trial;
+}
+
 /**
  * Deletes the directories under `versions/` nothing needs. Kept: what `current`
  * and `keeper` name, what a pending update trial would restore or has swapped
@@ -170,7 +200,7 @@ export async function prune(): Promise<void> {
   const lock = await readJson<
     { version?: string } & Parameters<typeof markerIsLive>[0]
   >(lockFilePath());
-  if (lock && markerIsLive(lock)) {
+  if (lock && (await helperIsLive())) {
     add(lock.version);
   }
   const versions = join(binaryRoot(), "versions");
