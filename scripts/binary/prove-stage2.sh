@@ -197,6 +197,16 @@ api_on() { local c=$1; shift; as_user "$c" curl -fsS "http://127.0.0.1:3456$1" "
 spawn_child() {
   as_user "$1" sh -c 'printf "%s\n" "{\"type\":\"spawn\",\"commandId\":\"hold-$1\",\"procId\":\"boundary-$1\",\"spec\":{\"command\":\"sleep\",\"args\":[\"3000\"]}}" | socat -t1 - UNIX-CONNECT:/run/user/1000/cawco/sessiond.sock > /dev/null' sh "$2"
 }
+# Starts the in-container watcher that fires at the moment a machine's phase becomes installing (see
+# stage2-during-install.ts); its output goes to the file, ending with a `done` line.
+watch_install() {
+  local container=$1 mode=$2 hub=$3 machine=$4 prefix=$5 file=$6
+  : > "$file"
+  as_user "$container" env BUN_BE_BUN=1 /home/cawco/.local/bin/cawco /shared/stage2-during-install.ts "$mode" "$hub" "$machine" "$prefix" > "$file" 2>&1 &
+}
+# The ids the watcher recorded as accepted while the machine was installing, one per line.
+watched_ids() { sed -n 's/^accepted //p' "$1"; }
+export -f watch_install watched_ids
 # Asks the hub, from inside its own container, to start a session on a machine, the way the dashboard does.
 start_session() { as_user "$hubc" env BUN_BE_BUN=1 /home/cawco/.local/bin/cawco /shared/stage2-start-session.ts http://127.0.0.1:3456 "$1" "$2"; }
 # Keeps asking until the stop file appears. A start is written down only if the hub accepted it
@@ -310,7 +320,7 @@ setup "publish the bad-signature release" "$out/logs/fixture-badsig.log" publish
 setup "publish the unsigned release" "$out/logs/fixture-nosig.log" publish nosig stable 0.0.1-test.1 $sha1111 "$bins/cawco-1" "$key" 10 "$schema" no-signature
 setup "write the broken build" "$out/logs/fixture-broken.log" fixture broken-binary "$out/broken-cawco"
 setup "write the workflow the hub keeps" "$out/logs/fixture-workflow.log" bun -e "await Bun.write('$out/shared/workflow.json', JSON.stringify({name: 'kept-through-rollback', program: 'import { z } from \"zod\"; export const inputs=z.object({name:z.string()}); export default async function(w:Workflow<typeof inputs>){await w.checkpoint(\"binary\",w.inputs);return {name:w.inputs.name};}'}))"
-setup "put the session starter where the machines can read it" "$out/logs/starter.log" cp "$here/stage2-start-session.ts" "$out/shared/stage2-start-session.ts"
+setup "put the session starter where the machines can read it" "$out/logs/starter.log" cp "$here/stage2-start-session.ts" "$here/stage2-during-install.ts" "$out/shared/"
 cat > "$out/shared/reset-hub.sh" <<'EOF'
 # Puts the hub machine back on a known working build ($1). Prints one line when it had to change something.
 good=$1
@@ -379,6 +389,10 @@ setup "boot the hub machine" "$out/logs/boot-hub.log" boot "$hubc" "$hub_ip" hub
 setup "boot the joining machine" "$out/logs/boot-joiner.log" boot "$joinerc" "$joiner_ip" joiner
 setup "boot the spare machine (no lingering)" "$out/logs/boot-fresh.log" boot "$freshc" "$fresh_ip" fresh nolinger
 setup "boot the second hub machine" "$out/logs/boot-hub2.log" boot "$hub2c" "$hub2_ip" hub2
+# The refusal checks compare this machine before and after a refused install, so it must already hold what the
+# installer needs before it can verify anything: openssl, installed with sudo (the installer's own first step on
+# a machine without it, which also writes sudo's first-use note into the home directory).
+setup "give the second hub machine openssl and a first use of sudo" "$out/logs/prepare-hub2.log" as_user "$hub2c" sh -c 'sudo apt-get update > /dev/null && sudo apt-get install -y openssl > /dev/null && command -v openssl && test -e "$HOME/.sudo_as_admin_successful"'
 
 # ---------------------------------------------------------------- installer
 
@@ -725,19 +739,23 @@ auto_with_held_child() {
   echo "$child $keeper" > "$out/held.txt"
   # Sessions already running on the hub's own machine before its update begins.
   start_before "$hid" "$hubc" "$out/hub-before.txt" hubpre-1 hubpre-2
-  rm -f "$out/stop-hub" "$out/accepted-hub.txt"
-  start_loop "$hid" hubstart "$out/accepted-hub.txt" "$out/stop-hub" &
-  echo $! > "$out/hubloop.pid"
+  # Two watchers, started before the update is asked for: one asks the hub to start sessions on its own machine,
+  # the other starts held children on the joined machine, each firing the moment that machine says installing.
+  watch_install "$hubc" hub-start http://127.0.0.1:3456 "$hid" hubstart "$out/watch-hub.txt"
+  watch_install "$joinerc" keeper-child "http://$hub_ip:3456" "$jid" during "$out/watch-joiner.txt"
   put_policy nightly true
   wait_until 300 '[[ "$(build_version $hid)" == "0.0.1-nightly.3+333333333333" ]]'
-  touch "$out/stop-hub"
-  wait "$(cat "$out/hubloop.pid")"
+  wait_until 120 'grep -q "^done " "$out/watch-hub.txt"'
+  echo "== what the hub-machine watcher sent and what came back"
+  cat "$out/watch-hub.txt"
+  watched_ids "$out/watch-hub.txt" > "$out/accepted-hub.txt"
 }
 export -f auto_with_held_child
 check "with auto-update on the build is applied when the machine is idle" auto_with_held_child 600 "changing the channel takes effect" "0.0.1-nightly.3+333333333333"
 
 hub_starts_held() {
   need_hub
+  grep -q "^done " "$out/watch-hub.txt"
   accepted_ran_once "$hid" "$hubc" hubstart "$out/accepted-hub.txt"
 }
 export -f hub_starts_held
@@ -760,14 +778,14 @@ check "a child held by the session keeper survives the update and the keeper is 
 
 session_during_update() {
   need_hub
-  # The joined machine follows its hub to the new build; sessions are started on it throughout.
-  n=0
-  until [[ "$(build_version $jid)" == "0.0.1-nightly.3+333333333333" ]]; do
-    n=$((n + 1))
-    spawn_child "$joinerc" "during$n"
-    sleep 1
-    (( n < 300 )) || { echo "the joined machine never reached the new build"; return 1; }
-  done
+  # The joined machine follows its hub to the new build. Its watcher (started in the check that updated the hub)
+  # started a held child each time the hub reported the machine as installing, and recorded each answer.
+  wait_until 600 '[[ "$(build_version $jid)" == "0.0.1-nightly.3+333333333333" ]]'
+  wait_until 300 'grep -q "^done " "$out/watch-joiner.txt"'
+  echo "== what the joined-machine watcher sent and what came back"
+  cat "$out/watch-joiner.txt"
+  local n
+  n=$(watched_ids "$out/watch-joiner.txt" | wc -l)
   [[ $n -ge 1 ]]
   # Every one of them is still alive afterwards.
   [[ "$(children_with "$joinerc" during)" == "$n" ]]
