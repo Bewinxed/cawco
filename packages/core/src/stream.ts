@@ -25,8 +25,10 @@
  * 2: a session's stream carries the hub's transcript events (3721295c).
  * 3: raised on the live fleet to show a tab built for 2 reload itself with
  *    its drafts; what the wire carries is 2's.
+ * 4: board deltas carry changed machines and optional metadata, with pulse
+ *    snapshots only on connect. Older tabs must reload before reading deltas.
  */
-export const WIRE_PROTOCOL = 3;
+export const WIRE_PROTOCOL = 4;
 
 /**
  * What a session's stream carries: the changes each frame made to its
