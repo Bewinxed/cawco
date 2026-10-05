@@ -5280,6 +5280,13 @@ export const createServer = (
         };
       }
     }
+    if (
+      envelope.verb === "spawn" &&
+      envelope.requestId &&
+      peek(outgoing.payload, "requestId") === envelope.requestId
+    ) {
+      registry.rememberRequester(envelope.requestId, dashboard);
+    }
     agent.send(outgoing);
     return true;
   };
