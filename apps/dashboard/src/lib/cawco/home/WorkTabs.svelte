@@ -84,7 +84,13 @@
   import { reflow, reflowsFrom, reread } from "../motion/rows.svelte";
   import OlderRows from "../OlderRows.svelte";
   import OsMark from "../OsMark.svelte";
-  import { DELEGATE_WINDOW, listedOf, runningIds } from "../older";
+  import {
+    DELEGATE_WINDOW,
+    failedIn,
+    failedWords,
+    listedOf,
+    runningIds,
+  } from "../older";
   import { openTrees } from "../open-trees.svelte";
   import { rail } from "../rail.svelte";
   import SessionRow, { ROW_PILL } from "../SessionRow.svelte";
@@ -206,6 +212,8 @@
   interface Older {
     /** The rows it holds, at every depth: the number the row says. */
     count: number;
+    /** How many of them failed. */
+    failed: number;
     /** Every row in it, at every depth. */
     held: Set<string>;
     /** The rows directly under the parent that fold. */
@@ -245,6 +253,7 @@
       );
       out.set(parent, {
         count: rows.length,
+        failed: failedIn(rows),
         held: new Set([
           ...older.map((line) => line.row.id),
           ...rows.map((row) => row.id),
@@ -846,6 +855,7 @@
                since the list holds none of them. -->
           <OlderRows
             count={older.count}
+            failed={older.failed}
             flip={!plan}
             front={current !== null && older.held.has(current)}
             id={row.id}
@@ -892,6 +902,7 @@
           <!-- Its "N older" row leaves with the last row over it. -->
           <OlderRows
             count={older.count}
+            failed={older.failed}
             id={line.key}
             list="home"
             still
@@ -1067,7 +1078,7 @@
                 >
                   {line.words}
                   {#if line.failed > 0}
-                    <span class="more-failed">· {line.failed} failed</span>
+                    <span class="more-failed">{failedWords(line.failed)}</span>
                   {/if}
                 </button>
               {:else if plan?.more.get(id)}

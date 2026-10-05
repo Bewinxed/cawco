@@ -41,7 +41,7 @@
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import { IconHistory } from "#lib/icons.js";
   import { type BranchOptions, branch } from "./motion/branch.svelte";
-  import { OLDER_ROWS } from "./older";
+  import { failedWords, OLDER_ROWS } from "./older";
   import TreeMark from "./TreeMark.svelte";
 
   let {
@@ -49,6 +49,7 @@
     list,
     trees = [],
     count,
+    failed = 0,
     keyOf,
     tree,
     front = false,
@@ -65,6 +66,8 @@
     trees?: T[];
     /** The rows it holds, at every depth: the number the row says. */
     count: number;
+    /** How many of those rows failed (older.ts `failedIn`). */
+    failed?: number;
     keyOf?: (held: T) => string;
     /** One older tree, drawn as the list draws its rows. */
     tree?: Snippet<[T]>;
@@ -213,7 +216,11 @@
         {style}
         type="button"
       >
-        <TreeMark open={out} rowToggles>
+        <TreeMark
+          open={out}
+          rowToggles
+          status={failed > 0 ? "fail" : undefined}
+        >
           {#snippet face()}
             <!-- The glyph and the spinner stacked in one cell (the kit's
                  icon swap). Out of the button's name: `aria-busy` says it,
@@ -227,6 +234,9 @@
           {/snippet}
         </TreeMark>
         <span class="num">{count} older</span>
+        {#if failed > 0}
+          <span class="older-failed">{failedWords(failed)}</span>
+        {/if}
       </button>
     {/snippet}
   </Sidebar.MenuSubButton>
@@ -254,6 +264,10 @@
      to while its rows are read (the kit's icon swap, at a control's pace). */
   .older-face {
     --icon-swap-dur: var(--dur-control);
+  }
+  .older-failed {
+    margin-inline-start: 0.3em;
+    color: var(--status-fail-ink);
   }
   /* Six rows at most, scrolling in place. The edges fade only while there
      is more past them. */

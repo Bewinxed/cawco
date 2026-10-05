@@ -64,6 +64,7 @@
   import OlderRows, { olderOut } from "./OlderRows.svelte";
   import {
     DELEGATE_WINDOW,
+    failedIn,
     listedOf,
     PROJECT_WINDOW,
     type Reading,
@@ -729,12 +730,14 @@
 {#snippet olderRows(
   id: string,
   count: number,
+  failed: number,
   front: boolean,
   trees: Branch[]
 )}
   {#if count > 0}
     <OlderRows
       {count}
+      {failed}
       {front}
       {id}
       keyOf={(node) => node.row.id}
@@ -803,6 +806,7 @@
         {@render olderRows(
           row.id,
           rowsIn(node.older),
+          failedIn(node.older.flatMap((held) => [held.row, ...held.under])),
           inFront(node.older),
           node.older
         )}
@@ -1102,6 +1106,7 @@
                     {@render olderRows(
                       project.id,
                       lists.older.length,
+                      failedIn(lists.older),
                       front,
                       olderOut(project.id, front)
                         ? branches(lists.older, `rail:${project.id}:older`)

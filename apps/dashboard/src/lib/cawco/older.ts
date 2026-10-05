@@ -14,6 +14,7 @@
  * worth listed whole is the four thousand pixels of rail the fold is for.
  */
 import { cawco, type InstanceRow } from "./client.svelte";
+import { sessionStatus } from "./SessionMark.svelte";
 
 /** A project lists every session that moved in the last day. */
 export const PROJECT_WINDOW = 24 * 60 * 60 * 1000;
@@ -74,3 +75,20 @@ export function listedOf(
   }
   return listed;
 }
+
+/**
+ * How many of these rows failed: the status SessionMark draws the red dot
+ * for, so the count and the dot are one rule.
+ */
+export const failedIn = (rows: Iterable<InstanceRow>): number => {
+  let failed = 0;
+  for (const row of rows) {
+    if (sessionStatus(row) === "fail") {
+      failed += 1;
+    }
+  }
+  return failed;
+};
+
+/** The failures a folded line keeps out of sight, as its words say them. */
+export const failedWords = (failed: number): string => `· ${failed} failed`;
