@@ -1368,6 +1368,11 @@
     flex: 1 1 auto;
     min-height: 0;
     overflow: hidden;
+    /* The area's own stacking context: the placeholder's z-index below is
+       ranked among the transcript's, never against the group's composer
+       standing over this area's foot. Without it a desk's placeholder
+       painted over the composer and took its clicks until the rows came. */
+    isolation: isolate;
   }
 
   /* One named state, or the transcript, filling the area. */
