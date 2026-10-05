@@ -65,6 +65,8 @@ final class ThinkingIndicator: UIView {
         accessibilityTraits = .updatesFrequently
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (view: ThinkingIndicator, _: UITraitCollection) in view.paint() }
         NotificationCenter.default.addObserver(self, selector: #selector(motionChanged), name: UIAccessibility.reduceMotionStatusDidChangeNotification, object: nil)
+        // The system removes every layer animation when the app goes to the background.
+        NotificationCenter.default.addObserver(self, selector: #selector(motionChanged), name: UIApplication.willEnterForegroundNotification, object: nil)
         paint()
     }
 
@@ -183,7 +185,9 @@ final class ThinkingIndicator: UIView {
             group.fillMode = .both
             group.beginTime = begin + breath * Double(i * 2) - 0.24
             entry.word.layer.add(group, forKey: "cycle")
-            entry.word.alpha = 1
+            // At rest only the first word stands: if the system strips the animations
+            // (the app returns from the background), the four never show at once.
+            entry.word.alpha = i == 0 ? 1 : 0
             // The light crosses the word, right to left, once a breath.
             let width = entry.word.bounds.width
             let sweep = CABasicAnimation(keyPath: "position.x")
