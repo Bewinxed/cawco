@@ -436,7 +436,11 @@ public final class HomeModel {
         public let recent: [RecentItem]
     }
 
-    public var board: Board {
+    public var board: Board { board(recent: true) }
+
+    /// `recent`: whether Recent is read too. The rail's home does not list it
+    /// (Home.svelte: `HomeRecent` is the page's), and it is the larger part of a read.
+    public func board(recent listed: Bool) -> Board {
         let working = working
         let finished = finished
         let workingRows = rows(of: working)
@@ -445,8 +449,14 @@ public final class HomeModel {
             working: workingRows,
             finished: finishedRows,
             groups: groups(tab, lines: lines(tab, rows: tab == .working ? workingRows : finishedRows)),
-            recent: recent(working: working, finished: finished)
+            recent: listed ? recent(working: working, finished: finished) : []
         )
+    }
+
+    /// Nothing to list anywhere: no session the hub lists, and no transcript
+    /// stored on any machine (home-state `empty`), asked without building a list.
+    public var empty: Bool {
+        !fleet.rows.contains(where: \.isListed) && fleet.machines.allSatisfy { fleet.catalog($0.machineId).isEmpty }
     }
 
     public struct Line: Identifiable {

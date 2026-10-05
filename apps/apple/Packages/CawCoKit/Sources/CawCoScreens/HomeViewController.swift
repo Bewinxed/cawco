@@ -651,7 +651,8 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
             snapshot.appendItems(needList.map { .need($0.id) }, toSection: .needs)
         }
 
-        let board = home.board
+        // Recent is the page's: the rail's home neither lists nor reads it.
+        let board = home.board(recent: variant == .page)
         let working = board.working
         let finished = board.finished
         counts = (working.count, finished.count, finished.contains(where: \.isFailed))
@@ -689,7 +690,9 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
 
         let recent = board.recent
         recentAll = recent
-        if live, needList.isEmpty, working.isEmpty, finished.isEmpty, recent.isEmpty {
+        // Nothing to list anywhere (home-state `empty`): the page knows from its Recent, the rail asks without building one.
+        let nothing = variant == .page ? recent.isEmpty : home.empty
+        if live, needList.isEmpty, working.isEmpty, finished.isEmpty, nothing {
             // Caw only on a fleet with nothing in it yet, or while a machine has not answered.
             let waiting = home.waitingOn
             cawStatus = waiting.isEmpty ? .sleeping : .ready
