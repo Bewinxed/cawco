@@ -235,7 +235,7 @@ await writeFile(
       name: "cawco",
       version: cliPkg.version,
       description: "Self-hosted fleet control plane for AI coding agents",
-      license: root.license ?? "MIT",
+      license: root.license,
       repository: root.repository ?? "https://github.com/Bewinxed/cawco",
       type: "module",
       bin: { cawco: "./cli.js" },
