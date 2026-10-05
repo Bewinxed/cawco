@@ -147,7 +147,8 @@ def ship(app):
         members = listed(f"/v1/betaGroups/{internal['id']}/betaTesters?limit=200")
         if not any(t["attributes"]["email"] == owner["attributes"]["email"] for t in members):
             api("POST", "/v1/betaTesters", {"data": {"type": "betaTesters", "attributes": {key: owner["attributes"][key] for key in ["email", "firstName", "lastName"]}, "relationships": {"betaGroups": {"data": [{"type": "betaGroups", "id": internal["id"]}]}}}})
-        api("POST", "/v1/betaBuildLocalizations", {"data": {"type": "betaBuildLocalizations", "attributes": {"locale": "en-US", "whatsNew": "Connect to your CawCo hub and check the live fleet, sessions and transcripts.\nTry approvals, steering, workflows and configuration; report any issues."}, "relationships": {"build": relationship("builds", build["id"])}}})
+        if not any(row["attributes"]["locale"] == "en-US" for row in listed(f"/v1/builds/{build['id']}/betaBuildLocalizations")):
+          api("POST", "/v1/betaBuildLocalizations", {"data": {"type": "betaBuildLocalizations", "attributes": {"locale": "en-US", "whatsNew": "Connect to your CawCo hub and check the live fleet, sessions and transcripts.\nTry approvals, steering, workflows and configuration; report any issues."}, "relationships": {"build": relationship("builds", build["id"])}}})
         api("POST", f"/v1/betaGroups/{internal['id']}/relationships/builds", {"data": [{"type": "builds", "id": build["id"]}]})
         print(f"APP_ID {app} GROUP_ID {internal['id']} BUILD_ID {build['id']}")
         status(app)
