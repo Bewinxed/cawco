@@ -2135,24 +2135,6 @@
         }
       }
     },
-    "c-tray-min": {
-      "$type": "dimension",
-      "$value": "120px",
-      "$description": "A delegate chip's shrink floor, shared by layout and overflow accounting."
-    },
-    "c-tray-max": {
-      "$type": "dimension",
-      "$value": "224px"
-    },
-    "c-tray-more": {
-      "$type": "dimension",
-      "$value": "52px"
-    },
-    "c-tray-panel-cap": {
-      "$type": "dimension",
-      "$value": "320px",
-      "$description": "The delegate detail's height cap; a touch fan leaves this much room above it."
-    },
     "c-tray-gap": {
       "$type": "dimension",
       "$value": "{space.space-2}",

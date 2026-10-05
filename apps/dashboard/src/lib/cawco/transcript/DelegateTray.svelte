@@ -14,9 +14,7 @@
    * or in the fan.
    */
   import type { WorkItemSummary } from "@cawco/core";
-  import { Portal } from "bits-ui";
   import { untrack } from "svelte";
-  import type { Attachment } from "svelte/attachments";
   import { SvelteMap } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
   import { toast } from "svelte-sonner";
@@ -63,6 +61,14 @@
   const HOLD = 6000;
   /** How long a new delegate's card has to come on screen before its chip simply appears. */
   const SETTLE = 1500;
+  /**
+   * A chip's floor (it shrinks to it, its title ellipsised) and the gap after
+   * it, for the overflow count; the "+N" chip and its gap. What does not fit
+   * at the floor goes into "+N", so the row never passes the composer's edge.
+   */
+  const CHIP = 120;
+  const GAP = 7;
+  const MORE = 59;
 
   type Tone =
     | "starting"
@@ -343,68 +349,18 @@
   /* ---- overflow ------------------------------------------------------ */
 
   let rowWidth = $state(0);
-  let metrics = $state({ chip: 0, gap: 0, more: 0, cap: 0, inset: 0 });
-  let anchor = $state({ x: 0, foot: 0, room: 0 });
-  /** The tray belongs to the dock, but its disclosures must clear the preview sheet. */
-  const locate: Attachment<HTMLElement> = (node) => {
-    const measure = () => {
-      const box = node.getBoundingClientRect();
-      const style = getComputedStyle(node);
-      const px = (token: string) =>
-        Number.parseFloat(style.getPropertyValue(token));
-      metrics = {
-        chip: px("--c-tray-min"),
-        gap: px("--space-2"),
-        more: px("--c-tray-more"),
-        cap: px("--c-tray-panel-cap"),
-        inset: px("--space-4"),
-      };
-      const dock = node.closest(".dock") as HTMLElement;
-      const top = Math.max(
-        dock.getBoundingClientRect().top,
-        window.visualViewport?.offsetTop ?? 0
-      );
-      anchor = {
-        x: box.left,
-        foot: innerHeight - box.top,
-        room: Math.max(0, box.top - top - metrics.inset),
-      };
-    };
-    const observer = new ResizeObserver(measure);
-    observer.observe(node);
-    for (const part of node.closest(".dock")?.children ?? []) {
-      observer.observe(part);
-    }
-    window.addEventListener("resize", measure);
-    window.addEventListener("scroll", measure, true);
-    window.visualViewport?.addEventListener("resize", measure);
-    window.visualViewport?.addEventListener("scroll", measure);
-    untrack(measure);
-    return () => {
-      observer.disconnect();
-      window.removeEventListener("resize", measure);
-      window.removeEventListener("scroll", measure, true);
-      window.visualViewport?.removeEventListener("resize", measure);
-      window.visualViewport?.removeEventListener("scroll", measure);
-    };
-  };
   const fit = $derived.by(() => {
     const total = chips.length;
-    if (rowWidth === 0 || metrics.chip === 0) {
-      return 0;
+    if (rowWidth === 0) {
+      return total;
     }
     for (let n = total; n >= 1; n -= 1) {
       const hidden = total - n;
-      if (
-        n * metrics.chip +
-          (n - 1) * metrics.gap +
-          (hidden ? metrics.more + metrics.gap : 0) <=
-        rowWidth
-      ) {
+      if (n * CHIP + (n - 1) * GAP + (hidden ? MORE : 0) <= rowWidth) {
         return n;
       }
     }
-    return 0;
+    return 1;
   });
   const shown = $derived(chips.slice(0, fit));
   const hidden = $derived(chips.slice(fit));
@@ -518,14 +474,14 @@
 
   const fine = () => matchMedia("(hover: hover) and (pointer: fine)").matches;
   const chipEl = (key: string) =>
-    root?.querySelector<HTMLElement>(`[data-key="${CSS.escape(key)}"]`) ??
-    fan?.querySelector<HTMLElement>(`[data-key="${CSS.escape(key)}"]`) ??
-    null;
-  function ondisclosureenter(): void {
-    hovering = true;
-    clearTimeout(closing);
-    clearTimeout(dwell);
-  }
+    root?.querySelector<HTMLElement>(`[data-key="${CSS.escape(key)}"]`) ?? null;
+  /** The room over the tray, up to the top of the composer's dock. */
+  const roomOver = (tray: HTMLElement): number => {
+    const dock = tray.closest(".dock") ?? document.documentElement;
+    return (
+      tray.getBoundingClientRect().top - dock.getBoundingClientRect().top - 16
+    );
+  };
 
   function open(key: string, pin: boolean): void {
     clearTimeout(dwell);
@@ -544,7 +500,7 @@
       x: fanned ? fanBox.x : Math.max(0, chip.offsetLeft),
       span: row.clientWidth,
       origin: chip.offsetWidth / 2,
-      room: Math.min(metrics.cap, anchor.room - rise),
+      room: Math.min(320, roomOver(root) - rise),
       rise,
     };
     openKey = key;
@@ -577,9 +533,7 @@
     const w = Math.max(0, ...leaves.map((leaf) => leaf.offsetWidth));
     const at = (more.parentElement as HTMLElement).offsetLeft;
     const x = Math.max(0, Math.min(at, root.clientWidth - w));
-    // Leave space for the detail opened by a fan chip. On a short viewport
-    // each disclosure gets half the room; neither can starve the other.
-    const room = Math.min(anchor.room / 2, metrics.cap);
+    const room = roomOver(root);
     fanBox = {
       x,
       w,
@@ -594,13 +548,8 @@
   // somewhere else, and holds other chips.
   $effect(() => {
     // biome-ignore lint/complexity/noVoid: the row's chips and width place the fan.
-    void [keys, rowWidth, hidden.length, anchor];
+    void [keys, rowWidth, hidden.length];
     untrack(measureFan);
-    untrack(() => {
-      if (openKey) {
-        open(openKey, pinned);
-      }
-    });
   });
 
   function openFan(pin: boolean): void {
@@ -613,12 +562,8 @@
   // A fan taller than its room opens at "+N", on its nearest chips: once
   // it is open, which is when it scrolls.
   $effect(() => {
-    if (fanOpen) {
-      untrack(() => {
-        if (fanBox.tall && fan) {
-          fan.scrollTop = fan.scrollHeight;
-        }
-      });
+    if (fanOpen && fanBox.tall && fan) {
+      fan.scrollTop = fan.scrollHeight;
     }
   });
   function closeFan(): void {
@@ -684,14 +629,7 @@
       return;
     }
     const press = (event: PointerEvent) => {
-      const target = event.target as Node;
-      if (
-        !(
-          root?.contains(target) ||
-          fan?.contains(target) ||
-          document.getElementById(panelId)?.contains(target)
-        )
-      ) {
+      if (!root?.contains(event.target as Node)) {
         shut();
       }
     };
@@ -991,11 +929,10 @@
   </button>
 {/snippet}
 
-<div class="host" bind:clientWidth={rowWidth} {@attach locate}>
+<div class="host" bind:clientWidth={rowWidth}>
   {#if chips.length}
     <div
       class="tray"
-      inert={held}
       onpointerenter={() => {
         hovering = true;
         clearTimeout(closing);
@@ -1045,116 +982,103 @@
             <!-- The fan: what "+N" holds, as chips, in a column over it. Always
                  laid out, folded into "+N" until it opens, so opening and
                  closing are one transition a pointer can turn round half-way. -->
-            <Portal
-              ><div
-                class="fan"
-                id={fanId}
-                inert={held || !fanOpen}
-                onpointerenter={ondisclosureenter}
-                onpointerleave={onrootleave}
-                role="presentation"
-                bind:this={fan}
-                style:--dx="{fanBox.dx}px"
-                style:--fan-w="{fanBox.w}px"
-                style:--foot="{anchor.foot}px"
-                style:--n={hidden.length}
-                style:--room="{fanBox.room}px"
-                style:left="{anchor.x + fanBox.x}px"
-                class:open={fanOpen}
-                class:tall={fanBox.tall}
-              >
-                <ul aria-label="More delegates" class="stack">
-                  {#each hidden as chip, j (chip.item.id)}
-                    <li class="leaf" style:--i={j} out:fanOut>
-                      {@render chipButton(chip, shown.length + 1 + j, true)}
-                    </li>
-                  {/each}
-                </ul>
-              </div></Portal
+            <div
+              class="fan"
+              id={fanId}
+              inert={held || !fanOpen}
+              bind:this={fan}
+              style:--dx="{fanBox.dx}px"
+              style:--fan-w="{fanBox.w}px"
+              style:--n={hidden.length}
+              style:--room="{fanBox.room}px"
+              class:open={fanOpen}
+              class:tall={fanBox.tall}
             >
+              <ul aria-label="More delegates" class="stack">
+                {#each hidden as chip, j (chip.item.id)}
+                  <li class="leaf" style:--i={j} out:fanOut>
+                    {@render chipButton(chip, shown.length + 1 + j, true)}
+                  </li>
+                {/each}
+              </ul>
+            </div>
           </div>
         {/if}
       </div>
 
       <!-- The house hover panel; its mousedown is swallowed so a phone's
            keyboard stays up (its controls are links and buttons). -->
-      <Portal
-        ><HoverPanel
-          {gliding}
-          id={panelId}
-          key={openKey}
-          onmousedown={(event) => event.preventDefault()}
-          onpointerenter={ondisclosureenter}
-          onpointerleave={onrootleave}
-          role="presentation"
-          side="above"
-          style="--origin: {place.origin}px; --rise: {place.rise}px; --room: {place.room}px; --span: {place.span}px; --x: {place.x}px; position: fixed; inset-block-start: auto; inset-block-end: calc({anchor.foot}px + var(--space-1) + var(--rise)); inset-inline-start: {anchor.x}px; z-index: 50"
-          watch={openInstance}
-        >
-          {#snippet children()}
-            {#if openChip}
-              {@const { item, tone } = openChip}
-              <div class="phead">
-                {@render mark(item, false)}
-                <span class="ptitle">{item.title}</span>
-                <span
-                  aria-label={stateWords(openChip)}
-                  class="pstate {tone}"
-                  role="img"
-                >
-                  {#if tone === "starting"}
-                    <Spinner aria-hidden="true" role="presentation" />
-                  {:else if tone === "running"}
-                    <span
-                      class="dot"
-                      style:animation-delay="-{Date.now() % 2000}ms"
-                    ></span>
-                  {:else if tone === "asked" || tone === "needs"}
-                    <IconAsk />
-                  {:else if tone === "done"}
-                    <IconSuccess />
-                  {:else if tone === "failed"}
-                    <IconWarningTriangle />
-                  {:else}
-                    <IconStop />
-                  {/if}
-                </span>
-                <span class="elapsed"
-                  >{span(item.createdAt, item.endedAt ?? minute)}</span
-                >
-                <a
-                  aria-label="Open {item.title} in its own view"
-                  class="jump touch-hit"
-                  href={hrefOf(item)}
-                  title="Open {item.title} in its own view"
-                >
-                  <IconExternal />
-                </a>
-              </div>
-              <DelegateTail
-                instanceId={item.instanceId}
-                note={noteOf(openChip)}
-              />
-              {#if tone === "needs"}
-                <div class="acts">
-                  <Button href={hrefOf(item)} size="sm" variant="outline"
-                    >Open question</Button
-                  >
-                </div>
-              {:else if tone === "failed"}
-                <div class="acts">
-                  <Button
-                    onclick={() => dismiss(item)}
-                    size="sm"
-                    variant="ghost"
-                    >Dismiss</Button
-                  >
-                </div>
-              {/if}
-            {/if}
-          {/snippet}
-        </HoverPanel></Portal
+      <HoverPanel
+        {gliding}
+        id={panelId}
+        key={openKey}
+        onmousedown={(event) => event.preventDefault()}
+        onpointerenter={() => clearTimeout(dwell)}
+        role="presentation"
+        side="above"
+        style="--origin: {place.origin}px; --rise: {place.rise}px; --room: {place.room}px; --span: {place.span}px; --x: {place.x}px"
+        watch={openInstance}
       >
+        {#snippet children()}
+          {#if openChip}
+            {@const { item, tone } = openChip}
+            <div class="phead">
+              {@render mark(item, false)}
+              <span class="ptitle">{item.title}</span>
+              <span
+                aria-label={stateWords(openChip)}
+                class="pstate {tone}"
+                role="img"
+              >
+                {#if tone === "starting"}
+                  <Spinner aria-hidden="true" role="presentation" />
+                {:else if tone === "running"}
+                  <span
+                    class="dot"
+                    style:animation-delay="-{Date.now() % 2000}ms"
+                  ></span>
+                {:else if tone === "asked" || tone === "needs"}
+                  <IconAsk />
+                {:else if tone === "done"}
+                  <IconSuccess />
+                {:else if tone === "failed"}
+                  <IconWarningTriangle />
+                {:else}
+                  <IconStop />
+                {/if}
+              </span>
+              <span class="elapsed"
+                >{span(item.createdAt, item.endedAt ?? minute)}</span
+              >
+              <a
+                aria-label="Open {item.title} in its own view"
+                class="jump touch-hit"
+                href={hrefOf(item)}
+                title="Open {item.title} in its own view"
+              >
+                <IconExternal />
+              </a>
+            </div>
+            <DelegateTail
+              instanceId={item.instanceId}
+              note={noteOf(openChip)}
+            />
+            {#if tone === "needs"}
+              <div class="acts">
+                <Button href={hrefOf(item)} size="sm" variant="outline"
+                  >Open question</Button
+                >
+              </div>
+            {:else if tone === "failed"}
+              <div class="acts">
+                <Button onclick={() => dismiss(item)} size="sm" variant="ghost"
+                  >Dismiss</Button
+                >
+              </div>
+            {/if}
+          {/if}
+        {/snippet}
+      </HoverPanel>
     </div>
   {/if}
 </div>
@@ -1163,14 +1087,13 @@
   /* Always laid out, so the row's width is known before its first chip. */
   .host {
     pointer-events: none;
-    block-size: var(--c-tray-row);
   }
   /* The row of chips, standing a step off the composer's top edge: no
      surface of its own, one line, never wrapping or scrolling sideways. Its
      chip and step are the app's tray tokens, the row the composer keeps. */
   .tray {
     /* "+N"'s width: the chip's, and the box the fan folds into. */
-    --more: var(--c-tray-more);
+    --more: 52px;
     position: relative;
     padding-block-end: var(--c-tray-gap);
   }
@@ -1189,8 +1112,8 @@
     position: relative;
     isolation: isolate;
     flex: 0 1 auto;
-    min-inline-size: min(var(--c-tray-min), 100%);
-    max-inline-size: var(--c-tray-max);
+    min-inline-size: 120px;
+    max-inline-size: 224px;
     block-size: var(--c-tray-chip);
     display: inline-flex;
     align-items: center;
@@ -1478,14 +1401,14 @@
      its slot. Open, close, a turn half-way and a chip joining or leaving
      are therefore one transition each, picked up from wherever it is. */
   .fan {
-    --fan-gap: var(--c-tray-gap);
-    --step: calc(var(--c-tray-chip) + var(--fan-gap));
-    --hit-gap-y: var(--fan-gap);
-    position: fixed;
-    z-index: 50;
-    inset-block-end: var(--foot);
+    --step: calc(var(--c-tray-chip) + var(--space-2));
+    position: absolute;
+    z-index: 1;
+    inset-block-end: 100%;
+    inset-inline-start: 0;
     inline-size: var(--fan-w);
     block-size: min(calc(var(--n) * var(--step)), var(--room));
+    translate: calc(var(--dx) * -1) 0;
     pointer-events: none;
   }
   /* Taller than the room over the tray: it scrolls there, from "+N" up. */
@@ -1528,7 +1451,7 @@
   .fan.open .leaf {
     opacity: 1;
     visibility: visible;
-    translate: 0 calc((var(--i) * var(--step) + var(--fan-gap)) * -1);
+    translate: 0 calc((var(--i) * var(--step) + var(--space-2)) * -1);
     /* Past its own edge, so the chip's shadow is drawn whole. */
     clip-path: inset(calc(var(--space-2) * -1) round var(--radius-sm));
     transition:
@@ -1570,7 +1493,7 @@
   @media (prefers-reduced-motion: reduce) {
     .leaf,
     .fan.open .leaf {
-      translate: 0 calc((var(--i) * var(--step) + var(--fan-gap)) * -1);
+      translate: 0 calc((var(--i) * var(--step) + var(--space-2)) * -1);
       clip-path: none;
     }
   }
