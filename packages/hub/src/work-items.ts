@@ -180,10 +180,10 @@ export interface WorkItemDeps {
     workspace?: WorkspaceRef
   ) => Promise<CommandResult>;
   readonly db: DbShape;
-  /** The agent's live turn state, including a long tool call with no output. */
-  readonly inTurn: (row: InstanceRow) => boolean;
   /** Store stop intent and wait for the machine's positive end confirmation. */
   readonly end: (instanceId: string) => Promise<void>;
+  /** The agent's live turn state, including a long tool call with no output. */
+  readonly inTurn: (row: InstanceRow) => boolean;
   /** Tells every dashboard an item moved: its parent's delegate tray follows it. */
   readonly publish: (item: WorkItemSummary) => void;
   /** Hands a report to the parent of the item's session. */

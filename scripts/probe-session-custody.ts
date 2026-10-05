@@ -11,7 +11,7 @@ const [role, scratch, portText, old] = process.argv.slice(2);
 const machine = "ownership-proof";
 const pathEnv = { PATH: process.env.PATH ?? "/usr/bin:/bin" };
 const CALLBACK_SOURCE = /packages\/agent\/src\/mcp-oauth\.ts$/;
-const MAIN_BASE = "cf00ab303c89b2685186083af25f267a23bbd41b";
+const MAIN_BASE = "9a6afa8a422f55e30d97f9304e83241dc3c26a6b";
 
 async function delay(ms: number) {
   await new Promise<void>((done) => setTimeout(done, ms));
@@ -91,7 +91,7 @@ if (role === "migration-main") {
     "INSERT INTO instances(id,machine_id,cwd,status,harness,session_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)"
   );
   for (const [id, status, harness, key] of [
-    ["migrated-stop", "stopped", "opencode", "ses_migrated"],
+    ["migrated-stop", "stopped", "opencode", "conversation-migrated-stop"],
     ["migrated-discard", "discarded", "claude", "conversation-migrated"],
     ["migrated-legacy", "discarded", "opencode", null],
     ["migrated-kept", "sleeping", "claude", "conversation-kept"],
@@ -233,7 +233,7 @@ if (role === "migration-main") {
             if (data.status === "discarded") {
               sql
                 .query(
-                  "UPDATE instances SET end_intent = 'discard', end_confirmed_at = CASE WHEN harness = 'opencode' AND session_id IS NULL THEN NULL ELSE updated_at END WHERE id = ?"
+                  "UPDATE instances SET end_intent = 'discard', end_confirmed_at = CASE WHEN harness = 'opencode' THEN NULL ELSE updated_at END WHERE id = ?"
                 )
                 .run(data.id);
             }
@@ -540,6 +540,7 @@ if (role === "migration-main") {
         }
       },
       stop: async () => {
+        await log(`STOP_BEGIN ${ctx.instanceId}`);
         while (
           // biome-ignore lint/performance/noAwaitInLoops: private gate makes an actual stop outlast the hub's normal halt window
           await Bun.file(join(scratch, `pause-stop-${ctx.instanceId}`)).exists()
@@ -597,6 +598,9 @@ if (role === "migration-main") {
       tagSession: async () => undefined,
       deleteSession: async (key) => {
         await log(`TEARDOWN ${key}`);
+        if (await Bun.file(join(scratch, `refuse-teardown-${key}`)).exists()) {
+          throw new Error("Private transcript teardown refused.");
+        }
         // biome-ignore lint/performance/noAwaitInLoops: private fault gate deliberately delays transcript deletion across a hub restart
         while (await Bun.file(join(scratch, "pause-transcript")).exists()) {
           await delay(100);
@@ -827,6 +831,7 @@ if (role === "migration-main") {
         status: string;
         endIntent: string | null;
         endConfirmedAt: string | null;
+        sessionId: string | null;
       }[]
     >;
   const row = async (id: string) =>
@@ -969,9 +974,10 @@ if (role === "migration-main") {
       )
     );
     const migratedRows = await api("/proof/rows");
-    assert.ok(
+    assert.equal(
       migratedRows.find((owner: { id: string }) => owner.id === "migrated-stop")
-        .endConfirmedAt
+        .endConfirmedAt,
+      null
     );
     assert.ok(
       migratedRows.find(
@@ -993,7 +999,118 @@ if (role === "migration-main") {
       `SECOND 1 main ${MAIN_BASE} 0071 and 0072 database migrates on branch hub startup to 0073 and backfills correctly`
     );
     await seed("offline-stop");
+    await held("opencode-server-turn-migrated-stop");
     await startAgent();
+    await confirmed("migrated-stop");
+    end("migrated-stop");
+    assert.equal(await alive("opencode-server-turn-migrated-stop"), false);
+    assert.ok(
+      (await events()).includes("RESOURCES_CLOSED conversation-migrated-stop")
+    );
+    console.log(
+      "THIRD 1 historical OpenCode end is owed until registration closes its surviving conversation"
+    );
+
+    const replies = () =>
+      dashboardFrames as {
+        requestId?: string;
+        payload?: {
+          kind?: string;
+          requestId?: string;
+          ok?: boolean;
+          error?: string;
+        };
+      }[];
+    const reply = (requestId: string) =>
+      replies().find(
+        (frame) =>
+          frame.payload?.kind === "control_result" &&
+          (frame.requestId ?? frame.payload.requestId) === requestId
+      );
+    await seed("receipt-discard");
+    send("spawn", "receipt-discard", {
+      cwd: scratchDir,
+      harness: "claude",
+      model: "stand-in",
+    });
+    await until(
+      "discard child ready",
+      () => row("receipt-discard"),
+      (owner) => owner?.status === "running" && !!owner.sessionId
+    );
+    await writeFile(
+      join(scratchDir, "pause-stop-receipt-discard"),
+      "private gate"
+    );
+    send("stop", "receipt-discard", {
+      discard: true,
+      requestId: "review-discard-receipt",
+    });
+    await until("discard stop reached machine", events, (text) =>
+      text.includes("STOP_BEGIN receipt-discard")
+    );
+    assert.equal(reply("review-discard-receipt"), undefined);
+    assert.equal(await alive("receipt-discard"), true);
+    assert.equal((await row("receipt-discard"))?.endConfirmedAt, null);
+    await rm(join(scratchDir, "pause-stop-receipt-discard"));
+    const discardedReply = await until(
+      "discard physical reply",
+      async () => reply("review-discard-receipt"),
+      Boolean
+    );
+    assert.equal(discardedReply?.payload?.ok, true);
+    assert.equal(await alive("receipt-discard"), false);
+    assert.ok((await row("receipt-discard"))?.endConfirmedAt);
+
+    await seed("refused-discard");
+    send("spawn", "refused-discard", {
+      cwd: scratchDir,
+      harness: "claude",
+      model: "stand-in",
+    });
+    await until(
+      "refusal child ready",
+      () => row("refused-discard"),
+      (owner) => owner?.status === "running" && !!owner.sessionId
+    );
+    const refusalGate = join(
+      scratchDir,
+      "refuse-teardown-conversation-refused-discard"
+    );
+    await writeFile(refusalGate, "private refusal");
+    await writeFile(
+      join(scratchDir, "conversation-refused-discard.transcript"),
+      "private discarded transcript"
+    );
+    send("stop", "refused-discard", {
+      discard: true,
+      requestId: "review-discard-refusal",
+    });
+    const refusedReply = await until(
+      "discard refusal reply",
+      async () => reply("review-discard-refusal"),
+      Boolean
+    );
+    assert.equal(refusedReply?.payload?.ok, false);
+    assert.equal(
+      refusedReply?.payload?.error,
+      "Private transcript teardown refused."
+    );
+    assert.equal((await row("refused-discard"))?.endConfirmedAt, null);
+    await rm(refusalGate);
+    send("stop", "refused-discard", {
+      discard: true,
+      requestId: "review-discard-retry",
+    });
+    const retriedReply = await until(
+      "discard retry reply",
+      async () => reply("review-discard-retry"),
+      Boolean
+    );
+    assert.equal(retriedReply?.payload?.ok, true);
+    console.log(
+      "THIRD 2 Discard waits for physical teardown, returns machine refusal verbatim, and retries with its own receipt"
+    );
     await disconnect();
     await held("offline-stop");
     end("offline-stop");
@@ -1395,7 +1512,7 @@ if (role === "migration-main") {
     );
     pass(
       11,
-      "discard survives hub crash; historically confirmed discard sends no stop or repeated teardown"
+      "discard survives hub crash; fresh held custody ends a historically confirmed child without repeated teardown"
     );
     console.log(
       "SECOND 7 fresh held custody clears historical confirmation and the owed stop proceeds"
@@ -2220,6 +2337,11 @@ if (role === "migration-main") {
       timeoutMinutes: 60,
       prompt: "private-delayed-stop",
     });
+    await until(
+      "delayed workflow supervisor ready",
+      () => row("workflow-supervisor-review"),
+      (owner) => owner?.status === "running"
+    );
     const delayedRun = await api(
       `/api/workflows/${delayedDefinition.id}/runs`,
       {
@@ -2361,19 +2483,17 @@ if (role === "migration-main") {
       "SECOND both directions refuse with words and new hub declaration heals custody"
     );
 
-    const metadataFile = Bun.file(
-      join(root, ".context", "ownership", "legacy-null-metadata.json")
-    );
-    const legacyRows = (await metadataFile.json()) as {
-      status: string;
-      cwd: string;
-      created_at: number;
-      updated_at: number;
-    }[];
+    // Distributed synthetic shapes; the owner's nine-row count is observation only.
+    const legacyRows = ["discarded", "error"].map((status) => ({
+      status,
+      cwd: scratchDir,
+      created_at: 1_791_000_000_000,
+      updated_at: 1_791_000_001_000,
+    }));
     const classified: Record<string, number> = {};
     for (const [index, copied] of legacyRows.entries()) {
       const id = `legacy-copy-${index}`;
-      // biome-ignore lint/performance/noAwaitInLoops: each sanitized copied row is independently classified on the private server
+      // biome-ignore lint/performance/noAwaitInLoops: each synthetic row is independently classified on the private server
       await seed(id, {
         harness: "opencode",
         status: copied.status,
@@ -2384,14 +2504,14 @@ if (role === "migration-main") {
       end(id);
       // Only positive private-server confirmation counts as a classification.
       await until(
-        "legacy copied row confirmed",
+        "legacy synthetic row confirmed",
         () => row(id),
         (owner) => !!owner?.endConfirmedAt
       );
       classified[`15a ${copied.status}`] =
         (classified[`15a ${copied.status}`] ?? 0) + 1;
     }
-    console.log(`PRIVATE_COPY_LEGACY_COUNTS ${JSON.stringify(classified)}`);
+    console.log(`SYNTHETIC_LEGACY_COUNTS ${JSON.stringify(classified)}`);
     const nativeProof = Bun.spawn(
       [process.execPath, join(root, "scripts/probe-opencode-end-custody.ts")],
       { cwd: root, env: pathEnv, stdout: "pipe", stderr: "pipe" }
@@ -2407,9 +2527,19 @@ if (role === "migration-main") {
     console.log("ownership-proofs-pass");
   } finally {
     dashboard?.close();
-    holder?.close();
     await stop(agent);
     await stop(hub);
+    if (holder) {
+      const { endProc } = await import("../packages/agent/src/sessiond-client");
+      const listing = await holder.list();
+      for (const proc of listing.procs) {
+        if (proc.alive) {
+          // biome-ignore lint/performance/noAwaitInLoops: only this private endpoint's fixture children are ended
+          await endProc(holder, proc.procId);
+        }
+      }
+      holder.close();
+    }
     await Promise.all([...children].map(stop));
     console.log(`Private proof evidence: ${scratchDir}`);
   }

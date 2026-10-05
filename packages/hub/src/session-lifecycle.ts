@@ -29,6 +29,7 @@ export const createSessionLifecycle = (ports: {
   const deleting = new Set<string>();
   const issued = new Map<string, { generation: string; sequence: number }>();
   const delivering = new Map<string, string>();
+  const requests = new Map<string, { id: string; generation: string }>();
   const unavailable = new Set<string>();
   const preservedUnattached = new Set<string>();
   let sequence = 0;
@@ -143,42 +144,50 @@ export const createSessionLifecycle = (ports: {
         if (delivering.get(row.id) === generation(row)) {
           continue;
         }
-        sequence += 1;
-        const delivered = ports.send(machineId, {
-          stopSequence: sequence,
-          instanceId: row.id,
-          ...(row.scratchWorktree
-            ? { scratchWorktree: row.scratchWorktree }
-            : {}),
-          processGeneration: generation(row),
-          ...(row.harness
-            ? { harness: row.harness as StopPayload["harness"] }
-            : {}),
-          ...(row.sessionId ? { sessionId: row.sessionId } : {}),
-          cwd: row.cwd,
-          ...(row.harness === "opencode"
-            ? {
-                claimedSessionIds: rows.flatMap((owner) =>
-                  owner.id !== row.id &&
-                  owner.harness === "opencode" &&
-                  owner.sessionId &&
-                  (!row.sessionId ||
-                    ["running", "starting"].includes(owner.status) ||
-                    attached.has(owner.id) ||
-                    pending.has(owner.id) ||
-                    attaching.has(owner.id))
-                    ? [owner.sessionId]
-                    : []
-                ),
-              }
-            : {}),
-          discard: row.endIntent === "discard" && row.status !== "discarded",
-        });
-        if (delivered) {
-          issued.set(row.id, { generation: generation(row), sequence });
-        }
-        if (delivered) {
-          delivering.set(row.id, generation(row));
+        const requestIds = [...requests].flatMap(([requestId, request]) =>
+          request.id === row.id && request.generation === generation(row)
+            ? [requestId]
+            : []
+        );
+        for (const requestId of requestIds.length ? requestIds : [undefined]) {
+          sequence += 1;
+          const delivered = ports.send(machineId, {
+            ...(requestId ? { requestId } : {}),
+            stopSequence: sequence,
+            instanceId: row.id,
+            ...(row.scratchWorktree
+              ? { scratchWorktree: row.scratchWorktree }
+              : {}),
+            processGeneration: generation(row),
+            ...(row.harness
+              ? { harness: row.harness as StopPayload["harness"] }
+              : {}),
+            ...(row.sessionId ? { sessionId: row.sessionId } : {}),
+            cwd: row.cwd,
+            ...(row.harness === "opencode"
+              ? {
+                  claimedSessionIds: rows.flatMap((owner) =>
+                    owner.id !== row.id &&
+                    owner.harness === "opencode" &&
+                    owner.sessionId &&
+                    (!row.sessionId ||
+                      ["running", "starting"].includes(owner.status) ||
+                      attached.has(owner.id) ||
+                      pending.has(owner.id) ||
+                      attaching.has(owner.id))
+                      ? [owner.sessionId]
+                      : []
+                  ),
+                }
+              : {}),
+            discard: row.endIntent === "discard" && row.status !== "discarded",
+          });
+          if (delivered) {
+            issued.set(row.id, { generation: generation(row), sequence });
+          }
+          if (delivered) {
+            delivering.set(row.id, generation(row));
+          }
         }
         continue;
       }
@@ -221,12 +230,28 @@ export const createSessionLifecycle = (ports: {
     }
   };
 
-  const endSession = (instanceId: string, intent: SessionEndIntent): void => {
+  const endSession = (
+    instanceId: string,
+    intent: SessionEndIntent,
+    requestId?: string
+  ): void => {
     const owner = ports.db.ownedInstance(instanceId);
+    if (requestId && !owner) {
+      throw new Error(
+        "This session is no longer recorded. Refresh, then retry."
+      );
+    }
     if (owner && !ports.ready(owner.machineId)) {
       throw new Error(
         `${ports.machineName(owner.machineId)}'s agent has not restarted onto this build yet. Restart its agent, then retry.`
       );
+    }
+    if (owner && requestId) {
+      requests.set(requestId, {
+        id: instanceId,
+        generation: generation(owner),
+      });
+      delivering.delete(instanceId);
     }
     oweEndSession(instanceId, intent);
   };
@@ -295,6 +320,13 @@ export const createSessionLifecycle = (ports: {
       attaching.delete(id);
     },
     endSession,
+    answered: (requestId: string, ok: boolean) => {
+      const request = requests.get(requestId);
+      requests.delete(requestId);
+      if (request && !ok) {
+        delivering.delete(request.id);
+      }
+    },
     oweEndSession,
     reconcile,
     confirm,

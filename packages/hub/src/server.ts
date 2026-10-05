@@ -4292,6 +4292,7 @@ export const createServer = (
         verb: "stop",
         machineId,
         instanceId: payload.instanceId,
+        ...(payload.requestId ? { requestId: payload.requestId } : {}),
         payload,
       });
       return true;
@@ -4377,9 +4378,13 @@ export const createServer = (
         .finally(() => refreshingCustody.delete(machineId));
     },
   });
-  const endSession = (instanceId: string, intent: SessionEndIntent): void => {
+  const endSession = (
+    instanceId: string,
+    intent: SessionEndIntent,
+    requestId?: string
+  ): void => {
     const row = db.ownedInstance(instanceId);
-    lifecycle.endSession(instanceId, intent);
+    lifecycle.endSession(instanceId, intent, requestId);
     if (row) {
       workItems.cancelled(row);
       forgetPending(instanceId, UNREAD.stopped);
@@ -11572,6 +11577,10 @@ export const createServer = (
               // A control a route is waiting on: the reply is that request's
               // answer and nobody else's news.
               if (kind === "control_result" && message.requestId) {
+                lifecycle.answered(
+                  message.requestId,
+                  (message.payload as ControlResult).ok
+                );
                 const answering = waiting.get(message.requestId);
                 if (answering) {
                   waiting.delete(message.requestId);
@@ -11843,11 +11852,22 @@ export const createServer = (
               if (message.instanceId) {
                 const requestId =
                   message.requestId ?? peek(message.payload, "requestId");
+                const discard = peekDiscard(message.payload);
+                if (discard && requestId) {
+                  registry.rememberRequester(requestId, ws);
+                }
                 endSession(
                   message.instanceId,
-                  peekDiscard(message.payload) ? "discard" : "stop"
+                  discard ? "discard" : "stop",
+                  discard ? requestId : undefined
                 );
-                if (requestId) {
+                if (
+                  requestId &&
+                  (!discard ||
+                    db.ownedInstance(message.instanceId)?.endConfirmedAt)
+                ) {
+                  lifecycle.answered(requestId, true);
+                  registry.takeRequester(requestId);
                   toDashboard(ws, {
                     ...message,
                     verb: "frames",
