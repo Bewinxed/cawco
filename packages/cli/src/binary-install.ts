@@ -72,8 +72,14 @@ async function awaitJoined(hubUrl: string): Promise<void> {
     }
     await Bun.sleep(1000);
   }
+  const lan =
+    process.platform === "darwin" &&
+    /^https?:\/\/(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(hubUrl);
   throw new Error(
-    `The agent started, but ${hubUrl} has not listed this machine online after ${JOIN_TIMEOUT_MS / 1000}s.`
+    `The agent started, but ${hubUrl} has not listed this machine online after ${JOIN_TIMEOUT_MS / 1000}s.` +
+      (lan
+        ? " macOS does not let a background service reach local-network addresses (10.x, 172.16-31.x, 192.168.x). Join with the hub's Tailscale address instead."
+        : "")
   );
 }
 
