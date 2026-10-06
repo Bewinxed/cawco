@@ -51,6 +51,7 @@ import {
   CONTROL_READ_SESSION_CONTEXT,
   CONTROL_SET_EFFORT,
   CONTROL_SET_MODEL,
+  CONTROL_SET_PERMISSION_MODE,
   CONTROL_WITHDRAW_SEND,
   EFFORT_READ,
   INSPECT_CONFIG,
@@ -626,6 +627,12 @@ const sessionEnv = (
   ...(model && { CAWCO_MODEL: model }),
 });
 
+/** Tools that put a question to the person: never answered for them, in any mode. */
+const INTERACTIVE_TOOLS: ReadonlySet<string> = new Set([
+  ASK_USER_QUESTION,
+  "ExitPlanMode",
+]);
+
 /** The `canUseTool` callback, parked until `resolvePermission` answers it. */
 type PermissionResolver = (result: PermissionResult) => void;
 
@@ -698,6 +705,8 @@ class ClaudeSession implements HarnessSession {
   readonly #stored: boolean;
   readonly instanceId: string;
   #lastRequestAt: number | undefined;
+  /** The permission mode the CLI is in now: the one it started with, then each `setPermissionMode`. */
+  #mode: string | undefined;
 
   constructor(
     instanceId: string,
@@ -730,6 +739,7 @@ class ClaudeSession implements HarnessSession {
   ) {
     this.instanceId = instanceId;
     this.#ctx = ctx;
+    this.#mode = permissionMode;
     this.#launchCredential = ctx.sessionCredential;
     const mcpServers: Record<string, McpServerConfig> = {
       ...((
@@ -882,13 +892,24 @@ class ClaudeSession implements HarnessSession {
             signal,
             decisionReason,
             blockedPath,
+            matchedAskRule,
           }
         ) =>
           new Promise<PermissionResult>((resolve) => {
             // Why the CLI asked: a session in bypass is never meant to be asked, so the reason is the evidence.
             console.log(
-              `[claude] permission asked: ${toolName}${decisionReason ? ` — ${decisionReason}` : ""}${blockedPath ? ` (path ${blockedPath})` : ""}`
+              `[claude] permission asked: ${toolName}${decisionReason ? ` — ${decisionReason}` : ""}${blockedPath ? ` (path ${blockedPath})` : ""}${matchedAskRule ? " [ask rule]" : ""}`
             );
+            // Bypass means bypass. The CLI still raises its own safety checks in that mode (a shell -c script it
+            // cannot parse, a cd with git, protected paths); the SDK documents answering them host-side. What stays
+            // with the owner: questions to him, plan approval, and any ask his own `permissions.ask` rule forced.
+            if (this.#answersHostSide(toolName, matchedAskRule)) {
+              resolve({
+                behavior: "allow",
+                updatedInput: toolInput,
+              });
+              return;
+            }
             this.#permissions.set(requestId, resolve);
             // The CLI withdrew the ask (an interrupt mid-ask): nobody can
             // answer it any more, and the hub hears so.
@@ -1303,6 +1324,14 @@ class ClaudeSession implements HarnessSession {
     this.#input.push(outgoing);
   }
 
+  /** Whether this ask is answered here: a bypass session, a tool that asks no question, no ask rule of the owner's. */
+  #answersHostSide(toolName: string, matchedAskRule: unknown): boolean {
+    return (
+      this.#mode === "bypassPermissions" &&
+      !(matchedAskRule || INTERACTIVE_TOOLS.has(toolName))
+    );
+  }
+
   async control(method: string, args: unknown[]): Promise<unknown> {
     if (method === CONTROL_WITHDRAW_SEND) {
       if (typeof args[0] !== "string" || !args[0]) {
@@ -1341,6 +1370,9 @@ class ClaudeSession implements HarnessSession {
       throw new Error(`unknown control method: ${method}`);
     }
     const answer = await handle[method](...args);
+    if (method === CONTROL_SET_PERMISSION_MODE) {
+      this.#mode = args[0] as string;
+    }
     // A model switch moves the effort with it: onto a model without effort,
     // or down to the new model's ceiling.
     if (method === CONTROL_SET_MODEL) {
