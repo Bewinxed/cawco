@@ -16,6 +16,7 @@
   import { IconPlus } from "#lib/icons.js";
   import Attention from "~icons/solar/hand-shake-bold-duotone";
   import { cawco } from "../client.svelte";
+  import { deployPending } from "../deploy-toast.svelte";
   import { crossIn, crossOut, morphMs } from "../motion/curves.svelte";
   import { reflow } from "../motion/rows.svelte";
   import { newSession } from "../spawn/new-session.svelte";
@@ -40,7 +41,7 @@
   const stale = $derived(!home.live);
   /** The update nobody has seen, until it is dismissed. */
   const updated = $derived(
-    updates.policy
+    updates.policy && !deployPending()
       ? updatedNotice(updates.withSeen(cawco.machines), updates.policy)
       : null
   );

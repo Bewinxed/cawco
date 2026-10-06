@@ -142,10 +142,12 @@ export function startUpdateNotice(): () => void {
       const found = input
         ? noticeFor(input, (hostname) => machineLabel(hostname))
         : null;
-      // An updated notice the person closed stays closed in this tab.
+      // An updated notice the person closed stays closed in this tab, and on Home the card says it:
+      // one surface at a time, never the toast and the card together.
       const notice =
         found?.kind === 6 &&
-        updatedKeys(found.machineIds).every((key) => dismissed.has(key))
+        (page.url.pathname === "/" ||
+          updatedKeys(found.machineIds).every((key) => dismissed.has(key)))
           ? null
           : found;
       const onPage = page.url.pathname === "/config/updates";
