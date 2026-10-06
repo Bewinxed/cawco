@@ -476,6 +476,21 @@ th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute
 .st2.plan{background:var(--recess);color:var(--ink);border:1px solid var(--line-strong)}
 .st2.gap{background:var(--warn-wash);color:var(--warn-ink)}
 
+
+.pat{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+@media (max-width:900px){.pat{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:560px){.pat{grid-template-columns:minmax(0,1fr)}}
+.pat .p2{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.pat .p2 b{font-size:13px;font-weight:500}
+.pat .p2 .hw{font-size:11.5px;color:var(--muted);line-height:1.4}
+.pat .p2 .cw{font-size:12px;line-height:1.4;border-top:1px dashed var(--line-strong);padding-top:6px}
+.pat .p2 .cw::before{content:"In CawCo · ";color:var(--coral-ink);font-weight:500}
+.pat.is-live .p2{animation:patlit 9s var(--ease) infinite}
+.pat.is-live .p2:nth-child(2){animation-delay:1.5s}.pat.is-live .p2:nth-child(3){animation-delay:3s}.pat.is-live .p2:nth-child(4){animation-delay:4.5s}.pat.is-live .p2:nth-child(5){animation-delay:6s}.pat.is-live .p2:nth-child(6){animation-delay:7.5s}
+@keyframes patlit{0%,100%{border-color:var(--line)}6%,14%{border-color:var(--coral)}22%{border-color:var(--line)}}
+.thesis{font-size:15px;font-weight:500}
+.thesis span{color:var(--muted);font-weight:400;font-size:13px}
+
 @media (prefers-reduced-motion: reduce){
   *,*::before,*::after{animation:none!important;transition:none!important}
 }
@@ -577,6 +592,7 @@ The tray chip overflows at 320px wide…</pre>
     <article class="ans wide" id="jev">
       <header><span class="did">Jev</span><h3>Jev: how it gets turned on, what it does, what happens without it</h3></header>
       <p class="q">Jev should be enabled through onboarding via OpenRouter OAuth, or with your own API key for Jev itself. Jev can do a lot more. When it's not enabled we need some sort of fallback.</p>
+      <p class="thesis">"Code owns the workflow; the model supplies programmable common sense." <span>Typesafe's own line, and this page's thesis: code coordinates, models judge.</span></p>
       <span class="gl">Turning it on, in onboarding and in Settings</span>
       <div class="jev-on">
         <div class="o rec"><b>Connect OpenRouter</b><span>OAuth (PKCE), already shipped in Settings. The key stays in the hub DB.</span></div>
@@ -595,6 +611,15 @@ The tray chip overflows at 320px wide…</pre>
           <div class="br"><span class="tr"><i style="--v:22%"></i></span><span class="pv">2</span><span class="lb2">needs a check</span></div>
           <div class="br top"><span class="tr"><i style="--v:70%"></i></span><span class="pv">3</span><span class="lb2">ready</span></div></div></div>
       </div>
+      <span class="gl">Six patterns from Typesafe's skill, each with a job here</span>
+      <div class="pat anim" aria-label="Six Jev patterns mapped to CawCo uses.">
+        <div class="p2"><b>Route and fill</b><span class="hw">One request picks a handler and its typed parameters, asked together in one call.</span><span class="cw">A message from the iOS app ("pause site until 6") becomes an action, a project and a time. An inbound event picks its routine.</span></div>
+        <div class="p2"><b>Select, don't generate</b><span class="hw">Code finds candidates; a judgment picks one; code copies it exactly.</span><span class="cw">Is this new message about an open task? Pick it, or "none" to file a new one. Recaps quote the session's own lines instead of paraphrasing.</span></div>
+        <div class="p2"><b>Find and judge evidence</b><span class="hw">Retrieve, rerank, keep what is relevant.</span><span class="cw">Build a brief's context: rank project memory and knowledge files against the task, include the top few. Skill chips already work this way.</span></div>
+        <div class="p2"><b>Reusable judgments</b><span class="hw">Score dimensions once; code and controls change weights and thresholds without rerunning.</span><span class="cw">Score each task once (clarity, size, risk): the dispatcher orders and routes by weights you can tune. X drafts scored on voice and hook become features the weekly loop correlates with views.</span></div>
+        <div class="p2"><b>Verify and escalate</b><span class="hw">Check claims against evidence; uncertain cases go to a person or a reasoning model.</span><span class="cw">Judged checks for non-commit work: one question per acceptance criterion on a report or a post. Recap claims checked against their events. Unsure goes to Caw, then you.</span></div>
+        <div class="p2"><b>Respond to changing state</b><span class="hw">Fresh judgments guide the next bounded step; keep inferred state apart from observed facts.</span><span class="cw">Fleet watch re-asks on fresh transcript slices. A Jev answer is never status: the derived-liveness law already keeps those apart.</span></div>
+      </div>
       <span class="gl">Where it plugs into this design</span>
       <div class="uses"><table>
         <thead><tr><th>Use</th><th>Kind</th><th>With Jev</th><th>Without Jev</th></tr></thead>
@@ -608,9 +633,13 @@ The tray chip overflows at 320px wide…</pre>
           <tr><td>Event routing (D10)</td><td><span class="ty2">choice</span></td><td>Which routine or project does this event belong to?</td><td class="fb">Matcher filters: author, label, regex.</td></tr>
           <tr><td>Delegate type</td><td><span class="ty2">choice</span></td><td>Which preset fits this brief?</td><td class="fb">The caller names a type, else "medium".</td></tr>
           <tr><td>Grounded recaps</td><td><span class="ty2">yes/no</span></td><td>Is each recap claim backed by its cited events?</td><td class="fb">Recaps list events only, no prose claims.</td></tr>
+          <tr><td>Judged checks (D6)</td><td><span class="ty2">yes/no ×N</span></td><td>One question per acceptance criterion on a report, brief or post.</td><td class="fb">Shell checks only, or the lead reviews.</td></tr>
+          <tr><td>Brief context</td><td><span class="ty2">score ×N</span></td><td>Rank memory and knowledge files for this task; include the top few.</td><td class="fb">Include the whole brand kit and the newest notes.</td></tr>
+          <tr><td>Phone requests</td><td><span class="ty2">choice + fill</span></td><td>Action, project and time from one sentence.</td><td class="fb">Buttons and pickers in the app.</td></tr>
+          <tr><td>Dispatch order</td><td><span class="ty2">score ×3</span></td><td>Clarity, size and risk per task; code weights them.</td><td class="fb">Rank order on the board.</td></tr>
           <tr><td>X voice check</td><td><span class="ty2">yes/no ×N</span></td><td>One question per brand-kit rule, on every draft.</td><td class="fb">Lint-style rules: length, banned words, "!".</td></tr>
         </tbody></table></div>
-      <p class="fine">Two rules hold either way. Off is a mode you can see on every feature ("Jev off · using rules"). On but failing is never quietly downgraded: the feature says Jev failed, which keeps your 2026-09-23 "no fallbacks" decision for errors. Jev runs through OpenRouter or Typesafe, so text leaves your network; that is why it is opt-in. I could not open docs.typesafe.ai/agent-skill from here (blocked), so this card uses the Jev plan in <code>.design-foundations</code> and the <code>w.jev</code> types; send it over and I'll fold in the rest.</p>
+      <p class="fine">Rules that hold either way. Off is a mode you can see on every feature ("Jev off · using rules"). On but failing is never quietly downgraded: the feature says Jev failed, which keeps your 2026-09-23 "no fallbacks" decision for errors. Typed answers guarantee the shape, not the truth, so every threshold is tuned on CawCo's own logged cases, a confidence is never permission to act, and Jev never writes status or answers a permission. The key stays in the hub. Text goes to OpenRouter or Typesafe, which is why it is opt-in. Sources: Typesafe's agent skill and the Jev plan in <code>.design-foundations</code>.</p>
     </article>
     <article class="ans wide" id="todos">
       <header><span class="did">To-dos</span><h3>Can sessions set their own to-dos? Three layers, one word each</h3></header>
