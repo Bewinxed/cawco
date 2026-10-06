@@ -76,3 +76,5 @@ does with an IntersectionObserver.
 | xreply | X example: replies only to mentions, drafter cannot post |
 | xloop | X example: weekly recap to playbook to next draft |
 | pdelegates | Project delegate types as files; Jev routes a task to a type |
+| stages | Project stages on fixed kinds: board, calendar and pipeline views |
+| canvas | Design canvas: variants from any tool, a pin to the session, a pick |

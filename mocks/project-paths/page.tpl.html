@@ -553,6 +553,7 @@ th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute
   <a href="#time">Time <span class="n">D9–11</span></a>
   <a href="#face">Words, Caw <span class="n">D12–13</span></a>
   <a href="#procedures">Skills <span class="n">D14–15</span></a>
+  <a href="#kinds">Stages, design <span class="n">D17–18</span></a>
   <a href="#order">Roadmap</a>
   <a href="#sources">Sources</a>
   <div class="meter">
@@ -566,7 +567,7 @@ th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute
   <div class="caw"><img class="caw-l" src="caw/light-ready.webp" alt="Caw" width="104" height="104"><img class="caw-d" src="caw/dark-ready.webp" alt="" width="104" height="104"></div>
   <div>
     <h1>Projects, rethought</h1>
-    <p>Sixteen decisions. Each one shows how it would look and how it works. Pick a path per card; I read your picks back from this page.</p>
+    <p>Eighteen decisions. Each one shows how it would look and how it works. Pick a path per card; I read your picks back from this page.</p>
     <div class="row">
       <span class="pill" id="savestate"><span class="dot"></span><span id="savetext">Connecting…</span></span>
       <button class="btn" id="copypicks" type="button">Copy my picks</button>
@@ -633,6 +634,7 @@ th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute
     {id:"dtypes",band:"hub",grp:"Work",kind:"store",t:"Delegate types",s:"fleet + project files",d:"Harness, model, effort, skills, MCP, role, budget. Project files shadow fleet types.",talks:["disp","proj","mcp"]},
     {id:"disp",band:"hub",grp:"Work",kind:"code",t:"Dispatcher",s:"frontier, caps, routing",d:"Starts ready tasks under caps and budgets, on a machine that can run the type.",talks:["board","dtypes","daemon","land","brief","wf","api"],jev:"Ready for an agent? Which type fits? Clarity, size, risk? (score, choice)",fb:"A check must exist; the task names its type; board order."},
     {id:"land",band:"hub",grp:"Work",kind:"code",t:"Checks + landing",s:"run, rebase, push or PR",d:"Runs acceptance checks, then lands through a per-repo queue.",talks:["ws","board","lead","gh","disp"],jev:"Does this report meet each acceptance criterion? (yes/no each)",fb:"Shell checks only, or the lead reviews."},
+    {id:"stages",band:"hub",grp:"Work",kind:"store",t:"Stages and views",s:"per project, six fixed kinds",d:"The project's stages file: names, kinds, hooks, who may move a card, and its views. Board, calendar and pipeline all read it.",talks:["folder","board","disp","rout","act"]},
     {id:"act",band:"hub",grp:"Work",kind:"code",t:"Approved actions",s:"exact call, once, on time",d:"You approve one exact tool call; code runs it once at its time. Never a model.",talks:["cred","x","gh","ios"]},
     {id:"rout",band:"hub",grp:"Time and events",kind:"code",t:"Routines",s:"Effect Cron, run per slot",d:"Each slot fires once; a fresh session or a message to the lead.",talks:["wf","sess","lead","ingress"]},
     {id:"ingress",band:"hub",grp:"Time and events",kind:"code",t:"Ingress",s:"pollers + optional relay",d:"Polls GitHub and any connector; an optional relay reaches a one-route listener.",talks:["gh","x","rout","cred"],jev:"Which routine or project is this event for? (choice)",fb:"Matcher filters: author, label, regex."},
@@ -641,15 +643,18 @@ th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute
     {id:"mem",band:"hub",grp:"Knowledge",kind:"model",t:"Memory + curator",s:"inbox, proposals",d:"Agents write notes; the curator proposes; you tap.",talks:["folder","sess","ios","mcp"],jev:"Lasting fact, scaffolding, secret, untrusted? (choice)",fb:"Rules: repeats in 2+ sessions, provenance tags."},
     {id:"brief",band:"hub",grp:"Knowledge",kind:"code",t:"Brief builder",s:"what a session starts with",d:"Task, checks, last failure and the right context files.",talks:["folder","mem","disp"],jev:"How much does each file matter for this task? (score each)",fb:"The whole brand kit and the newest notes."},
     {id:"assets",band:"hub",grp:"Knowledge",kind:"store",t:"Assets",s:"content-addressed",d:"Images and files by hash, versioned, from any session.",talks:["folder","sess"]},
+    {id:"canvas",band:"hub",grp:"Knowledge",kind:"store",t:"Canvas",s:"results, pins, picks",d:"Keeps the previews and images a project's sessions showed, side by side. A pin goes to the session that made it; a pick keeps one variant.",talks:["prev","sess","folder","land","dash"],jev:"How closely does each variant follow DESIGN.md? (score each)",fb:"You look at all of them."},
     {id:"lead",band:"hub",grp:"Agents",kind:"model",t:"Caw · project lead",s:"woken by events",d:"Plans, briefs, recaps. Board tools only, per-project switch.",talks:["board","rout","ios","dash","land","watch"],jev:"Is each recap claim backed by its events? (yes/no each)",fb:"Recaps list events only."},
     {id:"watch",band:"hub",grp:"Agents",kind:"code",t:"Fleet watch",s:"detectors, one triage",d:"Code detectors; a fresh Caw triage run only when the case is real.",talks:["daemon","lead","ios"],jev:"Stuck? Looping? Off-task? (yes/no)",fb:"A second code signal, tighter caps."},
-    {id:"jev",band:"hub",grp:"Judgments",kind:"model",t:"Jev",s:"typed judgments, opt-in",d:"Yes/no, choice and score over one state, in one call. Never status, never a permission.",talks:["board","disp","land","ingress","mem","brief","lead","watch","cred","ort"]},
+    {id:"jev",band:"hub",grp:"Judgments",kind:"model",t:"Jev",s:"typed judgments, opt-in",d:"Yes/no, choice and score over one state, in one call. Never status, never a permission.",talks:["board","disp","land","ingress","mem","brief","canvas","lead","watch","cred","ort"]},
     {id:"daemon",band:"machines",kind:"code",t:"Daemon",s:"process truth",d:"The only authority on what runs on its machine.",talks:["api","sessiond","disp","watch"]},
     {id:"sessiond",band:"machines",kind:"code",t:"sessiond",s:"keeps sessions across deploys",d:"Protocol-blind keeper; ships almost never.",talks:["daemon","sess"]},
     {id:"sess",band:"machines",kind:"model",t:"Sessions",s:"Claude Code · OpenCode · pi",d:"Fresh per attempt; the role decides the tools.",talks:["mcp","ws","folder","sessiond","rout","mem","assets"]},
+    {id:"prev",band:"machines",kind:"code",t:"Preview proxy",s:"dev servers, folders · exists",d:"Already shipped: show_preview forwards a session's dev server or folder and adds the element picker.",talks:["sess","canvas","api"]},
     {id:"ws",band:"machines",kind:"store",t:"Workspaces",s:"clone + branch per task",d:"Durable per task; the session is the cheap part.",talks:["sess","land"]},
     {id:"gh",band:"outside",kind:"ext",t:"GitHub · Linear",s:"if a project picks one",d:"The record for a project that chose it; otherwise CawCo's files are.",talks:["ingress","land","act"]},
     {id:"x",band:"outside",kind:"ext",t:"X and other APIs",s:"through connectors",d:"Read by pollers, written only by approved actions.",talks:["ingress","act"]},
+    {id:"dmcp",band:"outside",kind:"ext",t:"Design tools",s:"pen.dev · Paper · Figma · Open Design",d:"Sessions design there through each tool's own MCP and save the result into the project. CawCo has no adapter for them.",talks:["sess"]},
     {id:"ort",band:"outside",kind:"ext",t:"OpenRouter · Typesafe",s:"where Jev runs",d:"Text leaves your network here, which is why Jev is opt-in.",talks:["jev"]},
     {id:"apns",band:"outside",kind:"ext",t:"Apple push",s:"content-free payloads",d:"Wakes the app; the app fetches details over the tailnet.",talks:["ios","api"]}
   ];
@@ -1394,16 +1399,158 @@ resolve        → finish_item → land</pre>
   </article>
 </section>
 
+<section class="chap" id="kinds">
+  <header><span class="eyebrow">Any kind of work</span><h2>Stages, views and design work</h2><p>A social project needs Draft, Scheduled and Posted. Outreach needs Contacted and Replied. A design project needs one place to see what was made, point at it and pick.</p></header>
+
+  <div class="answers">
+    <article class="ans">
+      <header><span class="did">D17</span><h3>More stages than four</h3></header>
+      <p class="q">A social media project might want a different view for its workflows, with more states like draft and posted. Same for outreach and other knowledge work.</p>
+      <p class="a">Yes. Each project names its own stages in a file, and every stage is filed under one of six fixed kinds: to do, active, waiting, you, done, dropped. Linear works this way: teams name their own statuses, but each one belongs to a fixed type. The kinds are what let the dispatcher, Needs you, budgets and recaps keep working whatever the stages are called. Views (board, table, calendar, pipeline) are settings over the same tasks, not code.</p>
+    </article>
+    <article class="ans">
+      <header><span class="did">D18</span><h3>Adapters, or just show the results?</h3></header>
+      <p class="q">If a design tool has an MCP, people can use it outside CawCo and I don't need to build for it. Unless adapters that show the results in CawCo are easier?</p>
+      <p class="a">Agreed, and showing results needs no adapter. pen.dev, Paper, Figma, Penpot and Open Design all ship an MCP, so a session already designs in them and can save a screenshot or the code of what it made. CawCo already shows those: <code>show_preview</code> for a dev server or folder (click an element and the session gets file:line), and <code>show_image</code>. The session is the adapter. What is new is small: a project canvas that keeps those results side by side, pins that stay on it, and a pick.</p>
+    </article>
+  </div>
+
+  <article class="dec" id="d17">
+    <header><span class="did">D17</span><h3>Project stages and views</h3><span class="state" data-for="stages">Not picked</span></header>
+    <p class="why">Fixed columns fit code. A social, outreach or design project has its own lifecycle. Let the project name its stages; keep the few kinds CawCo reasons about fixed.</p>
+    <div class="show">
+      <figure class="pane look"><span class="cap">How it would look</span>{{MK:stages}}</figure>
+      <figure class="pane mech"><span class="cap">Stages are a file</span>
+<pre class="v"><span class="c">x-growth/</span>stages.md
+---
+idea       todo
+draft      active   runs: writer
+review     you
+scheduled  waiting  until: post_at
+posted     done     by: action
+measured   done     after: 48h
+moves
+  review → scheduled    you
+  scheduled → posted    action
+views
+  board      by stage
+  calendar   by post_at
+---
+
+<span class="k">what each kind means</span>
+  todo     the dispatcher picks it up
+  active   entering can start a type
+  waiting  a routine moves it on
+  you      Needs you, and your phone
+  done     counts in recaps
+  dropped  closed, not counted
+
+<span class="k">never a stage</span>
+  running, checking, stuck:
+  read live from the session
+  and shown on the card</pre>
+      </figure>
+    </div>
+    <div class="opts" role="radiogroup" data-group="stages" data-label="D17 Project stages and views">
+      <button class="opt" type="button" role="radio" data-opt="fixed"><b>Fixed columns</b><span>Ready, Running, Needs you, Review, Done for every project.</span></button>
+      <button class="opt" type="button" role="radio" data-opt="kinds"><b>Project stages on fixed kinds</b><span>Names are the project's; six kinds keep the machinery working.</span><span class="tag">Recommended</span></button>
+      <button class="opt" type="button" role="radio" data-opt="free"><b>Free statuses</b><span>Any name, any move. Nothing can tell what done means.</span><span class="tag warn">Costly</span></button>
+      <button class="opt" type="button" role="radio" data-opt="agent"><b>Views built by agents</b><span>Caw writes an A2UI view per project; no stages file.</span></button>
+    </div>
+    <div class="foot">
+      <details class="more"><summary>Details</summary><div class="in">
+        <p>This changes D2 in two places: the task file's <code>status:</code> becomes <code>stage:</code>, and columns become stages. Running, Checking and Landing stay derived and show on the card. Needs you stays a lane that gathers every card of kind <i>you</i> plus any session that is asking.</p>
+        <p>A stage can carry a hook: <code>runs: writer</code> starts that delegate type when a card enters, <code>after: 48h</code> lets a routine move it on, <code>by: action</code> means only an approved action moves it there. Caw edits <code>stages.md</code> like any file, as a diff you approve. Templates ship for code, social, outreach, SEO and design. With GitHub as the tracker, stages map onto a Projects single-select field.</p>
+<pre class="v"><span class="c">outreach</span>
+  prospect   todo
+  contacted  waiting  reply due 3d
+  replied    you
+  meeting    you
+  won        done
+  lost       dropped
+<span class="c">site (design)</span>
+  brief → explore → review
+  → picked → build → shipped</pre>
+        <p>Views are settings, built from libraries rather than by hand: board with Pragmatic drag and drop and canvas with Svelte Flow (both already in the dashboard), table with TanStack Table, calendar with Event Calendar (MIT, Svelte 5), pipeline with a chart library. A view none of these covers is the escape hatch: an A2UI view over CawCo's catalog.</p>
+      </div></details>
+      <label class="note">Note <input id="note-stages" data-note="stages" type="text" placeholder="Anything to add"></label>
+    </div>
+  </article>
+
+  <article class="dec" id="d18">
+    <header><span class="did">D18</span><h3>Design work: what CawCo builds</h3><span class="state" data-for="design">Not picked</span></header>
+    <p class="why">The design tools already speak MCP, and CawCo already previews pages and images. Build only what neither gives: one place per project that keeps the results, the pins and the pick.</p>
+    <div class="show">
+      <figure class="pane look"><span class="cap">How it would look</span>{{MK:canvas}}</figure>
+      <figure class="pane mech"><span class="cap">Files in, previews out</span>
+<pre class="v"><span class="c">site/design/</span>
+  DESIGN.md        brand, rules
+  tokens.json      DTCG tokens
+  components.json  props, states
+  references/      Mobbin picks
+  explorations/    sessions' work
+
+<span class="k">how a result gets here</span> <span class="c"># all exist</span>
+  dev server  show_preview port
+  folder      show_preview dir
+  png, svg    show_image
+  pen.dev, Paper, Figma,
+  Penpot, Open Design:
+    the session saves a file
+    with that tool's MCP
+
+<span class="k">new</span>
+  canvas  side by side
+  pins    the picker, kept on it
+  pick    one wins, rest archive
+  checks  contrast, tokens, diff</pre>
+      </figure>
+    </div>
+    <div class="opts" role="radiogroup" data-group="design" data-label="D18 Design work">
+      <button class="opt" type="button" role="radio" data-opt="mcp"><b>MCP only</b><span>Sessions design in the tools; results stay in each transcript.</span></button>
+      <button class="opt" type="button" role="radio" data-opt="canvas"><b>Project canvas over files and previews</b><span>Reuses show_preview, show_image and the picker.</span><span class="tag">Recommended</span></button>
+      <button class="opt" type="button" role="radio" data-opt="od"><b>Run Open Design beside CawCo</b><span>Its own app and agent runs; two places to look.</span></button>
+      <button class="opt" type="button" role="radio" data-opt="editor"><b>Build a design editor</b><span>Redoes what pen.dev and Penpot already ship.</span><span class="tag warn">Costly</span></button>
+    </div>
+    <div class="foot">
+      <details class="more"><summary>Details</summary><div class="in"><p>The canvas is per project and stored like assets: each item is a file or a preview, with who made it, from which tool, and a link back. Pins are the picker's notes kept in place; when the session that made a variant is gone, a pin opens a new attempt in the same workspace. Previews stay in sandboxed frames; the preview proxy already checks every message a previewed page sends.</p><p>Not now: an adapter per design tool. A session with that tool's MCP does the reading and exporting, and the same MCP works outside CawCo too.</p></div></details>
+      <label class="note">Note <input id="note-design" data-note="design" type="text" placeholder="Anything to add"></label>
+    </div>
+  </article>
+
+  <article class="ans wide" id="dprim">
+    <header><span class="did">Check</span><h3>Built, borrowed or MCP</h3></header>
+    <div class="prim"><table>
+      <thead><tr><th>Need</th><th>Covered by</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td>Design in a real tool</td><td>pen.dev, Paper, Figma, Penpot or Open Design through its MCP, listed as a project MCP server (D15)</td><td><span class="st2 has">MCP · nothing to build</span></td></tr>
+        <tr><td>References</td><td>Mobbin's MCP; the session saves picks into <code>references/</code></td><td><span class="st2 has">MCP</span></td></tr>
+        <tr><td>Brand and tokens</td><td><code>DESIGN.md</code> plus DTCG <code>tokens.json</code>, built by Terrazzo into CSS and Tailwind (its Swift plugin is experimental)</td><td><span class="st2 plan">borrow</span></td></tr>
+        <tr><td>Ready-made systems and skills</td><td>Open Design's design systems and SKILL.md skills (Apache-2.0), copied in as project skills</td><td><span class="st2 plan">borrow</span></td></tr>
+        <tr><td>See a running app</td><td><code>show_preview</code> with a port, through the daemon's preview proxy</td><td><span class="st2 has">exists</span></td></tr>
+        <tr><td>See an HTML exploration</td><td><code>show_preview</code> with a folder</td><td><span class="st2 has">exists</span></td></tr>
+        <tr><td>See an export</td><td><code>show_image</code></td><td><span class="st2 has">exists</span></td></tr>
+        <tr><td>Point at an element</td><td>The preview picker: file:line and notes go to the session</td><td><span class="st2 has">exists</span></td></tr>
+        <tr><td>Results side by side</td><td>A project canvas on Svelte Flow, which already draws the workflow canvas</td><td><span class="st2 gap">build · small</span></td></tr>
+        <tr><td>Pick a variant</td><td>Variants are attempts (D3); a pick keeps one and archives the rest</td><td><span class="st2 gap">build · small</span></td></tr>
+        <tr><td>Contrast, tokens, diff</td><td>Acceptance checks the hub already runs: axe-core, a lint against literal colours, Playwright screenshot compare</td><td><span class="st2 plan">borrow</span></td></tr>
+        <tr><td>On brand?</td><td>Jev scores each variant against <code>DESIGN.md</code>; with Jev off, you look at all of them</td><td><span class="st2 plan">planned · P4</span></td></tr>
+        <tr><td>Components</td><td>The project's own code, shown from its Storybook build with <code>show_preview</code>. Storybook's MCP is React-only for now.</td><td><span class="st2 has">exists</span></td></tr>
+      </tbody></table></div>
+    <p class="a">Most of it exists or is borrowed. Two small builds: the canvas (on Svelte Flow, which already draws the workflow canvas) and the pick. Everything a design tool does stays in that tool, reached through its own MCP.</p>
+  </article>
+</section>
+
 <section class="chap" id="order">
   <header><span class="eyebrow">Roadmap</span><h2>With your picks</h2></header>
   <div class="pane mech" style="padding:18px 12px">
-    <div class="road anim" role="img" aria-label="Six phases with your picks: admin gap, words and landing; projects, tasks as files and the dispatcher; Caw lead, role toolsets and iOS push; routines and ingress; knowledge and skills; fleet watch. Telegram is pending.">
+    <div class="road anim" role="img" aria-label="Six phases with your picks: admin gap, words and landing; projects, tasks as files, stages and the dispatcher; Caw lead, role toolsets and iOS push; routines and ingress; knowledge, skills and the design canvas; fleet watch. Telegram is pending.">
       <span class="fill"></span>
       <div class="ph"><span class="n">0</span><div><b>Admin gap, words, landing</b><br><span>Role-gate admin; task, plan, attempt, routine; hub-owned landing.</span></div></div>
-      <div class="ph"><span class="n">1</span><div><b>Projects, tasks as files</b><br><span>Places, hub folder, tracker setting, dispatcher with all nine upgrades.</span></div></div>
+      <div class="ph"><span class="n">1</span><div><b>Projects, tasks as files</b><br><span>Places, hub folder, tracker setting, stages file, dispatcher with all nine upgrades.</span></div></div>
       <div class="ph"><span class="n">2</span><div><b>Caw lead, iOS</b><br><span>Per-project lead, role toolsets, onboarding with Jev, iOS push and threads.</span></div></div>
       <div class="ph"><span class="n">3</span><div><b>Routines, ingress</b><br><span>Effect Cron, output contract, connector poller, relay, approved actions.</span></div></div>
-      <div class="ph"><span class="n">4</span><div><b>Knowledge, skills</b><br><span>Memory tiers, Jev optional, brand kit, grill, to-tasks, triage.</span></div></div>
+      <div class="ph"><span class="n">4</span><div><b>Knowledge, skills, canvas</b><br><span>Memory tiers, Jev optional, brand kit, grill, to-tasks, triage, design canvas.</span></div></div>
       <div class="ph"><span class="n">5</span><div><b>Fleet watch</b><br><span>Detectors, Jev gate, triage; retire the old three. Telegram: pending.</span></div></div>
     </div>
   </div>
@@ -1440,6 +1587,24 @@ resolve        → finish_item → land</pre>
     <li><a href="https://linear.app/developers/agent-interaction">Linear agent interaction</a></li>
     <li><a href="https://docs.github.com/en/rest/using-the-rest-api/best-practices-for-using-the-rest-api">GitHub conditional requests</a></li>
     <li><a href="https://github.com/standard-webhooks/standard-webhooks/blob/main/spec/standard-webhooks.md">Standard Webhooks</a></li>
+    <li><a href="https://linear.app/docs/configuring-workflows">Linear issue statuses</a></li>
+    <li><a href="https://github.com/nexu-io/open-design">Open Design</a></li>
+    <li><a href="https://github.com/nexu-io/open-design/blob/main/docs/architecture.md">Open Design architecture</a></li>
+    <li><a href="https://www.pen.dev/">pen.dev</a></li>
+    <li><a href="https://docs.pen.dev/getting-started/installation">pen.dev docs</a></li>
+    <li><a href="https://paper.design/roadmap">Paper roadmap</a></li>
+    <li><a href="https://github.com/penpot/penpot/tree/develop/mcp">Penpot MCP</a></li>
+    <li><a href="https://developers.figma.com/docs/figma-mcp-server/write-to-canvas">Figma MCP server</a></li>
+    <li><a href="https://storybook.js.org/docs/ai/mcp/overview">Storybook MCP</a></li>
+    <li><a href="https://www.designtokens.org/">Design Tokens Community Group</a></li>
+    <li><a href="https://github.com/terrazzoapp/terrazzo">Terrazzo</a></li>
+    <li><a href="https://github.com/a2ui-project/a2ui">A2UI</a></li>
+    <li><a href="https://github.com/modelcontextprotocol/ext-apps">MCP Apps</a></li>
+    <li><a href="https://github.com/ag-ui-protocol/ag-ui">AG-UI</a></li>
+    <li><a href="https://github.com/vercel-labs/json-render">json-render</a></li>
+    <li><a href="https://svelteflow.dev/">Svelte Flow</a></li>
+    <li><a href="https://github.com/atlassian/pragmatic-drag-and-drop">Pragmatic drag and drop</a></li>
+    <li><a href="https://github.com/vkurko/calendar">Event Calendar</a></li>
   </ul>
 </section>
 </main>
