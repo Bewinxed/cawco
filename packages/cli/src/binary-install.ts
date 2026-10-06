@@ -40,6 +40,8 @@ import {
 /** Tools offered at install: what CawCo uses, none of it required to start. */
 const OFFERED = ["git", "opencode", "pi"] as const;
 const JOIN_TIMEOUT_MS = 90_000;
+const LOCAL_NETWORK_URL =
+  /^https?:\/\/(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/;
 
 export interface BinaryInstallOptions {
   /** Ask in this terminal before installing a missing tool. */
@@ -72,9 +74,7 @@ async function awaitJoined(hubUrl: string): Promise<void> {
     }
     await Bun.sleep(1000);
   }
-  const lan =
-    process.platform === "darwin" &&
-    /^https?:\/\/(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(hubUrl);
+  const lan = process.platform === "darwin" && LOCAL_NETWORK_URL.test(hubUrl);
   throw new Error(
     `The agent started, but ${hubUrl} has not listed this machine online after ${JOIN_TIMEOUT_MS / 1000}s.` +
       (lan
