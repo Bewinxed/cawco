@@ -14,9 +14,12 @@ import UIKit.UIGestureRecognizerSubclass
 enum Recall {
     /// One row: the field's own line box.
     static let row = Size.cComposerField
-    static let rowsAbove = 3
-    /// How far above the field the grown shape reaches: three rows, and a step.
-    static let extra = Double(rowsAbove) * row + 6
+    /// Rows above the field's line, at most: five where the window has the
+    /// room (640pt both ways, the web's phone breakpoint), three on a phone
+    /// or in a short window.
+    static func rowsAbove(in window: CGRect) -> Int {
+        window.width >= 640 && window.height >= 640 ? 5 : 3
+    }
     /// The wheel's lean per row, in degrees, and how much smaller each row
     /// is than the one below it: gentle, so it reads as a wheel and not a wall.
     static let lean = 6.0
@@ -28,8 +31,14 @@ enum Recall {
     /// transcript under the fade goes soft by degrees.
     static let blurs: [Double] = [0.5, 1, 2, 4, 8, 16]
     static let band = 6.0
-    /// How much a row's words have softened at the most (points of blur).
-    static let softest = Double(rowsAbove) * 0.9
+    /// How much softer each row up is than the one below it (points of
+    /// blur), and the most a row's words soften: the top of the taller wheel.
+    static let soft = 0.3
+    static let softest = 5 * soft
+    /// A ghost row `o` rows above the line: each a tenth fainter than the one below.
+    static func ghost(_ o: Double) -> Double {
+        0.7 * (1 - o * 0.1)
+    }
 
     /// `--ease-drawer`, close enough for a frame-driven morph (composer-recall `drawer`).
     static func drawer(_ t: Double) -> Double {
@@ -760,6 +769,7 @@ final class RecallWheel: NSObject, UIGestureRecognizerDelegate {
     private var rows: [RecallRow] = []
     private var search: RecallSearch?
     private let showsMeta: Bool
+    private let above: Int
 
     // The spring: `pos` rolls toward the nearest whole entry of `target`.
     private var pos = 0.0
@@ -785,6 +795,7 @@ final class RecallWheel: NSObject, UIGestureRecognizerDelegate {
         self.caret = caret
         self.keys = keys
         showsMeta = (composer.window?.bounds.width ?? 1000) > 560
+        above = Recall.rowsAbove(in: composer.window?.bounds ?? .zero)
         super.init()
     }
 
@@ -799,8 +810,8 @@ final class RecallWheel: NSObject, UIGestureRecognizerDelegate {
     /// It keeps one row of room even when a search leaves nothing, so it
     /// stays the wheel and never drops back to the bare pill.
     private func extraFor() -> Double {
-        let above = query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? Recall.rowsAbove : min(max(list.count - 1, 1), Recall.rowsAbove)
-        return Double(above) * Recall.row + 6
+        let tall = query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? above : min(max(list.count - 1, 1), above)
+        return Double(tall) * Recall.row + 6
     }
 
     // MARK: Opening
@@ -812,7 +823,7 @@ final class RecallWheel: NSObject, UIGestureRecognizerDelegate {
         geometry = RecallGeometry(width: ring.bounds.width, base: ring.bounds.height,
                                   button: composer.historyBox.convert(composer.historyBox.bounds, to: ring).midX)
         field = composer.pill.convert(composer.field.frame, to: ring)
-        let height = Recall.row + Recall.extra - 6
+        let height = Recall.row * Double(above + 1)
         composer.wheelStepsIn()
         let halo = RecallHalo(geometry, extra: extraFor())
         ring.insertSubview(halo, belowSubview: composer.pill)
@@ -987,17 +998,16 @@ final class RecallWheel: NSObject, UIGestureRecognizerDelegate {
         let line = Recall.round(p)
         for (k, row) in rows.enumerated() {
             let off = Double(k) - p
-            if off > Double(Recall.rowsAbove) + 0.6 || off < -1.2 {
+            if off > Double(above) + 0.6 || off < -1.2 {
                 row.isHidden = true
                 continue
             }
             row.isHidden = false
             let up = max(0, off)
             row.layer.transform = Recall.transform(off: off, up: up)
-            row.soften(max(0, up - 1) * 0.9)
+            row.soften(max(0, up - 1) * Recall.soft)
             // On the field's line a row is at full strength; above it the rows are ghosts, fading as they rise.
-            let ghost = { (o: Double) in 0.6 * (1 - o * 0.22) }
-            row.alpha = off >= 0 ? max(0, off < 1 ? 1 + (ghost(1) - 1) * off : ghost(off)) : max(0, 1 + off * 1.6)
+            row.alpha = off >= 0 ? max(0, off < 1 ? 1 + (Recall.ghost(1) - 1) * off : Recall.ghost(off)) : max(0, 1 + off * 1.6)
             row.pick(line == k)
         }
         if line >= 0, line <= last, line != detent {

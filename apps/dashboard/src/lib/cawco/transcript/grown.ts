@@ -12,9 +12,8 @@
  * stands in it (the wheel's rows, the editing row) is clipped to it, so it
  * comes up out of the button with the shape and folds back into it.
  *
- * Its edge is the pill's (`--grown-edge`), and takes the focus ring's
- * colour and weight while the field has keyboard focus, as the pill's own
- * border does.
+ * Its edge is the pill's border (`--border-control`), and stays the border
+ * while the field has keyboard focus: the grown composer draws no ring.
  *
  * The top fades out over the transcript, frosted progressively: a stack of
  * bands, each blurring twice the one above, each cut to the shape and masked
@@ -119,11 +118,11 @@ export class GrownShape {
         <stop offset="1" style="stop-color: var(--surface-raised)"/>
       </linearGradient>
       <linearGradient id="${edge}" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0.04" style="stop-color: var(--grown-edge); stop-opacity: 0"/>
-        <stop offset="0.32" style="stop-color: var(--grown-edge)"/>
-        <stop offset="1" style="stop-color: var(--grown-edge)"/>
+        <stop offset="0.04" style="stop-color: var(--border-control); stop-opacity: 0"/>
+        <stop offset="0.32" style="stop-color: var(--border-control)"/>
+        <stop offset="1" style="stop-color: var(--border-control)"/>
       </linearGradient>
-    </defs><path fill="url(#${fill})" stroke="url(#${edge})" style="stroke-width: var(--grown-edge-width)"/></svg>`;
+    </defs><path fill="url(#${fill})" stroke="url(#${edge})" stroke-width="1"/></svg>`;
     host.append(this.#halo);
     this.#svg = this.#halo.querySelector("svg") as SVGSVGElement;
     this.#path = this.#halo.querySelector("path") as SVGPathElement;

@@ -2488,17 +2488,11 @@
      faintly through it, and opaque where translucency is turned down. */
   /* The pill's box, which what grows out of it shares: the grown shape is
      drawn behind the pill and its rows over it. Grown, the shape's edge is
-     the field shell's: it takes the ring while the field has keyboard
-     focus, and the pill, stepped aside, draws none. */
+     the control border and never the ring: the grown composer is plainly
+     where the keys go, the caret and the row on the line say the rest, and
+     the pill, stepped aside, draws none. */
   .shell {
-    --grown-edge: var(--border-control);
-    --grown-edge-width: 1px;
     position: relative;
-
-    &:has(textarea:focus-visible) {
-      --grown-edge: var(--focus-ring);
-      --grown-edge-width: var(--focus-ring-width);
-    }
   }
   .cin {
     --cin-pad: var(--c-composer-inset);

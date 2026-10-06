@@ -79,11 +79,16 @@
     ondone: (send: boolean) => void;
   } = $props();
 
-  /** Rows above the field's line, at most. */
-  const ABOVE = 3;
+  /**
+   * Rows above the field's line, at most: five where the window has the
+   * room (the phone breakpoint, 640px, both ways), three on a phone or in a
+   * short window. Read once, as it opens.
+   */
+  const ROOMY = "(width >= 640px) and (height >= 640px)";
+  let above = 3;
   /** How far each row up leans back (deg), and how much softer it goes (px). */
   const LEAN = 6;
-  const SOFT = 0.9;
+  const SOFT = 0.3;
   /** The tab track's glide: critically damped at a 0.3s response. */
   const GLIDE = 0.3;
   const STIFFNESS = ((2 * Math.PI) / GLIDE) ** 2;
@@ -176,14 +181,14 @@
   let headroom = 0;
   /** How far above the pill the shape reaches: what the rows need, never less than one. */
   const extFor = () => {
-    const above = query.trim()
-      ? Math.min(Math.max(pickable - 1, 1), ABOVE)
-      : ABOVE;
-    return above * row + headroom;
+    const tall = query.trim()
+      ? Math.min(Math.max(pickable - 1, 1), above)
+      : above;
+    return tall * row + headroom;
   };
 
   /** A ghost row `o` rows above the line. */
-  const ghost = (o: number) => 0.6 * (1 - o * 0.22);
+  const ghost = (o: number) => 0.7 * (1 - o * 0.1);
   /**
    * How strongly a row `off` rows from the line shows: at full strength on
    * it, a ghost fading as it rises above it, leaving below it.
@@ -197,7 +202,7 @@
 
   /** Places one row `off` rows above the line. Writes only. */
   function place(node: HTMLElement, off: number): void {
-    if (off > ABOVE + 0.6 || off < -1.2) {
+    if (off > above + 0.6 || off < -1.2) {
       node.style.visibility = "hidden";
       return;
     }
@@ -233,7 +238,7 @@
       pick = k;
     }
     // Nearing the oldest row read so far, the page before it is read.
-    if (more && target >= pickable - 3 && !query.trim()) {
+    if (more && target >= pickable - above && !query.trim()) {
       older();
     }
   }
@@ -527,7 +532,8 @@
   onMount(() => {
     const { size, line } = measured;
     ({ row, headroom } = size);
-    box = { ...line, height: row * (ABOVE + 1) };
+    above = matchMedia(ROOMY).matches ? 5 : 3;
+    box = { ...line, height: row * (above + 1) };
     shape = new GrownShape(shell, size, extFor(), { frosted: true });
     if (ghosts) {
       shape.clip(ghosts, () => box);
