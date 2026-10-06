@@ -521,9 +521,9 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     }
 
     /// The rows the reader sees: settled first (rows.ts `drawnOf` — an
-    /// unanswered question is the composer's while asks reach the reader).
+    /// unanswered question is the composer's in every mode: no mode answers
+    /// a question for the reader, Bypass and Full Send included).
     private func settledRows() -> [Row] {
-        let bypass = factsValue("permissionMode") as? String == "bypassPermissions"
         // History joins the list a stretch a frame, newest first: a long
         // session's older page set as Markdown in one go was 80 ms of a frame
         // for rows far above the reader. A reader restored to a row is given
@@ -535,13 +535,13 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         }
         // The same blocks fold into the same rows: a long session's are folded
         // when its blocks change, not on every frame its tail or its fleet moves.
-        let stamp = "\(revision)|\(taken)|\(bypass)"
+        let stamp = "\(revision)|\(taken)"
         if let folded, folded.stamp == stamp {
             voices = folded.voices
             return folded.rows
         }
         let drawn = blocks.suffix(taken).filter { block in
-            !(Fold.isQuestion(block) && block.toolStatus == "pending" && !bypass)
+            !(Fold.isQuestion(block) && block.toolStatus == "pending")
                 && block.type != "send.ref" && block.type != "system.init"
         }
         var voices = Voices()

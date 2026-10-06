@@ -382,40 +382,118 @@ final class LifetimePopover: NsPopoverController {
 
 // MARK: Permission
 
-/// How each permission mode is named and drawn (permission-look.ts).
+/// How each permission mode is named, drawn and described
+/// (permission-modes.ts, permission-look.ts). The name is the product's;
+/// what it does is its harness's, so every description is for one harness.
 struct PermissionLook {
     let name: String
-    let short: String
     let desc: String
     let glyph: Glyph
     let hue: UIColor
 
-    static func of(_ mode: String) -> PermissionLook {
+    /// The modes in the order they are offered: from the one that asks the
+    /// most to the one that asks the least.
+    static let order = ["default", "plan", "acceptEdits", "bypassPermissions", "fullSend"]
+
+    private static let names = [
+        "default": "Ask first", "plan": "Plan first", "acceptEdits": "Accept edits",
+        "bypassPermissions": "Bypass", "fullSend": "Full Send",
+    ]
+
+    /// What each mode does on each harness that has modes (permission-modes.ts `DESCRIPTIONS`).
+    private static let descriptions: [String: [String: String]] = [
+        "claude": [
+            "default": "Reads and allow-listed tools run; others ask.",
+            "plan": "Read-only until you approve a plan.",
+            "acceptEdits": "File edits run without asking.",
+            "bypassPermissions": "Tools run unasked; safety checks still ask.",
+            "fullSend": "Bypass, and safety checks are allowed too.",
+        ],
+        "opencode": [
+            "default": "OpenCode's permission asks come to you.",
+            "plan": "Runs OpenCode's plan agent.",
+            "acceptEdits": "Edit asks are allowed; the rest come to you.",
+            "bypassPermissions": "Every permission ask is allowed.",
+            "fullSend": "The same as Bypass on OpenCode.",
+        ],
+    ]
+
+    /// Modes a harness can be in but is not offered, because there they
+    /// change nothing: OpenCode's Bypass already allows every ask.
+    private static let notOffered = ["opencode": ["fullSend"]]
+
+    static func of(_ mode: String, harness: String?) -> PermissionLook {
+        let desc = harness.flatMap { descriptions[$0]?[mode] } ?? ""
+        let name = names[mode] ?? mode
         switch mode {
-        case "default": PermissionLook(name: "Ask before edits", short: "Ask first", desc: "Approve every file write and command.", glyph: .rules, hue: Palette.hueGreen500)
-        case "plan": PermissionLook(name: "Plan first", short: "Plan first", desc: "Read-only until you approve a plan.", glyph: .notes, hue: Palette.hueCyan500)
-        case "acceptEdits": PermissionLook(name: "Auto-accept edits", short: "Auto-edit", desc: "Edits run freely; shell commands still ask.", glyph: .toolWrite, hue: Palette.hueBlue500)
-        case "bypassPermissions": PermissionLook(name: "Full access", short: "Full access", desc: "No prompts. Use on disposable machines only.", glyph: .warning, hue: Palette.hueOrange500)
-        default: PermissionLook(name: mode, short: mode, desc: "", glyph: .rules, hue: Palette.inkSubtle)
+        case "default": return PermissionLook(name: name, desc: desc, glyph: .rules, hue: Palette.hueGreen500)
+        case "plan": return PermissionLook(name: name, desc: desc, glyph: .notes, hue: Palette.hueCyan500)
+        case "acceptEdits": return PermissionLook(name: name, desc: desc, glyph: .toolWrite, hue: Palette.hueBlue500)
+        case "bypassPermissions": return PermissionLook(name: name, desc: desc, glyph: .warning, hue: Palette.hueOrange500)
+        // The consequential grant's shield in its warning ink: a wider grant than Bypass.
+        case "fullSend": return PermissionLook(name: name, desc: desc, glyph: .shield, hue: Palette.statusAttnInk)
+        default: return PermissionLook(name: name, desc: desc, glyph: .rules, hue: Palette.inkSubtle)
         }
     }
 
-    /// The four a person picks between, from the one that asks about everything
-    /// to the one that asks about nothing (permission-modes.ts).
-    static let modes = ["default", "plan", "acceptEdits", "bypassPermissions"]
+    /// The modes a person picks between on `harness`, plus `current` where a
+    /// session is already in one that is not offered.
+    static func modes(for harness: String, current: String? = nil) -> [String] {
+        let described = descriptions[harness] ?? [:]
+        let hidden = notOffered[harness] ?? []
+        return order.filter { described[$0] != nil && (!hidden.contains($0) || $0 == current) }
+    }
+
+    /// Whether the CLI runs in its bypass mode: Bypass, and Full Send on top of it.
+    static func bypasses(_ mode: String?) -> Bool {
+        mode == "bypassPermissions" || mode == "fullSend"
+    }
+
+    /// Where a form's mode goes when the machine cannot honour it: Full Send
+    /// to Bypass, anything else to the first mode the machine can.
+    static func fallback(_ mode: String, honoured: [String]) -> String? {
+        mode == "fullSend" && honoured.contains("bypassPermissions") ? "bypassPermissions" : honoured.first
+    }
+}
+
+/// Full Send's words, for the harnesses it is offered on (permission-modes.ts `FULL_SEND`).
+struct FullSendCopy {
+    let confirm: [String]
+    let restarts: String
+    let warning: String
+
+    static func of(_ harness: String?) -> FullSendCopy? {
+        guard harness == "claude" else { return nil }
+        return FullSendCopy(
+            confirm: [
+                "In Bypass, tools run without asking, but Claude Code still stops for its own safety checks and brings them to you: a shell -c script it cannot check, cd combined with git, a write to a protected path. Full Send answers those checks “allow” for you, so such a command runs without anyone seeing it first.",
+                "Still comes to you: questions Claude asks, plan approval, and ask rules you set in Claude Code's settings (permissions.ask). Tools your fleet denies still never run.",
+                "Use it where changed or lost files can be recovered: committed or backed-up work, or a throwaway workspace.",
+            ],
+            restarts: "Switching restarts this session in place; its conversation carries over.",
+            warning: "Claude Code's safety checks are answered “allow” for you, so a command they would stop runs unseen. Pick Bypass to have them ask you again."
+        )
+    }
 }
 
 /// Permission mode (PermissionSection.svelte, embedded): one row a mode,
 /// the chosen one filled and checked; a mode the harness cannot honour is
-/// listed, faded and inert.
+/// listed, faded and inert. Every pick of Full Send is confirmed first, in
+/// the app's one confirm, which says what it allows beyond Bypass and what
+/// still stops; only its own button applies it.
 final class PermissionPopover: NsPopoverController {
     private let modes: [(value: String, disabled: Bool)]
     private let value: String
+    private let harness: String?
+    private let restarts: Bool
     private let onPick: (String) -> Void
 
-    init(modes: [(value: String, disabled: Bool)], value: String, onPick: @escaping (String) -> Void) {
+    init(modes: [(value: String, disabled: Bool)], value: String, harness: String?, restarts: Bool = false,
+         onPick: @escaping (String) -> Void) {
         self.modes = modes
         self.value = value
+        self.harness = harness
+        self.restarts = restarts
         self.onPick = onPick
         super.init(width: 340, gap: 2)
     }
@@ -423,16 +501,30 @@ final class PermissionPopover: NsPopoverController {
     override func viewDidLoad() {
         super.viewDidLoad()
         for mode in modes {
-            let look = PermissionLook.of(mode.value)
+            let look = PermissionLook.of(mode.value, harness: harness)
             let row = NsRow(tile: NsTile(GlyphView(look.glyph, size: 16, tint: look.hue)), name: look.name, meta: look.desc)
             row.chosen = mode.value == value
             row.isEnabled = !mode.disabled
             if mode.disabled { row.accessibilityHint = "This agent cannot honor this permission mode." }
-            row.addAction(UIAction { [weak self] _ in self?.onPick(mode.value) }, for: .touchUpInside)
+            row.addAction(UIAction { [weak self] _ in self?.pick(mode.value) }, for: .touchUpInside)
             rows.addArrangedSubview(row)
         }
         fit()
         arrive()
+    }
+
+    private func pick(_ mode: String) {
+        guard mode == "fullSend", value != "fullSend" else {
+            onPick(mode)
+            return
+        }
+        // Offered only where it has words: never applied unread.
+        guard let copy = FullSendCopy.of(harness) else { return }
+        let body = (restarts ? copy.confirm + [copy.restarts] : copy.confirm).joined(separator: "\n\n")
+        present(ConfirmDialog(title: "Switch to Full Send?", body: body, confirmLabel: "Switch to Full Send",
+                              pendingLabel: "Switching…", grant: true) { [weak self] in
+            self?.onPick("fullSend")
+        }, animated: true)
     }
 }
 

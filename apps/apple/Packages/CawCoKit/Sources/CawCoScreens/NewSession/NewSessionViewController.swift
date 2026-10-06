@@ -77,6 +77,10 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
     private var model = ""
     private var effort: String?
     private var permissionMode = "bypassPermissions"
+    /// Full Send came with the form (the last start's mode, or a failed
+    /// continuation's) rather than from a pick in it: the warning says where
+    /// it came from. A pick in the picker, confirmed there, clears it.
+    private var fullSendCarried = false
     private var projectId: String?
     /// The reader set the place themselves (the web's `editing`): a seeded location is no longer locked.
     private var overridden = false
@@ -117,6 +121,8 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
     private let locationChip = NsChip()
     private let lifetimeChip = NsChip()
     private let reading = KitLabel(TypeScale.typeMeta, ink: Palette.statusFailInk)
+    /// Full Send chosen, however it got there: in view beside Start, outside the body's scroll.
+    private let fullSendNote = KitAlert(tone: .warning, glyph: .shield)
     private let sizing = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
     private let models = UIStackView()
     private var summarizerSection: ModelSectionView?
@@ -176,6 +182,7 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
         locationChip.addAction(UIAction { [weak self] _ in self?.toggle(.location) }, for: .touchUpInside)
         lifetimeChip.addAction(UIAction { [weak self] _ in self?.toggle(.lifetime) }, for: .touchUpInside)
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (form: NewSessionViewController, _: UITraitCollection) in form.tint() }
+        fullSendNote.isHidden = true
         reset()
     }
 
@@ -210,6 +217,7 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
             overridden = restore.baseCwd != continuing?.cwd || restore.machineIds.first != continuing?.machineId
             lastMachine = restore.machineIds.first ?? ""
         }
+        fullSendCarried = permissionMode == "fullSend"
         let request = submission
         if let source = continuing {
             Task { [weak self] in await self?.loadEstimate(source.instanceId, request) }
@@ -284,7 +292,7 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
     private var modes: [(value: String, disabled: Bool)] {
         guard !modeless else { return [] }
         let honoured = report?.capabilities.permissionModes.map(\.rawValue)
-        return PermissionLook.modes.map { mode in (mode, honoured.map { !$0.contains(mode) } ?? false) }
+        return PermissionLook.modes(for: harness).map { mode in (mode, honoured.map { !$0.contains(mode) } ?? false) }
     }
 
     private var workdir: String {
@@ -413,9 +421,9 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
             if !has.contains(harness) { chooseHarness(has.first ?? "claude") }
         }
         if let effort, !efforts.contains(effort) { self.effort = nil }
-        let offered = modes
-        if let first = offered.first(where: { !$0.disabled }), !offered.contains(where: { $0.value == permissionMode && !$0.disabled }) {
-            permissionMode = first.value
+        let honoured = modes.filter { !$0.disabled }.map(\.value)
+        if !honoured.contains(permissionMode), let next = PermissionLook.fallback(permissionMode, honoured: honoured) {
+            permissionMode = next
         }
         verify()
         follow()
@@ -591,15 +599,21 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
         let footer = UIStackView(arrangedSubviews: [UIView(), cancel, start])
         footer.spacing = 8
         footer.alignment = .center
-        footer.translatesAutoresizingMaskIntoConstraints = false
-        card.addSubview(footer)
+        footer.isLayoutMarginsRelativeArrangement = true
+        footer.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 0, leading: 4, bottom: 0, trailing: 4)
+        // The Full Send warning stands over the actions, on the recess, out of the scroll.
+        let foot = UIStackView(arrangedSubviews: [fullSendNote, footer])
+        foot.axis = .vertical
+        foot.spacing = 10
+        foot.translatesAutoresizingMaskIntoConstraints = false
+        card.addSubview(foot)
 
         let side: Double = phone ? 7 : Space.space2
         let bodyPad: (top: Double, side: Double, bottom: Double) = phone ? (14, 12, 16) : (18, 18, 20)
         // As tall as what it holds, until the screen (or the keyboard) stops it.
         let fits = scroll.heightAnchor.constraint(equalTo: scroll.contentLayoutGuide.heightAnchor)
         fits.priority = .defaultHigh - 1
-        footPad = footer.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -(phone ? 10 : Space.space2 + 2))
+        footPad = foot.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -(phone ? 10 : Space.space2 + 2))
         var constraints = [
             grip.topAnchor.constraint(equalTo: card.topAnchor, constant: phone ? 0 : Space.space2),
             grip.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: side),
@@ -624,9 +638,9 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
             content.bottomAnchor.constraint(equalTo: scroll.contentLayoutGuide.bottomAnchor, constant: -bodyPad.bottom),
             content.leadingAnchor.constraint(equalTo: scroll.frameLayoutGuide.leadingAnchor, constant: bodyPad.side),
             content.trailingAnchor.constraint(equalTo: scroll.frameLayoutGuide.trailingAnchor, constant: -bodyPad.side),
-            footer.topAnchor.constraint(equalTo: scroll.bottomAnchor, constant: 10),
-            footer.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: side + 4),
-            footer.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -(side + 4)),
+            foot.topAnchor.constraint(equalTo: scroll.bottomAnchor, constant: 10),
+            foot.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: side),
+            foot.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -side),
             footPad!,
             start.widthAnchor.constraint(greaterThanOrEqualToConstant: 96),
             composerColumn.topAnchor.constraint(equalTo: composer.topAnchor),
@@ -729,13 +743,14 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
         let tools = ModelTools(
             efforts: efforts, effort: effortShown,
             effortOff: report?.capabilities.effort == false ? ModelTools.effortNotExposed(harness) : nil,
-            modes: modes, permission: permissionMode,
+            harness: harness, modes: modes, permission: permissionMode,
             onEffort: { [weak self] level in
                 self?.effort = level
                 self?.requestRefresh()
             },
             onPermission: { [weak self] mode in
                 self?.permissionMode = mode
+                self?.fullSendCarried = false
                 self?.requestRefresh()
             }
         )
@@ -821,6 +836,17 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
         let lifetime = LifetimePopover.options[sideQuest ? 1 : 0]
         lifetimeChip.show(lifetime.glyph.image, tint: lifetime.hue, label: lifetime.name)
         chips.setNeedsLayout()
+
+        // Full Send is never started silently: while it is chosen, and offered
+        // on this machine, the form says so.
+        let offered = modes.contains { $0.value == "fullSend" && !$0.disabled }
+        if permissionMode == "fullSend", offered, let copy = FullSendCopy.of(harness) {
+            let lead = fullSendCarried ? "Full Send is on, from your last start" : "Full Send is on"
+            fullSendNote.label.text = "\(lead). \(copy.warning)"
+            fullSendNote.isHidden = false
+        } else {
+            fullSendNote.isHidden = true
+        }
 
         let text = readingText
         reading.text = text.isEmpty ? "\u{a0}" : text

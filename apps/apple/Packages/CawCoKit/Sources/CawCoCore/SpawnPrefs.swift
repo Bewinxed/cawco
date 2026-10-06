@@ -18,8 +18,16 @@ public final class SpawnPrefs {
     /// What the form sends when the reader has not chosen a model: nothing (`MODEL_DEFAULT`).
     public static let modelDefault = ""
     /// The permission modes the product offers, in the order it offers them
-    /// (permission-modes.ts `PERMISSION_MODES`).
-    public static let offeredModes: [PermissionMode] = [._default, .plan, .acceptEdits, .bypassPermissions]
+    /// (permission-modes.ts `ORDER`).
+    public static let offeredModes: [PermissionMode] = [._default, .plan, .acceptEdits, .bypassPermissions, .fullSend]
+
+    /// The mode a start with no picker runs on (permission-modes.ts
+    /// `unpickedMode`): Full Send is only ever chosen behind its
+    /// confirmation, or shown in the form under its warning, so a start
+    /// that shows neither runs on Bypass, where the safety checks still ask.
+    public nonisolated static func unpicked(_ mode: PermissionMode) -> PermissionMode {
+        mode == .fullSend ? .bypassPermissions : mode
+    }
 
     public private(set) var harness: Harness = .claude
     public private(set) var model = SpawnPrefs.modelDefault
@@ -66,16 +74,19 @@ public final class SpawnPrefs {
     /// spawn that has no form (`spawnDefaults`): the machine's default model
     /// entry by the model it resolves to, and the remembered permission mode
     /// unless the machine's harness cannot honour it, then the first one it
-    /// can. A harness that reports no modes at all (pi) has none.
+    /// can. A harness that reports no modes at all (pi) has none. With no
+    /// form there is no Full Send warning to read: a remembered Full Send
+    /// gives Bypass (`unpicked`).
     public func formDefaults(harness: Harness, machine: MachineRow?) -> (model: String, permissionMode: PermissionMode?) {
         let report = machine?.harnesses?.first { $0.harness.rawValue == harness.rawValue }
         let resolved = report?.models?.first { $0.value == "default" }?.resolvedModel
         let model = resolved.flatMap { $0 == "default" ? nil : $0 } ?? ""
-        guard let report else { return (model, permissionMode) }
+        let remembered = Self.unpicked(permissionMode)
+        guard let report else { return (model, remembered) }
         let honoured = Set(report.capabilities.permissionModes.map(\.rawValue))
         if honoured.isEmpty { return (model, nil) }
-        if honoured.contains(permissionMode.rawValue) { return (model, permissionMode) }
-        return (model, Self.offeredModes.first { honoured.contains($0.rawValue) } ?? permissionMode)
+        if honoured.contains(remembered.rawValue) { return (model, remembered) }
+        return (model, Self.offeredModes.first { honoured.contains($0.rawValue) } ?? remembered)
     }
 }
 
@@ -101,6 +112,8 @@ extension HubConnection {
     /// last set to, sends its first prompt when it has one, and remembers the
     /// settings it went out with (project/[id]/+page.svelte `startSession`,
     /// NewSessionDialog's `rememberSpawn`). Returns the new session's id.
+    /// Full Send is the exception: with no form its warning is never read,
+    /// so this start runs on Bypass, and the form keeps Full Send.
     @discardableResult
     public func spawnSession(machineId: String, cwd: String, projectId: String? = nil, prompt: String? = nil, scratch: Bool = false) async throws -> String {
         let prefs = spawnPrefs
@@ -111,7 +124,7 @@ extension HubConnection {
             harness: harness,
             instanceId: UUID().uuidString.lowercased(),
             model: model,
-            permissionMode: mode,
+            permissionMode: SpawnPrefs.unpicked(mode),
             projectId: projectId,
             scratch: scratch ? .init() : nil
         ))

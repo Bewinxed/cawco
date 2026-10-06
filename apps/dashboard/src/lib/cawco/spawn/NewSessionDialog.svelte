@@ -13,6 +13,11 @@
   import { tick, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import {
+    Alert,
+    AlertDescription,
+    AlertTitle,
+  } from "#lib/components/ui/alert/index.js";
+  import {
     Dialog,
     DialogPortal,
     DialogTitle,
@@ -33,7 +38,7 @@
    * the exact `spawnSession` payload — and composes the designed sections.
    */
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
-  import { IconClose as X } from "#lib/icons.js";
+  import { IconShield, IconClose as X } from "#lib/icons.js";
   import { goto } from "$app/navigation";
   import Bolt from "~icons/solar/bolt-bold-duotone";
   import Book from "~icons/solar/book-2-bold-duotone";
@@ -60,7 +65,11 @@
   import { loadModelWindows, models } from "../models.svelte";
   import { unfold } from "../motion/fold.svelte";
   import { handOver } from "../motion/share.svelte";
-  import { PERMISSION_MODES } from "../permission-modes";
+  import {
+    fallbackMode,
+    fullSendCopy,
+    permissionModesFor,
+  } from "../permission-modes";
   import { rememberSpawn, spawnPrefs } from "../spawnPrefs.svelte";
   import LifetimeChip from "./LifetimeChip.svelte";
   import LocationChip from "./LocationChip.svelte";
@@ -146,6 +155,12 @@
   let model = $state("");
   let effort = $state<EffortLevel | null>(null);
   let permissionMode = $state<PermissionMode>(spawnPrefs.permissionMode);
+  /**
+   * Full Send came with the form (the last start's mode, or a failed
+   * continuation's) rather than from a pick in it: the warning says where
+   * it came from. A pick in the picker, confirmed there, clears it.
+   */
+  let fullSendCarried = $state(false);
   let projectId = $state<string>();
   let editing = $state(false);
   let sideQuest = $state(false);
@@ -239,7 +254,7 @@
   const modes = $derived(
     modeless
       ? []
-      : PERMISSION_MODES.map((mode) => ({
+      : permissionModesFor(harness).map((mode) => ({
           value: mode.value,
           disabled: report
             ? !report.capabilities.permissionModes.includes(mode.value)
@@ -452,14 +467,24 @@
     }
   });
   $effect(() => {
-    const first = modes.find((mode) => !mode.disabled);
-    if (
-      first &&
-      !modes.some((mode) => mode.value === permissionMode && !mode.disabled)
-    ) {
-      permissionMode = first.value;
+    const honoured = modes
+      .filter((mode) => !mode.disabled)
+      .map((mode) => mode.value);
+    const next = fallbackMode(permissionMode, honoured);
+    if (next && !honoured.includes(permissionMode)) {
+      permissionMode = next;
     }
   });
+  /**
+   * The form starts in Full Send: chosen, and offered on this machine. It is
+   * never started silently: a warning stands in the form while it is chosen.
+   */
+  const fullSendWarning = $derived(
+    permissionMode === "fullSend" &&
+      modes.some((mode) => mode.value === "fullSend" && !mode.disabled)
+      ? fullSendCopy(harness)?.warning
+      : undefined
+  );
   $effect(() => {
     if (!open) {
       return;
@@ -480,6 +505,7 @@
       machinesTouched = false;
       cwd = continueFrom?.cwd || prefill?.cwd || seeded?.cwd || "";
       ({ harness, permissionMode } = spawnPrefs);
+      fullSendCarried = permissionMode === "fullSend";
       summarizerHarness = spawnPrefs.harness;
       summarizerModel = "";
       estimate = null;
@@ -496,6 +522,7 @@
       if (continueFrom && restore) {
         ({ repo, projectId, harness, effort, permissionMode, prompt } =
           restore);
+        fullSendCarried = permissionMode === "fullSend";
         ({ harness: summarizerHarness, model: summarizerModel } =
           restore.summarizer);
         machineIds = [...restore.machineIds];
@@ -1240,10 +1267,12 @@
               oneffort: (level) => {
                 effort = level;
               },
+              harness,
               modes,
               permission: permissionMode,
               onpermission: (value) => {
                 permissionMode = value;
+                fullSendCarried = false;
               },
             }}
             unavailable={continueFrom ? targetRefusal : undefined}
@@ -1252,6 +1281,21 @@
       </div>
     </div>
   </div>
+  <!-- Full Send in the form, however it got there, stands outside the body's
+       scroll, beside Start: it is in view whenever the form can start. -->
+  {#if fullSendWarning}
+    <div class="full-send" data-vaul-no-drag in:unfold|global out:unfold>
+      <Alert role="status" variant="warning">
+        <IconShield />
+        <AlertTitle
+          >{fullSendCarried
+            ? "Full Send is on, from your last start"
+            : "Full Send is on"}</AlertTitle
+        >
+        <AlertDescription>{fullSendWarning}</AlertDescription>
+      </Alert>
+    </div>
+  {/if}
   <div class="footer" data-vaul-no-drag>
     <SessionFooter
       {busy}
@@ -1271,6 +1315,10 @@
 <style>
   .footer {
     display: contents;
+  }
+  .full-send {
+    flex: none;
+    padding-top: var(--space-2);
   }
   :global(.session-scrim) {
     position: fixed;

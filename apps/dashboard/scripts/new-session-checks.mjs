@@ -5,7 +5,9 @@ import { homedir } from "node:os";
 import { chromium } from "playwright-core";
 
 const browser = await chromium.launch({
-  executablePath: `${homedir()}/.cache/ms-playwright/chromium-1234/chrome-linux64/chrome`,
+  executablePath:
+    process.env.CHROMIUM_BIN ||
+    `${homedir()}/.cache/ms-playwright/chromium-1234/chrome-linux64/chrome`,
   headless: true,
 });
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
@@ -16,6 +18,12 @@ const frames = [];
 let failures = 0;
 let fsDelay = 0;
 const levels = ["low", "medium", "high", "xhigh", "max"];
+/** What each harness reports (packages/agent): pi has no modes; Full Send rides on bypass. */
+const permissionModes = {
+  claude: ["default", "acceptEdits", "plan", "bypassPermissions", "fullSend"],
+  opencode: ["default", "acceptEdits", "plan", "bypassPermissions", "fullSend"],
+  pi: [],
+};
 const machines = ["check-online", "check-pi"].map((machineId) => ({
   machineId,
   hostname: machineId === "check-online" ? "check-host" : "pi-host",
@@ -27,7 +35,7 @@ const machines = ["check-online", "check-pi"].map((machineId) => ({
     harness,
     installed: machineId !== "check-pi" || harness === "pi",
     capabilities: {
-      permissionModes: ["default", "plan", "acceptEdits", "bypassPermissions"],
+      permissionModes: permissionModes[harness],
       effort: true,
     },
   })),
@@ -182,10 +190,25 @@ await page.addInitScript(
 const dialog = page.locator(".session-card");
 const start = page.locator("#session-start");
 const pop = (name) => page.locator(`#session-${name}-popover`);
+const BYPASS = /^Bypass/;
+/** A location the form verifies at once, so Start is live. */
+const CHECK_PROJECT = { machineId: "check-online", cwd: "/home/check/project" };
+const FULL_SEND = /^Full Send/;
+const FULL_SEND_ON = /^Full Send is on/;
 const trigger = (name) => page.locator(`#session-${name}`);
-async function open(query = "") {
+async function open(query = "", { prefill } = {}) {
   await page.goto(`${base}/motion/new-session${query}`);
-  await page.locator("main button", { hasText: "New session" }).click();
+  // The bench asks for the dialog as it mounts, and that first ask is not
+  // drawn; once it has been made, asked again through the dialog's own
+  // store, it opens.
+  await page.locator("main button", { hasText: "New session" }).waitFor();
+  await page.waitForTimeout(2500);
+  await page.evaluate(async (at) => {
+    const store = await import("/src/lib/cawco/spawn/new-session.svelte.ts");
+    store.spawning.open = false;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    store.newSession(at);
+  }, prefill);
   await dialog.waitFor();
   await page.waitForTimeout(1000);
 }
@@ -392,7 +415,7 @@ await check("mobile two-row sheet and keyboard containment", async () => {
         height === 844 ? "/tmp/ns-mobile.png" : "/tmp/ns-mobile-keyboard.png";
       await page.screenshot({ path, caret: "hide" });
     }
-    for (const name of ["model", "location", "mode", "options"]) {
+    for (const name of ["model", "location", "permission", "options"]) {
       await show(name);
       const bounds = await pop(name).boundingBox();
       assert.deepEqual(bounds, { x: 0, y: 0, width, height });
@@ -453,8 +476,8 @@ await check("mobile two-row sheet and keyboard containment", async () => {
     .getByPlaceholder("Search, or type a model id")
     .fill("company/custom-model-with-a-very-long-name-2026");
   await page.keyboard.press("Enter");
-  await show("mode");
-  await pop("mode").getByRole("radio", { name: "Bypass all" }).click();
+  await show("permission");
+  await pop("permission").getByRole("radio", { name: BYPASS }).click();
   await page.waitForTimeout(500);
   await mobileGates();
   const scrolling = await page.locator(".settings-row").evaluate((node) => {
@@ -479,13 +502,49 @@ await check("known release metadata relative to last use", async () => {
   );
   assert.equal(await pop("model").locator(".default-tag").count(), 1);
 });
-await check("mode radio rows, bypass tint and options switches", async () => {
-  await open();
-  await show("mode");
-  assert.equal(await pop("mode").getByRole("radio").count(), 4);
+await check("permission modes: Full Send confirmed every time", async () => {
+  const confirm = page.getByRole("alertdialog");
+  const fullSend = () =>
+    pop("permission").getByRole("radio", { name: FULL_SEND });
+  const warning = page.getByText(FULL_SEND_ON);
+  await open("", { prefill: CHECK_PROJECT });
+  await show("permission");
+  assert.equal(await pop("permission").getByRole("radio").count(), 5);
   await page.screenshot({ path: "/tmp/ns-mode.png" });
-  await pop("mode").getByRole("radio", { name: "Bypass all" }).click();
-  assert.equal(await trigger("mode").getAttribute("data-attention"), "true");
+  // Picking it asks first; Cancel changes nothing and lands on the row.
+  await fullSend().click();
+  await confirm.waitFor();
+  assert.ok((await confirm.textContent()).includes("safety checks"));
+  await confirm.getByRole("button", { name: "Cancel" }).click();
+  await confirm.waitFor({ state: "hidden" });
+  await page.waitForTimeout(400);
+  assert.equal((await trigger("permission").textContent()).trim(), "Ask first");
+  assert.equal(
+    await page.evaluate(() => document.activeElement?.dataset.perm),
+    "fullSend"
+  );
+  assert.equal(await warning.count(), 0);
+  // Its own button applies it, and the form says so while it is chosen.
+  await fullSend().click();
+  await confirm.getByRole("button", { name: "Switch to Full Send" }).click();
+  await confirm.waitFor({ state: "hidden" });
+  assert.equal((await trigger("permission").textContent()).trim(), "Full Send");
+  assert.equal(await warning.isVisible(), true);
+  const count = spawns().length;
+  await page.screenshot({ path: "/tmp/ns-full-send.png" });
+  await start.click();
+  await page.waitForTimeout(800);
+  assert.equal(spawns().at(-1)?.payload.permissionMode, "fullSend");
+  assert.equal(spawns().length, count + 1);
+  // OpenCode's Bypass already allows every ask: Full Send is not offered.
+  await open("", { prefill: CHECK_PROJECT });
+  await page.getByRole("radio", { name: "OpenCode", exact: true }).click();
+  await show("permission");
+  assert.equal(await fullSend().count(), 0);
+  await dismiss("permission");
+});
+await check("options switches", async () => {
+  await open();
   await show("options");
   assert.equal(await pop("options").getByRole("switch").count(), 2);
   await pop("options")
@@ -565,7 +624,7 @@ await check("contained popovers desktop and mobile", async () => {
           nodes.every((node) => node.getBoundingClientRect().width >= 24)
         )
     );
-    for (const name of ["model", "location", "mode", "options"]) {
+    for (const name of ["model", "location", "permission", "options"]) {
       await show(name);
       const bounds = await pop(name).boundingBox();
       const margin = width <= 600 ? 0 : 7;
@@ -666,7 +725,11 @@ await check("keyboard order and effort detent centering", async () => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await open();
   await page.locator("textarea").focus();
-  for (const id of ["session-model", "session-location", "session-mode"]) {
+  for (const id of [
+    "session-model",
+    "session-location",
+    "session-permission",
+  ]) {
     await page.keyboard.press("Tab");
     assert.equal(await page.evaluate(() => document.activeElement.id), id);
   }
@@ -810,7 +873,7 @@ await check("polish light and dark desktop and mobile", async () => {
       if (primary) {
         await page.screenshot({ path: primary, caret: "hide" });
       }
-      for (const name of ["model", "location", "mode", "options"]) {
+      for (const name of ["model", "location", "permission", "options"]) {
         await show(name);
         assert.equal(await start.isDisabled(), true);
         assert.ok(

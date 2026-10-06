@@ -10,7 +10,10 @@ import UIKit
 /// closes it. It rises 6pt as it fades in over `durPanel` on the out curve
 /// and leaves the same way over `durExit`. Up to 448pt wide from a 640pt
 /// screen (its text left, its buttons in a row at the end), 320pt below
-/// (centred, the confirm stacked over Cancel).
+/// (centred, the confirm stacked over Cancel). A body of several paragraphs
+/// (split by a blank line) reads from its start at every width. `grant`
+/// draws the confirm as a consequential grant (button.svelte `grant`): the
+/// warning tint, its ink and a real edge, the shield before the label.
 public final class ConfirmDialog: UIViewController, UIViewControllerTransitioningDelegate {
     private let titleText: String
     private let body: String?
@@ -18,6 +21,7 @@ public final class ConfirmDialog: UIViewController, UIViewControllerTransitionin
     private let pendingLabel: String?
     private let cancelLabel: String
     private let destructive: Bool
+    private let grant: Bool
     private let work: () async throws -> Void
     private let frameView = UIView()
     private let card = UIView()
@@ -26,13 +30,15 @@ public final class ConfirmDialog: UIViewController, UIViewControllerTransitionin
     private var running = false
 
     public init(title: String, body: String? = nil, confirmLabel: String = "Confirm", pendingLabel: String? = nil,
-                cancelLabel: String = "Cancel", destructive: Bool = false, work: @escaping () async throws -> Void) {
+                cancelLabel: String = "Cancel", destructive: Bool = false, grant: Bool = false,
+                work: @escaping () async throws -> Void) {
         titleText = title
         self.body = body
         self.confirmLabel = confirmLabel
         self.pendingLabel = pendingLabel
         self.cancelLabel = cancelLabel
         self.destructive = destructive
+        self.grant = grant
         self.work = work
         super.init(nibName: nil, bundle: nil)
         modalPresentationStyle = .custom
@@ -75,8 +81,9 @@ public final class ConfirmDialog: UIViewController, UIViewControllerTransitionin
         header.spacing = 6
         header.alignment = .fill
 
-        if destructive {
-            confirm = UIButton(configuration: Self.destructiveStyle(confirmLabel), primaryAction: UIAction { [weak self] _ in self?.accept() })
+        if destructive || grant {
+            let style = grant ? Self.grantStyle(confirmLabel) : Self.destructiveStyle(confirmLabel)
+            confirm = UIButton(configuration: style, primaryAction: UIAction { [weak self] _ in self?.accept() })
             confirm.houseStyle()
             confirm.translatesAutoresizingMaskIntoConstraints = false
             confirm.heightAnchor.constraint(greaterThanOrEqualToConstant: Size.cBtnH).isActive = true
@@ -95,9 +102,10 @@ public final class ConfirmDialog: UIViewController, UIViewControllerTransitionin
             footer.axis = .vertical
             footer.addArrangedSubview(confirm)
             footer.addArrangedSubview(cancel)
-            title.textAlignment = .center
-            description.textAlignment = .center
-            failure.textAlignment = .center
+            let paragraphs = body?.contains("\n\n") == true
+            title.textAlignment = paragraphs ? .natural : .center
+            description.textAlignment = paragraphs ? .natural : .center
+            failure.textAlignment = paragraphs ? .natural : .center
         }
         let stack = UIStackView(arrangedSubviews: [header, footer])
         stack.axis = .vertical
@@ -139,10 +147,27 @@ public final class ConfirmDialog: UIViewController, UIViewControllerTransitionin
         return config
     }
 
+    /// A grant wider than the one asked for (button.svelte `grant`): the
+    /// warning tint, its ink and edge, the same under the finger.
+    private static func grantStyle(_ title: String) -> UIButton.Configuration {
+        var config = UIButton.Configuration.plain()
+        config.attributedTitle = AttributedString(title, attributes: AttributeContainer(TypeScale.typeButton.attributes(color: Palette.statusAttnInk, tracking: -0.01)))
+        config.image = Glyph.shield.image
+        config.imageColorTransformer = UIConfigurationColorTransformer { _ in Palette.statusAttnInk }
+        config.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: Space.space4, bottom: 0, trailing: Space.space4)
+        config.background.cornerRadius = Radius.radiusMd
+        config.background.backgroundColor = Palette.statusAttnBg
+        config.background.strokeColor = Palette.statusAttnInk
+        config.background.strokeWidth = 1
+        config.imagePadding = 8
+        config.activityIndicatorColorTransformer = UIConfigurationColorTransformer { _ in Palette.statusAttnInk }
+        return config
+    }
+
     /// The confirm's label and spinner while the work runs.
     private func pending(_ on: Bool) {
         let label = on ? (pendingLabel ?? confirmLabel) : confirmLabel
-        let ink = destructive ? Palette.error11 : Palette.onAction
+        let ink = grant ? Palette.statusAttnInk : (destructive ? Palette.error11 : Palette.onAction)
         confirm.configuration?.attributedTitle = AttributedString(label, attributes: AttributeContainer(TypeScale.typeButton.attributes(color: ink, tracking: -0.01)))
         confirm.configuration?.showsActivityIndicator = on
         confirm.configuration?.imagePadding = 8

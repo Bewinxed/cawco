@@ -84,6 +84,7 @@ import {
   instanceForSession,
   transcriptUrl,
 } from "./links";
+import { unpickedMode } from "./permission-modes";
 import { type PendingSelection, selectionExtras } from "./preview/selection";
 import { projectsFor } from "./projects";
 import { type ReloadHold, reloadForProtocol } from "./protocol-reload";
@@ -3957,8 +3958,13 @@ export async function forkSession({
     },
     scratch: {},
     ...(source?.model ? { model: source.model } : {}),
+    // A branch is a new session nobody picked a mode for, so a Full Send
+    // source branches on Bypass (`unpickedMode`): Full Send is only ever a
+    // confirmed choice.
     ...(source?.permissionMode
-      ? { permissionMode: source.permissionMode as PermissionMode }
+      ? {
+          permissionMode: unpickedMode(source.permissionMode as PermissionMode),
+        }
       : {}),
     ...(isEffortLevel(source?.effort) ? { effort: source.effort } : {}),
   });
@@ -5067,7 +5073,8 @@ function effortToResend(
 
 /**
  * `bypassPermissions` is a launch decision — the SDK refuses to switch a running
- * session into it — so a session that wants it now is started again in place:
+ * session into it — and so is `fullSend`, which runs the CLI in bypass. A
+ * session that wants either from another mode is started again in place:
  * same instance id, same hub row, its own SDK session resumed, so the new
  * process reads the whole conversation back. A side quest relaunches the same
  * way; the agent keeps it in the checkout it was already working in.

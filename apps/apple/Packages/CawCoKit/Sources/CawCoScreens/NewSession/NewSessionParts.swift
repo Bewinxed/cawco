@@ -106,6 +106,9 @@ final class NsChip: UIControl {
     /// Nothing chosen (ProjectChip, LocationChip): muted ink.
     var empty = false { didSet { paint() } }
     var open = false { didSet { paint() } }
+    /// A grant wider than the rest (Full Send, ToolChips.svelte `.full-send`):
+    /// the warning tint, its ink and a real edge, plain or not.
+    var grant = false { didSet { paint() } }
 
     /// A chip that names a setting it cannot change: its own look at 55%, no chevron.
     var off = false {
@@ -196,6 +199,14 @@ final class NsChip: UIControl {
 
     private func paint() {
         let traits = traitCollection
+        if grant {
+            backgroundColor = Palette.statusAttnBg
+            layer.borderColor = Palette.statusAttnInk.resolvedColor(with: traits).cgColor
+            label.ink = Palette.statusAttnInk
+            chevron.tintColor = Palette.statusAttnInk
+            return
+        }
+        chevron.tintColor = Palette.inkSubtle
         backgroundColor = plain ? .clear : (open ? Palette.surfaceFill : Palette.surfaceRaised)
         layer.borderColor = plain ? UIColor.clear.cgColor : (warn ? Palette.statusFailInk : Palette.borderControl).resolvedColor(with: traits).cgColor
         label.ink = warn ? Palette.statusFailInk : (empty ? Palette.inkMuted : Palette.inkStrong)

@@ -14,8 +14,12 @@ struct ModelTools {
     var effort: String?
     /// Why the effort chip offers no level, as its label and its reason.
     var effortOff: (label: String, reason: String)?
+    /// The harness the modes are described for.
+    var harness: String?
     var modes: [(value: String, disabled: Bool)]
     var permission: String?
+    /// Switching into Full Send restarts the running session in place.
+    var restartsOnFullSend = false
     var onEffort: (String) -> Void
     var onPermission: (String) -> Void
 
@@ -73,12 +77,16 @@ final class ToolChipsView: UIStackView {
         effort.accessibilityValue = off.map { "\($0.label): \($0.reason)" } ?? tools.effort?.capitalized ?? "Default"
         // A session with no mode (its harness has none) shows nothing here.
         if let mode = tools.permission, !tools.modes.isEmpty {
-            let look = PermissionLook.of(mode)
-            permission.show(look.glyph.image, tint: look.hue, label: look.short)
+            let look = PermissionLook.of(mode, harness: tools.harness)
+            permission.show(look.glyph.image, tint: look.hue, label: look.name)
+            // Full Send says so on its chip, editable or not, in the
+            // consequential grant's warning tint: never a routine setting.
+            permission.grant = mode == "fullSend"
             permission.accessibilityLabel = "Permission mode"
-            permission.accessibilityValue = look.name
+            permission.accessibilityValue = look.desc.isEmpty ? look.name : "\(look.name): \(look.desc)"
             permission.isHidden = false
         } else {
+            permission.grant = false
             permission.isHidden = true
         }
     }
@@ -106,7 +114,8 @@ final class ToolChipsView: UIStackView {
 
     private func openPermission() {
         guard let tools, let mode = tools.permission, let presenter else { return }
-        let picker = PermissionPopover(modes: tools.modes, value: mode) { [weak self] picked in
+        let picker = PermissionPopover(modes: tools.modes, value: mode, harness: tools.harness,
+                                       restarts: tools.restartsOnFullSend) { [weak self] picked in
             self?.tools?.onPermission(picked)
             self?.popover?.dismiss(animated: true)
         }

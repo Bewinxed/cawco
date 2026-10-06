@@ -35,10 +35,14 @@
      */
     effortOff?: EffortOff | null;
     efforts: EffortLevel[];
+    /** The harness the modes are described for. */
+    harness: HarnessKind | undefined;
     modes: { value: PermissionMode; disabled: boolean; reason?: string }[];
     oneffort: (level: EffortLevel) => void;
-    onpermission: (mode: PermissionMode) => void;
+    onpermission: (mode: PermissionMode) => unknown;
     permission: PermissionMode | null;
+    /** Switching into Full Send restarts the running session in place. */
+    restartsOnFullSend?: boolean;
   }
 </script>
 
@@ -70,7 +74,15 @@
     readonly?: boolean;
   } = $props();
   let pop = $state<"effort" | "permission" | null>(null);
-  const look = $derived(permissionLook(tools.permission ?? ""));
+  const look = $derived(
+    tools.permission ? permissionLook(tools.permission, tools.harness) : null
+  );
+  /**
+   * A session or form in Full Send says so on its chip, editable or not, in
+   * the consequential grant's warning tint (DESIGN.md, The Consequential
+   * Grant Rule): it never reads as a routine setting.
+   */
+  const fullSend = $derived(tools.permission === "fullSend");
   /** The effort chip is always there; when it has no level, it says why. */
   const effortOff = $derived(
     tools.effortOff ??
@@ -114,9 +126,11 @@
   {/if}
 {/snippet}
 {#snippet permissionChip()}
-  {@const Icon = look.icon}
-  <Icon style={`color:${look.hue}`} />
-  <span class="chip-label">{look.short}</span>
+  {#if look}
+    {@const Icon = look.icon}
+    <Icon style={`color:${look.hue}`} />
+    <span class="chip-label">{look.name}</span>
+  {/if}
 {/snippet}
 
 <!-- Read-only and editable cross-fade in place (motion/curves crossIn/crossOut). -->
@@ -125,7 +139,11 @@
     <span class="swap" in:crossIn out:crossOut>
       {@render effortStatic()}
       {#if tools.modes.length && tools.permission}
-        <span class="ns-chip-btn tool static">{@render permissionChip()}</span>
+        <span
+          class={["ns-chip-btn tool static", fullSend && "full-send"]}
+          title={look?.desc || undefined}
+          >{@render permissionChip()}</span
+        >
       {/if}
     </span>
   {:else}
@@ -166,12 +184,12 @@
           <NsPopover
             align="end"
             id={`${id}-permission`}
-            label={`Permission mode: ${look.short}`}
+            label={`Permission mode: ${look?.name ?? ""}`}
             onchange={(value) => {
               pop = value ? "permission" : null;
             }}
             open={pop === "permission"}
-            triggerClass="ns-chip-btn tool"
+            triggerClass={`ns-chip-btn tool${fullSend ? " full-send" : ""}`}
             width={340}
           >
             {#snippet trigger()}
@@ -180,11 +198,13 @@
             {/snippet}
             <PermissionSection
               embedded
+              harness={tools.harness}
               modes={tools.modes}
               onchange={(mode) => {
-                tools.onpermission(mode);
                 pop = null;
+                return tools.onpermission(mode);
               }}
+              restarts={tools.restartsOnFullSend}
               value={tools.permission}
             />
           </NsPopover>
@@ -226,5 +246,18 @@
   }
   .effort-pop {
     padding: 8px 6px 6px;
+  }
+  .tool-chips :global(.ns-chip-btn.tool.full-send) {
+    background: var(--status-attn-bg);
+    border-color: var(--status-attn-ink);
+    color: var(--status-attn-ink);
+  }
+  .tool-chips :global(.ns-chip-btn.tool.full-send > svg.chevron) {
+    color: var(--status-attn-ink);
+  }
+  @media (hover: hover) {
+    .tool-chips :global(.ns-chip-btn.tool.full-send:hover) {
+      background: var(--status-attn-bg);
+    }
   }
 </style>

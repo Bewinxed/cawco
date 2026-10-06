@@ -53,7 +53,11 @@ extension HubConnection {
             harness: harness,
             instanceId: UUID().uuidString.lowercased(),
             model: source?.model.flatMap { $0.isEmpty ? nil : $0 },
-            permissionMode: source?.permissionMode.flatMap { .init(rawValue: $0) },
+            // A branch is a new session nobody picked a mode for, so a Full
+            // Send source branches on Bypass (`SpawnPrefs.unpicked`).
+            permissionMode: source?.permissionMode
+                .flatMap(Components.Schemas.SpawnPayload.PermissionModePayload.init(rawValue:))
+                .map(SpawnPrefs.unpicked),
             resume: .init(sessionKey: sessionKey, fork: true, atMessage: at.flatMap { $0.isEmpty ? nil : $0 }),
             scratch: .init()
         )

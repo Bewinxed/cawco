@@ -6,7 +6,11 @@ import type {
   PermissionMode,
 } from "@cawco/core";
 import { defaultModelFor, MODEL_DEFAULT } from "./models.svelte";
-import { PERMISSION_MODES } from "./permission-modes";
+import {
+  fallbackMode,
+  permissionModesFor,
+  unpickedMode,
+} from "./permission-modes";
 
 /**
  * What the new-session form was last set to. A user who picks Fable and a
@@ -91,10 +95,15 @@ export const spawnPrefs = {
 /**
  * What the New Session form shows before anything is touched, for a spawn
  * that has no form: its default model entry, and the remembered permission
- * mode unless the machine's harness cannot honour it, then the first one it
+ * mode unless the machine's harness cannot honour it, then the nearest one it
  * can — the same correction the form makes. A harness that reports no
  * modes at all (pi) has none, and none is given. A path that starts a session
- * without saying either takes these, never the machine's own defaults.
+ * without saying either takes these, never the machine's own defaults. With
+ * no form there is no Full Send warning to read, so a remembered Full Send
+ * starts these on Bypass ({@link unpickedMode}).
+ *
+ * Full Send is remembered only as a form's own choice: the form reaches it
+ * through its confirmation, or opens on it under its warning.
  */
 export function spawnDefaults(
   harness: HarnessKind,
@@ -105,14 +114,18 @@ export function spawnDefaults(
   if (report?.capabilities.permissionModes.length === 0) {
     return { model };
   }
-  const honoured = (mode: PermissionMode) =>
-    !report || report.capabilities.permissionModes.includes(mode);
+  const remembered = unpickedMode(store.permissionMode);
+  if (!report) {
+    return { model, permissionMode: remembered };
+  }
+  const honoured = permissionModesFor(harness)
+    .map((mode) => mode.value)
+    .filter((mode) => report.capabilities.permissionModes.includes(mode));
   return {
     model,
-    permissionMode: honoured(store.permissionMode)
-      ? store.permissionMode
-      : (PERMISSION_MODES.find((mode) => honoured(mode.value))?.value ??
-        store.permissionMode),
+    permissionMode: honoured.includes(remembered)
+      ? remembered
+      : (fallbackMode(remembered, honoured) ?? remembered),
   };
 }
 
