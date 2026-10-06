@@ -406,6 +406,7 @@ const permissionModeSchema = t.Union([
   t.Literal("plan"),
   t.Literal("dontAsk"),
   t.Literal("auto"),
+  t.Literal("fullSend"),
 ]);
 
 const continueBody = t.Object({
@@ -570,6 +571,15 @@ const peekSessionSettings = (
   }
   if (frame.subtype === "init") {
     return { model: frame.model, permissionMode: frame.permissionMode };
+  }
+  // A mode the session moved to mid-turn (plan mode, Full Send ended), filed
+  // now rather than at the next turn's `init`, so a restart restores it.
+  if (
+    frame.subtype === "status" &&
+    typeof frame.permissionMode === "string" &&
+    !frame.parent_tool_use_id
+  ) {
+    return { permissionMode: frame.permissionMode };
   }
   if (frame.subtype === "model_fallback") {
     return { model: frame.fallback_model };
@@ -3026,7 +3036,8 @@ export const createServer = (
 
   /**
    * The session's own word on its settings, written on its row: every `init`
-   * names its model and permission mode, a `model_fallback` the model
+   * names its model and permission mode, a main-loop `status` that names a
+   * mode that mode, a `model_fallback` the model
    * that answers instead of the one asked for, and a successful mode control
    * the mode the harness just applied. True when the row moved. A
    * mode the session's harness does not have is not recorded (`settleMode`'s

@@ -731,6 +731,10 @@ return ({
  * A question always routes — the parent session, or the user, answers it. Only
  * `acceptEdits` is left to the caller: granting edits alone needs the
  * permission's own type, which this decision does not see.
+ *
+ * Full Send is bypass here. Bypass already answers every tool ask opencode
+ * raises: it has no safety check of its own that outlasts bypass, no plan
+ * approval to put to the owner, and an ask names no rule it came from.
  */
 export function autoAllows(
   permissionMode: string | undefined,
@@ -739,7 +743,9 @@ export function autoAllows(
   if (kind === "question") {
     return false;
   }
-  return permissionMode === "bypassPermissions";
+  return (
+    permissionMode === "bypassPermissions" || permissionMode === "fullSend"
+  );
 }
 
 /** opencode's own name for the tool a question rides on. */
@@ -888,7 +894,13 @@ const COMMAND_KINDS: Partial<Record<string, SlashCommand["kind"]>> = {
 
 export const OPENCODE_CAPABILITIES: HarnessCapabilities = {
   interrupt: true,
-  permissionModes: ["default", "acceptEdits", "plan", "bypassPermissions"],
+  permissionModes: [
+    "default",
+    "acceptEdits",
+    "plan",
+    "bypassPermissions",
+    "fullSend",
+  ],
   setModel: true,
   effort: true,
   contextUsage: true,
