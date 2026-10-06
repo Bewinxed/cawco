@@ -17,6 +17,8 @@ apps/dashboard/.build-old
 *.db-journal
 *.db-wal
 *.db-shm
+# Project folders beside the database when the hub runs from a checkout.
+/packages/hub/projects/
 
 # code coverage
 coverage

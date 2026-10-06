@@ -198,6 +198,7 @@ import {
 } from "./pending";
 import { resolveMarketplacePlugins } from "./plugins";
 import { previewFrame, previewTargets } from "./preview";
+import { projectFolderRoutes, trashProjectFolder } from "./project-folder";
 import { placePath, readRemote } from "./projects";
 import { type HubSocket, type RegistryShape, toDashboard } from "./registry";
 import { RuleEngine } from "./rules";
@@ -7585,6 +7586,11 @@ export const createServer = (
       .use(dashboardErrorsRoutes())
       .use(delegateTypesRoutes(delegateTypes))
       .use(
+        projectFolderRoutes((id) =>
+          db.listProjects().some((project) => project.id === id)
+        )
+      )
+      .use(
         joinRoutes({
           online: (machineId) => Boolean(registry.agent(machineId)),
         })
@@ -10184,8 +10190,15 @@ export const createServer = (
           return { ...created, place, placeAdded: false };
         }
       )
-      .delete("/api/projects/:id", ({ params }) => {
+      .delete("/api/projects/:id", async ({ params }) => {
         db.deleteProject(params.id);
+        // The project is gone either way; a folder that could not be moved
+        // stays where it was, and the hub says so in its log.
+        await trashProjectFolder(params.id).catch((error: unknown) =>
+          console.warn(
+            `[hub] project ${params.id}'s folder was not moved to the trash: ${error instanceof Error ? error.message : String(error)}`
+          )
+        );
         return { ok: true };
       })
       // Another checkout of the project's repository, named by hand.

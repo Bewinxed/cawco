@@ -244,6 +244,622 @@
         }
       }
     },
+    "/api/projects/{id}/folder": {
+      "get": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "recursive",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "operationId": "getApiProjectsByIdFolder",
+        "responses": {
+          "200": {
+            "description": "getApiProjectsByIdFolder 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FolderListing"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "getApiProjectsByIdFolder 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "getApiProjectsByIdFolder 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "getApiProjectsByIdFolder 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "getApiProjectsByIdFolder 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "getApiProjectsByIdFolder 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiProjectsByIdFolder 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "getApiProjectsByIdFolder 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "getApiProjectsByIdFolder 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/folder/file": {
+      "get": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiProjectsByIdFolderFile",
+        "responses": {
+          "200": {
+            "description": "getApiProjectsByIdFolderFile 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FolderFile"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "getApiProjectsByIdFolderFile 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "getApiProjectsByIdFolderFile 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "getApiProjectsByIdFolderFile 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "getApiProjectsByIdFolderFile 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "getApiProjectsByIdFolderFile 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiProjectsByIdFolderFile 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "getApiProjectsByIdFolderFile 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "getApiProjectsByIdFolderFile 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string"
+                  },
+                  "content": {
+                    "type": "string"
+                  },
+                  "message": {
+                    "maxLength": 2000,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "path",
+                  "content"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "putApiProjectsByIdFolderFile",
+        "responses": {
+          "200": {
+            "description": "putApiProjectsByIdFolderFile 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FolderCommit"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "putApiProjectsByIdFolderFile 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "putApiProjectsByIdFolderFile 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "putApiProjectsByIdFolderFile 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "putApiProjectsByIdFolderFile 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "putApiProjectsByIdFolderFile 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "putApiProjectsByIdFolderFile 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "putApiProjectsByIdFolderFile 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "putApiProjectsByIdFolderFile 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "message",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "maxLength": 2000,
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "deleteApiProjectsByIdFolderFile",
+        "responses": {
+          "200": {
+            "description": "deleteApiProjectsByIdFolderFile 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FolderCommit"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "deleteApiProjectsByIdFolderFile 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "deleteApiProjectsByIdFolderFile 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "deleteApiProjectsByIdFolderFile 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "deleteApiProjectsByIdFolderFile 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "deleteApiProjectsByIdFolderFile 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "deleteApiProjectsByIdFolderFile 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "deleteApiProjectsByIdFolderFile 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "deleteApiProjectsByIdFolderFile 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/folder/history": {
+      "get": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "type": "integer"
+            }
+          }
+        ],
+        "operationId": "getApiProjectsByIdFolderHistory",
+        "responses": {
+          "200": {
+            "description": "getApiProjectsByIdFolderHistory 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FolderHistory"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "getApiProjectsByIdFolderHistory 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "getApiProjectsByIdFolderHistory 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "getApiProjectsByIdFolderHistory 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "getApiProjectsByIdFolderHistory 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "getApiProjectsByIdFolderHistory 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiProjectsByIdFolderHistory 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "getApiProjectsByIdFolderHistory 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "getApiProjectsByIdFolderHistory 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/join": {
       "get": {
         "operationId": "getApiJoin",
@@ -6546,6 +7162,10 @@
                 "id": {
                   "type": "string"
                 },
+                "createdAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
                 "slug": {
                   "type": "string"
                 },
@@ -6563,10 +7183,6 @@
                   "items": {
                     "$ref": "#/components/schemas/WorkflowInput"
                   }
-                },
-                "createdAt": {
-                  "type": "string",
-                  "format": "date-time"
                 },
                 "updatedAt": {
                   "type": "string",
@@ -6609,6 +7225,10 @@
           "id": {
             "type": "string"
           },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
           "slug": {
             "type": "string"
           },
@@ -6626,10 +7246,6 @@
             "items": {
               "$ref": "#/components/schemas/WorkflowInput"
             }
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
           },
           "updatedAt": {
             "type": "string",
@@ -6681,6 +7297,10 @@
           "id": {
             "type": "string"
           },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
           "slug": {
             "type": "string"
           },
@@ -6698,10 +7318,6 @@
             "items": {
               "$ref": "#/components/schemas/WorkflowInput"
             }
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
           },
           "updatedAt": {
             "type": "string",
@@ -6739,6 +7355,10 @@
           "id": {
             "type": "string"
           },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
           "slug": {
             "type": "string"
           },
@@ -6756,10 +7376,6 @@
             "items": {
               "$ref": "#/components/schemas/WorkflowInput"
             }
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
           },
           "updatedAt": {
             "type": "string",
@@ -7481,6 +8097,9 @@
                 "type": "string",
                 "format": "date-time"
               },
+              "cwd": {
+                "type": "string"
+              },
               "updatedAt": {
                 "type": "string",
                 "format": "date-time"
@@ -7504,9 +8123,6 @@
                   "null",
                   "string"
                 ]
-              },
-              "cwd": {
-                "type": "string"
               },
               "projectId": {
                 "type": [
@@ -7717,6 +8333,9 @@
                   "type": "string",
                   "format": "date-time"
                 },
+                "cwd": {
+                  "type": "string"
+                },
                 "updatedAt": {
                   "type": "string",
                   "format": "date-time"
@@ -7740,9 +8359,6 @@
                     "null",
                     "string"
                   ]
-                },
-                "cwd": {
-                  "type": "string"
                 },
                 "projectId": {
                   "type": [
@@ -9332,12 +9948,12 @@
           "id": {
             "type": "string"
           },
-          "state": {
-            "$ref": "#/components/schemas/WorkspaceState"
-          },
           "createdAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "state": {
+            "$ref": "#/components/schemas/WorkspaceState"
           },
           "branch": {
             "type": "string"
@@ -11123,6 +11739,140 @@
           "harness",
           "model",
           "name"
+        ]
+      },
+      "FolderListing": {
+        "type": "object",
+        "properties": {
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FolderEntry"
+            }
+          },
+          "path": {
+            "description": "The folder listed, from the root; `\"\"` is the root.",
+            "type": "string"
+          },
+          "truncated": {
+            "description": "True when the listing stopped at its cap before the last entry.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "entries",
+          "path",
+          "truncated"
+        ]
+      },
+      "FolderEntry": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "enum": [
+              "file",
+              "folder",
+              "link"
+            ],
+            "type": "string"
+          },
+          "path": {
+            "description": "From the folder's root, `/` between parts.",
+            "type": "string"
+          },
+          "size": {
+            "description": "Bytes, for a file.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "kind",
+          "path"
+        ]
+      },
+      "FolderFile": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "size": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "content",
+          "path",
+          "size"
+        ]
+      },
+      "FolderCommit": {
+        "description": "A write or delete as it landed.",
+        "type": "object",
+        "properties": {
+          "changed": {
+            "description": "False when the content was already what was asked: no commit was made.",
+            "type": "boolean"
+          },
+          "path": {
+            "type": "string"
+          },
+          "sha": {
+            "description": "The folder's commit after this change (HEAD).",
+            "type": "string"
+          }
+        },
+        "required": [
+          "changed",
+          "path",
+          "sha"
+        ]
+      },
+      "FolderHistory": {
+        "type": "object",
+        "properties": {
+          "commits": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FolderChange"
+            }
+          },
+          "path": {
+            "description": "The file, or `\"\"` for the whole folder.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "commits",
+          "path"
+        ]
+      },
+      "FolderChange": {
+        "type": "object",
+        "properties": {
+          "author": {
+            "type": "string"
+          },
+          "date": {
+            "description": "ISO 8601, the author's time.",
+            "type": "string"
+          },
+          "message": {
+            "description": "The subject line.",
+            "type": "string"
+          },
+          "sha": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "author",
+          "date",
+          "message",
+          "sha"
         ]
       },
       "JoinInfo": {
