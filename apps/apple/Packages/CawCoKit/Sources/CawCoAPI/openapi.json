@@ -2934,6 +2934,239 @@
         }
       }
     },
+    "/api/push": {
+      "get": {
+        "operationId": "getApiPush",
+        "responses": {
+          "200": {
+            "description": "getApiPush 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiPush200"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/push/credentials": {
+      "put": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "teamId": {
+                    "type": "string"
+                  },
+                  "keyId": {
+                    "type": "string"
+                  },
+                  "privateKey": {
+                    "type": "string"
+                  },
+                  "bundleId": {
+                    "type": "string"
+                  },
+                  "environment": {
+                    "type": "string",
+                    "enum": [
+                      "sandbox",
+                      "production"
+                    ]
+                  }
+                },
+                "required": [
+                  "teamId",
+                  "keyId",
+                  "bundleId",
+                  "environment"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "putApiPushCredentials",
+        "responses": {
+          "200": {
+            "description": "putApiPushCredentials 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/putApiPushCredentials200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "putApiPushCredentials 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "putApiPushCredentials 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteApiPushCredentials",
+        "responses": {
+          "200": {
+            "description": "deleteApiPushCredentials 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/deleteApiPushCredentials200"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/push/test": {
+      "post": {
+        "operationId": "postApiPushTest",
+        "responses": {
+          "200": {
+            "description": "postApiPushTest 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiPushTest200"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiPushTest 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/push/devices/{token}": {
+      "put": {
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "quiet": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "quiet"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "putApiPushDevicesByToken",
+        "responses": {
+          "200": {
+            "description": "putApiPushDevicesByToken 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/putApiPushDevicesByToken200"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "putApiPushDevicesByToken 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "putApiPushDevicesByToken 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "deleteApiPushDevicesByToken",
+        "responses": {
+          "200": {
+            "description": "deleteApiPushDevicesByToken 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/deleteApiPushDevicesByToken200"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "deleteApiPushDevicesByToken 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects/{id}/dispatch": {
       "get": {
         "parameters": [
@@ -9799,6 +10032,187 @@
           "tracker"
         ]
       },
+      "getApiPush200": {
+        "type": "object",
+        "properties": {
+          "credentials": {
+            "type": "object",
+            "properties": {
+              "teamId": {
+                "type": "string"
+              },
+              "keyId": {
+                "type": "string"
+              },
+              "bundleId": {
+                "type": "string"
+              },
+              "environment": {
+                "$ref": "#/components/schemas/ApnsEnvironment"
+              },
+              "savedAt": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "bundleId",
+              "environment",
+              "keyId",
+              "savedAt",
+              "teamId"
+            ]
+          },
+          "devices": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "token": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "platform": {
+                  "type": "string"
+                },
+                "environment": {
+                  "$ref": "#/components/schemas/ApnsEnvironment"
+                },
+                "quiet": {
+                  "type": "boolean"
+                },
+                "registeredAt": {
+                  "type": "number"
+                },
+                "lastSentAt": {
+                  "type": [
+                    "null",
+                    "number"
+                  ]
+                },
+                "lastError": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                }
+              },
+              "required": [
+                "environment",
+                "lastError",
+                "lastSentAt",
+                "name",
+                "platform",
+                "quiet",
+                "registeredAt",
+                "token"
+              ]
+            }
+          }
+        },
+        "required": [
+          "devices"
+        ]
+      },
+      "putApiPushCredentials200": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ]
+      },
+      "deleteApiPushCredentials200": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ]
+      },
+      "postApiPushTest200": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "devices"
+                ]
+              },
+              "outcomes": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/PushOutcome"
+                }
+              }
+            },
+            "required": [
+              "kind",
+              "outcomes"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "probe"
+                ]
+              },
+              "ok": {
+                "type": "boolean"
+              },
+              "status": {
+                "type": "number"
+              },
+              "reason": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              }
+            },
+            "required": [
+              "kind",
+              "ok",
+              "reason",
+              "status"
+            ]
+          }
+        ]
+      },
+      "putApiPushDevicesByToken200": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ]
+      },
+      "deleteApiPushDevicesByToken200": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ]
+      },
       "getApiBinaryUpdatesMachines200": {
         "type": "object",
         "properties": {
@@ -9928,6 +10342,10 @@
                   "type": "string",
                   "format": "date-time"
                 },
+                "updatedAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
                 "slug": {
                   "type": "string"
                 },
@@ -9945,10 +10363,6 @@
                   "items": {
                     "$ref": "#/components/schemas/WorkflowInput"
                   }
-                },
-                "updatedAt": {
-                  "type": "string",
-                  "format": "date-time"
                 }
               },
               "required": [
@@ -9991,6 +10405,10 @@
             "type": "string",
             "format": "date-time"
           },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
           "slug": {
             "type": "string"
           },
@@ -10008,10 +10426,6 @@
             "items": {
               "$ref": "#/components/schemas/WorkflowInput"
             }
-          },
-          "updatedAt": {
-            "type": "string",
-            "format": "date-time"
           }
         },
         "required": [
@@ -10063,6 +10477,10 @@
             "type": "string",
             "format": "date-time"
           },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
           "slug": {
             "type": "string"
           },
@@ -10080,10 +10498,6 @@
             "items": {
               "$ref": "#/components/schemas/WorkflowInput"
             }
-          },
-          "updatedAt": {
-            "type": "string",
-            "format": "date-time"
           }
         },
         "required": [
@@ -10121,6 +10535,10 @@
             "type": "string",
             "format": "date-time"
           },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
           "slug": {
             "type": "string"
           },
@@ -10138,10 +10556,6 @@
             "items": {
               "$ref": "#/components/schemas/WorkflowInput"
             }
-          },
-          "updatedAt": {
-            "type": "string",
-            "format": "date-time"
           }
         },
         "required": [
@@ -10892,6 +11306,12 @@
                 "type": "string",
                 "format": "date-time"
               },
+              "lastError": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
               "seenAt": {
                 "type": "string",
                 "format": "date-time"
@@ -10935,12 +11355,6 @@
                 ]
               },
               "permissionMode": {
-                "type": [
-                  "null",
-                  "string"
-                ]
-              },
-              "lastError": {
                 "type": [
                   "null",
                   "string"
@@ -11128,6 +11542,12 @@
                   "type": "string",
                   "format": "date-time"
                 },
+                "lastError": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
                 "seenAt": {
                   "type": "string",
                   "format": "date-time"
@@ -11168,12 +11588,6 @@
                   ]
                 },
                 "permissionMode": {
-                  "type": [
-                    "null",
-                    "string"
-                  ]
-                },
-                "lastError": {
                   "type": [
                     "null",
                     "string"
@@ -15640,6 +16054,48 @@
           "social"
         ],
         "type": "string"
+      },
+      "ApnsEnvironment": {
+        "description": "Which APNs host a push goes to: Xcode builds are `sandbox`, TestFlight and the App Store `production`.",
+        "enum": [
+          "production",
+          "sandbox"
+        ],
+        "type": "string"
+      },
+      "PushOutcome": {
+        "description": "One device's answer from APNs.",
+        "type": "object",
+        "properties": {
+          "device": {
+            "description": "Last six characters of the device token.",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "pruned": {
+            "description": "The device was unregistered (410) and is gone.",
+            "type": "boolean"
+          },
+          "reason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "status": {
+            "description": "HTTP status, or 0 when APNs could not be reached.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "device",
+          "name",
+          "pruned",
+          "reason",
+          "status"
+        ]
       },
       "DispatchView": {
         "description": "A project's dispatch: its settings, and what the dispatcher would do now.",

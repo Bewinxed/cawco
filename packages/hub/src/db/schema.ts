@@ -1561,3 +1561,48 @@ export const continuations = sqliteTable("continuations", {
   createdAt: timestamp("created_at").notNull(),
   updatedAt: timestamp("updated_at").notNull(),
 });
+
+/** Which APNs host a push goes to: Xcode builds are `sandbox`, TestFlight and the App Store `production`. */
+export type ApnsEnvironment = "sandbox" | "production";
+
+/**
+ * The fleet's APNs credentials for the iOS app's pushes (push.ts) — one row,
+ * keyed `'apns'`, following the {@link openrouterConnection} precedent. The
+ * `.p8` key is kept here like the OpenRouter key: the hub signs with it, and
+ * no route ever answers it. No row means pushes are off.
+ */
+export const apnsCredentials = sqliteTable("apns_credentials", {
+  /** Always `'apns'`. */
+  id: text("id").primaryKey(),
+  teamId: text("team_id").notNull(),
+  keyId: text("key_id").notNull(),
+  /** The `.p8` file's PEM text (an EC P-256 private key). */
+  privateKey: text("private_key").notNull(),
+  /** The app's bundle id, sent as `apns-topic`. */
+  bundleId: text("bundle_id").notNull(),
+  /** The host for a device that registered without naming one. */
+  environment: text("environment").$type<ApnsEnvironment>().notNull(),
+  savedAt: timestamp("saved_at").notNull(),
+});
+
+/**
+ * Phones (and iPads, Macs) the iOS app registered for pushes. Keyed by the
+ * APNs device token; a token APNs answers 410 for is deleted (push.ts).
+ */
+export const pushDevices = sqliteTable("push_devices", {
+  /** The APNs device token, lowercase hex. */
+  token: text("token").primaryKey(),
+  environment: text("environment").$type<ApnsEnvironment>().notNull(),
+  /** The device's own name (`UIDevice.name`), for Settings. */
+  name: text("name").notNull(),
+  /** `ios`, `ipados` or `macos`. */
+  platform: text("platform").notNull(),
+  /** Quiet: registered, and sent nothing. */
+  quiet: integer("quiet", { mode: "boolean" }).notNull().default(false),
+  createdAt: timestamp("created_at").notNull(),
+  updatedAt: timestamp("updated_at").notNull(),
+  /** When APNs last took a push for it. */
+  lastSentAt: timestamp("last_sent_at"),
+  /** APNs' reason for the last push it refused, cleared by the next it takes. */
+  lastError: text("last_error"),
+});

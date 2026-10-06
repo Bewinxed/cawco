@@ -144,6 +144,7 @@ export { default as IconRules } from "~icons/solar/shield-check-bold-duotone";
 export { default as IconShop } from "~icons/solar/shop-bold-duotone";
 export { default as IconSidebar } from "~icons/solar/sidebar-minimalistic-bold-duotone";
 export { default as IconToolGeneric } from "~icons/solar/sledgehammer-bold-duotone";
+export { default as IconPhone } from "~icons/solar/smartphone-bold-duotone";
 export { default as IconSort } from "~icons/solar/sort-bold-duotone";
 export { default as IconUnfold } from "~icons/solar/sort-vertical-bold-duotone";
 export { default as IconExternal } from "~icons/solar/square-top-down-bold-duotone";

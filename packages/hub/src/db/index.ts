@@ -70,6 +70,7 @@ import { DB_PATH } from "../config";
 import { workflowSkill } from "../workflows/skills";
 import {
   agents,
+  apnsCredentials,
   capabilityUsageDaily,
   claudeContextWindows,
   completedTurns,
@@ -92,6 +93,7 @@ import {
   projectPlaces,
   projects,
   projectTasks,
+  pushDevices,
   queuedTaskStarts,
   queuedWorkItems,
   ruleState,
@@ -166,6 +168,10 @@ export type PlaceRow = typeof projectPlaces.$inferSelect;
 export type ProjectRow = typeof projects.$inferSelect & { places: PlaceRow[] };
 /** One task file as a project's task index holds it (tasks.ts). */
 export type TaskIndexRow = typeof projectTasks.$inferSelect;
+/** The stored APNs credentials (push.ts); the private key never leaves the hub. */
+export type ApnsCredentialsRow = typeof apnsCredentials.$inferSelect;
+/** A device the iOS app registered for pushes. */
+export type PushDeviceRow = typeof pushDevices.$inferSelect;
 export type ContinuationRow = typeof continuations.$inferSelect;
 export type WorkflowRow = typeof workflows.$inferSelect;
 export type WorkflowRunRow = typeof workflowRuns.$inferSelect;
@@ -700,6 +706,27 @@ export interface DbShape {
   readonly projectsWithoutRemote: (
     machineId: string
   ) => { projectId: string; path: string }[];
+  /** The iOS app's pushes (push.ts): credentials, one row, and the devices that registered. */
+  readonly push: {
+    readonly credentials: () => ApnsCredentialsRow | undefined;
+    readonly setCredentials: (
+      row: Omit<ApnsCredentialsRow, "id" | "savedAt">
+    ) => void;
+    readonly clearCredentials: () => void;
+    readonly devices: () => PushDeviceRow[];
+    /** Registers or refreshes a device; a refresh keeps its quiet setting unless one is given. */
+    readonly putDevice: (
+      device: Pick<
+        PushDeviceRow,
+        "environment" | "name" | "platform" | "token"
+      > & { quiet?: boolean }
+    ) => PushDeviceRow;
+    /** False when no device has that token. */
+    readonly dropDevice: (token: string) => boolean;
+    readonly setQuiet: (token: string, quiet: boolean) => boolean;
+    /** What APNs said to the last push for a device: taken (no error) or refused with a reason. */
+    readonly noteResult: (token: string, error: string | null) => void;
+  };
   readonly putCredential: (id: string, blob: Record<string, unknown>) => void;
   /** Upsert of one definition's file; the hash and the size are read off it. */
   readonly putFleetAgent: (agent: {
@@ -1366,6 +1393,7 @@ const MEMORY_ID = "memory";
 /** The one row the supervisor config ever takes — same precedent as `MEMORY_ID`. */
 const SUPERVISOR_CONFIG_ID = "supervisor";
 const OPENROUTER_CONNECTION_ID = "openrouter";
+const APNS_CREDENTIALS_ID = "apns";
 
 /** How many supervisor event rows to keep — bounded without a scheduler (plan: our choice). */
 const SUPERVISOR_EVENTS_RETENTION = 5000;
@@ -4801,6 +4829,72 @@ const make = (path: string): DbShape => {
       db.delete(openrouterConnection)
         .where(eq(openrouterConnection.id, OPENROUTER_CONNECTION_ID))
         .run();
+    },
+    push: {
+      credentials: () =>
+        db
+          .select()
+          .from(apnsCredentials)
+          .where(eq(apnsCredentials.id, APNS_CREDENTIALS_ID))
+          .get(),
+      setCredentials: (row) => {
+        const values = { ...row, savedAt: new Date() };
+        db.insert(apnsCredentials)
+          .values({ id: APNS_CREDENTIALS_ID, ...values })
+          .onConflictDoUpdate({ target: apnsCredentials.id, set: values })
+          .run();
+      },
+      clearCredentials: () => {
+        db.delete(apnsCredentials)
+          .where(eq(apnsCredentials.id, APNS_CREDENTIALS_ID))
+          .run();
+      },
+      devices: () =>
+        db.select().from(pushDevices).orderBy(pushDevices.createdAt).all(),
+      putDevice: ({ quiet, ...device }) => {
+        const now = new Date();
+        return db
+          .insert(pushDevices)
+          .values({
+            ...device,
+            quiet: quiet ?? false,
+            createdAt: now,
+            updatedAt: now,
+          })
+          .onConflictDoUpdate({
+            target: pushDevices.token,
+            set: {
+              ...device,
+              ...(quiet === undefined ? {} : { quiet }),
+              updatedAt: now,
+            },
+          })
+          .returning()
+          .get();
+      },
+      dropDevice: (token) =>
+        db
+          .delete(pushDevices)
+          .where(eq(pushDevices.token, token))
+          .returning({ token: pushDevices.token })
+          .all().length > 0,
+      setQuiet: (token, quiet) =>
+        db
+          .update(pushDevices)
+          .set({ quiet, updatedAt: new Date() })
+          .where(eq(pushDevices.token, token))
+          .returning({ token: pushDevices.token })
+          .all().length > 0,
+      noteResult: (token, error) => {
+        db.update(pushDevices)
+          .set(
+            error === null
+              ? { lastSentAt: new Date(), lastError: null }
+              : { lastError: error }
+          )
+          .where(eq(pushDevices.token, token))
+          .run();
+      },
     },
     listRules: () =>
       db.select().from(rules).orderBy(desc(rules.createdAt)).all().map(ruleOf),

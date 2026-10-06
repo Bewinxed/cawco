@@ -5,6 +5,7 @@ import {
   IconCpu,
   IconDownload,
   IconHook,
+  IconPhone,
   IconRules,
   IconSubagent,
   IconSubagents,
@@ -33,6 +34,7 @@ export type SectionSlug =
   | "skills"
   | "memory"
   | "models"
+  | "phone"
   | "updates";
 
 export const SECTIONS: ConfigSection[] = [
@@ -107,6 +109,14 @@ export const SECTIONS: ConfigSection[] = [
     purpose: "OpenRouter and the supervisor server",
     icon: IconCpu,
     hue: "var(--hue-orange-500)",
+  },
+  {
+    slug: "phone",
+    group: "Hub",
+    label: "Phone",
+    purpose: "Pushes to the CawCo app when something needs you",
+    icon: IconPhone,
+    hue: "var(--hue-green-500)",
   },
   {
     slug: "updates",

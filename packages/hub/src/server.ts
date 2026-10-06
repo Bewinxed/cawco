@@ -213,6 +213,7 @@ import {
   placesChanged,
 } from "./project-placements";
 import { placePath, readRemote } from "./projects";
+import { createPush, pushRoutes } from "./push";
 import { type HubSocket, type RegistryShape, toDashboard } from "./registry";
 import { RuleEngine } from "./rules";
 import { createSessionIdentities } from "./session-identity";
@@ -1600,6 +1601,11 @@ export const createServer = (
     string,
     { outcome?: "answered" | "cancelled" }
   >();
+  // Pushes to the iOS app when something newly needs you (push.ts).
+  const push = createPush({
+    db,
+    task: (projectId, id) => tasks.get(projectId, id),
+  });
   pending.onSettled((parked, outcome) => {
     if (!(parked.requestId && parked.instanceId)) {
       return;
@@ -1609,6 +1615,7 @@ export const createServer = (
       answering.outcome = outcome;
     }
     telegram?.onSettled(parked.requestId);
+    push.onSettled(parked.requestId);
     registry.broadcast({
       verb: "frames",
       machineId: parked.machineId,
@@ -2037,6 +2044,7 @@ export const createServer = (
       delete payload.routedTo;
       registry.broadcast(parked);
       telegram?.onAsk(parked);
+      push.onAsk(parked);
     }
   };
 
@@ -7207,7 +7215,11 @@ export const createServer = (
     },
     // An attempt at a task ended: the dispatcher moves the task. Deferred: the
     // boot sweep below ends items before the dispatcher exists.
-    itemEnded: (item) => queueMicrotask(() => dispatcher.itemEnded(item)),
+    itemEnded: (item) =>
+      queueMicrotask(() => {
+        dispatcher.itemEnded(item);
+        push.itemEnded(item);
+      }),
     command: runOnMachine,
     inTurn: (row) => row.status === "running" && !!pulses.get(row.id)?.busy,
     report: (row, body, failed, notice) => {
@@ -7339,6 +7351,7 @@ export const createServer = (
         (envelope.payload as { routedTo?: string }).routedTo !== "parent"
       ) {
         telegram?.onAsk(envelope);
+        push.onAsk(envelope);
       }
     },
     settle: (id) => {
@@ -7437,6 +7450,7 @@ export const createServer = (
     start: (request) => workItems.start(request),
   });
   tasks.listen(dispatcher.taskChanged);
+  tasks.listen(push.taskChanged);
   if (resumeWorkflows) {
     // The dispatcher's safety net: a slow look at every dispatching project.
     dispatcher.watch();
@@ -7750,6 +7764,7 @@ export const createServer = (
         )
       )
       .use(taskRoutes(tasks))
+      .use(pushRoutes(db, push))
       .use(dispatchRoutes(dispatcher))
       .use(
         joinRoutes({
@@ -11771,6 +11786,7 @@ export const createServer = (
                   deliverDelegateAsk(sender, parent, message);
                 } else if (!internal) {
                   telegram?.onAsk(message);
+                  push.onAsk(message);
                 }
               }
               // The daemon's live reading of one session. Kept in memory only, so
