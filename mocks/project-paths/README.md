@@ -78,3 +78,4 @@ does with an IntersectionObserver.
 | pdelegates | Project delegate types as files; Jev routes a task to a type |
 | stages | Project stages on fixed kinds: board, calendar and pipeline views |
 | canvas | Design canvas: variants from any tool, a pin to the session, a pick |
+| bridge | Choices and dials inside a preview, kept in the hub and read by the session |

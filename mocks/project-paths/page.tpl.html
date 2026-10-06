@@ -553,7 +553,7 @@ th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute
   <a href="#time">Time <span class="n">D9–11</span></a>
   <a href="#face">Words, Caw <span class="n">D12–13</span></a>
   <a href="#procedures">Skills <span class="n">D14–15</span></a>
-  <a href="#kinds">Stages, design <span class="n">D17–18</span></a>
+  <a href="#kinds">Stages, design <span class="n">D17–19</span></a>
   <a href="#order">Roadmap</a>
   <a href="#sources">Sources</a>
   <div class="meter">
@@ -567,7 +567,7 @@ th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute
   <div class="caw"><img class="caw-l" src="caw/light-ready.webp" alt="Caw" width="104" height="104"><img class="caw-d" src="caw/dark-ready.webp" alt="" width="104" height="104"></div>
   <div>
     <h1>Projects, rethought</h1>
-    <p>Eighteen decisions. Each one shows how it would look and how it works. Pick a path per card; I read your picks back from this page.</p>
+    <p>Nineteen decisions. Each one shows how it would look and how it works. Pick a path per card; I read your picks back from this page.</p>
     <div class="row">
       <span class="pill" id="savestate"><span class="dot"></span><span id="savetext">Connecting…</span></span>
       <button class="btn" id="copypicks" type="button">Copy my picks</button>
@@ -643,7 +643,7 @@ th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute
     {id:"mem",band:"hub",grp:"Knowledge",kind:"model",t:"Memory + curator",s:"inbox, proposals",d:"Agents write notes; the curator proposes; you tap.",talks:["folder","sess","ios","mcp"],jev:"Lasting fact, scaffolding, secret, untrusted? (choice)",fb:"Rules: repeats in 2+ sessions, provenance tags."},
     {id:"brief",band:"hub",grp:"Knowledge",kind:"code",t:"Brief builder",s:"what a session starts with",d:"Task, checks, last failure and the right context files.",talks:["folder","mem","disp"],jev:"How much does each file matter for this task? (score each)",fb:"The whole brand kit and the newest notes."},
     {id:"assets",band:"hub",grp:"Knowledge",kind:"store",t:"Assets",s:"content-addressed",d:"Images and files by hash, versioned, from any session.",talks:["folder","sess"]},
-    {id:"canvas",band:"hub",grp:"Knowledge",kind:"store",t:"Canvas",s:"results, pins, picks",d:"Keeps the previews and images a project's sessions showed, side by side. A pin goes to the session that made it; a pick keeps one variant.",talks:["prev","sess","folder","land","dash"],jev:"How closely does each variant follow DESIGN.md? (score each)",fb:"You look at all of them."},
+    {id:"canvas",band:"hub",grp:"Knowledge",kind:"store",t:"Canvas",s:"results, pins, picks",d:"Many per project: the previews and images its sessions showed, side by side. Pins go to the session that made a piece; picks, notes and dials are kept and read by tool.",talks:["prev","sess","folder","land","dash","mcp"],jev:"How closely does each variant follow DESIGN.md? (score each)",fb:"You look at all of them."},
     {id:"lead",band:"hub",grp:"Agents",kind:"model",t:"Caw · project lead",s:"woken by events",d:"Plans, briefs, recaps. Board tools only, per-project switch.",talks:["board","rout","ios","dash","land","watch"],jev:"Is each recap claim backed by its events? (yes/no each)",fb:"Recaps list events only."},
     {id:"watch",band:"hub",grp:"Agents",kind:"code",t:"Fleet watch",s:"detectors, one triage",d:"Code detectors; a fresh Caw triage run only when the case is real.",talks:["daemon","lead","ios"],jev:"Stuck? Looping? Off-task? (yes/no)",fb:"A second code signal, tighter caps."},
     {id:"jev",band:"hub",grp:"Judgments",kind:"model",t:"Jev",s:"typed judgments, opt-in",d:"Yes/no, choice and score over one state, in one call. Never status, never a permission.",talks:["board","disp","land","ingress","mem","brief","canvas","lead","watch","cred","ort"]},
@@ -1464,7 +1464,7 @@ views
 <pre class="v"><span class="c">outreach</span>
   prospect   todo
   contacted  waiting  reply due 3d
-  replied    you
+  replied    active
   meeting    you
   won        done
   lost       dropped
@@ -1500,10 +1500,10 @@ views
     with that tool's MCP
 
 <span class="k">new</span>
-  canvas  side by side
-  pins    the picker, kept on it
-  pick    one wins, rest archive
-  checks  contrast, tokens, diff</pre>
+  canvases  many per project
+  pins      the picker, kept on it
+  pick      one wins, rest archive
+  checks    contrast, tokens, diff</pre>
       </figure>
     </div>
     <div class="opts" role="radiogroup" data-group="design" data-label="D18 Design work">
@@ -1539,6 +1539,91 @@ views
       </tbody></table></div>
     <p class="a">Most of it exists or is borrowed. Two small builds: the canvas (on Svelte Flow, which already draws the workflow canvas) and the pick. Everything a design tool does stays in that tool, reached through its own MCP.</p>
   </article>
+  <article class="ans wide" id="graphical">
+    <header><span class="did">Borrow</span><h3>What Graphical does that we can use</h3></header>
+    <p class="q">What does Graphical do that we can borrow from?</p>
+    <p class="a">Graphical (Josh Puckett and Adam Michela, launched 2026-10-05) is a closed editor for a visual language. Its output is what matters: every download has a <code>GUI.md</code>, theme references for light and dark, setup instructions, and three agent skills. Its site says the theme and skills apply across component libraries, frameworks and languages; the React and Base UI code is one implementation.</p>
+    <div class="prim"><table>
+      <thead><tr><th>Graphical does</th><th>CawCo takes</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td>Ships rules plus tokens plus skills as one bundle</td><td>A design project's <code>design/</code> folder is that bundle: <code>DESIGN.md</code>, tokens, components, skills</td><td><span class="st2 plan">D18</span></td></tr>
+        <tr><td>Skill: create screens</td><td>A project skill that builds a screen from the project's components and tokens only</td><td><span class="st2 plan">borrow</span></td></tr>
+        <tr><td>Skill: apply the theme to existing UI</td><td>A project skill for restyling a page or app that already exists</td><td><span class="st2 plan">borrow</span></td></tr>
+        <tr><td>Skill: find and fix inconsistent styles</td><td>Split in two: a code check finds drift (literal colours, off-scale spacing), the skill fixes it</td><td><span class="st2 plan">borrow</span></td></tr>
+        <tr><td>Start from a style, then tune it</td><td>Onboarding for a design project: Caw shows a few starting styles as previews; you pick one (D19)</td><td><span class="st2 gap">build · small</span></td></tr>
+        <tr><td>DialKit, by the same author (MIT, Svelte 5.8+): live dials in the running page, saved versions, copy a prompt</td><td>Use DialKit inside previews; the values go to the hub through D19 instead of the clipboard</td><td><span class="st2 plan">borrow</span></td></tr>
+        <tr><td>The editor itself</td><td>Not borrowable: closed, React and Base UI only, no MCP. A project can still drop a Graphical download into <code>design/</code>; sessions read <code>GUI.md</code> like <code>DESIGN.md</code>.</td><td><span class="st2 has">nothing to build</span></td></tr>
+      </tbody></table></div>
+  </article>
+
+  <article class="ans wide" id="pvaudit">
+    <header><span class="did">Check</span><h3>Does the preview tool have what design work needs?</h3></header>
+    <p class="q">Does the preview tool have all the primitives that we need? Multiple canvases etc.</p>
+    <p class="a">The core is strong. What's missing is about many at once, kept, and remembered.</p>
+    <div class="prim"><table>
+      <thead><tr><th>Need</th><th>Today</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td>A page beside a session, from a dev server or a folder</td><td><code>show_preview</code>, proxied by the daemon; hot reload, routes and sockets work through it</td><td><span class="st2 has">exists</span></td></tr>
+        <tr><td>Point at an element</td><td>The picker sends selector, file:line (Svelte, React, Vue), styles, a PNG and your note</td><td><span class="st2 has">exists</span></td></tr>
+        <tr><td>Several points in one message</td><td>Selections queue as chips and go as one message</td><td><span class="st2 has">exists</span></td></tr>
+        <tr><td>On the phone</td><td>The iOS app opens and closes previews and shows a preview card</td><td><span class="st2 plan">partly</span></td></tr>
+        <tr><td>Many previews at once</td><td>One per session; each show replaces the last</td><td><span class="st2 gap">gap · canvases</span></td></tr>
+        <tr><td>Several canvases per project</td><td>None. Proposed: one canvas per question (pricing, onboarding), files under <code>design/canvases/</code></td><td><span class="st2 gap">gap · D18</span></td></tr>
+        <tr><td>Kept after the session ends</td><td>Previews close with their session</td><td><span class="st2 gap">gap · D18</span></td></tr>
+        <tr><td>Phone, tablet, desktop side by side</td><td>One frame at the pane's width</td><td><span class="st2 gap">gap · small</span></td></tr>
+        <tr><td>Light, dark and reduced motion</td><td>Whatever the page does</td><td><span class="st2 gap">gap · small</span></td></tr>
+        <tr><td>Pins that stay, with replies</td><td>Selections are sent, then gone from the page</td><td><span class="st2 gap">gap · D18</span></td></tr>
+        <tr><td>Picks, notes and dials the model can read</td><td>Only what you send in a message</td><td><span class="st2 gap">gap · D19</span></td></tr>
+        <tr><td>Images and exports on the same surface</td><td><code>show_image</code> shows them in the transcript only</td><td><span class="st2 gap">gap · D18</span></td></tr>
+        <tr><td>Before and after, screenshot diff</td><td>Checks can diff; nothing shows the two side by side</td><td><span class="st2 gap">gap · small</span></td></tr>
+        <tr><td>Record a clip</td><td>This page kit's Playwright recorder, run by the daemon</td><td><span class="st2 plan">borrow</span></td></tr>
+      </tbody></table></div>
+  </article>
+
+  <article class="dec" id="d19">
+    <header><span class="did">D19</span><h3>Choices inside previews</h3><span class="state" data-for="choices">Not picked</span></header>
+    <p class="why">This page stores your picks and I read them back. A preview should work the same way: the page a session made carries choices and dials, you pick and tune in place, and the session reads what you chose.</p>
+    <div class="show">
+      <figure class="pane look"><span class="cap">How it would look</span>{{MK:bridge}}</figure>
+      <figure class="pane mech"><span class="cap">The page declares, the hub keeps</span>
+<pre class="v"><span class="c">&lt;!-- in a page a session made --&gt;</span>
+&lt;section data-cawco-choice="hero"
+         data-option="b"&gt;…&lt;/section&gt;
+
+<span class="c">// optional, from the overlay</span>
+cawco.choose("hero", "b")
+cawco.note("hero", "less shadow")
+cawco.set("dials", { radius: 14 })
+cawco.on("picks", render)
+
+<span class="k">the session reads</span>
+read_choices("hero options")
+  hero    b      you · 14:02
+  radius  14     dial
+  note    "less shadow on B"
+
+<span class="k">rules</span>
+  kept per canvas, with page hash
+  read by tool; sent when you say
+  every field bounded, like picks
+  MCP Apps names: works elsewhere</pre>
+      </figure>
+    </div>
+    <div class="opts" role="radiogroup" data-group="choices" data-label="D19 Choices inside previews">
+      <button class="opt" type="button" role="radio" data-opt="message"><b>As today</b><span>Selections become a message when you send.</span></button>
+      <button class="opt" type="button" role="radio" data-opt="store"><b>Stored picks, notes and dials</b><span>Kept in the hub; the session reads them with a tool.</span><span class="tag">Recommended</span></button>
+      <button class="opt" type="button" role="radio" data-opt="mcpapps"><b>MCP Apps messages only</b><span>Portable, but nothing is kept between turns.</span></button>
+    </div>
+    <div class="foot">
+      <details class="more"><summary>Details</summary><div class="in">
+        <p>The overlay CawCo already injects into every preview adds the bridge. A page needs no SDK: any element with <code>data-cawco-choice</code> becomes pickable, and the pane counts groups the way this page's ring counts decisions. The pane checks and bounds every message, as <code>wire.ts</code> already does for the picker, because the page is code an agent wrote.</p>
+        <p>MCP Apps defines <code>ui/update-model-context</code>, <code>ui/message</code> and <code>tools/call</code> for the same job inside Claude, ChatGPT and VS Code, but leaves persistence out. CawCo uses those names and adds the store, so one page works in both places.</p>
+        <p>Picks don't wake the session on their own; you press Send, or a routine reads them. Onboarding uses the same thing: Caw shows a few starting styles and asks you to pick.</p>
+      </div></details>
+      <label class="note">Note <input id="note-choices" data-note="choices" type="text" placeholder="Anything to add"></label>
+    </div>
+  </article>
+
 </section>
 
 <section class="chap" id="order">
@@ -1605,6 +1690,10 @@ views
     <li><a href="https://svelteflow.dev/">Svelte Flow</a></li>
     <li><a href="https://github.com/atlassian/pragmatic-drag-and-drop">Pragmatic drag and drop</a></li>
     <li><a href="https://github.com/vkurko/calendar">Event Calendar</a></li>
+    <li><a href="https://www.graphicalui.com/">Graphical</a></li>
+    <li><a href="https://x.com/joshpuckett/status/2107175379903594714">Graphical launch post</a></li>
+    <li><a href="https://github.com/joshpuckett/dialkit">DialKit</a></li>
+    <li><a href="https://github.com/modelcontextprotocol/ext-apps/blob/main/specification/2026-01-26/apps.mdx">MCP Apps spec</a></li>
   </ul>
 </section>
 </main>

@@ -553,7 +553,7 @@ th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute
   <a href="#time">Time <span class="n">D9–11</span></a>
   <a href="#face">Words, Caw <span class="n">D12–13</span></a>
   <a href="#procedures">Skills <span class="n">D14–15</span></a>
-  <a href="#kinds">Stages, design <span class="n">D17–18</span></a>
+  <a href="#kinds">Stages, design <span class="n">D17–19</span></a>
   <a href="#order">Roadmap</a>
   <a href="#sources">Sources</a>
   <div class="meter">
@@ -567,7 +567,7 @@ th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute
   <div class="caw"><img class="caw-l" src="caw/light-ready.webp" alt="Caw" width="104" height="104"><img class="caw-d" src="caw/dark-ready.webp" alt="" width="104" height="104"></div>
   <div>
     <h1>Projects, rethought</h1>
-    <p>Eighteen decisions. Each one shows how it would look and how it works. Pick a path per card; I read your picks back from this page.</p>
+    <p>Nineteen decisions. Each one shows how it would look and how it works. Pick a path per card; I read your picks back from this page.</p>
     <div class="row">
       <span class="pill" id="savestate"><span class="dot"></span><span id="savetext">Connecting…</span></span>
       <button class="btn" id="copypicks" type="button">Copy my picks</button>
@@ -643,7 +643,7 @@ th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute
     {id:"mem",band:"hub",grp:"Knowledge",kind:"model",t:"Memory + curator",s:"inbox, proposals",d:"Agents write notes; the curator proposes; you tap.",talks:["folder","sess","ios","mcp"],jev:"Lasting fact, scaffolding, secret, untrusted? (choice)",fb:"Rules: repeats in 2+ sessions, provenance tags."},
     {id:"brief",band:"hub",grp:"Knowledge",kind:"code",t:"Brief builder",s:"what a session starts with",d:"Task, checks, last failure and the right context files.",talks:["folder","mem","disp"],jev:"How much does each file matter for this task? (score each)",fb:"The whole brand kit and the newest notes."},
     {id:"assets",band:"hub",grp:"Knowledge",kind:"store",t:"Assets",s:"content-addressed",d:"Images and files by hash, versioned, from any session.",talks:["folder","sess"]},
-    {id:"canvas",band:"hub",grp:"Knowledge",kind:"store",t:"Canvas",s:"results, pins, picks",d:"Keeps the previews and images a project's sessions showed, side by side. A pin goes to the session that made it; a pick keeps one variant.",talks:["prev","sess","folder","land","dash"],jev:"How closely does each variant follow DESIGN.md? (score each)",fb:"You look at all of them."},
+    {id:"canvas",band:"hub",grp:"Knowledge",kind:"store",t:"Canvas",s:"results, pins, picks",d:"Many per project: the previews and images its sessions showed, side by side. Pins go to the session that made a piece; picks, notes and dials are kept and read by tool.",talks:["prev","sess","folder","land","dash","mcp"],jev:"How closely does each variant follow DESIGN.md? (score each)",fb:"You look at all of them."},
     {id:"lead",band:"hub",grp:"Agents",kind:"model",t:"Caw · project lead",s:"woken by events",d:"Plans, briefs, recaps. Board tools only, per-project switch.",talks:["board","rout","ios","dash","land","watch"],jev:"Is each recap claim backed by its events? (yes/no each)",fb:"Recaps list events only."},
     {id:"watch",band:"hub",grp:"Agents",kind:"code",t:"Fleet watch",s:"detectors, one triage",d:"Code detectors; a fresh Caw triage run only when the case is real.",talks:["daemon","lead","ios"],jev:"Stuck? Looping? Off-task? (yes/no)",fb:"A second code signal, tighter caps."},
     {id:"jev",band:"hub",grp:"Judgments",kind:"model",t:"Jev",s:"typed judgments, opt-in",d:"Yes/no, choice and score over one state, in one call. Never status, never a permission.",talks:["board","disp","land","ingress","mem","brief","canvas","lead","watch","cred","ort"]},
@@ -5039,7 +5039,351 @@ resolve        → finish_item → land</pre>
     <header><span class="did">D17</span><h3>Project stages and views</h3><span class="state" data-for="stages">Not picked</span></header>
     <p class="why">Fixed columns fit code. A social, outreach or design project has its own lifecycle. Let the project name its stages; keep the few kinds CawCo reasons about fixed.</p>
     <div class="show">
-      <figure class="pane look"><span class="cap">How it would look</span><div class="pending">Mockup "stages" is missing.</div></figure>
+      <figure class="pane look"><span class="cap">How it would look</span><style>
+.mk-stages{--ph:198px;display:block;min-width:0;color:var(--ink);font-family:var(--f-body);font-size:12px;line-height:1.3;text-align:left}
+.mk-stages *,.mk-stages *::before,.mk-stages *::after{box-sizing:border-box}
+.mk-stages .mkf-body{padding:8px;gap:8px}
+.mk-stages .mkf-bar{gap:6px;padding:0 10px 0 12px}
+
+/* title bar: project name + view name on the left, three view tabs on the right */
+.mk-stages .sg-ttl{display:grid;min-width:0;overflow:hidden}
+.mk-stages .sg-tg{grid-area:1/1;display:flex;align-items:center;gap:6px;min-width:0}
+.mk-stages .sg-tg2{opacity:0}
+.mk-stages .sg-vn{display:grid}
+.mk-stages .sg-vn span{grid-area:1/1}
+.mk-stages .sg-v2{opacity:0}
+.mk-stages .sg-tabs{position:relative;flex:none;align-self:stretch;display:inline-grid;grid-template-columns:repeat(3,1fr);pointer-events:none;user-select:none}
+.mk-stages .sg-tab{display:flex;align-items:center;justify-content:center;padding:0 5px;font-size:10px;font-weight:500;line-height:1;color:var(--muted);outline:none}
+.mk-stages .sg-ta{color:var(--ink)}
+.mk-stages .sg-ul{position:absolute;left:0;bottom:0;width:33.3334%;height:2px;border-radius:2px 2px 0 0;background:var(--coral)}
+
+/* the three views share one stage; at rest only the board shows */
+.mk-stages .sg-stage{position:relative;display:grid;min-width:0}
+.mk-stages .sg-pane{grid-area:1/1;min-width:0;display:flex;flex-direction:column}
+.mk-stages .sg-p2,.mk-stages .sg-p3{opacity:0;pointer-events:none}
+
+/* pane 1: board */
+.mk-stages .sg-scroll{overflow-x:auto;overflow-y:hidden;border-radius:10px;scrollbar-width:thin;scrollbar-color:var(--line-strong) transparent}
+.mk-stages .sg-track{position:relative;display:grid;grid-template-columns:repeat(6,minmax(92px,1fr));column-gap:5px;min-width:577px}
+.mk-stages .sg-col{min-height:var(--ph);padding:7px 0 0;background:var(--recess);border-radius:10px}
+.mk-stages .sg-col.sg-cy{background:var(--coral-wash)}
+.mk-stages .sg-ch{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:4px;padding:0 8px}
+.mk-stages .sg-nm{display:flex;align-items:center;gap:5px;height:14px;font-size:11px;line-height:14px;font-weight:700;white-space:nowrap}
+.mk-stages .sg-nm .mkdot{width:6px;height:6px;flex:none}
+.mk-stages .sg-cy .sg-nm{color:var(--coral-ink)}
+.mk-stages .sg-k{grid-column:1/-1;height:11px;font-family:var(--f-mono);font-size:9px;line-height:11px;color:var(--muted);font-variant-ligatures:none;white-space:nowrap}
+.mk-stages .sg-cy .sg-k{color:var(--coral-ink)}
+.mk-stages .sg-n{display:block;height:14px;min-width:8px;overflow:hidden;text-align:right;font-family:var(--f-mono);font-size:10.5px;font-weight:500;line-height:14px;color:var(--muted)}
+.mk-stages .sg-cy .sg-n{color:var(--coral-ink)}
+.mk-stages .sg-ns{display:flex;flex-direction:column}
+.mk-stages .sg-ns i{display:block;height:14px;font-style:normal}
+
+.mk-stages .sg-card{position:absolute;z-index:1;top:var(--y);left:calc(var(--c) * ((100% - 25px) / 6 + 5px) + 3px);width:calc((100% - 25px) / 6 - 6px);height:54px;display:flex;flex-direction:column;gap:3px;padding:5px 5px 5px 6px;background:var(--raised);border:1px solid var(--line-strong);border-radius:8px;min-width:0;overflow:hidden}
+.mk-stages .sg-ft{height:68px}
+.mk-stages .sg-hot{background:var(--coral-wash);border-color:var(--coral)}
+.mk-stages .sg-id{height:12px;font-family:var(--f-mono);font-size:9px;line-height:12px;color:var(--muted);font-variant-ligatures:none;white-space:nowrap}
+.mk-stages .sg-hot .sg-id{color:var(--coral-ink)}
+.mk-stages .sg-t{height:26px;overflow:hidden;font-size:10.5px;line-height:13px;font-weight:600;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.mk-stages .sg-fo{position:relative;height:12px;margin-top:auto;font-size:9px;line-height:12px;color:var(--muted)}
+.mk-stages .sg-fo>*{position:absolute;left:0;right:0;top:0;height:12px;display:flex;align-items:center;gap:4px;white-space:nowrap;overflow:hidden}
+.mk-stages .sg-fo .mkdot{width:6px;height:6px;flex:none}
+.mk-stages .sg-mo{font-family:var(--f-mono);font-size:9px;font-variant-ligatures:none}
+.mk-stages .sg-tm{color:var(--ink)}
+.mk-stages .sg-fy{color:var(--coral-ink);font-weight:600}
+.mk-stages .sg-mv .sg-fy{opacity:0}
+
+/* pane 2: calendar */
+.mk-stages .sg-cal{flex:1;display:grid;grid-template-columns:26px repeat(7,minmax(0,1fr));grid-template-rows:14px repeat(3,minmax(38px,1fr));gap:2px;min-width:0}
+.mk-stages .sg-dh{font-family:var(--f-mono);font-size:9px;line-height:14px;color:var(--muted);text-align:center;font-variant-ligatures:none}
+.mk-stages .sg-hr{align-self:center;font-family:var(--f-mono);font-size:8.5px;line-height:1;color:var(--muted);font-variant-ligatures:none}
+.mk-stages .sg-cell{display:flex;align-items:center;justify-content:center;min-width:0;padding:0 1px;background:var(--recess);border-radius:6px}
+.mk-stages .sg-chip{display:block;width:100%;min-width:0;height:18px;padding:0;border:1px solid var(--line-strong);border-radius:5px;background:var(--raised);color:var(--ink);font-size:8.5px;line-height:16px;font-weight:600;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mk-stages .sg-c-ok{background:var(--ok-wash);border-color:transparent;color:var(--ok-ink)}
+.mk-stages .sg-c-you{background:var(--coral-wash);border-color:var(--coral);color:var(--coral-ink)}
+.mk-stages .sg-key{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;padding-top:6px}
+.mk-stages .sg-key .sg-chip{display:inline-block;width:auto;height:16px;font-size:9px;line-height:14px;padding:0 6px;font-weight:500}
+
+/* pane 3: pipeline */
+.mk-stages .sg-pipe{flex:1;display:flex;flex-direction:column;gap:3px;min-width:0}
+.mk-stages .sg-pr{display:grid;grid-template-columns:70px minmax(0,1fr) 24px;grid-template-areas:"n b c" ". x x";align-items:center;column-gap:8px;padding:2px 8px;background:var(--recess);border-radius:8px}
+.mk-stages .sg-pn{grid-area:n;display:flex;flex-direction:column;min-width:0}
+.mk-stages .sg-pn b{display:block;height:13px;font-size:11px;line-height:13px;font-weight:700;white-space:nowrap}
+.mk-stages .sg-pn i{display:block;height:10px;font-style:normal;font-family:var(--f-mono);font-size:9px;line-height:10px;color:var(--muted);font-variant-ligatures:none;white-space:nowrap}
+.mk-stages .sg-bw{grid-area:b;display:flex;align-items:center;min-width:0}
+.mk-stages .sg-bar{display:block;height:9px;min-width:4px;border-radius:3px;background:var(--line-strong)}
+.mk-stages .sg-pc{grid-area:c;text-align:right;font-family:var(--f-mono);font-size:11px;font-weight:500;line-height:1;font-variant-ligatures:none}
+.mk-stages .sg-px{grid-area:x;justify-self:start;min-width:0;max-width:100%;margin-top:3px;padding:0 5px;border-radius:5px;background:var(--bg);font-size:9px;line-height:15px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mk-stages .sg-pr.sg-pyou{background:var(--coral-wash)}
+.mk-stages .sg-pyou .sg-pn,.mk-stages .sg-pyou .sg-pn i,.mk-stages .sg-pyou .sg-pc{color:var(--coral-ink)}
+.mk-stages .sg-pyou .sg-bar{background:var(--coral)}
+.mk-stages .sg-pdone .sg-pc{color:var(--ok-ink)}
+.mk-stages .sg-pdone .sg-bar{background:var(--ok-wash)}
+.mk-stages .sg-lost{display:grid;grid-template-columns:70px minmax(0,1fr) 24px;align-items:center;column-gap:8px;margin-top:auto;padding:4px 8px 0;border-top:1px dashed var(--line-strong);color:var(--muted)}
+.mk-stages .sg-lost .sg-pn,.mk-stages .sg-lost .sg-bw,.mk-stages .sg-lost .sg-pc{grid-area:auto}
+.mk-stages .sg-lost .sg-pn b{font-weight:500}
+.mk-stages .sg-lost .sg-bar{background:transparent;border:1px dashed var(--line-strong)}
+.mk-stages .sg-lost .sg-pc{color:var(--muted)}
+
+.mk-stages .sg-note{padding:0 2px;font-size:10.5px;line-height:1.35;color:var(--muted)}
+
+/* ---- motion: a draft moves Draft > Review, then the same project is seen as a week, then another project as a pipeline ---- */
+@keyframes sg-p1{0%,36%{opacity:1}40%,88%{opacity:0}92%,100%{opacity:1}}
+@keyframes sg-p2{0%,36%{opacity:0}40%,60%{opacity:1}64%,100%{opacity:0}}
+@keyframes sg-p3{0%,60%{opacity:0}64%,88%{opacity:1}92%,100%{opacity:0}}
+@keyframes sg-ul{
+  0%,36%{transform:translateX(0);animation-timing-function:cubic-bezier(.2,.8,.2,1)}
+  42%,60%{transform:translateX(100%);animation-timing-function:cubic-bezier(.2,.8,.2,1)}
+  66%,88%{transform:translateX(200%);animation-timing-function:cubic-bezier(.2,.8,.2,1)}
+  94%,100%{transform:translateX(0)}
+}
+@keyframes sg-ta{0%,36%{color:var(--ink)}40%,88%{color:var(--muted)}92%,100%{color:var(--ink)}}
+@keyframes sg-tb{0%,36%{color:var(--muted)}40%,60%{color:var(--ink)}64%,100%{color:var(--muted)}}
+@keyframes sg-tc{0%,60%{color:var(--muted)}64%,88%{color:var(--ink)}92%,100%{color:var(--muted)}}
+@keyframes sg-g1{0%,60%{opacity:1}64%,88%{opacity:0}92%,100%{opacity:1}}
+@keyframes sg-g2{0%,60%{opacity:0}64%,88%{opacity:1}92%,100%{opacity:0}}
+@keyframes sg-v1{0%,36%{opacity:1}40%,88%{opacity:0}92%,100%{opacity:1}}
+@keyframes sg-v2{0%,36%{opacity:0}40%,60%{opacity:1}64%,100%{opacity:0}}
+
+@keyframes sg-mv{
+  0%,6%{transform:translate(0,0);animation-timing-function:cubic-bezier(.2,.8,.2,1)}
+  15%,76%{transform:translate(calc(100% + 11px),var(--dy))}
+  76.01%,100%{transform:translate(0,0)}
+}
+@keyframes sg-bg{
+  0%,8%{background-color:var(--raised);border-color:var(--line-strong)}
+  14%,76%{background-color:var(--coral-wash);border-color:var(--coral)}
+  76.01%,100%{background-color:var(--raised);border-color:var(--line-strong)}
+}
+@keyframes sg-idc{0%,8%{color:var(--muted)}14%,76%{color:var(--coral-ink)}76.01%,100%{color:var(--muted)}}
+@keyframes sg-fl{0%,8%{opacity:1}11%,76%{opacity:0}76.01%,100%{opacity:1}}
+@keyframes sg-fy{0%,10%{opacity:0}14%,76%{opacity:1}76.01%,100%{opacity:0}}
+@keyframes sg-nt{0%,9%{transform:translateY(0)}10%,76%{transform:translateY(-14px)}76.01%,100%{transform:translateY(0)}}
+@keyframes sg-pop{0%,41%{transform:scale(.7)}47%{transform:scale(1.1)}52%,100%{transform:scale(1)}}
+@keyframes sg-pulse{0%,100%{box-shadow:0 0 0 0 var(--coral-wash)}50%{box-shadow:0 0 0 4px var(--coral-wash)}}
+@keyframes sg-live{0%,100%{box-shadow:0 0 0 0 var(--ok-wash)}50%{box-shadow:0 0 0 3px var(--ok-wash)}}
+
+@media (prefers-reduced-motion:no-preference){
+  .mk-stages.is-live .sg-p1{animation:sg-p1 10s ease-in-out infinite}
+  .mk-stages.is-live .sg-p2{animation:sg-p2 10s ease-in-out infinite}
+  .mk-stages.is-live .sg-p3{animation:sg-p3 10s ease-in-out infinite}
+  .mk-stages.is-live .sg-ul{animation:sg-ul 10s linear infinite;will-change:transform}
+  .mk-stages.is-live .sg-ta{animation:sg-ta 10s ease-in-out infinite}
+  .mk-stages.is-live .sg-tb{animation:sg-tb 10s ease-in-out infinite}
+  .mk-stages.is-live .sg-tc{animation:sg-tc 10s ease-in-out infinite}
+  .mk-stages.is-live .sg-tg1{animation:sg-g1 10s ease-in-out infinite}
+  .mk-stages.is-live .sg-tg2{animation:sg-g2 10s ease-in-out infinite}
+  .mk-stages.is-live .sg-v1{animation:sg-v1 10s ease-in-out infinite}
+  .mk-stages.is-live .sg-v2{animation:sg-v2 10s ease-in-out infinite}
+  .mk-stages.is-live .sg-mv{z-index:3;animation:sg-mv 10s linear infinite,sg-bg 10s ease-in-out infinite;will-change:transform}
+  .mk-stages.is-live .sg-mv .sg-id{animation:sg-idc 10s ease-in-out infinite}
+  .mk-stages.is-live .sg-mv .sg-fl{animation:sg-fl 10s linear infinite}
+  .mk-stages.is-live .sg-mv .sg-fy{animation:sg-fy 10s linear infinite}
+  .mk-stages.is-live .sg-nd .sg-ns,.mk-stages.is-live .sg-nr .sg-ns{animation:sg-nt 10s linear infinite}
+  .mk-stages.is-live .sg-pop{animation:sg-pop 10s cubic-bezier(.2,.8,.2,1) infinite}
+  .mk-stages.is-live .sg-cy .mkdot{animation:sg-pulse 2.4s ease-in-out infinite}
+  .mk-stages.is-live .sg-fl .mkdot.live{animation:sg-live 2.4s ease-in-out infinite}
+}
+@media (prefers-reduced-motion:reduce){
+  .mk-stages *,.mk-stages *::before,.mk-stages *::after{animation:none !important;transition:none !important}
+}
+</style>
+<div class="mk mk-stages" role="img" aria-label="Each project defines its own stages (six on the x-growth board, five in the outreach pipeline), every stage maps to one of a few fixed kinds, and a session working on a card is an overlay on the card, never a column.">
+  <div class="mkf">
+    <div class="mkf-bar">
+      <span class="sg-ttl">
+        <span class="sg-tg sg-tg1"><b>x-growth</b><span class="sg-vn"><span class="sg-v1">board</span><span class="sg-v2">calendar</span></span></span>
+        <span class="sg-tg sg-tg2"><b>outreach</b><span>pipeline</span></span>
+      </span>
+      <span class="sp"></span>
+      <span class="sg-tabs" aria-hidden="true">
+        <span class="sg-tab sg-ta" tabindex="-1">Board</span>
+        <span class="sg-tab sg-tb" tabindex="-1">Calendar</span>
+        <span class="sg-tab sg-tc" tabindex="-1">Pipeline</span>
+        <i class="sg-ul"></i>
+      </span>
+    </div>
+    <div class="mkf-body">
+      <div class="sg-stage">
+
+        <!-- pane 1: board, x-growth -->
+        <div class="sg-pane sg-p1">
+          <div class="sg-scroll">
+            <div class="sg-track">
+              <div class="sg-col"><div class="sg-ch"><span class="sg-nm">Idea</span><span class="sg-n"><span class="sg-ns"><i>2</i></span></span><span class="sg-k">to do</span></div></div>
+              <div class="sg-col sg-nd"><div class="sg-ch"><span class="sg-nm">Draft</span><span class="sg-n"><span class="sg-ns"><i>2</i><i>1</i></span></span><span class="sg-k">active</span></div></div>
+              <div class="sg-col sg-cy sg-nr"><div class="sg-ch"><span class="sg-nm"><i class="mkdot you"></i>Review</span><span class="sg-n"><span class="sg-ns"><i>1</i><i>2</i></span></span><span class="sg-k">you</span></div></div>
+              <div class="sg-col"><div class="sg-ch"><span class="sg-nm">Scheduled</span><span class="sg-n"><span class="sg-ns"><i>2</i></span></span><span class="sg-k">waiting</span></div></div>
+              <div class="sg-col"><div class="sg-ch"><span class="sg-nm">Posted</span><span class="sg-n"><span class="sg-ns"><i>1</i></span></span><span class="sg-k">done</span></div></div>
+              <div class="sg-col"><div class="sg-ch"><span class="sg-nm">Measured</span><span class="sg-n"><span class="sg-ns"><i>2</i></span></span><span class="sg-k">done</span></div></div>
+
+              <!-- Idea -->
+              <div class="sg-card" style="--c:0;--y:38px"><div class="sg-id">tsk-158</div><div class="sg-t">Poll: pricing</div></div>
+              <div class="sg-card" style="--c:0;--y:97px"><div class="sg-id">tsk-160</div><div class="sg-t">Tip: keyboard nav</div></div>
+
+              <!-- Draft -->
+              <div class="sg-card" style="--c:1;--y:38px"><div class="sg-id">tsk-148</div><div class="sg-t">Reply guide</div></div>
+
+              <!-- Review (you) -->
+              <div class="sg-card sg-ft sg-hot" style="--c:2;--y:38px">
+                <div class="sg-id">tsk-146</div>
+                <div class="sg-t">Launch recap</div>
+                <div class="sg-fo"><span class="sg-fy"><i class="mkdot you"></i>waiting on you</span></div>
+              </div>
+
+              <!-- Scheduled -->
+              <div class="sg-card sg-ft" style="--c:3;--y:38px">
+                <div class="sg-id">tsk-139</div>
+                <div class="sg-t">Release notes</div>
+                <div class="sg-fo"><span class="sg-mo sg-tm">Thu 09:30</span></div>
+              </div>
+              <div class="sg-card sg-ft" style="--c:3;--y:111px">
+                <div class="sg-id">tsk-142</div>
+                <div class="sg-t">Build log #12</div>
+                <div class="sg-fo"><span class="sg-mo sg-tm">Fri 13:00</span></div>
+              </div>
+
+              <!-- Posted -->
+              <div class="sg-card sg-ft" style="--c:4;--y:38px">
+                <div class="sg-id">tsk-131</div>
+                <div class="sg-t">Hub on a Pi</div>
+                <div class="sg-fo"><span class="sg-mo">4.1k views</span></div>
+              </div>
+
+              <!-- Measured -->
+              <div class="sg-card sg-ft" style="--c:5;--y:38px">
+                <div class="sg-id">tsk-120</div>
+                <div class="sg-t">Why self-host</div>
+                <div class="sg-fo"><span class="sg-mo">12.6k views</span></div>
+              </div>
+              <div class="sg-card sg-ft" style="--c:5;--y:111px">
+                <div class="sg-id">tsk-114</div>
+                <div class="sg-t">Week 11 recap</div>
+                <div class="sg-fo"><span class="sg-mo">3.2k views</span></div>
+              </div>
+
+              <!-- the card that travels: rests in Draft with a live session overlay -->
+              <div class="sg-card sg-ft sg-mv" style="--c:1;--y:97px;--dy:14px">
+                <div class="sg-id">tsk-151</div>
+                <div class="sg-t">Thread: what we shipped</div>
+                <div class="sg-fo">
+                  <span class="sg-fl"><i class="mkdot live"></i>writer drafting</span>
+                  <span class="sg-fy"><i class="mkdot you"></i>waiting on you</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- pane 2: calendar, x-growth -->
+        <div class="sg-pane sg-p2">
+          <div class="sg-cal">
+            <span></span>
+            <span class="sg-dh">Mon</span><span class="sg-dh">Tue</span><span class="sg-dh">Wed</span><span class="sg-dh">Thu</span><span class="sg-dh">Fri</span><span class="sg-dh">Sat</span><span class="sg-dh">Sun</span>
+
+            <span class="sg-hr">09:30</span>
+            <span class="sg-cell"><span class="sg-chip sg-c-ok">Hub</span></span>
+            <span class="sg-cell"></span>
+            <span class="sg-cell"></span>
+            <span class="sg-cell"><span class="sg-chip">Notes</span></span>
+            <span class="sg-cell"></span>
+            <span class="sg-cell"><span class="sg-chip sg-c-you">Recap</span></span>
+            <span class="sg-cell"></span>
+
+            <span class="sg-hr">13:00</span>
+            <span class="sg-cell"></span>
+            <span class="sg-cell"></span>
+            <span class="sg-cell"><span class="sg-chip sg-c-you sg-pop">Thread</span></span>
+            <span class="sg-cell"></span>
+            <span class="sg-cell"><span class="sg-chip">Log</span></span>
+            <span class="sg-cell"></span>
+            <span class="sg-cell"></span>
+
+            <span class="sg-hr">18:00</span>
+            <span class="sg-cell"></span>
+            <span class="sg-cell"><span class="sg-chip sg-c-ok">Host</span></span>
+            <span class="sg-cell"></span>
+            <span class="sg-cell"></span>
+            <span class="sg-cell"></span>
+            <span class="sg-cell"></span>
+            <span class="sg-cell"></span>
+          </div>
+          <div class="sg-key"><span class="sg-chip">scheduled</span><span class="sg-chip sg-c-ok">posted</span><span class="sg-chip sg-c-you">needs you</span></div>
+        </div>
+
+        <!-- pane 3: pipeline, outreach -->
+        <div class="sg-pane sg-p3">
+          <div class="sg-pipe">
+            <div class="sg-pr">
+              <span class="sg-pn"><b>Prospect</b><i>to do</i></span>
+              <span class="sg-bw"><i class="sg-bar" style="width:100%"></i></span>
+              <span class="sg-pc">40</span>
+            </div>
+            <div class="sg-pr">
+              <span class="sg-pn"><b>Contacted</b><i>waiting</i></span>
+              <span class="sg-bw"><i class="sg-bar" style="width:55%"></i></span>
+              <span class="sg-pc">22</span>
+              <span class="sg-px">3 replies due · routine checks 4h</span>
+            </div>
+            <div class="sg-pr">
+              <span class="sg-pn"><b>Replied</b><i>active</i></span>
+              <span class="sg-bw"><i class="sg-bar" style="width:22.5%"></i></span>
+              <span class="sg-pc">9</span>
+            </div>
+            <div class="sg-pr sg-pyou">
+              <span class="sg-pn"><b>Meeting</b><i>you</i></span>
+              <span class="sg-bw"><i class="sg-bar" style="width:10%"></i></span>
+              <span class="sg-pc">4</span>
+            </div>
+            <div class="sg-pr sg-pdone">
+              <span class="sg-pn"><b>Won</b><i>done</i></span>
+              <span class="sg-bw"><i class="sg-bar" style="width:2.5%"></i></span>
+              <span class="sg-pc">1</span>
+            </div>
+            <div class="sg-lost">
+              <span class="sg-pn"><b>Lost</b><i>dropped</i></span>
+              <span class="sg-bw"><i class="sg-bar" style="width:15%"></i></span>
+              <span class="sg-pc">6</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+      <div class="sg-note">Stages come from the project's stages file. Live work is an overlay, never a column.</div>
+    </div>
+  </div>
+</div>
+<script>
+(function(){
+  var root=document.querySelector('.mk-stages');
+  if(!root) return;
+  var sc=root.querySelector('.sg-scroll'),track=root.querySelector('.sg-track');
+  if(!sc||!track) return;
+  var reduce=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var timers=[],touched=false,CYCLE=10000;
+  ['pointerdown','wheel','touchstart'].forEach(function(ev){sc.addEventListener(ev,function(){touched=true;},{passive:true});});
+  // on a narrow box, bring Draft and Review into view while the card moves, and rewind while the board is hidden
+  function pan(smooth){
+    if(touched) return;
+    var room=sc.scrollWidth-sc.clientWidth;
+    if(room<4) return;
+    var cw=(track.offsetWidth-25)/6;
+    var left=smooth===null?0:(cw+5)-(sc.clientWidth-(2*cw+5))/2;
+    sc.scrollTo({left:Math.max(0,Math.min(room,left)),behavior:smooth?'smooth':'auto'});
+  }
+  function cycle(){
+    timers=[];
+    timers.push(setTimeout(function(){pan(true);},250));
+    timers.push(setTimeout(function(){pan(null);},5000));
+    timers.push(setTimeout(cycle,CYCLE));
+  }
+  function stop(){timers.forEach(clearTimeout);timers=[];}
+  function start(){stop();if(reduce) return;cycle();}
+  root.addEventListener('mk:live',start);
+  root.addEventListener('mk:idle',stop);
+  if(root.classList.contains('is-live')) start();
+})();
+</script>
+</figure>
       <figure class="pane mech"><span class="cap">Stages are a file</span>
 <pre class="v"><span class="c">x-growth/</span>stages.md
 ---
@@ -5084,7 +5428,7 @@ views
 <pre class="v"><span class="c">outreach</span>
   prospect   todo
   contacted  waiting  reply due 3d
-  replied    you
+  replied    active
   meeting    you
   won        done
   lost       dropped
@@ -5101,7 +5445,228 @@ views
     <header><span class="did">D18</span><h3>Design work: what CawCo builds</h3><span class="state" data-for="design">Not picked</span></header>
     <p class="why">The design tools already speak MCP, and CawCo already previews pages and images. Build only what neither gives: one place per project that keeps the results, the pins and the pick.</p>
     <div class="show">
-      <figure class="pane look"><span class="cap">How it would look</span><div class="pending">Mockup "canvas" is missing.</div></figure>
+      <figure class="pane look"><span class="cap">How it would look</span><style>
+.mk-canvas{display:block;min-width:0;container-type:inline-size;color:var(--ink);font-family:var(--f-body);font-size:12px;line-height:1.4;text-align:left}
+.mk-canvas *,.mk-canvas *::before,.mk-canvas *::after{box-sizing:border-box}
+.mk-canvas .mkf-body{gap:8px}
+.mk-canvas .cv-pg{min-width:0;overflow:hidden;text-overflow:ellipsis}
+
+/* the canvas: recess surface, faint dot grid, pans on its own */
+.mk-canvas .cv-board{min-width:0;padding:12px 10px;border:1px solid var(--line);border-radius:var(--r-card);background-color:var(--recess);background-image:radial-gradient(var(--line-strong) 1px,transparent 1px);background-size:14px 14px;background-attachment:local;overflow-x:auto;scrollbar-width:thin;scrollbar-color:var(--line-strong) transparent}
+.mk-canvas .cv-row{display:flex;align-items:flex-start;gap:10px;min-width:470px}
+.mk-canvas .cv-v{flex:1 0 150px;min-width:0;display:flex;flex-direction:column;gap:6px}
+
+/* a variant card */
+.mk-canvas .cv-card{position:relative;min-width:0;display:flex;flex-direction:column;gap:6px;padding:7px;background:var(--raised);border:1px solid var(--line-strong);border-radius:10px}
+.mk-canvas .cv-card.cv-pick{border-color:var(--coral);box-shadow:0 0 0 1px var(--coral)}
+.mk-canvas .cv-hd{display:flex;flex-direction:column;gap:1px;min-width:0}
+.mk-canvas .cv-t{display:flex;align-items:center;gap:6px;min-height:17px}
+.mk-canvas .cv-t b{font-size:12.5px;font-weight:700;line-height:1.3}
+.mk-canvas .cv-t .cv-pk{margin-left:auto;font-size:10px;font-weight:700;line-height:15px;padding:0 6px;border-radius:5px}
+.mk-canvas .cv-src{display:block;min-width:0;font-family:var(--f-mono);font-size:10px;line-height:14px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-ligatures:none}
+.mk-canvas .cv-src .mkdot{width:6px;height:6px;margin-right:5px;vertical-align:1px}
+
+/* wireframe of a pricing page */
+.mk-canvas .cv-wf{display:flex;flex-direction:column;gap:7px;height:100px;min-width:0;padding:6px;background:var(--bg);border:1px solid var(--line);border-radius:6px}
+.mk-canvas .cv-wf.cv-wb{gap:9px}
+.mk-canvas .cv-hh{display:flex;align-items:center;gap:6px}
+.mk-canvas .cv-hl{flex:0 1 56%;display:flex;flex-direction:column;gap:3px}
+.mk-canvas .cv-hl i{display:block;height:4px;border-radius:2px;background:var(--ink)}
+.mk-canvas .cv-hl i+i{height:3px;width:66%;background:var(--line-strong)}
+.mk-canvas .cv-wb .cv-hh{justify-content:center}
+.mk-canvas .cv-wb .cv-hl{align-items:center}
+.mk-canvas .cv-wb .cv-hl i{width:100%}
+.mk-canvas .cv-wb .cv-hl i+i{width:66%}
+.mk-canvas .cv-wc .cv-hh{justify-content:space-between}
+.mk-canvas .cv-tg{display:block;width:17px;height:7px;border:1px solid var(--muted);border-radius:4px;position:relative}
+.mk-canvas .cv-tg::after{content:"";position:absolute;left:1px;top:1px;width:3px;height:3px;border-radius:50%;background:var(--ink)}
+.mk-canvas .cv-pls{display:flex;gap:5px;flex:1;min-height:0}
+.mk-canvas .cv-pl{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;padding:4px;background:var(--raised);border:1px solid var(--line);border-radius:5px}
+.mk-canvas .cv-pl.cv-hi{margin-top:-5px;border-color:var(--ink)}
+.mk-canvas .cv-pl i{display:block}
+.mk-canvas .cv-pn{height:3px;width:52%;border-radius:2px;background:var(--muted)}
+.mk-canvas .cv-pp{height:7px;width:68%;margin:1px 0 2px;border-radius:2px;background:var(--ink)}
+.mk-canvas .cv-wc .cv-pp{height:9px;width:78%}
+.mk-canvas .cv-pf{height:2px;width:92%;border-radius:1px;background:var(--line-strong)}
+.mk-canvas .cv-pf.cv-s{width:62%}
+.mk-canvas .cv-pb{position:relative;margin-top:auto;height:11px;border-radius:3px;background:var(--ink)}
+.mk-canvas .cv-pb.cv-o{background:transparent;border:1px solid var(--muted)}
+.mk-canvas .cv-wc .cv-pb{border-radius:6px}
+.mk-canvas .cv-pb.cv-sel{outline:1.5px solid var(--coral);outline-offset:2px}
+
+/* feedback pin and cursor live inside B's button, so they follow the card when the row scrolls */
+.mk-canvas .cv-pin{position:absolute;top:-9px;right:-7px;z-index:3;width:15px;height:15px;border-radius:50%;background:var(--coral);color:var(--raised);font-family:var(--f-mono);font-size:9px;font-weight:700;line-height:15px;text-align:center;box-shadow:0 0 0 1.5px var(--raised)}
+.mk-canvas .cv-cur{position:absolute;left:30%;top:42%;z-index:4;width:13px;height:17px;overflow:visible;pointer-events:none;transform-origin:1px 1px}
+.mk-canvas .cv-cur path{fill:var(--ink);stroke:var(--raised);stroke-width:1.4;stroke-linejoin:round}
+
+/* comment bubble under B */
+.mk-canvas .cv-note{position:relative;display:flex;flex-direction:column;gap:2px;padding:5px 7px 5px 8px;background:var(--raised);border:1px solid var(--line-strong);border-left:3px solid var(--coral);border-radius:8px}
+.mk-canvas .cv-note::before{content:"";position:absolute;top:-5px;left:calc(50% - 4px);width:8px;height:8px;background:var(--raised);border-left:1px solid var(--line-strong);border-top:1px solid var(--line-strong);transform:rotate(45deg)}
+.mk-canvas .cv-path{font-family:var(--f-mono);font-size:10px;line-height:1.35;color:var(--ink);font-variant-ligatures:none}
+.mk-canvas .cv-msg{font-size:11.5px;line-height:1.35;font-weight:500}
+.mk-canvas .cv-sent{display:grid;padding-left:2px;font-size:11px;line-height:14px;color:var(--muted)}
+.mk-canvas .cv-sa,.mk-canvas .cv-sb{grid-area:1/1;display:flex;align-items:center;gap:5px;min-width:0}
+.mk-canvas .cv-sb{display:none}
+.mk-canvas.is-live .cv-sb{display:flex}
+
+/* checks (done by code) and provenance */
+.mk-canvas .cv-chk{display:flex;flex-wrap:wrap;gap:4px}
+.mk-canvas .cv-chk .mkchip{font-size:10.5px;line-height:17px;padding:0 6px}
+.mk-canvas .cv-by{font-family:var(--f-mono);font-size:10px;line-height:1.35;color:var(--muted);font-variant-ligatures:none}
+.mk-canvas .cv-by code{font-size:inherit;color:var(--ink)}
+.mk-canvas .cv-foot{margin:0;font-size:11px;line-height:1.4;color:var(--muted);text-wrap:pretty}
+
+/* motion, 9s loop: cursor travels to B's button, pin pulses, note slides in, session picks it up, B's pick ring pulses, reset */
+@keyframes mk-cv-cur{
+  0%,6%{transform:translate(120px,-104px) scale(1);opacity:1;animation-timing-function:cubic-bezier(.5,0,.2,1)}
+  30%{transform:translate(0,0) scale(1);opacity:1;animation-timing-function:ease-in-out}
+  32%{transform:translate(0,0) scale(.86);opacity:1}
+  35%,88%{transform:translate(0,0) scale(1);opacity:1}
+  93%{transform:translate(0,0) scale(1);opacity:0}
+  93.1%{transform:translate(120px,-104px) scale(1);opacity:0}
+  100%{transform:translate(120px,-104px) scale(1);opacity:1}
+}
+@keyframes mk-cv-sel{
+  0%,28%{outline-color:transparent}
+  31%,90%{outline-color:var(--coral)}
+  96%,100%{outline-color:transparent}
+}
+@keyframes mk-cv-pin{
+  0%,29%{transform:scale(1)}
+  31%{transform:scale(.82)}
+  36%{transform:scale(1.2)}
+  42%,100%{transform:scale(1)}
+}
+@keyframes mk-cv-ping{
+  0%,30%{transform:scale(1);opacity:0}
+  31%{transform:scale(1);opacity:.8}
+  44%{transform:scale(2.4);opacity:0}
+  100%{transform:scale(2.4);opacity:0}
+}
+@keyframes mk-cv-note{
+  0%,31%{transform:translateY(-4px);opacity:.55;animation-timing-function:cubic-bezier(.2,.8,.2,1)}
+  41%,92%{transform:none;opacity:1;animation-timing-function:ease-in-out}
+  98%,100%{transform:translateY(-4px);opacity:.55}
+}
+@keyframes mk-cv-sa{
+  0%,45%{opacity:1;transform:none}
+  49%,91%{opacity:0;transform:translateY(-3px)}
+  96%,100%{opacity:1;transform:none}
+}
+@keyframes mk-cv-sb{
+  0%,45%{opacity:0;transform:translateY(3px)}
+  49%,91%{opacity:1;transform:none}
+  96%,100%{opacity:0;transform:translateY(3px)}
+}
+@keyframes mk-cv-ring{
+  0%,57%{opacity:0;transform:scale(1)}
+  58%{opacity:.75;transform:scale(1)}
+  70%{opacity:0;transform:scale(1.08)}
+  100%{opacity:0;transform:scale(1.08)}
+}
+@keyframes mk-cv-tag{
+  0%,57%{transform:none}
+  61%{transform:scale(1.12)}
+  66%,100%{transform:none}
+}
+@keyframes mk-cv-live{0%,100%{box-shadow:0 0 0 0 var(--ok-wash)}50%{box-shadow:0 0 0 3px var(--ok-wash)}}
+.mk-canvas.is-live .cv-cur{animation:mk-cv-cur 9s linear infinite}
+.mk-canvas.is-live .cv-pb.cv-sel{animation:mk-cv-sel 9s ease-in-out infinite}
+.mk-canvas.is-live .cv-pin{animation:mk-cv-pin 9s ease-in-out infinite}
+.mk-canvas.is-live .cv-pin::after{content:"";position:absolute;inset:0;border-radius:50%;border:1.5px solid var(--coral);opacity:0;pointer-events:none;animation:mk-cv-ping 9s ease-out infinite}
+.mk-canvas.is-live .cv-note{animation:mk-cv-note 9s ease-in-out infinite}
+.mk-canvas.is-live .cv-sa{animation:mk-cv-sa 9s ease-in-out infinite}
+.mk-canvas.is-live .cv-sb{animation:mk-cv-sb 9s ease-in-out infinite}
+.mk-canvas.is-live .cv-card.cv-pick::after{content:"";position:absolute;inset:-2px;border-radius:12px;border:2px solid var(--coral);opacity:0;pointer-events:none;animation:mk-cv-ring 9s ease-out infinite}
+.mk-canvas.is-live .cv-pk{animation:mk-cv-tag 9s ease-in-out infinite}
+.mk-canvas.is-live .mkdot.live{animation:mk-cv-live 2.4s ease-in-out infinite}
+
+@media (prefers-reduced-motion:reduce){
+  .mk-canvas *,.mk-canvas *::before,.mk-canvas *::after{animation:none !important;transition:none !important}
+  .mk-canvas.is-live .cv-sb,.mk-canvas.is-live .cv-pin::after,.mk-canvas.is-live .cv-card.cv-pick::after{display:none !important}
+}
+</style>
+<div class="mk mk-canvas" role="img" aria-label="A design project's canvas gathers the previews and images from every session side by side, each with code checks, and the operator points at a button on variant B, sends file and line feedback to the session that made it, and picks that variant.">
+  <div class="mkf">
+    <div class="mkf-bar"><b>site</b><span class="cv-pg">· canvas · pricing page</span><span class="sp"></span><span class="mkchip">3 variants</span></div>
+    <div class="mkf-body">
+      <div class="cv-board">
+        <div class="cv-row">
+
+          <div class="cv-v">
+            <div class="cv-card">
+              <div class="cv-hd">
+                <div class="cv-t"><b>Pricing A</b></div>
+                <span class="cv-src"><i class="mkdot live"></i>:5173 live</span>
+              </div>
+              <div class="cv-wf cv-wa" aria-hidden="true">
+                <div class="cv-hh"><div class="cv-hl"><i></i><i></i></div></div>
+                <div class="cv-pls">
+                  <div class="cv-pl"><i class="cv-pn"></i><i class="cv-pp"></i><i class="cv-pf"></i><i class="cv-pf cv-s"></i><i class="cv-pb cv-o"></i></div>
+                  <div class="cv-pl"><i class="cv-pn"></i><i class="cv-pp"></i><i class="cv-pf"></i><i class="cv-pf cv-s"></i><i class="cv-pb"></i></div>
+                  <div class="cv-pl"><i class="cv-pn"></i><i class="cv-pp"></i><i class="cv-pf"></i><i class="cv-pf cv-s"></i><i class="cv-pb cv-o"></i></div>
+                </div>
+              </div>
+            </div>
+            <div class="cv-chk"><span class="mkchip ok">contrast ok</span><span class="mkchip code">diff 0.4%</span></div>
+            <div class="cv-by">made by <code>deep</code> · ws-4f2a</div>
+          </div>
+
+          <div class="cv-v">
+            <div class="cv-card cv-pick">
+              <div class="cv-hd">
+                <div class="cv-t"><b>Pricing B</b><span class="mkchip you cv-pk">Picked</span></div>
+                <span class="cv-src">pricing-b.pen → png</span>
+              </div>
+              <div class="cv-wf cv-wb" aria-hidden="true">
+                <div class="cv-hh"><div class="cv-hl"><i></i><i></i></div></div>
+                <div class="cv-pls">
+                  <div class="cv-pl"><i class="cv-pn"></i><i class="cv-pp"></i><i class="cv-pf"></i><i class="cv-pf cv-s"></i><i class="cv-pb"></i></div>
+                  <div class="cv-pl cv-hi"><i class="cv-pn"></i><i class="cv-pp"></i><i class="cv-pf"></i><i class="cv-pf cv-s"></i>
+                    <i class="cv-pb cv-sel"><span class="cv-pin">1</span><svg class="cv-cur" viewBox="0 0 14 18" aria-hidden="true"><path d="M1.5 1.2V14L4.8 11.1 7.1 16.6 9.5 15.6 7.2 10.2H11.8Z"/></svg></i>
+                  </div>
+                  <div class="cv-pl"><i class="cv-pn"></i><i class="cv-pp"></i><i class="cv-pf"></i><i class="cv-pf cv-s"></i><i class="cv-pb"></i></div>
+                </div>
+              </div>
+            </div>
+            <div class="cv-note">
+              <span class="cv-path">src/lib/<wbr>Pricing.svelte:42</span>
+              <span class="cv-msg">Make this the only primary button</span>
+            </div>
+            <div class="cv-sent">
+              <span class="cv-sa">sent to writer</span>
+              <span class="cv-sb"><i class="mkdot live"></i>writer editing</span>
+            </div>
+            <div class="cv-chk"><span class="mkchip ok">contrast ok</span><span class="mkchip ok">tokens ok</span></div>
+            <div class="cv-by">made by <code>writer</code> · ws-4f2a</div>
+          </div>
+
+          <div class="cv-v">
+            <div class="cv-card">
+              <div class="cv-hd">
+                <div class="cv-t"><b>Pricing C</b></div>
+                <span class="cv-src">Paper → png</span>
+              </div>
+              <div class="cv-wf cv-wc" aria-hidden="true">
+                <div class="cv-hh"><div class="cv-hl"><i></i><i></i></div><i class="cv-tg"></i></div>
+                <div class="cv-pls">
+                  <div class="cv-pl"><i class="cv-pp"></i><i class="cv-pn"></i><i class="cv-pf"></i><i class="cv-pf cv-s"></i><i class="cv-pb cv-o"></i></div>
+                  <div class="cv-pl"><i class="cv-pp"></i><i class="cv-pn"></i><i class="cv-pf"></i><i class="cv-pf cv-s"></i><i class="cv-pb cv-o"></i></div>
+                  <div class="cv-pl"><i class="cv-pp"></i><i class="cv-pn"></i><i class="cv-pf"></i><i class="cv-pf cv-s"></i><i class="cv-pb cv-o"></i></div>
+                </div>
+              </div>
+            </div>
+            <div class="cv-chk"><span class="mkchip warn">1 literal colour</span></div>
+            <div class="cv-by">made by <code>medium</code> · ws-91c0</div>
+          </div>
+
+        </div>
+      </div>
+      <p class="cv-foot">Any tool with an MCP exports here. CawCo shows files and live previews; it has no per-tool adapter.</p>
+    </div>
+  </div>
+</div>
+</figure>
       <figure class="pane mech"><span class="cap">Files in, previews out</span>
 <pre class="v"><span class="c">site/design/</span>
   DESIGN.md        brand, rules
@@ -5120,10 +5685,10 @@ views
     with that tool's MCP
 
 <span class="k">new</span>
-  canvas  side by side
-  pins    the picker, kept on it
-  pick    one wins, rest archive
-  checks  contrast, tokens, diff</pre>
+  canvases  many per project
+  pins      the picker, kept on it
+  pick      one wins, rest archive
+  checks    contrast, tokens, diff</pre>
       </figure>
     </div>
     <div class="opts" role="radiogroup" data-group="design" data-label="D18 Design work">
@@ -5159,6 +5724,319 @@ views
       </tbody></table></div>
     <p class="a">Most of it exists or is borrowed. Two small builds: the canvas (on Svelte Flow, which already draws the workflow canvas) and the pick. Everything a design tool does stays in that tool, reached through its own MCP.</p>
   </article>
+  <article class="ans wide" id="graphical">
+    <header><span class="did">Borrow</span><h3>What Graphical does that we can use</h3></header>
+    <p class="q">What does Graphical do that we can borrow from?</p>
+    <p class="a">Graphical (Josh Puckett and Adam Michela, launched 2026-10-05) is a closed editor for a visual language. Its output is what matters: every download has a <code>GUI.md</code>, theme references for light and dark, setup instructions, and three agent skills. Its site says the theme and skills apply across component libraries, frameworks and languages; the React and Base UI code is one implementation.</p>
+    <div class="prim"><table>
+      <thead><tr><th>Graphical does</th><th>CawCo takes</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td>Ships rules plus tokens plus skills as one bundle</td><td>A design project's <code>design/</code> folder is that bundle: <code>DESIGN.md</code>, tokens, components, skills</td><td><span class="st2 plan">D18</span></td></tr>
+        <tr><td>Skill: create screens</td><td>A project skill that builds a screen from the project's components and tokens only</td><td><span class="st2 plan">borrow</span></td></tr>
+        <tr><td>Skill: apply the theme to existing UI</td><td>A project skill for restyling a page or app that already exists</td><td><span class="st2 plan">borrow</span></td></tr>
+        <tr><td>Skill: find and fix inconsistent styles</td><td>Split in two: a code check finds drift (literal colours, off-scale spacing), the skill fixes it</td><td><span class="st2 plan">borrow</span></td></tr>
+        <tr><td>Start from a style, then tune it</td><td>Onboarding for a design project: Caw shows a few starting styles as previews; you pick one (D19)</td><td><span class="st2 gap">build · small</span></td></tr>
+        <tr><td>DialKit, by the same author (MIT, Svelte 5.8+): live dials in the running page, saved versions, copy a prompt</td><td>Use DialKit inside previews; the values go to the hub through D19 instead of the clipboard</td><td><span class="st2 plan">borrow</span></td></tr>
+        <tr><td>The editor itself</td><td>Not borrowable: closed, React and Base UI only, no MCP. A project can still drop a Graphical download into <code>design/</code>; sessions read <code>GUI.md</code> like <code>DESIGN.md</code>.</td><td><span class="st2 has">nothing to build</span></td></tr>
+      </tbody></table></div>
+  </article>
+
+  <article class="ans wide" id="pvaudit">
+    <header><span class="did">Check</span><h3>Does the preview tool have what design work needs?</h3></header>
+    <p class="q">Does the preview tool have all the primitives that we need? Multiple canvases etc.</p>
+    <p class="a">The core is strong. What's missing is about many at once, kept, and remembered.</p>
+    <div class="prim"><table>
+      <thead><tr><th>Need</th><th>Today</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td>A page beside a session, from a dev server or a folder</td><td><code>show_preview</code>, proxied by the daemon; hot reload, routes and sockets work through it</td><td><span class="st2 has">exists</span></td></tr>
+        <tr><td>Point at an element</td><td>The picker sends selector, file:line (Svelte, React, Vue), styles, a PNG and your note</td><td><span class="st2 has">exists</span></td></tr>
+        <tr><td>Several points in one message</td><td>Selections queue as chips and go as one message</td><td><span class="st2 has">exists</span></td></tr>
+        <tr><td>On the phone</td><td>The iOS app opens and closes previews and shows a preview card</td><td><span class="st2 plan">partly</span></td></tr>
+        <tr><td>Many previews at once</td><td>One per session; each show replaces the last</td><td><span class="st2 gap">gap · canvases</span></td></tr>
+        <tr><td>Several canvases per project</td><td>None. Proposed: one canvas per question (pricing, onboarding), files under <code>design/canvases/</code></td><td><span class="st2 gap">gap · D18</span></td></tr>
+        <tr><td>Kept after the session ends</td><td>Previews close with their session</td><td><span class="st2 gap">gap · D18</span></td></tr>
+        <tr><td>Phone, tablet, desktop side by side</td><td>One frame at the pane's width</td><td><span class="st2 gap">gap · small</span></td></tr>
+        <tr><td>Light, dark and reduced motion</td><td>Whatever the page does</td><td><span class="st2 gap">gap · small</span></td></tr>
+        <tr><td>Pins that stay, with replies</td><td>Selections are sent, then gone from the page</td><td><span class="st2 gap">gap · D18</span></td></tr>
+        <tr><td>Picks, notes and dials the model can read</td><td>Only what you send in a message</td><td><span class="st2 gap">gap · D19</span></td></tr>
+        <tr><td>Images and exports on the same surface</td><td><code>show_image</code> shows them in the transcript only</td><td><span class="st2 gap">gap · D18</span></td></tr>
+        <tr><td>Before and after, screenshot diff</td><td>Checks can diff; nothing shows the two side by side</td><td><span class="st2 gap">gap · small</span></td></tr>
+        <tr><td>Record a clip</td><td>This page kit's Playwright recorder, run by the daemon</td><td><span class="st2 plan">borrow</span></td></tr>
+      </tbody></table></div>
+  </article>
+
+  <article class="dec" id="d19">
+    <header><span class="did">D19</span><h3>Choices inside previews</h3><span class="state" data-for="choices">Not picked</span></header>
+    <p class="why">This page stores your picks and I read them back. A preview should work the same way: the page a session made carries choices and dials, you pick and tune in place, and the session reads what you chose.</p>
+    <div class="show">
+      <figure class="pane look"><span class="cap">How it would look</span><style>
+.mk-bridge{display:block;min-width:0;container-type:inline-size;color:var(--ink);font-family:var(--f-body);font-size:12px;line-height:1.4;text-align:left}
+.mk-bridge *,.mk-bridge *::before,.mk-bridge *::after{box-sizing:border-box}
+.mk-bridge .mkf-body{gap:8px}
+.mk-bridge .br-pg{min-width:0;overflow:hidden;text-overflow:ellipsis}
+
+/* layout: stacked on narrow, preview left and hub right when there is room */
+.mk-bridge .br-grid{display:flex;flex-direction:column;gap:14px;min-width:0}
+.mk-bridge .br-left,.mk-bridge .br-right{min-width:0;display:flex;flex-direction:column;gap:6px}
+@container (min-width:480px){
+  .mk-bridge .br-grid{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);align-items:start;gap:14px}
+}
+
+/* three hero variants */
+.mk-bridge .br-vars{--br-g:6px;position:relative;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--br-g);min-width:0}
+.mk-bridge .br-v{position:relative;min-width:0;display:flex;flex-direction:column;gap:4px;padding:5px;background:var(--raised);border:1px solid var(--line-strong);border-radius:10px}
+.mk-bridge .br-v.br-pick{border-color:var(--coral);box-shadow:0 0 0 1px var(--coral)}
+.mk-bridge .br-vh{display:flex;align-items:center;justify-content:space-between;gap:4px;height:20px;padding-left:2px}
+.mk-bridge .br-vh b{font-family:var(--f-mono);font-size:11px;font-weight:700;line-height:1}
+.mk-bridge .br-pill{appearance:none;margin:0;flex:none;width:44px;height:17px;padding:0;text-align:center;font:inherit;font-size:10px;font-weight:700;line-height:15px;color:var(--ink);background:var(--raised);border:1px solid var(--line-strong);border-radius:6px;cursor:default;pointer-events:none}
+.mk-bridge .br-pill.br-on{background:var(--coral-wash);border-color:var(--coral);color:var(--coral-ink)}
+
+/* wireframes: headline bars, a subline, a button */
+.mk-bridge .br-wf{display:flex;gap:5px;height:58px;min-width:0;padding:6px;background:var(--bg);border:1px solid var(--line);border-radius:4px;overflow:hidden}
+.mk-bridge .br-tx{flex:1 1 0;min-width:0;display:flex;flex-direction:column;justify-content:center;gap:3px}
+.mk-bridge .br-tx i{display:block;flex:none}
+.mk-bridge .br-h{height:5px;width:88%;border-radius:2px;background:var(--ink)}
+.mk-bridge .br-h.br-h2{width:58%}
+.mk-bridge .br-s{height:3px;width:74%;border-radius:2px;background:var(--line-strong)}
+.mk-bridge .br-b{height:10px;width:34px;max-width:70%;margin-top:3px;border-radius:2px;background:var(--ink)}
+.mk-bridge .br-wa .br-wf{border-radius:2px}
+.mk-bridge .br-wa .br-b{border-radius:1px}
+.mk-bridge .br-wb .br-wf{border-radius:9px}
+.mk-bridge .br-wb .br-tx{align-items:center}
+.mk-bridge .br-wb .br-s{width:70%}
+.mk-bridge .br-wb .br-b{border-radius:4px}
+.mk-bridge .br-wc .br-wf{border-radius:5px}
+.mk-bridge .br-wc .br-tx{flex:1.5 1 0}
+.mk-bridge .br-wc .br-b{background:transparent;border:1px solid var(--ink);border-radius:6px}
+.mk-bridge .br-img{flex:1 1 0;min-width:0;align-self:stretch;background:var(--recess);border:1px solid var(--line);border-radius:3px}
+
+/* travelling ring: wrapper is one column wide, so a percentage translate lands exactly one column over */
+.mk-bridge .br-trk{position:absolute;left:0;top:0;width:calc((100% - 2 * var(--br-g)) / 3);height:30px;z-index:2;pointer-events:none}
+.mk-bridge .br-ring{position:absolute;top:4.5px;right:3px;width:50px;height:23px;border:1.5px solid var(--coral);border-radius:9px;opacity:0}
+
+/* dials: a raised control panel */
+.mk-bridge .br-dials{display:flex;flex-direction:column;gap:8px;min-width:0;padding:9px 10px;background:var(--raised);border:1px solid var(--line-strong);border-radius:var(--r-card)}
+.mk-bridge .br-dr{display:grid;grid-template-columns:44px minmax(0,1fr) 46px;align-items:center;gap:8px;min-height:16px}
+.mk-bridge .br-dl{font-family:var(--f-mono);font-size:10.5px;line-height:16px;color:var(--muted);font-variant-ligatures:none}
+.mk-bridge .br-dv{display:flex;align-items:center;justify-content:flex-end;font-family:var(--f-mono);font-size:10.5px;line-height:16px;color:var(--ink);font-variant-ligatures:none;white-space:nowrap}
+.mk-bridge .br-nn{display:grid;justify-items:end}
+.mk-bridge .br-nn span{grid-area:1/1}
+.mk-bridge .br-n8{opacity:0}
+.mk-bridge .br-sw{display:inline-block;flex:none;width:9px;height:9px;margin-right:4px;border-radius:3px;background:var(--coral)}
+.mk-bridge .br-sl{position:relative;height:14px;min-width:0}
+.mk-bridge .br-rail{position:absolute;left:6px;right:6px;top:5px;height:4px;border-radius:2px;background:var(--line-strong);overflow:hidden}
+.mk-bridge .br-fill{position:absolute;inset:0;border-radius:2px;background:var(--coral);transform-origin:left center;transform:scaleX(.58333)}
+.mk-bridge .br-kw{position:absolute;left:6px;right:6px;top:0;height:14px;transform:translateX(-41.667%)}
+.mk-bridge .br-kn{position:absolute;right:-6px;top:1px;width:12px;height:12px;border-radius:50%;background:var(--raised);border:2px solid var(--coral)}
+.mk-bridge .br-kw.br-end{transform:none}
+.mk-bridge .br-kn.br-kc{background:var(--coral)}
+.mk-bridge .br-tick{position:absolute;top:5.5px;width:3px;height:3px;margin-left:-1.5px;border-radius:50%;background:var(--muted)}
+.mk-bridge .br-tg{justify-self:start;position:relative;width:24px;height:14px;border-radius:7px;background:var(--coral-wash);border:1px solid var(--coral)}
+.mk-bridge .br-tg::after{content:"";position:absolute;left:11px;top:2px;width:8px;height:8px;border-radius:50%;background:var(--coral)}
+
+.mk-bridge .br-foot{margin:0;font-size:11px;line-height:1.4;color:var(--muted);text-wrap:pretty}
+.mk-bridge .br-cap{display:block;padding-left:2px;font-family:var(--f-mono);font-size:10.5px;line-height:1.35;color:var(--muted);font-variant-ligatures:none;overflow-wrap:anywhere}
+
+/* the hub card */
+.mk-bridge .br-lab{padding-left:2px;font-size:10.5px;line-height:1.3;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.mk-bridge .br-hub{display:flex;flex-direction:column;gap:1px;min-width:0;padding:5px;background:var(--raised);border:1px solid var(--line);border-radius:var(--r-card)}
+.mk-bridge .br-r{display:grid;grid-template-columns:44px minmax(0,1fr) auto;align-items:baseline;gap:0 8px;min-width:0;padding:3px 6px;border-radius:7px;font-family:var(--f-mono);font-size:11px;line-height:16px;font-variant-ligatures:none}
+.mk-bridge .br-k{color:var(--muted)}
+.mk-bridge .br-val{min-width:0;font-weight:600;color:var(--ink);overflow-wrap:anywhere}
+.mk-bridge .br-m{font-size:10.5px;text-align:right;color:var(--muted);white-space:nowrap}
+.mk-bridge .br-r.br-note .br-val{grid-column:2 / 4;font-weight:500}
+
+/* connector, then the session */
+.mk-bridge .br-arrow{position:relative;height:22px;display:flex;justify-content:center}
+.mk-bridge .br-arrow svg{display:block;width:12px;height:22px;overflow:visible}
+.mk-bridge .br-arrow path{fill:none;stroke:var(--muted);stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.mk-bridge .br-pk{position:absolute;left:calc(50% - 2.5px);top:1px;width:5px;height:5px;border-radius:50%;background:var(--coral);opacity:0}
+.mk-bridge .br-ts{display:flex;flex-direction:column;gap:6px;min-width:0;padding:8px 9px;background:var(--recess);border-radius:var(--r-card)}
+.mk-bridge .br-who{display:flex;align-items:center;gap:6px;font-family:var(--f-mono);font-size:10.5px;line-height:15px;color:var(--muted)}
+.mk-bridge .br-call{align-self:flex-start;max-width:100%;padding:2px 7px;font-family:var(--f-mono);font-size:10.5px;line-height:15px;color:var(--muted);background:var(--raised);border:1px dashed var(--muted);border-radius:6px;font-variant-ligatures:none;overflow-wrap:anywhere}
+.mk-bridge .br-say{font-size:12px;line-height:1.4;text-wrap:pretty}
+.mk-bridge .br-say code{font-size:11px}
+
+/* motion, 9s loop: dial drifts back, the ring travels A to B and lands on B's pill, the radius dial slides 8 to 14 and B's corners round, the hub rows flash, the session reads them */
+@keyframes mk-br-trk{
+  0%,15%{transform:translateX(0);animation-timing-function:cubic-bezier(.5,0,.2,1)}
+  29%,100%{transform:translateX(calc(100% + var(--br-g)))}
+}
+@keyframes mk-br-ring{
+  0%,9%{opacity:0;transform:scale(1.3)}
+  14%{opacity:1;transform:scale(1)}
+  29%{opacity:1;transform:scale(1);animation-timing-function:ease-out}
+  31%{opacity:1;transform:scale(.94)}
+  38%,100%{opacity:0;transform:scale(1.45)}
+}
+@keyframes mk-br-pop{0%,29%{transform:scale(1)}33%{transform:scale(1.12)}39%,100%{transform:scale(1)}}
+@keyframes mk-br-card{
+  0%,29%{box-shadow:0 0 0 1px var(--coral)}
+  33%{box-shadow:0 0 0 1px var(--coral),0 0 0 5px var(--coral-wash)}
+  42%,100%{box-shadow:0 0 0 1px var(--coral)}
+}
+@keyframes mk-br-kw{0%,3%{transform:translateX(-41.667%)}9%,40%{transform:translateX(-66.667%)}54%,100%{transform:translateX(-41.667%)}}
+@keyframes mk-br-fill{0%,3%{transform:scaleX(.58333)}9%,40%{transform:scaleX(.33333)}54%,100%{transform:scaleX(.58333)}}
+@keyframes mk-br-wf{0%,3%{border-radius:9px}9%,40%{border-radius:4px}54%,100%{border-radius:9px}}
+@keyframes mk-br-btn{0%,3%{border-radius:4px}9%,40%{border-radius:1px}54%,100%{border-radius:4px}}
+@keyframes mk-br-n14{0%,5%{opacity:1}7%,46%{opacity:0}48%,100%{opacity:1}}
+@keyframes mk-br-n8{0%,5%{opacity:0}7%,46%{opacity:1}48%,100%{opacity:0}}
+@keyframes mk-br-f1{0%,54%{background-color:transparent}57%,60%{background-color:var(--coral-wash)}65%,100%{background-color:transparent}}
+@keyframes mk-br-f2{0%,62%{background-color:transparent}65%,68%{background-color:var(--coral-wash)}74%,100%{background-color:transparent}}
+@keyframes mk-br-pk{
+  0%,71%{opacity:0;transform:translateY(0)}
+  74%{opacity:1;transform:translateY(0)}
+  81%{opacity:1;transform:translateY(14px)}
+  84%,100%{opacity:0;transform:translateY(14px)}
+}
+@keyframes mk-br-call{
+  0%,81%{background-color:var(--raised);border-color:var(--muted)}
+  85%,91%{background-color:var(--coral-wash);border-color:var(--coral)}
+  97%,100%{background-color:var(--raised);border-color:var(--muted)}
+}
+@keyframes mk-br-live{
+  0%,81%{box-shadow:0 0 0 0 var(--ok-wash)}
+  85%{box-shadow:0 0 0 4px var(--ok-wash)}
+  89%{box-shadow:0 0 0 0 var(--ok-wash)}
+  93%{box-shadow:0 0 0 4px var(--ok-wash)}
+  97%,100%{box-shadow:0 0 0 0 var(--ok-wash)}
+}
+.mk-bridge.is-live .br-trk{animation:mk-br-trk 9s linear infinite}
+.mk-bridge.is-live .br-ring{animation:mk-br-ring 9s ease-in-out infinite}
+.mk-bridge.is-live .br-v.br-pick{animation:mk-br-card 9s ease-in-out infinite}
+.mk-bridge.is-live .br-pill.br-on{animation:mk-br-pop 9s ease-in-out infinite}
+.mk-bridge.is-live .br-kw.br-rad{animation:mk-br-kw 9s ease-in-out infinite}
+.mk-bridge.is-live .br-fill{animation:mk-br-fill 9s ease-in-out infinite}
+.mk-bridge.is-live .br-wb .br-wf{animation:mk-br-wf 9s ease-in-out infinite}
+.mk-bridge.is-live .br-wb .br-b{animation:mk-br-btn 9s ease-in-out infinite}
+.mk-bridge.is-live .br-n14{animation:mk-br-n14 9s ease-in-out infinite}
+.mk-bridge.is-live .br-n8{animation:mk-br-n8 9s ease-in-out infinite}
+.mk-bridge.is-live .br-f1{animation:mk-br-f1 9s ease-in-out infinite}
+.mk-bridge.is-live .br-f2{animation:mk-br-f2 9s ease-in-out infinite}
+.mk-bridge.is-live .br-pk{animation:mk-br-pk 9s ease-in-out infinite}
+.mk-bridge.is-live .br-call{animation:mk-br-call 9s ease-in-out infinite}
+.mk-bridge.is-live .br-who .mkdot.live{animation:mk-br-live 9s ease-in-out infinite}
+
+@media (prefers-reduced-motion:reduce){
+  .mk-bridge *,.mk-bridge *::before,.mk-bridge *::after{animation:none !important;transition:none !important}
+}
+</style>
+<div class="mk mk-bridge" role="img" aria-label="A page a session made can carry choices and dials: the operator picks hero B and sets radius 14 right inside CawCo's preview, CawCo stores those picks in the hub, and the session reads them back with a tool, so nothing is copied.">
+  <div class="br-grid">
+
+    <div class="br-left">
+      <div class="mkf">
+        <div class="mkf-bar"><b>site</b><span class="br-pg">preview · hero options</span></div>
+        <div class="mkf-body">
+
+          <div class="br-vars" aria-hidden="true">
+            <div class="br-v br-wa">
+              <div class="br-vh"><b>A</b><button class="br-pill" type="button" tabindex="-1" aria-hidden="true">Pick</button></div>
+              <div class="br-wf">
+                <div class="br-tx"><i class="br-h"></i><i class="br-h br-h2"></i><i class="br-s"></i><i class="br-b"></i></div>
+              </div>
+            </div>
+            <div class="br-v br-wb br-pick">
+              <div class="br-vh"><b>B</b><button class="br-pill br-on" type="button" tabindex="-1" aria-hidden="true">Picked</button></div>
+              <div class="br-wf">
+                <div class="br-tx"><i class="br-h"></i><i class="br-h br-h2"></i><i class="br-s"></i><i class="br-b"></i></div>
+              </div>
+            </div>
+            <div class="br-v br-wc">
+              <div class="br-vh"><b>C</b><button class="br-pill" type="button" tabindex="-1" aria-hidden="true">Pick</button></div>
+              <div class="br-wf">
+                <div class="br-tx"><i class="br-h"></i><i class="br-h br-h2"></i><i class="br-s"></i><i class="br-b"></i></div>
+                <div class="br-img"></div>
+              </div>
+            </div>
+            <div class="br-trk"><span class="br-ring"></span></div>
+          </div>
+
+          <div class="br-dials" aria-hidden="true">
+            <div class="br-dr">
+              <span class="br-dl">radius</span>
+              <div class="br-sl"><div class="br-rail"><i class="br-fill"></i></div><div class="br-kw br-rad"><i class="br-kn"></i></div></div>
+              <span class="br-dv"><span class="br-nn"><span class="br-n14">14</span><span class="br-n8">8</span></span></span>
+            </div>
+            <div class="br-dr">
+              <span class="br-dl">accent</span>
+              <div class="br-sl"><div class="br-rail"></div><i class="br-tick" style="left:6px"></i><i class="br-tick" style="left:50%"></i><div class="br-kw br-end"><i class="br-kn br-kc"></i></div></div>
+              <span class="br-dv"><i class="br-sw"></i>coral</span>
+            </div>
+            <div class="br-dr">
+              <span class="br-dl">motion</span>
+              <div class="br-tg"></div>
+              <span class="br-dv">on</span>
+            </div>
+          </div>
+
+          <p class="br-foot">Picks, notes and dials are stored in the hub. The session reads them; nothing is copied.</p>
+        </div>
+      </div>
+      <span class="br-cap">data-cawco-choice="hero"</span>
+    </div>
+
+    <div class="br-right">
+      <div class="br-lab">Stored in the hub</div>
+      <div class="br-hub" aria-hidden="true">
+        <div class="br-r br-f1"><span class="br-k">hero</span><span class="br-val">b</span><span class="br-m">you · 14:02</span></div>
+        <div class="br-r br-f2"><span class="br-k">radius</span><span class="br-val">14</span><span class="br-m">dial</span></div>
+        <div class="br-r"><span class="br-k">accent</span><span class="br-val">coral</span><span class="br-m">dial</span></div>
+        <div class="br-r br-note"><span class="br-k">note</span><span class="br-val">"less shadow on B"</span></div>
+      </div>
+      <div class="br-arrow" aria-hidden="true">
+        <svg viewBox="0 0 12 22"><path d="M6 1V19M2.5 15.5 6 19 9.5 15.5"/></svg>
+        <i class="br-pk"></i>
+      </div>
+      <div class="br-ts" aria-hidden="true">
+        <div class="br-who"><i class="mkdot live"></i><span>writer</span></div>
+        <div class="br-call">read_choices("hero options")</div>
+        <div class="br-say">Applying B with radius 14 to <code>Hero.svelte</code></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+</figure>
+      <figure class="pane mech"><span class="cap">The page declares, the hub keeps</span>
+<pre class="v"><span class="c">&lt;!-- in a page a session made --&gt;</span>
+&lt;section data-cawco-choice="hero"
+         data-option="b"&gt;…&lt;/section&gt;
+
+<span class="c">// optional, from the overlay</span>
+cawco.choose("hero", "b")
+cawco.note("hero", "less shadow")
+cawco.set("dials", { radius: 14 })
+cawco.on("picks", render)
+
+<span class="k">the session reads</span>
+read_choices("hero options")
+  hero    b      you · 14:02
+  radius  14     dial
+  note    "less shadow on B"
+
+<span class="k">rules</span>
+  kept per canvas, with page hash
+  read by tool; sent when you say
+  every field bounded, like picks
+  MCP Apps names: works elsewhere</pre>
+      </figure>
+    </div>
+    <div class="opts" role="radiogroup" data-group="choices" data-label="D19 Choices inside previews">
+      <button class="opt" type="button" role="radio" data-opt="message"><b>As today</b><span>Selections become a message when you send.</span></button>
+      <button class="opt" type="button" role="radio" data-opt="store"><b>Stored picks, notes and dials</b><span>Kept in the hub; the session reads them with a tool.</span><span class="tag">Recommended</span></button>
+      <button class="opt" type="button" role="radio" data-opt="mcpapps"><b>MCP Apps messages only</b><span>Portable, but nothing is kept between turns.</span></button>
+    </div>
+    <div class="foot">
+      <details class="more"><summary>Details</summary><div class="in">
+        <p>The overlay CawCo already injects into every preview adds the bridge. A page needs no SDK: any element with <code>data-cawco-choice</code> becomes pickable, and the pane counts groups the way this page's ring counts decisions. The pane checks and bounds every message, as <code>wire.ts</code> already does for the picker, because the page is code an agent wrote.</p>
+        <p>MCP Apps defines <code>ui/update-model-context</code>, <code>ui/message</code> and <code>tools/call</code> for the same job inside Claude, ChatGPT and VS Code, but leaves persistence out. CawCo uses those names and adds the store, so one page works in both places.</p>
+        <p>Picks don't wake the session on their own; you press Send, or a routine reads them. Onboarding uses the same thing: Caw shows a few starting styles and asks you to pick.</p>
+      </div></details>
+      <label class="note">Note <input id="note-choices" data-note="choices" type="text" placeholder="Anything to add"></label>
+    </div>
+  </article>
+
 </section>
 
 <section class="chap" id="order">
@@ -5225,6 +6103,10 @@ views
     <li><a href="https://svelteflow.dev/">Svelte Flow</a></li>
     <li><a href="https://github.com/atlassian/pragmatic-drag-and-drop">Pragmatic drag and drop</a></li>
     <li><a href="https://github.com/vkurko/calendar">Event Calendar</a></li>
+    <li><a href="https://www.graphicalui.com/">Graphical</a></li>
+    <li><a href="https://x.com/joshpuckett/status/2107175379903594714">Graphical launch post</a></li>
+    <li><a href="https://github.com/joshpuckett/dialkit">DialKit</a></li>
+    <li><a href="https://github.com/modelcontextprotocol/ext-apps/blob/main/specification/2026-01-26/apps.mdx">MCP Apps spec</a></li>
   </ul>
 </section>
 </main>

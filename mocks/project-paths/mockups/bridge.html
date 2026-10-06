@@ -1,0 +1,228 @@
+<style>
+.mk-bridge{display:block;min-width:0;container-type:inline-size;color:var(--ink);font-family:var(--f-body);font-size:12px;line-height:1.4;text-align:left}
+.mk-bridge *,.mk-bridge *::before,.mk-bridge *::after{box-sizing:border-box}
+.mk-bridge .mkf-body{gap:8px}
+.mk-bridge .br-pg{min-width:0;overflow:hidden;text-overflow:ellipsis}
+
+/* layout: stacked on narrow, preview left and hub right when there is room */
+.mk-bridge .br-grid{display:flex;flex-direction:column;gap:14px;min-width:0}
+.mk-bridge .br-left,.mk-bridge .br-right{min-width:0;display:flex;flex-direction:column;gap:6px}
+@container (min-width:480px){
+  .mk-bridge .br-grid{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);align-items:start;gap:14px}
+}
+
+/* three hero variants */
+.mk-bridge .br-vars{--br-g:6px;position:relative;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--br-g);min-width:0}
+.mk-bridge .br-v{position:relative;min-width:0;display:flex;flex-direction:column;gap:4px;padding:5px;background:var(--raised);border:1px solid var(--line-strong);border-radius:10px}
+.mk-bridge .br-v.br-pick{border-color:var(--coral);box-shadow:0 0 0 1px var(--coral)}
+.mk-bridge .br-vh{display:flex;align-items:center;justify-content:space-between;gap:4px;height:20px;padding-left:2px}
+.mk-bridge .br-vh b{font-family:var(--f-mono);font-size:11px;font-weight:700;line-height:1}
+.mk-bridge .br-pill{appearance:none;margin:0;flex:none;width:44px;height:17px;padding:0;text-align:center;font:inherit;font-size:10px;font-weight:700;line-height:15px;color:var(--ink);background:var(--raised);border:1px solid var(--line-strong);border-radius:6px;cursor:default;pointer-events:none}
+.mk-bridge .br-pill.br-on{background:var(--coral-wash);border-color:var(--coral);color:var(--coral-ink)}
+
+/* wireframes: headline bars, a subline, a button */
+.mk-bridge .br-wf{display:flex;gap:5px;height:58px;min-width:0;padding:6px;background:var(--bg);border:1px solid var(--line);border-radius:4px;overflow:hidden}
+.mk-bridge .br-tx{flex:1 1 0;min-width:0;display:flex;flex-direction:column;justify-content:center;gap:3px}
+.mk-bridge .br-tx i{display:block;flex:none}
+.mk-bridge .br-h{height:5px;width:88%;border-radius:2px;background:var(--ink)}
+.mk-bridge .br-h.br-h2{width:58%}
+.mk-bridge .br-s{height:3px;width:74%;border-radius:2px;background:var(--line-strong)}
+.mk-bridge .br-b{height:10px;width:34px;max-width:70%;margin-top:3px;border-radius:2px;background:var(--ink)}
+.mk-bridge .br-wa .br-wf{border-radius:2px}
+.mk-bridge .br-wa .br-b{border-radius:1px}
+.mk-bridge .br-wb .br-wf{border-radius:9px}
+.mk-bridge .br-wb .br-tx{align-items:center}
+.mk-bridge .br-wb .br-s{width:70%}
+.mk-bridge .br-wb .br-b{border-radius:4px}
+.mk-bridge .br-wc .br-wf{border-radius:5px}
+.mk-bridge .br-wc .br-tx{flex:1.5 1 0}
+.mk-bridge .br-wc .br-b{background:transparent;border:1px solid var(--ink);border-radius:6px}
+.mk-bridge .br-img{flex:1 1 0;min-width:0;align-self:stretch;background:var(--recess);border:1px solid var(--line);border-radius:3px}
+
+/* travelling ring: wrapper is one column wide, so a percentage translate lands exactly one column over */
+.mk-bridge .br-trk{position:absolute;left:0;top:0;width:calc((100% - 2 * var(--br-g)) / 3);height:30px;z-index:2;pointer-events:none}
+.mk-bridge .br-ring{position:absolute;top:4.5px;right:3px;width:50px;height:23px;border:1.5px solid var(--coral);border-radius:9px;opacity:0}
+
+/* dials: a raised control panel */
+.mk-bridge .br-dials{display:flex;flex-direction:column;gap:8px;min-width:0;padding:9px 10px;background:var(--raised);border:1px solid var(--line-strong);border-radius:var(--r-card)}
+.mk-bridge .br-dr{display:grid;grid-template-columns:44px minmax(0,1fr) 46px;align-items:center;gap:8px;min-height:16px}
+.mk-bridge .br-dl{font-family:var(--f-mono);font-size:10.5px;line-height:16px;color:var(--muted);font-variant-ligatures:none}
+.mk-bridge .br-dv{display:flex;align-items:center;justify-content:flex-end;font-family:var(--f-mono);font-size:10.5px;line-height:16px;color:var(--ink);font-variant-ligatures:none;white-space:nowrap}
+.mk-bridge .br-nn{display:grid;justify-items:end}
+.mk-bridge .br-nn span{grid-area:1/1}
+.mk-bridge .br-n8{opacity:0}
+.mk-bridge .br-sw{display:inline-block;flex:none;width:9px;height:9px;margin-right:4px;border-radius:3px;background:var(--coral)}
+.mk-bridge .br-sl{position:relative;height:14px;min-width:0}
+.mk-bridge .br-rail{position:absolute;left:6px;right:6px;top:5px;height:4px;border-radius:2px;background:var(--line-strong);overflow:hidden}
+.mk-bridge .br-fill{position:absolute;inset:0;border-radius:2px;background:var(--coral);transform-origin:left center;transform:scaleX(.58333)}
+.mk-bridge .br-kw{position:absolute;left:6px;right:6px;top:0;height:14px;transform:translateX(-41.667%)}
+.mk-bridge .br-kn{position:absolute;right:-6px;top:1px;width:12px;height:12px;border-radius:50%;background:var(--raised);border:2px solid var(--coral)}
+.mk-bridge .br-kw.br-end{transform:none}
+.mk-bridge .br-kn.br-kc{background:var(--coral)}
+.mk-bridge .br-tick{position:absolute;top:5.5px;width:3px;height:3px;margin-left:-1.5px;border-radius:50%;background:var(--muted)}
+.mk-bridge .br-tg{justify-self:start;position:relative;width:24px;height:14px;border-radius:7px;background:var(--coral-wash);border:1px solid var(--coral)}
+.mk-bridge .br-tg::after{content:"";position:absolute;left:11px;top:2px;width:8px;height:8px;border-radius:50%;background:var(--coral)}
+
+.mk-bridge .br-foot{margin:0;font-size:11px;line-height:1.4;color:var(--muted);text-wrap:pretty}
+.mk-bridge .br-cap{display:block;padding-left:2px;font-family:var(--f-mono);font-size:10.5px;line-height:1.35;color:var(--muted);font-variant-ligatures:none;overflow-wrap:anywhere}
+
+/* the hub card */
+.mk-bridge .br-lab{padding-left:2px;font-size:10.5px;line-height:1.3;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.mk-bridge .br-hub{display:flex;flex-direction:column;gap:1px;min-width:0;padding:5px;background:var(--raised);border:1px solid var(--line);border-radius:var(--r-card)}
+.mk-bridge .br-r{display:grid;grid-template-columns:44px minmax(0,1fr) auto;align-items:baseline;gap:0 8px;min-width:0;padding:3px 6px;border-radius:7px;font-family:var(--f-mono);font-size:11px;line-height:16px;font-variant-ligatures:none}
+.mk-bridge .br-k{color:var(--muted)}
+.mk-bridge .br-val{min-width:0;font-weight:600;color:var(--ink);overflow-wrap:anywhere}
+.mk-bridge .br-m{font-size:10.5px;text-align:right;color:var(--muted);white-space:nowrap}
+.mk-bridge .br-r.br-note .br-val{grid-column:2 / 4;font-weight:500}
+
+/* connector, then the session */
+.mk-bridge .br-arrow{position:relative;height:22px;display:flex;justify-content:center}
+.mk-bridge .br-arrow svg{display:block;width:12px;height:22px;overflow:visible}
+.mk-bridge .br-arrow path{fill:none;stroke:var(--muted);stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.mk-bridge .br-pk{position:absolute;left:calc(50% - 2.5px);top:1px;width:5px;height:5px;border-radius:50%;background:var(--coral);opacity:0}
+.mk-bridge .br-ts{display:flex;flex-direction:column;gap:6px;min-width:0;padding:8px 9px;background:var(--recess);border-radius:var(--r-card)}
+.mk-bridge .br-who{display:flex;align-items:center;gap:6px;font-family:var(--f-mono);font-size:10.5px;line-height:15px;color:var(--muted)}
+.mk-bridge .br-call{align-self:flex-start;max-width:100%;padding:2px 7px;font-family:var(--f-mono);font-size:10.5px;line-height:15px;color:var(--muted);background:var(--raised);border:1px dashed var(--muted);border-radius:6px;font-variant-ligatures:none;overflow-wrap:anywhere}
+.mk-bridge .br-say{font-size:12px;line-height:1.4;text-wrap:pretty}
+.mk-bridge .br-say code{font-size:11px}
+
+/* motion, 9s loop: dial drifts back, the ring travels A to B and lands on B's pill, the radius dial slides 8 to 14 and B's corners round, the hub rows flash, the session reads them */
+@keyframes mk-br-trk{
+  0%,15%{transform:translateX(0);animation-timing-function:cubic-bezier(.5,0,.2,1)}
+  29%,100%{transform:translateX(calc(100% + var(--br-g)))}
+}
+@keyframes mk-br-ring{
+  0%,9%{opacity:0;transform:scale(1.3)}
+  14%{opacity:1;transform:scale(1)}
+  29%{opacity:1;transform:scale(1);animation-timing-function:ease-out}
+  31%{opacity:1;transform:scale(.94)}
+  38%,100%{opacity:0;transform:scale(1.45)}
+}
+@keyframes mk-br-pop{0%,29%{transform:scale(1)}33%{transform:scale(1.12)}39%,100%{transform:scale(1)}}
+@keyframes mk-br-card{
+  0%,29%{box-shadow:0 0 0 1px var(--coral)}
+  33%{box-shadow:0 0 0 1px var(--coral),0 0 0 5px var(--coral-wash)}
+  42%,100%{box-shadow:0 0 0 1px var(--coral)}
+}
+@keyframes mk-br-kw{0%,3%{transform:translateX(-41.667%)}9%,40%{transform:translateX(-66.667%)}54%,100%{transform:translateX(-41.667%)}}
+@keyframes mk-br-fill{0%,3%{transform:scaleX(.58333)}9%,40%{transform:scaleX(.33333)}54%,100%{transform:scaleX(.58333)}}
+@keyframes mk-br-wf{0%,3%{border-radius:9px}9%,40%{border-radius:4px}54%,100%{border-radius:9px}}
+@keyframes mk-br-btn{0%,3%{border-radius:4px}9%,40%{border-radius:1px}54%,100%{border-radius:4px}}
+@keyframes mk-br-n14{0%,5%{opacity:1}7%,46%{opacity:0}48%,100%{opacity:1}}
+@keyframes mk-br-n8{0%,5%{opacity:0}7%,46%{opacity:1}48%,100%{opacity:0}}
+@keyframes mk-br-f1{0%,54%{background-color:transparent}57%,60%{background-color:var(--coral-wash)}65%,100%{background-color:transparent}}
+@keyframes mk-br-f2{0%,62%{background-color:transparent}65%,68%{background-color:var(--coral-wash)}74%,100%{background-color:transparent}}
+@keyframes mk-br-pk{
+  0%,71%{opacity:0;transform:translateY(0)}
+  74%{opacity:1;transform:translateY(0)}
+  81%{opacity:1;transform:translateY(14px)}
+  84%,100%{opacity:0;transform:translateY(14px)}
+}
+@keyframes mk-br-call{
+  0%,81%{background-color:var(--raised);border-color:var(--muted)}
+  85%,91%{background-color:var(--coral-wash);border-color:var(--coral)}
+  97%,100%{background-color:var(--raised);border-color:var(--muted)}
+}
+@keyframes mk-br-live{
+  0%,81%{box-shadow:0 0 0 0 var(--ok-wash)}
+  85%{box-shadow:0 0 0 4px var(--ok-wash)}
+  89%{box-shadow:0 0 0 0 var(--ok-wash)}
+  93%{box-shadow:0 0 0 4px var(--ok-wash)}
+  97%,100%{box-shadow:0 0 0 0 var(--ok-wash)}
+}
+.mk-bridge.is-live .br-trk{animation:mk-br-trk 9s linear infinite}
+.mk-bridge.is-live .br-ring{animation:mk-br-ring 9s ease-in-out infinite}
+.mk-bridge.is-live .br-v.br-pick{animation:mk-br-card 9s ease-in-out infinite}
+.mk-bridge.is-live .br-pill.br-on{animation:mk-br-pop 9s ease-in-out infinite}
+.mk-bridge.is-live .br-kw.br-rad{animation:mk-br-kw 9s ease-in-out infinite}
+.mk-bridge.is-live .br-fill{animation:mk-br-fill 9s ease-in-out infinite}
+.mk-bridge.is-live .br-wb .br-wf{animation:mk-br-wf 9s ease-in-out infinite}
+.mk-bridge.is-live .br-wb .br-b{animation:mk-br-btn 9s ease-in-out infinite}
+.mk-bridge.is-live .br-n14{animation:mk-br-n14 9s ease-in-out infinite}
+.mk-bridge.is-live .br-n8{animation:mk-br-n8 9s ease-in-out infinite}
+.mk-bridge.is-live .br-f1{animation:mk-br-f1 9s ease-in-out infinite}
+.mk-bridge.is-live .br-f2{animation:mk-br-f2 9s ease-in-out infinite}
+.mk-bridge.is-live .br-pk{animation:mk-br-pk 9s ease-in-out infinite}
+.mk-bridge.is-live .br-call{animation:mk-br-call 9s ease-in-out infinite}
+.mk-bridge.is-live .br-who .mkdot.live{animation:mk-br-live 9s ease-in-out infinite}
+
+@media (prefers-reduced-motion:reduce){
+  .mk-bridge *,.mk-bridge *::before,.mk-bridge *::after{animation:none !important;transition:none !important}
+}
+</style>
+<div class="mk mk-bridge" role="img" aria-label="A page a session made can carry choices and dials: the operator picks hero B and sets radius 14 right inside CawCo's preview, CawCo stores those picks in the hub, and the session reads them back with a tool, so nothing is copied.">
+  <div class="br-grid">
+
+    <div class="br-left">
+      <div class="mkf">
+        <div class="mkf-bar"><b>site</b><span class="br-pg">preview · hero options</span></div>
+        <div class="mkf-body">
+
+          <div class="br-vars" aria-hidden="true">
+            <div class="br-v br-wa">
+              <div class="br-vh"><b>A</b><button class="br-pill" type="button" tabindex="-1" aria-hidden="true">Pick</button></div>
+              <div class="br-wf">
+                <div class="br-tx"><i class="br-h"></i><i class="br-h br-h2"></i><i class="br-s"></i><i class="br-b"></i></div>
+              </div>
+            </div>
+            <div class="br-v br-wb br-pick">
+              <div class="br-vh"><b>B</b><button class="br-pill br-on" type="button" tabindex="-1" aria-hidden="true">Picked</button></div>
+              <div class="br-wf">
+                <div class="br-tx"><i class="br-h"></i><i class="br-h br-h2"></i><i class="br-s"></i><i class="br-b"></i></div>
+              </div>
+            </div>
+            <div class="br-v br-wc">
+              <div class="br-vh"><b>C</b><button class="br-pill" type="button" tabindex="-1" aria-hidden="true">Pick</button></div>
+              <div class="br-wf">
+                <div class="br-tx"><i class="br-h"></i><i class="br-h br-h2"></i><i class="br-s"></i><i class="br-b"></i></div>
+                <div class="br-img"></div>
+              </div>
+            </div>
+            <div class="br-trk"><span class="br-ring"></span></div>
+          </div>
+
+          <div class="br-dials" aria-hidden="true">
+            <div class="br-dr">
+              <span class="br-dl">radius</span>
+              <div class="br-sl"><div class="br-rail"><i class="br-fill"></i></div><div class="br-kw br-rad"><i class="br-kn"></i></div></div>
+              <span class="br-dv"><span class="br-nn"><span class="br-n14">14</span><span class="br-n8">8</span></span></span>
+            </div>
+            <div class="br-dr">
+              <span class="br-dl">accent</span>
+              <div class="br-sl"><div class="br-rail"></div><i class="br-tick" style="left:6px"></i><i class="br-tick" style="left:50%"></i><div class="br-kw br-end"><i class="br-kn br-kc"></i></div></div>
+              <span class="br-dv"><i class="br-sw"></i>coral</span>
+            </div>
+            <div class="br-dr">
+              <span class="br-dl">motion</span>
+              <div class="br-tg"></div>
+              <span class="br-dv">on</span>
+            </div>
+          </div>
+
+          <p class="br-foot">Picks, notes and dials are stored in the hub. The session reads them; nothing is copied.</p>
+        </div>
+      </div>
+      <span class="br-cap">data-cawco-choice="hero"</span>
+    </div>
+
+    <div class="br-right">
+      <div class="br-lab">Stored in the hub</div>
+      <div class="br-hub" aria-hidden="true">
+        <div class="br-r br-f1"><span class="br-k">hero</span><span class="br-val">b</span><span class="br-m">you · 14:02</span></div>
+        <div class="br-r br-f2"><span class="br-k">radius</span><span class="br-val">14</span><span class="br-m">dial</span></div>
+        <div class="br-r"><span class="br-k">accent</span><span class="br-val">coral</span><span class="br-m">dial</span></div>
+        <div class="br-r br-note"><span class="br-k">note</span><span class="br-val">"less shadow on B"</span></div>
+      </div>
+      <div class="br-arrow" aria-hidden="true">
+        <svg viewBox="0 0 12 22"><path d="M6 1V19M2.5 15.5 6 19 9.5 15.5"/></svg>
+        <i class="br-pk"></i>
+      </div>
+      <div class="br-ts" aria-hidden="true">
+        <div class="br-who"><i class="mkdot live"></i><span>writer</span></div>
+        <div class="br-call">read_choices("hero options")</div>
+        <div class="br-say">Applying B with radius 14 to <code>Hero.svelte</code></div>
+      </div>
+    </div>
+
+  </div>
+</div>

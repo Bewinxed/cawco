@@ -1,0 +1,221 @@
+<style>
+.mk-canvas{display:block;min-width:0;container-type:inline-size;color:var(--ink);font-family:var(--f-body);font-size:12px;line-height:1.4;text-align:left}
+.mk-canvas *,.mk-canvas *::before,.mk-canvas *::after{box-sizing:border-box}
+.mk-canvas .mkf-body{gap:8px}
+.mk-canvas .cv-pg{min-width:0;overflow:hidden;text-overflow:ellipsis}
+
+/* the canvas: recess surface, faint dot grid, pans on its own */
+.mk-canvas .cv-board{min-width:0;padding:12px 10px;border:1px solid var(--line);border-radius:var(--r-card);background-color:var(--recess);background-image:radial-gradient(var(--line-strong) 1px,transparent 1px);background-size:14px 14px;background-attachment:local;overflow-x:auto;scrollbar-width:thin;scrollbar-color:var(--line-strong) transparent}
+.mk-canvas .cv-row{display:flex;align-items:flex-start;gap:10px;min-width:470px}
+.mk-canvas .cv-v{flex:1 0 150px;min-width:0;display:flex;flex-direction:column;gap:6px}
+
+/* a variant card */
+.mk-canvas .cv-card{position:relative;min-width:0;display:flex;flex-direction:column;gap:6px;padding:7px;background:var(--raised);border:1px solid var(--line-strong);border-radius:10px}
+.mk-canvas .cv-card.cv-pick{border-color:var(--coral);box-shadow:0 0 0 1px var(--coral)}
+.mk-canvas .cv-hd{display:flex;flex-direction:column;gap:1px;min-width:0}
+.mk-canvas .cv-t{display:flex;align-items:center;gap:6px;min-height:17px}
+.mk-canvas .cv-t b{font-size:12.5px;font-weight:700;line-height:1.3}
+.mk-canvas .cv-t .cv-pk{margin-left:auto;font-size:10px;font-weight:700;line-height:15px;padding:0 6px;border-radius:5px}
+.mk-canvas .cv-src{display:block;min-width:0;font-family:var(--f-mono);font-size:10px;line-height:14px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-ligatures:none}
+.mk-canvas .cv-src .mkdot{width:6px;height:6px;margin-right:5px;vertical-align:1px}
+
+/* wireframe of a pricing page */
+.mk-canvas .cv-wf{display:flex;flex-direction:column;gap:7px;height:100px;min-width:0;padding:6px;background:var(--bg);border:1px solid var(--line);border-radius:6px}
+.mk-canvas .cv-wf.cv-wb{gap:9px}
+.mk-canvas .cv-hh{display:flex;align-items:center;gap:6px}
+.mk-canvas .cv-hl{flex:0 1 56%;display:flex;flex-direction:column;gap:3px}
+.mk-canvas .cv-hl i{display:block;height:4px;border-radius:2px;background:var(--ink)}
+.mk-canvas .cv-hl i+i{height:3px;width:66%;background:var(--line-strong)}
+.mk-canvas .cv-wb .cv-hh{justify-content:center}
+.mk-canvas .cv-wb .cv-hl{align-items:center}
+.mk-canvas .cv-wb .cv-hl i{width:100%}
+.mk-canvas .cv-wb .cv-hl i+i{width:66%}
+.mk-canvas .cv-wc .cv-hh{justify-content:space-between}
+.mk-canvas .cv-tg{display:block;width:17px;height:7px;border:1px solid var(--muted);border-radius:4px;position:relative}
+.mk-canvas .cv-tg::after{content:"";position:absolute;left:1px;top:1px;width:3px;height:3px;border-radius:50%;background:var(--ink)}
+.mk-canvas .cv-pls{display:flex;gap:5px;flex:1;min-height:0}
+.mk-canvas .cv-pl{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;padding:4px;background:var(--raised);border:1px solid var(--line);border-radius:5px}
+.mk-canvas .cv-pl.cv-hi{margin-top:-5px;border-color:var(--ink)}
+.mk-canvas .cv-pl i{display:block}
+.mk-canvas .cv-pn{height:3px;width:52%;border-radius:2px;background:var(--muted)}
+.mk-canvas .cv-pp{height:7px;width:68%;margin:1px 0 2px;border-radius:2px;background:var(--ink)}
+.mk-canvas .cv-wc .cv-pp{height:9px;width:78%}
+.mk-canvas .cv-pf{height:2px;width:92%;border-radius:1px;background:var(--line-strong)}
+.mk-canvas .cv-pf.cv-s{width:62%}
+.mk-canvas .cv-pb{position:relative;margin-top:auto;height:11px;border-radius:3px;background:var(--ink)}
+.mk-canvas .cv-pb.cv-o{background:transparent;border:1px solid var(--muted)}
+.mk-canvas .cv-wc .cv-pb{border-radius:6px}
+.mk-canvas .cv-pb.cv-sel{outline:1.5px solid var(--coral);outline-offset:2px}
+
+/* feedback pin and cursor live inside B's button, so they follow the card when the row scrolls */
+.mk-canvas .cv-pin{position:absolute;top:-9px;right:-7px;z-index:3;width:15px;height:15px;border-radius:50%;background:var(--coral);color:var(--raised);font-family:var(--f-mono);font-size:9px;font-weight:700;line-height:15px;text-align:center;box-shadow:0 0 0 1.5px var(--raised)}
+.mk-canvas .cv-cur{position:absolute;left:30%;top:42%;z-index:4;width:13px;height:17px;overflow:visible;pointer-events:none;transform-origin:1px 1px}
+.mk-canvas .cv-cur path{fill:var(--ink);stroke:var(--raised);stroke-width:1.4;stroke-linejoin:round}
+
+/* comment bubble under B */
+.mk-canvas .cv-note{position:relative;display:flex;flex-direction:column;gap:2px;padding:5px 7px 5px 8px;background:var(--raised);border:1px solid var(--line-strong);border-left:3px solid var(--coral);border-radius:8px}
+.mk-canvas .cv-note::before{content:"";position:absolute;top:-5px;left:calc(50% - 4px);width:8px;height:8px;background:var(--raised);border-left:1px solid var(--line-strong);border-top:1px solid var(--line-strong);transform:rotate(45deg)}
+.mk-canvas .cv-path{font-family:var(--f-mono);font-size:10px;line-height:1.35;color:var(--ink);font-variant-ligatures:none}
+.mk-canvas .cv-msg{font-size:11.5px;line-height:1.35;font-weight:500}
+.mk-canvas .cv-sent{display:grid;padding-left:2px;font-size:11px;line-height:14px;color:var(--muted)}
+.mk-canvas .cv-sa,.mk-canvas .cv-sb{grid-area:1/1;display:flex;align-items:center;gap:5px;min-width:0}
+.mk-canvas .cv-sb{display:none}
+.mk-canvas.is-live .cv-sb{display:flex}
+
+/* checks (done by code) and provenance */
+.mk-canvas .cv-chk{display:flex;flex-wrap:wrap;gap:4px}
+.mk-canvas .cv-chk .mkchip{font-size:10.5px;line-height:17px;padding:0 6px}
+.mk-canvas .cv-by{font-family:var(--f-mono);font-size:10px;line-height:1.35;color:var(--muted);font-variant-ligatures:none}
+.mk-canvas .cv-by code{font-size:inherit;color:var(--ink)}
+.mk-canvas .cv-foot{margin:0;font-size:11px;line-height:1.4;color:var(--muted);text-wrap:pretty}
+
+/* motion, 9s loop: cursor travels to B's button, pin pulses, note slides in, session picks it up, B's pick ring pulses, reset */
+@keyframes mk-cv-cur{
+  0%,6%{transform:translate(120px,-104px) scale(1);opacity:1;animation-timing-function:cubic-bezier(.5,0,.2,1)}
+  30%{transform:translate(0,0) scale(1);opacity:1;animation-timing-function:ease-in-out}
+  32%{transform:translate(0,0) scale(.86);opacity:1}
+  35%,88%{transform:translate(0,0) scale(1);opacity:1}
+  93%{transform:translate(0,0) scale(1);opacity:0}
+  93.1%{transform:translate(120px,-104px) scale(1);opacity:0}
+  100%{transform:translate(120px,-104px) scale(1);opacity:1}
+}
+@keyframes mk-cv-sel{
+  0%,28%{outline-color:transparent}
+  31%,90%{outline-color:var(--coral)}
+  96%,100%{outline-color:transparent}
+}
+@keyframes mk-cv-pin{
+  0%,29%{transform:scale(1)}
+  31%{transform:scale(.82)}
+  36%{transform:scale(1.2)}
+  42%,100%{transform:scale(1)}
+}
+@keyframes mk-cv-ping{
+  0%,30%{transform:scale(1);opacity:0}
+  31%{transform:scale(1);opacity:.8}
+  44%{transform:scale(2.4);opacity:0}
+  100%{transform:scale(2.4);opacity:0}
+}
+@keyframes mk-cv-note{
+  0%,31%{transform:translateY(-4px);opacity:.55;animation-timing-function:cubic-bezier(.2,.8,.2,1)}
+  41%,92%{transform:none;opacity:1;animation-timing-function:ease-in-out}
+  98%,100%{transform:translateY(-4px);opacity:.55}
+}
+@keyframes mk-cv-sa{
+  0%,45%{opacity:1;transform:none}
+  49%,91%{opacity:0;transform:translateY(-3px)}
+  96%,100%{opacity:1;transform:none}
+}
+@keyframes mk-cv-sb{
+  0%,45%{opacity:0;transform:translateY(3px)}
+  49%,91%{opacity:1;transform:none}
+  96%,100%{opacity:0;transform:translateY(3px)}
+}
+@keyframes mk-cv-ring{
+  0%,57%{opacity:0;transform:scale(1)}
+  58%{opacity:.75;transform:scale(1)}
+  70%{opacity:0;transform:scale(1.08)}
+  100%{opacity:0;transform:scale(1.08)}
+}
+@keyframes mk-cv-tag{
+  0%,57%{transform:none}
+  61%{transform:scale(1.12)}
+  66%,100%{transform:none}
+}
+@keyframes mk-cv-live{0%,100%{box-shadow:0 0 0 0 var(--ok-wash)}50%{box-shadow:0 0 0 3px var(--ok-wash)}}
+.mk-canvas.is-live .cv-cur{animation:mk-cv-cur 9s linear infinite}
+.mk-canvas.is-live .cv-pb.cv-sel{animation:mk-cv-sel 9s ease-in-out infinite}
+.mk-canvas.is-live .cv-pin{animation:mk-cv-pin 9s ease-in-out infinite}
+.mk-canvas.is-live .cv-pin::after{content:"";position:absolute;inset:0;border-radius:50%;border:1.5px solid var(--coral);opacity:0;pointer-events:none;animation:mk-cv-ping 9s ease-out infinite}
+.mk-canvas.is-live .cv-note{animation:mk-cv-note 9s ease-in-out infinite}
+.mk-canvas.is-live .cv-sa{animation:mk-cv-sa 9s ease-in-out infinite}
+.mk-canvas.is-live .cv-sb{animation:mk-cv-sb 9s ease-in-out infinite}
+.mk-canvas.is-live .cv-card.cv-pick::after{content:"";position:absolute;inset:-2px;border-radius:12px;border:2px solid var(--coral);opacity:0;pointer-events:none;animation:mk-cv-ring 9s ease-out infinite}
+.mk-canvas.is-live .cv-pk{animation:mk-cv-tag 9s ease-in-out infinite}
+.mk-canvas.is-live .mkdot.live{animation:mk-cv-live 2.4s ease-in-out infinite}
+
+@media (prefers-reduced-motion:reduce){
+  .mk-canvas *,.mk-canvas *::before,.mk-canvas *::after{animation:none !important;transition:none !important}
+  .mk-canvas.is-live .cv-sb,.mk-canvas.is-live .cv-pin::after,.mk-canvas.is-live .cv-card.cv-pick::after{display:none !important}
+}
+</style>
+<div class="mk mk-canvas" role="img" aria-label="A design project's canvas gathers the previews and images from every session side by side, each with code checks, and the operator points at a button on variant B, sends file and line feedback to the session that made it, and picks that variant.">
+  <div class="mkf">
+    <div class="mkf-bar"><b>site</b><span class="cv-pg">· canvas · pricing page</span><span class="sp"></span><span class="mkchip">3 variants</span></div>
+    <div class="mkf-body">
+      <div class="cv-board">
+        <div class="cv-row">
+
+          <div class="cv-v">
+            <div class="cv-card">
+              <div class="cv-hd">
+                <div class="cv-t"><b>Pricing A</b></div>
+                <span class="cv-src"><i class="mkdot live"></i>:5173 live</span>
+              </div>
+              <div class="cv-wf cv-wa" aria-hidden="true">
+                <div class="cv-hh"><div class="cv-hl"><i></i><i></i></div></div>
+                <div class="cv-pls">
+                  <div class="cv-pl"><i class="cv-pn"></i><i class="cv-pp"></i><i class="cv-pf"></i><i class="cv-pf cv-s"></i><i class="cv-pb cv-o"></i></div>
+                  <div class="cv-pl"><i class="cv-pn"></i><i class="cv-pp"></i><i class="cv-pf"></i><i class="cv-pf cv-s"></i><i class="cv-pb"></i></div>
+                  <div class="cv-pl"><i class="cv-pn"></i><i class="cv-pp"></i><i class="cv-pf"></i><i class="cv-pf cv-s"></i><i class="cv-pb cv-o"></i></div>
+                </div>
+              </div>
+            </div>
+            <div class="cv-chk"><span class="mkchip ok">contrast ok</span><span class="mkchip code">diff 0.4%</span></div>
+            <div class="cv-by">made by <code>deep</code> · ws-4f2a</div>
+          </div>
+
+          <div class="cv-v">
+            <div class="cv-card cv-pick">
+              <div class="cv-hd">
+                <div class="cv-t"><b>Pricing B</b><span class="mkchip you cv-pk">Picked</span></div>
+                <span class="cv-src">pricing-b.pen → png</span>
+              </div>
+              <div class="cv-wf cv-wb" aria-hidden="true">
+                <div class="cv-hh"><div class="cv-hl"><i></i><i></i></div></div>
+                <div class="cv-pls">
+                  <div class="cv-pl"><i class="cv-pn"></i><i class="cv-pp"></i><i class="cv-pf"></i><i class="cv-pf cv-s"></i><i class="cv-pb"></i></div>
+                  <div class="cv-pl cv-hi"><i class="cv-pn"></i><i class="cv-pp"></i><i class="cv-pf"></i><i class="cv-pf cv-s"></i>
+                    <i class="cv-pb cv-sel"><span class="cv-pin">1</span><svg class="cv-cur" viewBox="0 0 14 18" aria-hidden="true"><path d="M1.5 1.2V14L4.8 11.1 7.1 16.6 9.5 15.6 7.2 10.2H11.8Z"/></svg></i>
+                  </div>
+                  <div class="cv-pl"><i class="cv-pn"></i><i class="cv-pp"></i><i class="cv-pf"></i><i class="cv-pf cv-s"></i><i class="cv-pb"></i></div>
+                </div>
+              </div>
+            </div>
+            <div class="cv-note">
+              <span class="cv-path">src/lib/<wbr>Pricing.svelte:42</span>
+              <span class="cv-msg">Make this the only primary button</span>
+            </div>
+            <div class="cv-sent">
+              <span class="cv-sa">sent to writer</span>
+              <span class="cv-sb"><i class="mkdot live"></i>writer editing</span>
+            </div>
+            <div class="cv-chk"><span class="mkchip ok">contrast ok</span><span class="mkchip ok">tokens ok</span></div>
+            <div class="cv-by">made by <code>writer</code> · ws-4f2a</div>
+          </div>
+
+          <div class="cv-v">
+            <div class="cv-card">
+              <div class="cv-hd">
+                <div class="cv-t"><b>Pricing C</b></div>
+                <span class="cv-src">Paper → png</span>
+              </div>
+              <div class="cv-wf cv-wc" aria-hidden="true">
+                <div class="cv-hh"><div class="cv-hl"><i></i><i></i></div><i class="cv-tg"></i></div>
+                <div class="cv-pls">
+                  <div class="cv-pl"><i class="cv-pp"></i><i class="cv-pn"></i><i class="cv-pf"></i><i class="cv-pf cv-s"></i><i class="cv-pb cv-o"></i></div>
+                  <div class="cv-pl"><i class="cv-pp"></i><i class="cv-pn"></i><i class="cv-pf"></i><i class="cv-pf cv-s"></i><i class="cv-pb cv-o"></i></div>
+                  <div class="cv-pl"><i class="cv-pp"></i><i class="cv-pn"></i><i class="cv-pf"></i><i class="cv-pf cv-s"></i><i class="cv-pb cv-o"></i></div>
+                </div>
+              </div>
+            </div>
+            <div class="cv-chk"><span class="mkchip warn">1 literal colour</span></div>
+            <div class="cv-by">made by <code>medium</code> · ws-91c0</div>
+          </div>
+
+        </div>
+      </div>
+      <p class="cv-foot">Any tool with an MCP exports here. CawCo shows files and live previews; it has no per-tool adapter.</p>
+    </div>
+  </div>
+</div>

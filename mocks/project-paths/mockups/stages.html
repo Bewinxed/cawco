@@ -1,0 +1,344 @@
+<style>
+.mk-stages{--ph:198px;display:block;min-width:0;color:var(--ink);font-family:var(--f-body);font-size:12px;line-height:1.3;text-align:left}
+.mk-stages *,.mk-stages *::before,.mk-stages *::after{box-sizing:border-box}
+.mk-stages .mkf-body{padding:8px;gap:8px}
+.mk-stages .mkf-bar{gap:6px;padding:0 10px 0 12px}
+
+/* title bar: project name + view name on the left, three view tabs on the right */
+.mk-stages .sg-ttl{display:grid;min-width:0;overflow:hidden}
+.mk-stages .sg-tg{grid-area:1/1;display:flex;align-items:center;gap:6px;min-width:0}
+.mk-stages .sg-tg2{opacity:0}
+.mk-stages .sg-vn{display:grid}
+.mk-stages .sg-vn span{grid-area:1/1}
+.mk-stages .sg-v2{opacity:0}
+.mk-stages .sg-tabs{position:relative;flex:none;align-self:stretch;display:inline-grid;grid-template-columns:repeat(3,1fr);pointer-events:none;user-select:none}
+.mk-stages .sg-tab{display:flex;align-items:center;justify-content:center;padding:0 5px;font-size:10px;font-weight:500;line-height:1;color:var(--muted);outline:none}
+.mk-stages .sg-ta{color:var(--ink)}
+.mk-stages .sg-ul{position:absolute;left:0;bottom:0;width:33.3334%;height:2px;border-radius:2px 2px 0 0;background:var(--coral)}
+
+/* the three views share one stage; at rest only the board shows */
+.mk-stages .sg-stage{position:relative;display:grid;min-width:0}
+.mk-stages .sg-pane{grid-area:1/1;min-width:0;display:flex;flex-direction:column}
+.mk-stages .sg-p2,.mk-stages .sg-p3{opacity:0;pointer-events:none}
+
+/* pane 1: board */
+.mk-stages .sg-scroll{overflow-x:auto;overflow-y:hidden;border-radius:10px;scrollbar-width:thin;scrollbar-color:var(--line-strong) transparent}
+.mk-stages .sg-track{position:relative;display:grid;grid-template-columns:repeat(6,minmax(92px,1fr));column-gap:5px;min-width:577px}
+.mk-stages .sg-col{min-height:var(--ph);padding:7px 0 0;background:var(--recess);border-radius:10px}
+.mk-stages .sg-col.sg-cy{background:var(--coral-wash)}
+.mk-stages .sg-ch{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:4px;padding:0 8px}
+.mk-stages .sg-nm{display:flex;align-items:center;gap:5px;height:14px;font-size:11px;line-height:14px;font-weight:700;white-space:nowrap}
+.mk-stages .sg-nm .mkdot{width:6px;height:6px;flex:none}
+.mk-stages .sg-cy .sg-nm{color:var(--coral-ink)}
+.mk-stages .sg-k{grid-column:1/-1;height:11px;font-family:var(--f-mono);font-size:9px;line-height:11px;color:var(--muted);font-variant-ligatures:none;white-space:nowrap}
+.mk-stages .sg-cy .sg-k{color:var(--coral-ink)}
+.mk-stages .sg-n{display:block;height:14px;min-width:8px;overflow:hidden;text-align:right;font-family:var(--f-mono);font-size:10.5px;font-weight:500;line-height:14px;color:var(--muted)}
+.mk-stages .sg-cy .sg-n{color:var(--coral-ink)}
+.mk-stages .sg-ns{display:flex;flex-direction:column}
+.mk-stages .sg-ns i{display:block;height:14px;font-style:normal}
+
+.mk-stages .sg-card{position:absolute;z-index:1;top:var(--y);left:calc(var(--c) * ((100% - 25px) / 6 + 5px) + 3px);width:calc((100% - 25px) / 6 - 6px);height:54px;display:flex;flex-direction:column;gap:3px;padding:5px 5px 5px 6px;background:var(--raised);border:1px solid var(--line-strong);border-radius:8px;min-width:0;overflow:hidden}
+.mk-stages .sg-ft{height:68px}
+.mk-stages .sg-hot{background:var(--coral-wash);border-color:var(--coral)}
+.mk-stages .sg-id{height:12px;font-family:var(--f-mono);font-size:9px;line-height:12px;color:var(--muted);font-variant-ligatures:none;white-space:nowrap}
+.mk-stages .sg-hot .sg-id{color:var(--coral-ink)}
+.mk-stages .sg-t{height:26px;overflow:hidden;font-size:10.5px;line-height:13px;font-weight:600;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.mk-stages .sg-fo{position:relative;height:12px;margin-top:auto;font-size:9px;line-height:12px;color:var(--muted)}
+.mk-stages .sg-fo>*{position:absolute;left:0;right:0;top:0;height:12px;display:flex;align-items:center;gap:4px;white-space:nowrap;overflow:hidden}
+.mk-stages .sg-fo .mkdot{width:6px;height:6px;flex:none}
+.mk-stages .sg-mo{font-family:var(--f-mono);font-size:9px;font-variant-ligatures:none}
+.mk-stages .sg-tm{color:var(--ink)}
+.mk-stages .sg-fy{color:var(--coral-ink);font-weight:600}
+.mk-stages .sg-mv .sg-fy{opacity:0}
+
+/* pane 2: calendar */
+.mk-stages .sg-cal{flex:1;display:grid;grid-template-columns:26px repeat(7,minmax(0,1fr));grid-template-rows:14px repeat(3,minmax(38px,1fr));gap:2px;min-width:0}
+.mk-stages .sg-dh{font-family:var(--f-mono);font-size:9px;line-height:14px;color:var(--muted);text-align:center;font-variant-ligatures:none}
+.mk-stages .sg-hr{align-self:center;font-family:var(--f-mono);font-size:8.5px;line-height:1;color:var(--muted);font-variant-ligatures:none}
+.mk-stages .sg-cell{display:flex;align-items:center;justify-content:center;min-width:0;padding:0 1px;background:var(--recess);border-radius:6px}
+.mk-stages .sg-chip{display:block;width:100%;min-width:0;height:18px;padding:0;border:1px solid var(--line-strong);border-radius:5px;background:var(--raised);color:var(--ink);font-size:8.5px;line-height:16px;font-weight:600;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mk-stages .sg-c-ok{background:var(--ok-wash);border-color:transparent;color:var(--ok-ink)}
+.mk-stages .sg-c-you{background:var(--coral-wash);border-color:var(--coral);color:var(--coral-ink)}
+.mk-stages .sg-key{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;padding-top:6px}
+.mk-stages .sg-key .sg-chip{display:inline-block;width:auto;height:16px;font-size:9px;line-height:14px;padding:0 6px;font-weight:500}
+
+/* pane 3: pipeline */
+.mk-stages .sg-pipe{flex:1;display:flex;flex-direction:column;gap:3px;min-width:0}
+.mk-stages .sg-pr{display:grid;grid-template-columns:70px minmax(0,1fr) 24px;grid-template-areas:"n b c" ". x x";align-items:center;column-gap:8px;padding:2px 8px;background:var(--recess);border-radius:8px}
+.mk-stages .sg-pn{grid-area:n;display:flex;flex-direction:column;min-width:0}
+.mk-stages .sg-pn b{display:block;height:13px;font-size:11px;line-height:13px;font-weight:700;white-space:nowrap}
+.mk-stages .sg-pn i{display:block;height:10px;font-style:normal;font-family:var(--f-mono);font-size:9px;line-height:10px;color:var(--muted);font-variant-ligatures:none;white-space:nowrap}
+.mk-stages .sg-bw{grid-area:b;display:flex;align-items:center;min-width:0}
+.mk-stages .sg-bar{display:block;height:9px;min-width:4px;border-radius:3px;background:var(--line-strong)}
+.mk-stages .sg-pc{grid-area:c;text-align:right;font-family:var(--f-mono);font-size:11px;font-weight:500;line-height:1;font-variant-ligatures:none}
+.mk-stages .sg-px{grid-area:x;justify-self:start;min-width:0;max-width:100%;margin-top:3px;padding:0 5px;border-radius:5px;background:var(--bg);font-size:9px;line-height:15px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mk-stages .sg-pr.sg-pyou{background:var(--coral-wash)}
+.mk-stages .sg-pyou .sg-pn,.mk-stages .sg-pyou .sg-pn i,.mk-stages .sg-pyou .sg-pc{color:var(--coral-ink)}
+.mk-stages .sg-pyou .sg-bar{background:var(--coral)}
+.mk-stages .sg-pdone .sg-pc{color:var(--ok-ink)}
+.mk-stages .sg-pdone .sg-bar{background:var(--ok-wash)}
+.mk-stages .sg-lost{display:grid;grid-template-columns:70px minmax(0,1fr) 24px;align-items:center;column-gap:8px;margin-top:auto;padding:4px 8px 0;border-top:1px dashed var(--line-strong);color:var(--muted)}
+.mk-stages .sg-lost .sg-pn,.mk-stages .sg-lost .sg-bw,.mk-stages .sg-lost .sg-pc{grid-area:auto}
+.mk-stages .sg-lost .sg-pn b{font-weight:500}
+.mk-stages .sg-lost .sg-bar{background:transparent;border:1px dashed var(--line-strong)}
+.mk-stages .sg-lost .sg-pc{color:var(--muted)}
+
+.mk-stages .sg-note{padding:0 2px;font-size:10.5px;line-height:1.35;color:var(--muted)}
+
+/* ---- motion: a draft moves Draft > Review, then the same project is seen as a week, then another project as a pipeline ---- */
+@keyframes sg-p1{0%,36%{opacity:1}40%,88%{opacity:0}92%,100%{opacity:1}}
+@keyframes sg-p2{0%,36%{opacity:0}40%,60%{opacity:1}64%,100%{opacity:0}}
+@keyframes sg-p3{0%,60%{opacity:0}64%,88%{opacity:1}92%,100%{opacity:0}}
+@keyframes sg-ul{
+  0%,36%{transform:translateX(0);animation-timing-function:cubic-bezier(.2,.8,.2,1)}
+  42%,60%{transform:translateX(100%);animation-timing-function:cubic-bezier(.2,.8,.2,1)}
+  66%,88%{transform:translateX(200%);animation-timing-function:cubic-bezier(.2,.8,.2,1)}
+  94%,100%{transform:translateX(0)}
+}
+@keyframes sg-ta{0%,36%{color:var(--ink)}40%,88%{color:var(--muted)}92%,100%{color:var(--ink)}}
+@keyframes sg-tb{0%,36%{color:var(--muted)}40%,60%{color:var(--ink)}64%,100%{color:var(--muted)}}
+@keyframes sg-tc{0%,60%{color:var(--muted)}64%,88%{color:var(--ink)}92%,100%{color:var(--muted)}}
+@keyframes sg-g1{0%,60%{opacity:1}64%,88%{opacity:0}92%,100%{opacity:1}}
+@keyframes sg-g2{0%,60%{opacity:0}64%,88%{opacity:1}92%,100%{opacity:0}}
+@keyframes sg-v1{0%,36%{opacity:1}40%,88%{opacity:0}92%,100%{opacity:1}}
+@keyframes sg-v2{0%,36%{opacity:0}40%,60%{opacity:1}64%,100%{opacity:0}}
+
+@keyframes sg-mv{
+  0%,6%{transform:translate(0,0);animation-timing-function:cubic-bezier(.2,.8,.2,1)}
+  15%,76%{transform:translate(calc(100% + 11px),var(--dy))}
+  76.01%,100%{transform:translate(0,0)}
+}
+@keyframes sg-bg{
+  0%,8%{background-color:var(--raised);border-color:var(--line-strong)}
+  14%,76%{background-color:var(--coral-wash);border-color:var(--coral)}
+  76.01%,100%{background-color:var(--raised);border-color:var(--line-strong)}
+}
+@keyframes sg-idc{0%,8%{color:var(--muted)}14%,76%{color:var(--coral-ink)}76.01%,100%{color:var(--muted)}}
+@keyframes sg-fl{0%,8%{opacity:1}11%,76%{opacity:0}76.01%,100%{opacity:1}}
+@keyframes sg-fy{0%,10%{opacity:0}14%,76%{opacity:1}76.01%,100%{opacity:0}}
+@keyframes sg-nt{0%,9%{transform:translateY(0)}10%,76%{transform:translateY(-14px)}76.01%,100%{transform:translateY(0)}}
+@keyframes sg-pop{0%,41%{transform:scale(.7)}47%{transform:scale(1.1)}52%,100%{transform:scale(1)}}
+@keyframes sg-pulse{0%,100%{box-shadow:0 0 0 0 var(--coral-wash)}50%{box-shadow:0 0 0 4px var(--coral-wash)}}
+@keyframes sg-live{0%,100%{box-shadow:0 0 0 0 var(--ok-wash)}50%{box-shadow:0 0 0 3px var(--ok-wash)}}
+
+@media (prefers-reduced-motion:no-preference){
+  .mk-stages.is-live .sg-p1{animation:sg-p1 10s ease-in-out infinite}
+  .mk-stages.is-live .sg-p2{animation:sg-p2 10s ease-in-out infinite}
+  .mk-stages.is-live .sg-p3{animation:sg-p3 10s ease-in-out infinite}
+  .mk-stages.is-live .sg-ul{animation:sg-ul 10s linear infinite;will-change:transform}
+  .mk-stages.is-live .sg-ta{animation:sg-ta 10s ease-in-out infinite}
+  .mk-stages.is-live .sg-tb{animation:sg-tb 10s ease-in-out infinite}
+  .mk-stages.is-live .sg-tc{animation:sg-tc 10s ease-in-out infinite}
+  .mk-stages.is-live .sg-tg1{animation:sg-g1 10s ease-in-out infinite}
+  .mk-stages.is-live .sg-tg2{animation:sg-g2 10s ease-in-out infinite}
+  .mk-stages.is-live .sg-v1{animation:sg-v1 10s ease-in-out infinite}
+  .mk-stages.is-live .sg-v2{animation:sg-v2 10s ease-in-out infinite}
+  .mk-stages.is-live .sg-mv{z-index:3;animation:sg-mv 10s linear infinite,sg-bg 10s ease-in-out infinite;will-change:transform}
+  .mk-stages.is-live .sg-mv .sg-id{animation:sg-idc 10s ease-in-out infinite}
+  .mk-stages.is-live .sg-mv .sg-fl{animation:sg-fl 10s linear infinite}
+  .mk-stages.is-live .sg-mv .sg-fy{animation:sg-fy 10s linear infinite}
+  .mk-stages.is-live .sg-nd .sg-ns,.mk-stages.is-live .sg-nr .sg-ns{animation:sg-nt 10s linear infinite}
+  .mk-stages.is-live .sg-pop{animation:sg-pop 10s cubic-bezier(.2,.8,.2,1) infinite}
+  .mk-stages.is-live .sg-cy .mkdot{animation:sg-pulse 2.4s ease-in-out infinite}
+  .mk-stages.is-live .sg-fl .mkdot.live{animation:sg-live 2.4s ease-in-out infinite}
+}
+@media (prefers-reduced-motion:reduce){
+  .mk-stages *,.mk-stages *::before,.mk-stages *::after{animation:none !important;transition:none !important}
+}
+</style>
+<div class="mk mk-stages" role="img" aria-label="Each project defines its own stages (six on the x-growth board, five in the outreach pipeline), every stage maps to one of a few fixed kinds, and a session working on a card is an overlay on the card, never a column.">
+  <div class="mkf">
+    <div class="mkf-bar">
+      <span class="sg-ttl">
+        <span class="sg-tg sg-tg1"><b>x-growth</b><span class="sg-vn"><span class="sg-v1">board</span><span class="sg-v2">calendar</span></span></span>
+        <span class="sg-tg sg-tg2"><b>outreach</b><span>pipeline</span></span>
+      </span>
+      <span class="sp"></span>
+      <span class="sg-tabs" aria-hidden="true">
+        <span class="sg-tab sg-ta" tabindex="-1">Board</span>
+        <span class="sg-tab sg-tb" tabindex="-1">Calendar</span>
+        <span class="sg-tab sg-tc" tabindex="-1">Pipeline</span>
+        <i class="sg-ul"></i>
+      </span>
+    </div>
+    <div class="mkf-body">
+      <div class="sg-stage">
+
+        <!-- pane 1: board, x-growth -->
+        <div class="sg-pane sg-p1">
+          <div class="sg-scroll">
+            <div class="sg-track">
+              <div class="sg-col"><div class="sg-ch"><span class="sg-nm">Idea</span><span class="sg-n"><span class="sg-ns"><i>2</i></span></span><span class="sg-k">to do</span></div></div>
+              <div class="sg-col sg-nd"><div class="sg-ch"><span class="sg-nm">Draft</span><span class="sg-n"><span class="sg-ns"><i>2</i><i>1</i></span></span><span class="sg-k">active</span></div></div>
+              <div class="sg-col sg-cy sg-nr"><div class="sg-ch"><span class="sg-nm"><i class="mkdot you"></i>Review</span><span class="sg-n"><span class="sg-ns"><i>1</i><i>2</i></span></span><span class="sg-k">you</span></div></div>
+              <div class="sg-col"><div class="sg-ch"><span class="sg-nm">Scheduled</span><span class="sg-n"><span class="sg-ns"><i>2</i></span></span><span class="sg-k">waiting</span></div></div>
+              <div class="sg-col"><div class="sg-ch"><span class="sg-nm">Posted</span><span class="sg-n"><span class="sg-ns"><i>1</i></span></span><span class="sg-k">done</span></div></div>
+              <div class="sg-col"><div class="sg-ch"><span class="sg-nm">Measured</span><span class="sg-n"><span class="sg-ns"><i>2</i></span></span><span class="sg-k">done</span></div></div>
+
+              <!-- Idea -->
+              <div class="sg-card" style="--c:0;--y:38px"><div class="sg-id">tsk-158</div><div class="sg-t">Poll: pricing</div></div>
+              <div class="sg-card" style="--c:0;--y:97px"><div class="sg-id">tsk-160</div><div class="sg-t">Tip: keyboard nav</div></div>
+
+              <!-- Draft -->
+              <div class="sg-card" style="--c:1;--y:38px"><div class="sg-id">tsk-148</div><div class="sg-t">Reply guide</div></div>
+
+              <!-- Review (you) -->
+              <div class="sg-card sg-ft sg-hot" style="--c:2;--y:38px">
+                <div class="sg-id">tsk-146</div>
+                <div class="sg-t">Launch recap</div>
+                <div class="sg-fo"><span class="sg-fy"><i class="mkdot you"></i>waiting on you</span></div>
+              </div>
+
+              <!-- Scheduled -->
+              <div class="sg-card sg-ft" style="--c:3;--y:38px">
+                <div class="sg-id">tsk-139</div>
+                <div class="sg-t">Release notes</div>
+                <div class="sg-fo"><span class="sg-mo sg-tm">Thu 09:30</span></div>
+              </div>
+              <div class="sg-card sg-ft" style="--c:3;--y:111px">
+                <div class="sg-id">tsk-142</div>
+                <div class="sg-t">Build log #12</div>
+                <div class="sg-fo"><span class="sg-mo sg-tm">Fri 13:00</span></div>
+              </div>
+
+              <!-- Posted -->
+              <div class="sg-card sg-ft" style="--c:4;--y:38px">
+                <div class="sg-id">tsk-131</div>
+                <div class="sg-t">Hub on a Pi</div>
+                <div class="sg-fo"><span class="sg-mo">4.1k views</span></div>
+              </div>
+
+              <!-- Measured -->
+              <div class="sg-card sg-ft" style="--c:5;--y:38px">
+                <div class="sg-id">tsk-120</div>
+                <div class="sg-t">Why self-host</div>
+                <div class="sg-fo"><span class="sg-mo">12.6k views</span></div>
+              </div>
+              <div class="sg-card sg-ft" style="--c:5;--y:111px">
+                <div class="sg-id">tsk-114</div>
+                <div class="sg-t">Week 11 recap</div>
+                <div class="sg-fo"><span class="sg-mo">3.2k views</span></div>
+              </div>
+
+              <!-- the card that travels: rests in Draft with a live session overlay -->
+              <div class="sg-card sg-ft sg-mv" style="--c:1;--y:97px;--dy:14px">
+                <div class="sg-id">tsk-151</div>
+                <div class="sg-t">Thread: what we shipped</div>
+                <div class="sg-fo">
+                  <span class="sg-fl"><i class="mkdot live"></i>writer drafting</span>
+                  <span class="sg-fy"><i class="mkdot you"></i>waiting on you</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- pane 2: calendar, x-growth -->
+        <div class="sg-pane sg-p2">
+          <div class="sg-cal">
+            <span></span>
+            <span class="sg-dh">Mon</span><span class="sg-dh">Tue</span><span class="sg-dh">Wed</span><span class="sg-dh">Thu</span><span class="sg-dh">Fri</span><span class="sg-dh">Sat</span><span class="sg-dh">Sun</span>
+
+            <span class="sg-hr">09:30</span>
+            <span class="sg-cell"><span class="sg-chip sg-c-ok">Hub</span></span>
+            <span class="sg-cell"></span>
+            <span class="sg-cell"></span>
+            <span class="sg-cell"><span class="sg-chip">Notes</span></span>
+            <span class="sg-cell"></span>
+            <span class="sg-cell"><span class="sg-chip sg-c-you">Recap</span></span>
+            <span class="sg-cell"></span>
+
+            <span class="sg-hr">13:00</span>
+            <span class="sg-cell"></span>
+            <span class="sg-cell"></span>
+            <span class="sg-cell"><span class="sg-chip sg-c-you sg-pop">Thread</span></span>
+            <span class="sg-cell"></span>
+            <span class="sg-cell"><span class="sg-chip">Log</span></span>
+            <span class="sg-cell"></span>
+            <span class="sg-cell"></span>
+
+            <span class="sg-hr">18:00</span>
+            <span class="sg-cell"></span>
+            <span class="sg-cell"><span class="sg-chip sg-c-ok">Host</span></span>
+            <span class="sg-cell"></span>
+            <span class="sg-cell"></span>
+            <span class="sg-cell"></span>
+            <span class="sg-cell"></span>
+            <span class="sg-cell"></span>
+          </div>
+          <div class="sg-key"><span class="sg-chip">scheduled</span><span class="sg-chip sg-c-ok">posted</span><span class="sg-chip sg-c-you">needs you</span></div>
+        </div>
+
+        <!-- pane 3: pipeline, outreach -->
+        <div class="sg-pane sg-p3">
+          <div class="sg-pipe">
+            <div class="sg-pr">
+              <span class="sg-pn"><b>Prospect</b><i>to do</i></span>
+              <span class="sg-bw"><i class="sg-bar" style="width:100%"></i></span>
+              <span class="sg-pc">40</span>
+            </div>
+            <div class="sg-pr">
+              <span class="sg-pn"><b>Contacted</b><i>waiting</i></span>
+              <span class="sg-bw"><i class="sg-bar" style="width:55%"></i></span>
+              <span class="sg-pc">22</span>
+              <span class="sg-px">3 replies due · routine checks 4h</span>
+            </div>
+            <div class="sg-pr">
+              <span class="sg-pn"><b>Replied</b><i>active</i></span>
+              <span class="sg-bw"><i class="sg-bar" style="width:22.5%"></i></span>
+              <span class="sg-pc">9</span>
+            </div>
+            <div class="sg-pr sg-pyou">
+              <span class="sg-pn"><b>Meeting</b><i>you</i></span>
+              <span class="sg-bw"><i class="sg-bar" style="width:10%"></i></span>
+              <span class="sg-pc">4</span>
+            </div>
+            <div class="sg-pr sg-pdone">
+              <span class="sg-pn"><b>Won</b><i>done</i></span>
+              <span class="sg-bw"><i class="sg-bar" style="width:2.5%"></i></span>
+              <span class="sg-pc">1</span>
+            </div>
+            <div class="sg-lost">
+              <span class="sg-pn"><b>Lost</b><i>dropped</i></span>
+              <span class="sg-bw"><i class="sg-bar" style="width:15%"></i></span>
+              <span class="sg-pc">6</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+      <div class="sg-note">Stages come from the project's stages file. Live work is an overlay, never a column.</div>
+    </div>
+  </div>
+</div>
+<script>
+(function(){
+  var root=document.querySelector('.mk-stages');
+  if(!root) return;
+  var sc=root.querySelector('.sg-scroll'),track=root.querySelector('.sg-track');
+  if(!sc||!track) return;
+  var reduce=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var timers=[],touched=false,CYCLE=10000;
+  ['pointerdown','wheel','touchstart'].forEach(function(ev){sc.addEventListener(ev,function(){touched=true;},{passive:true});});
+  // on a narrow box, bring Draft and Review into view while the card moves, and rewind while the board is hidden
+  function pan(smooth){
+    if(touched) return;
+    var room=sc.scrollWidth-sc.clientWidth;
+    if(room<4) return;
+    var cw=(track.offsetWidth-25)/6;
+    var left=smooth===null?0:(cw+5)-(sc.clientWidth-(2*cw+5))/2;
+    sc.scrollTo({left:Math.max(0,Math.min(room,left)),behavior:smooth?'smooth':'auto'});
+  }
+  function cycle(){
+    timers=[];
+    timers.push(setTimeout(function(){pan(true);},250));
+    timers.push(setTimeout(function(){pan(null);},5000));
+    timers.push(setTimeout(cycle,CYCLE));
+  }
+  function stop(){timers.forEach(clearTimeout);timers=[];}
+  function start(){stop();if(reduce) return;cycle();}
+  root.addEventListener('mk:live',start);
+  root.addEventListener('mk:idle',stop);
+  if(root.classList.contains('is-live')) start();
+})();
+</script>
