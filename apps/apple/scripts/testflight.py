@@ -54,6 +54,16 @@ def group(app):
     return next((g for g in groups if g["attributes"]["isInternalGroup"] and g["attributes"]["name"] == "Internal"), None)
 
 
+def whats_new(version):
+    """The shipped version's own release notes, as TestFlight's what-to-know text."""
+    path = ROOT / "source/docs/releases" / f"{version}.md"
+    if path.exists():
+        bullets = [line[2:].strip() for line in path.read_text().splitlines() if line.strip().startswith(("- ", "* "))]
+        if bullets:
+            return f"{version}\n" + "\n".join(bullets)
+    return f"{version}\nCawCo {version} for iPhone and iPad. Connect to your hub to see the live fleet, sessions and transcripts."
+
+
 def status(app):
     available = builds(app)
     if not available:
@@ -148,7 +158,7 @@ def ship(app):
         if not any(t["attributes"]["email"] == owner["attributes"]["email"] for t in members):
             api("POST", "/v1/betaTesters", {"data": {"type": "betaTesters", "attributes": {key: owner["attributes"][key] for key in ["email", "firstName", "lastName"]}, "relationships": {"betaGroups": {"data": [{"type": "betaGroups", "id": internal["id"]}]}}}})
         if not any(row["attributes"]["locale"] == "en-US" for row in listed(f"/v1/builds/{build['id']}/betaBuildLocalizations")):
-          api("POST", "/v1/betaBuildLocalizations", {"data": {"type": "betaBuildLocalizations", "attributes": {"locale": "en-US", "whatsNew": "Connect to your CawCo hub and check the live fleet, sessions and transcripts.\nTry approvals, steering, workflows and configuration; report any issues."}, "relationships": {"build": relationship("builds", build["id"])}}})
+            api("POST", "/v1/betaBuildLocalizations", {"data": {"type": "betaBuildLocalizations", "attributes": {"locale": "en-US", "whatsNew": whats_new(api("GET", f"/v1/builds/{build['id']}/preReleaseVersion")["data"]["attributes"]["version"])}, "relationships": {"build": relationship("builds", build["id"])}}})
         api("POST", f"/v1/betaGroups/{internal['id']}/relationships/builds", {"data": [{"type": "builds", "id": build["id"]}]})
         print(f"APP_ID {app} GROUP_ID {internal['id']} BUILD_ID {build['id']}")
         status(app)
