@@ -2764,6 +2764,445 @@
         }
       }
     },
+    "/api/projects/{id}/dispatch": {
+      "get": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiProjectsByIdDispatch",
+        "responses": {
+          "200": {
+            "description": "getApiProjectsByIdDispatch 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DispatchView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "getApiProjectsByIdDispatch 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "getApiProjectsByIdDispatch 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "getApiProjectsByIdDispatch 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "getApiProjectsByIdDispatch 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "getApiProjectsByIdDispatch 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "getApiProjectsByIdDispatch 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiProjectsByIdDispatch 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "getApiProjectsByIdDispatch 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "getApiProjectsByIdDispatch 502",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "getApiProjectsByIdDispatch 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "dispatch": {
+                    "type": "boolean"
+                  },
+                  "leadInstanceId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "maxAttempts": {
+                    "type": "integer"
+                  },
+                  "reviewLimit": {
+                    "type": "integer"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "patchApiProjectsByIdDispatch",
+        "responses": {
+          "200": {
+            "description": "patchApiProjectsByIdDispatch 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DispatchView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "patchApiProjectsByIdDispatch 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "patchApiProjectsByIdDispatch 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "patchApiProjectsByIdDispatch 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "patchApiProjectsByIdDispatch 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "patchApiProjectsByIdDispatch 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "patchApiProjectsByIdDispatch 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "patchApiProjectsByIdDispatch 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "patchApiProjectsByIdDispatch 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "patchApiProjectsByIdDispatch 502",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "patchApiProjectsByIdDispatch 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/tasks/{taskId}/attempts": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "taskId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "parentInstanceId": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postApiProjectsByIdTasksByTaskIdAttempts",
+        "responses": {
+          "200": {
+            "description": "postApiProjectsByIdTasksByTaskIdAttempts 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttemptStart"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiProjectsByIdTasksByTaskIdAttempts 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "postApiProjectsByIdTasksByTaskIdAttempts 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiProjectsByIdTasksByTaskIdAttempts 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiProjectsByIdTasksByTaskIdAttempts 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "postApiProjectsByIdTasksByTaskIdAttempts 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "postApiProjectsByIdTasksByTaskIdAttempts 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiProjectsByIdTasksByTaskIdAttempts 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "postApiProjectsByIdTasksByTaskIdAttempts 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "postApiProjectsByIdTasksByTaskIdAttempts 502",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "postApiProjectsByIdTasksByTaskIdAttempts 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/join": {
       "get": {
         "operationId": "getApiJoin",
@@ -9519,6 +9958,10 @@
                   "type": "string"
                 },
                 "result": {},
+                "endedAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
                 "failure": {
                   "type": [
                     "null",
@@ -9526,10 +9969,6 @@
                   ]
                 },
                 "startedAt": {
-                  "type": "string",
-                  "format": "date-time"
-                },
-                "endedAt": {
                   "type": "string",
                   "format": "date-time"
                 },
@@ -9564,6 +10003,10 @@
             "type": "object"
           },
           "result": {},
+          "endedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
           "parentRunId": {
             "type": [
               "null",
@@ -9604,10 +10047,6 @@
             ]
           },
           "startedAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "endedAt": {
             "type": "string",
             "format": "date-time"
           },
@@ -9715,6 +10154,10 @@
                 "type": "object"
               },
               "result": {},
+              "endedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
               "parentRunId": {
                 "type": [
                   "null",
@@ -9755,10 +10198,6 @@
                 ]
               },
               "startedAt": {
-                "type": "string",
-                "format": "date-time"
-              },
-              "endedAt": {
                 "type": "string",
                 "format": "date-time"
               },
@@ -10056,6 +10495,18 @@
                   "string"
                 ]
               },
+              "parentInstanceId": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "projectId": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
               "updatedAt": {
                 "type": "string",
                 "format": "date-time"
@@ -10075,18 +10526,6 @@
                 ]
               },
               "workflowStepId": {
-                "type": [
-                  "null",
-                  "string"
-                ]
-              },
-              "projectId": {
-                "type": [
-                  "null",
-                  "string"
-                ]
-              },
-              "parentInstanceId": {
                 "type": [
                   "null",
                   "string"
@@ -10292,6 +10731,18 @@
                     "string"
                   ]
                 },
+                "parentInstanceId": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "projectId": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
                 "updatedAt": {
                   "type": "string",
                   "format": "date-time"
@@ -10311,18 +10762,6 @@
                   ]
                 },
                 "workflowStepId": {
-                  "type": [
-                    "null",
-                    "string"
-                  ]
-                },
-                "projectId": {
-                  "type": [
-                    "null",
-                    "string"
-                  ]
-                },
-                "parentInstanceId": {
                   "type": [
                     "null",
                     "string"
@@ -11596,6 +12035,21 @@
             "tracker": {
               "$ref": "#/components/schemas/Tracker"
             },
+            "leadInstanceId": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "dispatch": {
+              "type": "boolean"
+            },
+            "maxAttempts": {
+              "type": "number"
+            },
+            "reviewLimit": {
+              "type": "number"
+            },
             "places": {
               "type": "array",
               "items": {
@@ -11635,11 +12089,15 @@
           "required": [
             "createdAt",
             "cwd",
+            "dispatch",
             "id",
+            "leadInstanceId",
             "machineId",
+            "maxAttempts",
             "name",
             "places",
             "remote",
+            "reviewLimit",
             "tracker"
           ]
         }
@@ -11707,6 +12165,21 @@
           "tracker": {
             "$ref": "#/components/schemas/Tracker"
           },
+          "leadInstanceId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "dispatch": {
+            "type": "boolean"
+          },
+          "maxAttempts": {
+            "type": "number"
+          },
+          "reviewLimit": {
+            "type": "number"
+          },
           "places": {
             "type": "array",
             "items": {
@@ -11746,13 +12219,17 @@
         "required": [
           "createdAt",
           "cwd",
+          "dispatch",
           "id",
+          "leadInstanceId",
           "machineId",
+          "maxAttempts",
           "name",
           "place",
           "placeAdded",
           "places",
           "remote",
+          "reviewLimit",
           "tracker"
         ]
       },
@@ -11830,6 +12307,21 @@
           "tracker": {
             "$ref": "#/components/schemas/Tracker"
           },
+          "leadInstanceId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "dispatch": {
+            "type": "boolean"
+          },
+          "maxAttempts": {
+            "type": "number"
+          },
+          "reviewLimit": {
+            "type": "number"
+          },
           "places": {
             "type": "array",
             "items": {
@@ -11869,13 +12361,17 @@
         "required": [
           "createdAt",
           "cwd",
+          "dispatch",
           "id",
+          "leadInstanceId",
           "machineId",
+          "maxAttempts",
           "name",
           "place",
           "placeAdded",
           "places",
           "remote",
+          "reviewLimit",
           "tracker"
         ]
       },
@@ -11906,13 +12402,10 @@
             "type": "string",
             "format": "date-time"
           },
-          "state": {
-            "$ref": "#/components/schemas/WorkspaceState"
-          },
-          "branch": {
+          "repoRoot": {
             "type": "string"
           },
-          "repoRoot": {
+          "branch": {
             "type": "string"
           },
           "base": {
@@ -11923,6 +12416,9 @@
               "null",
               "number"
             ]
+          },
+          "state": {
+            "$ref": "#/components/schemas/WorkspaceState"
           },
           "ports": {
             "type": "array",
@@ -13864,7 +14360,7 @@
         ]
       },
       "TaskSummary": {
-        "description": "One task as a list shows it: the index's row.",
+        "description": "One task as a list shows it: the index's row, and what its attempts and edges say.",
         "type": "object",
         "properties": {
           "after": {
@@ -13895,7 +14391,7 @@
             }
           },
           "needsYou": {
-            "description": "Its stage is of kind `you`: it is in Needs you. Derived on read, never stored.",
+            "description": "It waits for you: its stage is of kind `you`, or its last attempt failed.\nDerived on read, never stored.",
             "type": "boolean"
           },
           "number": {
@@ -13953,12 +14449,45 @@
           "updatedAt": {
             "description": "When the hub last saw the file's content change, ms epoch.",
             "type": "number"
+          },
+          "attempts": {
+            "description": "Its attempts, newest first.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TaskAttempt"
+            }
+          },
+          "blockedBy": {
+            "description": "The tasks it waits for (`after`) that are not in a done stage; a task the project lacks counts.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "lastAttemptFailed": {
+            "description": "Its newest attempt failed or was cancelled, and it is not done or dropped since: it waits for a person.",
+            "type": "boolean"
+          },
+          "liveAttempt": {
+            "description": "An attempt at it is starting or running.",
+            "type": "boolean"
+          },
+          "startProblem": {
+            "description": "Why the hub could not start an attempt the last time it tried, while the task is unchanged since.",
+            "type": [
+              "null",
+              "string"
+            ]
           }
         },
         "required": [
           "after",
+          "attempts",
+          "blockedBy",
           "id",
           "labels",
+          "lastAttemptFailed",
+          "liveAttempt",
           "needsYou",
           "number",
           "parent",
@@ -13966,11 +14495,57 @@
           "problem",
           "rank",
           "stage",
+          "startProblem",
           "title",
           "todos",
           "type",
           "updatedAt"
         ]
+      },
+      "TaskAttempt": {
+        "description": "One attempt at a task: a work item whose task it is, as a task read shows it.",
+        "type": "object",
+        "properties": {
+          "endedAt": {
+            "description": "When it ended, ms epoch; null while it is live.",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "instanceId": {
+            "description": "The session running it.",
+            "type": "string"
+          },
+          "startedAt": {
+            "description": "When it was filed, ms epoch.",
+            "type": "number"
+          },
+          "state": {
+            "$ref": "#/components/schemas/WorkItemState"
+          },
+          "workItemId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "endedAt",
+          "instanceId",
+          "startedAt",
+          "state",
+          "workItemId"
+        ]
+      },
+      "WorkItemState": {
+        "description": "A work item's life. Only `starting` and `running` take messages.",
+        "enum": [
+          "cancelled",
+          "done",
+          "failed",
+          "running",
+          "starting"
+        ],
+        "type": "string"
       },
       "Tracker": {
         "description": "Where a project's tasks live: CawCo's files, or (later) an outside tracker.",
@@ -13982,7 +14557,7 @@
         "type": "string"
       },
       "TaskView": {
-        "description": "One task, its file read whole.",
+        "description": "One task, its file read whole, and what its attempts and edges say.",
         "type": "object",
         "properties": {
           "acceptance": {
@@ -14042,7 +14617,7 @@
             }
           },
           "needsYou": {
-            "description": "Its stage is of kind `you`: it is in Needs you.",
+            "description": "It waits for you: its stage is of kind `you`, or its last attempt failed.",
             "type": "boolean"
           },
           "number": {
@@ -14117,11 +14692,42 @@
               "null",
               "string"
             ]
+          },
+          "attempts": {
+            "description": "Its attempts, newest first.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TaskAttempt"
+            }
+          },
+          "blockedBy": {
+            "description": "The tasks it waits for (`after`) that are not in a done stage; a task the project lacks counts.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "lastAttemptFailed": {
+            "description": "Its newest attempt failed or was cancelled, and it is not done or dropped since: it waits for a person.",
+            "type": "boolean"
+          },
+          "liveAttempt": {
+            "description": "An attempt at it is starting or running.",
+            "type": "boolean"
+          },
+          "startProblem": {
+            "description": "Why the hub could not start an attempt the last time it tried, while the task is unchanged since.",
+            "type": [
+              "null",
+              "string"
+            ]
           }
         },
         "required": [
           "acceptance",
           "after",
+          "attempts",
+          "blockedBy",
           "checks",
           "description",
           "extra",
@@ -14129,6 +14735,8 @@
           "hash",
           "id",
           "labels",
+          "lastAttemptFailed",
+          "liveAttempt",
           "needsYou",
           "number",
           "outputs",
@@ -14139,6 +14747,7 @@
           "related",
           "sections",
           "stage",
+          "startProblem",
           "title",
           "todos",
           "type"
@@ -14398,6 +15007,110 @@
           "social"
         ],
         "type": "string"
+      },
+      "DispatchView": {
+        "description": "A project's dispatch: its settings, and what the dispatcher would do now.",
+        "type": "object",
+        "properties": {
+          "dispatch": {
+            "description": "Whether the hub starts attempts at ready tasks on its own.",
+            "type": "boolean"
+          },
+          "frontier": {
+            "description": "The tasks it would start next, in order.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "leadInstanceId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "leadProblem": {
+            "description": "Why the lead cannot take reports now; null when it can, or there is none.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "live": {
+            "description": "Attempts starting or running now.",
+            "type": "number"
+          },
+          "maxAttempts": {
+            "type": "number"
+          },
+          "paused": {
+            "description": "Why it would start nothing now even with a ready task; null when it would.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "review": {
+            "description": "Tasks waiting in `you` stages now.",
+            "type": "number"
+          },
+          "reviewLimit": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "dispatch",
+          "frontier",
+          "leadInstanceId",
+          "leadProblem",
+          "live",
+          "maxAttempts",
+          "paused",
+          "review",
+          "reviewLimit"
+        ]
+      },
+      "AttemptStart": {
+        "description": "An attempt as it started.",
+        "type": "object",
+        "properties": {
+          "instanceId": {
+            "type": "string"
+          },
+          "stage": {
+            "description": "The stage the task is in now.",
+            "type": "string"
+          },
+          "task": {
+            "type": "string"
+          },
+          "text": {
+            "description": "What the starting session reads.",
+            "type": "string"
+          },
+          "type": {
+            "description": "The delegate type it runs.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "workItemId": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "instanceId",
+          "stage",
+          "task",
+          "text",
+          "type",
+          "workItemId",
+          "workspaceId"
+        ]
       },
       "JoinInfo": {
         "description": "`GET /api/join`.",
@@ -15598,6 +16311,10 @@
                 "type": "object"
               },
               "result": {},
+              "endedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
               "parentRunId": {
                 "type": [
                   "null",
@@ -15638,10 +16355,6 @@
                 ]
               },
               "startedAt": {
-                "type": "string",
-                "format": "date-time"
-              },
-              "endedAt": {
                 "type": "string",
                 "format": "date-time"
               },

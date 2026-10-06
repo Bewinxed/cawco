@@ -20,14 +20,19 @@
  * - **Tracker.** A project keeps its tasks in CawCo's files (`tracker:
  *   cawco`). GitHub Issues and Linear are named in the setting and refused
  *   until they are built.
+ * - **Attempts** are work items at a task (dispatch.ts starts them). Every
+ *   read carries a task's attempts and what follows from them and its edges:
+ *   a live attempt, the tasks it still waits for, a last attempt that failed
+ *   (it then waits for a person, in Needs you). The hub moves a task as
+ *   `hub`: code, which the file's moves do not bind; its commits say so.
  *
  * Changes to one project's tasks are taken one at a time: two to-dos ticked
  * at once both land.
  */
 import type { InstanceRow } from "@cawco/core";
 import { Elysia, t } from "elysia";
-import type { TaskIndexRow } from "./db";
-import type { Tracker } from "./db/schema";
+import type { TaskIndexRow, WorkItemRow } from "./db";
+import type { Tracker, WorkItemState } from "./db/schema";
 import {
   type FolderAuthor,
   FolderRefusal,
@@ -70,15 +75,33 @@ import {
   taskNumber,
   taskPath,
 } from "./task-file";
+import { isLive } from "./work-items";
+
+/**
+ * Who moves a task: one of the movers stages.md names, or `hub`, the hub's
+ * own code (the dispatcher), which the file's moves do not bind.
+ */
+export type TaskMover = Mover | "hub";
 
 /** Who is changing a task: what stage moves they may make, and whom the commit is by. */
 export interface TaskActor {
   author: FolderAuthor;
-  mover: Mover;
+  /** The session making the change, when one is. */
+  instanceId?: string;
+  mover: TaskMover;
+  /** Why, when the hub says: `(by hub: attempt 5fd1e189 started)`. */
+  reason?: string;
 }
 
 /** The operator, at the dashboard. */
 export const YOU_ACTOR: TaskActor = { mover: "you", author: YOU };
+
+/** The hub's own code moving a task, and why. */
+export const hubActor = (reason: string): TaskActor => ({
+  mover: "hub",
+  author: { name: "hub" },
+  reason,
+});
 
 /**
  * A session calling the task tools: it moves stages as a `session`, and
@@ -87,6 +110,7 @@ export const YOU_ACTOR: TaskActor = { mover: "you", author: YOU };
  */
 export const sessionActor = (row: InstanceRow): TaskActor => ({
   mover: "session",
+  instanceId: row.id,
   author: {
     name:
       row.title?.trim() ||
@@ -95,8 +119,53 @@ export const sessionActor = (row: InstanceRow): TaskActor => ({
   },
 });
 
+/** One attempt at a task: a work item whose task it is, as a task read shows it. */
+export interface TaskAttempt {
+  /** When it ended, ms epoch; null while it is live. */
+  endedAt: number | null;
+  /** The session running it. */
+  instanceId: string;
+  /** When it was filed, ms epoch. */
+  startedAt: number;
+  state: WorkItemState;
+  workItemId: string;
+}
+
+/** What a task's attempts and edges say about it, worked out on every read. */
+export interface TaskFlags {
+  /** Its attempts, newest first. */
+  attempts: TaskAttempt[];
+  /** The tasks it waits for (`after`) that are not in a done stage; a task the project lacks counts. */
+  blockedBy: string[];
+  /** Its newest attempt failed or was cancelled, and it is not done or dropped since: it waits for a person. */
+  lastAttemptFailed: boolean;
+  /** An attempt at it is starting or running. */
+  liveAttempt: boolean;
+  /** Why the hub could not start an attempt the last time it tried, while the task is unchanged since. */
+  startProblem: string | null;
+}
+
+/** A change to a project's tasks, for the dispatcher to look again. */
+export type TaskEvent =
+  | {
+      actor: TaskActor;
+      from: string;
+      id: string;
+      kind: "moved";
+      projectId: string;
+      to: string;
+    }
+  | { kind: "changed"; projectId: string };
+
 /** What the service needs of the hub's database. */
 export interface TaskStore {
+  /** Every work item at one of the project's tasks, newest first. */
+  readonly attempts: (
+    projectId: string
+  ) => Pick<
+    WorkItemRow,
+    "createdAt" | "endedAt" | "id" | "instanceId" | "state" | "taskId"
+  >[];
   readonly drop: (projectId: string, paths: string[]) => void;
   readonly index: (projectId: string) => TaskIndexRow[];
   readonly project: (
@@ -105,16 +174,24 @@ export interface TaskStore {
   readonly projectIds: () => string[];
   readonly put: (rows: TaskIndexRow[]) => void;
   readonly setTracker: (id: string, tracker: Tracker) => void;
+  /** Why the hub last could not start an attempt at a task, while that stands (dispatch.ts). */
+  readonly startProblem?: (
+    projectId: string,
+    task: { hash: string; id: string }
+  ) => string | null;
 }
 
-/** One task as a list shows it: the index's row. */
-export interface TaskSummary {
+/** One task as a list shows it: the index's row, and what its attempts and edges say. */
+export interface TaskSummary extends TaskFlags {
   after: string[];
   id: string;
   /** The kind of its stage; null when its stage is not one of the project's. */
   kind: StageKind | null;
   labels: string[];
-  /** Its stage is of kind `you`: it is in Needs you. Derived on read, never stored. */
+  /**
+   * It waits for you: its stage is of kind `you`, or its last attempt failed.
+   * Derived on read, never stored.
+   */
   needsYou: boolean;
   number: number;
   parent: string | null;
@@ -161,8 +238,8 @@ export interface StagesTemplateView {
   views: StageView[];
 }
 
-/** One task, its file read whole. */
-export interface TaskView {
+/** One task, its file read whole, and what its attempts and edges say. */
+export interface TaskView extends TaskFlags {
   acceptance: string;
   after: string[];
   checks: string[];
@@ -176,7 +253,7 @@ export interface TaskView {
   /** The kind of its stage; null when its stage is not one of the project's. */
   kind: StageKind | null;
   labels: string[];
-  /** Its stage is of kind `you`: it is in Needs you. */
+  /** It waits for you: its stage is of kind `you`, or its last attempt failed. */
   needsYou: boolean;
   number: number;
   outputs: string[];
@@ -340,9 +417,42 @@ const stageName = (stage: string): string => {
 const kindIn = (stages: Stages | undefined, stage: string): StageKind | null =>
   (stages && stageNamed(stages, stage)?.kind) ?? null;
 
+/** An attempt as a task read shows it. */
+const attemptOf = (
+  item: ReturnType<TaskStore["attempts"]>[number]
+): TaskAttempt => ({
+  workItemId: item.id,
+  state: item.state,
+  instanceId: item.instanceId,
+  startedAt: item.createdAt.getTime(),
+  endedAt: item.endedAt?.getTime() ?? null,
+});
+
+/** Every indexed task's stage, by id. */
+const stagesById = (rows: TaskIndexRow[]): Map<string, string> =>
+  new Map(rows.map((row) => [row.id, row.stage]));
+
+/** Whether a task waits for a person: its stage is of kind `you`, or its last attempt failed. */
+const waitsForYou = (kind: StageKind | null, flags: TaskFlags): boolean =>
+  kind === "you" || flags.lastAttemptFailed;
+
+/**
+ * Whether the dispatcher may start an attempt at a task on its own (the
+ * frontier): it is in a `todo` stage, everything it waits for is done, no
+ * attempt at it is live, its last one did not fail, and the hub's last try
+ * to start one did not fail on the task as it stands.
+ */
+export const onFrontier = (task: TaskSummary): boolean =>
+  task.kind === "todo" &&
+  task.blockedBy.length === 0 &&
+  !task.liveAttempt &&
+  !task.lastAttemptFailed &&
+  task.startProblem === null;
+
 const summaryOf = (
   row: TaskIndexRow,
-  stages: Stages | undefined
+  stages: Stages | undefined,
+  flags: TaskFlags
 ): TaskSummary => {
   const kind = kindIn(stages, row.stage);
   const stray =
@@ -356,7 +466,8 @@ const summaryOf = (
     title: row.title,
     stage: row.stage,
     kind,
-    needsYou: kind === "you",
+    needsYou: waitsForYou(kind, flags),
+    ...flags,
     type: row.type,
     after: row.after,
     parent: row.parent,
@@ -374,7 +485,8 @@ const viewOf = (
   parsed: ParsedTask,
   title: string,
   hash: string,
-  stages: Stages | undefined
+  stages: Stages | undefined,
+  flags: TaskFlags
 ): TaskView => ({
   id: taskId(number),
   number,
@@ -382,7 +494,8 @@ const viewOf = (
   title,
   stage: parsed.fields.stage ?? "",
   kind: kindIn(stages, parsed.fields.stage ?? ""),
-  needsYou: kindIn(stages, parsed.fields.stage ?? "") === "you",
+  needsYou: waitsForYou(kindIn(stages, parsed.fields.stage ?? ""), flags),
+  ...flags,
   type: parsed.fields.type,
   after: parsed.fields.after,
   parent: parsed.fields.parent,
@@ -562,12 +675,81 @@ const stagesView = (
   problems: reading.ok ? [] : reading.problems,
 });
 
-/** Commit messages say who: `(by you)`, `(by Fix tray chip)`. */
-const byWhom = (actor: TaskActor): string => `(by ${actor.author.name})`;
+/** Why the hub cannot put a task in `stage`: only that the project has no such stage. */
+const hubProblem = (stages: Stages, stage: string): string | undefined =>
+  stageNamed(stages, stage)
+    ? undefined
+    : `${stage} is not a stage of this project.`;
+
+/** Commit messages say who: `(by you)`, `(by Fix tray chip)`, `(by hub: attempt 5fd1e189 started)`. */
+const byWhom = (actor: TaskActor): string =>
+  `(by ${actor.author.name}${actor.reason ? `: ${actor.reason}` : ""})`;
 
 export const createTasks = (store: TaskStore) => {
   /** One change to a project's tasks at a time, around the folder's own commits. */
   const inTurn = turnTaker();
+  /** Who hears about changes (dispatch.ts); told after the change has landed. */
+  const listeners = new Set<(event: TaskEvent) => void>();
+  const emit = (event: TaskEvent): void => {
+    for (const listener of listeners) {
+      try {
+        listener(event);
+      } catch (error) {
+        console.warn(
+          `[tasks] a listener failed on ${event.kind} in ${event.projectId}: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
+    }
+  };
+  /** Answers `result` once listeners have heard `event`. */
+  const told = <T>(event: TaskEvent, result: T): T => {
+    emit(event);
+    return result;
+  };
+
+  /** The project's attempts, by task, newest first. */
+  const attemptsByTask = (projectId: string): Map<string, TaskAttempt[]> => {
+    const byTask = new Map<string, TaskAttempt[]>();
+    for (const item of store.attempts(projectId)) {
+      if (item.taskId) {
+        byTask.set(item.taskId, [
+          ...(byTask.get(item.taskId) ?? []),
+          attemptOf(item),
+        ]);
+      }
+    }
+    return byTask;
+  };
+
+  /** What a task's attempts and edges say, against the project's other tasks as indexed. */
+  const flagsOf = (
+    projectId: string,
+    task: { after: string[]; hash: string; id: string; stage: string },
+    context: {
+      attempts: Map<string, TaskAttempt[]>;
+      /** Every task's stage, by id. */
+      stageOf: Map<string, string>;
+      stages: Stages | undefined;
+    }
+  ): TaskFlags => {
+    const { attempts: byTask, stageOf, stages } = context;
+    const attempts = byTask.get(task.id) ?? [];
+    const [last] = attempts;
+    const kind = kindIn(stages, task.stage);
+    return {
+      attempts,
+      liveAttempt: attempts.some((attempt) => isLive(attempt.state)),
+      blockedBy: task.after.filter((id) => {
+        const stage = stageOf.get(id);
+        return stage === undefined || kindIn(stages, stage) !== "done";
+      }),
+      lastAttemptFailed:
+        (last?.state === "failed" || last?.state === "cancelled") &&
+        kind !== "done" &&
+        kind !== "dropped",
+      startProblem: store.startProblem?.(projectId, task) ?? null,
+    };
+  };
   /** The highest task number each project has handed out, once read from its history. */
   const issued = new Map<string, number>();
 
@@ -789,7 +971,10 @@ export const createTasks = (store: TaskStore) => {
     );
     const stage =
       asked === undefined ? firstStage(stages).name : stageName(asked);
-    const problem = startProblem(stages, stage, actor.mover);
+    const problem =
+      actor.mover === "hub"
+        ? hubProblem(stages, stage)
+        : startProblem(stages, stage, actor.mover);
     if (problem) {
       refuse(stageNamed(stages, stage) ? 403 : 400, problem);
     }
@@ -859,19 +1044,36 @@ export const createTasks = (store: TaskStore) => {
   };
 
   const view = (
+    projectId: string,
     path: string,
     number: number,
     content: string,
     stages: Stages | undefined
   ): TaskView => {
     const doc = new TaskDoc(path, content);
+    const parsed = doc.read();
+    const hash = hashOf(content);
     return viewOf(
       path,
       number,
-      doc.read(),
+      parsed,
       doc.title(),
-      hashOf(content),
-      stages
+      hash,
+      stages,
+      flagsOf(
+        projectId,
+        {
+          id: taskId(number),
+          after: parsed.fields.after,
+          stage: parsed.fields.stage ?? "",
+          hash,
+        },
+        {
+          attempts: attemptsByTask(projectId),
+          stageOf: stagesById(store.index(projectId)),
+          stages,
+        }
+      )
     );
   };
 
@@ -889,7 +1091,13 @@ export const createTasks = (store: TaskStore) => {
       message,
     });
     store.put([indexRow(projectId, path, number, content, hashOf(content))]);
-    return view(path, number, content, await currentStages(projectId));
+    return view(
+      projectId,
+      path,
+      number,
+      content,
+      await currentStages(projectId)
+    );
   };
 
   /**
@@ -911,7 +1119,13 @@ export const createTasks = (store: TaskStore) => {
       const did = await apply(doc, id);
       const next = doc.toString();
       if (next === content) {
-        return view(path, number, content, await currentStages(projectId));
+        return view(
+          projectId,
+          path,
+          number,
+          content,
+          await currentStages(projectId)
+        );
       }
       return await save(
         projectId,
@@ -962,8 +1176,13 @@ export const createTasks = (store: TaskStore) => {
         stagesOf(projectId),
       ]);
       const stages = reading.ok ? reading.stages : undefined;
+      const context = {
+        attempts: attemptsByTask(projectId),
+        stageOf: stagesById(rows),
+        stages,
+      };
       const tasks = rows
-        .map((row) => summaryOf(row, stages))
+        .map((row) => summaryOf(row, stages, flagsOf(projectId, row, context)))
         .filter(
           (task) =>
             (!filter.stage || task.stage === filter.stage) &&
@@ -988,7 +1207,13 @@ export const createTasks = (store: TaskStore) => {
       if (row?.hash !== hash) {
         store.put([indexRow(projectId, path, number, content, hash)]);
       }
-      return view(path, number, content, await currentStages(projectId));
+      return view(
+        projectId,
+        path,
+        number,
+        content,
+        await currentStages(projectId)
+      );
     },
 
     create(
@@ -1031,7 +1256,7 @@ export const createTasks = (store: TaskStore) => {
           actor,
           `task ${taskId(number)}: create “${title}” in ${fields.stage} ${byWhom(actor)}`
         );
-      });
+      }).then((task) => told({ kind: "changed", projectId }, task));
     },
 
     /** Fields and owned sections; what the patch leaves out stays as written. */
@@ -1041,30 +1266,44 @@ export const createTasks = (store: TaskStore) => {
       patch: TaskPatch,
       actor: TaskActor
     ): Promise<TaskView> {
-      return change(projectId, ref, actor, (doc) => applyPatch(doc, patch));
+      return change(projectId, ref, actor, (doc) =>
+        applyPatch(doc, patch)
+      ).then((task) => told({ kind: "changed", projectId }, task));
     },
 
-    /** Moves a task to another stage. */
-    move(
+    /**
+     * Moves a task to another stage, checked against the moves for its mover;
+     * the hub's own moves are not, as the stage exists. Listeners hear of a
+     * move that happened.
+     */
+    async move(
       projectId: string,
       ref: string,
       stage: string,
       actor: TaskActor
     ): Promise<TaskView> {
-      return change(projectId, ref, actor, async (doc, id) => {
+      let moved: { from: string; to: string } | undefined;
+      const task = await change(projectId, ref, actor, async (doc, id) => {
         const stages = await usableStages(projectId, "check a stage change");
         const to = stageName(stage);
         const from = doc.read().fields.stage ?? "";
         if (from === to) {
           return `stage ${to}`;
         }
-        const problem = moveProblem(stages, id, from, to, actor.mover);
+        const problem =
+          actor.mover === "hub"
+            ? hubProblem(stages, to)
+            : moveProblem(stages, id, from, to, actor.mover);
         if (problem) {
           refuse(stageNamed(stages, to) ? 403 : 400, problem);
         }
         doc.setField("stage", to);
+        moved = { from, to };
         return `stage ${from || "(none)"} → ${to}`;
       });
+      return moved
+        ? told({ kind: "moved", projectId, id: task.id, actor, ...moved }, task)
+        : task;
     },
 
     /** Adds or removes one edge from a task to another. */
@@ -1111,7 +1350,7 @@ export const createTasks = (store: TaskStore) => {
           );
         }
         return linkMany(doc, edge, target, remove);
-      });
+      }).then((task) => told({ kind: "changed", projectId }, task));
     },
 
     /** Ticks, unticks, adds and rewords to-dos, all in one commit. */
@@ -1149,7 +1388,7 @@ export const createTasks = (store: TaskStore) => {
           message: message?.trim() || `stages: update ${byWhom(actor)}`,
         });
         return stagesView("file", content, reading);
-      });
+      }).then((written) => told({ kind: "changed", projectId }, written));
     },
 
     /**
@@ -1177,7 +1416,18 @@ export const createTasks = (store: TaskStore) => {
             .filter((row) => !stageNamed(stages, row.stage))
             .map((row) => row.id),
         };
-      });
+      }).then((written) => told({ kind: "changed", projectId }, written));
+    },
+
+    /** Hears every change to a project's tasks once it has landed; answers how to stop. */
+    listen(listener: (event: TaskEvent) => void): () => void {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+
+    /** Tells listeners a project's folder changed under the tasks (a write through the folder's own routes). */
+    touched(projectId: string): void {
+      emit({ kind: "changed", projectId });
     },
 
     /** The stage templates a project can apply. */

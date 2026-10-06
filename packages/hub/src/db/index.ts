@@ -672,6 +672,11 @@ export interface DbShape {
   ) => PublicInstanceRow | undefined;
   /** A project with its places, or undefined for an id the hub does not hold. */
   readonly project: (id: string) => ProjectRow | undefined;
+  /**
+   * Every work item that is an attempt at one of the project's tasks, newest
+   * first (dispatch.ts).
+   */
+  readonly projectAttempts: (projectId: string) => WorkItemRow[];
   /** The oldest project whose checkouts are of `remote` (normalised). */
   readonly projectByRemote: (remote: string) => ProjectRow | undefined;
   /**
@@ -958,6 +963,16 @@ export interface DbShape {
   ) => void;
   /** Store (or replace) the OpenRouter key from a completed PKCE exchange. */
   readonly setOpenRouterConnection: (apiKey: string) => void;
+  /** The project's dispatch settings: its lead, whether it dispatches, its caps. */
+  readonly setProjectDispatch: (
+    id: string,
+    change: Partial<
+      Pick<
+        ProjectRow,
+        "dispatch" | "leadInstanceId" | "maxAttempts" | "reviewLimit"
+      >
+    >
+  ) => void;
   /** The repository a project's checkouts are of, once a machine has read it. */
   readonly setProjectRemote: (id: string, remote: string) => void;
   /** Where the project's tasks live; tasks.ts refuses a tracker not built yet. */
@@ -3668,6 +3683,20 @@ const make = (path: string): DbShape => {
     setProjectTracker: (id, tracker) => {
       db.update(projects).set({ tracker }).where(eq(projects.id, id)).run();
     },
+    setProjectDispatch: (id, change) => {
+      if (Object.keys(change).length > 0) {
+        db.update(projects).set(change).where(eq(projects.id, id)).run();
+      }
+    },
+    projectAttempts: (projectId) =>
+      db
+        .select()
+        .from(workItems)
+        .where(
+          and(eq(workItems.projectId, projectId), isNotNull(workItems.taskId))
+        )
+        .orderBy(desc(workItems.createdAt), desc(workItems.id))
+        .all(),
     taskIndex: (projectId) =>
       db
         .select()

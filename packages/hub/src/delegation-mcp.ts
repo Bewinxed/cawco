@@ -9,6 +9,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { adminTools } from "./admin-tools";
 import { handoffInstructions, handoffTools } from "./delegation-tools";
+import type { AttemptStart } from "./dispatch";
 import { MAINLINE_TASK_TOOLS, TASK_TOOLS, taskTools } from "./task-tools";
 import type { Tasks } from "./tasks";
 
@@ -20,6 +21,7 @@ const LONG_CALLS: Record<string, string> = {
   generate_image: "Generating image through ChatGPT",
   continue_session: "Summarising the session",
   finish_item: "Running the work item's acceptance checks",
+  task_start: "Creating the attempt's workspace",
   start_session: "Waiting for the machine to start the session",
 };
 
@@ -50,6 +52,12 @@ export function createDelegationMcp(options: {
   tasks?: Tasks;
   /** The task a work item is an attempt at, if any. */
   workItemTask?: (workItemId: string) => string | null | undefined;
+  /** Starts an attempt at a task for `task_start` (dispatch.ts). */
+  startAttempt?: (
+    projectId: string,
+    ref: string,
+    parent: InstanceRow
+  ) => Promise<AttemptStart>;
 }) {
   let tools = options.tools ?? handoffTools;
   let admin = adminTools();
@@ -218,7 +226,7 @@ export function createDelegationMcp(options: {
     const mainline = administers(actor);
     if (MAINLINE_TASK_TOOLS.has(name) && !mainline) {
       throw new Error(
-        `${name} isn't available here: only sessions you started file or change tasks, and this one is a delegate, work item or workflow step. Propose the change to the session that started it, with handoff.`
+        `${name} isn't available here: only sessions you started file, change or start tasks, and this one is a delegate, work item or workflow step. Propose the change to the session that started it, with handoff.`
       );
     }
     const entry =
@@ -226,6 +234,7 @@ export function createDelegationMcp(options: {
       taskTools({
         actor,
         mainline,
+        startAttempt: options.startAttempt,
         tasks: options.tasks,
         workItemTask: actor.workItemId
           ? (options.workItemTask?.(actor.workItemId) ?? null)

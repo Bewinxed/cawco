@@ -263,6 +263,21 @@ export const projects = sqliteTable("projects", {
    * setting is ready for them; the hub refuses them until they are built.
    */
   tracker: text("tracker").$type<Tracker>().notNull().default("cawco"),
+  /**
+   * The project's lead (§5.3): a session you started in this project, which
+   * the attempts the dispatcher starts on its own report to. Null: no lead,
+   * and nothing is dispatched without someone asking.
+   */
+  leadInstanceId: text("lead_instance_id"),
+  /**
+   * Whether the hub starts attempts at ready tasks on its own (dispatch.ts).
+   * Off until you turn it on, and inert without a lead.
+   */
+  dispatch: integer("dispatch", { mode: "boolean" }).notNull().default(false),
+  /** Live attempts at once, past which the dispatcher starts no more. */
+  maxAttempts: integer("max_attempts").notNull().default(2),
+  /** Tasks waiting in `you` stages at which the dispatcher pauses. */
+  reviewLimit: integer("review_limit").notNull().default(5),
   createdAt: timestamp("created_at")
     .notNull()
     .$defaultFn(() => new Date()),
@@ -679,6 +694,11 @@ export const workItems = sqliteTable(
      * project), if any: the one task whose to-dos its session may write.
      */
     taskId: text("task_id"),
+    /**
+     * The project of {@link taskId}, kept on the item so a task's attempts
+     * are found by the item alone, whatever becomes of its session.
+     */
+    projectId: text("project_id"),
     harness: text("harness").notNull(),
     model: text("model"),
     effort: text("effort"),
@@ -731,6 +751,7 @@ export const workItems = sqliteTable(
   (table) => [
     index("work_items_workspace").on(table.workspaceId, table.state),
     index("work_items_parent").on(table.parentInstanceId, table.state),
+    index("work_items_task").on(table.projectId, table.taskId),
   ]
 );
 

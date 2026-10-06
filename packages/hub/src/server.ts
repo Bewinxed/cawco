@@ -175,6 +175,7 @@ import { hashHookMaterial } from "./db";
 import { delegateTypesRoutes, makeDelegateTypes } from "./delegate-types";
 import { hubHttpUrl } from "./delegation-actions";
 import { createDelegationMcp } from "./delegation-mcp";
+import { createDispatcher, dispatchRoutes } from "./dispatch";
 import { FleetMcp } from "./fleet-mcp";
 import { hidden } from "./hidden";
 import { joinRoutes } from "./join";
@@ -7124,6 +7125,9 @@ export const createServer = (
       endSession(instanceId, "stop");
       await waitForEnd(instanceId);
     },
+    // An attempt at a task ended: the dispatcher moves the task. Deferred: the
+    // boot sweep below ends items before the dispatcher exists.
+    itemEnded: (item) => queueMicrotask(() => dispatcher.itemEnded(item)),
     command: runOnMachine,
     inTurn: (row) => row.status === "running" && !!pulses.get(row.id)?.busy,
     report: (row, body, failed, notice) => {
@@ -7323,8 +7327,21 @@ export const createServer = (
     put: db.putTaskIndex,
     drop: db.dropTaskIndex,
     setTracker: db.setProjectTracker,
+    attempts: db.projectAttempts,
+    startProblem: (projectId, task) => dispatcher.problemOf(projectId, task),
   });
+  // Attempts at tasks: started by a session, a stage's `runs:` hook, or the
+  // dispatcher itself for a project that dispatches (dispatch.ts).
+  const dispatcher = createDispatcher({
+    db,
+    tasks,
+    online: (machineId) => Boolean(registry.agent(machineId)),
+    start: (request) => workItems.start(request),
+  });
+  tasks.listen(dispatcher.taskChanged);
   if (resumeWorkflows) {
+    // The dispatcher's safety net: a slow look at every dispatching project.
+    dispatcher.watch();
     // Off the boot path: a folder edited while the hub was down is re-read once.
     // biome-ignore lint/complexity/noVoid: the catch-up logs its own failures
     void tasks.syncAll().catch(console.error);
@@ -7332,6 +7349,8 @@ export const createServer = (
   const delegationMcp = createDelegationMcp({
     tasks,
     workItemTask: (id) => db.workItem(id)?.taskId,
+    startAttempt: (projectId, ref, parent) =>
+      dispatcher.startAttempt(projectId, ref, parent),
     instances: () => withKeepAlive(db.listInstances()),
     instanceById: (id) => db.getInstancesByIds([id])[0],
     credentialActor: (authorization) => {
@@ -7603,11 +7622,13 @@ export const createServer = (
       .use(dashboardErrorsRoutes())
       .use(delegateTypesRoutes(delegateTypes))
       .use(
-        projectFolderRoutes((id) =>
-          db.listProjects().some((project) => project.id === id)
+        projectFolderRoutes(
+          (id) => db.listProjects().some((project) => project.id === id),
+          (id) => tasks.touched(id)
         )
       )
       .use(taskRoutes(tasks))
+      .use(dispatchRoutes(dispatcher))
       .use(
         joinRoutes({
           online: (machineId) => Boolean(registry.agent(machineId)),
@@ -10617,6 +10638,9 @@ export const createServer = (
               // the moment it can run commands — waiting on nothing else the
               // register asks of the agent.
               workItems.resumeChecks(message.machineId);
+              // A checkout coming online can be where a ready task's
+              // workspace is cut.
+              dispatcher.machineOnline(message.machineId);
               // Projects that do not know their repository yet read it from
               // their checkouts here, now that the machine can run git.
               Promise.all(

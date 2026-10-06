@@ -877,10 +877,14 @@ export const refused = (error: unknown) => {
 /**
  * The dashboard's routes for a project's folder, under
  * `/api/projects/:id/folder`: list, read, write, delete and history. Writes
- * from here are the operator's ("you"). A standalone Elysia app so
+ * from here are the operator's ("you"), and `changed` hears of each one (a
+ * task file or stages.md may be among them). A standalone Elysia app so
  * `server.ts` mounts it with one `.use()`.
  */
-export const projectFolderRoutes = (projectExists: (id: string) => boolean) => {
+export const projectFolderRoutes = (
+  projectExists: (id: string) => boolean,
+  changed: (id: string) => void = () => undefined
+) => {
   const known = (id: string): void => {
     if (!projectExists(id)) {
       throw new FolderRefusal(404, `The hub keeps no project ${id}.`);
@@ -932,10 +936,14 @@ export const projectFolderRoutes = (projectExists: (id: string) => boolean) => {
       async ({ params, body }) => {
         try {
           known(params.id);
-          return await writeFolderFile(params.id, body.path, body.content, {
-            author: YOU,
-            message: body.message,
-          });
+          const written = await writeFolderFile(
+            params.id,
+            body.path,
+            body.content,
+            { author: YOU, message: body.message }
+          );
+          changed(params.id);
+          return written;
         } catch (error) {
           return refused(error);
         }
@@ -952,10 +960,12 @@ export const projectFolderRoutes = (projectExists: (id: string) => boolean) => {
       async ({ params, query }) => {
         try {
           known(params.id);
-          return await deleteFolderFile(params.id, query.path, {
+          const deleted = await deleteFolderFile(params.id, query.path, {
             author: YOU,
             message: query.message,
           });
+          changed(params.id);
+          return deleted;
         } catch (error) {
           return refused(error);
         }

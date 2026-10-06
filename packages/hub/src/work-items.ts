@@ -72,6 +72,9 @@ const LIVE: ReadonlySet<WorkItemRow["state"]> = new Set([
   "running",
 ]);
 
+/** Whether an item in `state` is live work: starting or running. */
+export const isLive = (state: WorkItemRow["state"]): boolean => LIVE.has(state);
+
 /** A request the hub turns down, with the status and the words the caller reads. */
 export class WorkItemRefusal extends Error {
   readonly status: 400 | 403 | 404 | 409;
@@ -145,6 +148,11 @@ export interface WorkItemRequest {
   parentInstanceId: string;
   prompt: string;
   skills?: string[];
+  /**
+   * The project task the item is an attempt at (dispatch.ts). Only for a new
+   * workspace; the item's session may write that task's to-dos.
+   */
+  task?: { id: string; projectId: string };
   /** What the caller named the work: the item's title and its session's. */
   title: string;
   type?: string;
@@ -185,6 +193,11 @@ export interface WorkItemDeps {
   readonly end: (instanceId: string) => Promise<void>;
   /** The agent's live turn state, including a long tool call with no output. */
   readonly inTurn: (row: InstanceRow) => boolean;
+  /**
+   * An item went from live to finished (done, failed or cancelled), as
+   * written. Called in the same step; whoever listens defers its own work.
+   */
+  readonly itemEnded?: (item: WorkItemRow) => void;
   /** Tells every dashboard an item moved: its parent's delegate tray follows it. */
   readonly publish: (item: WorkItemSummary) => void;
   /** Hands a report to the parent of the item's session. */
@@ -487,6 +500,7 @@ export const createWorkItems = ({
   command,
   db,
   end,
+  itemEnded,
   publish,
   report,
   inTurn,
@@ -539,7 +553,8 @@ export const createWorkItems = ({
   ): WorkItemRow | undefined => {
     if (change.state && !LIVE.has(change.state)) {
       disarmWait(id);
-      return published(
+      const before = db.workItem(id);
+      const after = published(
         db.updateWorkItem(id, {
           ...change,
           waitUntil: null,
@@ -547,6 +562,10 @@ export const createWorkItems = ({
           waitResumeBy: null,
         })
       );
+      if (after && before && LIVE.has(before.state)) {
+        itemEnded?.(after);
+      }
+      return after;
     }
     return published(db.updateWorkItem(id, change));
   };
@@ -899,6 +918,9 @@ export const createWorkItems = ({
       brief: request.prompt,
       title: request.title.trim(),
       type: settings.type?.name,
+      ...(request.task
+        ? { taskId: request.task.id, projectId: request.task.projectId }
+        : {}),
       harness,
       model: settings.model,
       effort: settings.type?.effort,

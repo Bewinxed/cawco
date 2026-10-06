@@ -4,11 +4,13 @@
  * tasks and writes to-dos; filing and changing tasks belongs to the sessions
  * the operator started (delegation-mcp's `administers`), and a delegate
  * proposes those through handoff. A session's project is its instance row's
- * `projectId`; a delegate's is its parent's.
+ * `projectId`; a delegate's is its parent's. `task_start` starts an attempt
+ * at a task (dispatch.ts) that reports to the session calling it.
  */
 import type { InstanceRow } from "@cawco/core";
 import { z } from "zod";
 import { tool } from "./admin-tools";
+import type { AttemptStart } from "./dispatch";
 import { EDGES, normaliseTaskRef } from "./task-file";
 import {
   type StagesView,
@@ -23,20 +25,28 @@ export const TASK_TOOLS: ReadonlySet<string> = new Set([
   "task_read",
   "task_update",
   "task_link",
+  "task_start",
   "todo_write",
 ]);
 
-/** The tools that file or change tasks: a session the operator started only. */
+/** The tools that file, change or start tasks: a session the operator started only. */
 export const MAINLINE_TASK_TOOLS: ReadonlySet<string> = new Set([
   "task_create",
   "task_update",
   "task_link",
+  "task_start",
 ]);
 
 export interface TaskToolContext {
   actor: InstanceRow;
   /** A session the operator started, not a delegate, work item or workflow step. */
   mainline: boolean;
+  /** Starts an attempt at a task, reporting to `parent` (dispatch.ts); without it task_start refuses. */
+  startAttempt?: (
+    projectId: string,
+    ref: string,
+    parent: InstanceRow
+  ) => Promise<AttemptStart>;
   tasks: Tasks;
   /** The task the session's work item is an attempt at, if it has one. */
   workItemTask: string | null;
@@ -58,26 +68,40 @@ const stageLine = ({ name, kind, hooks }: StagesView["stages"][number]) => {
   return `${name} (${said.join(", ")})`;
 };
 
+type TaskLine = TaskList["tasks"][number];
+
+/** What a task's attempts and edges add to its line: only what is so. */
+const attemptFields = (task: TaskLine) => ({
+  ...(task.liveAttempt ? { attempt: "live" } : {}),
+  ...(task.lastAttemptFailed ? { attempt: "failed" } : {}),
+  ...(task.blockedBy.length > 0 ? { blockedBy: task.blockedBy } : {}),
+  ...(task.startProblem ? { startProblem: task.startProblem } : {}),
+});
+
+/** One task as a model reads it in a list: its fields that are set. */
+const taskLine = (task: TaskLine) => ({
+  id: task.id,
+  title: task.title,
+  stage: task.stage,
+  ...(task.needsYou ? { needsYou: true } : {}),
+  ...(task.type ? { type: task.type } : {}),
+  ...(task.after.length > 0 ? { after: task.after } : {}),
+  ...(task.parent ? { parent: task.parent } : {}),
+  ...(task.labels.length > 0 ? { labels: task.labels } : {}),
+  ...(task.todos.total > 0
+    ? { todos: `${task.todos.done}/${task.todos.total}` }
+    : {}),
+  ...attemptFields(task),
+  ...(task.problem ? { problem: task.problem } : {}),
+});
+
 /** A list as a model reads it: the project's stages, then one short line of fields per task. */
 const compact = (list: TaskList, stages: StagesView) => ({
   stages: stages.stages.map(stageLine),
   ...(list.stagesProblems.length > 0
     ? { stagesProblems: list.stagesProblems }
     : {}),
-  tasks: list.tasks.map((task) => ({
-    id: task.id,
-    title: task.title,
-    stage: task.stage,
-    ...(task.needsYou ? { needsYou: true } : {}),
-    ...(task.type ? { type: task.type } : {}),
-    ...(task.after.length > 0 ? { after: task.after } : {}),
-    ...(task.parent ? { parent: task.parent } : {}),
-    ...(task.labels.length > 0 ? { labels: task.labels } : {}),
-    ...(task.todos.total > 0
-      ? { todos: `${task.todos.done}/${task.todos.total}` }
-      : {}),
-    ...(task.problem ? { problem: task.problem } : {}),
-  })),
+  tasks: list.tasks.map(taskLine),
   ...(list.problems.length > 0 ? { problems: list.problems } : {}),
 });
 
@@ -135,7 +159,7 @@ export function taskTools(context: TaskToolContext | undefined) {
   return [
     tool(
       "task_read",
-      "Read your project's tasks. With `id`: that task's file, parsed — stage, edges, checks, description, acceptance criteria, and to-dos with their ids (td-3) and positions (2.1). Without: the project's stages and every task, one line each; `stage` narrows the list. needsYou marks a task waiting on the operator.",
+      "Read your project's tasks. With `id`: that task's file, parsed — stage, edges, checks, description, acceptance criteria, to-dos with their ids (td-3) and positions (2.1), and its attempts. Without: the project's stages and every task, one line each; `stage` narrows the list. needsYou marks a task waiting on the operator; attempt says one is live or the last one failed; blockedBy lists the tasks it still waits for.",
       {
         id: taskRef().optional(),
         stage: z
@@ -233,6 +257,18 @@ export function taskTools(context: TaskToolContext | undefined) {
       async ({ id, edge, to, remove }) => {
         const { projectId, tasks, actor } = scope();
         return ok(await tasks.link(projectId, id, { edge, to, remove }, actor));
+      }
+    ),
+    tool(
+      "task_start",
+      "Start an attempt at one of your project's tasks: a delegate in a new workspace cut from a checkout of the project on a machine that is online, briefed from the task file (description, acceptance criteria, open to-dos, checks), reporting to you like any delegate. The task moves to its active stage, and runs the type that stage names, else the task's type. Refused while it has a live attempt or is done.",
+      { id: taskRef() },
+      async ({ id }) => {
+        const { projectId } = scope();
+        if (!context?.startAttempt) {
+          throw new Error("Attempts cannot be started on this hub.");
+        }
+        return ok(await context.startAttempt(projectId, id, context.actor));
       }
     ),
     tool(
