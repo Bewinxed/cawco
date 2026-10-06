@@ -32,6 +32,7 @@
 import Accelerate
 import AudioToolbox
 import AVFoundation
+import CoreAudio
 import os
 import QuartzCore
 
