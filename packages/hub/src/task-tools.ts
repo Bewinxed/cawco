@@ -10,7 +10,12 @@ import type { InstanceRow } from "@cawco/core";
 import { z } from "zod";
 import { tool } from "./admin-tools";
 import { EDGES, normaliseTaskRef } from "./task-file";
-import { sessionActor, type TaskList, type Tasks } from "./tasks";
+import {
+  type StagesView,
+  sessionActor,
+  type TaskList,
+  type Tasks,
+} from "./tasks";
 
 /** Every task tool, by name. */
 export const TASK_TOOLS: ReadonlySet<string> = new Set([
@@ -41,12 +46,29 @@ const ok = (data: unknown) => ({
   content: [{ type: "text" as const, text: JSON.stringify(data) }],
 });
 
-/** A list as a model reads it: one short line of fields per task. */
-const compact = (list: TaskList) => ({
+/** A stage as a model reads it: `draft (active, runs writer)`. */
+const stageLine = ({ name, kind, hooks }: StagesView["stages"][number]) => {
+  const said = [
+    kind,
+    ...(hooks.runs ? [`runs ${hooks.runs}`] : []),
+    ...(hooks.until ? [`until ${hooks.until}`] : []),
+    ...(hooks.after ? [`after ${hooks.after}`] : []),
+    ...(hooks.by ? [`only ${hooks.by} moves a task in`] : []),
+  ];
+  return `${name} (${said.join(", ")})`;
+};
+
+/** A list as a model reads it: the project's stages, then one short line of fields per task. */
+const compact = (list: TaskList, stages: StagesView) => ({
+  stages: stages.stages.map(stageLine),
+  ...(list.stagesProblems.length > 0
+    ? { stagesProblems: list.stagesProblems }
+    : {}),
   tasks: list.tasks.map((task) => ({
     id: task.id,
     title: task.title,
     stage: task.stage,
+    ...(task.needsYou ? { needsYou: true } : {}),
     ...(task.type ? { type: task.type } : {}),
     ...(task.after.length > 0 ? { after: task.after } : {}),
     ...(task.parent ? { parent: task.parent } : {}),
@@ -113,7 +135,7 @@ export function taskTools(context: TaskToolContext | undefined) {
   return [
     tool(
       "task_read",
-      "Read your project's tasks. With `id`: that task's file, parsed — stage, edges, checks, description, acceptance criteria, and to-dos with their ids (td-3) and positions (2.1). Without: every task, one line each; `stage` narrows the list.",
+      "Read your project's tasks. With `id`: that task's file, parsed — stage, edges, checks, description, acceptance criteria, and to-dos with their ids (td-3) and positions (2.1). Without: the project's stages and every task, one line each; `stage` narrows the list. needsYou marks a task waiting on the operator.",
       {
         id: taskRef().optional(),
         stage: z
@@ -123,11 +145,14 @@ export function taskTools(context: TaskToolContext | undefined) {
       },
       async ({ id, stage }) => {
         const { projectId, tasks } = scope();
-        return ok(
-          id
-            ? await tasks.get(projectId, id)
-            : compact(await tasks.list(projectId, { stage }))
-        );
+        if (id) {
+          return ok(await tasks.get(projectId, id));
+        }
+        const [list, stages] = await Promise.all([
+          tasks.list(projectId, { stage }),
+          tasks.stages(projectId),
+        ]);
+        return ok(compact(list, stages));
       }
     ),
     tool(

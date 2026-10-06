@@ -12,6 +12,11 @@
  *   and re-indexes the ones whose hash moved, so a hand edit shows on the
  *   next read; a write through here re-indexes its own file at once. The hub
  *   catches up every project that has a folder when it starts.
+ * - **Stages** come from the project's `stages.md` (stages.ts), or the code
+ *   template while it has none. A new task starts in the first `todo` stage;
+ *   a stage change is checked against the file's moves for who is making it
+ *   (you at the dashboard, a session through the tools). Needs you is worked
+ *   out on every read from the stage's kind and never stored.
  * - **Tracker.** A project keeps its tasks in CawCo's files (`tracker:
  *   cawco`). GitHub Issues and Linear are named in the setting and refused
  *   until they are built.
@@ -36,6 +41,25 @@ import {
   YOU,
 } from "./project-folder";
 import {
+  firstStage,
+  type Mover,
+  moveProblem,
+  readStages,
+  STAGE_NAME,
+  type Stage,
+  type StageKind,
+  type StageMove,
+  type Stages,
+  type StagesReading,
+  type StagesTemplate,
+  type StageView,
+  stageNamed,
+  startProblem,
+  TEMPLATES,
+  templateStages,
+  templateText,
+} from "./stages";
+import {
   type Edge,
   fileTaskNumber,
   type ParsedTask,
@@ -47,13 +71,6 @@ import {
   taskPath,
 } from "./task-file";
 
-/**
- * Who moves a task, as `stages.md` names them: you (the dashboard), the
- * project's lead (Caw, §5.3), a session working in the project, an approved
- * action, a routine.
- */
-export type Mover = "you" | "lead" | "session" | "action" | "routine";
-
 /** Who is changing a task: what stage moves they may make, and whom the commit is by. */
 export interface TaskActor {
   author: FolderAuthor;
@@ -63,7 +80,11 @@ export interface TaskActor {
 /** The operator, at the dashboard. */
 export const YOU_ACTOR: TaskActor = { mover: "you", author: YOU };
 
-/** A session calling the task tools: it moves stages as a session, and commits under its name. */
+/**
+ * A session calling the task tools: it moves stages as a `session`, and
+ * commits under its name. (`lead` is for the project's lead, Caw, once
+ * there is one.)
+ */
 export const sessionActor = (row: InstanceRow): TaskActor => ({
   mover: "session",
   author: {
@@ -90,11 +111,15 @@ export interface TaskStore {
 export interface TaskSummary {
   after: string[];
   id: string;
+  /** The kind of its stage; null when its stage is not one of the project's. */
+  kind: StageKind | null;
   labels: string[];
+  /** Its stage is of kind `you`: it is in Needs you. Derived on read, never stored. */
+  needsYou: boolean;
   number: number;
   parent: string | null;
   path: string;
-  /** What in the file could not be read, in a sentence; null when all of it could. */
+  /** What in the file could not be read, or a stage the project lacks, in a sentence; null when all is well. */
   problem: string | null;
   rank: string | null;
   stage: string;
@@ -108,8 +133,32 @@ export interface TaskSummary {
 export interface TaskList {
   /** Files in tasks/ the hub could not list as tasks, one sentence each. */
   problems: string[];
+  /** What is wrong with stages.md, one sentence each; empty when it reads. */
+  stagesProblems: string[];
   tasks: TaskSummary[];
   tracker: Tracker;
+}
+
+/** A project's stages as the dashboard reads them. */
+export interface StagesView {
+  moves: StageMove[];
+  /** What is wrong with stages.md, one sentence each; stages, moves and views are empty while there is any. */
+  problems: string[];
+  /** `file`: the project's stages.md; `template`: it has none, and the code template stands in. */
+  source: "file" | "template";
+  stages: Stage[];
+  /** The template the stages are, word for word, if any. */
+  template: StagesTemplate | null;
+  views: StageView[];
+}
+
+/** A template the dashboard offers: its stages, and the stages.md it writes. */
+export interface StagesTemplateView {
+  content: string;
+  moves: StageMove[];
+  name: StagesTemplate;
+  stages: Stage[];
+  views: StageView[];
 }
 
 /** One task, its file read whole. */
@@ -124,7 +173,11 @@ export interface TaskView {
   /** sha256 hex of the file as read. */
   hash: string;
   id: string;
+  /** The kind of its stage; null when its stage is not one of the project's. */
+  kind: StageKind | null;
   labels: string[];
+  /** Its stage is of kind `you`: it is in Needs you. */
+  needsYou: boolean;
   number: number;
   outputs: string[];
   parent: string | null;
@@ -184,14 +237,14 @@ const TODO_LIMIT = 500;
 const TEXT_LIMIT = 20_000;
 const ITEM_LIMIT = 200;
 const LIST_LIMIT = 50;
-const STAGE_NAME = /^[a-z][a-z0-9_-]{0,39}$/;
 const TYPE_NAME = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/;
 const SECTION_LINE = /^##\s/m;
 const TODO_MARKER_START = /^\[td-\d+\]/;
 const LINE_BREAK = /[\r\n]/;
 
-/** Where a task starts when nothing names its stage, until stages.md says otherwise. */
-const FIRST_STAGE = "ready";
+/** The project folder's stages file, and the template that stands in while there is none. */
+const STAGES_FILE = "stages.md";
+const DEFAULT_TEMPLATE: StagesTemplate = "code";
 
 const refuse = (code: 400 | 403 | 404 | 409 | 422, message: string): never => {
   throw new FolderRefusal(code, message);
@@ -283,34 +336,53 @@ const stageName = (stage: string): string => {
 
 // --- the service --------------------------------------------------------------
 
-const summaryOf = (row: TaskIndexRow): TaskSummary => ({
-  id: row.id,
-  number: row.number,
-  path: row.path,
-  title: row.title,
-  stage: row.stage,
-  type: row.type,
-  after: row.after,
-  parent: row.parent,
-  rank: row.rank,
-  labels: row.labels,
-  todos: { done: row.todosDone, total: row.todosTotal },
-  updatedAt: row.updatedAt.getTime(),
-  problem: row.problem,
-});
+/** A stage's kind in the project's stages; null for a stage it lacks, or while stages.md does not read. */
+const kindIn = (stages: Stages | undefined, stage: string): StageKind | null =>
+  (stages && stageNamed(stages, stage)?.kind) ?? null;
+
+const summaryOf = (
+  row: TaskIndexRow,
+  stages: Stages | undefined
+): TaskSummary => {
+  const kind = kindIn(stages, row.stage);
+  const stray =
+    stages && row.stage && !kind
+      ? `Its stage “${row.stage}” is not one of the project's stages.`
+      : undefined;
+  return {
+    id: row.id,
+    number: row.number,
+    path: row.path,
+    title: row.title,
+    stage: row.stage,
+    kind,
+    needsYou: kind === "you",
+    type: row.type,
+    after: row.after,
+    parent: row.parent,
+    rank: row.rank,
+    labels: row.labels,
+    todos: { done: row.todosDone, total: row.todosTotal },
+    updatedAt: row.updatedAt.getTime(),
+    problem: [row.problem, stray].filter(Boolean).join(" ") || null,
+  };
+};
 
 const viewOf = (
   path: string,
   number: number,
   parsed: ParsedTask,
   title: string,
-  hash: string
+  hash: string,
+  stages: Stages | undefined
 ): TaskView => ({
   id: taskId(number),
   number,
   path,
   title,
   stage: parsed.fields.stage ?? "",
+  kind: kindIn(stages, parsed.fields.stage ?? ""),
+  needsYou: kindIn(stages, parsed.fields.stage ?? "") === "you",
   type: parsed.fields.type,
   after: parsed.fields.after,
   parent: parsed.fields.parent,
@@ -476,6 +548,19 @@ const applyTodos = (doc: TaskDoc, changes: TodoChanges): string => {
   }
   return said.join("; ");
 };
+
+const stagesView = (
+  source: "file" | "template",
+  content: string,
+  reading: StagesReading
+): StagesView => ({
+  source,
+  template: TEMPLATES.find((name) => templateText(name) === content) ?? null,
+  stages: reading.ok ? reading.stages.stages : [],
+  moves: reading.ok ? reading.stages.moves : [],
+  views: reading.ok ? reading.stages.views : [],
+  problems: reading.ok ? [] : reading.problems,
+});
 
 /** Commit messages say who: `(by you)`, `(by Fix tray chip)`. */
 const byWhom = (actor: TaskActor): string => `(by ${actor.author.name})`;
@@ -692,6 +777,25 @@ export const createTasks = (store: TaskStore) => {
   ): Promise<string | null> =>
     ref ? ((await targets(projectId, edge, [ref]))[0] ?? null) : null;
 
+  /** Where a new task starts: the stage asked for, if the actor may put it there, else the first todo stage. */
+  const startStage = async (
+    projectId: string,
+    asked: string | undefined,
+    actor: TaskActor
+  ): Promise<string> => {
+    const stages = await usableStages(
+      projectId,
+      "tell where a new task starts"
+    );
+    const stage =
+      asked === undefined ? firstStage(stages).name : stageName(asked);
+    const problem = startProblem(stages, stage, actor.mover);
+    if (problem) {
+      refuse(stageNamed(stages, stage) ? 403 : 400, problem);
+    }
+    return stage;
+  };
+
   /** One past the highest number the folder ever held, or this process handed out. */
   const nextNumber = async (projectId: string): Promise<number> => {
     let highest = issued.get(projectId);
@@ -708,9 +812,67 @@ export const createTasks = (store: TaskStore) => {
     return next;
   };
 
-  const view = (path: string, number: number, content: string): TaskView => {
+  /** stages.md as it reads, or the code template while the project has none. */
+  const stagesOf = async (
+    projectId: string
+  ): Promise<{
+    content: string;
+    reading: StagesReading;
+    source: "file" | "template";
+  }> => {
+    try {
+      const { content } = await readFolderFile(projectId, STAGES_FILE);
+      return { source: "file", content, reading: readStages(content) };
+    } catch (error) {
+      if (error instanceof FolderRefusal && error.status === 404) {
+        return {
+          source: "template",
+          content: templateText(DEFAULT_TEMPLATE),
+          reading: { ok: true, stages: templateStages(DEFAULT_TEMPLATE) },
+        };
+      }
+      throw error;
+    }
+  };
+
+  /** The project's stages; undefined while stages.md does not read. */
+  const currentStages = async (
+    projectId: string
+  ): Promise<Stages | undefined> => {
+    const { reading } = await stagesOf(projectId);
+    return reading.ok ? reading.stages : undefined;
+  };
+
+  /** The project's stages, or a refusal saying what in stages.md keeps the hub from `doing`. */
+  const usableStages = async (
+    projectId: string,
+    doing: string
+  ): Promise<Stages> => {
+    const { reading } = await stagesOf(projectId);
+    if (!reading.ok) {
+      return refuse(
+        409,
+        `stages.md does not read, so the hub cannot ${doing}. ${reading.problems.join(" ")} Fix it, or apply a template.`
+      );
+    }
+    return reading.stages;
+  };
+
+  const view = (
+    path: string,
+    number: number,
+    content: string,
+    stages: Stages | undefined
+  ): TaskView => {
     const doc = new TaskDoc(path, content);
-    return viewOf(path, number, doc.read(), doc.title(), hashOf(content));
+    return viewOf(
+      path,
+      number,
+      doc.read(),
+      doc.title(),
+      hashOf(content),
+      stages
+    );
   };
 
   /** Writes a task file through the folder (one commit) and re-indexes it. */
@@ -727,7 +889,7 @@ export const createTasks = (store: TaskStore) => {
       message,
     });
     store.put([indexRow(projectId, path, number, content, hashOf(content))]);
-    return view(path, number, content);
+    return view(path, number, content, await currentStages(projectId));
   };
 
   /**
@@ -749,7 +911,7 @@ export const createTasks = (store: TaskStore) => {
       const did = await apply(doc, id);
       const next = doc.toString();
       if (next === content) {
-        return view(path, number, content);
+        return view(path, number, content, await currentStages(projectId));
       }
       return await save(
         projectId,
@@ -790,14 +952,30 @@ export const createTasks = (store: TaskStore) => {
 
   return {
     /** The project's tasks from the index, caught up with the files first. */
-    async list(projectId: string, filter: { stage?: string } = {}) {
+    async list(
+      projectId: string,
+      filter: { kind?: StageKind; stage?: string } = {}
+    ): Promise<TaskList> {
       const tracker = known(projectId);
-      const { rows, problems } = await sync(projectId);
+      const [{ rows, problems }, { reading }] = await Promise.all([
+        sync(projectId),
+        stagesOf(projectId),
+      ]);
+      const stages = reading.ok ? reading.stages : undefined;
       const tasks = rows
-        .map(summaryOf)
-        .filter((task) => !filter.stage || task.stage === filter.stage)
+        .map((row) => summaryOf(row, stages))
+        .filter(
+          (task) =>
+            (!filter.stage || task.stage === filter.stage) &&
+            (!filter.kind || task.kind === filter.kind)
+        )
         .sort(byRank);
-      return { tracker, tasks, problems } satisfies TaskList;
+      return {
+        tracker,
+        tasks,
+        problems,
+        stagesProblems: reading.ok ? [] : reading.problems,
+      };
     },
 
     /** One task, its file read and parsed; the index catches up if the file moved. */
@@ -810,7 +988,7 @@ export const createTasks = (store: TaskStore) => {
       if (row?.hash !== hash) {
         store.put([indexRow(projectId, path, number, content, hash)]);
       }
-      return view(path, number, content);
+      return view(path, number, content, await currentStages(projectId));
     },
 
     create(
@@ -822,7 +1000,7 @@ export const createTasks = (store: TaskStore) => {
         writable(projectId);
         const title = oneLine("title", draft.title, TITLE_LIMIT);
         const fields: Partial<TaskFields> = {
-          stage: stageName(draft.stage ?? FIRST_STAGE),
+          stage: await startStage(projectId, draft.stage, actor),
           type: draft.type ? typeName(draft.type) : null,
           after: await targets(projectId, "after", draft.after ?? []),
           parent: await single(projectId, "parent", draft.parent),
@@ -873,9 +1051,17 @@ export const createTasks = (store: TaskStore) => {
       stage: string,
       actor: TaskActor
     ): Promise<TaskView> {
-      return change(projectId, ref, actor, (doc) => {
+      return change(projectId, ref, actor, async (doc, id) => {
+        const stages = await usableStages(projectId, "check a stage change");
         const to = stageName(stage);
         const from = doc.read().fields.stage ?? "";
+        if (from === to) {
+          return `stage ${to}`;
+        }
+        const problem = moveProblem(stages, id, from, to, actor.mover);
+        if (problem) {
+          refuse(stageNamed(stages, to) ? 403 : 400, problem);
+        }
         doc.setField("stage", to);
         return `stage ${from || "(none)"} → ${to}`;
       });
@@ -938,6 +1124,71 @@ export const createTasks = (store: TaskStore) => {
       return change(projectId, ref, actor, (doc) => applyTodos(doc, changes));
     },
 
+    /** The project's stages, moves, views and hooks, or what keeps stages.md from reading. */
+    async stages(projectId: string): Promise<StagesView> {
+      known(projectId);
+      const { source, content, reading } = await stagesOf(projectId);
+      return stagesView(source, content, reading);
+    },
+
+    /** Writes stages.md, once it reads; a file that does not is refused with every problem. */
+    putStages(
+      projectId: string,
+      content: string,
+      actor: TaskActor,
+      message?: string
+    ): Promise<StagesView> {
+      return inTurn(projectId, async () => {
+        writable(projectId);
+        const reading = readStages(content);
+        if (!reading.ok) {
+          refuse(422, `stages.md was not saved. ${reading.problems.join(" ")}`);
+        }
+        await writeFolderFile(projectId, STAGES_FILE, content, {
+          author: actor.author,
+          message: message?.trim() || `stages: update ${byWhom(actor)}`,
+        });
+        return stagesView("file", content, reading);
+      });
+    },
+
+    /**
+     * Writes a template as the project's stages.md. Answers the stages, and
+     * the tasks whose stage the template does not have (they stay where they
+     * are until moved).
+     */
+    applyTemplate(
+      projectId: string,
+      template: StagesTemplate,
+      actor: TaskActor
+    ): Promise<StagesView & { stranded: string[] }> {
+      return inTurn(projectId, async () => {
+        writable(projectId);
+        const content = templateText(template);
+        await writeFolderFile(projectId, STAGES_FILE, content, {
+          author: actor.author,
+          message: `stages: apply the ${template} template ${byWhom(actor)}`,
+        });
+        const stages = templateStages(template);
+        const { rows } = await sync(projectId);
+        return {
+          ...stagesView("file", content, { ok: true, stages }),
+          stranded: rows
+            .filter((row) => !stageNamed(stages, row.stage))
+            .map((row) => row.id),
+        };
+      });
+    },
+
+    /** The stage templates a project can apply. */
+    templates(): StagesTemplateView[] {
+      return TEMPLATES.map((name) => ({
+        name,
+        content: templateText(name),
+        ...templateStages(name),
+      }));
+    },
+
     /** Sets where the project's tasks live; only CawCo's files are built. */
     setTracker(projectId: string, tracker: Tracker): { tracker: Tracker } {
       known(projectId);
@@ -979,6 +1230,21 @@ const EDGE = t.Union([
   t.Literal("related"),
   t.Literal("found_in"),
 ]);
+const KIND = t.Union([
+  t.Literal("todo"),
+  t.Literal("active"),
+  t.Literal("waiting"),
+  t.Literal("you"),
+  t.Literal("done"),
+  t.Literal("dropped"),
+]);
+const TEMPLATE = t.Union([
+  t.Literal("code"),
+  t.Literal("social"),
+  t.Literal("outreach"),
+  t.Literal("seo"),
+  t.Literal("design"),
+]);
 const TRACKER = t.Union([
   t.Literal("cawco"),
   t.Literal("github"),
@@ -987,17 +1253,25 @@ const TRACKER = t.Union([
 
 /**
  * The dashboard's routes for a project's tasks, under
- * `/api/projects/:id/tasks`, and its tracker setting. Changes from here are
- * the operator's ("you").
+ * `/api/projects/:id/tasks`, its stages and tracker setting, and the stage
+ * templates. Changes from here are the operator's ("you").
  */
 export const taskRoutes = (tasks: Tasks) =>
   new Elysia()
     .get(
       "/api/projects/:id/tasks",
-      { query: t.Object({ stage: t.Optional(t.String()) }) },
+      {
+        query: t.Object({
+          stage: t.Optional(t.String()),
+          kind: t.Optional(KIND),
+        }),
+      },
       async ({ params, query }) => {
         try {
-          return await tasks.list(params.id, { stage: query.stage });
+          return await tasks.list(params.id, {
+            stage: query.stage,
+            kind: query.kind,
+          });
         } catch (error) {
           return refused(error);
         }
@@ -1139,6 +1413,46 @@ export const taskRoutes = (tasks: Tasks) =>
         }
       }
     )
+    .get("/api/projects/:id/stages", async ({ params }) => {
+      try {
+        return await tasks.stages(params.id);
+      } catch (error) {
+        return refused(error);
+      }
+    })
+    .put(
+      "/api/projects/:id/stages",
+      {
+        body: t.Object({
+          content: t.String(),
+          message: t.Optional(t.String({ maxLength: 2000 })),
+        }),
+      },
+      async ({ params, body }) => {
+        try {
+          return await tasks.putStages(
+            params.id,
+            body.content,
+            YOU_ACTOR,
+            body.message
+          );
+        } catch (error) {
+          return refused(error);
+        }
+      }
+    )
+    .post(
+      "/api/projects/:id/stages/template",
+      { body: t.Object({ template: TEMPLATE }) },
+      async ({ params, body }) => {
+        try {
+          return await tasks.applyTemplate(params.id, body.template, YOU_ACTOR);
+        } catch (error) {
+          return refused(error);
+        }
+      }
+    )
+    .get("/api/stage-templates", () => tasks.templates())
     .put(
       "/api/projects/:id/tracker",
       { body: t.Object({ tracker: TRACKER }) },

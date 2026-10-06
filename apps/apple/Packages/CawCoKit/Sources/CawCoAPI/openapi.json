@@ -953,6 +953,22 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todo",
+                "active",
+                "waiting",
+                "you",
+                "done",
+                "dropped"
+              ]
+            }
           }
         ],
         "operationId": "getApiProjectsByIdTasks",
@@ -962,7 +978,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/getApiProjectsByIdTasks200"
+                  "$ref": "#/components/schemas/TaskList"
                 }
               }
             }
@@ -2173,6 +2189,429 @@
               "text/plain": {
                 "schema": {
                   "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/stages": {
+      "get": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiProjectsByIdStages",
+        "responses": {
+          "200": {
+            "description": "getApiProjectsByIdStages 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StagesView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "getApiProjectsByIdStages 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "getApiProjectsByIdStages 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "getApiProjectsByIdStages 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "getApiProjectsByIdStages 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "getApiProjectsByIdStages 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "getApiProjectsByIdStages 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiProjectsByIdStages 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "getApiProjectsByIdStages 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "getApiProjectsByIdStages 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "content": {
+                    "type": "string"
+                  },
+                  "message": {
+                    "maxLength": 2000,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "content"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "putApiProjectsByIdStages",
+        "responses": {
+          "200": {
+            "description": "putApiProjectsByIdStages 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StagesView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "putApiProjectsByIdStages 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "putApiProjectsByIdStages 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "putApiProjectsByIdStages 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "putApiProjectsByIdStages 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "putApiProjectsByIdStages 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "putApiProjectsByIdStages 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "putApiProjectsByIdStages 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "putApiProjectsByIdStages 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "putApiProjectsByIdStages 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/stages/template": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "template": {
+                    "type": "string",
+                    "enum": [
+                      "code",
+                      "social",
+                      "outreach",
+                      "seo",
+                      "design"
+                    ]
+                  }
+                },
+                "required": [
+                  "template"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiProjectsByIdStagesTemplate",
+        "responses": {
+          "200": {
+            "description": "postApiProjectsByIdStagesTemplate 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiProjectsByIdStagesTemplate200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiProjectsByIdStagesTemplate 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "postApiProjectsByIdStagesTemplate 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiProjectsByIdStagesTemplate 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiProjectsByIdStagesTemplate 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "postApiProjectsByIdStagesTemplate 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "postApiProjectsByIdStagesTemplate 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiProjectsByIdStagesTemplate 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "postApiProjectsByIdStagesTemplate 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "postApiProjectsByIdStagesTemplate 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/stage-templates": {
+      "get": {
+        "operationId": "getApiStageTemplates",
+        "responses": {
+          "200": {
+            "description": "getApiStageTemplates 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiStageTemplates200"
                 }
               }
             }
@@ -8502,30 +8941,32 @@
           "ok"
         ]
       },
-      "getApiProjectsByIdTasks200": {
-        "type": "object",
-        "properties": {
-          "tracker": {
-            "$ref": "#/components/schemas/Tracker"
+      "postApiProjectsByIdStagesTemplate200": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/StagesView"
           },
-          "tasks": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/TaskSummary"
-            }
-          },
-          "problems": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
+          {
+            "type": "object",
+            "properties": {
+              "stranded": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "stranded"
+            ]
           }
-        },
-        "required": [
-          "problems",
-          "tasks",
-          "tracker"
         ]
+      },
+      "getApiStageTemplates200": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/StagesTemplateView"
+        }
       },
       "putApiProjectsByIdTracker200": {
         "type": "object",
@@ -8667,10 +9108,6 @@
                   "type": "string",
                   "format": "date-time"
                 },
-                "updatedAt": {
-                  "type": "string",
-                  "format": "date-time"
-                },
                 "slug": {
                   "type": "string"
                 },
@@ -8688,6 +9125,10 @@
                   "items": {
                     "$ref": "#/components/schemas/WorkflowInput"
                   }
+                },
+                "updatedAt": {
+                  "type": "string",
+                  "format": "date-time"
                 }
               },
               "required": [
@@ -8730,10 +9171,6 @@
             "type": "string",
             "format": "date-time"
           },
-          "updatedAt": {
-            "type": "string",
-            "format": "date-time"
-          },
           "slug": {
             "type": "string"
           },
@@ -8751,6 +9188,10 @@
             "items": {
               "$ref": "#/components/schemas/WorkflowInput"
             }
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
           }
         },
         "required": [
@@ -8802,10 +9243,6 @@
             "type": "string",
             "format": "date-time"
           },
-          "updatedAt": {
-            "type": "string",
-            "format": "date-time"
-          },
           "slug": {
             "type": "string"
           },
@@ -8823,6 +9260,10 @@
             "items": {
               "$ref": "#/components/schemas/WorkflowInput"
             }
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
           }
         },
         "required": [
@@ -8860,10 +9301,6 @@
             "type": "string",
             "format": "date-time"
           },
-          "updatedAt": {
-            "type": "string",
-            "format": "date-time"
-          },
           "slug": {
             "type": "string"
           },
@@ -8881,6 +9318,10 @@
             "items": {
               "$ref": "#/components/schemas/WorkflowInput"
             }
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
           }
         },
         "required": [
@@ -9225,12 +9666,12 @@
                   "type": "string",
                   "format": "date-time"
                 },
+                "kind": {
+                  "$ref": "#/components/schemas/WorkflowEffectKind"
+                },
                 "result": {},
                 "failure": {
                   "$ref": "#/components/schemas/WorkflowFailure"
-                },
-                "kind": {
-                  "$ref": "#/components/schemas/WorkflowEffectKind"
                 },
                 "runId": {
                   "type": "string"
@@ -9601,11 +10042,13 @@
               "cwd": {
                 "type": "string"
               },
-              "projectId": {
-                "type": [
-                  "null",
-                  "string"
-                ]
+              "kind": {
+                "enum": [
+                  "mainline",
+                  "scratch",
+                  "summariser"
+                ],
+                "type": "string"
               },
               "title": {
                 "type": [
@@ -9632,6 +10075,12 @@
                 ]
               },
               "workflowStepId": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "projectId": {
                 "type": [
                   "null",
                   "string"
@@ -9664,14 +10113,6 @@
                   "null",
                   "string"
                 ]
-              },
-              "kind": {
-                "enum": [
-                  "mainline",
-                  "scratch",
-                  "summariser"
-                ],
-                "type": "string"
               },
               "permissionMode": {
                 "type": [
@@ -9837,11 +10278,13 @@
                 "cwd": {
                   "type": "string"
                 },
-                "projectId": {
-                  "type": [
-                    "null",
-                    "string"
-                  ]
+                "kind": {
+                  "enum": [
+                    "mainline",
+                    "scratch",
+                    "summariser"
+                  ],
+                  "type": "string"
                 },
                 "title": {
                   "type": [
@@ -9873,6 +10316,12 @@
                     "string"
                   ]
                 },
+                "projectId": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
                 "parentInstanceId": {
                   "type": [
                     "null",
@@ -9897,14 +10346,6 @@
                     "null",
                     "string"
                   ]
-                },
-                "kind": {
-                  "enum": [
-                    "mainline",
-                    "scratch",
-                    "summariser"
-                  ],
-                  "type": "string"
                 },
                 "permissionMode": {
                   "type": [
@@ -11173,11 +11614,11 @@
                     "type": "string",
                     "format": "date-time"
                   },
-                  "projectId": {
-                    "type": "string"
-                  },
                   "kind": {
                     "$ref": "#/components/schemas/PlaceKind"
+                  },
+                  "projectId": {
+                    "type": "string"
                   }
                 },
                 "required": [
@@ -11222,11 +11663,11 @@
                 "type": "string",
                 "format": "date-time"
               },
-              "projectId": {
-                "type": "string"
-              },
               "kind": {
                 "$ref": "#/components/schemas/PlaceKind"
+              },
+              "projectId": {
+                "type": "string"
               }
             },
             "required": [
@@ -11284,11 +11725,11 @@
                   "type": "string",
                   "format": "date-time"
                 },
-                "projectId": {
-                  "type": "string"
-                },
                 "kind": {
                   "$ref": "#/components/schemas/PlaceKind"
+                },
+                "projectId": {
+                  "type": "string"
                 }
               },
               "required": [
@@ -11345,11 +11786,11 @@
                 "type": "string",
                 "format": "date-time"
               },
-              "projectId": {
-                "type": "string"
-              },
               "kind": {
                 "$ref": "#/components/schemas/PlaceKind"
+              },
+              "projectId": {
+                "type": "string"
               }
             },
             "required": [
@@ -11407,11 +11848,11 @@
                   "type": "string",
                   "format": "date-time"
                 },
-                "projectId": {
-                  "type": "string"
-                },
                 "kind": {
                   "$ref": "#/components/schemas/PlaceKind"
+                },
+                "projectId": {
+                  "type": "string"
                 }
               },
               "required": [
@@ -13388,14 +13829,39 @@
           "sha"
         ]
       },
-      "Tracker": {
-        "description": "Where a project's tasks live: CawCo's files, or (later) an outside tracker.",
-        "enum": [
-          "cawco",
-          "github",
-          "linear"
-        ],
-        "type": "string"
+      "TaskList": {
+        "type": "object",
+        "properties": {
+          "problems": {
+            "description": "Files in tasks/ the hub could not list as tasks, one sentence each.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "stagesProblems": {
+            "description": "What is wrong with stages.md, one sentence each; empty when it reads.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "tasks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TaskSummary"
+            }
+          },
+          "tracker": {
+            "$ref": "#/components/schemas/Tracker"
+          }
+        },
+        "required": [
+          "problems",
+          "stagesProblems",
+          "tasks",
+          "tracker"
+        ]
       },
       "TaskSummary": {
         "description": "One task as a list shows it: the index's row.",
@@ -13410,11 +13876,27 @@
           "id": {
             "type": "string"
           },
+          "kind": {
+            "description": "The kind of its stage; null when its stage is not one of the project's.",
+            "enum": [
+              "active",
+              "done",
+              "dropped",
+              "todo",
+              "waiting",
+              "you"
+            ],
+            "type": "string"
+          },
           "labels": {
             "type": "array",
             "items": {
               "type": "string"
             }
+          },
+          "needsYou": {
+            "description": "Its stage is of kind `you`: it is in Needs you. Derived on read, never stored.",
+            "type": "boolean"
           },
           "number": {
             "type": "number"
@@ -13429,7 +13911,7 @@
             "type": "string"
           },
           "problem": {
-            "description": "What in the file could not be read, in a sentence; null when all of it could.",
+            "description": "What in the file could not be read, or a stage the project lacks, in a sentence; null when all is well.",
             "type": [
               "null",
               "string"
@@ -13477,6 +13959,7 @@
           "after",
           "id",
           "labels",
+          "needsYou",
           "number",
           "parent",
           "path",
@@ -13488,6 +13971,15 @@
           "type",
           "updatedAt"
         ]
+      },
+      "Tracker": {
+        "description": "Where a project's tasks live: CawCo's files, or (later) an outside tracker.",
+        "enum": [
+          "cawco",
+          "github",
+          "linear"
+        ],
+        "type": "string"
       },
       "TaskView": {
         "description": "One task, its file read whole.",
@@ -13531,11 +14023,27 @@
           "id": {
             "type": "string"
           },
+          "kind": {
+            "description": "The kind of its stage; null when its stage is not one of the project's.",
+            "enum": [
+              "active",
+              "done",
+              "dropped",
+              "todo",
+              "waiting",
+              "you"
+            ],
+            "type": "string"
+          },
           "labels": {
             "type": "array",
             "items": {
               "type": "string"
             }
+          },
+          "needsYou": {
+            "description": "Its stage is of kind `you`: it is in Needs you.",
+            "type": "boolean"
           },
           "number": {
             "type": "number"
@@ -13621,6 +14129,7 @@
           "hash",
           "id",
           "labels",
+          "needsYou",
           "number",
           "outputs",
           "parent",
@@ -13677,6 +14186,218 @@
           "promoted",
           "text"
         ]
+      },
+      "StagesView": {
+        "description": "A project's stages as the dashboard reads them.",
+        "type": "object",
+        "properties": {
+          "moves": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StageMove"
+            }
+          },
+          "problems": {
+            "description": "What is wrong with stages.md, one sentence each; stages, moves and views are empty while there is any.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "source": {
+            "description": "`file`: the project's stages.md; `template`: it has none, and the code template stands in.",
+            "enum": [
+              "file",
+              "template"
+            ],
+            "type": "string"
+          },
+          "stages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Stage"
+            }
+          },
+          "template": {
+            "description": "The template the stages are, word for word, if any.",
+            "enum": [
+              "code",
+              "design",
+              "outreach",
+              "seo",
+              "social"
+            ],
+            "type": "string"
+          },
+          "views": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StageView"
+            }
+          }
+        },
+        "required": [
+          "moves",
+          "problems",
+          "source",
+          "stages",
+          "views"
+        ]
+      },
+      "StageMove": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "description": "A stage, or `*` for any.",
+            "type": "string"
+          },
+          "to": {
+            "description": "A stage, or `*` for any.",
+            "type": "string"
+          },
+          "who": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "action",
+                "lead",
+                "routine",
+                "session",
+                "you"
+              ],
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "from",
+          "to",
+          "who"
+        ]
+      },
+      "Stage": {
+        "type": "object",
+        "properties": {
+          "hooks": {
+            "$ref": "#/components/schemas/StageHooks"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/StageKind"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "hooks",
+          "kind",
+          "name"
+        ]
+      },
+      "StageHooks": {
+        "type": "object",
+        "properties": {
+          "after": {
+            "description": "`after:` as written, like `48h`.",
+            "type": "string"
+          },
+          "afterMs": {
+            "description": "`after:` in milliseconds.",
+            "type": "number"
+          },
+          "by": {
+            "enum": [
+              "action",
+              "lead",
+              "routine",
+              "session",
+              "you"
+            ],
+            "type": "string"
+          },
+          "runs": {
+            "type": "string"
+          },
+          "until": {
+            "type": "string"
+          }
+        }
+      },
+      "StageKind": {
+        "enum": [
+          "active",
+          "done",
+          "dropped",
+          "todo",
+          "waiting",
+          "you"
+        ],
+        "type": "string"
+      },
+      "StageView": {
+        "type": "object",
+        "properties": {
+          "by": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "by",
+          "name"
+        ]
+      },
+      "StagesTemplateView": {
+        "description": "A template the dashboard offers: its stages, and the stages.md it writes.",
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "moves": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StageMove"
+            }
+          },
+          "name": {
+            "$ref": "#/components/schemas/StagesTemplate"
+          },
+          "stages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Stage"
+            }
+          },
+          "views": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StageView"
+            }
+          }
+        },
+        "required": [
+          "content",
+          "moves",
+          "name",
+          "stages",
+          "views"
+        ]
+      },
+      "StagesTemplate": {
+        "enum": [
+          "code",
+          "design",
+          "outreach",
+          "seo",
+          "social"
+        ],
+        "type": "string"
       },
       "JoinInfo": {
         "description": "`GET /api/join`.",
@@ -15046,6 +15767,28 @@
           "stepId"
         ]
       },
+      "WorkflowEffectKind": {
+        "description": "Every effect kind the bridge can carry: one `w.*` call.",
+        "enum": [
+          "ask",
+          "checkpoint",
+          "exec",
+          "exists",
+          "jev",
+          "log",
+          "notes",
+          "notify",
+          "now",
+          "run",
+          "sleep",
+          "spawn",
+          "state-get",
+          "state-set",
+          "trace",
+          "workflow"
+        ],
+        "type": "string"
+      },
       "WorkflowFailure": {
         "description": "How a typed rejection crosses the worker boundary and comes back.",
         "type": "object",
@@ -15079,28 +15822,6 @@
           "message",
           "name"
         ]
-      },
-      "WorkflowEffectKind": {
-        "description": "Every effect kind the bridge can carry: one `w.*` call.",
-        "enum": [
-          "ask",
-          "checkpoint",
-          "exec",
-          "exists",
-          "jev",
-          "log",
-          "notes",
-          "notify",
-          "now",
-          "run",
-          "sleep",
-          "spawn",
-          "state-get",
-          "state-set",
-          "trace",
-          "workflow"
-        ],
-        "type": "string"
       },
       "AgentRow": {
         "description": "A machine from the hub's `agents` table — what `GET /api/agents` answers with,\nand what rides alongside the sessions in an `instances` frame.",
