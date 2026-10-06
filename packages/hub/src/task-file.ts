@@ -12,6 +12,7 @@
  * found_in: 140
  * checks: ["bun test", "bun run lint"]
  * outputs: [post.md]
+ * lands: pr
  * rank: a0V
  * labels: [ui]
  * ---
@@ -51,7 +52,12 @@
  * Every other byte is the file as it was, so a hand edit survives the next
  * write through the API, and the parser reads whatever a hand wrote.
  */
-import { type FrontMatterLine, frontMatterBlock } from "@cawco/core";
+import {
+  type FrontMatterLine,
+  frontMatterBlock,
+  LANDS_MODES,
+  type LandsMode,
+} from "@cawco/core";
 
 /** The front matter fields a task file knows, in the order a new file writes them. */
 export const TASK_FIELDS = [
@@ -63,6 +69,7 @@ export const TASK_FIELDS = [
   "found_in",
   "checks",
   "outputs",
+  "lands",
   "rank",
   "labels",
 ] as const;
@@ -80,6 +87,8 @@ export interface TaskFields {
   checks: string[];
   foundIn: string | null;
   labels: string[];
+  /** Where an attempt's work lands (`main`, `branch`, `pr`, `none`); null: the project's default. */
+  lands: LandsMode | null;
   outputs: string[];
   parent: string | null;
   rank: string | null;
@@ -305,6 +314,7 @@ const FIELD_KEYS = {
   found_in: "foundIn",
   checks: "checks",
   outputs: "outputs",
+  lands: "lands",
   rank: "rank",
   labels: "labels",
 } as const satisfies Record<TaskField, keyof TaskFields>;
@@ -339,6 +349,7 @@ const emptyFields = (): TaskFields => ({
   foundIn: null,
   checks: [],
   outputs: [],
+  lands: null,
   rank: null,
   labels: [],
 });
@@ -392,6 +403,24 @@ const readList = (
   return items ?? [];
 };
 
+const LANDS: ReadonlySet<string> = new Set(LANDS_MODES);
+
+/** `lands:` — one of the modes; anything else goes to `problems`. */
+const readLands = (
+  line: FrontMatterLine,
+  problems: string[]
+): LandsMode | null => {
+  const value = scalarOf(line);
+  if (value === null) {
+    return null;
+  }
+  if (LANDS.has(value)) {
+    return value as LandsMode;
+  }
+  problems.push(`lands: “${value}” is not one of ${LANDS_MODES.join(", ")}.`);
+  return null;
+};
+
 /** Reads the known fields of a front matter block; what it cannot read goes to `problems`. */
 const readFields = (
   lines: FrontMatterLine[],
@@ -418,6 +447,8 @@ const readFields = (
       fields[field] = readList(field, line, problems);
     } else if (field === "stage" || field === "type" || field === "rank") {
       fields[field] = scalarOf(line);
+    } else if (field === "lands") {
+      fields.lands = readLands(line, problems);
     } else {
       extra.push(field);
     }

@@ -1,5 +1,5 @@
 import { unwatchFile, watchFile } from "node:fs";
-import type { Envelope, InstanceRow } from "@cawco/core";
+import type { Envelope, InstanceRow, LandsMode } from "@cawco/core";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import {
@@ -52,8 +52,16 @@ export function createDelegationMcp(options: {
   tasks?: Tasks;
   /** The task a work item is an attempt at, if any. */
   workItemTask?: (workItemId: string) => string | null | undefined;
+  /** Where a work item lands: what its session's finish_item says happens. */
+  workItemLands?: (workItemId: string) => LandsMode | undefined;
   /** Starts an attempt at a task for `task_start` (dispatch.ts). */
   startAttempt?: (
+    projectId: string,
+    ref: string,
+    parent: InstanceRow
+  ) => Promise<AttemptStart>;
+  /** Retries a task whose last attempt failed, for `task_retry` (dispatch.ts). */
+  retryAttempt?: (
     projectId: string,
     ref: string,
     parent: InstanceRow
@@ -101,17 +109,23 @@ export function createDelegationMcp(options: {
     });
   }
 
+  /** How the work item a session runs lands, when it runs one. */
+  const landsOf = (actor: InstanceRow | undefined): LandsMode | undefined =>
+    actor?.workItemId ? options.workItemLands?.(actor.workItemId) : undefined;
+
   const describe = (
     canDelegate?: boolean,
     workflowStepId?: string,
     workItem?: boolean,
-    withAdmin = true
+    withAdmin = true,
+    lands?: LandsMode
   ) => [
     ...tools({
       instanceId: "",
       instanceById: options.instanceById,
       cwd: "",
       canDelegate,
+      lands,
       workItem,
       workflowStepId,
       workflowRunId: workflowStepId ? "" : undefined,
@@ -235,6 +249,7 @@ export function createDelegationMcp(options: {
         actor,
         mainline,
         startAttempt: options.startAttempt,
+        retryAttempt: options.retryAttempt,
         tasks: options.tasks,
         workItemTask: actor.workItemId
           ? (options.workItemTask?.(actor.workItemId) ?? null)
@@ -300,6 +315,7 @@ export function createDelegationMcp(options: {
         cwd: actor.cwd,
         harness: actor.harness as "claude" | "opencode" | "pi",
         canDelegate: actor.canDelegate ?? undefined,
+        lands: landsOf(actor),
         workItem: !!actor.parentInstanceId,
         workflowStepId: actor.workflowStepId ?? undefined,
         workflowRunId: actor.workflowRunId ?? undefined,
@@ -371,7 +387,8 @@ export function createDelegationMcp(options: {
         canDelegate,
         bound?.workflowStepId ?? undefined,
         binding === null || !!bound?.parentInstanceId,
-        binding === null || administers(bound)
+        binding === null || administers(bound),
+        landsOf(bound)
       ).map(({ name, description, inputSchema, ...entry }) => ({
         name,
         description,
@@ -509,7 +526,8 @@ export function createDelegationMcp(options: {
         actor?.canDelegate ?? undefined,
         actor?.workflowStepId ?? undefined,
         instanceId === undefined || !!actor?.parentInstanceId,
-        instanceId === undefined || administers(actor)
+        instanceId === undefined || administers(actor),
+        landsOf(actor)
       ).map(({ name, description, inputSchema, ...entry }) => ({
         name,
         description,

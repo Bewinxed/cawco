@@ -209,8 +209,8 @@ import { hashFiles, resolveSkill } from "./skills";
 import { createStreamHub } from "./stream";
 import { suggest } from "./suggest";
 import { SupervisorEngine } from "./supervisor";
-import { createTasks, taskRoutes } from "./tasks";
-import type { TelegramBridge } from "./telegram";
+import { createTasks, LANDS, taskRoutes } from "./tasks";
+import { dashboardUrl, type TelegramBridge } from "./telegram";
 import {
   createTranscripts,
   type HistoryRead,
@@ -7151,6 +7151,11 @@ export const createServer = (
     types: () => delegateTypes.list(),
     spawn: issueSpawn,
     send: deliverSend,
+    // What a pull request an attempt opens links back to and is titled by.
+    sessionUrl: (instanceId) =>
+      `${dashboardUrl(registry)}/session/${instanceId}`,
+    taskTitle: (projectId, taskId) =>
+      db.taskIndex(projectId).find((row) => row.id === taskId)?.title,
     call: async (machineId, method, args) => {
       const timeout =
         method === CONTROL_WORKSPACE_CREATE ||
@@ -7329,6 +7334,8 @@ export const createServer = (
     setTracker: db.setProjectTracker,
     attempts: db.projectAttempts,
     startProblem: (projectId, task) => dispatcher.problemOf(projectId, task),
+    queuedStarts: (projectId) =>
+      db.queuedTaskStarts(projectId).map((row) => row.taskId),
   });
   // Attempts at tasks: started by a session, a stage's `runs:` hook, or the
   // dispatcher itself for a project that dispatches (dispatch.ts).
@@ -7349,8 +7356,11 @@ export const createServer = (
   const delegationMcp = createDelegationMcp({
     tasks,
     workItemTask: (id) => db.workItem(id)?.taskId,
+    workItemLands: (id) => db.workItem(id)?.lands,
     startAttempt: (projectId, ref, parent) =>
       dispatcher.startAttempt(projectId, ref, parent),
+    retryAttempt: (projectId, ref, parent) =>
+      dispatcher.retryAttempt(projectId, ref, parent),
     instances: () => withKeepAlive(db.listInstances()),
     instanceById: (id) => db.getInstancesByIds([id])[0],
     credentialActor: (authorization) => {
@@ -10311,6 +10321,8 @@ export const createServer = (
             workspace: t.Optional(t.String()),
             fork: t.Optional(t.Boolean()),
             checks: checksSchema,
+            lands: t.Optional(LANDS),
+            outputs: t.Optional(t.Array(t.String())),
           }),
           // A 400 that says which field is missing or malformed, in words:
           // a delegate without a title is refused, never named from its brief.

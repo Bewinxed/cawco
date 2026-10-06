@@ -37,11 +37,69 @@ const landLine = (base: string): string =>
   `The repository's default branch is ${base}. Land with \`git fetch origin && git rebase origin/${base} && git push origin HEAD:${base}\`. Compare against ${base} with \`git show origin/${base}:<path>\`.`;
 
 /**
+ * Where a work item's work goes once its checks pass (hub/src/landing.ts):
+ * `main` onto the repository's default branch, `branch` to a branch of its
+ * own on origin, `pr` to that branch with a pull request, `none` nowhere (the
+ * work is not commits; its outputs are the deliverable).
+ */
+export type LandsMode = "main" | "branch" | "pr" | "none";
+
+/** Every {@link LandsMode}, in the order a setting offers them. */
+export const LANDS_MODES: readonly LandsMode[] = [
+  "main",
+  "branch",
+  "pr",
+  "none",
+];
+
+/** How a work item lands, and the files it hands in besides commits. */
+export interface WorkspaceLanding {
+  lands: LandsMode;
+  /** Paths in the workspace the hub copies into the project's folder. */
+  outputs?: string[];
+}
+
+/** What a session is told of its outputs, when it has any. */
+const outputsLine = (outputs: string[] | undefined): string =>
+  outputs?.length
+    ? ` The hub then copies your outputs (${outputs.join(", ")}) into the project's folder; a missing one comes back to you like a failing check.`
+    : "";
+
+/**
  * How a work item's workspace lands: the hub does it after `finish_item`'s
  * checks pass (hub/src/landing.ts), so the session commits and never pushes.
  */
-const hubLandLine = (base: string): string =>
-  `The repository's default branch is ${base}. Commit your work and do not push: when finish_item's checks pass, the hub rebases your commits onto origin/${base}, runs the checks again if ${base} moved, and pushes. Compare against ${base} with \`git show origin/${base}:<path>\`.`;
+const hubLandLine = (
+  base: string,
+  { lands, outputs }: WorkspaceLanding
+): string => {
+  const outputsSaid = outputsLine(outputs);
+  const compare = ` Compare against ${base} with \`git show origin/${base}:<path>\`.`;
+  const opening = `The repository's default branch is ${base}.`;
+  switch (lands) {
+    case "branch":
+      return `${opening} Commit your work and do not push: when finish_item's checks pass, the hub pushes your branch to origin; nothing goes onto ${base}.${outputsSaid}${compare}`;
+    case "pr":
+      return `${opening} Commit your work and do not push: when finish_item's checks pass, the hub pushes your branch to origin and opens a pull request against ${base}.${outputsSaid}${compare}`;
+    case "none":
+      return outputs?.length
+        ? `${opening} Nothing is pushed: when finish_item's checks pass, your outputs (${outputs.join(", ")}) are collected into the project's folder, and a missing one comes back to you like a failing check. They need not be committed.${compare}`
+        : `${opening} Nothing is pushed and nothing is collected: the hub runs finish_item's checks and reports.${compare}`;
+    default:
+      return `${opening} Commit your work and do not push: when finish_item's checks pass, the hub rebases your commits onto origin/${base}, runs the checks again if ${base} moved, and pushes to ${base}.${outputsSaid}${compare}`;
+  }
+};
+
+/**
+ * `text` with how its work item lands right after any hand-off marker: a
+ * follow-up in a session that already read its workspace line, landing
+ * otherwise than the brief before it.
+ */
+export const withLandingLine = (
+  text: string,
+  base: string,
+  landing: WorkspaceLanding
+): string => afterMarker(text, hubLandLine(base, landing));
 
 /**
  * The opening of a side quest the daemon started in a fresh git worktree of
@@ -67,11 +125,12 @@ export const withWorktreeLine = (
 export const withWorkspaceLine = (
   text: string,
   repoRoot: string,
-  base: string
+  base: string,
+  landing: WorkspaceLanding = { lands: "main" }
 ): string =>
   afterMarker(
     text,
-    `You work in your own clone of ${repoRoot} (your current directory), on its own branch; its stash is its own. Paths under ${repoRoot} in this brief mean the same path in your clone. ${hubLandLine(base)} Your shell commands run inside this workspace's boundary: they can write only this clone, /tmp (the workspace's own), ~/.cache, ~/.bun and ~/.npm; they see and signal only this workspace's processes; they cannot reach the service manager; the hub and the internet are reachable.`
+    `You work in your own clone of ${repoRoot} (your current directory), on its own branch; its stash is its own. Paths under ${repoRoot} in this brief mean the same path in your clone. ${hubLandLine(base, landing)} Your shell commands run inside this workspace's boundary: they can write only this clone, /tmp (the workspace's own), ~/.cache, ~/.bun and ~/.npm; they see and signal only this workspace's processes; they cannot reach the service manager; the hub and the internet are reachable.`
   );
 
 /**

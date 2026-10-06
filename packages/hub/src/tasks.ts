@@ -29,7 +29,7 @@
  * Changes to one project's tasks are taken one at a time: two to-dos ticked
  * at once both land.
  */
-import type { InstanceRow } from "@cawco/core";
+import type { InstanceRow, LandsMode } from "@cawco/core";
 import { Elysia, t } from "elysia";
 import type { TaskIndexRow, WorkItemRow } from "./db";
 import type { Tracker, WorkItemState } from "./db/schema";
@@ -141,11 +141,17 @@ export interface TaskFlags {
   lastAttemptFailed: boolean;
   /** An attempt at it is starting or running. */
   liveAttempt: boolean;
+  /** Its stage's `runs:` hook asked for an attempt, which waits for a slot under the project's max_attempts. */
+  queuedStart: boolean;
   /** Why the hub could not start an attempt the last time it tried, while the task is unchanged since. */
   startProblem: string | null;
 }
 
-/** A change to a project's tasks, for the dispatcher to look again. */
+/**
+ * A change to a project's tasks, for the dispatcher to look again. A task
+ * filed straight into a stage is `created`, so a stage's hook runs for it as
+ * for a move in.
+ */
 export type TaskEvent =
   | {
       actor: TaskActor;
@@ -154,6 +160,13 @@ export type TaskEvent =
       kind: "moved";
       projectId: string;
       to: string;
+    }
+  | {
+      actor: TaskActor;
+      id: string;
+      kind: "created";
+      projectId: string;
+      stage: string;
     }
   | { kind: "changed"; projectId: string };
 
@@ -173,6 +186,8 @@ export interface TaskStore {
   ) => { id: string; tracker: Tracker } | undefined;
   readonly projectIds: () => string[];
   readonly put: (rows: TaskIndexRow[]) => void;
+  /** The tasks whose hook start waits for a slot (dispatch.ts). */
+  readonly queuedStarts?: (projectId: string) => string[];
   readonly setTracker: (id: string, tracker: Tracker) => void;
   /** Why the hub last could not start an attempt at a task, while that stands (dispatch.ts). */
   readonly startProblem?: (
@@ -253,6 +268,8 @@ export interface TaskView extends TaskFlags {
   /** The kind of its stage; null when its stage is not one of the project's. */
   kind: StageKind | null;
   labels: string[];
+  /** Where an attempt's work lands, as the file says; null: the project's default. */
+  lands: LandsMode | null;
   /** It waits for you: its stage is of kind `you`, or its last attempt failed. */
   needsYou: boolean;
   number: number;
@@ -278,6 +295,7 @@ export interface TaskDraft {
   description?: string;
   foundIn?: string;
   labels?: string[];
+  lands?: LandsMode;
   outputs?: string[];
   parent?: string;
   rank?: string;
@@ -295,6 +313,8 @@ export interface TaskPatch {
   checks?: string[];
   description?: string;
   labels?: string[];
+  /** Where an attempt's work lands; null: the project's default. */
+  lands?: LandsMode | null;
   outputs?: string[];
   rank?: string | null;
   title?: string;
@@ -503,6 +523,7 @@ const viewOf = (
   foundIn: parsed.fields.foundIn,
   checks: parsed.fields.checks,
   outputs: parsed.fields.outputs,
+  lands: parsed.fields.lands,
   rank: parsed.fields.rank,
   labels: parsed.fields.labels,
   description: parsed.description,
@@ -577,7 +598,7 @@ const applyPatch = (doc: TaskDoc, patch: TaskPatch): string => {
     apply();
     changed.push(name);
   };
-  const { title, description, acceptance, type, rank } = patch;
+  const { title, description, acceptance, type, rank, lands } = patch;
   if (title !== undefined) {
     set("title", () => doc.setTitle(oneLine("title", title, TITLE_LIMIT)));
   }
@@ -598,6 +619,9 @@ const applyPatch = (doc: TaskDoc, patch: TaskPatch): string => {
     set("rank", () =>
       doc.setField("rank", rank ? oneLine("rank", rank, 64) : null)
     );
+  }
+  if (lands !== undefined) {
+    set("lands", () => doc.setField("lands", lands));
   }
   for (const field of ["checks", "outputs", "labels"] as const) {
     const list = patch[field];
@@ -721,18 +745,24 @@ export const createTasks = (store: TaskStore) => {
     return byTask;
   };
 
+  /** The tasks whose hook start waits for a slot. */
+  const queuedIn = (projectId: string): Set<string> =>
+    new Set(store.queuedStarts?.(projectId) ?? []);
+
   /** What a task's attempts and edges say, against the project's other tasks as indexed. */
   const flagsOf = (
     projectId: string,
     task: { after: string[]; hash: string; id: string; stage: string },
     context: {
       attempts: Map<string, TaskAttempt[]>;
+      /** The tasks whose hook start waits for a slot. */
+      queued: Set<string>;
       /** Every task's stage, by id. */
       stageOf: Map<string, string>;
       stages: Stages | undefined;
     }
   ): TaskFlags => {
-    const { attempts: byTask, stageOf, stages } = context;
+    const { attempts: byTask, queued, stageOf, stages } = context;
     const attempts = byTask.get(task.id) ?? [];
     const [last] = attempts;
     const kind = kindIn(stages, task.stage);
@@ -747,6 +777,7 @@ export const createTasks = (store: TaskStore) => {
         (last?.state === "failed" || last?.state === "cancelled") &&
         kind !== "done" &&
         kind !== "dropped",
+      queuedStart: queued.has(task.id),
       startProblem: store.startProblem?.(projectId, task) ?? null,
     };
   };
@@ -1070,6 +1101,7 @@ export const createTasks = (store: TaskStore) => {
         },
         {
           attempts: attemptsByTask(projectId),
+          queued: queuedIn(projectId),
           stageOf: stagesById(store.index(projectId)),
           stages,
         }
@@ -1178,6 +1210,7 @@ export const createTasks = (store: TaskStore) => {
       const stages = reading.ok ? reading.stages : undefined;
       const context = {
         attempts: attemptsByTask(projectId),
+        queued: queuedIn(projectId),
         stageOf: stagesById(rows),
         stages,
       };
@@ -1233,6 +1266,7 @@ export const createTasks = (store: TaskStore) => {
           foundIn: await single(projectId, "found_in", draft.foundIn),
           checks: items("checks", draft.checks ?? []),
           outputs: items("outputs", draft.outputs ?? []),
+          lands: draft.lands ?? null,
           rank: draft.rank ? oneLine("rank", draft.rank, 64) : null,
           labels: items("labels", draft.labels ?? []),
         };
@@ -1256,7 +1290,12 @@ export const createTasks = (store: TaskStore) => {
           actor,
           `task ${taskId(number)}: create “${title}” in ${fields.stage} ${byWhom(actor)}`
         );
-      }).then((task) => told({ kind: "changed", projectId }, task));
+      }).then((task) =>
+        told(
+          { kind: "created", projectId, id: task.id, stage: task.stage, actor },
+          task
+        )
+      );
     },
 
     /** Fields and owned sections; what the patch leaves out stays as written. */
@@ -1495,6 +1534,13 @@ const TEMPLATE = t.Union([
   t.Literal("seo"),
   t.Literal("design"),
 ]);
+/** Where an attempt's work lands (`@cawco/core`'s `LandsMode`). */
+export const LANDS = t.Union([
+  t.Literal("main"),
+  t.Literal("branch"),
+  t.Literal("pr"),
+  t.Literal("none"),
+]);
 const TRACKER = t.Union([
   t.Literal("cawco"),
   t.Literal("github"),
@@ -1540,6 +1586,7 @@ export const taskRoutes = (tasks: Tasks) =>
           foundIn: t.Optional(t.String()),
           checks: t.Optional(t.Array(t.String())),
           outputs: t.Optional(t.Array(t.String())),
+          lands: t.Optional(LANDS),
           rank: t.Optional(t.String()),
           labels: t.Optional(t.Array(t.String())),
           description: t.Optional(t.String()),
@@ -1571,6 +1618,7 @@ export const taskRoutes = (tasks: Tasks) =>
           acceptance: t.Optional(t.String()),
           type: t.Optional(t.Nullable(t.String())),
           rank: t.Optional(t.Nullable(t.String())),
+          lands: t.Optional(t.Nullable(LANDS)),
           checks: t.Optional(t.Array(t.String())),
           outputs: t.Optional(t.Array(t.String())),
           labels: t.Optional(t.Array(t.String())),

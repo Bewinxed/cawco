@@ -120,7 +120,7 @@ const DASHBOARD_PORT = Bun.env.CAWCO_DASHBOARD_PORT ?? "3000";
  * composed from this machine's hostname — the best guess available on a hub no
  * dashboard has ever connected to, and better than no link at all.
  */
-const dashboardUrl = (registry: RegistryShape): string =>
+export const dashboardUrl = (registry: RegistryShape): string =>
   DASHBOARD_URL_OVERRIDE ??
   registry.dashboardOrigin() ??
   `http://${hostname()}:${DASHBOARD_PORT}`;

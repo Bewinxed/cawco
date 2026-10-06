@@ -15,6 +15,7 @@ import type {
   GeneratedImage,
   ImageGenerationRequest,
   InstanceRow,
+  LandsMode,
   PermissionMode,
   PermissionResult,
   PreviewSource,
@@ -440,6 +441,8 @@ export interface HandoffDeps {
   readonly instanceById: (id: string) => InstanceRow | undefined;
   /** The session doing the handing over. */
   readonly instanceId: string;
+  /** Where this session's work item lands, which finish_item's description follows; `main` when unknown. */
+  readonly lands?: LandsMode;
   readonly workflowRunId?: string;
   readonly workflowStepId?: string;
   /** Delegate role: finish_item is available even before an item has checks. */
@@ -513,6 +516,10 @@ export interface HandoffActions {
       fork?: boolean;
       /** The item's acceptance checks, run by the hub at finish_item. */
       checks: WorkItemCheck[];
+      /** Where its commits go once its checks pass; `main` by default. */
+      lands?: LandsMode;
+      /** Files in its workspace the hub copies into the project's folder. */
+      outputs?: string[];
     }
   ): Promise<DelegateResult>;
   /**

@@ -12,6 +12,7 @@ import type {
   HarnessReport,
   HookEvent,
   HookHandler,
+  LandsMode,
   NeutralUserMessage,
   OpenCodeGoLimits,
   RuleAction,
@@ -278,6 +279,11 @@ export const projects = sqliteTable("projects", {
   maxAttempts: integer("max_attempts").notNull().default(2),
   /** Tasks waiting in `you` stages at which the dispatcher pauses. */
   reviewLimit: integer("review_limit").notNull().default(5),
+  /**
+   * Where its tasks' attempts land when the task file says nothing
+   * (`lands:`): onto the default branch, as before there was a choice.
+   */
+  lands: text("lands").$type<LandsMode>().notNull().default("main"),
   createdAt: timestamp("created_at")
     .notNull()
     .$defaultFn(() => new Date()),
@@ -285,6 +291,29 @@ export const projects = sqliteTable("projects", {
 
 /** Where a project's tasks live: CawCo's files, or (later) an outside tracker. */
 export type Tracker = "cawco" | "github" | "linear";
+
+/**
+ * Attempts a stage's `runs:` hook asked for while the project already ran
+ * its `max_attempts` (dispatch.ts): each starts, oldest first, as a slot
+ * frees, if its task is still in that stage. Kept here so a hub restart does
+ * not forget them.
+ */
+export const queuedTaskStarts = sqliteTable(
+  "queued_task_starts",
+  {
+    projectId: text("project_id").notNull(),
+    /** The task, `tsk-12`. */
+    taskId: text("task_id").notNull(),
+    /** The stage whose hook asked for it. */
+    stage: text("stage").notNull(),
+    /** The session that moved the task in, which takes the report; null: the lead. */
+    parentInstanceId: text("parent_instance_id"),
+    queuedAt: timestamp("queued_at")
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (table) => [primaryKey({ columns: [table.projectId, table.taskId] })]
+);
 
 /**
  * The index of a project's task files (`tasks/<id>-<slug>.md` in its hub
@@ -695,10 +724,28 @@ export const workItems = sqliteTable(
      */
     taskId: text("task_id"),
     /**
-     * The project of {@link taskId}, kept on the item so a task's attempts
-     * are found by the item alone, whatever becomes of its session.
+     * The project the item works for: its task's, else its parent session's.
+     * Kept on the item so a task's attempts, and where its outputs go, are
+     * found by the item alone, whatever becomes of its session.
      */
     projectId: text("project_id"),
+    /**
+     * Where its commits go once its checks pass (landing.ts): onto the
+     * workspace's base branch, to `cawco/<task or item>` on origin, to that
+     * branch with a pull request, or nowhere.
+     */
+    lands: text("lands").$type<LandsMode>().notNull().default("main"),
+    /**
+     * Files in its workspace, as paths from the clone's root, that the hub
+     * copies into its project's folder (`assets/<task or item>/`) when it
+     * finishes; one missing sends it back to its session. Null: none.
+     */
+    outputs: text("outputs", { mode: "json" }).$type<string[]>(),
+    /**
+     * The pull request its landing opened or found open, when it lands `pr`:
+     * what a poller watches to move its task on when it merges.
+     */
+    prUrl: text("pr_url"),
     harness: text("harness").notNull(),
     model: text("model"),
     effort: text("effort"),

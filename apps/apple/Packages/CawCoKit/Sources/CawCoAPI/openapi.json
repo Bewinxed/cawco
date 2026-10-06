@@ -1137,6 +1137,15 @@
                       "type": "string"
                     }
                   },
+                  "lands": {
+                    "type": "string",
+                    "enum": [
+                      "main",
+                      "branch",
+                      "pr",
+                      "none"
+                    ]
+                  },
                   "rank": {
                     "type": "string"
                   },
@@ -1445,6 +1454,18 @@
                     "type": [
                       "string",
                       "null"
+                    ]
+                  },
+                  "lands": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "enum": [
+                      "main",
+                      "branch",
+                      "pr",
+                      "none"
                     ]
                   },
                   "checks": {
@@ -2911,6 +2932,15 @@
                   "dispatch": {
                     "type": "boolean"
                   },
+                  "lands": {
+                    "type": "string",
+                    "enum": [
+                      "main",
+                      "branch",
+                      "pr",
+                      "none"
+                    ]
+                  },
                   "leadInstanceId": {
                     "type": [
                       "string",
@@ -3192,6 +3222,161 @@
           },
           "503": {
             "description": "postApiProjectsByIdTasksByTaskIdAttempts 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/tasks/{taskId}/retry": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "taskId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "parentInstanceId": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postApiProjectsByIdTasksByTaskIdRetry",
+        "responses": {
+          "200": {
+            "description": "postApiProjectsByIdTasksByTaskIdRetry 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttemptStart"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiProjectsByIdTasksByTaskIdRetry 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "postApiProjectsByIdTasksByTaskIdRetry 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiProjectsByIdTasksByTaskIdRetry 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiProjectsByIdTasksByTaskIdRetry 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "postApiProjectsByIdTasksByTaskIdRetry 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "postApiProjectsByIdTasksByTaskIdRetry 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiProjectsByIdTasksByTaskIdRetry 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "postApiProjectsByIdTasksByTaskIdRetry 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "postApiProjectsByIdTasksByTaskIdRetry 502",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "postApiProjectsByIdTasksByTaskIdRetry 503",
             "content": {
               "text/plain": {
                 "schema": {
@@ -12050,6 +12235,9 @@
             "reviewLimit": {
               "type": "number"
             },
+            "lands": {
+              "$ref": "#/components/schemas/LandsMode"
+            },
             "places": {
               "type": "array",
               "items": {
@@ -12091,6 +12279,7 @@
             "cwd",
             "dispatch",
             "id",
+            "lands",
             "leadInstanceId",
             "machineId",
             "maxAttempts",
@@ -12180,6 +12369,9 @@
           "reviewLimit": {
             "type": "number"
           },
+          "lands": {
+            "$ref": "#/components/schemas/LandsMode"
+          },
           "places": {
             "type": "array",
             "items": {
@@ -12221,6 +12413,7 @@
           "cwd",
           "dispatch",
           "id",
+          "lands",
           "leadInstanceId",
           "machineId",
           "maxAttempts",
@@ -12322,6 +12515,9 @@
           "reviewLimit": {
             "type": "number"
           },
+          "lands": {
+            "$ref": "#/components/schemas/LandsMode"
+          },
           "places": {
             "type": "array",
             "items": {
@@ -12363,6 +12559,7 @@
           "cwd",
           "dispatch",
           "id",
+          "lands",
           "leadInstanceId",
           "machineId",
           "maxAttempts",
@@ -12402,10 +12599,10 @@
             "type": "string",
             "format": "date-time"
           },
-          "repoRoot": {
+          "branch": {
             "type": "string"
           },
-          "branch": {
+          "repoRoot": {
             "type": "string"
           },
           "base": {
@@ -14472,6 +14669,10 @@
             "description": "An attempt at it is starting or running.",
             "type": "boolean"
           },
+          "queuedStart": {
+            "description": "Its stage's `runs:` hook asked for an attempt, which waits for a slot under the project's max_attempts.",
+            "type": "boolean"
+          },
           "startProblem": {
             "description": "Why the hub could not start an attempt the last time it tried, while the task is unchanged since.",
             "type": [
@@ -14493,6 +14694,7 @@
           "parent",
           "path",
           "problem",
+          "queuedStart",
           "rank",
           "stage",
           "startProblem",
@@ -14616,6 +14818,16 @@
               "type": "string"
             }
           },
+          "lands": {
+            "description": "Where an attempt's work lands, as the file says; null: the project's default.",
+            "enum": [
+              "branch",
+              "main",
+              "none",
+              "pr"
+            ],
+            "type": "string"
+          },
           "needsYou": {
             "description": "It waits for you: its stage is of kind `you`, or its last attempt failed.",
             "type": "boolean"
@@ -14715,6 +14927,10 @@
             "description": "An attempt at it is starting or running.",
             "type": "boolean"
           },
+          "queuedStart": {
+            "description": "Its stage's `runs:` hook asked for an attempt, which waits for a slot under the project's max_attempts.",
+            "type": "boolean"
+          },
           "startProblem": {
             "description": "Why the hub could not start an attempt the last time it tried, while the task is unchanged since.",
             "type": [
@@ -14743,6 +14959,7 @@
           "parent",
           "path",
           "problems",
+          "queuedStart",
           "rank",
           "related",
           "sections",
@@ -15023,6 +15240,10 @@
               "type": "string"
             }
           },
+          "lands": {
+            "$ref": "#/components/schemas/LandsMode",
+            "description": "Where an attempt lands when its task and type say nothing."
+          },
           "leadInstanceId": {
             "type": [
               "null",
@@ -15050,6 +15271,13 @@
               "string"
             ]
           },
+          "queued": {
+            "description": "Tasks whose `runs:` hook start waits for a slot, oldest first.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "review": {
             "description": "Tasks waiting in `you` stages now.",
             "type": "number"
@@ -15061,14 +15289,26 @@
         "required": [
           "dispatch",
           "frontier",
+          "lands",
           "leadInstanceId",
           "leadProblem",
           "live",
           "maxAttempts",
           "paused",
+          "queued",
           "review",
           "reviewLimit"
         ]
+      },
+      "LandsMode": {
+        "description": "Where a work item's work goes once its checks pass (hub/src/landing.ts):\n`main` onto the repository's default branch, `branch` to a branch of its\nown on origin, `pr` to that branch with a pull request, `none` nowhere (the\nwork is not commits; its outputs are the deliverable).",
+        "enum": [
+          "branch",
+          "main",
+          "none",
+          "pr"
+        ],
+        "type": "string"
       },
       "AttemptStart": {
         "description": "An attempt as it started.",
@@ -15076,6 +15316,10 @@
         "properties": {
           "instanceId": {
             "type": "string"
+          },
+          "lands": {
+            "$ref": "#/components/schemas/LandsMode",
+            "description": "Where its work lands."
           },
           "stage": {
             "description": "The stage the task is in now.",
@@ -15104,6 +15348,7 @@
         },
         "required": [
           "instanceId",
+          "lands",
           "stage",
           "task",
           "text",

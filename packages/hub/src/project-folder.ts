@@ -341,20 +341,26 @@ const askedMessage = (message: string | undefined): string | undefined => {
 };
 
 /**
- * Stages `rel` with `stage`, then commits that path alone. Content that is
+ * Stages `rels` with `stage`, then commits those paths alone. Content that is
  * already what HEAD holds makes no commit and answers HEAD.
  */
-const commit = async (
+const commitPaths = async (
   root: string,
-  rel: string,
+  rels: string[],
   stage: string[],
   message: string,
   author: FolderAuthor
-): Promise<FolderCommit> => {
+): Promise<{ changed: boolean; sha: string }> => {
   await git(root, stage);
-  const staged = await run(root, ["diff", "--cached", "--quiet", "--", rel]);
+  const staged = await run(root, [
+    "diff",
+    "--cached",
+    "--quiet",
+    "--",
+    ...rels,
+  ]);
   if (staged.code === 0) {
-    return { path: rel, sha: await head(root), changed: false };
+    return { sha: await head(root), changed: false };
   }
   if (staged.code !== 1) {
     throw new FolderRefusal(
@@ -369,10 +375,22 @@ const commit = async (
     "-m",
     message,
     "--",
-    rel,
+    ...rels,
   ]);
-  return { path: rel, sha: await head(root), changed: true };
+  return { sha: await head(root), changed: true };
 };
+
+/** {@link commitPaths} for one path. */
+const commit = async (
+  root: string,
+  rel: string,
+  stage: string[],
+  message: string,
+  author: FolderAuthor
+): Promise<FolderCommit> => ({
+  path: rel,
+  ...(await commitPaths(root, [rel], stage, message, author)),
+});
 
 // --- one project at a time ---------------------------------------------------
 
@@ -719,6 +737,150 @@ export const writeFolderFile = async (
       }
       await run(root, ["reset", "-q", "--", rel]).catch(noop);
       throw putBack(error, rel);
+    }
+  });
+};
+
+/** Several files written together, as {@link writeFolderFiles} landed them. */
+export interface FolderCommits {
+  /** False when every file was already what was asked: no commit was made. */
+  changed: boolean;
+  paths: string[];
+  /** The folder's commit after this change (HEAD). */
+  sha: string;
+}
+
+/** Files a caller asked to write, each checked and sized as one write is; refused when one cannot be. */
+const toWrite = (
+  files: { path: string; content: string | Uint8Array }[]
+): { rel: string; bytes: Uint8Array }[] => {
+  const writes = files.map(({ path, content }) => {
+    const rel = folderPath(path);
+    if (!rel) {
+      throw new FolderRefusal(
+        400,
+        "Name each file to write, like assets/a.md."
+      );
+    }
+    const bytes = typeof content === "string" ? Buffer.from(content) : content;
+    if (bytes.byteLength > FOLDER_FILE_LIMIT) {
+      throw new FolderRefusal(
+        413,
+        `${rel} is ${size(bytes.byteLength)}; writes stop at ${size(FOLDER_FILE_LIMIT)}.`
+      );
+    }
+    return { rel, bytes };
+  });
+  if (writes.length === 0) {
+    throw new FolderRefusal(400, "Name at least one file to write.");
+  }
+  return writes;
+};
+
+/**
+ * Puts `bytes` at `rel` (its folders made as needed), atomically, keeping in
+ * `before` what the path held first so a failed commit can put it back.
+ */
+const putFile = async (
+  root: string,
+  rel: string,
+  bytes: Uint8Array,
+  before: Map<string, Buffer | undefined>
+): Promise<void> => {
+  const abs = await writable(root, rel);
+  const there = await lstatIfThere(abs);
+  if (there?.isDirectory()) {
+    throw new FolderRefusal(
+      409,
+      `${rel} is a folder, so a file cannot be written there.`
+    );
+  }
+  if (!before.has(abs)) {
+    before.set(abs, there?.isFile() ? await readFile(abs) : undefined);
+  }
+  await mkdir(dirname(abs), { recursive: true }).catch((error: unknown) => {
+    const { code } = error as NodeJS.ErrnoException;
+    if (code === "EEXIST" || code === "ENOTDIR") {
+      throw new FolderRefusal(
+        409,
+        `A file sits where ${dirname(rel)} would be a folder, so ${rel} cannot be written.`
+      );
+    }
+    throw error;
+  });
+  // Beside the history, on the same disk: the rename is the write.
+  const scratch = join(root, ".git", `cawco-write-${randomUUID()}`);
+  await writeFile(scratch, bytes);
+  try {
+    await rename(scratch, abs);
+  } catch (error) {
+    await unlink(scratch).catch(noop);
+    throw error;
+  }
+};
+
+/** Puts back what {@link putFile} replaced, and unstages the paths. */
+const putBackAll = async (
+  root: string,
+  rels: string[],
+  before: Map<string, Buffer | undefined>
+): Promise<void> => {
+  for (const [abs, previous] of before) {
+    if (previous) {
+      // biome-ignore lint/performance/noAwaitInLoops: putting files back, one at a time
+      await writeFile(abs, previous).catch(noop);
+    } else {
+      await unlink(abs).catch(noop);
+      await pruneEmpty(root, dirname(abs));
+    }
+  }
+  await run(root, ["reset", "-q", "--", ...rels]).catch(noop);
+};
+
+/**
+ * Writes several files (their folders made as needed) and commits them
+ * together, one commit for what one piece of work produced (a work item's
+ * outputs). Each is checked and sized as {@link writeFolderFile} checks one.
+ * Files HEAD already holds as asked change nothing; when none changed, no
+ * commit is made. A failed write or commit puts every file back as it was.
+ */
+export const writeFolderFiles = async (
+  projectId: string,
+  files: { path: string; content: string | Uint8Array }[],
+  options: FolderWriteOptions & { message: string }
+): Promise<FolderCommits> => {
+  const asked = askedMessage(options.message);
+  if (!asked) {
+    throw new FolderRefusal(400, "Say what the files are in a commit message.");
+  }
+  const writes = toWrite(files);
+  const rels = [...new Set(writes.map((write) => write.rel))];
+  const root = projectRoot(projectId);
+  return await inTurn(projectId, async () => {
+    await prepare(projectId, root);
+    /** What each path held before, to put back if anything fails. */
+    const before = new Map<string, Buffer | undefined>();
+    try {
+      for (const { rel, bytes } of writes) {
+        // biome-ignore lint/performance/noAwaitInLoops: one file at a time, each checked before it is written
+        await putFile(root, rel, bytes, before);
+      }
+      const done = await commitPaths(
+        root,
+        rels,
+        ["add", "-A", "--", ...rels],
+        asked,
+        options.author ?? YOU
+      );
+      return { ...done, paths: rels };
+    } catch (error) {
+      await putBackAll(root, rels, before);
+      throw error instanceof FolderRefusal && error.status === 500
+        ? new FolderRefusal(
+            500,
+            `${error.message} ${rels.join(", ")} are as they were.`
+          )
+        : error;
     }
   });
 };

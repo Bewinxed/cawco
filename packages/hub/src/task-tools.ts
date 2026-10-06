@@ -5,9 +5,10 @@
  * the operator started (delegation-mcp's `administers`), and a delegate
  * proposes those through handoff. A session's project is its instance row's
  * `projectId`; a delegate's is its parent's. `task_start` starts an attempt
- * at a task (dispatch.ts) that reports to the session calling it.
+ * at a task (dispatch.ts) that reports to the session calling it;
+ * `task_retry` starts a fresh one in the failed attempt's workspace.
  */
-import type { InstanceRow } from "@cawco/core";
+import { type InstanceRow, LANDS_MODES, type LandsMode } from "@cawco/core";
 import { z } from "zod";
 import { tool } from "./admin-tools";
 import type { AttemptStart } from "./dispatch";
@@ -26,6 +27,7 @@ export const TASK_TOOLS: ReadonlySet<string> = new Set([
   "task_update",
   "task_link",
   "task_start",
+  "task_retry",
   "todo_write",
 ]);
 
@@ -35,12 +37,19 @@ export const MAINLINE_TASK_TOOLS: ReadonlySet<string> = new Set([
   "task_update",
   "task_link",
   "task_start",
+  "task_retry",
 ]);
 
 export interface TaskToolContext {
   actor: InstanceRow;
   /** A session the operator started, not a delegate, work item or workflow step. */
   mainline: boolean;
+  /** Retries a task whose last attempt failed, reporting to `parent` (dispatch.ts); without it task_retry refuses. */
+  retryAttempt?: (
+    projectId: string,
+    ref: string,
+    parent: InstanceRow
+  ) => Promise<AttemptStart>;
   /** Starts an attempt at a task, reporting to `parent` (dispatch.ts); without it task_start refuses. */
   startAttempt?: (
     projectId: string,
@@ -107,6 +116,12 @@ const compact = (list: TaskList, stages: StagesView) => ({
 
 const taskRef = () =>
   z.string().trim().min(1).describe("A task id, like tsk-12.");
+const landsParameter = () =>
+  z
+    .enum(LANDS_MODES as [LandsMode, ...LandsMode[]])
+    .describe(
+      "Where an attempt's work goes once its checks pass: main (onto the default branch), branch (cawco/<task> on origin), pr (that branch and a pull request), or none (nothing pushed; its outputs are the deliverable). Left out, the project's default."
+    );
 const lines = (what: string) => z.array(z.string()).optional().describe(what);
 
 /**
@@ -204,6 +219,7 @@ export function taskTools(context: TaskToolContext | undefined) {
           .describe("The task whose work turned this one up."),
         checks: lines("Shell commands that must pass, like bun test."),
         outputs: lines("Files it produces that are not commits."),
+        lands: landsParameter().optional(),
         labels: lines("Short labels."),
       },
       async ({ found_in, ...draft }) => {
@@ -215,7 +231,7 @@ export function taskTools(context: TaskToolContext | undefined) {
     ),
     tool(
       "task_update",
-      "Change one of your project's tasks: move its `stage` (checked against the project's stages), or replace its title, description, acceptance criteria, type, checks, outputs or labels. What you leave out stays as written.",
+      "Change one of your project's tasks: move its `stage` (checked against the project's stages), or replace its title, description, acceptance criteria, type, checks, outputs, lands or labels. What you leave out stays as written.",
       {
         id: taskRef(),
         stage: z.string().optional(),
@@ -229,6 +245,10 @@ export function taskTools(context: TaskToolContext | undefined) {
           .describe("A delegate type; null clears it."),
         checks: lines("Replaces the checks."),
         outputs: lines("Replaces the outputs."),
+        lands: landsParameter()
+          .nullable()
+          .optional()
+          .describe("Where its attempts land; null: the project's default."),
         labels: lines("Replaces the labels."),
       },
       async ({ id, stage, ...patch }) => {
@@ -269,6 +289,18 @@ export function taskTools(context: TaskToolContext | undefined) {
           throw new Error("Attempts cannot be started on this hub.");
         }
         return ok(await context.startAttempt(projectId, id, context.actor));
+      }
+    ),
+    tool(
+      "task_retry",
+      "Retry one of your project's tasks whose last attempt failed or was cancelled: a fresh session in that attempt's workspace (its commits and files as it left them) when the clone is still there, else in a new workspace, briefed from the task file with the last attempt's failure and the to-dos done so far, reporting to you like any delegate. Refused while it has a live attempt, or when its last attempt did not fail.",
+      { id: taskRef() },
+      async ({ id }) => {
+        const { projectId } = scope();
+        if (!context?.retryAttempt) {
+          throw new Error("Attempts cannot be retried on this hub.");
+        }
+        return ok(await context.retryAttempt(projectId, id, context.actor));
       }
     ),
     tool(

@@ -24,6 +24,7 @@ import type {
   Envelope,
   HarnessKind,
   InstanceRow,
+  LandsMode,
   NeutralOrigin,
   PermissionMode,
   SendPayload,
@@ -38,11 +39,26 @@ import {
   CONTROL_WORKSPACE_CREATE,
   CONTROL_WORKSPACE_MIGRATE,
   handoffMarker,
+  type WorkspaceLanding,
+  withLandingLine,
   withWorkspaceLine,
 } from "@cawco/core";
 import type { DbShape, WorkItemRow, WorkspaceRow } from "./db";
 import type { WorkItemCheck, WorkItemSubmission } from "./db/schema";
-import { land, landingQueue } from "./landing";
+import {
+  type BranchOutcome,
+  land,
+  landingQueue,
+  openPullRequest,
+  pushBranch,
+  quote,
+} from "./landing";
+import {
+  FOLDER_FILE_LIMIT,
+  FolderRefusal,
+  folderPath,
+  writeFolderFiles,
+} from "./project-folder";
 
 /** How long the name a caller gives a delegate or a started session may run. */
 export const SESSION_TITLE_MAX = 48;
@@ -142,11 +158,24 @@ export interface WorkItemRequest {
    */
   fork?: boolean;
   harness?: HarnessKind;
+  /** Where its commits go once its checks pass; `main` when left out. */
+  lands?: LandsMode;
   /** The machine a new workspace is cut on; the parent's by default. */
   machineId?: string;
   model?: string;
+  /**
+   * Files in its workspace, as paths from the clone's root, that the hub
+   * copies into its project's folder when it finishes. Needs a project.
+   */
+  outputs?: string[];
   parentInstanceId: string;
   prompt: string;
+  /**
+   * The workspace of an earlier attempt at the same task (a retry): the item
+   * runs in a fresh session there when its clone is still on its machine,
+   * else in a new workspace as though this were not given.
+   */
+  reuse?: string;
   skills?: string[];
   /**
    * The project task the item is an attempt at (dispatch.ts). Only for a new
@@ -212,6 +241,8 @@ export interface WorkItemDeps {
     reason: string | null;
     state: string;
   };
+  /** Where a reader opens a session in the dashboard: the link a pull request carries back. */
+  readonly sessionUrl?: (instanceId: string) => string;
   /**
    * Sends a spawn and records its row under the work item. `fallbackMode` is
    * the mode it runs in when its harness has modes; the hub's one rule
@@ -223,6 +254,11 @@ export interface WorkItemDeps {
     workItemId: string,
     fallbackMode: PermissionMode
   ) => void;
+  /** A task's title as its project's index has it: a pull request's title. */
+  readonly taskTitle?: (
+    projectId: string,
+    taskId: string
+  ) => string | undefined;
   /** The fleet's delegate types, read at dispatch. */
   readonly types: () => DelegateType[];
 }
@@ -416,6 +452,117 @@ export const checksProblem = (checks: WorkItemCheck[]): string | undefined => {
   return undefined;
 };
 
+/** A path as the project's folder reads it, or undefined when the folder refuses it. */
+const folderPathOf = (raw: string): string | undefined => {
+  try {
+    return folderPath(raw);
+  } catch (error) {
+    if (error instanceof FolderRefusal) {
+      return undefined;
+    }
+    throw error;
+  }
+};
+
+/** Outputs one work item may name. */
+const OUTPUTS_LIMIT = 50;
+
+/**
+ * A request's outputs as paths from the clone's root, each once; null for
+ * none. Refused when one could reach outside the clone or into its history,
+ * the same rules a path in the project's folder follows (where they go).
+ */
+const outputsOf = (outputs: string[] | undefined): string[] | null => {
+  if (!outputs?.length) {
+    return null;
+  }
+  if (outputs.length > OUTPUTS_LIMIT) {
+    throw new WorkItemRefusal(
+      400,
+      `outputs names ${outputs.length} files; it stops at ${OUTPUTS_LIMIT}.`
+    );
+  }
+  const paths = outputs.map((raw) => {
+    const path = folderPathOf(raw.trim());
+    if (path === undefined) {
+      throw new WorkItemRefusal(
+        400,
+        `outputs: “${raw}” is not a path inside the workspace. Name each file from the workspace's root, like report.md or docs/notes.md: no leading "/", no "..", nothing under .git.`
+      );
+    }
+    if (!path) {
+      throw new WorkItemRefusal(
+        400,
+        `outputs: “${raw}” names the workspace itself; name a file in it, like report.md.`
+      );
+    }
+    return path;
+  });
+  return [...new Set(paths)];
+};
+
+/** What an item's branch and its assets folder are named by: its task, else its own short id. */
+const landingKey = (item: Pick<WorkItemRow, "id" | "taskId">): string =>
+  item.taskId ?? item.id.slice(0, 8);
+
+/** The branch an item that lands `branch` or `pr` is pushed to: `cawco/tsk-12`. */
+export const landingBranch = (item: Pick<WorkItemRow, "id" | "taskId">) =>
+  `cawco/${landingKey(item)}`;
+
+/** How an item lands, as its session is told. */
+const landingOf = (item: WorkItemRow): WorkspaceLanding => ({
+  lands: item.lands,
+  ...(item.outputs?.length ? { outputs: item.outputs } : {}),
+});
+
+const MIB = 1024 * 1024;
+
+/** The shell that says of each output whether it is missing, a link, or a file of some size. */
+const outputsProbe = (outputs: string[]): string =>
+  outputs
+    .map(
+      (path) =>
+        `p=${quote(path)}; if [ -L "$p" ]; then echo "link $p"; elif [ ! -f "$p" ]; then echo "missing $p"; else echo "size $(wc -c < "$p" | tr -d ' ') $p"; fi`
+    )
+    .join("; ");
+
+/** What a probe's answer says is wrong with the outputs, a sentence each. */
+const outputsSaid = (stdout: string): string[] => {
+  const by = { missing: [] as string[], link: [] as string[] };
+  const large: string[] = [];
+  for (const line of stdout.split("\n")) {
+    const [word, ...rest] = line.split(" ");
+    if (word === "missing" || word === "link") {
+      by[word].push(rest.join(" "));
+    } else if (word === "size" && Number(rest[0]) > FOLDER_FILE_LIMIT) {
+      large.push(
+        `${rest.slice(1).join(" ")} is ${(Number(rest[0]) / MIB).toFixed(2)} MiB`
+      );
+    }
+  }
+  return [
+    ...(by.missing.length > 0
+      ? [
+          `These outputs are not in your workspace: ${by.missing.join(", ")}; write each at its path from the workspace's root.`,
+        ]
+      : []),
+    ...(by.link.length > 0
+      ? [
+          `These outputs are links, and the hub copies files: ${by.link.join(", ")}. Write the file itself at that path.`,
+        ]
+      : []),
+    ...(large.length > 0
+      ? [
+          `${large.join("; ")}; an output stops at ${FOLDER_FILE_LIMIT / MIB} MiB.`,
+        ]
+      : []),
+  ];
+};
+
+/** A command's failure in a few words: what it wrote, else its exit code. */
+const failedWith = (result: CommandResult): string =>
+  (result.stderr || result.stdout).trim() || `exit ${result.exitCode}`;
+
 /** How much of each stream a check keeps: `expect` and the report read this. */
 const CHECK_TAIL = 4000;
 
@@ -492,6 +639,46 @@ export const summaryOf = (item: WorkItemRow): WorkItemSummary => ({
   },
 });
 
+/**
+ * What landing a checked item came to: done (with the pull request it opened
+ * or found, landing `pr`), back to its session, or refused.
+ */
+type Landed =
+  | { kind: "done" | "refused"; line: string; prUrl?: string }
+  | { kind: "retry"; text: string };
+
+/** The text that hands uncommitted work back to the session, for a landing that takes only commits. */
+const dirtyText = (files: string, where: string): string =>
+  `The checks passed, but the workspace has changes that are not committed, new files included. The checks ran on them and the hub lands only commits, so landing now could leave ${where} without them. Commit them, delete them, or add them to .gitignore, then call finish_item again.${fenced(files)}`;
+
+/** A push to an item's own branch that did not happen, as its landing. */
+const unpushed = (
+  pushed: Exclude<BranchOutcome, { kind: "pushed" }>,
+  workspace: WorkspaceRow,
+  branch: string,
+  lands: LandsMode
+): Landed => {
+  switch (pushed.kind) {
+    case "dirty":
+      return { kind: "retry", text: dirtyText(pushed.files, branch) };
+    case "nothing":
+      return {
+        kind: "done",
+        line: `Nothing to push: ${workspace.base} already holds every commit in this workspace${lands === "pr" ? ", so no pull request was opened" : ""}.`,
+      };
+    case "no-remote":
+      return {
+        kind: "done",
+        line: "Not pushed: this workspace's repository has no remote.",
+      };
+    default:
+      return {
+        kind: "refused",
+        line: `Not pushed: the push to branch ${branch} was refused.${fenced(pushed.detail)}\nThe commits are on branch ${workspace.branch} in workspace ${workspace.id}.`,
+      };
+  }
+};
+
 /** How long a tray shows a finished item before it leaves (the dashboard's hold). */
 const TRAY_HOLD_MS = 6000;
 
@@ -505,7 +692,9 @@ export const createWorkItems = ({
   report,
   inTurn,
   send,
+  sessionUrl,
   spawn,
+  taskTitle,
   types,
 }: WorkItemDeps) => {
   /** Turns in a row each live item's session ended without `finish_item`, by item. */
@@ -777,6 +966,7 @@ export const createWorkItems = ({
       brief: request.prompt,
       title: request.title.trim(),
       type: previous.type,
+      ...placing(request, parent),
       harness: previous.harness,
       model: previous.model,
       effort: previous.effort,
@@ -788,14 +978,14 @@ export const createWorkItems = ({
       parentInstanceId: parent.id,
     });
     published(item);
-    const sent = send(
-      messageOf(
-        session.id,
-        session.machineId,
-        parent,
-        `${handoffMarker(leaf(parent.cwd))}${request.prompt}`
-      )
-    );
+    const brief = `${handoffMarker(leaf(parent.cwd))}${request.prompt}`;
+    // The session read how its last item landed; this one is told when it
+    // lands otherwise or hands in outputs.
+    const told =
+      item.lands === "main" && !item.outputs?.length
+        ? brief
+        : withLandingLine(brief, workspace.base, landingOf(item));
+    const sent = send(messageOf(session.id, session.machineId, parent, told));
     if (sent.state === "failed") {
       update(item.id, {
         state: "failed",
@@ -849,7 +1039,88 @@ export const createWorkItems = ({
       : workspace;
   };
 
-  const start = async (request: WorkItemRequest): Promise<WorkItemStart> => {
+  /**
+   * The workspace of an earlier attempt a retry runs in again, when its clone
+   * is still on its machine: its boundary started again (and the workspace
+   * filed as active again, should it have been archived with the clone left
+   * behind). Undefined when the clone is gone or its machine cannot say, and
+   * the retry cuts a new workspace. Refused while an item there is live.
+   */
+  const reusable = async (
+    id: string,
+    projectId: string | null
+  ): Promise<WorkspaceRow | undefined> => {
+    const [workspace] = db.workspacesNamed(id);
+    if (!workspace) {
+      return;
+    }
+    const busy = (): void => {
+      const live = db
+        .workItemsIn(workspace.id)
+        .find((item) => LIVE.has(item.state));
+      if (live) {
+        throw new WorkItemRefusal(
+          409,
+          `Workspace ${workspace.id} already has a live work item: ${live.title} (${live.id}) is ${live.state}. A workspace runs one work item at a time.`
+        );
+      }
+    };
+    busy();
+    try {
+      const there = await command(
+        workspace.machineId,
+        "/",
+        `test -d ${quote(`${workspace.path}/.git`)}`,
+        GIT_TIMEOUT_MS
+      );
+      if (there.exitCode !== 0) {
+        return;
+      }
+      const boundaryPid = (await call(
+        workspace.machineId,
+        CONTROL_WORKSPACE_BOUNDARY,
+        [refOf(workspace)]
+      )) as number;
+      // Awaited above: the one-writer check again, in the step that files the item.
+      busy();
+      if (workspace.state === "archived" && projectId) {
+        db.addPlace({
+          projectId,
+          machineId: workspace.machineId,
+          path: workspace.path,
+          kind: "workspace",
+        });
+      }
+      return (
+        db.updateWorkspace(workspace.id, { boundaryPid, state: "active" }) ??
+        workspace
+      );
+    } catch (error) {
+      if (error instanceof WorkItemRefusal) {
+        throw error;
+      }
+      console.warn(
+        `[work-items] workspace ${workspace.id} cannot be used again, so a new one is cut: ${error instanceof Error ? error.message : String(error)}`
+      );
+      return undefined;
+    }
+  };
+
+  /**
+   * The request as {@link start} files it (its outputs as paths), its parent,
+   * and the project it works for; refused when any of it cannot stand.
+   */
+  const admitted = (
+    asked: WorkItemRequest
+  ): {
+    parent: InstanceRow;
+    projectId: string | null;
+    request: WorkItemRequest;
+  } => {
+    const request = {
+      ...asked,
+      outputs: outputsOf(asked.outputs) ?? undefined,
+    };
     const [parent] = db.getInstancesByIds([request.parentInstanceId]);
     if (!parent) {
       throw new WorkItemRefusal(
@@ -868,7 +1139,24 @@ export const createWorkItems = ({
     if (unchecked) {
       throw new WorkItemRefusal(400, unchecked);
     }
+    const projectId = request.task?.projectId ?? parent.projectId;
+    if (request.outputs && !projectId) {
+      throw new WorkItemRefusal(
+        400,
+        "outputs are copied into the project's folder, and this session belongs to no project. Drop outputs, or delegate from a session in a project."
+      );
+    }
+    return { request, parent, projectId };
+  };
 
+  const start = async (asked: WorkItemRequest): Promise<WorkItemStart> => {
+    const { request, parent, projectId } = admitted(asked);
+    if (request.reuse) {
+      const again = await reusable(request.reuse, projectId);
+      if (again) {
+        return spawnIn(again, settingsOf(request, parent), parent, request);
+      }
+    }
     if (!request.workspace) {
       const machineId = targetMachine(request, parent);
       const settings = settingsOf(request, parent);
@@ -900,6 +1188,20 @@ export const createWorkItems = ({
       : spawnIn(followed, settingsOf(request, parent), parent, request);
   };
 
+  /**
+   * Where an item lands and what it hands in, and the project it works for
+   * (its task's, else its parent's), as its row keeps them.
+   */
+  const placing = (request: WorkItemRequest, parent: InstanceRow) => {
+    const projectId = request.task?.projectId ?? parent.projectId;
+    return {
+      ...(request.task ? { taskId: request.task.id } : {}),
+      ...(projectId ? { projectId } : {}),
+      lands: request.lands ?? "main",
+      outputs: request.outputs?.length ? request.outputs : null,
+    };
+  };
+
   /** A new session in `workspace`, running a new item from the request's brief. */
   const spawnIn = (
     workspace: WorkspaceRow,
@@ -918,9 +1220,7 @@ export const createWorkItems = ({
       brief: request.prompt,
       title: request.title.trim(),
       type: settings.type?.name,
-      ...(request.task
-        ? { taskId: request.task.id, projectId: request.task.projectId }
-        : {}),
+      ...placing(request, parent),
       harness,
       model: settings.model,
       effort: settings.type?.effort,
@@ -948,7 +1248,8 @@ export const createWorkItems = ({
           withWorkspaceLine(
             `${handoffMarker(leaf(parent.cwd))}${fork}${request.prompt}`,
             workspace.repoRoot,
-            workspace.base
+            workspace.base,
+            landingOf(item)
           )
         )
       );
@@ -1227,6 +1528,18 @@ export const createWorkItems = ({
     return `\n\nCommits:${fenced(commits.stdout.trim())}\n\nDiffstat:${fenced(diffstat.stdout.trim() || "(no changes)")}`;
   };
 
+  /** Runs a command in the item's workspace, inside its boundary. */
+  const runIn =
+    (workspace: WorkspaceRow) =>
+    (cmd: string, timeoutMs: number): Promise<CommandResult> =>
+      command(
+        workspace.machineId,
+        workspace.path,
+        cmd,
+        timeoutMs,
+        refOf(workspace)
+      );
+
   /**
    * Lands a checked item's commits on its workspace's base branch
    * (landing.ts). Answers the line the report and the delegate read when the
@@ -1234,27 +1547,20 @@ export const createWorkItems = ({
    * uncommitted work, a conflict, checks that fail after a rebase); or the line
    * that says why it could not land (`refused`).
    */
-  const landChecked = async (
+  const landOnBase = async (
     workspace: WorkspaceRow,
+    item: WorkItemRow,
     checks: WorkItemCheck[]
-  ): Promise<
-    { kind: "done" | "refused"; line: string } | { kind: "retry"; text: string }
-  > => {
+  ): Promise<Landed> => {
     const { base } = workspace;
     const outcome = await land<CheckOutcome[]>(base, {
-      run: (cmd, timeoutMs) =>
-        command(
-          workspace.machineId,
-          workspace.path,
-          cmd,
-          timeoutMs,
-          refOf(workspace)
-        ),
+      run: runIn(workspace),
       recheck: async () => {
         const again = await runChecks(workspace, checks);
         return again.some((check) => !check.passed) ? again : undefined;
       },
       queue: landings,
+      skip: item.outputs ?? [],
     });
     switch (outcome.kind) {
       case "landed":
@@ -1273,10 +1579,7 @@ export const createWorkItems = ({
           line: "Not landed: this workspace's repository has no remote.",
         };
       case "dirty":
-        return {
-          kind: "retry",
-          text: `The checks passed, but the workspace has changes that are not committed, new files included. The checks ran on them and the hub lands only commits, so landing now could leave ${base} without them. Commit them, delete them, or add them to .gitignore, then call finish_item again.${fenced(outcome.files)}`,
-        };
+        return { kind: "retry", text: dirtyText(outcome.files, base) };
       case "conflict":
         return {
           kind: "retry",
@@ -1298,14 +1601,261 @@ export const createWorkItems = ({
     }
   };
 
+  /** A pull request's body: what the delegate said it did, its checks, and where its report is. */
+  const pullRequestBody = (
+    item: WorkItemRow,
+    said: { lines: string; summary: string }
+  ): string => {
+    const link = sessionUrl?.(item.instanceId);
+    const what = item.taskId
+      ? `an attempt at ${item.taskId}`
+      : `work item ${item.id}`;
+    return [
+      said.summary.trim(),
+      `Checks, run by the CawCo hub:\n${said.lines}`,
+      link
+        ? `This is ${what}; its report and transcript: ${link}`
+        : `This is ${what} (work item ${item.id}).`,
+    ].join("\n\n");
+  };
+
+  /**
+   * Lands an item that lands `branch` or `pr`: its commits pushed as they are
+   * to `cawco/<task or item>`, and for `pr`, a pull request against the base
+   * branch opened, or the open one found. gh turning the pull request down
+   * refuses the landing in gh's words.
+   */
+  const landOnBranch = async (
+    workspace: WorkspaceRow,
+    item: WorkItemRow,
+    said: { lines: string; summary: string }
+  ): Promise<Landed> => {
+    const { base } = workspace;
+    const branch = landingBranch(item);
+    const pushed = await pushBranch(base, branch, {
+      run: runIn(workspace),
+      queue: landings,
+      skip: item.outputs ?? [],
+    });
+    if (pushed.kind !== "pushed") {
+      return unpushed(pushed, workspace, branch, item.lands);
+    }
+    const at = `${branch} at ${pushed.sha.slice(0, 9)}`;
+    return item.lands === "pr"
+      ? await pullRequestFor(workspace, item, said, at)
+      : {
+          kind: "done",
+          line: `Pushed to branch ${at} on origin; ${base} is untouched.`,
+        };
+  };
+
+  /** Opens the pull request for an item's pushed branch, or finds the open one. */
+  const pullRequestFor = async (
+    workspace: WorkspaceRow,
+    item: WorkItemRow,
+    said: { lines: string; summary: string },
+    at: string
+  ): Promise<Landed> => {
+    const { base } = workspace;
+    const branch = landingBranch(item);
+    const title =
+      (item.projectId && item.taskId
+        ? taskTitle?.(item.projectId, item.taskId)
+        : undefined) ?? item.title;
+    const pr = await openPullRequest(
+      { base, branch, title, body: pullRequestBody(item, said) },
+      runIn(workspace)
+    );
+    if (pr.kind === "refused") {
+      return {
+        kind: "refused",
+        line: `Pushed to branch ${at}, but the pull request was not opened. gh said:${fenced(pr.detail)}\nOpen it by hand from ${branch} into ${base}, or start the task again once gh can.`,
+      };
+    }
+    return {
+      kind: "done",
+      prUrl: pr.url,
+      line:
+        pr.kind === "opened"
+          ? `Pushed to branch ${at} and opened a pull request against ${base}: ${pr.url}`
+          : `Pushed to branch ${at}, which updates its open pull request: ${pr.url}`,
+    };
+  };
+
+  /** Lands a checked item the way it lands: on its base, on a branch, through a pull request, or not at all. */
+  const landChecked = (
+    workspace: WorkspaceRow,
+    item: WorkItemRow,
+    checks: WorkItemCheck[],
+    said: { lines: string; summary: string }
+  ): Promise<Landed> => {
+    switch (item.lands) {
+      case "none":
+        return Promise.resolve({
+          kind: "done",
+          line: item.outputs?.length
+            ? "Nothing pushed: this item lands none, and its outputs are what it hands in."
+            : "Nothing pushed: this item lands none.",
+        });
+      case "branch":
+      case "pr":
+        return landOnBranch(workspace, item, said);
+      default:
+        return landOnBase(workspace, item, checks);
+    }
+  };
+
+  /**
+   * Whether each of the item's outputs is in its workspace: a file (not a
+   * link, which could lead anywhere) within the size the project's folder
+   * takes. The text that sends the item back when one is not; else nothing.
+   */
+  const outputsProblem = async (
+    workspace: WorkspaceRow,
+    outputs: string[]
+  ): Promise<string | undefined> => {
+    const result = await runIn(workspace)(
+      outputsProbe(outputs),
+      GIT_TIMEOUT_MS
+    );
+    if (result.exitCode !== 0) {
+      throw new Error(
+        `the hub could not look for the item's outputs: ${failedWith(result)}`
+      );
+    }
+    const problems = outputsSaid(result.stdout);
+    return problems.length > 0
+      ? `The checks passed, but the item's outputs are not ready. ${problems.join(" ")} Then call finish_item again.`
+      : undefined;
+  };
+
+  /**
+   * Copies the item's outputs from its workspace into its project's folder,
+   * under `assets/<task or item>/`, in one commit (project-folder.ts). The
+   * report's lines on them, and whether they arrived.
+   */
+  const collectOutputs = async (
+    workspace: WorkspaceRow,
+    item: WorkItemRow
+  ): Promise<{ ok: boolean; line: string }> => {
+    const outputs = item.outputs ?? [];
+    if (outputs.length === 0) {
+      return { ok: true, line: "" };
+    }
+    if (!item.projectId) {
+      return {
+        ok: false,
+        line: "\n\nOutputs not collected: the item belongs to no project.",
+      };
+    }
+    const folder = `assets/${landingKey(item)}`;
+    try {
+      const files: { path: string; content: Uint8Array }[] = [];
+      for (const path of outputs) {
+        // biome-ignore lint/performance/noAwaitInLoops: one file at a time keeps each read under the command's output cap
+        const read = await runIn(workspace)(
+          `base64 < ${quote(path)}`,
+          GIT_TIMEOUT_MS
+        );
+        if (read.exitCode !== 0) {
+          throw new Error(`${path} could not be read: ${failedWith(read)}`);
+        }
+        files.push({
+          path: `${folder}/${path}`,
+          content: Buffer.from(read.stdout, "base64"),
+        });
+      }
+      const written = await writeFolderFiles(item.projectId, files, {
+        author: { name: item.title },
+        message: `assets: ${item.taskId ? `outputs of ${item.taskId}, attempt ${item.id.slice(0, 8)}` : `outputs of work item ${item.id.slice(0, 8)}`}`,
+      });
+      return {
+        ok: true,
+        line: `\n\nOutputs, copied into the project's folder ${written.changed ? `at ${written.sha.slice(0, 9)}` : "(already there, unchanged)"}:\n${written.paths.map((path) => `- ${path}`).join("\n")}`,
+      };
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      return {
+        ok: false,
+        line: `\n\nOutputs not collected into ${folder}/: ${reason}`,
+      };
+    }
+  };
+
+  /**
+   * A checked item, its checks all passed, to its end: its outputs must be
+   * in its workspace (else it is back to running, told which are not); then
+   * it lands as its row says and its outputs are collected, and it is done
+   * (or failed, when it could not land or its outputs did not arrive) with
+   * the report the hub builds sent to its parent.
+   */
+  const landAndReport = async (
+    item: WorkItemRow,
+    row: InstanceRow,
+    workspace: WorkspaceRow,
+    checks: WorkItemCheck[],
+    submission: WorkItemSubmission,
+    passed: { count: number; lines: string }
+  ): Promise<{ done: boolean; text: string }> => {
+    const settled = { checkingSince: null, submission: null };
+    const { count, lines } = passed;
+    const unready = item.outputs?.length
+      ? await outputsProblem(workspace, item.outputs)
+      : undefined;
+    if (unready) {
+      update(item.id, settled);
+      return { done: false, text: unready };
+    }
+    const landing = await landChecked(workspace, item, checks, {
+      summary: submission.summary,
+      lines,
+    });
+    if (landing.kind === "retry") {
+      update(item.id, settled);
+      return { done: false, text: landing.text };
+    }
+    const collected =
+      landing.kind === "done"
+        ? await collectOutputs(workspace, item)
+        : { ok: true, line: "" };
+    const body = `${submission.summary}\n\nChecks:\n${lines}\n\n${landing.line}${collected.line}${await changesSince(workspace, item)}${findingsBlock(submission.findings)}`;
+    const landed = landing.kind === "done" && collected.ok;
+    const ended = finish(db.workItem(item.id) ?? item, {
+      state: landed ? "done" : "failed",
+      result: body,
+      ...(landing.kind === "done" && landing.prUrl
+        ? { prUrl: landing.prUrl }
+        : {}),
+      ...settled,
+    });
+    report(row, `${body}${reportLine(ended)}`, false);
+    if (landing.kind !== "done") {
+      return {
+        done: false,
+        text: `All ${count} checks passed, but the work could not land. ${landing.line}\n\nThe item has failed and your parent has the details. End your turn.`,
+      };
+    }
+    return collected.ok
+      ? {
+          done: true,
+          text: `All ${count} checks passed. ${landing.line}${collected.line}\n\n${lines}\n\nThe item is done. End your turn.`,
+        }
+      : {
+          done: false,
+          text: `All ${count} checks passed. ${landing.line} But the outputs did not arrive.${collected.line}\n\nThe item has failed and your parent has the details. End your turn.`,
+        };
+  };
+
   /**
    * THE run of a `finish_item`: the item's checks, in order, against the
    * submission stored on its row, to an outcome. The live call and a hub
-   * start-up resume both come here. All passing, the item is done and the
-   * parent gets the report the hub builds; any failing, it is back to running
-   * and the answer names the failures. Either way the row stops checking —
-   * also when a check cannot run at all, which throws. Answers the text the
-   * delegate reads, and whether the item is done.
+   * start-up resume both come here. All passing, the item's outputs must be
+   * in its workspace (else it is back to running, told which are not); then
+   * it lands as its row says and its outputs are collected, and it is done
+   * and the parent gets the report the hub builds; any check failing, it is
+   * back to running and the answer names the failures. Either way the row
+   * stops checking — also when a check cannot run at all, which throws.
+   * Answers the text the delegate reads, and whether the item is done.
    */
   const settleChecks = async (
     item: WorkItemRow,
@@ -1337,26 +1887,10 @@ export const createWorkItems = ({
           text: `The checks passed, but ${stopped.title} is ${stopped.state} now; nothing was landed or reported.`,
         };
       }
-      const landing = await landChecked(workspace, checks);
-      if (landing.kind === "retry") {
-        update(item.id, settled);
-        return { done: false, text: landing.text };
-      }
-      const body = `${submission.summary}\n\nChecks:\n${lines}\n\n${landing.line}${await changesSince(workspace, item)}${findingsBlock(submission.findings)}`;
-      const current = db.workItem(item.id) ?? item;
-      const landed = landing.kind === "done";
-      const ended = finish(current, {
-        state: landed ? "done" : "failed",
-        result: body,
-        ...settled,
+      return await landAndReport(stopped, row, workspace, checks, submission, {
+        count: outcomes.length,
+        lines,
       });
-      report(row, `${body}${reportLine(ended)}`, false);
-      return {
-        done: landed,
-        text: landed
-          ? `All ${outcomes.length} checks passed. ${landing.line}\n\n${lines}\n\nThe item is done. End your turn.`
-          : `All ${outcomes.length} checks passed, but the work could not land. ${landing.line}\n\nThe item has failed and your parent has the details. End your turn.`,
-      };
     } catch (error) {
       update(item.id, settled);
       throw error;

@@ -92,6 +92,7 @@ import {
   projectPlaces,
   projects,
   projectTasks,
+  queuedTaskStarts,
   ruleState,
   rules,
   sentMessages,
@@ -172,6 +173,7 @@ export type WorkflowAttemptRow = typeof workflowAttempts.$inferSelect;
 export type WorkflowLogRow = typeof workflowRunLog.$inferSelect;
 export type WorkflowNoticeRow = typeof workflowNotices.$inferSelect;
 export type WorkItemRow = typeof workItems.$inferSelect;
+export type QueuedTaskStartRow = typeof queuedTaskStarts.$inferSelect;
 export type WorkspaceRow = typeof workspaces.$inferSelect;
 export type SessionIdentityRow = typeof sessionIdentities.$inferSelect;
 
@@ -350,6 +352,8 @@ export interface DbShape {
   readonly deleteWorkflow: (id: string) => void;
   /** A kept supervisor notice that has now been sent. */
   readonly deleteWorkflowNotice: (id: number) => void;
+  /** Forgets a task's queued start, if it had one. */
+  readonly dropQueuedTaskStart: (projectId: string, taskId: string) => void;
   /** Forgets the index rows of task files that are gone. */
   readonly dropTaskIndex: (projectId: string, paths: string[]) => void;
   /** Persist the decision before its reconciler may send anything. */
@@ -770,6 +774,12 @@ export interface DbShape {
   readonly putWorkflow: (row: typeof workflows.$inferInsert) => WorkflowRow;
   /** Records a call in its run's log, or completes the row it already has. */
   readonly putWorkflowLog: (row: typeof workflowRunLog.$inferInsert) => void;
+  /** Every hook start waiting for a slot in the project, oldest first (dispatch.ts). */
+  readonly queuedTaskStarts: (projectId: string) => QueuedTaskStartRow[];
+  /** Queues a hook's start, or replaces the one its task already had. */
+  readonly queueTaskStart: (
+    row: Omit<QueuedTaskStartRow, "queuedAt">
+  ) => QueuedTaskStartRow;
   /** A supervisor notice kept until its supervisor is live. */
   readonly queueWorkflowNotice: (
     row: typeof workflowNotices.$inferInsert
@@ -969,7 +979,7 @@ export interface DbShape {
     change: Partial<
       Pick<
         ProjectRow,
-        "dispatch" | "leadInstanceId" | "maxAttempts" | "reviewLimit"
+        "dispatch" | "lands" | "leadInstanceId" | "maxAttempts" | "reviewLimit"
       >
     >
   ) => void;
@@ -1128,6 +1138,7 @@ export interface DbShape {
         | "waitReason"
         | "waitResumeBy"
         | "waitHistory"
+        | "prUrl"
       >
     >
   ) => WorkItemRow | undefined;
@@ -1179,6 +1190,8 @@ export interface DbShape {
     steps?: WorkflowStepRow[]
   ) => void;
   readonly workItem: (id: string) => WorkItemRow | undefined;
+  /** The newest work item whose landing opened or found the pull request at `url`. */
+  readonly workItemByPrUrl: (url: string) => WorkItemRow | undefined;
   /** A workspace's items, newest first. */
   readonly workItemsIn: (workspaceId: string) => WorkItemRow[];
   /** Unfiled creates to discard when this machine next registers. */
@@ -3697,6 +3710,45 @@ const make = (path: string): DbShape => {
         )
         .orderBy(desc(workItems.createdAt), desc(workItems.id))
         .all(),
+    queuedTaskStarts: (projectId) =>
+      db
+        .select()
+        .from(queuedTaskStarts)
+        .where(eq(queuedTaskStarts.projectId, projectId))
+        .orderBy(asc(queuedTaskStarts.queuedAt), asc(queuedTaskStarts.taskId))
+        .all(),
+    queueTaskStart: (row) =>
+      db
+        .insert(queuedTaskStarts)
+        .values(row)
+        .onConflictDoUpdate({
+          target: [queuedTaskStarts.projectId, queuedTaskStarts.taskId],
+          set: {
+            stage: row.stage,
+            parentInstanceId: row.parentInstanceId,
+            queuedAt: new Date(),
+          },
+        })
+        .returning()
+        .get(),
+    dropQueuedTaskStart: (projectId, taskId) => {
+      db.delete(queuedTaskStarts)
+        .where(
+          and(
+            eq(queuedTaskStarts.projectId, projectId),
+            eq(queuedTaskStarts.taskId, taskId)
+          )
+        )
+        .run();
+    },
+    workItemByPrUrl: (url) =>
+      db
+        .select()
+        .from(workItems)
+        .where(eq(workItems.prUrl, url))
+        .orderBy(desc(workItems.createdAt))
+        .limit(1)
+        .get(),
     taskIndex: (projectId) =>
       db
         .select()
@@ -3877,6 +3929,9 @@ const make = (path: string): DbShape => {
           tx.delete(projectTasks)
             .where(inArray(projectTasks.projectId, gone))
             .run();
+          tx.delete(queuedTaskStarts)
+            .where(inArray(queuedTaskStarts.projectId, gone))
+            .run();
           tx.delete(projects).where(inArray(projects.id, gone)).run();
         }
         tx.delete(usageLimits)
@@ -3894,6 +3949,9 @@ const make = (path: string): DbShape => {
           .run();
         tx.delete(projectPlaces).where(eq(projectPlaces.projectId, id)).run();
         tx.delete(projectTasks).where(eq(projectTasks.projectId, id)).run();
+        tx.delete(queuedTaskStarts)
+          .where(eq(queuedTaskStarts.projectId, id))
+          .run();
         tx.delete(projects).where(eq(projects.id, id)).run();
       });
     },

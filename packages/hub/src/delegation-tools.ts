@@ -1,4 +1,8 @@
-import { IMAGE_GENERATION_DESCRIPTION } from "@cawco/core";
+import {
+  IMAGE_GENERATION_DESCRIPTION,
+  LANDS_MODES,
+  type LandsMode,
+} from "@cawco/core";
 import type { ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import {
@@ -68,6 +72,28 @@ function tool<T extends z.ZodRawShape>(
     handler: (args: unknown) => handler(schema.parse(args)),
   };
 }
+
+/**
+ * What `finish_item` says happens once the checks pass: the session's own
+ * work item's landing (`lands`), so a delegate is never told the hub pushes
+ * to the base branch when it does not.
+ */
+const finishItemDescription = (lands: LandsMode = "main"): string => {
+  const outputs =
+    " When the item names outputs, each must be a file at its path in your workspace: the hub copies them into the project's folder, and a missing one comes back to you like a failing check.";
+  const close =
+    " Pass `blocked` with the exact command and error text only when something outside your control stops the work; the item then fails with that reason. Anything you noticed outside your brief goes in `findings`, not in the work.";
+  switch (lands) {
+    case "branch":
+      return `Finish your work item. Commit your work first and do not push. The hub runs the item's acceptance checks in your worktree and returns each result. When all pass, the hub pushes your branch to origin (nothing goes onto the base branch); the item is then done and your parent receives the results. When a check fails or work is left uncommitted, you get the details back: fix the cause and call finish_item again.${outputs}${close}`;
+    case "pr":
+      return `Finish your work item. Commit your work first and do not push. The hub runs the item's acceptance checks in your worktree and returns each result. When all pass, the hub pushes your branch to origin and opens a pull request against the base branch (or updates the one already open for it); the item is then done and your parent receives the results with the pull request's link. When a check fails or work is left uncommitted, you get the details back: fix the cause and call finish_item again.${outputs}${close}`;
+    case "none":
+      return `Finish your work item. Nothing is pushed: the hub runs the item's acceptance checks in your worktree and returns each result, and when all pass, your outputs are collected into the project's folder; the item is then done and your parent receives the results. Each output must be a file at its path in your workspace; a missing one comes back to you like a failing check, as does a failing check: fix the cause and call finish_item again.${close}`;
+    default:
+      return `Finish your work item. Commit your work first and do not push. The hub runs the item's acceptance checks in your worktree and returns each result. When all pass, the hub rebases your commits onto the base branch (running the checks again if it moved) and pushes to it; the item is then done and your parent receives the results. When a check fails or your commits conflict with the base branch, you get the details back: fix the cause and call finish_item again.${outputs}${close}`;
+  }
+};
 
 /** Only a workflow step session gets these; they need its step and run. */
 const STEP_TOOLS: ReadonlySet<string> = new Set([
@@ -598,6 +624,23 @@ export function handoffTools(deps: HandoffDeps) {
         checks: checksParameter().describe(
           "The item's acceptance checks. The hub runs each command in the item's worktree, inside its workspace boundary exactly as the delegate's own shell commands run (same mounts, same private /tmp), when the delegate calls finish_item; the item is done only when every command exits 0 and its stdout contains `expect` where one is given. Write the checks a reviewer would run: build, lint, type-check, a grep that proves a removal, one script run for a live assertion. The delegate runs nothing beyond these to prove the work."
         ),
+        lands: z
+          .enum(LANDS_MODES as [LandsMode, ...LandsMode[]])
+          .optional()
+          .describe(
+            "Where the work goes once the checks pass. 'main' (default): the hub rebases the delegate's commits onto the repository's default branch and pushes. " +
+              "'branch': the hub pushes them, as they are, to cawco/<task or item> on origin. " +
+              "'pr': that, then a pull request against the default branch (or the one already open for that branch); the report carries its link. " +
+              "'none': nothing is pushed, for work that is not commits (a report, a draft); name its files in `outputs`."
+          ),
+        outputs: z
+          .array(z.string())
+          .optional()
+          .describe(
+            "Files the work produces that are the deliverable rather than commits, as paths from the repository's root, e.g. ['report.md']. " +
+              "When the checks pass, the hub copies each into the project's folder under assets/<task or item>/ and the report lists them; " +
+              "a missing one goes back to the delegate like a failing check. Needs this session to be in a project."
+          ),
       },
       async ({
         prompt,
@@ -612,6 +655,8 @@ export function handoffTools(deps: HandoffDeps) {
         can_delegate,
         checks,
         machine,
+        lands,
+        outputs,
       }) => {
         const result = await actions.delegate(prompt, {
           title,
@@ -625,6 +670,8 @@ export function handoffTools(deps: HandoffDeps) {
           canDelegate: can_delegate,
           checks,
           machine,
+          lands,
+          outputs,
         });
         const sc = {
           delegateInstanceId: result.id,
@@ -667,7 +714,7 @@ export function handoffTools(deps: HandoffDeps) {
     ),
     tool(
       "finish_item",
-      "Finish your work item. Commit your work first and do not push. The hub runs the item's acceptance checks in your worktree and returns each result. When all pass, the hub rebases your commits onto the base branch (running the checks again if it moved) and pushes; the item is then done and your parent receives the results. When a check fails or your commits conflict with the base branch, you get the details back: fix the cause and call finish_item again. Pass `blocked` with the exact command and error text only when something outside your control stops the work; the item then fails with that reason. Anything you noticed outside your brief goes in `findings`, not in the work.",
+      finishItemDescription(deps.lands),
       {
         summary: z.string().describe("What was done, in plain words."),
         findings: z
