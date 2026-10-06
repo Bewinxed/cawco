@@ -506,7 +506,10 @@ export class BinaryUpdater {
     this.#policy = (await settings.json()) as BinaryUpdatePolicy;
     const { release, dbSchemaVersion } = await this.#offer(installation);
     const running = await readRunningManifest();
-    await this.#set({ channel: this.#policy.channel });
+    // Only a change is written: every write moves `updatedAt`, and the lost-helper rule below reads it.
+    if (this.#state.channel !== this.#policy.channel) {
+      await this.#set({ channel: this.#policy.channel });
+    }
     if (
       this.#state.phase === "installing" &&
       Date.now() - this.#state.updatedAt > INSTALL_STALE_MS
