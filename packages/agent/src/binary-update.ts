@@ -757,11 +757,18 @@ export class BinaryUpdater {
     }
     const keeper = await readKeeper();
     if (keeper.held > 0) {
-      await this.#set({
-        phase: "waiting-sessions",
-        heldChildren: keeper.held,
-        sessiondVersion: keeperVersion,
-      });
+      // Only a change is written: every write moves `updatedAt`, which the board reads as news.
+      if (
+        this.#state.phase !== "waiting-sessions" ||
+        this.#state.heldChildren !== keeper.held ||
+        this.#state.sessiondVersion !== keeperVersion
+      ) {
+        await this.#set({
+          phase: "waiting-sessions",
+          heldChildren: keeper.held,
+          sessiondVersion: keeperVersion,
+        });
+      }
       return;
     }
     if (!(this.#flags.commanded || this.#policy.autoUpdate)) {

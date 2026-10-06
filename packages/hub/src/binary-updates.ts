@@ -248,7 +248,14 @@ export function createBinaryUpdates(options: Options) {
     .post(
       "/api/binary-updates/machines/:machineId/acknowledge",
       async ({ params }) => {
-        await options.acknowledge(params.machineId);
+        // The agent answers with its state; taking it now means the board stops showing the update as
+        // unseen at once, not at the machine's next report.
+        const state = (await options.acknowledge(params.machineId)) as
+          | BinaryUpdateState
+          | undefined;
+        if (state?.phase) {
+          options.setState(params.machineId, state);
+        }
         return { ok: true };
       }
     )
