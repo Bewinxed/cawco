@@ -176,6 +176,7 @@ import { delegateTypesRoutes, makeDelegateTypes } from "./delegate-types";
 import { hubHttpUrl } from "./delegation-actions";
 import { createDelegationMcp } from "./delegation-mcp";
 import { createDispatcher, dispatchRoutes } from "./dispatch";
+import { fleetChoicesRoutes } from "./fleet-choices";
 import { FleetMcp } from "./fleet-mcp";
 import { hidden } from "./hidden";
 import { joinRoutes } from "./join";
@@ -199,7 +200,18 @@ import {
 } from "./pending";
 import { resolveMarketplacePlugins } from "./plugins";
 import { previewFrame, previewTargets } from "./preview";
+import {
+  makeProjectDelegateTypes,
+  projectDelegateTypesRoutes,
+} from "./project-delegate-types";
 import { projectFolderRoutes, trashProjectFolder } from "./project-folder";
+import {
+  foldPlacedStates,
+  hasProjectHooks,
+  onPlacesChanged,
+  placedHooks,
+  placesChanged,
+} from "./project-placements";
 import { placePath, readRemote } from "./projects";
 import { type HubSocket, type RegistryShape, toDashboard } from "./registry";
 import { RuleEngine } from "./rules";
@@ -1200,6 +1212,7 @@ const holdsFleet = (report: FleetSyncReport | undefined): boolean =>
     report.plugins,
     report.skills,
     report.memoryDocs,
+    report.hooks,
   ].some((states) =>
     Object.values(states ?? {}).some((item) => item.state !== "removed")
   ) ||
@@ -6071,6 +6084,13 @@ export const createServer = (
           mcp: config.mcp.flatMap((row) =>
             current.has(row.name) ? [current.get(row.name) as typeof row] : []
           ),
+          // A project-bound hook once per place of its project on this
+          // machine, with that place as its cwd (project-placements.ts).
+          hooks: placedHooks(
+            config.hooks,
+            db.listProjects().flatMap((project) => project.places),
+            machineId
+          ),
         },
         hubHttpUrl()
       );
@@ -6170,6 +6190,7 @@ export const createServer = (
       config.marketplaces.length ||
       config.plugins.length ||
       config.skills?.length ||
+      config.hooks?.length ||
       config.memory
     );
     if (
@@ -6558,6 +6579,33 @@ export const createServer = (
       publishInstances(machineId);
     }
   };
+
+  /** Each place's path by its id, for a folded hook report to say which place a copy failed in. */
+  const placePathById = (): ((placeId: string) => string | undefined) => {
+    const paths = new Map(
+      db
+        .listProjects()
+        .flatMap((project) =>
+          project.places.map((place) => [place.id, place.path] as const)
+        )
+    );
+    return (placeId) => paths.get(placeId);
+  };
+
+  // A place added or removed: its machine is sent its fleet config again, so
+  // the project's hooks reach the new place or leave the old one. Only when
+  // the project has any; a place of a project without them changes nothing.
+  onPlacesChanged((machineId, projectId) => {
+    const agent = registry.agent(machineId);
+    if (
+      !agent ||
+      (projectId && !hasProjectHooks(db.fleetConfig().hooks, projectId))
+    ) {
+      return;
+    }
+    sendFleetSync(machineId, agent);
+    publishInstances(machineId);
+  });
 
   const announceMcp = (): void => {
     registry.broadcast({
@@ -7095,6 +7143,8 @@ export const createServer = (
   // route group, mounted rather than folded into the routes below — see
   // delegate-types.ts for why it keeps its own connection.
   const delegateTypes = makeDelegateTypes();
+  // A project's own types (`delegates/*.md` in its folder) shadow the fleet's.
+  const projectTypes = makeProjectDelegateTypes(delegateTypes);
   /**
    * THE way the hub runs a command on a machine: in `cwd`, killed after
    * `timeoutMs` (the machine's default when not given), answering its
@@ -7168,7 +7218,8 @@ export const createServer = (
         payload: { kind: "work_item", instanceId: item.parentInstanceId, item },
       });
     },
-    types: () => delegateTypes.list(),
+    // A session's project's catalog: its own types shadow the fleet's.
+    types: (projectId?: string | null) => projectTypes.typesFor(projectId),
     spawn: issueSpawn,
     send: deliverSend,
     // What a pull request an attempt opens links back to and is titled by.
@@ -7654,6 +7705,18 @@ export const createServer = (
       .use(websocket())
       .use(dashboardErrorsRoutes())
       .use(delegateTypesRoutes(delegateTypes))
+      .use(
+        projectDelegateTypesRoutes(projectTypes, (id) =>
+          db.listProjects().some((project) => project.id === id)
+        )
+      )
+      .use(
+        fleetChoicesRoutes({
+          read: () => db.getSupervisorConfig()?.deniedTools ?? null,
+          write: (deniedTools) => db.putSupervisorConfig({ deniedTools }),
+          synced: () => fanOutFleet(),
+        })
+      )
       .use(
         projectFolderRoutes(
           (id) => db.listProjects().some((project) => project.id === id),
@@ -10244,6 +10307,9 @@ export const createServer = (
               path: cwd,
               kind: "checkout",
             });
+            if (added) {
+              placesChanged(body.machineId, known.id);
+            }
             return {
               ...(db.project(known.id) ?? known),
               place,
@@ -10263,7 +10329,14 @@ export const createServer = (
         }
       )
       .delete("/api/projects/:id", async ({ params }) => {
+        const machines = new Set(
+          db.project(params.id)?.places.map((place) => place.machineId)
+        );
         db.deleteProject(params.id);
+        // Its hooks leave every place it had.
+        for (const machineId of machines) {
+          placesChanged(machineId, params.id);
+        }
         // The project is gone either way; a folder that could not be moved
         // stays where it was, and the hub says so in its log.
         await trashProjectFolder(params.id).catch((error: unknown) =>
@@ -10300,6 +10373,9 @@ export const createServer = (
             path,
             kind: "checkout",
           });
+          if (added) {
+            placesChanged(body.machineId, project.id);
+          }
           if (!project.remote) {
             await learnRemote(project.id, body.machineId, path);
           }
@@ -10311,7 +10387,13 @@ export const createServer = (
         }
       )
       .delete("/api/projects/:id/places/:placeId", ({ params, status }) => {
+        const leaving = db
+          .project(params.id)
+          ?.places.find((place) => place.id === params.placeId);
         const removed = db.removePlace(params.id, params.placeId);
+        if (removed === "removed" && leaving) {
+          placesChanged(leaving.machineId, params.id);
+        }
         if (removed === "missing") {
           return status(404, "No place with that id in this project.");
         }
@@ -11988,7 +12070,15 @@ export const createServer = (
                 pendingFleet.has(message.requestId)
               ) {
                 pendingFleet.delete(message.requestId);
-                const report = peekFleetReport(message.payload);
+                const peeked = peekFleetReport(message.payload);
+                // A project-bound hook went out once per place; the hub keeps
+                // one state per hook, the worst of its places.
+                const report = peeked?.hooks
+                  ? {
+                      ...peeked,
+                      hooks: foldPlacedStates(peeked.hooks, placePathById()),
+                    }
+                  : peeked;
                 if (report) {
                   // Compare the machine's persisted content before overwriting
                   // its report; timestamps and insertion order cannot cause a reload.

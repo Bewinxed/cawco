@@ -6,7 +6,7 @@
  * builds a `SpawnPayload`.
  */
 
-import { EFFORT_LEVELS, type EffortLevel } from "./harness";
+import { EFFORT_LEVELS, type EffortLevel, type HarnessKind } from "./harness";
 
 /** One named preset. `name` is the key a `delegate` call's `type` asks for. */
 export interface DelegateType {
@@ -56,14 +56,118 @@ export const delegateTypeProblem = (
   if (draft.effort && !EFFORT_LEVELS.includes(draft.effort)) {
     return `“${draft.effort}” is not an effort level`;
   }
-  // denyTools is enforced by the claude adapter alone — it writes into the
-  // spawned session's own settings.deny, the mechanism opencode and pi have
-  // no equivalent of. A type that names denyTools on another harness would
-  // store a promise nothing enforces, which is worse than refusing it here.
-  if (draft.denyTools?.length && draft.harness !== "claude") {
-    return `denyTools only applies to the claude harness — “${draft.harness}” cannot enforce it`;
+  // A deny list is kept only where its harness enforces it: a type that names
+  // tools its harness cannot deny would store a promise nothing keeps.
+  return denyToolsProblem(draft.harness, draft.denyTools ?? []);
+};
+
+/**
+ * Each harness's own tools for the two things the fleet's onboarding choices
+ * turn off (Projects spec §5.2, §5.6): native subagents ("delegates instead
+ * of subagents") and the native to-do list ("CawCo's to-dos instead of each
+ * harness's own list"). pi has neither.
+ */
+export const NATIVE_TOOLS = {
+  subagents: { claude: ["Task", "Agent"], opencode: ["task"], pi: [] },
+  todos: {
+    claude: ["TaskCreate", "TaskUpdate", "TaskList", "TaskGet"],
+    opencode: ["todowrite", "todoread"],
+    pi: [],
+  },
+} as const satisfies Record<string, Record<HarnessKind, readonly string[]>>;
+
+/**
+ * Claude Code's tool names that OpenCode has its own tool for. Denied-tool
+ * lists (the fleet baseline, a delegate type's, a spawn's) are written in
+ * Claude's names — Claude Code refuses a lowercase rule in settings.json —
+ * so the OpenCode adapter reads them through this.
+ */
+const OPENCODE_EQUIVALENTS: Record<string, readonly string[]> = {
+  Agent: ["task"],
+  Task: ["task"],
+  TaskCreate: ["todowrite"],
+  TaskUpdate: ["todowrite"],
+  TaskList: ["todoread"],
+  TaskGet: ["todoread"],
+  TodoWrite: ["todowrite"],
+  Bash: ["bash"],
+  Edit: ["edit"],
+  Write: ["write"],
+  Read: ["read"],
+  Glob: ["glob"],
+  Grep: ["grep"],
+  LS: ["list"],
+  WebFetch: ["webfetch"],
+  WebSearch: ["websearch"],
+  Skill: ["skill"],
+};
+
+const CLAUDE_MCP_TOOL = /^mcp__([^_]+(?:_[^_]+)*?)(?:__(.+))?$/;
+const OPENCODE_UNSAFE = /[^A-Za-z0-9_-]/g;
+const LOWERCASE_START = /^[a-z]/;
+
+/**
+ * OpenCode's tool ids for a denied-tool list. A Claude name with an OpenCode
+ * equivalent maps to it; `mcp__server__tool` becomes OpenCode's
+ * `server_tool` (a bare `mcp__server` or `mcp__server__*` every tool of
+ * it); a name already in OpenCode's lowercase form passes through. Anything
+ * else is `unmapped`: OpenCode has no tool by that name to deny.
+ */
+export const opencodeToolsFor = (
+  names: readonly string[]
+): { tools: string[]; unmapped: string[] } => {
+  const tools = new Set<string>();
+  const unmapped: string[] = [];
+  for (const name of names) {
+    const mcp = CLAUDE_MCP_TOOL.exec(name);
+    if (mcp) {
+      const server = mcp[1].replace(OPENCODE_UNSAFE, "_");
+      const tool = mcp[2] ?? "*";
+      tools.add(
+        `${server}_${tool === "*" ? "*" : tool.replace(OPENCODE_UNSAFE, "_")}`
+      );
+    } else if (OPENCODE_EQUIVALENTS[name]) {
+      for (const id of OPENCODE_EQUIVALENTS[name]) {
+        tools.add(id);
+      }
+    } else if (LOWERCASE_START.test(name)) {
+      tools.add(name);
+    } else {
+      unmapped.push(name);
+    }
   }
-  return undefined;
+  return { tools: [...tools], unmapped };
+};
+
+/**
+ * Why `harness` cannot carry this denied-tool list, in a sentence, or nothing
+ * when it can. Claude denies by its own settings; OpenCode through its
+ * session config (the names it has an equivalent for, {@link
+ * opencodeToolsFor}); pi has no way to deny a tool, so only a to-do list
+ * denial is accepted there, as the no-op it is (pi keeps no to-do list). A
+ * name nothing would enforce is refused rather than stored as a promise.
+ */
+export const denyToolsProblem = (
+  harness: HarnessKind,
+  names: readonly string[]
+): string | undefined => {
+  if (names.length === 0 || harness === "claude") {
+    return undefined;
+  }
+  if (harness === "opencode") {
+    const { unmapped } = opencodeToolsFor(names);
+    return unmapped.length > 0
+      ? `OpenCode has no tool for ${unmapped.map((name) => `“${name}”`).join(", ")}, so it cannot deny ${unmapped.length === 1 ? "it" : "them"}`
+      : undefined;
+  }
+  const todos = new Set<string>([
+    ...NATIVE_TOOLS.todos.claude,
+    ...NATIVE_TOOLS.todos.opencode,
+  ]);
+  const rest = names.filter((name) => !todos.has(name));
+  return rest.length > 0
+    ? `“${harness}” cannot deny tools — only a to-do list denial applies there, and pi keeps no to-do list`
+    : undefined;
 };
 
 /**

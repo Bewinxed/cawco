@@ -57,12 +57,20 @@ export const hubHttpUrl = (): string => {
  * A valid empty catalog remains distinct from a failed fetch.
  * Descriptions take a startup snapshot. Catalog reads and named dispatch fetch
  * again so saved routing changes apply to sessions already running.
+ *
+ * With `projectId`, the catalog a session of that project sees: the project's
+ * own types (the `delegates/` files in its folder) shadowing fleet types of
+ * the same name (project-delegate-types.ts).
  */
 export async function fetchDelegateTypes(
-  onError?: (message: string) => void
+  onError?: (message: string) => void,
+  projectId?: string
 ): Promise<DelegateType[]> {
   try {
-    const res = await fetch(`${hubHttpUrl()}/api/delegate-types`, {
+    const path = projectId
+      ? `/api/projects/${encodeURIComponent(projectId)}/delegate-types`
+      : "/api/delegate-types";
+    const res = await fetch(`${hubHttpUrl()}${path}`, {
       signal: AbortSignal.timeout(5000),
     });
     if (!res.ok) {
@@ -443,6 +451,8 @@ export interface HandoffDeps {
   readonly instanceId: string;
   /** Where this session's work item lands, which finish_item's description follows; `main` when unknown. */
   readonly lands?: LandsMode;
+  /** The session's project: its delegate types shadow the fleet's. */
+  readonly projectId?: string;
   readonly workflowRunId?: string;
   readonly workflowStepId?: string;
   /** Delegate role: finish_item is available even before an item has checks. */
@@ -786,6 +796,7 @@ export const handoffActions = ({
   cwd,
   emit,
   authorization,
+  projectId,
 }: HandoffDeps): HandoffActions => ({
   async continueSession(input) {
     let source = instanceId;
@@ -988,7 +999,7 @@ export const handoffActions = ({
   async listDelegateTypes() {
     const types = await fetchDelegateTypes((message) => {
       throw new Error(message);
-    });
+    }, projectId);
     return { types };
   },
   async listSessions(): Promise<string> {
@@ -1095,10 +1106,11 @@ export const handoffActions = ({
     const machineId = target?.machineId ?? "";
     // Nothing is left to the machine's defaults: the type (or `medium`) says
     // what runs, and the caller's own mode is how it answers permissions.
+    // The caller's project's catalog: its own types shadow the fleet's.
     const [types, { rows }] = await Promise.all([
       fetchDelegateTypes((message) => {
         throw new Error(message);
-      }),
+      }, projectId),
       fetchInstances(),
     ]);
     const { type, harness, model } = resolveSpawnType(types, {

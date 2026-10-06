@@ -59,6 +59,7 @@ import {
   folderPath,
   writeFolderFiles,
 } from "./project-folder";
+import { placesChanged } from "./project-placements";
 import { unwatchedMode } from "./unwatched-mode";
 
 /** How long the name a caller gives a delegate or a started session may run. */
@@ -260,8 +261,8 @@ export interface WorkItemDeps {
     projectId: string,
     taskId: string
   ) => string | undefined;
-  /** The fleet's delegate types, read at dispatch. */
-  readonly types: () => DelegateType[];
+  /** The delegate types a session of the project sees (the fleet's without one), read at dispatch. */
+  readonly types: (projectId?: string | null) => DelegateType[];
 }
 
 /** The last path segment — how the rail names a session. */
@@ -903,7 +904,10 @@ export const createWorkItems = ({
     request: WorkItemRequest,
     parent: InstanceRow
   ): Settings => {
-    const { type, harness, model } = resolveSpawnType(types(), request);
+    const { type, harness, model } = resolveSpawnType(
+      types(parent.projectId),
+      request
+    );
     const settings: Settings = {
       type,
       harness,
@@ -1091,6 +1095,7 @@ export const createWorkItems = ({
           path: workspace.path,
           kind: "workspace",
         });
+        placesChanged(workspace.machineId, projectId);
       }
       return (
         db.updateWorkspace(workspace.id, { boundaryPid, state: "active" }) ??
@@ -1175,6 +1180,7 @@ export const createWorkItems = ({
           path: workspace.path,
           kind: "workspace",
         });
+        placesChanged(machineId, parent.projectId);
       }
       return spawnIn(workspace, settings, parent, request);
     }
@@ -2358,6 +2364,7 @@ export const createWorkItems = ({
         refOf(workspace),
       ]);
       db.removeWorkspacePlaces(workspace.machineId, workspace.path);
+      placesChanged(workspace.machineId);
       return (
         db.updateWorkspace(workspace.id, {
           state: "archived",

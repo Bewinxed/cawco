@@ -1,3 +1,4 @@
+import { denyToolsProblem } from "./delegate-types";
 import type { EffortLevel } from "./harness";
 
 export type WorkflowRunStatus =
@@ -938,8 +939,9 @@ export function validateWorkflow(
       if (node.timeoutMinutes !== undefined && !(node.timeoutMinutes > 0)) {
         add("Timeout must be positive.", node.id);
       }
-      if (node.denyTools?.length && node.harness !== "claude") {
-        add("Denied tools are supported only by Claude.", node.id);
+      const denied = denyToolsProblem(node.harness, node.denyTools ?? []);
+      if (denied) {
+        add(`Denied tools: ${denied}.`, node.id);
       }
       if (node.harness === "pi" && node.effort) {
         add("The pi harness cannot enforce an effort level.", node.id);

@@ -98,6 +98,11 @@ import {
 } from "@opencode-ai/sdk/v2";
 import { workspacesDir } from "../boundary";
 import { delegationHubUrl, harnessMcpUrl } from "../delegation";
+import {
+  type OpencodeDenySettings,
+  opencodeDenySettings,
+  resolvedDenyList,
+} from "../denied-tools";
 import type { Harness, HarnessContext, HarnessSession } from "../harness";
 import { HarnessRecoveryRefused, SessionAddressRefused } from "../harness";
 import { isMachineAgent } from "../machine-agent";
@@ -1381,6 +1386,8 @@ export class OpencodeSession implements HarnessSession {
   readonly #prepareDispatch: () => Promise<void>;
   readonly #workflowStepId?: string;
   readonly #canDelegate?: boolean;
+  /** Tools denied to this session (fleet, type and spawn), switched off on every prompt. */
+  readonly #deniedTools: OpencodeDenySettings["tools"];
 
   constructor(
     instanceId: string,
@@ -1397,7 +1404,8 @@ export class OpencodeSession implements HarnessSession {
     prepareDispatch: () => Promise<void>,
     effort?: EffortLevel,
     workflowStepId?: string,
-    canDelegate?: boolean
+    canDelegate?: boolean,
+    deniedTools: OpencodeDenySettings["tools"] = {}
   ) {
     this.instanceId = instanceId;
     this.#ctx = ctx;
@@ -1415,6 +1423,7 @@ export class OpencodeSession implements HarnessSession {
     this.#prepareDispatch = prepareDispatch;
     this.#workflowStepId = workflowStepId;
     this.#canDelegate = canDelegate;
+    this.#deniedTools = deniedTools;
   }
 
   /**
@@ -2941,6 +2950,8 @@ export class OpencodeSession implements HarnessSession {
               "list_workflows",
             ].map((name) => [`cawco_${name}`, this.#canDelegate !== false])
           ),
+          // Denied last, so a denial is never switched back on above.
+          ...this.#deniedTools,
         },
         ...(this.#effort ? { variant: this.#effort } : {}),
         // A bare model id (no provider) is left to opencode's default; never send `providerID: ''`.
@@ -5620,6 +5631,12 @@ export class OpencodeHarness implements Harness {
     if (existing?.running && spec.resume?.atMessage && !spec.resume.fork) {
       throw new Error("OpenCode cannot rewind a running incumbent turn.");
     }
+    // The fleet's baseline, the delegate type's and the spawn's own denials —
+    // the three layers the claude adapter unions too — as OpenCode denies them.
+    const denied = opencodeDenySettings([
+      ...(await resolvedDenyList()),
+      ...(spec.denyTools ?? []),
+    ]);
     // cbd4c3a0 required the correct hub and caller identity, not readiness of
     // every remote server. Config provenance is fast; MCP health is asynchronous.
     if (!existing?.running) {
@@ -5689,7 +5706,13 @@ export class OpencodeHarness implements Harness {
       sessionId = spec.resume.sessionKey;
     } else {
       const created = await client.session.create(
-        { directory: ctx.cwd },
+        {
+          directory: ctx.cwd,
+          // Kept with the session, so a resume is denied the same tools.
+          ...(denied.permission.length > 0
+            ? { permission: denied.permission }
+            : {}),
+        },
         { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
       );
       if (created.error || !created.data) {
@@ -5778,7 +5801,8 @@ export class OpencodeHarness implements Harness {
       () => this.#prepareDispatch(session),
       spec.effort,
       spec.workflowStepId,
-      spec.canDelegate
+      spec.canDelegate,
+      denied.tools
     );
     this.#sessionOwners.set(ctx.instanceId, identity);
     // A session an earlier agent left mid-turn: the hub still waits on that

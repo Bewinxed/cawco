@@ -275,7 +275,24 @@ export function createDelegationMcp(options: {
     authorization?: string
   ): Promise<CallToolResult | undefined> => {
     if (name === "list_delegate_types") {
-      const entry = describe().find((tool) => tool.name === name);
+      // Anyone may read it; a caller the bridge can name reads its project's
+      // catalog, where the project's own types shadow the fleet's.
+      let projectId: string | undefined;
+      try {
+        projectId =
+          actorOf(binding, args, authorization).projectId ?? undefined;
+      } catch {
+        projectId = undefined;
+      }
+      const entry = tools({
+        instanceId: "",
+        instanceById: options.instanceById,
+        cwd: "",
+        projectId,
+        emit: () => {
+          throw new Error("Reading the catalog emits nothing");
+        },
+      }).find((tool) => tool.name === name);
       if (!entry) {
         throw new Error(`Unknown tool ${name}`);
       }
@@ -341,6 +358,7 @@ export function createDelegationMcp(options: {
         workItem: !!actor.parentInstanceId,
         workflowStepId: actor.workflowStepId ?? undefined,
         workflowRunId: actor.workflowRunId ?? undefined,
+        projectId: actor.projectId ?? undefined,
         emit: (envelope) => emitted.push(envelope),
       }).find((tool) => tool.name === name);
       if (!entry) {

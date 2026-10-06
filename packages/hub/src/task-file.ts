@@ -269,13 +269,14 @@ const flowItems = (inner: string): string[] => {
   return items.map(unquoted).filter((item) => item !== "");
 };
 
-const scalarOf = (line: FrontMatterLine): string | null => {
+/** One field's scalar, its comment and quotes taken off; null when it is empty. */
+export const scalarOf = (line: FrontMatterLine): string | null => {
   const value = unquoted(withoutComment(line.value));
   return value === "" ? null : value;
 };
 
 /** `[a, b]`, a block sequence under the key, or one bare value as a list of one. */
-const listOf = (line: FrontMatterLine): string[] | undefined => {
+export const listOf = (line: FrontMatterLine): string[] | undefined => {
   const value = withoutComment(line.value);
   if (value.startsWith("[")) {
     return value.endsWith("]") ? flowItems(value.slice(1, -1)) : undefined;

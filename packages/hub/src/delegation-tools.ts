@@ -364,7 +364,8 @@ export function handoffTools(deps: HandoffDeps) {
     ),
     tool(
       "list_delegate_types",
-      "Read the live fleet delegate catalog: each type's task description, harness, model, effort, skills, denied tools, and permission to delegate further. " +
+      "Read the live delegate catalog: each type's task description, harness, model, effort, skills, denied tools, and permission to delegate further. " +
+        "In a project, its own types (source 'project') come first and replace fleet types of the same name. " +
         "Use this to inspect current routing before choosing a delegate type or answering questions about model mappings. " +
         "This is a read-only tool, not an MCP resource; it does not spawn sessions. Returned settings are configuration, not confirmation of a served model. " +
         "Named delegate dispatch reads this same live catalog.",

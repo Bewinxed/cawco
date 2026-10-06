@@ -215,7 +215,8 @@ export const folderPath = (raw: string): string => {
   return parts.join("/");
 };
 
-const projectRoot = (projectId: string): string => {
+/** The project's folder on disk, whether or not it has been made; refuses anything that is not a project id. */
+export const projectRoot = (projectId: string): string => {
   if (!PROJECT_ID.test(projectId)) {
     throw new FolderRefusal(400, `${projectId} is not a project id.`);
   }

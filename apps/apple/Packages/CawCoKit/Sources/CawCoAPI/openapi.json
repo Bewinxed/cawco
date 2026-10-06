@@ -244,6 +244,103 @@
         }
       }
     },
+    "/api/projects/{id}/delegate-types": {
+      "get": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiProjectsByIdDelegateTypes",
+        "responses": {
+          "200": {
+            "description": "getApiProjectsByIdDelegateTypes 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DelegateCatalog"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "getApiProjectsByIdDelegateTypes 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/fleet/choices": {
+      "get": {
+        "operationId": "getApiFleetChoices",
+        "responses": {
+          "200": {
+            "description": "getApiFleetChoices 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FleetChoices"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "delegates": {
+                    "type": "boolean"
+                  },
+                  "todos": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "putApiFleetChoices",
+        "responses": {
+          "200": {
+            "description": "putApiFleetChoices 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FleetChoices"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "putApiFleetChoices 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects/{id}/folder": {
       "get": {
         "parameters": [
@@ -14418,6 +14515,175 @@
           "harness",
           "model",
           "name"
+        ]
+      },
+      "DelegateCatalog": {
+        "type": "object",
+        "properties": {
+          "problems": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TypeFileProblem"
+            }
+          },
+          "types": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CatalogType"
+            }
+          }
+        },
+        "required": [
+          "problems",
+          "types"
+        ]
+      },
+      "TypeFileProblem": {
+        "description": "A file under `delegates/` that did not make a type, or a field one ignored.",
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "problem": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "problem"
+        ]
+      },
+      "CatalogType": {
+        "description": "One entry of a catalog, saying where it comes from.",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/DelegateType"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "budget": {
+                "$ref": "#/components/schemas/DelegateBudget",
+                "description": "A type's spending limit: any of cost, turns and time, per a period."
+              },
+              "brief": {
+                "description": "The type's brief: the file's body.",
+                "type": "string"
+              },
+              "lands": {
+                "enum": [
+                  "branch",
+                  "main",
+                  "none",
+                  "pr"
+                ],
+                "type": "string"
+              },
+              "mcp": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "path": {
+                "description": "The file it was read from, inside the project folder.",
+                "type": "string"
+              },
+              "role": {
+                "enum": [
+                  "delegate",
+                  "lead",
+                  "overseer",
+                  "web-facing",
+                  "worker"
+                ],
+                "type": "string"
+              },
+              "shadows": {
+                "description": "A project type that replaces a fleet type of the same name.",
+                "type": "boolean"
+              },
+              "source": {
+                "enum": [
+                  "fleet",
+                  "project"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "source"
+            ]
+          }
+        ]
+      },
+      "DelegateBudget": {
+        "description": "A type's spending limit: any of cost, turns and time, per a period.",
+        "type": "object",
+        "properties": {
+          "minutes": {
+            "type": "number"
+          },
+          "per": {
+            "enum": [
+              "attempt",
+              "day",
+              "month",
+              "task",
+              "week"
+            ],
+            "type": "string"
+          },
+          "turns": {
+            "type": "number"
+          },
+          "usd": {
+            "type": "number"
+          }
+        }
+      },
+      "FleetChoices": {
+        "description": "What `GET /api/fleet/choices` answers.",
+        "type": "object",
+        "properties": {
+          "delegates": {
+            "description": "Use delegates instead of each harness's subagents.",
+            "type": "boolean"
+          },
+          "deniedTools": {
+            "description": "The baseline as stored, every choice and every other denial in it.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "todos": {
+            "description": "Use CawCo's to-dos instead of each harness's own list.",
+            "type": "boolean"
+          },
+          "tools": {
+            "type": "object",
+            "properties": {
+              "delegates": {
+                "type": "object"
+              },
+              "todos": {
+                "type": "object"
+              }
+            },
+            "required": [
+              "delegates",
+              "todos"
+            ],
+            "description": "What each choice denies, per harness."
+          }
+        },
+        "required": [
+          "delegates",
+          "deniedTools",
+          "todos",
+          "tools"
         ]
       },
       "FolderListing": {
