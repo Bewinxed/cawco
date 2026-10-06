@@ -862,7 +862,8 @@ The tray chip overflows at 320px wide…</pre>
         <li><code>finish_item</code> lists any unticked to-dos, and the session ticks or explains each one, like an acceptance check.</li>
         <li>Plan items still open at the end become proposed to-dos.</li>
       </ul>
-      <p class="a">The toggle stays as an option per delegate type, "CawCo's list only". It denies the native task tools and gives <code>todo_write</code> an attempt scope. It can be enforced on Claude Code today, because <code>denyTools</code> writes the session's deny settings; the OpenCode adapter can't enforce it yet. pi has no native list, so it always uses CawCo's.</p>
+      <p class="q">I already disable Claude's subagents in favour of delegates, so onboarding should let the user decide the same for to-dos; each harness can turn its own off.</p>
+      <p class="a">Agreed. Onboarding asks both once, at the fleet level: delegates instead of subagents, and CawCo's to-dos instead of each harness's own list. Both use the fleet's denied-tools baseline you already use for subagents, and both can be changed in Settings or per delegate type. Claude Code denies <code>TaskCreate</code>, <code>TaskUpdate</code>, <code>TaskList</code> and <code>TaskGet</code>. OpenCode denies <code>todowrite</code> and <code>todoread</code> in its <code>permission</code> config; CawCo's OpenCode adapter has to learn to write that. pi has no list of its own. With CawCo's to-dos on, <code>todo_write</code> also holds the session's steps, and the progress ring reads CawCo's list. With it off, the id link above keeps the two in step.</p>
     </article>
     <article class="ans">
       <header><span class="did">D14</span><h3>Our own three skills</h3></header>
