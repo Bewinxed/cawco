@@ -218,6 +218,8 @@ export interface Notice {
   lines: NoticeLine[];
   /** Ids of the machines it stands for. */
   machineIds: string[];
+  /** Every release-note line, for the notice kind that lists them all. */
+  notes?: string[];
   title: string;
   /** The version the notice speaks of, as shown. */
   version: string;
@@ -458,11 +460,18 @@ function heldBack({ input, machines }: Ctx): Notice | null {
   };
 }
 
-/** 6. A build landed that nobody watched. */
-function unwatched({ input, machines }: Ctx): Notice | null {
+/**
+ * 6. A build landed that nobody watched. The toast shows the first three
+ * note lines; the Home card shows `notes`, every line.
+ */
+export function updatedNotice(
+  machines: UpdateMachine[],
+  policy: BinaryUpdatePolicy
+): Notice | null {
   const landed = machines
+    .filter((m) => isOnline(m) && m.binaryUpdate)
     .filter((m) => {
-      const { row } = cellFor(m, input.policy);
+      const { row } = cellFor(m, policy);
       return (row === 8 || row === 12) && stateOf(m).unseen;
     })
     .sort(byName);
@@ -477,6 +486,7 @@ function unwatched({ input, machines }: Ctx): Notice | null {
     title: `CawCo updated to ${v}`,
     failed: false,
     lines: noticeNotes(state.notes),
+    notes: noteLines(state.notes),
     configure: true,
     caw: { status: "sleeping", moves: false },
     machineIds: landed.map((m) => m.machineId),
@@ -509,6 +519,6 @@ export function noticeFor(
     landedAll(ctx) ??
     unlessDismissed(waitsForYou(ctx), input) ??
     unlessDismissed(heldBack(ctx), input) ??
-    unwatched(ctx)
+    updatedNotice(input.machines, input.policy)
   );
 }

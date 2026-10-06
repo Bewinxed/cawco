@@ -35,8 +35,6 @@ function stored(): string[] {
 export function startUpdateNotice(): () => void {
   return $effect.root(() => {
     const dismissed = new SvelteSet<string>(stored());
-    /** Machines this tab acknowledged, by `machineId:updatedAt`: seen, before the socket says so. */
-    const seen = new SvelteSet<string>();
     /** The commanded set the person dismissed notice 2 for. */
     let installingDismissed = $state("");
     const view = $state<{ notice: Notice; onPage: boolean }>({
@@ -48,19 +46,21 @@ export function startUpdateNotice(): () => void {
     let ours = false;
 
     const commandedKey = () => [...updates.commanded].sort().join(",");
-    const machines = (): UpdateMachine[] =>
-      cawco.machines.map((machine) => {
-        const state = machine.binaryUpdate;
-        return state && seen.has(`${machine.machineId}:${state.updatedAt}`)
-          ? { ...machine, binaryUpdate: { ...state, unseen: false } }
-          : machine;
+    const machines = (): UpdateMachine[] => updates.withSeen(cawco.machines);
+
+    /** The `machineId:updatedAt` keys of the machines an updated notice stands for. */
+    const updatedKeys = (ids: string[]): string[] =>
+      ids.flatMap((id) => {
+        const state = cawco.machines.find(
+          (row) => row.machineId === id
+        )?.binaryUpdate;
+        return state ? [`${id}:${state.updatedAt}`] : [];
       });
 
     const acknowledge = (ids: string[]) => {
       for (const id of ids) {
         const machine = cawco.machines.find((row) => row.machineId === id);
         if (machine?.binaryUpdate?.unseen) {
-          seen.add(`${id}:${machine.binaryUpdate.updatedAt}`);
           // biome-ignore lint/complexity/noVoid: the acknowledgement reports through the next machine frame
           void updates.acknowledge(machine);
         }
@@ -76,8 +76,14 @@ export function startUpdateNotice(): () => void {
       const { notice } = view;
       switch (notice.kind) {
         case 1:
-        case 6:
           acknowledge(notice.machineIds);
+          break;
+        case 6:
+          // Only hides the toast in this tab; the Home card acknowledges.
+          for (const key of updatedKeys(notice.machineIds)) {
+            dismissed.add(key);
+          }
+          localStorage.setItem(STORE, JSON.stringify([...dismissed]));
           break;
         case 2:
           installingDismissed = commandedKey();
@@ -133,9 +139,15 @@ export function startUpdateNotice(): () => void {
             policy,
           }
         : null;
-      const notice = input
+      const found = input
         ? noticeFor(input, (hostname) => machineLabel(hostname))
         : null;
+      // An updated notice the person closed stays closed in this tab.
+      const notice =
+        found?.kind === 6 &&
+        updatedKeys(found.machineIds).every((key) => dismissed.has(key))
+          ? null
+          : found;
       const onPage = page.url.pathname === "/config/updates";
       untrack(() => {
         if (!notice) {

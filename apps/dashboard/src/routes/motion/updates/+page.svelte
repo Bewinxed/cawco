@@ -12,12 +12,14 @@
     BinaryUpdateState,
   } from "@cawco/core/binary-updates";
   import { toast } from "svelte-sonner";
+  import UpdateCard from "#lib/cawco/home/UpdateCard.svelte";
   import ChannelCards from "#lib/cawco/updates/ChannelCards.svelte";
   import {
     type Notice,
     type NoticeInput,
     noticeFor,
     type UpdateMachine,
+    updatedNotice,
   } from "#lib/cawco/updates/model.js";
   import UpdateNotice from "#lib/cawco/updates/UpdateNotice.svelte";
   import UpdateTable from "#lib/cawco/updates/UpdateTable.svelte";
@@ -209,6 +211,15 @@
     ),
   ].filter((notice): notice is Notice => notice !== null);
 
+  const UPDATED = updatedNotice(
+    trio([
+      { phase: "installed", installedVersion: "1.4.2", unseen: true },
+      {},
+      {},
+    ]),
+    ON
+  ) as Notice;
+
   // The real toast: one id, and the box changes in place.
   const ID = "cawco-update-demo";
   const demo = $state<{ notice: Notice; onPage: boolean }>({
@@ -267,6 +278,11 @@
       </div>
     {/each}
   </div>
+
+  <h1>Updated, unseen, on Home</h1>
+  <div class="home-card" data-states="update-card">
+    <UpdateCard notice={UPDATED} ondismiss={noop} />
+  </div>
 </main>
 
 <style>
@@ -295,6 +311,9 @@
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(356px, 1fr));
     gap: var(--space-5);
+  }
+  .home-card {
+    max-inline-size: 440px;
   }
   .one {
     display: grid;

@@ -15,15 +15,19 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import { IconPlus } from "#lib/icons.js";
   import Attention from "~icons/solar/hand-shake-bold-duotone";
+  import { cawco } from "../client.svelte";
   import { crossIn, crossOut, morphMs } from "../motion/curves.svelte";
   import { reflow } from "../motion/rows.svelte";
   import { newSession } from "../spawn/new-session.svelte";
   import UsageMeter from "../UsageMeter.svelte";
+  import { updatedNotice } from "../updates/model";
+  import { updates } from "../updates/updates.svelte";
   import Caw from "./Caw.svelte";
   import HomeRecent from "./HomeRecent.svelte";
   import { home } from "./home-state.svelte";
   import NeedsCard from "./NeedsCard.svelte";
   import StatusLine from "./StatusLine.svelte";
+  import UpdateCard from "./UpdateCard.svelte";
   import WorkTabs from "./WorkTabs.svelte";
 
   let {
@@ -34,6 +38,21 @@
   } = $props();
 
   const stale = $derived(!home.live);
+  /** The update nobody has seen, until it is dismissed. */
+  const updated = $derived(
+    updates.policy
+      ? updatedNotice(updates.withSeen(cawco.machines), updates.policy)
+      : null
+  );
+  function dismissUpdate(): void {
+    for (const id of updated?.machineIds ?? []) {
+      const machine = cawco.machines.find((row) => row.machineId === id);
+      if (machine) {
+        // biome-ignore lint/complexity/noVoid: the acknowledgement reports through the next machine frame
+        void updates.acknowledge(machine);
+      }
+    }
+  }
   /**
    * The tabs are changing their rows and driving the list's height
    * themselves (WorkTabs `relaying`): the home is not the rail's reflow's
@@ -126,6 +145,19 @@
        `waiting`), so the tab row is where it will be and the list
        cross-fades in under it; nothing else here is claimed before then. -->
   <div class="groups">
+    {#if variant === "page" && updated}
+      <!-- An update nobody has seen stays here until it is dismissed. -->
+      <section
+        aria-label="Update"
+        class="group"
+        data-flip="box"
+        in:crossIn
+        out:crossOut
+      >
+        <UpdateCard notice={updated} ondismiss={dismissUpdate} />
+      </section>
+    {/if}
+
     {#if home.ready && home.needs.length > 0}
       <!-- The headline above names this group and counts it; a header
            here would say the same twice. -->

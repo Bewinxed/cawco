@@ -129,7 +129,26 @@ class Updates {
     }).catch(() => null);
   }
 
-  async acknowledge(machine: { machineId: string }): Promise<void> {
+  /** Machines acknowledged here, by `machineId:updatedAt`: seen before the socket says so. */
+  seen = new SvelteSet<string>();
+
+  /** The machines with the optimistic `seen` marks applied. */
+  withSeen<T extends UpdateMachine>(machines: T[]): T[] {
+    return machines.map((machine) => {
+      const state = machine.binaryUpdate;
+      return state && this.seen.has(`${machine.machineId}:${state.updatedAt}`)
+        ? { ...machine, binaryUpdate: { ...state, unseen: false } }
+        : machine;
+    });
+  }
+
+  async acknowledge(machine: {
+    machineId: string;
+    binaryUpdate?: { updatedAt: number };
+  }): Promise<void> {
+    if (machine.binaryUpdate) {
+      this.seen.add(`${machine.machineId}:${machine.binaryUpdate.updatedAt}`);
+    }
     await fetch(
       `/api/binary-updates/machines/${machine.machineId}/acknowledge`,
       { method: "POST" }
