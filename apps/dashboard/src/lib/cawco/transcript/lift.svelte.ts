@@ -260,8 +260,12 @@ export function startFlight(words: Node, box: WordsBox) {
  */
 export const readFirst = (agent: string): string =>
   `${agent} had already read your queued message, so it went as it was.`;
-export const notEdited = (reason?: string): string =>
-  `Couldn't edit your queued message${reason ? `: ${reason}` : ""}.`;
+/** A reason's own closing full stop, which the sentence around it supplies. */
+const CLOSING_STOP = /[.\s]+$/;
+export const notEdited = (reason?: string): string => {
+  const why = reason?.trim().replace(CLOSING_STOP, "");
+  return `Couldn't edit your queued message${why ? `: ${why}` : ""}.`;
+};
 const BACK = "Your edit is back in the composer.";
 
 /**
