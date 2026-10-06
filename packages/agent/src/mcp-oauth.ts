@@ -1,13 +1,30 @@
 import { CAWCO_MCP_CALLBACK_PORT } from "@cawco/core";
+import {
+  AGENT_RESTARTING,
+  RESUMABLE_CAWCO_TOOLS,
+} from "@cawco/core/binary-updates";
+import {
+  fenced,
+  holdRestart,
+  lowerFence,
+  raiseFence,
+  restartReadiness,
+} from "./restart";
 
 const MCP_RELAY_PATH = /^\/mcp\/(?:cawco|fleet\/[^/]+)$/;
 const TOOL_READ_PATH =
   /^\/api\/(?:instances|delegation\/tools|workflow-runs\/[^/]+\/state\/[^/]+)$/;
 const TOOL_WRITE_PATH =
   /^\/api\/(?:delegation\/call\/[^/]+|workflow-steps\/[^/]+\/result|workflow-runs\/[^/]+\/state\/[^/]+)$/;
+const DELEGATION_CALL_PATH = /^\/api\/delegation\/call\//;
+const STEP_RESULT_PATH = /^\/api\/workflow-steps\//;
 
 /** Relay only MCP and the generated tools' exact API routes; never arbitrary hub paths. */
-async function relayMcp(request: Request, hubUrl: string): Promise<Response> {
+async function relayMcp(
+  request: Request,
+  body: ArrayBuffer | undefined,
+  hubUrl: string
+): Promise<Response> {
   const incoming = new URL(request.url);
   if (incoming.hostname !== "127.0.0.1") {
     return new Response("MCP relay requires a loopback host.", { status: 403 });
@@ -32,9 +49,7 @@ async function relayMcp(request: Request, hubUrl: string): Promise<Response> {
     const response = await fetch(hub, {
       method: request.method,
       headers,
-      body: ["GET", "HEAD"].includes(request.method)
-        ? undefined
-        : await request.arrayBuffer(),
+      body,
       signal: request.signal,
       redirect: "error",
       timeout: false,
@@ -57,6 +72,141 @@ async function relayMcp(request: Request, hubUrl: string): Promise<Response> {
   }
 }
 
+const parsed = (body: ArrayBuffer): unknown => {
+  try {
+    return JSON.parse(new TextDecoder().decode(body));
+  } catch {
+    return undefined;
+  }
+};
+
+/**
+ * The tool a relayed request calls, when a restart cutting it would lose
+ * work: undefined for a read, for MCP's own handshake and listing, and for a
+ * CawCo tool the hub finishes by itself ({@link RESUMABLE_CAWCO_TOOLS}). A
+ * fleet server's tools are not CawCo's, so every call to one counts.
+ */
+function heldCall(
+  pathname: string,
+  body: ArrayBuffer | undefined
+): string | undefined {
+  if (!body) {
+    return undefined;
+  }
+  if (MCP_RELAY_PATH.test(pathname)) {
+    return heldMcpCall(pathname, parsed(body));
+  }
+  if (!DELEGATION_CALL_PATH.test(pathname)) {
+    return STEP_RESULT_PATH.test(pathname)
+      ? "submit_result"
+      : "workflow_state_write";
+  }
+  const name = (parsed(body) as { name?: unknown } | undefined)?.name;
+  if (typeof name !== "string") {
+    return "unnamed";
+  }
+  return RESUMABLE_CAWCO_TOOLS.has(name) ? undefined : name;
+}
+
+/** The first `tools/call` in a JSON-RPC message (or batch) that holds, by its tool's name. */
+function heldMcpCall(pathname: string, message: unknown): string | undefined {
+  const cawco = pathname === "/mcp/cawco";
+  for (const one of Array.isArray(message) ? message : [message]) {
+    const call = one as
+      | { method?: unknown; params?: { name?: unknown } }
+      | undefined;
+    const name =
+      typeof call?.params?.name === "string" ? call.params.name : "unnamed";
+    if (call?.method !== "tools/call") {
+      continue;
+    }
+    if (!cawco) {
+      return `${pathname.slice("/mcp/fleet/".length)}/${name}`;
+    }
+    if (!RESUMABLE_CAWCO_TOOLS.has(name)) {
+      return name;
+    }
+  }
+  return undefined;
+}
+
+/** A relayed call's response, holding the restart until its body has ended either way. */
+function holdingUntilEnd(response: Response, release: () => void): Response {
+  if (!response.body) {
+    release();
+    return response;
+  }
+  const reader = response.body.getReader();
+  return new Response(
+    new ReadableStream({
+      async pull(controller) {
+        try {
+          const next = await reader.read();
+          if (next.done) {
+            release();
+            controller.close();
+          } else {
+            controller.enqueue(next.value);
+          }
+        } catch (error) {
+          release();
+          controller.error(error);
+        }
+      },
+      async cancel(reason) {
+        try {
+          await reader.cancel(reason);
+        } finally {
+          release();
+        }
+      },
+    }),
+    { status: response.status, headers: response.headers }
+  );
+}
+
+/**
+ * The refusal a raised fence gives a call a restart would cut: 503, with the
+ * reason in words, and for an MCP request a JSON-RPC error under its own id so
+ * the harness can hand the words to its model.
+ */
+function notStarted(body: ArrayBuffer | undefined): Response {
+  const message = body ? parsed(body) : undefined;
+  const id = (message as { id?: unknown } | undefined)?.id;
+  return Response.json(
+    id === undefined
+      ? { error: AGENT_RESTARTING, started: false }
+      : {
+          jsonrpc: "2.0",
+          id,
+          error: { code: -32_000, message: AGENT_RESTARTING },
+        },
+    { status: 503, headers: { "Retry-After": "60" } }
+  );
+}
+
+/**
+ * `cawco service restart agent` asks here, on this machine, what a restart
+ * would cut, and raises its own fence for the moment between its last look
+ * and the restart. Never from a page: a browser sends `Origin`.
+ */
+async function restartRoute(request: Request): Promise<Response> {
+  if (request.headers.has("Origin")) {
+    return new Response("Not from a browser.", { status: 403 });
+  }
+  if (request.method === "POST") {
+    const { ms } = (await request.json().catch(() => ({}))) as {
+      ms?: unknown;
+    };
+    if (typeof ms === "number" && ms > 0) {
+      raiseFence("service-restart", Math.min(ms, 5 * 60_000));
+    } else {
+      lowerFence("service-restart");
+    }
+  }
+  return Response.json({ ...restartReadiness(), fenced: fenced() });
+}
+
 /** One stable loopback endpoint for every harness and the browser's OAuth callback. */
 export const startMcpGateway = (hubUrl: () => string) => {
   try {
@@ -68,14 +218,41 @@ export const startMcpGateway = (hubUrl: () => string) => {
       idleTimeout: 0,
       async fetch(request) {
         const url = new URL(request.url);
-        if (
-          MCP_RELAY_PATH.test(url.pathname) ||
-          (request.method === "GET" && TOOL_READ_PATH.test(url.pathname)) ||
-          (request.method === "POST" && TOOL_WRITE_PATH.test(url.pathname))
-        ) {
-          return await relayMcp(request, hubUrl());
+        if (url.pathname === "/restart" || url.pathname === "/restart/fence") {
+          return await restartRoute(request);
         }
-        return new Response("Not found.", { status: 404 });
+        if (
+          !(
+            MCP_RELAY_PATH.test(url.pathname) ||
+            (request.method === "GET" && TOOL_READ_PATH.test(url.pathname)) ||
+            (request.method === "POST" && TOOL_WRITE_PATH.test(url.pathname))
+          )
+        ) {
+          return new Response("Not found.", { status: 404 });
+        }
+        const body = ["GET", "HEAD"].includes(request.method)
+          ? undefined
+          : await request.arrayBuffer();
+        const call = heldCall(url.pathname, body);
+        if (call === undefined) {
+          return await relayMcp(request, body, hubUrl());
+        }
+        if (fenced()) {
+          return notStarted(body);
+        }
+        const release = holdRestart(
+          "tool-call",
+          `${call}#${crypto.randomUUID().slice(0, 8)}`
+        );
+        try {
+          return holdingUntilEnd(
+            await relayMcp(request, body, hubUrl()),
+            release
+          );
+        } catch (error) {
+          release();
+          throw error;
+        }
       },
     });
   } catch (error) {

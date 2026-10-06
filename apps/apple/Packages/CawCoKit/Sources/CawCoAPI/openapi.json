@@ -12357,6 +12357,13 @@
             ],
             "type": "string"
           },
+          "cut": {
+            "description": "What the last install cut: the work in flight when it was applied anyway,\nbecause a person pressed Install now or auto-update had waited its cap.\nKept until the next install.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RestartHold"
+            }
+          },
           "error": {
             "type": "string"
           },
@@ -12397,8 +12404,15 @@
             "description": "When anything in this state last changed. Not an identity for anything.",
             "type": "number"
           },
-          "waitingFor": {
-            "description": "Sessions working now, while `ready` waits for the machine to be idle.",
+          "waitingOn": {
+            "description": "What `ready` waits for: the work in flight a restart would cut now.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RestartHold"
+            }
+          },
+          "waitingSince": {
+            "description": "When auto-update first waited on work in flight; it installs anyway once its cap has passed.",
             "type": "number"
           }
         },
@@ -12409,6 +12423,41 @@
           "phase",
           "updatedAt"
         ]
+      },
+      "RestartHold": {
+        "description": "One kind of work a restart would cut now, and what each piece is (a session, a call).",
+        "type": "object",
+        "properties": {
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "reason": {
+            "$ref": "#/components/schemas/RestartHoldReason"
+          }
+        },
+        "required": [
+          "ids",
+          "reason"
+        ]
+      },
+      "RestartHoldReason": {
+        "description": "Kinds of work a restart of the agent or the hub would cut. A turn is not one:\nthe session keeper runs it, and the next agent takes it over where it stands.\n\n- `custody`: the agent is still taking over the sessions the keeper holds.\n- `starting`: a session start the agent is in the middle of.\n- `image`: an image generation the agent is running.\n- `workspace`: a delegate's workspace the agent is cutting or archiving.\n- `command`: a command the hub asked the agent to run (a check, a step).\n- `tool-call`: a tool call the agent relays to its hub.\n- `hub-tool-call`: a CawCo tool call the hub is answering, from any machine.\n- `write`: a message or an answer the agent is handing to a harness.\n- `opencode`: an OpenCode server operation the agent runs (a config apply,\n  a session opening, an MCP change, a handoff between server generations).\n- `opencode-send`: messages the agent holds for OpenCode, not yet handed over.",
+        "enum": [
+          "command",
+          "custody",
+          "hub-tool-call",
+          "image",
+          "opencode",
+          "opencode-send",
+          "starting",
+          "tool-call",
+          "workspace",
+          "write"
+        ],
+        "type": "string"
       },
       "BinaryUpdateLanding": {
         "description": "An install or a rollback that finished, held until a person acknowledges\nthat very one. It is the event a notice announces, so nothing but the\nfinish of an install or rollback sets it, and only an acknowledgement\nnaming its `at` clears it: the state's other writes carry it through\nunchanged, and the session keeper moving to the build later is part of\nthe same update, not a new one.",

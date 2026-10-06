@@ -52,30 +52,38 @@ Services
   exactly one. A machine nobody points a browser at wants \`agent\` alone.
 
   \`install --dev\` runs them out of the checkout instead of the build: the hub
-  watches its own source and restarts itself on every edit, which costs nothing
-  because the sessions live in the daemons and reconnect; the dashboard runs
-  vite, which reloads an edited file without restarting at all. The agent is
-  never watched in either mode — it hosts your sessions, and a restart ends
-  whatever turn is in flight. \`status\` reads the mode back out of the unit.
+  watches its own source and restarts itself on every edit, which costs little
+  because the sessions live in the daemons and reconnect (only the tool calls
+  it is answering then are cut); the dashboard runs vite, which reloads an
+  edited file without restarting at all. The agent is never watched in either
+  mode. \`status\` reads the mode back out of the unit.
 
-  \`restart agent\` is therefore always deliberate: it asks the hub how many of
-  this machine's sessions are mid-turn and refuses while any are. \`--when-idle\`
-  waits up to five minutes for those turns to finish and then restarts; \`--force\`
-  restarts regardless, and is also the only way through when the hub cannot be
-  reached to answer the question at all.
+  A turn outlives an agent restart: the session keeper runs it and the next
+  agent takes it over. What the restart does cut is what the agent carries
+  itself — tool calls it relays to the hub, image generations, commands the
+  hub asked it to run, a session it is starting, a message it is handing over.
+  So \`restart agent\` asks the agent what it would cut now and refuses while
+  anything; \`restart sessiond\` asks the hub whether this machine's sessions
+  are mid-turn and refuses while any are, since the keeper's restart kills
+  them. \`--when-idle\` waits up to five minutes for that to clear and then
+  restarts; \`--force\` restarts regardless, and is also the only way through
+  when the question cannot be answered at all.
 
 Updating
-  A machine updates itself from the app: automatically once it is idle, when
-  auto-update is on, or when a person presses Install now. There is no update
-  command, and running the install script again on an installed machine only
-  reports what is installed.
+  A machine updates itself from the app: automatically when auto-update is on,
+  or when a person presses Install now. An update waits for what its restart
+  would cut, as \`restart agent\` does (on the hub's machine, also the tool calls
+  the hub is answering for every machine): up to 45 seconds for Install now,
+  which then installs anyway, and up to 30 minutes for auto-update. There is no
+  update command, and running the install script again on an installed machine
+  only reports what is installed.
 
 Options
   --hub <url>     hub to use, as http://host:port or ws://host:port/ws
   --token <token> a \`claude setup-token\` token, for \`login\` without a terminal
   --dev           for \`service install\`: run from the checkout, watching it
-  --when-idle     for \`service restart\`: wait for this machine's sessions first
-  --force         for \`service restart\`: restart the agent mid-turn anyway
+  --when-idle     for \`service restart\`: wait until the restart would cut nothing
+  --force         for \`service restart\`: restart now, cutting what is in flight
   --follow, -f    keep printing, for \`service logs\`
   --verbose       narrate the discovery ladder
   --help          this

@@ -9,6 +9,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { adminTools } from "./admin-tools";
 import { handoffInstructions, handoffTools } from "./delegation-tools";
+import { admitToolCall } from "./restart-holds";
 
 type ToolFactory = typeof handoffTools;
 
@@ -162,7 +163,28 @@ export function createDelegationMcp(options: {
     return candidates[0];
   };
 
+  /** Every call, MCP or REST, from any machine: held for a hub restart while it runs, refused behind its fence. */
   const call = async (
+    binding: string | null,
+    name: string,
+    args: Record<string, unknown>,
+    authorization?: string
+  ): Promise<CallToolResult> => {
+    const admitted = admitToolCall(name, binding ?? "unbound");
+    if ("refused" in admitted) {
+      return {
+        isError: true,
+        content: [{ type: "text", text: admitted.refused }],
+      };
+    }
+    try {
+      return await answer(binding, name, args, authorization);
+    } finally {
+      admitted.release();
+    }
+  };
+
+  const answer = async (
     binding: string | null,
     name: string,
     args: Record<string, unknown>,

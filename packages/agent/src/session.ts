@@ -59,6 +59,11 @@ import {
   withWorktreeLine,
   worstFleetState,
 } from "@cawco/core";
+import {
+  AGENT_RESTARTING,
+  mergeHolds,
+  type RestartHold,
+} from "@cawco/core/binary-updates";
 import { sessiondEndpoint } from "@cawco/core/sessiond";
 import { Effect } from "effect";
 import { type Boundary, boundaryFor } from "./boundary";
@@ -79,6 +84,7 @@ import { prepareFleetMcp } from "./mcp-launcher";
 import { startPreview, stopPreview, stopPreviews } from "./preview";
 import { parseProcId, SESSION_PROC_KINDS } from "./proc-id";
 import { type PromptWriteNotice, withPromptWrites } from "./prompt-writes";
+import { fenced } from "./restart";
 import { acknowledgeSessionCredential } from "./session-identity";
 import { endProc, procEpoch, SessiondClient } from "./sessiond-client";
 import { installTool, probeTools } from "./tools";
@@ -620,8 +626,11 @@ export class SessionSupervisor {
   readonly #pulseTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
   readonly #daemonFunctions: Record<string, ControlMethod> = {
+    // A generation runs in this process, so a restart cuts it: none starts behind a raised fence.
     [GENERATE_IMAGE]: (_instanceId, cwd, input) =>
-      generateImage(cwd as string, input),
+      fenced()
+        ? Promise.reject(new Error(AGENT_RESTARTING))
+        : generateImage(cwd as string, input),
     [PREVIEW_START]: (options) =>
       startPreview(options as Parameters<typeof startPreview>[0]),
     [PREVIEW_STOP]: (options) => stopPreview(options as { instanceId: string }),
@@ -869,11 +878,11 @@ export class SessionSupervisor {
   }
 
   /**
-   * The sessions mid-turn right now, with undecided custody counted busy. The answer
-   * {@link AGENT_BUSY} gives over the wire, and the one the deploy poller
-   * reads in-process: it runs in this same daemon, and asking its own
-   * supervisor through the hub it is itself connected to would be a round
-   * trip to learn a fact already held in memory.
+   * The sessions mid-turn right now, with undecided custody counted busy: the
+   * answer {@link AGENT_BUSY} gives over the wire, for the hub's keep-alive and
+   * for a restart of the session keeper, which kills the turns. An agent
+   * restart reads {@link restartHolds} instead: the keeper runs a turn on
+   * through one.
    */
   async busyNow(): Promise<AgentBusyReport> {
     // Recovery must defer retirement, not the machine control reply. A hold
@@ -900,6 +909,41 @@ export class SessionSupervisor {
       recovery: this.#custodyState,
       ...(this.#custodyError ? { error: this.#custodyError } : {}),
     };
+  }
+
+  /**
+   * What an agent restart would cut that only the supervisor can see; what
+   * runs elsewhere in this process holds for itself (`restart.ts`). A running
+   * turn is not on it, nor an ask waiting for its answer: the keeper holds the
+   * child, and the next agent attaches to it and parks the ask again.
+   *
+   * - custody not decided yet: a restart now starts the takeover over;
+   * - a session start, or a reattach, in flight;
+   * - an image generation, a workspace being cut and a command the hub asked
+   *   for, each of which runs in this process (their queues name them);
+   * - each harness's own operations ({@link Harness.restartHolds}).
+   */
+  restartHolds(): RestartHold[] {
+    const queued = (prefix: string): string[] =>
+      [...this.#queues.keys()]
+        .filter((key) => key.startsWith(prefix))
+        .map((key) => key.slice(prefix.length));
+    return mergeHolds(
+      this.custodyReady
+        ? [{ reason: "starting", ids: [...this.#adopting.keys()] }]
+        : [
+            {
+              reason: "custody",
+              ids: [...this.#custodyInstances, `machine:${this.#custodyState}`],
+            },
+          ],
+      [
+        { reason: "image", ids: [...this.#imageRequests.keys()] },
+        { reason: "workspace", ids: queued("workspace:") },
+        { reason: "command", ids: queued("command:") },
+      ],
+      ...harnesses().map((adapter) => adapter.restartHolds?.() ?? [])
+    );
   }
 
   /** The pulse as it stands, computed from the parts rather than stored. */

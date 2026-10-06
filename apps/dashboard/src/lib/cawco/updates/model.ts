@@ -3,9 +3,11 @@
  * the Update cell of a machine, the Running cell, the rail's count and the
  * one notice. Nothing here knows Svelte.
  */
-import type {
-  BinaryUpdatePolicy,
-  BinaryUpdateState,
+import {
+  type BinaryUpdatePolicy,
+  type BinaryUpdateState,
+  holdPhrases,
+  UPDATE_WAIT_CAP_MS,
 } from "@cawco/core/binary-updates";
 
 /** The part of a machine row these functions read. */
@@ -77,6 +79,13 @@ const channelName = (channel: BinaryUpdatePolicy["channel"]): string =>
 const words = (...parts: string[]): string =>
   parts.filter((part) => part !== "").join(" ");
 
+/**
+ * What a ready build waits for, in words: the work in flight its restart
+ * would cut (`2 tool calls`, `1 image generation`). Empty when nothing holds it.
+ */
+const waitsOn = (u: BinaryUpdateState): string[] =>
+  u.phase === "ready" && u.waitingOn ? holdPhrases(u.waitingOn) : [];
+
 /** The cell a machine's Update column shows. First match wins. */
 export function cellFor(
   machine: UpdateMachine,
@@ -112,17 +121,21 @@ export function cellFor(
       return { ...EMPTY(5), icon: "spinner", text: words("Installing", v) };
     case "downloading":
       return { ...EMPTY(6), icon: "spinner", text: words("Downloading", v) };
-    case "ready":
+    case "ready": {
+      const waiting = waitsOn(u);
       return {
         ...EMPTY(7),
         icon: "clock",
-        text: words(v, "installs when idle"),
-        meta:
-          u.waitingFor !== undefined && u.waitingFor > 0
-            ? `${plural(u.waitingFor, "session")} working`
-            : undefined,
+        text: words(
+          v,
+          waiting.length > 0
+            ? "installs when its work in flight ends"
+            : "installs within a minute"
+        ),
+        meta: waiting.length > 0 ? waiting.join(" · ") : undefined,
         buttons: policy.autoUpdate ? [] : ["cancel"],
       };
+    }
     case "waiting-sessions": {
       if (u.installedVersion === u.availableVersion) {
         return EMPTY(8);
@@ -324,14 +337,11 @@ function installLine(machine: UpdateMachine, name: string): NoticeLine {
   if (state.phase === "downloading") {
     return { state: "busy", text: `${name} · downloading` };
   }
-  if (
-    state.phase === "ready" &&
-    state.waitingFor !== undefined &&
-    state.waitingFor > 0
-  ) {
+  const waiting = waitsOn(state);
+  if (waiting.length > 0) {
     return {
       state: "wait",
-      text: `· ${name} · waiting for ${plural(state.waitingFor, "session")}`,
+      text: `· ${name} · waiting for ${waiting.join(", ")}`,
     };
   }
   return { state: "wait", text: `· ${name} · waiting` };
@@ -429,17 +439,10 @@ function waitsForYou({ input, machines }: Ctx): Notice | null {
   };
 }
 
-/** 5. Auto-update is on and working sessions hold machines back. */
+/** 5. Auto-update is on and work in flight holds machines back. */
 function heldBack({ input, machines }: Ctx): Notice | null {
   const held = machines
-    .filter((m) => {
-      const state = stateOf(m);
-      return (
-        state.phase === "ready" &&
-        state.waitingFor !== undefined &&
-        state.waitingFor > 0
-      );
-    })
+    .filter((m) => waitsOn(stateOf(m)).length > 0)
     .sort(byName);
   const [lead] = held;
   if (!(input.policy.autoUpdate && lead)) {
@@ -452,7 +455,7 @@ function heldBack({ input, machines }: Ctx): Notice | null {
     title: `CawCo ${v} is ready`,
     failed: false,
     lines: noticeNotes(state.notes),
-    closing: `Each machine installs it when idle. ${held.length} ${held.length === 1 ? "is" : "are"} working now.`,
+    closing: `Each machine installs it once its work in flight ends, within ${UPDATE_WAIT_CAP_MS / 60_000} minutes. Turns keep running through it. ${held.length} ${held.length === 1 ? "is" : "are"} waiting now.`,
     configure: true,
     caw: { status: "ready", moves: false },
     machineIds: held.map((m) => m.machineId),

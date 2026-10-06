@@ -51,7 +51,7 @@ Away from a desk, the operator uses a Telegram bridge to receive permission prom
 - No in-app authentication — the Tailscale/LAN network boundary is the entire security model; anyone who can reach the hub socket can operate the fleet
 - The hub is never publicly bound (architectural law); external access requires a tunnel with its own auth layer
 - sessiond (process keeper) is deliberately protocol-blind and ships approximately never, so agent daemon deploys don't kill running sessions
-- The daemon is never auto-restarted mid-turn — deploys require `--when-idle` or `--force`
+- A daemon restart never cuts a turn (the keeper runs it, the next daemon takes it over); an update or `cawco service restart agent` waits, behind a fence, for what the daemon carries itself (relayed tool calls, image generations, commands, session starts, hand-offs to a harness) — Install now for up to 45 s, auto-update for up to 30 min, `--when-idle` for up to 5 min; an update that then installs anyway records what it cut, and only `--force` restarts the daemon through it by hand
 
 **Terminology (canonical — one concept, one term):**
 - **session**: one working instance of an agent on repo+machine+task

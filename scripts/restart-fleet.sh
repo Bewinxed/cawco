@@ -2,16 +2,20 @@
 #
 # Restart cawco's services after a delay, then prove the fleet came back.
 #
-# Why the delay: the agent hosts the Claude Code sessions, so the session that
-# asks for this restart is itself mid-turn, and `cawco service restart
-# --when-idle` would wait on a turn that cannot finish until the command it is
-# running returns. Sleeping first lets the asking turn end before the agent is
-# touched.
+# Why the delay: the session that asks for this restart is mid-turn, and its
+# turn is not what a restart cuts — the session keeper runs it through an agent
+# restart, and the next agent takes it over. What the restarts below do cut is
+# what the hub and the agent carry themselves: the tool calls the hub is
+# answering, and the calls, image generations, commands and hand-offs the agent
+# relays or runs. Sleeping first lets the asking turn finish its own tool calls
+# before the hub and the agent go. What is still in flight when they go is
+# logged below, so a cut is on record.
 #
 # Why this must be launched with `systemd-run --user` and not `nohup … &`:
-# cawco-agent.service is KillMode=control-group, and anything spawned from a
-# session lives in that cgroup. Restarting the agent would kill this script
-# halfway through. Run it in its own transient unit and it outlives the restart:
+# anything a session spawns lives in a service's cgroup (the session keeper's,
+# cawco-sessiond.service, KillMode=control-group), and this script must belong
+# to none of the units it restarts or that a later keeper restart would end.
+# Run it in its own transient unit and it outlives every restart it makes:
 #
 #   systemd-run --user --unit=cawco-restart --collect \
 #     scripts/restart-fleet.sh [delay-seconds]
@@ -22,6 +26,7 @@ set -uo pipefail
 
 DELAY="${1:-45}"
 HUB="http://127.0.0.1:${CAWCO_HUB_PORT:-3456}"
+AGENT_GATEWAY="http://127.0.0.1:${CAWCO_MCP_CALLBACK_PORT:-43879}"
 MACHINE_ID="${CAWCO_MACHINE_ID:-d04ca118428001f1}"
 LOG="${HOME}/.claude/cawco-restart.log"
 SIDECAR="${HOME}/.claude/cawco-fleet.json"
@@ -65,11 +70,15 @@ hub_healthy() { curl -fsS -m 3 "${HUB}/health"; }
 say "=== cawco restart requested; sleeping ${DELAY}s so the asking turn can finish ==="
 sleep "$DELAY"
 
-# The agent is only safe to bounce once no session is mid-turn. Ask the hub
-# rather than guessing; 'unknown' means the hub is unreachable, which is its own
-# problem and is reported instead of being restarted through.
-busy="$(curl -fsS -m 5 "${HUB}/api/agents/${MACHINE_ID}/busy" 2>/dev/null || echo '')"
-say "hub reports busy=${busy:-unreachable}"
+# What these restarts cut, asked of the two processes that know: the hub (the
+# tool calls it is answering, from every machine) and this machine's agent, on
+# its own loopback gateway (what it relays and runs). Turns are not on either
+# list. Recorded, not waited on: this script is the deliberate restart; use
+# `cawco service restart agent --when-idle` to wait instead.
+hub_cut="$(curl -fsS -m 5 "${HUB}/api/binary-updates/hub-readiness" 2>/dev/null || echo 'unreachable')"
+agent_cut="$(curl -fsS -m 5 "${AGENT_GATEWAY}/restart" 2>/dev/null || echo 'unreachable')"
+say "the hub restart cuts: ${hub_cut}"
+say "the agent restart cuts: ${agent_cut}"
 
 for id in "${SERVICES[@]}"; do
   unit="cawco-${id}.service"
