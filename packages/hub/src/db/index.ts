@@ -90,6 +90,7 @@ import {
   openrouterConnection,
   type PlaceKind,
   plugins,
+  projectOffers,
   projectPlaces,
   projects,
   projectTasks,
@@ -172,6 +173,7 @@ export type TaskIndexRow = typeof projectTasks.$inferSelect;
 export type ApnsCredentialsRow = typeof apnsCredentials.$inferSelect;
 /** A device the iOS app registered for pushes. */
 export type PushDeviceRow = typeof pushDevices.$inferSelect;
+export type ProjectOfferRow = typeof projectOffers.$inferSelect;
 export type ContinuationRow = typeof continuations.$inferSelect;
 export type WorkflowRow = typeof workflows.$inferSelect;
 export type WorkflowRunRow = typeof workflowRuns.$inferSelect;
@@ -290,6 +292,12 @@ export interface DbShape {
   readonly agentAddressContract: (machineId: string) => boolean;
   readonly agentHarnesses: (machineId: string) => HarnessReport[] | undefined;
   readonly agentTools: (machineId: string) => Record<string, ToolStatus>;
+  /** Records the answer, filing the offer first when it was taken unprompted. */
+  readonly answerProjectOffer: (
+    instanceId: string,
+    answer: "accepted" | "dismissed",
+    projectId?: string
+  ) => void;
   /** Records ownership before sending a create; a restart discards anything still unfiled. */
   readonly beginWorkspaceCreate: (id: string, machineId: string) => void;
   /** Whether nothing has been counted yet — the backfill's cue. */
@@ -624,6 +632,12 @@ export interface DbShape {
     instanceId: string,
     repeat: boolean
   ) => RuleState;
+  /** Files an offer; false when the session was already offered one. */
+  readonly offerProject: (offer: {
+    instanceId: string;
+    reason: ProjectOfferRow["reason"];
+    line: string;
+  }) => boolean;
   readonly openInstance: (instance: {
     addressProtocol?: boolean;
     id: string;
@@ -647,6 +661,8 @@ export interface DbShape {
     /** The work item the session runs; set once, at its spawn. */
     workItemId?: string;
   }) => void;
+  /** The offers nobody has answered yet. */
+  readonly openProjectOffers: () => ProjectOfferRow[];
   /** What a machine is owed, in the order it was asked for. */
   readonly owedSpawns: (
     machineId: string
@@ -699,6 +715,8 @@ export interface DbShape {
   readonly projectAttempts: (projectId: string) => WorkItemRow[];
   /** The oldest project whose checkouts are of `remote` (normalised). */
   readonly projectByRemote: (remote: string) => ProjectRow | undefined;
+  /** A session's "make this a project" offer, answered or not (project-offers.ts). */
+  readonly projectOffer: (instanceId: string) => ProjectOfferRow | undefined;
   /**
    * Projects whose remote is not known yet, each with a checkout on
    * `machineId` to read it from.
@@ -1012,6 +1030,8 @@ export interface DbShape {
     instanceId: string,
     value: { enabled: boolean; prompt: string; updatedAt: number } | null
   ) => void;
+  /** Puts sessions in a project: a session made a project, and its delegates. */
+  readonly setInstancesProject: (ids: string[], projectId: string) => void;
   readonly setMcpAuth: (
     name: string,
     mode: "direct" | "oauth",
@@ -3747,6 +3767,47 @@ const make = (path: string): DbShape => {
     },
     setProjectRemote: (id, remote) => {
       db.update(projects).set({ remote }).where(eq(projects.id, id)).run();
+    },
+    projectOffer: (instanceId) =>
+      db
+        .select()
+        .from(projectOffers)
+        .where(eq(projectOffers.instanceId, instanceId))
+        .get(),
+    openProjectOffers: () =>
+      db.select().from(projectOffers).where(isNull(projectOffers.answer)).all(),
+    offerProject: ({ instanceId, reason, line }) =>
+      db
+        .insert(projectOffers)
+        .values({ instanceId, reason, line, offeredAt: new Date() })
+        .onConflictDoNothing()
+        .returning({ instanceId: projectOffers.instanceId })
+        .all().length > 0,
+    answerProjectOffer: (instanceId, answer, projectId) => {
+      const answeredAt = new Date();
+      db.insert(projectOffers)
+        .values({
+          instanceId,
+          reason: "caw",
+          line: "",
+          offeredAt: answeredAt,
+          answer,
+          answeredAt,
+          projectId: projectId ?? null,
+        })
+        .onConflictDoUpdate({
+          target: projectOffers.instanceId,
+          set: { answer, answeredAt, projectId: projectId ?? null },
+        })
+        .run();
+    },
+    setInstancesProject: (ids, projectId) => {
+      if (ids.length > 0) {
+        db.update(instances)
+          .set({ projectId, updatedAt: new Date() })
+          .where(inArray(instances.id, ids))
+          .run();
+      }
     },
     setProjectTracker: (id, tracker) => {
       db.update(projects).set({ tracker }).where(eq(projects.id, id)).run();

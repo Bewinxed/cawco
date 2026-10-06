@@ -169,6 +169,8 @@ import type {
   ContinuationRow,
   DbShape,
   InstanceKind,
+  PlaceRow,
+  ProjectRow,
   SentMessageRow,
 } from "./db";
 import { hashHookMaterial } from "./db";
@@ -205,6 +207,7 @@ import {
   projectDelegateTypesRoutes,
 } from "./project-delegate-types";
 import { projectFolderRoutes, trashProjectFolder } from "./project-folder";
+import { createProjectOffers, projectOfferRoutes } from "./project-offers";
 import {
   foldPlacedStates,
   hasProjectHooks,
@@ -222,7 +225,15 @@ import { hashFiles, resolveSkill } from "./skills";
 import { createStreamHub } from "./stream";
 import { suggest } from "./suggest";
 import { SupervisorEngine } from "./supervisor";
-import { BUDGET, createTasks, hubActor, LANDS, taskRoutes } from "./tasks";
+import {
+  BUDGET,
+  createTasks,
+  hubActor,
+  LANDS,
+  sessionActor,
+  taskRoutes,
+  YOU_ACTOR,
+} from "./tasks";
 import { dashboardUrl, type TelegramBridge } from "./telegram";
 import {
   createTranscripts,
@@ -3984,6 +3995,9 @@ export const createServer = (
       }
     });
 
+  /** Who hears that a session started a delegate (project-offers.ts). */
+  const delegateSpawned = new Set<(parentInstanceId: string) => void>();
+
   /**
    * A spawn sent on a session's behalf — a relayed one, or a work item's —
    * recorded as every spawn is: the row is what puts it in the rail. A
@@ -4039,6 +4053,12 @@ export const createServer = (
       awaitingFirstTurn.add(payload.instanceId);
     }
     publishInstances(machineId);
+    const { parentInstanceId: spawnedBy } = peekParent(payload);
+    if (spawnedBy) {
+      for (const heard of delegateSpawned) {
+        heard(spawnedBy);
+      }
+    }
   };
 
   /**
@@ -7207,6 +7227,54 @@ export const createServer = (
     }
   };
 
+  /**
+   * One repository is one project: a folder whose remote a project already
+   * has joins it as a checkout place (`placeAdded`), and the answer is that
+   * project, not a second one. Else a new project, its one place the folder.
+   * The dashboard's "New project" and "Make project" both come here.
+   */
+  const createOrJoinProject = async (asked: {
+    name: string;
+    machineId: string;
+    cwd: string;
+  }): Promise<{
+    project: ProjectRow;
+    place: PlaceRow;
+    placeAdded: boolean;
+    joined: boolean;
+  }> => {
+    const cwd = placePath(asked.cwd);
+    const remote = await readRemote(runOnMachine, asked.machineId, cwd);
+    const known = remote ? db.projectByRemote(remote) : undefined;
+    if (known) {
+      const { place, added } = db.addPlace({
+        projectId: known.id,
+        machineId: asked.machineId,
+        path: cwd,
+        kind: "checkout",
+      });
+      if (added) {
+        placesChanged(asked.machineId, known.id);
+      }
+      return {
+        project: db.project(known.id) ?? known,
+        place,
+        placeAdded: added,
+        joined: true,
+      };
+    }
+    const created = db.createProject({
+      id: crypto.randomUUID(),
+      name: asked.name,
+      machineId: asked.machineId,
+      cwd,
+      remote,
+    });
+    // Its one place, the checkout it was made from.
+    const [place] = created.places;
+    return { project: created, place, placeAdded: false, joined: false };
+  };
+
   const workItems = createWorkItems({
     db,
     end: async (instanceId) => {
@@ -7451,6 +7519,32 @@ export const createServer = (
   });
   tasks.listen(dispatcher.taskChanged);
   tasks.listen(push.taskChanged);
+  // "Make this a project": offered once to a plain session that outgrew
+  // itself, at a turn's end or a delegate's spawn (project-offers.ts).
+  const projectOffers = createProjectOffers({
+    db,
+    tasks,
+    run: runOnMachine,
+    online: (machineId) => Boolean(registry.agent(machineId)),
+    createProject: createOrJoinProject,
+    moved: (machineIds) => {
+      for (const machineId of machineIds) {
+        publishInstances(machineId);
+      }
+    },
+    publish: (row, offer) =>
+      registry.broadcast({
+        verb: "frames",
+        machineId: row.machineId,
+        instanceId: row.id,
+        payload: {
+          kind: "project_offer",
+          instanceId: row.id,
+          offer,
+        } satisfies FramePayload,
+      }),
+  });
+  delegateSpawned.add(projectOffers.delegateSpawned);
   if (resumeWorkflows) {
     // The dispatcher's safety net: a slow look at every dispatching project.
     dispatcher.watch();
@@ -7466,6 +7560,8 @@ export const createServer = (
       dispatcher.startAttempt(projectId, ref, parent),
     retryAttempt: (projectId, ref, parent) =>
       dispatcher.retryAttempt(projectId, ref, parent),
+    projectFromSession: (actor) =>
+      projectOffers.accept(actor.id, sessionActor(actor)),
     instances: () => withKeepAlive(db.listInstances()),
     instanceById: (id) => db.getInstancesByIds([id])[0],
     ledBy: (id, leadId) => workItems.ledBy(id, leadId),
@@ -7765,6 +7861,7 @@ export const createServer = (
       )
       .use(taskRoutes(tasks))
       .use(pushRoutes(db, push))
+      .use(projectOfferRoutes(projectOffers, YOU_ACTOR))
       .use(dispatchRoutes(dispatcher))
       .use(
         joinRoutes({
@@ -10338,35 +10435,9 @@ export const createServer = (
           }),
         },
         async ({ body }) => {
-          const cwd = placePath(body.cwd);
-          const remote = await readRemote(runOnMachine, body.machineId, cwd);
-          const known = remote ? db.projectByRemote(remote) : undefined;
-          if (known) {
-            const { place, added } = db.addPlace({
-              projectId: known.id,
-              machineId: body.machineId,
-              path: cwd,
-              kind: "checkout",
-            });
-            if (added) {
-              placesChanged(body.machineId, known.id);
-            }
-            return {
-              ...(db.project(known.id) ?? known),
-              place,
-              placeAdded: added,
-            };
-          }
-          const created = db.createProject({
-            id: crypto.randomUUID(),
-            name: body.name,
-            machineId: body.machineId,
-            cwd,
-            remote,
-          });
-          // Its one place, the checkout it was made from.
-          const [place] = created.places;
-          return { ...created, place, placeAdded: false };
+          const { project, place, placeAdded } =
+            await createOrJoinProject(body);
+          return { ...project, place, placeAdded };
         }
       )
       .delete("/api/projects/:id", async ({ params }) => {
@@ -12051,12 +12122,20 @@ export const createServer = (
                     // biome-ignore lint/complexity/noVoid: nothing waits on whether a rule answered a turn that is not held
                     void answered();
                   }
+                  // A plain session past one conversation is offered a project, once.
+                  if (row && !failed) {
+                    projectOffers.turnEnded(row.id);
+                  }
                 }
               }
               // Standing instructions read the frames inside a turn as the
               // dashboards do; a turn's end is answered above.
               if (kind === "frame" && message.instanceId && !internal) {
                 ruleEngine.observe(
+                  message.instanceId,
+                  (message.payload as FramePayload & { kind: "frame" }).message
+                );
+                projectOffers.observe(
                   message.instanceId,
                   (message.payload as FramePayload & { kind: "frame" }).message
                 );

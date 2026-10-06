@@ -213,6 +213,28 @@ export interface WorkItemFrame {
   kind: "work_item";
 }
 
+/**
+ * What made the hub offer to make a plain session a project (project-offers.ts);
+ * `caw` when nothing did: Caw proposed it in conversation and you said yes.
+ */
+export type ProjectOfferReason = "delegates" | "days" | "plan" | "repo" | "caw";
+
+/** "Make this a project": offered once, on a plain session that outgrew itself. */
+export interface ProjectOfferSummary {
+  instanceId: string;
+  /** One sentence naming why, ending in the question. */
+  line: string;
+  offeredAt: number;
+  reason: ProjectOfferReason;
+}
+
+export interface ProjectOfferFrame {
+  instanceId: string;
+  /** Hub-originated: the session's standing offer, or null once it was answered. */
+  kind: "project_offer";
+  offer: ProjectOfferSummary | null;
+}
+
 export interface DelegateEventFrame {
   event: DelegateEvent;
   instanceId: string;

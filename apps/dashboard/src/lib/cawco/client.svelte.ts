@@ -27,6 +27,7 @@ import type {
   PermissionResult,
   PermissionUpdate,
   PreviewSource,
+  ProjectOfferSummary,
   SendPayload,
   SendRecord,
   SessionEffort,
@@ -668,6 +669,11 @@ const state = $state({
    * read when the parent's view opens, then kept by `work_item` frames.
    */
   workItems: {} as Record<string, WorkItemSummary>,
+  /**
+   * "Make this a project" offers standing on plain sessions, by session id:
+   * read on connect, then kept by `project_offer` frames.
+   */
+  projectOffers: {} as Record<string, ProjectOfferSummary>,
   /**
    * The supervisor's intervention log, newest first, capped at 200 in memory
    * (PLAN §C9). Seeded from REST and kept live by `supervisor_event` frames.
@@ -1804,6 +1810,8 @@ async function refresh(): Promise<boolean> {
   // Same reason as the limits below: the frames that carry spend come once a
   // minute per machine, and a dashboard opened between them has none yet.
   readSpend();
+  // Off the board's wait: an offer is a quiet card, not part of the fleet.
+  readProjectOffers();
   const [machines, rows, projects, pending, handoffs, usage, continuations] =
     await Promise.all([
       load<Machine[]>("/api/agents"),
@@ -2261,6 +2269,15 @@ function handleFrame(frame: FramePayload): void {
   if (frame.kind === "work_item") {
     if (!equal(state.workItems[frame.item.id], frame.item)) {
       state.workItems[frame.item.id] = frame.item;
+    }
+    return;
+  }
+
+  if (frame.kind === "project_offer") {
+    if (frame.offer) {
+      state.projectOffers[frame.instanceId] = frame.offer;
+    } else {
+      delete state.projectOffers[frame.instanceId];
     }
     return;
   }
@@ -4392,6 +4409,53 @@ export async function createProject(project: {
   return created;
 }
 
+/** The standing "make this a project" offers, as the hub holds them now. */
+async function readProjectOffers(): Promise<void> {
+  const offers = await load<ProjectOfferSummary[]>("/api/project-offers");
+  if (offers) {
+    state.projectOffers = Object.fromEntries(
+      offers.map((offer) => [offer.instanceId, offer])
+    );
+  }
+}
+
+/** What "Make project" did: the project, and the plan items it filed as proposed tasks. */
+export interface ProjectOfferAccepted {
+  joined: boolean;
+  project: { id: string; name: string };
+  sessions: string[];
+  tasks: { id: string; title: string }[];
+  unfiled: { title: string; why: string }[];
+}
+
+/**
+ * Answers a session's offer. "Make project" makes (or joins, by remote) the
+ * project from the session's folder and moves the session and its delegates
+ * into it; "Not now" is recorded, and the session is never offered again.
+ */
+export async function answerProjectOffer(
+  instanceId: string,
+  answer: "accept" | "dismiss"
+): Promise<ProjectOfferAccepted | null> {
+  const response = await fetch(
+    `/api/project-offers/${encodeURIComponent(instanceId)}/${answer}`,
+    { method: "POST" }
+  );
+  if (!response.ok) {
+    throw new Error(
+      (await response.text()) ||
+        `The hub answered ${response.status}, so nothing changed. Try again.`
+    );
+  }
+  delete state.projectOffers[instanceId];
+  if (answer === "dismiss") {
+    return null;
+  }
+  const accepted = (await response.json()) as ProjectOfferAccepted;
+  await refresh();
+  return accepted;
+}
+
 /** Forgets the project; the sessions started from it stay, just unattached. */
 export async function deleteProject(id: string): Promise<void> {
   const response = await fetch(`/api/projects/${id}`, { method: "DELETE" });
@@ -5705,6 +5769,9 @@ export const cawco = {
     Object.values(state.workItems)
       .filter((item) => item.parentInstanceId === parentInstanceId)
       .sort((a, b) => a.createdAt - b.createdAt),
+  /** The "make this a project" offer standing on a session, if one does. */
+  projectOfferOf: (instanceId: string): ProjectOfferSummary | undefined =>
+    state.projectOffers[instanceId],
   /** The work item a delegate session runs, when its parent's tray was told of it. */
   workItemFor: (instanceId: string): WorkItemSummary | undefined =>
     Object.values(state.workItems).find(

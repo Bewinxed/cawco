@@ -3167,6 +3167,257 @@
         }
       }
     },
+    "/api/project-offers": {
+      "get": {
+        "operationId": "getApiProjectOffers",
+        "responses": {
+          "200": {
+            "description": "getApiProjectOffers 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiProjectOffers200"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/project-offers/{instanceId}/dismiss": {
+      "post": {
+        "parameters": [
+          {
+            "name": "instanceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "postApiProjectOffersByInstanceIdDismiss",
+        "responses": {
+          "200": {
+            "description": "postApiProjectOffersByInstanceIdDismiss 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiProjectOffersByInstanceIdDismiss200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiProjectOffersByInstanceIdDismiss 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "postApiProjectOffersByInstanceIdDismiss 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiProjectOffersByInstanceIdDismiss 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiProjectOffersByInstanceIdDismiss 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "postApiProjectOffersByInstanceIdDismiss 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "postApiProjectOffersByInstanceIdDismiss 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiProjectOffersByInstanceIdDismiss 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "postApiProjectOffersByInstanceIdDismiss 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "postApiProjectOffersByInstanceIdDismiss 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/project-offers/{instanceId}/accept": {
+      "post": {
+        "parameters": [
+          {
+            "name": "instanceId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "postApiProjectOffersByInstanceIdAccept",
+        "responses": {
+          "200": {
+            "description": "postApiProjectOffersByInstanceIdAccept 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AcceptResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiProjectOffersByInstanceIdAccept 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "postApiProjectOffersByInstanceIdAccept 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiProjectOffersByInstanceIdAccept 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiProjectOffersByInstanceIdAccept 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "postApiProjectOffersByInstanceIdAccept 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "postApiProjectOffersByInstanceIdAccept 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiProjectOffersByInstanceIdAccept 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "postApiProjectOffersByInstanceIdAccept 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "postApiProjectOffersByInstanceIdAccept 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects/{id}/dispatch": {
       "get": {
         "parameters": [
@@ -10213,6 +10464,23 @@
           "ok"
         ]
       },
+      "getApiProjectOffers200": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/ProjectOfferSummary"
+        }
+      },
+      "postApiProjectOffersByInstanceIdDismiss200": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ]
+      },
       "getApiBinaryUpdatesMachines200": {
         "type": "object",
         "properties": {
@@ -14047,6 +14315,9 @@
             "$ref": "#/components/schemas/WorkItemFrame"
           },
           {
+            "$ref": "#/components/schemas/ProjectOfferFrame"
+          },
+          {
             "$ref": "#/components/schemas/DelegateEventFrame"
           },
           {
@@ -14083,6 +14354,7 @@
             "user_message": "#/components/schemas/UserMessageFrame",
             "pulse": "#/components/schemas/PulseFrame",
             "work_item": "#/components/schemas/WorkItemFrame",
+            "project_offer": "#/components/schemas/ProjectOfferFrame",
             "delegate_event": "#/components/schemas/DelegateEventFrame",
             "supervisor_event": "#/components/schemas/SupervisorEventFrame",
             "supervisor_status": "#/components/schemas/SupervisorStatusFrame",
@@ -16095,6 +16367,117 @@
           "pruned",
           "reason",
           "status"
+        ]
+      },
+      "ProjectOfferSummary": {
+        "description": "\"Make this a project\": offered once, on a plain session that outgrew itself.",
+        "type": "object",
+        "properties": {
+          "instanceId": {
+            "type": "string"
+          },
+          "line": {
+            "description": "One sentence naming why, ending in the question.",
+            "type": "string"
+          },
+          "offeredAt": {
+            "type": "number"
+          },
+          "reason": {
+            "$ref": "#/components/schemas/ProjectOfferReason"
+          }
+        },
+        "required": [
+          "instanceId",
+          "line",
+          "offeredAt",
+          "reason"
+        ]
+      },
+      "ProjectOfferReason": {
+        "description": "What made the hub offer to make a plain session a project (project-offers.ts);\n`caw` when nothing did: Caw proposed it in conversation and you said yes.",
+        "enum": [
+          "caw",
+          "days",
+          "delegates",
+          "plan",
+          "repo"
+        ],
+        "type": "string"
+      },
+      "AcceptResult": {
+        "type": "object",
+        "properties": {
+          "joined": {
+            "description": "True when the session's folder joined a project that already had its repository.",
+            "type": "boolean"
+          },
+          "project": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "name"
+            ]
+          },
+          "sessions": {
+            "description": "The sessions moved into it: this one, then its delegates.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "tasks": {
+            "description": "Plan items filed as proposed tasks, and the ones the project refused.",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "title"
+              ]
+            }
+          },
+          "unfiled": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "title": {
+                  "type": "string"
+                },
+                "why": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "title",
+                "why"
+              ]
+            }
+          }
+        },
+        "required": [
+          "joined",
+          "project",
+          "sessions",
+          "tasks",
+          "unfiled"
         ]
       },
       "DispatchView": {
@@ -23985,6 +24368,28 @@
         "required": [
           "instanceId",
           "item",
+          "kind"
+        ]
+      },
+      "ProjectOfferFrame": {
+        "type": "object",
+        "properties": {
+          "instanceId": {
+            "type": "string"
+          },
+          "kind": {
+            "description": "Hub-originated: the session's standing offer, or null once it was answered.",
+            "type": "string",
+            "enum": [
+              "project_offer"
+            ]
+          },
+          "offer": {
+            "$ref": "#/components/schemas/ProjectOfferSummary"
+          }
+        },
+        "required": [
+          "instanceId",
           "kind"
         ]
       },

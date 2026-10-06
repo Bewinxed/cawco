@@ -10,6 +10,12 @@ import {
 import { adminTools } from "./admin-tools";
 import { handoffInstructions, handoffTools } from "./delegation-tools";
 import type { AttemptStart } from "./dispatch";
+import {
+  type AcceptResult,
+  mayMakeProject,
+  PROJECT_FROM_SESSION,
+  projectFromSessionTool,
+} from "./project-offers";
 import { admitToolCall } from "./restart-holds";
 import { MAINLINE_TASK_TOOLS, TASK_TOOLS, taskTools } from "./task-tools";
 import type { Tasks } from "./tasks";
@@ -69,6 +75,8 @@ export function createDelegationMcp(options: {
     ref: string,
     parent: InstanceRow
   ) => Promise<AttemptStart>;
+  /** Makes the calling session a project, for `project_from_session` (project-offers.ts). */
+  projectFromSession?: (actor: InstanceRow) => Promise<AcceptResult>;
 }) {
   let tools = options.tools ?? handoffTools;
   let admin = adminTools();
@@ -143,6 +151,10 @@ export function createDelegationMcp(options: {
       ? taskTools(undefined).filter(
           (tool) => withAdmin || !MAINLINE_TASK_TOOLS.has(tool.name)
         )
+      : []),
+    // Making a session a project is for the sessions the operator started.
+    ...(options.projectFromSession && withAdmin
+      ? [projectFromSessionTool()]
       : []),
   ];
 
@@ -301,9 +313,33 @@ export function createDelegationMcp(options: {
       return (await entry.handler(input)) as CallToolResult;
     }
     if (!adminNames.has(name)) {
-      return undefined;
+      // Making the caller a project is the one fleet change a session asks for itself.
+      return await projectCall(binding, name, args, input, authorization);
     }
     return await administer(actorOf(binding, args, authorization), name, input);
+  };
+
+  /** `project_from_session`, for a session you started and in no project yet; undefined for every other tool. */
+  const projectCall = async (
+    binding: string | null,
+    name: string,
+    args: Record<string, unknown>,
+    input: Record<string, unknown>,
+    authorization?: string
+  ): Promise<CallToolResult | undefined> => {
+    const make = options.projectFromSession;
+    if (!make || name !== PROJECT_FROM_SESSION) {
+      return undefined;
+    }
+    const actor = actorOf(binding, args, authorization);
+    if (!(administers(actor) && mayMakeProject(actor))) {
+      throw new Error(
+        `${name} isn't available here: only a session you started, in no project yet, can be made a project.`
+      );
+    }
+    return (await projectFromSessionTool(() => make(actor)).handler(
+      input
+    )) as CallToolResult;
   };
 
   /** Every call, MCP or REST, from any machine: held for a hub restart while it runs, refused behind its fence. */

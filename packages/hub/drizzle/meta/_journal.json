@@ -589,6 +589,13 @@
       "when": 1791313459818,
       "tag": "0083_push_notifications",
       "breakpoints": true
+    },
+    {
+      "idx": 84,
+      "version": "6",
+      "when": 1791313546118,
+      "tag": "0084_project_offers",
+      "breakpoints": true
     }
   ]
 }

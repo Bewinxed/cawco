@@ -863,6 +863,7 @@ export type FramePayload =
   | import("./frames").UserMessageFrame
   | import("./frames").PulseFrame
   | import("./frames").WorkItemFrame
+  | import("./frames").ProjectOfferFrame
   | import("./frames").DelegateEventFrame
   | import("./frames").SupervisorEventFrame
   | import("./frames").SupervisorStatusFrame

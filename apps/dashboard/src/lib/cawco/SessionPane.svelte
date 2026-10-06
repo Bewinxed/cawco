@@ -69,6 +69,7 @@
     loadDraft,
     saveDraft,
   } from "./transcript/draft-store";
+  import ProjectOffer from "./transcript/ProjectOffer.svelte";
   import Prompt from "./transcript/Prompt.svelte";
   import { parkedAsks } from "./transcript/present";
   import { settleInto } from "./transcript/settle";
@@ -782,6 +783,9 @@
     parkedAsks(session?.pending ?? [])
   );
 
+  /** "Make this a project", when the hub offered it to this session. */
+  const projectOffer = $derived(cawco.projectOfferOf(viewId));
+
   /** What this conversation has half-written, whichever composer draws it. */
   const draft = new ComposerDraft();
 
@@ -1088,6 +1092,12 @@
       <Prompt onanswer={(result) => onanswer(request, result)} {request} />
     </div>
   {/each}
+  <!-- The quiet one: an offer, standing under the asks that block work. -->
+  {#if projectOffer}
+    <div class="parked" data-flip>
+      <ProjectOffer offer={projectOffer} />
+    </div>
+  {/if}
 {/snippet}
 
 <!-- A named state, not an empty pane: what happened, in one line, and the one

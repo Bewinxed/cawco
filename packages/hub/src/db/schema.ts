@@ -1606,3 +1606,23 @@ export const pushDevices = sqliteTable("push_devices", {
   /** APNs' reason for the last push it refused, cleared by the next it takes. */
   lastError: text("last_error"),
 });
+
+/**
+ * "Make this a project" (project-offers.ts): the one offer a plain session
+ * gets when it outgrows itself. A row means it was offered, so it is never
+ * offered again; `answer` stays null while the offer stands.
+ */
+export const projectOffers = sqliteTable("project_offers", {
+  instanceId: text("instance_id").primaryKey(),
+  /** Which signal made it: `delegates`, `days`, `plan` or `repo`; `caw` when Caw asked in conversation. */
+  reason: text("reason")
+    .$type<import("@cawco/core").ProjectOfferReason>()
+    .notNull(),
+  /** The sentence the offer says, naming why. */
+  line: text("line").notNull(),
+  offeredAt: timestamp("offered_at").notNull(),
+  answer: text("answer").$type<"accepted" | "dismissed">(),
+  answeredAt: timestamp("answered_at"),
+  /** The project accepting made or joined. */
+  projectId: text("project_id"),
+});
