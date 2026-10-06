@@ -21,6 +21,7 @@ import { hubProtocol, probeHealth } from "@cawco/core/binary-health";
 import {
   type BinaryInstallation,
   binaryRoot,
+  helperIsLive,
   keeperRecoveredPath,
   previousInstallationPath,
   prune,
@@ -188,9 +189,13 @@ async function launchApplyHelper(
   }
 }
 
-/** A finished one-shot macOS job and its file are removed the next time an agent starts. */
+/**
+ * A finished one-shot macOS job and its file are removed the next time an agent
+ * starts. The helper restarts the agent itself mid-update, so a helper that is
+ * still running is left alone: booting its job out would kill it half-way.
+ */
 async function removeFinishedHelpers(): Promise<void> {
-  if (process.platform !== "darwin") {
+  if (process.platform !== "darwin" || (await helperIsLive())) {
     return;
   }
   const files = (await readdir(binaryRoot())).filter(
