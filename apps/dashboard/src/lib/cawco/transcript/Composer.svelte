@@ -1350,18 +1350,54 @@
   });
 
   // While the wheel is up, a press anywhere outside the composer puts it
-  // away, back to the draft.
+  // away, back to the draft. The grown shape is the composer's: a press on
+  // it, around the rows, rolls the wheel as a press on the rows does.
   $effect(() => {
     if (!recall) {
       return;
     }
     const outside = (event: PointerEvent) => {
-      if (!shell?.contains(event.target as Node)) {
+      const target = event.target as Element;
+      if (!shell?.contains(target)) {
         wheel?.back();
+      } else if (target.closest(".grown-halo")) {
+        wheel?.grab(event);
       }
     };
     document.addEventListener("pointerdown", outside, true);
     return () => document.removeEventListener("pointerdown", outside, true);
+  });
+
+  // A touch the wheel is rolling must not pan the page under it. Pointer
+  // events cannot cancel a pan, and touch-action alone has not always held
+  // on iOS Safari, so the touch's own moves are cancelled while it belongs
+  // to the wheel: one that began on the composer, or the held press that
+  // brought the wheel up mid-touch.
+  $effect(() => {
+    if (!recall) {
+      return;
+    }
+    let ours = untrack(() => !!hold?.live);
+    const began = (event: TouchEvent) => {
+      ours = !!shell?.contains(event.target as Node);
+    };
+    const moved = (event: TouchEvent) => {
+      if (ours && event.cancelable) {
+        event.preventDefault();
+      }
+    };
+    document.addEventListener("touchstart", began, {
+      capture: true,
+      passive: true,
+    });
+    document.addEventListener("touchmove", moved, {
+      capture: true,
+      passive: false,
+    });
+    return () => {
+      document.removeEventListener("touchstart", began, true);
+      document.removeEventListener("touchmove", moved, true);
+    };
   });
 
   /*
@@ -2099,7 +2135,7 @@
          recall wheel, or the row that says a queued message is being
          edited. Both stand on the pill's foot, absolutely, so nothing above
          them moves. -->
-    <div class="shell" bind:this={shell}>
+    <div class="shell" bind:this={shell} class:rolling={!!recall}>
       {#if recall && shell && pill}
         <RecallWheel
           draft={recall.text}
@@ -3035,6 +3071,12 @@
       block-size: 100%;
       overflow: visible;
     }
+  }
+  /* While the wheel is up the grown shape is part of the composer: its
+     margins take a press (rolling the wheel) and never pan the page. */
+  .shell.rolling :global(.grown-halo) {
+    pointer-events: auto;
+    touch-action: none;
   }
   .shell :global(.grown-halo.settled) {
     filter: drop-shadow(var(--shadow-drop)) drop-shadow(var(--shadow-drop-near));

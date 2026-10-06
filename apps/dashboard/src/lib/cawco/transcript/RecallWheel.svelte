@@ -493,6 +493,16 @@
     release(flick);
   }
 
+  /**
+   * A press on the grown shape around the rows rolls the wheel as a press
+   * on the rows does: the drag is captured onto them from here on.
+   */
+  export function grab(event: PointerEvent): void {
+    if (!closing) {
+      ondown(event);
+    }
+  }
+
   function pickRow(k: number): void {
     if (closing || rows[k]?.kind === "none") {
       return;
