@@ -491,6 +491,50 @@ th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute
 .thesis{font-size:15px;font-weight:500}
 .thesis span{color:var(--muted);font-weight:400;font-size:13px}
 
+
+/* architecture map */
+.ar{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:12px;align-items:start}
+@media (max-width:1000px){.ar{grid-template-columns:minmax(0,1fr)}}
+.ar-ctl{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}
+.ar-seg{display:inline-flex;border:1px solid var(--line-strong);border-radius:10px;padding:3px;background:var(--raised);gap:3px}
+.ar-seg button{font:inherit;font-size:12.5px;border:0;background:transparent;color:var(--muted);padding:5px 12px;border-radius:7px;cursor:pointer}
+.ar-seg button[aria-checked="true"]{background:var(--coral-wash);color:var(--coral-ink)}
+.ar-map{display:flex;flex-direction:column;gap:10px;min-width:0}
+.ar-band{border:1px solid var(--line-strong);border-radius:16px;padding:28px 10px 10px;position:relative;min-width:0}
+.ar-band>.ar-bl{position:absolute;top:8px;left:12px;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:500}
+.ar-band.hub{background:var(--bg)}
+.ar-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.ar-groups{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px;align-items:start}
+.ar-grp{display:flex;flex-direction:column;gap:6px;min-width:0}
+.ar-grp>span{font-size:11px;color:var(--muted);font-weight:500}
+.ar-grp.jev{border:1.5px dashed var(--coral);border-radius:12px;padding:8px;background:var(--coral-wash)}
+.ar-map.off .ar-grp.jev{border-color:var(--line-strong);background:transparent}
+.an{font:inherit;text-align:left;cursor:pointer;background:var(--raised);color:var(--ink);border:1px solid var(--line-strong);border-radius:10px;padding:7px 9px;display:flex;flex-direction:column;gap:1px;position:relative;min-width:0;transition:opacity .2s,border-color .2s,background-color .2s,transform .2s var(--ease)}
+.an b{font-size:12.5px;font-weight:500;padding-right:22px;line-height:1.3}
+.an span{font-size:11px;color:var(--muted);line-height:1.35}
+.an.code{border-style:dashed;border-color:var(--muted)}
+.an.model{border:1.5px solid var(--ink)}
+.an.store{border-top:3px double var(--line-strong)}
+.an.you{background:var(--coral-wash);border-color:var(--coral)}
+.an.ext{background:transparent}
+.an.pending{opacity:.55;border-style:dotted}
+.ar-map.picking .an{opacity:.32}
+.ar-map.picking .an.rel{opacity:1}
+.ar-map.picking .an.sel{opacity:1;border-color:var(--coral);background:var(--coral-wash);transform:translateY(-1px)}
+.an .jb{position:absolute;top:6px;right:6px;font-family:var(--f-mono);font-size:10px;line-height:16px;min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:var(--coral);color:oklch(18% .01 40);text-align:center}
+.ar-map.off .an .jb{background:transparent;border:1px dashed var(--muted);color:var(--muted)}
+.ar-map.is-live:not(.off) .an .jb{animation:jcall 4.8s var(--ease) infinite;animation-delay:var(--jd,0s)}
+@keyframes jcall{0%,100%{box-shadow:0 0 0 0 transparent}8%{box-shadow:0 0 0 4px var(--coral-wash)}16%{box-shadow:0 0 0 0 transparent}}
+.ar-ins{position:sticky;top:16px;background:var(--raised);border:1px solid var(--line);border-radius:var(--r-tray);padding:14px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.ar-ins h4{font-size:15px}
+.ar-ins .k2{font-family:var(--f-mono);font-size:10.5px;color:var(--muted)}
+.ar-ins p{font-size:13px;color:var(--muted)}
+.ar-ins .tl{display:flex;flex-wrap:wrap;gap:4px}
+.ar-ins .tl span{font-size:11px;border:1px solid var(--line);border-radius:999px;padding:0 7px;line-height:18px;background:var(--bg)}
+.ar-ins .jx{border-radius:10px;padding:8px 10px;font-size:12.5px;background:var(--coral-wash);color:var(--coral-ink)}
+.ar-ins .jx.off{background:var(--recess);color:var(--ink)}
+.ar-ins .jx b{font-weight:500;display:block;font-size:11px;letter-spacing:.04em;text-transform:uppercase;margin-bottom:2px}
+
 @media (prefers-reduced-motion: reduce){
   *,*::before,*::after{animation:none!important;transition:none!important}
 }
@@ -499,11 +543,12 @@ th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute
 <div class="wrap">
 <nav class="idx" aria-label="Chapters">
   <div class="mark">Caw&amp;Co</div>
-  <a href="#path">Your path <span class="n">16</span></a>
+  <a href="#arch">Architecture</a>
+  <a href="#path">Your path <span class="n">17</span></a>
   <a href="#xexample">Example: X</a>
   <a href="#research">Evidence <span class="n">10</span></a>
   <a href="#shape">Shape <span class="n">D1–3</span></a>
-  <a href="#runs">Who runs it <span class="n">D4–7</span></a>
+  <a href="#runs">Who runs it <span class="n">D4–7, 16</span></a>
   <a href="#knowledge">Knowledge <span class="n">D8</span></a>
   <a href="#time">Time <span class="n">D9–11</span></a>
   <a href="#face">Words, Caw <span class="n">D12–13</span></a>
@@ -521,7 +566,7 @@ th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute
   <div class="caw"><img class="caw-l" src="caw/light-ready.webp" alt="Caw" width="104" height="104"><img class="caw-d" src="caw/dark-ready.webp" alt="" width="104" height="104"></div>
   <div>
     <h1>Projects, rethought</h1>
-    <p>Fifteen decisions. Each one shows how it would look and how it works. Pick a path per card; I read your picks back from this page.</p>
+    <p>Sixteen decisions. Each one shows how it would look and how it works. Pick a path per card; I read your picks back from this page.</p>
     <div class="row">
       <span class="pill" id="savestate"><span class="dot"></span><span id="savetext">Connecting…</span></span>
       <button class="btn" id="copypicks" type="button">Copy my picks</button>
@@ -554,6 +599,140 @@ th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute
   </div>
 </section>
 
+
+
+<section class="chap" id="arch">
+  <header><span class="eyebrow">Architecture</span><h2>The whole system, and where Jev sits</h2><p>Tap a box to see what it talks to. Switch Jev off to see what each part does without it.</p></header>
+  <div class="ar-ctl">
+    <div class="ar-seg" role="radiogroup" aria-label="Jev">
+      <button type="button" role="radio" aria-checked="true" data-jev="on">Jev on</button>
+      <button type="button" role="radio" aria-checked="false" data-jev="off">Jev off</button>
+    </div>
+    <div class="legend" style="margin:0"><span class="lg code">code</span><span class="lg model">model</span><span class="lg store">stored</span><span class="lg you">you</span><span class="lg ext">outside</span><span class="lg" style="border-color:var(--coral);color:var(--coral-ink)">J · asks Jev</span></div>
+  </div>
+  <div class="ar">
+    <div class="ar-map anim" id="armap"></div>
+    <aside class="ar-ins" id="arins" aria-live="polite"></aside>
+  </div>
+</section>
+<script>
+(function(){
+  "use strict";
+  var B = {clients:"Clients", hub:"Hub · one process on your tailnet", machines:"Machines · one daemon each", outside:"Outside"};
+  var G = ["Front door","Work","Time and events","Knowledge","Agents","Judgments"];
+  var NODES = [
+    {id:"dash",band:"clients",kind:"you",t:"Dashboard",s:"board, threads, settings",d:"Where you read the board, talk to Caw and approve.",talks:["api"]},
+    {id:"ios",band:"clients",kind:"you",t:"iOS and Mac app",s:"push, threads, approvals",d:"The phone path now that Telegram is pending. Needs push first.",talks:["api","apns"]},
+    {id:"cli",band:"clients",kind:"you",t:"cawco CLI",s:"admin, same role checks",d:"Admin for people and for the overseer, under the same role checks as MCP.",talks:["api"]},
+    {id:"tg",band:"clients",kind:"pending",t:"Telegram",s:"pending",d:"Paused. Topics per project come back if you turn it on.",talks:["api"]},
+    {id:"api",band:"hub",grp:"Front door",kind:"code",t:"API + socket",s:"one ledger for every client",d:"Every client and every action rides the same ledger; nothing is posted optimistically.",talks:["dash","ios","cli","tg","proj","board","disp","daemon","apns"]},
+    {id:"mcp",band:"hub",grp:"Front door",kind:"code",t:"MCP · cawco",s:"one toolset per role",d:"One server; the session's credential picks its role and toolset.",talks:["sess","board","mem","cred","dtypes"]},
+    {id:"cred",band:"hub",grp:"Front door",kind:"store",t:"Credentials",s:"Jev key, connector keys",d:"Keys stay here. Sessions call tools; they never see tokens.",talks:["mcp","act","jev","ingress"]},
+    {id:"proj",band:"hub",grp:"Work",kind:"store",t:"Projects and places",s:"remote, checkouts, folder",d:"One identity with many places: checkouts on any machine, workspaces, the hub folder.",talks:["folder","board","dtypes","api"]},
+    {id:"board",band:"hub",grp:"Work",kind:"store",t:"Board index",s:"tasks are files, rebuilt",d:"An index rebuilt from the task files, for the frontier and board order. Never the truth.",talks:["folder","disp","lead","api","mcp"],jev:"Is this the same work as an open task? (yes/no, fan-out)",fb:"Exact match on files and checks."},
+    {id:"dtypes",band:"hub",grp:"Work",kind:"store",t:"Delegate types",s:"fleet + project files",d:"Harness, model, effort, skills, MCP, role, budget. Project files shadow fleet types.",talks:["disp","proj","mcp"]},
+    {id:"disp",band:"hub",grp:"Work",kind:"code",t:"Dispatcher",s:"frontier, caps, routing",d:"Starts ready tasks under caps and budgets, on a machine that can run the type.",talks:["board","dtypes","daemon","land","brief","wf","api"],jev:"Ready for an agent? Which type fits? Clarity, size, risk? (score, choice)",fb:"A check must exist; the task names its type; board order."},
+    {id:"land",band:"hub",grp:"Work",kind:"code",t:"Checks + landing",s:"run, rebase, push or PR",d:"Runs acceptance checks, then lands through a per-repo queue.",talks:["ws","board","lead","gh","disp"],jev:"Does this report meet each acceptance criterion? (yes/no each)",fb:"Shell checks only, or the lead reviews."},
+    {id:"act",band:"hub",grp:"Work",kind:"code",t:"Approved actions",s:"exact call, once, on time",d:"You approve one exact tool call; code runs it once at its time. Never a model.",talks:["cred","x","gh","ios"]},
+    {id:"rout",band:"hub",grp:"Time and events",kind:"code",t:"Routines",s:"Effect Cron, run per slot",d:"Each slot fires once; a fresh session or a message to the lead.",talks:["wf","sess","lead","ingress"]},
+    {id:"ingress",band:"hub",grp:"Time and events",kind:"code",t:"Ingress",s:"pollers + optional relay",d:"Polls GitHub and any connector; an optional relay reaches a one-route listener.",talks:["gh","x","rout","cred"],jev:"Which routine or project is this event for? (choice)",fb:"Matcher filters: author, label, regex."},
+    {id:"wf",band:"hub",grp:"Time and events",kind:"code",t:"Workflow engine",s:"durable runs, replay",d:"Effect's durable engine under routines and multi-step runs.",talks:["rout","disp"]},
+    {id:"folder",band:"hub",grp:"Knowledge",kind:"store",t:"Project folder",s:"git, synced as files",d:"AGENTS.md, tasks, knowledge, assets, memory, routines, skills, delegates.",talks:["proj","board","mem","sess","brief","assets"]},
+    {id:"mem",band:"hub",grp:"Knowledge",kind:"model",t:"Memory + curator",s:"inbox, proposals",d:"Agents write notes; the curator proposes; you tap.",talks:["folder","sess","ios","mcp"],jev:"Lasting fact, scaffolding, secret, untrusted? (choice)",fb:"Rules: repeats in 2+ sessions, provenance tags."},
+    {id:"brief",band:"hub",grp:"Knowledge",kind:"code",t:"Brief builder",s:"what a session starts with",d:"Task, checks, last failure and the right context files.",talks:["folder","mem","disp"],jev:"How much does each file matter for this task? (score each)",fb:"The whole brand kit and the newest notes."},
+    {id:"assets",band:"hub",grp:"Knowledge",kind:"store",t:"Assets",s:"content-addressed",d:"Images and files by hash, versioned, from any session.",talks:["folder","sess"]},
+    {id:"lead",band:"hub",grp:"Agents",kind:"model",t:"Caw · project lead",s:"woken by events",d:"Plans, briefs, recaps. Board tools only, per-project switch.",talks:["board","rout","ios","dash","land","watch"],jev:"Is each recap claim backed by its events? (yes/no each)",fb:"Recaps list events only."},
+    {id:"watch",band:"hub",grp:"Agents",kind:"code",t:"Fleet watch",s:"detectors, one triage",d:"Code detectors; a fresh Caw triage run only when the case is real.",talks:["daemon","lead","ios"],jev:"Stuck? Looping? Off-task? (yes/no)",fb:"A second code signal, tighter caps."},
+    {id:"jev",band:"hub",grp:"Judgments",kind:"model",t:"Jev",s:"typed judgments, opt-in",d:"Yes/no, choice and score over one state, in one call. Never status, never a permission.",talks:["board","disp","land","ingress","mem","brief","lead","watch","cred","ort"]},
+    {id:"daemon",band:"machines",kind:"code",t:"Daemon",s:"process truth",d:"The only authority on what runs on its machine.",talks:["api","sessiond","disp","watch"]},
+    {id:"sessiond",band:"machines",kind:"code",t:"sessiond",s:"keeps sessions across deploys",d:"Protocol-blind keeper; ships almost never.",talks:["daemon","sess"]},
+    {id:"sess",band:"machines",kind:"model",t:"Sessions",s:"Claude Code · OpenCode · pi",d:"Fresh per attempt; the role decides the tools.",talks:["mcp","ws","folder","sessiond","rout","mem","assets"]},
+    {id:"ws",band:"machines",kind:"store",t:"Workspaces",s:"clone + branch per task",d:"Durable per task; the session is the cheap part.",talks:["sess","land"]},
+    {id:"gh",band:"outside",kind:"ext",t:"GitHub · Linear",s:"if a project picks one",d:"The record for a project that chose it; otherwise CawCo's files are.",talks:["ingress","land","act"]},
+    {id:"x",band:"outside",kind:"ext",t:"X and other APIs",s:"through connectors",d:"Read by pollers, written only by approved actions.",talks:["ingress","act"]},
+    {id:"ort",band:"outside",kind:"ext",t:"OpenRouter · Typesafe",s:"where Jev runs",d:"Text leaves your network here, which is why Jev is opt-in.",talks:["jev"]},
+    {id:"apns",band:"outside",kind:"ext",t:"Apple push",s:"content-free payloads",d:"Wakes the app; the app fetches details over the tailnet.",talks:["ios","api"]}
+  ];
+  var byId = {}; NODES.forEach(function(n){ byId[n.id] = n; n.rel = {}; });
+  NODES.forEach(function(n){ n.talks.forEach(function(t){ if (byId[t]) { n.rel[t] = 1; byId[t].rel[n.id] = 1; } }); });
+  var map = document.getElementById("armap"), ins = document.getElementById("arins");
+  if (!map || !ins) return;
+  var jevOn = true, sel = "jev", btns = {};
+  function mk(n, i){
+    var b = document.createElement("button"); b.type = "button"; b.className = "an " + n.kind; b.dataset.id = n.id;
+    var t = document.createElement("b"); t.textContent = n.t; b.appendChild(t);
+    var s2 = document.createElement("span"); s2.textContent = n.s; b.appendChild(s2);
+    if (n.jev) { var j = document.createElement("i"); j.className = "jb"; j.style.setProperty("--jd", (i * 0.45).toFixed(2) + "s"); b.appendChild(j); }
+    b.addEventListener("click", function(){ sel = sel === n.id ? null : n.id; paint(); });
+    btns[n.id] = b; return b;
+  }
+  var ji = 0;
+  ["clients","hub","machines","outside"].forEach(function(band){
+    var box = document.createElement("div"); box.className = "ar-band" + (band === "hub" ? " hub" : "");
+    var bl = document.createElement("span"); bl.className = "ar-bl"; bl.textContent = B[band]; box.appendChild(bl);
+    if (band === "hub") {
+      var gs = document.createElement("div"); gs.className = "ar-groups";
+      G.forEach(function(g){
+        var gd = document.createElement("div"); gd.className = "ar-grp" + (g === "Judgments" ? " jev" : "");
+        var gl = document.createElement("span"); gl.textContent = g; gd.appendChild(gl);
+        NODES.filter(function(n){ return n.grp === g; }).forEach(function(n){ gd.appendChild(mk(n, n.jev ? ji++ : 0)); });
+        gs.appendChild(gd);
+      });
+      box.appendChild(gs);
+    } else {
+      var row = document.createElement("div"); row.className = "ar-row";
+      NODES.filter(function(n){ return n.band === band; }).forEach(function(n){ row.appendChild(mk(n, n.jev ? ji++ : 0)); });
+      box.appendChild(row);
+    }
+    map.appendChild(box);
+  });
+  function paint(){
+    map.classList.toggle("off", !jevOn);
+    map.classList.toggle("picking", !!sel);
+    NODES.forEach(function(n){
+      var off = !jevOn && (n.id === "jev" || n.id === "ort") && sel !== n.id;
+      var b = btns[n.id], on = sel === n.id, rel = sel && !off && (byId[sel].rel[n.id] || on);
+      b.classList.toggle("sel", on); b.classList.toggle("rel", !!rel);
+      b.setAttribute("aria-pressed", on ? "true" : "false");
+      var jb = b.querySelector(".jb"); if (jb) jb.textContent = jevOn ? "J" : "rules";
+    });
+    ins.textContent = "";
+    var n = sel ? byId[sel] : null;
+    var h = document.createElement("h4"), k = document.createElement("span"), p = document.createElement("p");
+    k.className = "k2";
+    if (!n) {
+      h.textContent = "Pick a box"; k.textContent = "the map";
+      p.textContent = jevOn ? "Coral J marks the eight parts that ask Jev a question." : "Jev is off: those parts run on their rules, and say so.";
+      ins.appendChild(k); ins.appendChild(h); ins.appendChild(p); return;
+    }
+    k.textContent = ({code:"code",model:"model",store:"stored",you:"you",ext:"outside",pending:"pending"})[n.kind] + (n.band === "hub" ? " · " + n.grp : " · " + B[n.band].split(" ·")[0]);
+    h.textContent = n.t; p.textContent = n.d;
+    ins.appendChild(k); ins.appendChild(h); ins.appendChild(p);
+    var tl = document.createElement("div"); tl.className = "tl";
+    Object.keys(n.rel).forEach(function(id){ if (!jevOn && (id === "jev" || id === "ort") && n.id !== "jev") return; var c = document.createElement("span"); c.textContent = byId[id].t; tl.appendChild(c); });
+    var lab = document.createElement("span"); lab.className = "k2"; lab.textContent = "talks to"; ins.appendChild(lab); ins.appendChild(tl);
+    if (n.id === "jev") {
+      var jx = document.createElement("div"); jx.className = "jx" + (jevOn ? "" : " off");
+      var jb2 = document.createElement("b"); jb2.textContent = jevOn ? "On" : "Off";
+      jx.appendChild(jb2); jx.appendChild(document.createTextNode(jevOn ? "Asked by the board, dispatcher, checks, ingress, memory, briefs, Caw and fleet watch." : "Nobody asks; each part runs its rules and shows \u201cJev off\u201d."));
+      ins.appendChild(jx);
+    } else if (n.jev) {
+      var jx2 = document.createElement("div"); jx2.className = "jx" + (jevOn ? "" : " off");
+      var jb3 = document.createElement("b"); jb3.textContent = jevOn ? "With Jev" : "Without Jev";
+      jx2.appendChild(jb3); jx2.appendChild(document.createTextNode(jevOn ? n.jev : n.fb));
+      ins.appendChild(jx2);
+    }
+  }
+  document.querySelectorAll(".ar-seg button").forEach(function(b){
+    b.addEventListener("click", function(){
+      jevOn = b.dataset.jev === "on";
+      document.querySelectorAll(".ar-seg button").forEach(function(x){ x.setAttribute("aria-checked", x === b ? "true" : "false"); });
+      paint();
+    });
+  });
+  paint();
+})();
+</script>
 
 <section class="chap" id="path">
   <header><span class="eyebrow">Your path</span><h2>Your picks, and answers to your notes</h2><p>Read from this page on 2026-10-06. Change a pick and this list updates.</p></header>
@@ -921,6 +1100,45 @@ The tray chip overflows at 320px wide…</pre>
     <div class="foot">
       <details class="more"><summary>Details</summary><div class="in"><p>New tools are named group first (<code>board_write</code>, <code>admin_hooks_read</code>) so a pattern allows or denies a group. Admin tools split into read and write; writes ask you first. Existing hot names (<code>delegate</code>, <code>handoff</code>) stay. pi gained native MCP on 2026-09-29, so it can share the same names.</p></div></details>
       <label class="note">Note <input id="note-mcp" data-note="mcp" type="text" placeholder="Anything to add"></label>
+    </div>
+  </article>
+  <article class="dec" id="d16">
+    <header><span class="did">D16</span><h3>Project delegates</h3><span class="state" data-for="pdelegates">Not picked</span></header>
+    <p class="why">Delegate types are fleet-wide today. Let each project define its own: harness, model, effort, skills, MCP, role, budget.</p>
+    <div class="show">
+      <figure class="pane look"><span class="cap">How it would look</span>{{MK:pdelegates}}</figure>
+      <figure class="pane mech"><span class="cap">A type is a file</span>
+<pre class="v"><span class="c">x-growth/delegates/</span>writer.md
+---
+harness: claude
+model:   claude-opus-5-5
+effort:  high
+skills:  [brand-voice, x-post]
+mcp:     [x-read]
+role:    web-facing      <span class="c"># its toolset (D7)</span>
+budget:  { usd: 2, per: day }
+lands:   none            <span class="c"># drafts, not commits</span>
+---
+Draft posts in the brand voice.
+Never post; drafts go to Needs you.
+
+<span class="k">which type runs a task</span>
+  task names one     → that type
+  else Jev on        → choice over the project's types
+  else               → Caw picks, or "medium"
+<span class="k">lookup</span>  project file, then fleet type of that name</pre>
+      </figure>
+    </div>
+    <div class="opts" role="radiogroup" data-group="pdelegates" data-label="D16 Project delegates">
+      <button class="opt" type="button" role="radio" data-opt="fleet"><b>Fleet types only</b><span>As today.</span></button>
+      <button class="opt" type="button" role="radio" data-opt="files"><b>Project files shadow fleet</b><span>Types live in the project folder.</span><span class="tag">Recommended</span></button>
+      <button class="opt" type="button" role="radio" data-opt="adhoc"><b>Per-task overrides only</b><span>No named types per project.</span></button>
+    </div>
+    <div class="foot">
+      <details class="more"><summary>Details</summary><div class="in">
+        <p>A type carries its role, so a web-facing writer never gets posting or admin tools. The dispatcher runs a type only on a machine where its harness and model are installed and signed in. The catalog a session sees is fixed at its start, because the <code>delegate</code> tool's description feeds the prompt cache (as the code already does). Keep it short: a project shows its own types plus at most a few fleet ones. Caw can propose a new type as a file diff you approve. Routines name a type too, so "morning drafts" always runs as <code>writer</code>.</p>
+      </div></details>
+      <label class="note">Note <input id="note-pdelegates" data-note="pdelegates" type="text" placeholder="Anything to add"></label>
     </div>
   </article>
 </section>

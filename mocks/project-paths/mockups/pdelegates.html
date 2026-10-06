@@ -1,0 +1,269 @@
+<style>
+.mk-pdelegates{display:block;width:100%;container-type:inline-size;color:var(--ink);font-family:var(--f-body);font-size:12px;line-height:1.4;text-align:left}
+.mk-pdelegates *,.mk-pdelegates *::before,.mk-pdelegates *::after{box-sizing:border-box}
+.mk-pdelegates .mkf-body{padding:10px;gap:8px}
+.mk-pdelegates .mkf-bar b{flex:none}
+.mk-pdelegates .pd-sub{min-width:0;overflow:hidden;text-overflow:ellipsis}
+
+/* layout: project cards | file, then the fleet types; stacks when narrow */
+.mk-pdelegates .pd-main{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-areas:"pj fi" "fl fl";gap:8px;align-items:stretch;min-width:0}
+.mk-pdelegates .pd-pj{grid-area:pj;display:flex;flex-direction:column;gap:5px;min-width:0}
+.mk-pdelegates .pd-fl{grid-area:fl;display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:5px;min-width:0}
+.mk-pdelegates .pd-fl .pd-card{padding:5px 9px}
+.mk-pdelegates .pd-file{grid-area:fi}
+@container (max-width:499px){
+  .mk-pdelegates .pd-main{grid-template-columns:minmax(0,1fr);grid-template-areas:"pj" "fl" "fi"}
+}
+
+/* type cards */
+.mk-pdelegates .pd-card{display:flex;flex-direction:column;justify-content:center;gap:3px;padding:6px 9px;background:var(--raised);border:1px solid var(--line-strong);border-radius:10px;min-width:0;transition:background-color .3s ease,border-color .3s ease}
+.mk-pdelegates .pd-pj .pd-card{flex:1 1 auto}
+.mk-pdelegates .pd-l1,.mk-pdelegates .pd-l2{display:flex;align-items:center;gap:6px;min-width:0}
+.mk-pdelegates .pd-l3{display:flex;flex-wrap:wrap;align-items:center;gap:4px}
+.mk-pdelegates .pd-nm{flex:none;font:600 12.5px/18px var(--f-mono);font-variant-ligatures:none}
+.mk-pdelegates .pd-sp{flex:1}
+.mk-pdelegates .pd-md{flex:1;min-width:0;font:500 10.5px/16px var(--f-mono);font-variant-ligatures:none;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mk-pdelegates .pd-bd{font-family:var(--f-mono);font-variant-ligatures:none}
+.mk-pdelegates .pd-sk{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;line-height:17px;padding:0 7px;border:1px solid var(--line);border-radius:999px;background:var(--bg);color:var(--muted);white-space:nowrap}
+.mk-pdelegates .pd-sk.pd-mc{font-family:var(--f-mono);font-size:10px;color:var(--ink)}
+.mk-pdelegates .pd-sk.pd-mc span{font-family:var(--f-body);color:var(--muted)}
+.mk-pdelegates .pd-cp{gap:4px}
+.mk-pdelegates .pd-cp svg{width:9px;height:9px;flex:none}
+
+/* effort: three dots */
+.mk-pdelegates .pd-ef{flex:none;display:inline-flex;gap:3px;align-items:center}
+.mk-pdelegates .pd-ef i{display:block;width:6px;height:6px;border-radius:50%;background:var(--line-strong)}
+.mk-pdelegates .pd-ef[data-n="1"] i:nth-child(-n+1),
+.mk-pdelegates .pd-ef[data-n="2"] i:nth-child(-n+2),
+.mk-pdelegates .pd-ef[data-n="3"] i{background:var(--ink)}
+
+/* fleet types: muted, with a small tag */
+.mk-pdelegates .pd-card.pd-fc{background:transparent;border-color:var(--line)}
+.mk-pdelegates .pd-fc .pd-nm{color:var(--muted)}
+.mk-pdelegates .pd-fc .mkchip{background:transparent;border-color:var(--line);color:var(--muted)}
+.mk-pdelegates .pd-fc .pd-ef[data-n="1"] i:nth-child(-n+1),
+.mk-pdelegates .pd-fc .pd-ef[data-n="2"] i:nth-child(-n+2),
+.mk-pdelegates .pd-fc .pd-ef[data-n="3"] i{background:var(--muted)}
+.mk-pdelegates .pd-tag{flex:none;font:500 9.5px/14px var(--f-mono);padding:0 5px;border:1px solid var(--line-strong);border-radius:4px;color:var(--muted)}
+.mk-pdelegates .pd-fn{grid-column:1/-1;margin:1px 2px 0;font-size:11px;line-height:1.4;color:var(--muted)}
+.mk-pdelegates .pd-fn code{font-family:var(--f-mono);font-size:10.5px;color:var(--ink)}
+
+/* the selected type */
+.mk-pdelegates[data-sel="writer"] .pd-card[data-t="writer"],
+.mk-pdelegates[data-sel="analyst"] .pd-card[data-t="analyst"]{background:var(--coral-wash);border-color:var(--coral)}
+
+/* file panel */
+.mk-pdelegates .pd-file{display:grid;min-width:0;background:var(--recess);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.mk-pdelegates .pd-fp{grid-area:1/1;min-width:0;display:flex;flex-direction:column;visibility:hidden}
+.mk-pdelegates[data-file="writer"] .pd-fp[data-f="writer"],
+.mk-pdelegates[data-file="analyst"] .pd-fp[data-f="analyst"]{visibility:visible}
+.mk-pdelegates .pd-fh{display:flex;align-items:center;gap:6px;height:26px;padding:0 10px;background:var(--raised);border-bottom:1px solid var(--line);font:500 11px/1 var(--f-mono);color:var(--muted);white-space:nowrap;overflow:hidden}
+.mk-pdelegates .pd-fh b{font-weight:600;color:var(--ink)}
+.mk-pdelegates .pd-fb{flex:1;padding:7px 10px 8px;font:10px/1.6 var(--f-mono);font-variant-ligatures:none;color:var(--ink)}
+.mk-pdelegates .pd-ln{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mk-pdelegates .pd-k,.mk-pdelegates .pd-dd{color:var(--muted)}
+.mk-pdelegates .pd-ln.pd-wf{margin-inline:-10px;padding-inline:10px;background:var(--warn-wash);color:var(--warn-ink)}
+.mk-pdelegates .pd-ln.pd-wf .pd-k{color:var(--warn-ink)}
+.mk-pdelegates .pd-ln.pd-wf em{font-style:normal;opacity:.75}
+.mk-pdelegates .pd-cy{color:var(--coral-ink)}
+.mk-pdelegates .pd-ln.pd-bo{white-space:normal;overflow:visible}
+.mk-pdelegates .pd-ln.pd-bo:first-of-type{margin-top:0}
+
+/* routing strip */
+.mk-pdelegates .pd-route{position:relative;margin-top:5px;background:var(--recess);border:1px solid var(--line);border-radius:10px;padding:11px 8px 8px;min-width:0}
+.mk-pdelegates .pd-rh{position:absolute;top:-6px;left:10px;padding:0 6px;border-radius:4px;background:var(--bg);font:600 10px/12px var(--f-body);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.mk-pdelegates .pd-rt{display:grid;min-width:0}
+.mk-pdelegates .pd-run{grid-area:1/1;display:grid;grid-template-columns:minmax(0,1fr) 16px minmax(0,1.4fr) 16px minmax(0,1fr);align-items:center;min-width:0}
+.mk-pdelegates .pd-run:not(.pd-on){visibility:hidden}
+.mk-pdelegates .pd-ar{display:block;width:16px;height:10px;color:var(--muted);justify-self:center}
+.mk-pdelegates .pd-ar svg{display:block;width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+@container (max-width:499px){
+  .mk-pdelegates .pd-run{grid-template-columns:minmax(0,1fr)}
+  .mk-pdelegates .pd-ar{transform:rotate(90deg);margin-block:4px}
+}
+
+.mk-pdelegates .pd-task{display:flex;flex-direction:column;gap:3px;padding:6px 8px;background:var(--raised);border:1px solid var(--line-strong);border-radius:8px;min-width:0}
+.mk-pdelegates .pd-tr{display:flex;align-items:center;justify-content:space-between;gap:6px}
+.mk-pdelegates .pd-id{font:500 10.5px/16px var(--f-mono);color:var(--muted)}
+.mk-pdelegates .pd-nt{color:var(--muted);background:transparent}
+.mk-pdelegates .pd-tt{font-size:12px;line-height:1.3;font-weight:600}
+
+.mk-pdelegates .pd-jev{display:flex;flex-direction:column;gap:4px;padding:6px 9px 7px;background:var(--raised);border:1.5px solid var(--ink);border-radius:10px;min-width:0}
+.mk-pdelegates .pd-jh{display:flex;align-items:center;gap:6px;font-size:10.5px;color:var(--muted);white-space:nowrap;overflow:hidden}
+.mk-pdelegates .pd-jh b{font-weight:700;color:var(--ink);font-size:11.5px}
+.mk-pdelegates .pd-br{display:grid;grid-template-columns:48px minmax(0,1fr) 26px;align-items:center;gap:6px}
+.mk-pdelegates .pd-bn{font:500 10.5px/14px var(--f-mono);color:var(--muted)}
+.mk-pdelegates .pd-bt{display:block;height:6px;border-radius:3px;background:var(--recess);overflow:hidden}
+.mk-pdelegates .pd-bt i{display:block;height:100%;width:calc(var(--p) * 100%);border-radius:3px;background:var(--muted);transform-origin:left center}
+.mk-pdelegates .pd-bv{font:500 10.5px/14px var(--f-mono);color:var(--muted);text-align:right;font-variant-numeric:tabular-nums}
+.mk-pdelegates .pd-br.pd-top .pd-bn,.mk-pdelegates .pd-br.pd-top .pd-bv{color:var(--coral-ink);font-weight:600}
+.mk-pdelegates .pd-br.pd-top .pd-bt i{background:var(--coral)}
+
+.mk-pdelegates .pd-res{display:flex;flex-direction:column;gap:1px;padding:6px 9px;background:var(--coral-wash);border:1px solid var(--coral);border-radius:8px;min-width:0}
+.mk-pdelegates .pd-res b{font:600 12.5px/18px var(--f-mono);color:var(--coral-ink)}
+.mk-pdelegates .pd-res span{display:block;font:500 10.5px/1.4 var(--f-mono);font-variant-ligatures:none;color:var(--coral-ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* ---- motion: the routing plays, the winner lights up, the file follows ---- */
+@keyframes pd-in{from{opacity:0;transform:translateY(5px) scale(.97)}to{opacity:1;transform:none}}
+@keyframes pd-fade{from{opacity:0}to{opacity:1}}
+@keyframes pd-grow{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+@keyframes pd-ripple{from{box-shadow:0 0 0 0 var(--coral)}to{box-shadow:0 0 0 6px transparent}}
+@keyframes pd-line{from{opacity:.15;transform:translateY(3px)}to{opacity:1;transform:none}}
+
+@media (prefers-reduced-motion:no-preference){
+  .mk-pdelegates.is-live .pd-run.pd-on .pd-task{animation:pd-in .4s cubic-bezier(.2,.8,.2,1) both}
+  .mk-pdelegates.is-live .pd-run.pd-on .pd-ar:nth-of-type(1){animation:pd-fade .3s ease-out .3s both}
+  .mk-pdelegates.is-live .pd-run.pd-on .pd-jev{animation:pd-fade .3s ease-out .4s both}
+  .mk-pdelegates.is-live .pd-run.pd-on .pd-bt i{animation:pd-grow .65s cubic-bezier(.2,.8,.2,1) both;animation-delay:calc(700ms + var(--d) * 150ms)}
+  .mk-pdelegates.is-live .pd-run.pd-on .pd-bv{animation:pd-fade .3s ease-out both;animation-delay:calc(1000ms + var(--d) * 150ms)}
+  .mk-pdelegates.is-live .pd-run.pd-on .pd-ar:nth-of-type(2){animation:pd-fade .3s ease-out 1.6s both}
+  .mk-pdelegates.is-live .pd-run.pd-on .pd-res{animation:pd-in .4s cubic-bezier(.2,.8,.2,1) 1.75s both}
+  .mk-pdelegates.is-live[data-sel="writer"] .pd-card[data-t="writer"],
+  .mk-pdelegates.is-live[data-sel="analyst"] .pd-card[data-t="analyst"]{animation:pd-ripple .9s ease-out}
+  .mk-pdelegates.is-live[data-file="writer"] .pd-fp[data-f="writer"] .pd-ln,
+  .mk-pdelegates.is-live[data-file="analyst"] .pd-fp[data-f="analyst"] .pd-ln{animation:pd-line .4s cubic-bezier(.2,.8,.2,1) both;animation-delay:calc(var(--i) * 40ms)}
+}
+@media (prefers-reduced-motion:reduce){
+  .mk-pdelegates *,.mk-pdelegates *::before,.mk-pdelegates *::after{animation:none !important;transition:none !important}
+}
+</style>
+<div class="mk mk-pdelegates" data-sel="writer" data-file="writer" role="img" aria-label="Delegate types in the x-growth project: three live as files in the project folder and two come from the fleet. A task with no type goes to Jev, who scores each type and picks writer, so writer.md is the file that applies.">
+  <div class="mkf">
+    <div class="mkf-bar"><b>x-growth · Delegates</b><span class="sp"></span><span class="pd-sub">3 project · 2 from fleet</span></div>
+    <div class="mkf-body">
+      <div class="pd-main">
+
+        <div class="pd-pj">
+          <div class="pd-card" data-t="writer">
+            <div class="pd-l1"><span class="pd-nm">writer</span><span class="mkchip">Claude Code</span><span class="pd-sp"></span><span class="mkchip pd-bd">$2/day</span></div>
+            <div class="pd-l2"><span class="pd-md">claude-opus-5-5</span><span class="pd-ef" data-n="3" aria-hidden="true"><i></i><i></i><i></i></span></div>
+            <div class="pd-l3"><span class="mkchip warn pd-cp"><svg viewBox="0 0 10 10" aria-hidden="true"><circle cx="5" cy="5" r="3.7" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M2.4 7.6l5.2-5.2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>can't post</span><span class="pd-sk">brand-voice</span><span class="pd-sk">x-post</span></div>
+          </div>
+          <div class="pd-card" data-t="analyst">
+            <div class="pd-l1"><span class="pd-nm">analyst</span><span class="mkchip">OpenCode</span><span class="pd-sp"></span><span class="mkchip pd-bd">$1/day</span></div>
+            <div class="pd-l2"><span class="pd-md">opencode-go/deepseek-v4-pro</span><span class="pd-ef" data-n="2" aria-hidden="true"><i></i><i></i><i></i></span></div>
+            <div class="pd-l3"><span class="pd-sk">research</span><span class="pd-sk pd-mc"><span>mcp</span>x-read</span></div>
+          </div>
+          <div class="pd-card" data-t="replier">
+            <div class="pd-l1"><span class="pd-nm">replier</span><span class="mkchip">pi</span><span class="pd-sp"></span><span class="mkchip pd-bd">$1/day</span></div>
+            <div class="pd-l2"><span class="pd-md">claude-sonnet-5-5</span><span class="pd-ef" data-n="1" aria-hidden="true"><i></i><i></i><i></i></span></div>
+            <div class="pd-l3"><span class="mkchip warn pd-cp"><svg viewBox="0 0 10 10" aria-hidden="true"><circle cx="5" cy="5" r="3.7" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M2.4 7.6l5.2-5.2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>can't post</span><span class="pd-sk">brand-voice</span></div>
+          </div>
+        </div>
+
+        <div class="pd-fl">
+          <div class="pd-card pd-fc" data-t="medium">
+            <div class="pd-l1"><span class="pd-nm">medium</span><span class="pd-tag">fleet</span><span class="pd-sp"></span><span class="mkchip">Claude Code</span></div>
+            <div class="pd-l2"><span class="pd-md">claude-sonnet-5-5</span><span class="pd-ef" data-n="2" aria-hidden="true"><i></i><i></i><i></i></span></div>
+          </div>
+          <div class="pd-card pd-fc" data-t="deep">
+            <div class="pd-l1"><span class="pd-nm">deep</span><span class="pd-tag">fleet</span><span class="pd-sp"></span><span class="mkchip">Claude Code</span></div>
+            <div class="pd-l2"><span class="pd-md">claude-opus-5-5</span><span class="pd-ef" data-n="3" aria-hidden="true"><i></i><i></i><i></i></span></div>
+          </div>
+          <p class="pd-fn">A project file named <code>medium.md</code> would win over the fleet type.</p>
+        </div>
+
+        <div class="pd-file">
+          <div class="pd-fp" data-f="writer">
+            <div class="pd-fh"><span>delegates/</span><b>writer.md</b></div>
+            <div class="pd-fb">
+              <span class="pd-ln pd-dd" style="--i:0">---</span>
+              <span class="pd-ln" style="--i:1"><span class="pd-k">harness:</span> claude-code</span>
+              <span class="pd-ln" style="--i:2"><span class="pd-k">model:</span> claude-opus-5-5</span>
+              <span class="pd-ln" style="--i:3"><span class="pd-k">effort:</span> high</span>
+              <span class="pd-ln" style="--i:4"><span class="pd-k">skills:</span> [brand-voice, x-post]</span>
+              <span class="pd-ln" style="--i:5"><span class="pd-k">mcp:</span> []</span>
+              <span class="pd-ln pd-wf" style="--i:6"><span class="pd-k">role:</span> web-facing</span>
+              <span class="pd-ln" style="--i:7"><span class="pd-k">budget:</span> $2/day</span>
+              <span class="pd-ln" style="--i:8"><span class="pd-k">lands:</span> <span class="pd-cy">needs-you</span></span>
+              <span class="pd-ln pd-dd" style="--i:9">---</span>
+              <span class="pd-ln pd-bo" style="--i:10">Draft posts in the brand voice.</span>
+              <span class="pd-ln pd-bo" style="--i:11">Never post; drafts go to Needs you.</span>
+            </div>
+          </div>
+          <div class="pd-fp" data-f="analyst">
+            <div class="pd-fh"><span>delegates/</span><b>analyst.md</b></div>
+            <div class="pd-fb">
+              <span class="pd-ln pd-dd" style="--i:0">---</span>
+              <span class="pd-ln" style="--i:1"><span class="pd-k">harness:</span> opencode</span>
+              <span class="pd-ln" style="--i:2"><span class="pd-k">model:</span> opencode-go/deepseek-v4-pro</span>
+              <span class="pd-ln" style="--i:3"><span class="pd-k">effort:</span> medium</span>
+              <span class="pd-ln" style="--i:4"><span class="pd-k">skills:</span> [research]</span>
+              <span class="pd-ln" style="--i:5"><span class="pd-k">mcp:</span> [x-read]</span>
+              <span class="pd-ln" style="--i:6"><span class="pd-k">role:</span> worker</span>
+              <span class="pd-ln" style="--i:7"><span class="pd-k">budget:</span> $1/day</span>
+              <span class="pd-ln" style="--i:8"><span class="pd-k">lands:</span> board</span>
+              <span class="pd-ln pd-dd" style="--i:9">---</span>
+              <span class="pd-ln pd-bo" style="--i:10">Pull last week's numbers.</span>
+              <span class="pd-ln pd-bo" style="--i:11">Summarise them in plain terms.</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="pd-route">
+        <div class="pd-rh">Routing</div>
+        <div class="pd-rt">
+          <div class="pd-run pd-on" data-r="1">
+            <div class="pd-task"><div class="pd-tr"><span class="pd-id">#t-31</span><span class="mkchip pd-nt">no type</span></div><div class="pd-tt">Draft Tuesday's thread</div></div>
+            <span class="pd-ar" aria-hidden="true"><svg viewBox="0 0 16 10"><path d="M1.5 5h12M9.5 1.2L13.5 5l-4 3.8"/></svg></span>
+            <div class="pd-jev">
+              <div class="pd-jh"><span class="mkchip model">Jev</span><span>picks by probability</span></div>
+              <div class="pd-br pd-top"><span class="pd-bn">writer</span><span class="pd-bt"><i style="--p:.82;--d:0"></i></span><span class="pd-bv" style="--d:0">0.82</span></div>
+              <div class="pd-br"><span class="pd-bn">analyst</span><span class="pd-bt"><i style="--p:.11;--d:1"></i></span><span class="pd-bv" style="--d:1">0.11</span></div>
+              <div class="pd-br"><span class="pd-bn">replier</span><span class="pd-bt"><i style="--p:.07;--d:2"></i></span><span class="pd-bv" style="--d:2">0.07</span></div>
+            </div>
+            <span class="pd-ar" aria-hidden="true"><svg viewBox="0 0 16 10"><path d="M1.5 5h12M9.5 1.2L13.5 5l-4 3.8"/></svg></span>
+            <div class="pd-res"><b>writer</b><span>Claude Code</span><span>opus · high</span></div>
+          </div>
+          <div class="pd-run" data-r="2">
+            <div class="pd-task"><div class="pd-tr"><span class="pd-id">#t-32</span><span class="mkchip pd-nt">no type</span></div><div class="pd-tt">Weekly numbers</div></div>
+            <span class="pd-ar" aria-hidden="true"><svg viewBox="0 0 16 10"><path d="M1.5 5h12M9.5 1.2L13.5 5l-4 3.8"/></svg></span>
+            <div class="pd-jev">
+              <div class="pd-jh"><span class="mkchip model">Jev</span><span>picks by probability</span></div>
+              <div class="pd-br pd-top"><span class="pd-bn">analyst</span><span class="pd-bt"><i style="--p:.88;--d:0"></i></span><span class="pd-bv" style="--d:0">0.88</span></div>
+              <div class="pd-br"><span class="pd-bn">writer</span><span class="pd-bt"><i style="--p:.07;--d:1"></i></span><span class="pd-bv" style="--d:1">0.07</span></div>
+              <div class="pd-br"><span class="pd-bn">replier</span><span class="pd-bt"><i style="--p:.05;--d:2"></i></span><span class="pd-bv" style="--d:2">0.05</span></div>
+            </div>
+            <span class="pd-ar" aria-hidden="true"><svg viewBox="0 0 16 10"><path d="M1.5 5h12M9.5 1.2L13.5 5l-4 3.8"/></svg></span>
+            <div class="pd-res"><b>analyst</b><span>OpenCode</span><span>deepseek · medium</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+(function(){
+  var root=document.querySelector('.mk-pdelegates');
+  if(!root) return;
+  var runs=[].slice.call(root.querySelectorAll('.pd-run'));
+  var reduce=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var timers=[],CYCLE=10000;
+  function show(n){runs.forEach(function(r,i){r.classList.toggle('pd-on',i===n-1);});}
+  function pick(k){
+    root.setAttribute('data-sel',k);
+    if(k) root.setAttribute('data-file',k);
+  }
+  // [ms into the loop, step]: task 1 routes to writer, task 2 routes to analyst
+  var plan=[
+    [0,function(){show(1);pick('');}],
+    [2400,function(){pick('writer');}],
+    [5200,function(){show(2);pick('');}],
+    [7600,function(){pick('analyst');}]
+  ];
+  function cycle(){
+    timers=[];
+    plan.forEach(function(p){timers.push(setTimeout(p[1],p[0]));});
+    timers.push(setTimeout(cycle,CYCLE));
+  }
+  function clear(){timers.forEach(clearTimeout);timers=[];}
+  function rest(){show(1);root.setAttribute('data-sel','writer');root.setAttribute('data-file','writer');}
+  function start(){clear();if(reduce) return;cycle();}
+  function stop(){clear();rest();}
+  root.addEventListener('mk:live',start);
+  root.addEventListener('mk:idle',stop);
+  if(root.classList.contains('is-live')) start();
+})();
+</script>

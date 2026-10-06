@@ -75,3 +75,4 @@ does with an IntersectionObserver.
 | xphone | X example: approving drafts in the iOS app |
 | xreply | X example: replies only to mentions, drafter cannot post |
 | xloop | X example: weekly recap to playbook to next draft |
+| pdelegates | Project delegate types as files; Jev routes a task to a type |

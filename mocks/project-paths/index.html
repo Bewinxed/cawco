@@ -491,6 +491,50 @@ th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute
 .thesis{font-size:15px;font-weight:500}
 .thesis span{color:var(--muted);font-weight:400;font-size:13px}
 
+
+/* architecture map */
+.ar{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:12px;align-items:start}
+@media (max-width:1000px){.ar{grid-template-columns:minmax(0,1fr)}}
+.ar-ctl{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}
+.ar-seg{display:inline-flex;border:1px solid var(--line-strong);border-radius:10px;padding:3px;background:var(--raised);gap:3px}
+.ar-seg button{font:inherit;font-size:12.5px;border:0;background:transparent;color:var(--muted);padding:5px 12px;border-radius:7px;cursor:pointer}
+.ar-seg button[aria-checked="true"]{background:var(--coral-wash);color:var(--coral-ink)}
+.ar-map{display:flex;flex-direction:column;gap:10px;min-width:0}
+.ar-band{border:1px solid var(--line-strong);border-radius:16px;padding:28px 10px 10px;position:relative;min-width:0}
+.ar-band>.ar-bl{position:absolute;top:8px;left:12px;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:500}
+.ar-band.hub{background:var(--bg)}
+.ar-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.ar-groups{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px;align-items:start}
+.ar-grp{display:flex;flex-direction:column;gap:6px;min-width:0}
+.ar-grp>span{font-size:11px;color:var(--muted);font-weight:500}
+.ar-grp.jev{border:1.5px dashed var(--coral);border-radius:12px;padding:8px;background:var(--coral-wash)}
+.ar-map.off .ar-grp.jev{border-color:var(--line-strong);background:transparent}
+.an{font:inherit;text-align:left;cursor:pointer;background:var(--raised);color:var(--ink);border:1px solid var(--line-strong);border-radius:10px;padding:7px 9px;display:flex;flex-direction:column;gap:1px;position:relative;min-width:0;transition:opacity .2s,border-color .2s,background-color .2s,transform .2s var(--ease)}
+.an b{font-size:12.5px;font-weight:500;padding-right:22px;line-height:1.3}
+.an span{font-size:11px;color:var(--muted);line-height:1.35}
+.an.code{border-style:dashed;border-color:var(--muted)}
+.an.model{border:1.5px solid var(--ink)}
+.an.store{border-top:3px double var(--line-strong)}
+.an.you{background:var(--coral-wash);border-color:var(--coral)}
+.an.ext{background:transparent}
+.an.pending{opacity:.55;border-style:dotted}
+.ar-map.picking .an{opacity:.32}
+.ar-map.picking .an.rel{opacity:1}
+.ar-map.picking .an.sel{opacity:1;border-color:var(--coral);background:var(--coral-wash);transform:translateY(-1px)}
+.an .jb{position:absolute;top:6px;right:6px;font-family:var(--f-mono);font-size:10px;line-height:16px;min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:var(--coral);color:oklch(18% .01 40);text-align:center}
+.ar-map.off .an .jb{background:transparent;border:1px dashed var(--muted);color:var(--muted)}
+.ar-map.is-live:not(.off) .an .jb{animation:jcall 4.8s var(--ease) infinite;animation-delay:var(--jd,0s)}
+@keyframes jcall{0%,100%{box-shadow:0 0 0 0 transparent}8%{box-shadow:0 0 0 4px var(--coral-wash)}16%{box-shadow:0 0 0 0 transparent}}
+.ar-ins{position:sticky;top:16px;background:var(--raised);border:1px solid var(--line);border-radius:var(--r-tray);padding:14px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.ar-ins h4{font-size:15px}
+.ar-ins .k2{font-family:var(--f-mono);font-size:10.5px;color:var(--muted)}
+.ar-ins p{font-size:13px;color:var(--muted)}
+.ar-ins .tl{display:flex;flex-wrap:wrap;gap:4px}
+.ar-ins .tl span{font-size:11px;border:1px solid var(--line);border-radius:999px;padding:0 7px;line-height:18px;background:var(--bg)}
+.ar-ins .jx{border-radius:10px;padding:8px 10px;font-size:12.5px;background:var(--coral-wash);color:var(--coral-ink)}
+.ar-ins .jx.off{background:var(--recess);color:var(--ink)}
+.ar-ins .jx b{font-weight:500;display:block;font-size:11px;letter-spacing:.04em;text-transform:uppercase;margin-bottom:2px}
+
 @media (prefers-reduced-motion: reduce){
   *,*::before,*::after{animation:none!important;transition:none!important}
 }
@@ -499,11 +543,12 @@ th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute
 <div class="wrap">
 <nav class="idx" aria-label="Chapters">
   <div class="mark">Caw&amp;Co</div>
-  <a href="#path">Your path <span class="n">16</span></a>
+  <a href="#arch">Architecture</a>
+  <a href="#path">Your path <span class="n">17</span></a>
   <a href="#xexample">Example: X</a>
   <a href="#research">Evidence <span class="n">10</span></a>
   <a href="#shape">Shape <span class="n">D1–3</span></a>
-  <a href="#runs">Who runs it <span class="n">D4–7</span></a>
+  <a href="#runs">Who runs it <span class="n">D4–7, 16</span></a>
   <a href="#knowledge">Knowledge <span class="n">D8</span></a>
   <a href="#time">Time <span class="n">D9–11</span></a>
   <a href="#face">Words, Caw <span class="n">D12–13</span></a>
@@ -521,7 +566,7 @@ th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute
   <div class="caw"><img class="caw-l" src="caw/light-ready.webp" alt="Caw" width="104" height="104"><img class="caw-d" src="caw/dark-ready.webp" alt="" width="104" height="104"></div>
   <div>
     <h1>Projects, rethought</h1>
-    <p>Fifteen decisions. Each one shows how it would look and how it works. Pick a path per card; I read your picks back from this page.</p>
+    <p>Sixteen decisions. Each one shows how it would look and how it works. Pick a path per card; I read your picks back from this page.</p>
     <div class="row">
       <span class="pill" id="savestate"><span class="dot"></span><span id="savetext">Connecting…</span></span>
       <button class="btn" id="copypicks" type="button">Copy my picks</button>
@@ -554,6 +599,140 @@ th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute
   </div>
 </section>
 
+
+
+<section class="chap" id="arch">
+  <header><span class="eyebrow">Architecture</span><h2>The whole system, and where Jev sits</h2><p>Tap a box to see what it talks to. Switch Jev off to see what each part does without it.</p></header>
+  <div class="ar-ctl">
+    <div class="ar-seg" role="radiogroup" aria-label="Jev">
+      <button type="button" role="radio" aria-checked="true" data-jev="on">Jev on</button>
+      <button type="button" role="radio" aria-checked="false" data-jev="off">Jev off</button>
+    </div>
+    <div class="legend" style="margin:0"><span class="lg code">code</span><span class="lg model">model</span><span class="lg store">stored</span><span class="lg you">you</span><span class="lg ext">outside</span><span class="lg" style="border-color:var(--coral);color:var(--coral-ink)">J · asks Jev</span></div>
+  </div>
+  <div class="ar">
+    <div class="ar-map anim" id="armap"></div>
+    <aside class="ar-ins" id="arins" aria-live="polite"></aside>
+  </div>
+</section>
+<script>
+(function(){
+  "use strict";
+  var B = {clients:"Clients", hub:"Hub · one process on your tailnet", machines:"Machines · one daemon each", outside:"Outside"};
+  var G = ["Front door","Work","Time and events","Knowledge","Agents","Judgments"];
+  var NODES = [
+    {id:"dash",band:"clients",kind:"you",t:"Dashboard",s:"board, threads, settings",d:"Where you read the board, talk to Caw and approve.",talks:["api"]},
+    {id:"ios",band:"clients",kind:"you",t:"iOS and Mac app",s:"push, threads, approvals",d:"The phone path now that Telegram is pending. Needs push first.",talks:["api","apns"]},
+    {id:"cli",band:"clients",kind:"you",t:"cawco CLI",s:"admin, same role checks",d:"Admin for people and for the overseer, under the same role checks as MCP.",talks:["api"]},
+    {id:"tg",band:"clients",kind:"pending",t:"Telegram",s:"pending",d:"Paused. Topics per project come back if you turn it on.",talks:["api"]},
+    {id:"api",band:"hub",grp:"Front door",kind:"code",t:"API + socket",s:"one ledger for every client",d:"Every client and every action rides the same ledger; nothing is posted optimistically.",talks:["dash","ios","cli","tg","proj","board","disp","daemon","apns"]},
+    {id:"mcp",band:"hub",grp:"Front door",kind:"code",t:"MCP · cawco",s:"one toolset per role",d:"One server; the session's credential picks its role and toolset.",talks:["sess","board","mem","cred","dtypes"]},
+    {id:"cred",band:"hub",grp:"Front door",kind:"store",t:"Credentials",s:"Jev key, connector keys",d:"Keys stay here. Sessions call tools; they never see tokens.",talks:["mcp","act","jev","ingress"]},
+    {id:"proj",band:"hub",grp:"Work",kind:"store",t:"Projects and places",s:"remote, checkouts, folder",d:"One identity with many places: checkouts on any machine, workspaces, the hub folder.",talks:["folder","board","dtypes","api"]},
+    {id:"board",band:"hub",grp:"Work",kind:"store",t:"Board index",s:"tasks are files, rebuilt",d:"An index rebuilt from the task files, for the frontier and board order. Never the truth.",talks:["folder","disp","lead","api","mcp"],jev:"Is this the same work as an open task? (yes/no, fan-out)",fb:"Exact match on files and checks."},
+    {id:"dtypes",band:"hub",grp:"Work",kind:"store",t:"Delegate types",s:"fleet + project files",d:"Harness, model, effort, skills, MCP, role, budget. Project files shadow fleet types.",talks:["disp","proj","mcp"]},
+    {id:"disp",band:"hub",grp:"Work",kind:"code",t:"Dispatcher",s:"frontier, caps, routing",d:"Starts ready tasks under caps and budgets, on a machine that can run the type.",talks:["board","dtypes","daemon","land","brief","wf","api"],jev:"Ready for an agent? Which type fits? Clarity, size, risk? (score, choice)",fb:"A check must exist; the task names its type; board order."},
+    {id:"land",band:"hub",grp:"Work",kind:"code",t:"Checks + landing",s:"run, rebase, push or PR",d:"Runs acceptance checks, then lands through a per-repo queue.",talks:["ws","board","lead","gh","disp"],jev:"Does this report meet each acceptance criterion? (yes/no each)",fb:"Shell checks only, or the lead reviews."},
+    {id:"act",band:"hub",grp:"Work",kind:"code",t:"Approved actions",s:"exact call, once, on time",d:"You approve one exact tool call; code runs it once at its time. Never a model.",talks:["cred","x","gh","ios"]},
+    {id:"rout",band:"hub",grp:"Time and events",kind:"code",t:"Routines",s:"Effect Cron, run per slot",d:"Each slot fires once; a fresh session or a message to the lead.",talks:["wf","sess","lead","ingress"]},
+    {id:"ingress",band:"hub",grp:"Time and events",kind:"code",t:"Ingress",s:"pollers + optional relay",d:"Polls GitHub and any connector; an optional relay reaches a one-route listener.",talks:["gh","x","rout","cred"],jev:"Which routine or project is this event for? (choice)",fb:"Matcher filters: author, label, regex."},
+    {id:"wf",band:"hub",grp:"Time and events",kind:"code",t:"Workflow engine",s:"durable runs, replay",d:"Effect's durable engine under routines and multi-step runs.",talks:["rout","disp"]},
+    {id:"folder",band:"hub",grp:"Knowledge",kind:"store",t:"Project folder",s:"git, synced as files",d:"AGENTS.md, tasks, knowledge, assets, memory, routines, skills, delegates.",talks:["proj","board","mem","sess","brief","assets"]},
+    {id:"mem",band:"hub",grp:"Knowledge",kind:"model",t:"Memory + curator",s:"inbox, proposals",d:"Agents write notes; the curator proposes; you tap.",talks:["folder","sess","ios","mcp"],jev:"Lasting fact, scaffolding, secret, untrusted? (choice)",fb:"Rules: repeats in 2+ sessions, provenance tags."},
+    {id:"brief",band:"hub",grp:"Knowledge",kind:"code",t:"Brief builder",s:"what a session starts with",d:"Task, checks, last failure and the right context files.",talks:["folder","mem","disp"],jev:"How much does each file matter for this task? (score each)",fb:"The whole brand kit and the newest notes."},
+    {id:"assets",band:"hub",grp:"Knowledge",kind:"store",t:"Assets",s:"content-addressed",d:"Images and files by hash, versioned, from any session.",talks:["folder","sess"]},
+    {id:"lead",band:"hub",grp:"Agents",kind:"model",t:"Caw · project lead",s:"woken by events",d:"Plans, briefs, recaps. Board tools only, per-project switch.",talks:["board","rout","ios","dash","land","watch"],jev:"Is each recap claim backed by its events? (yes/no each)",fb:"Recaps list events only."},
+    {id:"watch",band:"hub",grp:"Agents",kind:"code",t:"Fleet watch",s:"detectors, one triage",d:"Code detectors; a fresh Caw triage run only when the case is real.",talks:["daemon","lead","ios"],jev:"Stuck? Looping? Off-task? (yes/no)",fb:"A second code signal, tighter caps."},
+    {id:"jev",band:"hub",grp:"Judgments",kind:"model",t:"Jev",s:"typed judgments, opt-in",d:"Yes/no, choice and score over one state, in one call. Never status, never a permission.",talks:["board","disp","land","ingress","mem","brief","lead","watch","cred","ort"]},
+    {id:"daemon",band:"machines",kind:"code",t:"Daemon",s:"process truth",d:"The only authority on what runs on its machine.",talks:["api","sessiond","disp","watch"]},
+    {id:"sessiond",band:"machines",kind:"code",t:"sessiond",s:"keeps sessions across deploys",d:"Protocol-blind keeper; ships almost never.",talks:["daemon","sess"]},
+    {id:"sess",band:"machines",kind:"model",t:"Sessions",s:"Claude Code · OpenCode · pi",d:"Fresh per attempt; the role decides the tools.",talks:["mcp","ws","folder","sessiond","rout","mem","assets"]},
+    {id:"ws",band:"machines",kind:"store",t:"Workspaces",s:"clone + branch per task",d:"Durable per task; the session is the cheap part.",talks:["sess","land"]},
+    {id:"gh",band:"outside",kind:"ext",t:"GitHub · Linear",s:"if a project picks one",d:"The record for a project that chose it; otherwise CawCo's files are.",talks:["ingress","land","act"]},
+    {id:"x",band:"outside",kind:"ext",t:"X and other APIs",s:"through connectors",d:"Read by pollers, written only by approved actions.",talks:["ingress","act"]},
+    {id:"ort",band:"outside",kind:"ext",t:"OpenRouter · Typesafe",s:"where Jev runs",d:"Text leaves your network here, which is why Jev is opt-in.",talks:["jev"]},
+    {id:"apns",band:"outside",kind:"ext",t:"Apple push",s:"content-free payloads",d:"Wakes the app; the app fetches details over the tailnet.",talks:["ios","api"]}
+  ];
+  var byId = {}; NODES.forEach(function(n){ byId[n.id] = n; n.rel = {}; });
+  NODES.forEach(function(n){ n.talks.forEach(function(t){ if (byId[t]) { n.rel[t] = 1; byId[t].rel[n.id] = 1; } }); });
+  var map = document.getElementById("armap"), ins = document.getElementById("arins");
+  if (!map || !ins) return;
+  var jevOn = true, sel = "jev", btns = {};
+  function mk(n, i){
+    var b = document.createElement("button"); b.type = "button"; b.className = "an " + n.kind; b.dataset.id = n.id;
+    var t = document.createElement("b"); t.textContent = n.t; b.appendChild(t);
+    var s2 = document.createElement("span"); s2.textContent = n.s; b.appendChild(s2);
+    if (n.jev) { var j = document.createElement("i"); j.className = "jb"; j.style.setProperty("--jd", (i * 0.45).toFixed(2) + "s"); b.appendChild(j); }
+    b.addEventListener("click", function(){ sel = sel === n.id ? null : n.id; paint(); });
+    btns[n.id] = b; return b;
+  }
+  var ji = 0;
+  ["clients","hub","machines","outside"].forEach(function(band){
+    var box = document.createElement("div"); box.className = "ar-band" + (band === "hub" ? " hub" : "");
+    var bl = document.createElement("span"); bl.className = "ar-bl"; bl.textContent = B[band]; box.appendChild(bl);
+    if (band === "hub") {
+      var gs = document.createElement("div"); gs.className = "ar-groups";
+      G.forEach(function(g){
+        var gd = document.createElement("div"); gd.className = "ar-grp" + (g === "Judgments" ? " jev" : "");
+        var gl = document.createElement("span"); gl.textContent = g; gd.appendChild(gl);
+        NODES.filter(function(n){ return n.grp === g; }).forEach(function(n){ gd.appendChild(mk(n, n.jev ? ji++ : 0)); });
+        gs.appendChild(gd);
+      });
+      box.appendChild(gs);
+    } else {
+      var row = document.createElement("div"); row.className = "ar-row";
+      NODES.filter(function(n){ return n.band === band; }).forEach(function(n){ row.appendChild(mk(n, n.jev ? ji++ : 0)); });
+      box.appendChild(row);
+    }
+    map.appendChild(box);
+  });
+  function paint(){
+    map.classList.toggle("off", !jevOn);
+    map.classList.toggle("picking", !!sel);
+    NODES.forEach(function(n){
+      var off = !jevOn && (n.id === "jev" || n.id === "ort") && sel !== n.id;
+      var b = btns[n.id], on = sel === n.id, rel = sel && !off && (byId[sel].rel[n.id] || on);
+      b.classList.toggle("sel", on); b.classList.toggle("rel", !!rel);
+      b.setAttribute("aria-pressed", on ? "true" : "false");
+      var jb = b.querySelector(".jb"); if (jb) jb.textContent = jevOn ? "J" : "rules";
+    });
+    ins.textContent = "";
+    var n = sel ? byId[sel] : null;
+    var h = document.createElement("h4"), k = document.createElement("span"), p = document.createElement("p");
+    k.className = "k2";
+    if (!n) {
+      h.textContent = "Pick a box"; k.textContent = "the map";
+      p.textContent = jevOn ? "Coral J marks the eight parts that ask Jev a question." : "Jev is off: those parts run on their rules, and say so.";
+      ins.appendChild(k); ins.appendChild(h); ins.appendChild(p); return;
+    }
+    k.textContent = ({code:"code",model:"model",store:"stored",you:"you",ext:"outside",pending:"pending"})[n.kind] + (n.band === "hub" ? " · " + n.grp : " · " + B[n.band].split(" ·")[0]);
+    h.textContent = n.t; p.textContent = n.d;
+    ins.appendChild(k); ins.appendChild(h); ins.appendChild(p);
+    var tl = document.createElement("div"); tl.className = "tl";
+    Object.keys(n.rel).forEach(function(id){ if (!jevOn && (id === "jev" || id === "ort") && n.id !== "jev") return; var c = document.createElement("span"); c.textContent = byId[id].t; tl.appendChild(c); });
+    var lab = document.createElement("span"); lab.className = "k2"; lab.textContent = "talks to"; ins.appendChild(lab); ins.appendChild(tl);
+    if (n.id === "jev") {
+      var jx = document.createElement("div"); jx.className = "jx" + (jevOn ? "" : " off");
+      var jb2 = document.createElement("b"); jb2.textContent = jevOn ? "On" : "Off";
+      jx.appendChild(jb2); jx.appendChild(document.createTextNode(jevOn ? "Asked by the board, dispatcher, checks, ingress, memory, briefs, Caw and fleet watch." : "Nobody asks; each part runs its rules and shows \u201cJev off\u201d."));
+      ins.appendChild(jx);
+    } else if (n.jev) {
+      var jx2 = document.createElement("div"); jx2.className = "jx" + (jevOn ? "" : " off");
+      var jb3 = document.createElement("b"); jb3.textContent = jevOn ? "With Jev" : "Without Jev";
+      jx2.appendChild(jb3); jx2.appendChild(document.createTextNode(jevOn ? n.jev : n.fb));
+      ins.appendChild(jx2);
+    }
+  }
+  document.querySelectorAll(".ar-seg button").forEach(function(b){
+    b.addEventListener("click", function(){
+      jevOn = b.dataset.jev === "on";
+      document.querySelectorAll(".ar-seg button").forEach(function(x){ x.setAttribute("aria-checked", x === b ? "true" : "false"); });
+      paint();
+    });
+  });
+  paint();
+})();
+</script>
 
 <section class="chap" id="path">
   <header><span class="eyebrow">Your path</span><h2>Your picks, and answers to your notes</h2><p>Read from this page on 2026-10-06. Change a pick and this list updates.</p></header>
@@ -3264,6 +3443,314 @@ The tray chip overflows at 320px wide…</pre>
     <div class="foot">
       <details class="more"><summary>Details</summary><div class="in"><p>New tools are named group first (<code>board_write</code>, <code>admin_hooks_read</code>) so a pattern allows or denies a group. Admin tools split into read and write; writes ask you first. Existing hot names (<code>delegate</code>, <code>handoff</code>) stay. pi gained native MCP on 2026-09-29, so it can share the same names.</p></div></details>
       <label class="note">Note <input id="note-mcp" data-note="mcp" type="text" placeholder="Anything to add"></label>
+    </div>
+  </article>
+  <article class="dec" id="d16">
+    <header><span class="did">D16</span><h3>Project delegates</h3><span class="state" data-for="pdelegates">Not picked</span></header>
+    <p class="why">Delegate types are fleet-wide today. Let each project define its own: harness, model, effort, skills, MCP, role, budget.</p>
+    <div class="show">
+      <figure class="pane look"><span class="cap">How it would look</span><style>
+.mk-pdelegates{display:block;width:100%;container-type:inline-size;color:var(--ink);font-family:var(--f-body);font-size:12px;line-height:1.4;text-align:left}
+.mk-pdelegates *,.mk-pdelegates *::before,.mk-pdelegates *::after{box-sizing:border-box}
+.mk-pdelegates .mkf-body{padding:10px;gap:8px}
+.mk-pdelegates .mkf-bar b{flex:none}
+.mk-pdelegates .pd-sub{min-width:0;overflow:hidden;text-overflow:ellipsis}
+
+/* layout: project cards | file, then the fleet types; stacks when narrow */
+.mk-pdelegates .pd-main{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-areas:"pj fi" "fl fl";gap:8px;align-items:stretch;min-width:0}
+.mk-pdelegates .pd-pj{grid-area:pj;display:flex;flex-direction:column;gap:5px;min-width:0}
+.mk-pdelegates .pd-fl{grid-area:fl;display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:5px;min-width:0}
+.mk-pdelegates .pd-fl .pd-card{padding:5px 9px}
+.mk-pdelegates .pd-file{grid-area:fi}
+@container (max-width:499px){
+  .mk-pdelegates .pd-main{grid-template-columns:minmax(0,1fr);grid-template-areas:"pj" "fl" "fi"}
+}
+
+/* type cards */
+.mk-pdelegates .pd-card{display:flex;flex-direction:column;justify-content:center;gap:3px;padding:6px 9px;background:var(--raised);border:1px solid var(--line-strong);border-radius:10px;min-width:0;transition:background-color .3s ease,border-color .3s ease}
+.mk-pdelegates .pd-pj .pd-card{flex:1 1 auto}
+.mk-pdelegates .pd-l1,.mk-pdelegates .pd-l2{display:flex;align-items:center;gap:6px;min-width:0}
+.mk-pdelegates .pd-l3{display:flex;flex-wrap:wrap;align-items:center;gap:4px}
+.mk-pdelegates .pd-nm{flex:none;font:600 12.5px/18px var(--f-mono);font-variant-ligatures:none}
+.mk-pdelegates .pd-sp{flex:1}
+.mk-pdelegates .pd-md{flex:1;min-width:0;font:500 10.5px/16px var(--f-mono);font-variant-ligatures:none;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mk-pdelegates .pd-bd{font-family:var(--f-mono);font-variant-ligatures:none}
+.mk-pdelegates .pd-sk{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;line-height:17px;padding:0 7px;border:1px solid var(--line);border-radius:999px;background:var(--bg);color:var(--muted);white-space:nowrap}
+.mk-pdelegates .pd-sk.pd-mc{font-family:var(--f-mono);font-size:10px;color:var(--ink)}
+.mk-pdelegates .pd-sk.pd-mc span{font-family:var(--f-body);color:var(--muted)}
+.mk-pdelegates .pd-cp{gap:4px}
+.mk-pdelegates .pd-cp svg{width:9px;height:9px;flex:none}
+
+/* effort: three dots */
+.mk-pdelegates .pd-ef{flex:none;display:inline-flex;gap:3px;align-items:center}
+.mk-pdelegates .pd-ef i{display:block;width:6px;height:6px;border-radius:50%;background:var(--line-strong)}
+.mk-pdelegates .pd-ef[data-n="1"] i:nth-child(-n+1),
+.mk-pdelegates .pd-ef[data-n="2"] i:nth-child(-n+2),
+.mk-pdelegates .pd-ef[data-n="3"] i{background:var(--ink)}
+
+/* fleet types: muted, with a small tag */
+.mk-pdelegates .pd-card.pd-fc{background:transparent;border-color:var(--line)}
+.mk-pdelegates .pd-fc .pd-nm{color:var(--muted)}
+.mk-pdelegates .pd-fc .mkchip{background:transparent;border-color:var(--line);color:var(--muted)}
+.mk-pdelegates .pd-fc .pd-ef[data-n="1"] i:nth-child(-n+1),
+.mk-pdelegates .pd-fc .pd-ef[data-n="2"] i:nth-child(-n+2),
+.mk-pdelegates .pd-fc .pd-ef[data-n="3"] i{background:var(--muted)}
+.mk-pdelegates .pd-tag{flex:none;font:500 9.5px/14px var(--f-mono);padding:0 5px;border:1px solid var(--line-strong);border-radius:4px;color:var(--muted)}
+.mk-pdelegates .pd-fn{grid-column:1/-1;margin:1px 2px 0;font-size:11px;line-height:1.4;color:var(--muted)}
+.mk-pdelegates .pd-fn code{font-family:var(--f-mono);font-size:10.5px;color:var(--ink)}
+
+/* the selected type */
+.mk-pdelegates[data-sel="writer"] .pd-card[data-t="writer"],
+.mk-pdelegates[data-sel="analyst"] .pd-card[data-t="analyst"]{background:var(--coral-wash);border-color:var(--coral)}
+
+/* file panel */
+.mk-pdelegates .pd-file{display:grid;min-width:0;background:var(--recess);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.mk-pdelegates .pd-fp{grid-area:1/1;min-width:0;display:flex;flex-direction:column;visibility:hidden}
+.mk-pdelegates[data-file="writer"] .pd-fp[data-f="writer"],
+.mk-pdelegates[data-file="analyst"] .pd-fp[data-f="analyst"]{visibility:visible}
+.mk-pdelegates .pd-fh{display:flex;align-items:center;gap:6px;height:26px;padding:0 10px;background:var(--raised);border-bottom:1px solid var(--line);font:500 11px/1 var(--f-mono);color:var(--muted);white-space:nowrap;overflow:hidden}
+.mk-pdelegates .pd-fh b{font-weight:600;color:var(--ink)}
+.mk-pdelegates .pd-fb{flex:1;padding:7px 10px 8px;font:10px/1.6 var(--f-mono);font-variant-ligatures:none;color:var(--ink)}
+.mk-pdelegates .pd-ln{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mk-pdelegates .pd-k,.mk-pdelegates .pd-dd{color:var(--muted)}
+.mk-pdelegates .pd-ln.pd-wf{margin-inline:-10px;padding-inline:10px;background:var(--warn-wash);color:var(--warn-ink)}
+.mk-pdelegates .pd-ln.pd-wf .pd-k{color:var(--warn-ink)}
+.mk-pdelegates .pd-ln.pd-wf em{font-style:normal;opacity:.75}
+.mk-pdelegates .pd-cy{color:var(--coral-ink)}
+.mk-pdelegates .pd-ln.pd-bo{white-space:normal;overflow:visible}
+.mk-pdelegates .pd-ln.pd-bo:first-of-type{margin-top:0}
+
+/* routing strip */
+.mk-pdelegates .pd-route{position:relative;margin-top:5px;background:var(--recess);border:1px solid var(--line);border-radius:10px;padding:11px 8px 8px;min-width:0}
+.mk-pdelegates .pd-rh{position:absolute;top:-6px;left:10px;padding:0 6px;border-radius:4px;background:var(--bg);font:600 10px/12px var(--f-body);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.mk-pdelegates .pd-rt{display:grid;min-width:0}
+.mk-pdelegates .pd-run{grid-area:1/1;display:grid;grid-template-columns:minmax(0,1fr) 16px minmax(0,1.4fr) 16px minmax(0,1fr);align-items:center;min-width:0}
+.mk-pdelegates .pd-run:not(.pd-on){visibility:hidden}
+.mk-pdelegates .pd-ar{display:block;width:16px;height:10px;color:var(--muted);justify-self:center}
+.mk-pdelegates .pd-ar svg{display:block;width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+@container (max-width:499px){
+  .mk-pdelegates .pd-run{grid-template-columns:minmax(0,1fr)}
+  .mk-pdelegates .pd-ar{transform:rotate(90deg);margin-block:4px}
+}
+
+.mk-pdelegates .pd-task{display:flex;flex-direction:column;gap:3px;padding:6px 8px;background:var(--raised);border:1px solid var(--line-strong);border-radius:8px;min-width:0}
+.mk-pdelegates .pd-tr{display:flex;align-items:center;justify-content:space-between;gap:6px}
+.mk-pdelegates .pd-id{font:500 10.5px/16px var(--f-mono);color:var(--muted)}
+.mk-pdelegates .pd-nt{color:var(--muted);background:transparent}
+.mk-pdelegates .pd-tt{font-size:12px;line-height:1.3;font-weight:600}
+
+.mk-pdelegates .pd-jev{display:flex;flex-direction:column;gap:4px;padding:6px 9px 7px;background:var(--raised);border:1.5px solid var(--ink);border-radius:10px;min-width:0}
+.mk-pdelegates .pd-jh{display:flex;align-items:center;gap:6px;font-size:10.5px;color:var(--muted);white-space:nowrap;overflow:hidden}
+.mk-pdelegates .pd-jh b{font-weight:700;color:var(--ink);font-size:11.5px}
+.mk-pdelegates .pd-br{display:grid;grid-template-columns:48px minmax(0,1fr) 26px;align-items:center;gap:6px}
+.mk-pdelegates .pd-bn{font:500 10.5px/14px var(--f-mono);color:var(--muted)}
+.mk-pdelegates .pd-bt{display:block;height:6px;border-radius:3px;background:var(--recess);overflow:hidden}
+.mk-pdelegates .pd-bt i{display:block;height:100%;width:calc(var(--p) * 100%);border-radius:3px;background:var(--muted);transform-origin:left center}
+.mk-pdelegates .pd-bv{font:500 10.5px/14px var(--f-mono);color:var(--muted);text-align:right;font-variant-numeric:tabular-nums}
+.mk-pdelegates .pd-br.pd-top .pd-bn,.mk-pdelegates .pd-br.pd-top .pd-bv{color:var(--coral-ink);font-weight:600}
+.mk-pdelegates .pd-br.pd-top .pd-bt i{background:var(--coral)}
+
+.mk-pdelegates .pd-res{display:flex;flex-direction:column;gap:1px;padding:6px 9px;background:var(--coral-wash);border:1px solid var(--coral);border-radius:8px;min-width:0}
+.mk-pdelegates .pd-res b{font:600 12.5px/18px var(--f-mono);color:var(--coral-ink)}
+.mk-pdelegates .pd-res span{display:block;font:500 10.5px/1.4 var(--f-mono);font-variant-ligatures:none;color:var(--coral-ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* ---- motion: the routing plays, the winner lights up, the file follows ---- */
+@keyframes pd-in{from{opacity:0;transform:translateY(5px) scale(.97)}to{opacity:1;transform:none}}
+@keyframes pd-fade{from{opacity:0}to{opacity:1}}
+@keyframes pd-grow{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+@keyframes pd-ripple{from{box-shadow:0 0 0 0 var(--coral)}to{box-shadow:0 0 0 6px transparent}}
+@keyframes pd-line{from{opacity:.15;transform:translateY(3px)}to{opacity:1;transform:none}}
+
+@media (prefers-reduced-motion:no-preference){
+  .mk-pdelegates.is-live .pd-run.pd-on .pd-task{animation:pd-in .4s cubic-bezier(.2,.8,.2,1) both}
+  .mk-pdelegates.is-live .pd-run.pd-on .pd-ar:nth-of-type(1){animation:pd-fade .3s ease-out .3s both}
+  .mk-pdelegates.is-live .pd-run.pd-on .pd-jev{animation:pd-fade .3s ease-out .4s both}
+  .mk-pdelegates.is-live .pd-run.pd-on .pd-bt i{animation:pd-grow .65s cubic-bezier(.2,.8,.2,1) both;animation-delay:calc(700ms + var(--d) * 150ms)}
+  .mk-pdelegates.is-live .pd-run.pd-on .pd-bv{animation:pd-fade .3s ease-out both;animation-delay:calc(1000ms + var(--d) * 150ms)}
+  .mk-pdelegates.is-live .pd-run.pd-on .pd-ar:nth-of-type(2){animation:pd-fade .3s ease-out 1.6s both}
+  .mk-pdelegates.is-live .pd-run.pd-on .pd-res{animation:pd-in .4s cubic-bezier(.2,.8,.2,1) 1.75s both}
+  .mk-pdelegates.is-live[data-sel="writer"] .pd-card[data-t="writer"],
+  .mk-pdelegates.is-live[data-sel="analyst"] .pd-card[data-t="analyst"]{animation:pd-ripple .9s ease-out}
+  .mk-pdelegates.is-live[data-file="writer"] .pd-fp[data-f="writer"] .pd-ln,
+  .mk-pdelegates.is-live[data-file="analyst"] .pd-fp[data-f="analyst"] .pd-ln{animation:pd-line .4s cubic-bezier(.2,.8,.2,1) both;animation-delay:calc(var(--i) * 40ms)}
+}
+@media (prefers-reduced-motion:reduce){
+  .mk-pdelegates *,.mk-pdelegates *::before,.mk-pdelegates *::after{animation:none !important;transition:none !important}
+}
+</style>
+<div class="mk mk-pdelegates" data-sel="writer" data-file="writer" role="img" aria-label="Delegate types in the x-growth project: three live as files in the project folder and two come from the fleet. A task with no type goes to Jev, who scores each type and picks writer, so writer.md is the file that applies.">
+  <div class="mkf">
+    <div class="mkf-bar"><b>x-growth · Delegates</b><span class="sp"></span><span class="pd-sub">3 project · 2 from fleet</span></div>
+    <div class="mkf-body">
+      <div class="pd-main">
+
+        <div class="pd-pj">
+          <div class="pd-card" data-t="writer">
+            <div class="pd-l1"><span class="pd-nm">writer</span><span class="mkchip">Claude Code</span><span class="pd-sp"></span><span class="mkchip pd-bd">$2/day</span></div>
+            <div class="pd-l2"><span class="pd-md">claude-opus-5-5</span><span class="pd-ef" data-n="3" aria-hidden="true"><i></i><i></i><i></i></span></div>
+            <div class="pd-l3"><span class="mkchip warn pd-cp"><svg viewBox="0 0 10 10" aria-hidden="true"><circle cx="5" cy="5" r="3.7" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M2.4 7.6l5.2-5.2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>can't post</span><span class="pd-sk">brand-voice</span><span class="pd-sk">x-post</span></div>
+          </div>
+          <div class="pd-card" data-t="analyst">
+            <div class="pd-l1"><span class="pd-nm">analyst</span><span class="mkchip">OpenCode</span><span class="pd-sp"></span><span class="mkchip pd-bd">$1/day</span></div>
+            <div class="pd-l2"><span class="pd-md">opencode-go/deepseek-v4-pro</span><span class="pd-ef" data-n="2" aria-hidden="true"><i></i><i></i><i></i></span></div>
+            <div class="pd-l3"><span class="pd-sk">research</span><span class="pd-sk pd-mc"><span>mcp</span>x-read</span></div>
+          </div>
+          <div class="pd-card" data-t="replier">
+            <div class="pd-l1"><span class="pd-nm">replier</span><span class="mkchip">pi</span><span class="pd-sp"></span><span class="mkchip pd-bd">$1/day</span></div>
+            <div class="pd-l2"><span class="pd-md">claude-sonnet-5-5</span><span class="pd-ef" data-n="1" aria-hidden="true"><i></i><i></i><i></i></span></div>
+            <div class="pd-l3"><span class="mkchip warn pd-cp"><svg viewBox="0 0 10 10" aria-hidden="true"><circle cx="5" cy="5" r="3.7" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M2.4 7.6l5.2-5.2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>can't post</span><span class="pd-sk">brand-voice</span></div>
+          </div>
+        </div>
+
+        <div class="pd-fl">
+          <div class="pd-card pd-fc" data-t="medium">
+            <div class="pd-l1"><span class="pd-nm">medium</span><span class="pd-tag">fleet</span><span class="pd-sp"></span><span class="mkchip">Claude Code</span></div>
+            <div class="pd-l2"><span class="pd-md">claude-sonnet-5-5</span><span class="pd-ef" data-n="2" aria-hidden="true"><i></i><i></i><i></i></span></div>
+          </div>
+          <div class="pd-card pd-fc" data-t="deep">
+            <div class="pd-l1"><span class="pd-nm">deep</span><span class="pd-tag">fleet</span><span class="pd-sp"></span><span class="mkchip">Claude Code</span></div>
+            <div class="pd-l2"><span class="pd-md">claude-opus-5-5</span><span class="pd-ef" data-n="3" aria-hidden="true"><i></i><i></i><i></i></span></div>
+          </div>
+          <p class="pd-fn">A project file named <code>medium.md</code> would win over the fleet type.</p>
+        </div>
+
+        <div class="pd-file">
+          <div class="pd-fp" data-f="writer">
+            <div class="pd-fh"><span>delegates/</span><b>writer.md</b></div>
+            <div class="pd-fb">
+              <span class="pd-ln pd-dd" style="--i:0">---</span>
+              <span class="pd-ln" style="--i:1"><span class="pd-k">harness:</span> claude-code</span>
+              <span class="pd-ln" style="--i:2"><span class="pd-k">model:</span> claude-opus-5-5</span>
+              <span class="pd-ln" style="--i:3"><span class="pd-k">effort:</span> high</span>
+              <span class="pd-ln" style="--i:4"><span class="pd-k">skills:</span> [brand-voice, x-post]</span>
+              <span class="pd-ln" style="--i:5"><span class="pd-k">mcp:</span> []</span>
+              <span class="pd-ln pd-wf" style="--i:6"><span class="pd-k">role:</span> web-facing</span>
+              <span class="pd-ln" style="--i:7"><span class="pd-k">budget:</span> $2/day</span>
+              <span class="pd-ln" style="--i:8"><span class="pd-k">lands:</span> <span class="pd-cy">needs-you</span></span>
+              <span class="pd-ln pd-dd" style="--i:9">---</span>
+              <span class="pd-ln pd-bo" style="--i:10">Draft posts in the brand voice.</span>
+              <span class="pd-ln pd-bo" style="--i:11">Never post; drafts go to Needs you.</span>
+            </div>
+          </div>
+          <div class="pd-fp" data-f="analyst">
+            <div class="pd-fh"><span>delegates/</span><b>analyst.md</b></div>
+            <div class="pd-fb">
+              <span class="pd-ln pd-dd" style="--i:0">---</span>
+              <span class="pd-ln" style="--i:1"><span class="pd-k">harness:</span> opencode</span>
+              <span class="pd-ln" style="--i:2"><span class="pd-k">model:</span> opencode-go/deepseek-v4-pro</span>
+              <span class="pd-ln" style="--i:3"><span class="pd-k">effort:</span> medium</span>
+              <span class="pd-ln" style="--i:4"><span class="pd-k">skills:</span> [research]</span>
+              <span class="pd-ln" style="--i:5"><span class="pd-k">mcp:</span> [x-read]</span>
+              <span class="pd-ln" style="--i:6"><span class="pd-k">role:</span> worker</span>
+              <span class="pd-ln" style="--i:7"><span class="pd-k">budget:</span> $1/day</span>
+              <span class="pd-ln" style="--i:8"><span class="pd-k">lands:</span> board</span>
+              <span class="pd-ln pd-dd" style="--i:9">---</span>
+              <span class="pd-ln pd-bo" style="--i:10">Pull last week's numbers.</span>
+              <span class="pd-ln pd-bo" style="--i:11">Summarise them in plain terms.</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="pd-route">
+        <div class="pd-rh">Routing</div>
+        <div class="pd-rt">
+          <div class="pd-run pd-on" data-r="1">
+            <div class="pd-task"><div class="pd-tr"><span class="pd-id">#t-31</span><span class="mkchip pd-nt">no type</span></div><div class="pd-tt">Draft Tuesday's thread</div></div>
+            <span class="pd-ar" aria-hidden="true"><svg viewBox="0 0 16 10"><path d="M1.5 5h12M9.5 1.2L13.5 5l-4 3.8"/></svg></span>
+            <div class="pd-jev">
+              <div class="pd-jh"><span class="mkchip model">Jev</span><span>picks by probability</span></div>
+              <div class="pd-br pd-top"><span class="pd-bn">writer</span><span class="pd-bt"><i style="--p:.82;--d:0"></i></span><span class="pd-bv" style="--d:0">0.82</span></div>
+              <div class="pd-br"><span class="pd-bn">analyst</span><span class="pd-bt"><i style="--p:.11;--d:1"></i></span><span class="pd-bv" style="--d:1">0.11</span></div>
+              <div class="pd-br"><span class="pd-bn">replier</span><span class="pd-bt"><i style="--p:.07;--d:2"></i></span><span class="pd-bv" style="--d:2">0.07</span></div>
+            </div>
+            <span class="pd-ar" aria-hidden="true"><svg viewBox="0 0 16 10"><path d="M1.5 5h12M9.5 1.2L13.5 5l-4 3.8"/></svg></span>
+            <div class="pd-res"><b>writer</b><span>Claude Code</span><span>opus · high</span></div>
+          </div>
+          <div class="pd-run" data-r="2">
+            <div class="pd-task"><div class="pd-tr"><span class="pd-id">#t-32</span><span class="mkchip pd-nt">no type</span></div><div class="pd-tt">Weekly numbers</div></div>
+            <span class="pd-ar" aria-hidden="true"><svg viewBox="0 0 16 10"><path d="M1.5 5h12M9.5 1.2L13.5 5l-4 3.8"/></svg></span>
+            <div class="pd-jev">
+              <div class="pd-jh"><span class="mkchip model">Jev</span><span>picks by probability</span></div>
+              <div class="pd-br pd-top"><span class="pd-bn">analyst</span><span class="pd-bt"><i style="--p:.88;--d:0"></i></span><span class="pd-bv" style="--d:0">0.88</span></div>
+              <div class="pd-br"><span class="pd-bn">writer</span><span class="pd-bt"><i style="--p:.07;--d:1"></i></span><span class="pd-bv" style="--d:1">0.07</span></div>
+              <div class="pd-br"><span class="pd-bn">replier</span><span class="pd-bt"><i style="--p:.05;--d:2"></i></span><span class="pd-bv" style="--d:2">0.05</span></div>
+            </div>
+            <span class="pd-ar" aria-hidden="true"><svg viewBox="0 0 16 10"><path d="M1.5 5h12M9.5 1.2L13.5 5l-4 3.8"/></svg></span>
+            <div class="pd-res"><b>analyst</b><span>OpenCode</span><span>deepseek · medium</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+(function(){
+  var root=document.querySelector('.mk-pdelegates');
+  if(!root) return;
+  var runs=[].slice.call(root.querySelectorAll('.pd-run'));
+  var reduce=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var timers=[],CYCLE=10000;
+  function show(n){runs.forEach(function(r,i){r.classList.toggle('pd-on',i===n-1);});}
+  function pick(k){
+    root.setAttribute('data-sel',k);
+    if(k) root.setAttribute('data-file',k);
+  }
+  // [ms into the loop, step]: task 1 routes to writer, task 2 routes to analyst
+  var plan=[
+    [0,function(){show(1);pick('');}],
+    [2400,function(){pick('writer');}],
+    [5200,function(){show(2);pick('');}],
+    [7600,function(){pick('analyst');}]
+  ];
+  function cycle(){
+    timers=[];
+    plan.forEach(function(p){timers.push(setTimeout(p[1],p[0]));});
+    timers.push(setTimeout(cycle,CYCLE));
+  }
+  function clear(){timers.forEach(clearTimeout);timers=[];}
+  function rest(){show(1);root.setAttribute('data-sel','writer');root.setAttribute('data-file','writer');}
+  function start(){clear();if(reduce) return;cycle();}
+  function stop(){clear();rest();}
+  root.addEventListener('mk:live',start);
+  root.addEventListener('mk:idle',stop);
+  if(root.classList.contains('is-live')) start();
+})();
+</script>
+</figure>
+      <figure class="pane mech"><span class="cap">A type is a file</span>
+<pre class="v"><span class="c">x-growth/delegates/</span>writer.md
+---
+harness: claude
+model:   claude-opus-5-5
+effort:  high
+skills:  [brand-voice, x-post]
+mcp:     [x-read]
+role:    web-facing      <span class="c"># its toolset (D7)</span>
+budget:  { usd: 2, per: day }
+lands:   none            <span class="c"># drafts, not commits</span>
+---
+Draft posts in the brand voice.
+Never post; drafts go to Needs you.
+
+<span class="k">which type runs a task</span>
+  task names one     → that type
+  else Jev on        → choice over the project's types
+  else               → Caw picks, or "medium"
+<span class="k">lookup</span>  project file, then fleet type of that name</pre>
+      </figure>
+    </div>
+    <div class="opts" role="radiogroup" data-group="pdelegates" data-label="D16 Project delegates">
+      <button class="opt" type="button" role="radio" data-opt="fleet"><b>Fleet types only</b><span>As today.</span></button>
+      <button class="opt" type="button" role="radio" data-opt="files"><b>Project files shadow fleet</b><span>Types live in the project folder.</span><span class="tag">Recommended</span></button>
+      <button class="opt" type="button" role="radio" data-opt="adhoc"><b>Per-task overrides only</b><span>No named types per project.</span></button>
+    </div>
+    <div class="foot">
+      <details class="more"><summary>Details</summary><div class="in">
+        <p>A type carries its role, so a web-facing writer never gets posting or admin tools. The dispatcher runs a type only on a machine where its harness and model are installed and signed in. The catalog a session sees is fixed at its start, because the <code>delegate</code> tool's description feeds the prompt cache (as the code already does). Keep it short: a project shows its own types plus at most a few fleet ones. Caw can propose a new type as a file diff you approve. Routines name a type too, so "morning drafts" always runs as <code>writer</code>.</p>
+      </div></details>
+      <label class="note">Note <input id="note-pdelegates" data-note="pdelegates" type="text" placeholder="Anything to add"></label>
     </div>
   </article>
 </section>
