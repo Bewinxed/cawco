@@ -102,6 +102,8 @@ interface SessiondAdoption {
       sessionId: string | null;
       /** {@link turnRunning}'s answer for this child. */
       turnRunning: boolean;
+      /** The stored mode, known before the attach replays a parked ask. */
+      permissionMode?: SpawnPayload["permissionMode"];
     }
   ): Promise<HarnessSession>;
   // biome-ignore lint/style/useConsistentMethodSignatures: a property signature changes parameter variance here and would break the claude adapter's implementation
@@ -2214,6 +2216,7 @@ export class SessionSupervisor {
       head: proc.head,
       sessionId: row.sessionId ?? null,
       turnRunning: running,
+      permissionMode: row.permissionMode,
     });
     holder.session = session;
     await this.#applyStoredPermissionMode(session, row.permissionMode);
