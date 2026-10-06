@@ -46,14 +46,20 @@ export interface SessionCredentialInstall {
 
 export const HARNESSES: readonly HarnessKind[] = ["claude", "opencode", "pi"];
 
-/** How a session answers tool permissions. The union is Claude Code's; others map onto it. */
+/**
+ * How a session answers tool permissions. The union is Claude Code's, plus
+ * `fullSend`, CawCo's own: Claude Code's `bypassPermissions` with the host
+ * also answering the safety checks the CLI still raises in that mode. Each
+ * adapter maps `fullSend` onto its harness; none hands it to an SDK as is.
+ */
 export type PermissionMode =
   | "default"
   | "acceptEdits"
   | "bypassPermissions"
   | "plan"
   | "dontAsk"
-  | "auto";
+  | "auto"
+  | "fullSend";
 
 /**
  * How hard the model thinks, and how much it spends doing it: Claude Code's

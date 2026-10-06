@@ -9536,6 +9536,7 @@
                       "bypassPermissions",
                       "default",
                       "dontAsk",
+                      "fullSend",
                       "plan"
                     ],
                     "type": "string"
@@ -9926,6 +9927,7 @@
               "bypassPermissions",
               "default",
               "dontAsk",
+              "fullSend",
               "plan"
             ],
             "type": "string"
@@ -12739,13 +12741,14 @@
         ]
       },
       "PermissionMode": {
-        "description": "How a session answers tool permissions. The union is Claude Code's; others map onto it.",
+        "description": "How a session answers tool permissions. The union is Claude Code's, plus\n`fullSend`, CawCo's own: Claude Code's `bypassPermissions` with the host\nalso answering the safety checks the CLI still raises in that mode. Each\nadapter maps `fullSend` onto its harness; none hands it to an SDK as is.",
         "enum": [
           "acceptEdits",
           "auto",
           "bypassPermissions",
           "default",
           "dontAsk",
+          "fullSend",
           "plan"
         ],
         "type": "string"
@@ -13468,6 +13471,7 @@
               "bypassPermissions",
               "default",
               "dontAsk",
+              "fullSend",
               "plan"
             ],
             "type": "string"
@@ -13908,6 +13912,7 @@
               "bypassPermissions",
               "default",
               "dontAsk",
+              "fullSend",
               "plan"
             ],
             "type": "string"
@@ -17006,13 +17011,14 @@
             }
           },
           "permissionMode": {
-            "description": "How a session answers tool permissions. The union is Claude Code's; others map onto it.",
+            "description": "How a session answers tool permissions. The union is Claude Code's, plus\n`fullSend`, CawCo's own: Claude Code's `bypassPermissions` with the host\nalso answering the safety checks the CLI still raises in that mode. Each\nadapter maps `fullSend` onto its harness; none hands it to an SDK as is.",
             "enum": [
               "acceptEdits",
               "auto",
               "bypassPermissions",
               "default",
               "dontAsk",
+              "fullSend",
               "plan"
             ],
             "type": "string"

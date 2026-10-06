@@ -636,6 +636,27 @@ const INTERACTIVE_TOOLS: ReadonlySet<string> = new Set([
 /** The `canUseTool` callback, parked until `resolvePermission` answers it. */
 type PermissionResolver = (result: PermissionResult) => void;
 
+/** CawCo's `fullSend` is the CLI's `bypassPermissions`: the SDK never sees CawCo's own mode. */
+const sdkMode = (
+  mode: import("@cawco/core").PermissionMode
+): import("@anthropic-ai/claude-agent-sdk").PermissionMode =>
+  mode === "fullSend" ? "bypassPermissions" : mode;
+
+/** A permission answer in the SDK's words: any `setMode` it carries names the CLI's mode. */
+const sdkPermissionResult = (
+  result: import("@cawco/core").PermissionResult
+): PermissionResult =>
+  (result.behavior === "allow" && result.updatedPermissions
+    ? {
+        ...result,
+        updatedPermissions: result.updatedPermissions.map((update) =>
+          update.type === "setMode"
+            ? { ...update, mode: sdkMode(update.mode) }
+            : update
+        ),
+      }
+    : result) as PermissionResult;
+
 class ClaudeSession implements HarnessSession {
   readonly harness = "claude" as const;
   sessionId: string | null = null;
@@ -1491,7 +1512,7 @@ class ClaudeSession implements HarnessSession {
     // SDK rejects that input for the `questions` it no longer has. The parked
     // call is put back underneath, which is what the dashboard sends when it
     // answers one of these itself.
-    resolve(settledQuestionResult(question, result));
+    resolve(sdkPermissionResult(settledQuestionResult(question, result)));
   }
 
   async interrupt(): Promise<void> {
