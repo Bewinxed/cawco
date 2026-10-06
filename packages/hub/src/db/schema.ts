@@ -48,6 +48,7 @@ import {
   real,
   sqliteTable,
   text,
+  uniqueIndex,
 } from "drizzle-orm/sqlite-core";
 import type { ContinueRequest, PreparedContinuation } from "../continuation";
 
@@ -236,7 +237,12 @@ export const agents = sqliteTable("agents", {
     .$defaultFn(() => new Date()),
 });
 
-/** A repository checkout on a machine; groups instances in the sidebar. */
+/**
+ * A project: one identity for work across machines and folders (WORDS.md).
+ * Where its files are is its places (`project_places`); `machineId` and `cwd`
+ * are its primary place, the one it was made from, and every client that
+ * reads a project as one folder on one machine reads that one.
+ */
 export const projects = sqliteTable("projects", {
   id: text("id").primaryKey(),
   machineId: text("machine_id")
@@ -244,10 +250,49 @@ export const projects = sqliteTable("projects", {
     .references(() => agents.machineId),
   name: text("name").notNull(),
   cwd: text("cwd").notNull(),
+  /**
+   * The checkout's `origin`, normalised to `host/owner/repo` (projects.ts
+   * `normaliseRemote`): how a checkout of the same repository on another
+   * machine is known as this project. Null until a place's machine has
+   * answered, and for a folder with no remote.
+   */
+  remote: text("remote"),
   createdAt: timestamp("created_at")
     .notNull()
     .$defaultFn(() => new Date()),
 });
+
+/**
+ * What a place is: a checkout on a machine, a delegate's workspace (kept
+ * while the workspace is active), or the project's folder on the hub.
+ */
+export type PlaceKind = "checkout" | "workspace" | "hub";
+
+/** Where a project's files are, one row per machine and folder. */
+export const projectPlaces = sqliteTable(
+  "project_places",
+  {
+    id: text("id").primaryKey(),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    /** Not a reference: a machine's places go with it in `deleteMachine`. */
+    machineId: text("machine_id").notNull(),
+    path: text("path").notNull(),
+    kind: text("kind").$type<PlaceKind>().notNull(),
+    createdAt: timestamp("created_at")
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("project_places_where").on(
+      table.projectId,
+      table.machineId,
+      table.path
+    ),
+    index("project_places_machine").on(table.machineId, table.path),
+  ]
+);
 
 /** A running or resumable `query()`. Messages live in SDK session storage, not here. */
 export const instances = sqliteTable("instances", {

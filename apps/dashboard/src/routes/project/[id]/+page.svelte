@@ -38,6 +38,7 @@
   import { Alert, AlertDescription } from "#lib/components/ui/alert/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as AlertDialog from "#lib/components/ui/alert-dialog/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Card } from "#lib/components/ui/card/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
@@ -348,6 +349,13 @@
       return false;
     }
   }
+
+  /** What each kind of place is called on its badge (WORDS.md: place, workspace). */
+  const PLACE_KIND = {
+    checkout: "checkout",
+    workspace: "workspace",
+    hub: "hub folder",
+  } as const;
 
   const live = $derived(project ? cawco.liveIn(project) : []);
   const stored = $derived(project ? cawco.storedIn(project) : []);
@@ -956,6 +964,60 @@
             {/if}
           {/snippet}
         </MemoryCard>
+
+        <!-- Places: where the project's files are, on every machine. The
+             primary place, the folder the header names, comes first. They
+             arrive with the project, so the card is its size from the first
+             frame. -->
+        {#if project.places.length > 0}
+          <Card class="gap-0 rounded-[var(--radius-lg)] py-0 shadow-md">
+            <header class="px-[var(--space-4)] py-[var(--space-3)]">
+              <h2 class="text-title">Places</h2>
+            </header>
+            <ul
+              class="flex flex-col gap-1.5 px-[var(--space-3)] pb-[var(--space-3)]"
+            >
+              {#each project.places as place (place.id)}
+                {@const host = cawco.machines.find(
+                  (row) => row.machineId === place.machineId
+                )}
+                {@const online = host?.status === "online"}
+                <li class="flex min-h-9 items-center gap-3 px-4 py-1.5">
+                  <OsMark
+                    class="size-4 text-muted-foreground"
+                    os={host?.os ?? ""}
+                  />
+                  <span class="flex min-w-0 flex-1 flex-col gap-0.5">
+                    <span class="flex min-w-0 items-center gap-1.5">
+                      <span class="truncate text-label">
+                        {host ? machineLabel(host.hostname) : place.machineId}
+                      </span>
+                      <span
+                        class="size-2 shrink-0 rounded-full transition-[background-color] duration-(--dur-panel) ease-(--ease-out) {online
+                          ? "bg-success"
+                          : "bg-muted-foreground/40"}"
+                        title={host?.status ?? "offline"}
+                      ></span>
+                      <span class="sr-only"
+                        >{online ? "online" : "offline"}</span
+                      >
+                    </span>
+                    <!-- Gives up from the left: the leaf tells two checkouts
+                         apart. -->
+                    <span
+                      class="truncate font-mono text-label text-muted-foreground [direction:rtl]"
+                      title={place.path}
+                      ><bdi>{place.path}</bdi></span
+                    >
+                  </span>
+                  <Badge class="shrink-0" variant="secondary">
+                    {PLACE_KIND[place.kind]}
+                  </Badge>
+                </li>
+              {/each}
+            </ul>
+          </Card>
+        {/if}
 
         <!-- Machine inventory -->
         {#if project && machine}

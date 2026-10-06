@@ -198,6 +198,7 @@ import {
 } from "./pending";
 import { resolveMarketplacePlugins } from "./plugins";
 import { previewFrame, previewTargets } from "./preview";
+import { placePath, readRemote } from "./projects";
 import { type HubSocket, type RegistryShape, toDashboard } from "./registry";
 import { RuleEngine } from "./rules";
 import { createSessionIdentities } from "./session-identity";
@@ -7100,6 +7101,21 @@ export const createServer = (
     return response.result as CommandResult;
   };
 
+  /**
+   * A project's remote, read from one of its checkouts. Nothing read (the
+   * machine away, no `origin`) leaves it unknown for the next chance.
+   */
+  const learnRemote = async (
+    projectId: string,
+    machineId: string,
+    path: string
+  ): Promise<void> => {
+    const remote = await readRemote(runOnMachine, machineId, path);
+    if (remote) {
+      db.setProjectRemote(projectId, remote);
+    }
+  };
+
   const workItems = createWorkItems({
     db,
     end: async (instanceId) => {
@@ -10120,7 +10136,16 @@ export const createServer = (
           return { ok: true };
         }
       )
-      .get("/api/projects", () => db.listProjects())
+      // Each row spread into a fresh object, not the named `ProjectRow`: the
+      // native app's client types a project by this route's own schema
+      // (`GetApiProjects200Payload`), which a named row would rename.
+      .get("/api/projects", () =>
+        db.listProjects().map((project) => ({ ...project }))
+      )
+      // One repository is one project: a folder whose remote a project
+      // already has joins it as a checkout place (`placeAdded`), and the
+      // answer is that project, not a second one. `place` is the folder asked
+      // about; `machineId`/`cwd` stay the project's primary place.
       .post(
         "/api/projects",
         {
@@ -10130,10 +10155,87 @@ export const createServer = (
             machineId: t.String(),
           }),
         },
-        ({ body }) => db.createProject({ id: crypto.randomUUID(), ...body })
+        async ({ body }) => {
+          const cwd = placePath(body.cwd);
+          const remote = await readRemote(runOnMachine, body.machineId, cwd);
+          const known = remote ? db.projectByRemote(remote) : undefined;
+          if (known) {
+            const { place, added } = db.addPlace({
+              projectId: known.id,
+              machineId: body.machineId,
+              path: cwd,
+              kind: "checkout",
+            });
+            return {
+              ...(db.project(known.id) ?? known),
+              place,
+              placeAdded: added,
+            };
+          }
+          const created = db.createProject({
+            id: crypto.randomUUID(),
+            name: body.name,
+            machineId: body.machineId,
+            cwd,
+            remote,
+          });
+          // Its one place, the checkout it was made from.
+          const [place] = created.places;
+          return { ...created, place, placeAdded: false };
+        }
       )
       .delete("/api/projects/:id", ({ params }) => {
         db.deleteProject(params.id);
+        return { ok: true };
+      })
+      // Another checkout of the project's repository, named by hand.
+      .post(
+        "/api/projects/:id/places",
+        { body: t.Object({ machineId: t.String(), path: t.String() }) },
+        async ({ params, body, status }) => {
+          const project = db.project(params.id);
+          if (!project) {
+            return status(404, "No project with that id on this hub.");
+          }
+          if (
+            !db.listAgents().some((row) => row.machineId === body.machineId)
+          ) {
+            return status(404, "No machine with that id on this hub.");
+          }
+          const path = placePath(body.path);
+          if (!path.startsWith("/")) {
+            return status(
+              400,
+              "A place is a folder's absolute path on its machine. Pass a path that starts with /."
+            );
+          }
+          const { place, added } = db.addPlace({
+            projectId: project.id,
+            machineId: body.machineId,
+            path,
+            kind: "checkout",
+          });
+          if (!project.remote) {
+            await learnRemote(project.id, body.machineId, path);
+          }
+          return {
+            ...(db.project(project.id) ?? project),
+            place,
+            placeAdded: added,
+          };
+        }
+      )
+      .delete("/api/projects/:id/places/:placeId", ({ params, status }) => {
+        const removed = db.removePlace(params.id, params.placeId);
+        if (removed === "missing") {
+          return status(404, "No place with that id in this project.");
+        }
+        if (removed === "primary") {
+          return status(
+            409,
+            "This is the project's primary place. Forget the project to remove it."
+          );
+        }
         return { ok: true };
       })
       // Delegation: one work item, in a new workspace or as the follow-up in
@@ -10484,6 +10586,19 @@ export const createServer = (
               // the moment it can run commands — waiting on nothing else the
               // register asks of the agent.
               workItems.resumeChecks(message.machineId);
+              // Projects that do not know their repository yet read it from
+              // their checkouts here, now that the machine can run git.
+              Promise.all(
+                db
+                  .projectsWithoutRemote(message.machineId)
+                  .map(({ projectId, path }) =>
+                    learnRemote(projectId, message.machineId, path)
+                  )
+              ).catch((error: unknown) =>
+                console.warn(
+                  `[hub] reading ${message.machineId}'s project remotes failed: ${error instanceof Error ? error.message : String(error)}`
+                )
+              );
               // Workspaces from before clones become clones as their agent
               // starts; a spawn that gets there first converts its own.
               workItems

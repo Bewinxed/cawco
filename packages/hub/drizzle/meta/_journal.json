@@ -547,6 +547,13 @@
       "when": 1791199447301,
       "tag": "0077_owed_spawn",
       "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "6",
+      "when": 1791305474544,
+      "tag": "0078_project_places",
+      "breakpoints": true
     }
   ]
 }

@@ -5933,6 +5933,140 @@
         }
       }
     },
+    "/api/projects/{id}/places": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "machineId": {
+                    "type": "string"
+                  },
+                  "path": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "machineId",
+                  "path"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiProjectsByIdPlaces",
+        "responses": {
+          "200": {
+            "description": "postApiProjectsByIdPlaces 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiProjectsByIdPlaces200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiProjectsByIdPlaces 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiProjectsByIdPlaces 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiProjectsByIdPlaces 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/places/{placeId}": {
+      "delete": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "placeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "deleteApiProjectsByIdPlacesByPlaceId",
+        "responses": {
+          "200": {
+            "description": "deleteApiProjectsByIdPlacesByPlaceId 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/deleteApiProjectsByIdPlacesByPlaceId200"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "deleteApiProjectsByIdPlacesByPlaceId 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "deleteApiProjectsByIdPlacesByPlaceId 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/workspaces/{id}/archive": {
       "post": {
         "parameters": [
@@ -8894,6 +9028,47 @@
             },
             "cwd": {
               "type": "string"
+            },
+            "remote": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "places": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string"
+                  },
+                  "machineId": {
+                    "type": "string"
+                  },
+                  "id": {
+                    "type": "string"
+                  },
+                  "createdAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "projectId": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "$ref": "#/components/schemas/PlaceKind"
+                  }
+                },
+                "required": [
+                  "createdAt",
+                  "id",
+                  "kind",
+                  "machineId",
+                  "path",
+                  "projectId"
+                ]
+              }
             }
           },
           "required": [
@@ -8901,13 +9076,50 @@
             "cwd",
             "id",
             "machineId",
-            "name"
+            "name",
+            "places",
+            "remote"
           ]
         }
       },
       "postApiProjects200": {
         "type": "object",
         "properties": {
+          "place": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "machineId": {
+                "type": "string"
+              },
+              "id": {
+                "type": "string"
+              },
+              "createdAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "projectId": {
+                "type": "string"
+              },
+              "kind": {
+                "$ref": "#/components/schemas/PlaceKind"
+              }
+            },
+            "required": [
+              "createdAt",
+              "id",
+              "kind",
+              "machineId",
+              "path",
+              "projectId"
+            ]
+          },
+          "placeAdded": {
+            "type": "boolean"
+          },
           "machineId": {
             "type": "string"
           },
@@ -8923,6 +9135,47 @@
           },
           "cwd": {
             "type": "string"
+          },
+          "remote": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "places": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "machineId": {
+                  "type": "string"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "createdAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "projectId": {
+                  "type": "string"
+                },
+                "kind": {
+                  "$ref": "#/components/schemas/PlaceKind"
+                }
+              },
+              "required": [
+                "createdAt",
+                "id",
+                "kind",
+                "machineId",
+                "path",
+                "projectId"
+              ]
+            }
           }
         },
         "required": [
@@ -8930,10 +9183,133 @@
           "cwd",
           "id",
           "machineId",
-          "name"
+          "name",
+          "place",
+          "placeAdded",
+          "places",
+          "remote"
         ]
       },
       "deleteApiProjectsById200": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ]
+      },
+      "postApiProjectsByIdPlaces200": {
+        "type": "object",
+        "properties": {
+          "place": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "machineId": {
+                "type": "string"
+              },
+              "id": {
+                "type": "string"
+              },
+              "createdAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "projectId": {
+                "type": "string"
+              },
+              "kind": {
+                "$ref": "#/components/schemas/PlaceKind"
+              }
+            },
+            "required": [
+              "createdAt",
+              "id",
+              "kind",
+              "machineId",
+              "path",
+              "projectId"
+            ]
+          },
+          "placeAdded": {
+            "type": "boolean"
+          },
+          "machineId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "cwd": {
+            "type": "string"
+          },
+          "remote": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "places": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "machineId": {
+                  "type": "string"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "createdAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "projectId": {
+                  "type": "string"
+                },
+                "kind": {
+                  "$ref": "#/components/schemas/PlaceKind"
+                }
+              },
+              "required": [
+                "createdAt",
+                "id",
+                "kind",
+                "machineId",
+                "path",
+                "projectId"
+              ]
+            }
+          }
+        },
+        "required": [
+          "createdAt",
+          "cwd",
+          "id",
+          "machineId",
+          "name",
+          "place",
+          "placeAdded",
+          "places",
+          "remote"
+        ]
+      },
+      "deleteApiProjectsByIdPlacesByPlaceId200": {
         "type": "object",
         "properties": {
           "ok": {
@@ -15606,6 +15982,15 @@
           "content",
           "hash"
         ]
+      },
+      "PlaceKind": {
+        "description": "What a place is: a checkout on a machine, a delegate's workspace (kept\nwhile the workspace is active), or the project's folder on the hub.",
+        "enum": [
+          "checkout",
+          "hub",
+          "workspace"
+        ],
+        "type": "string"
       },
       "WorkspaceState": {
         "description": "A workspace's life: `active` while its checkout is kept; `archived` once its boundary and clone are gone.",

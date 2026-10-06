@@ -61,6 +61,7 @@
   import { unfold } from "../motion/fold.svelte";
   import { handOver } from "../motion/share.svelte";
   import { PERMISSION_MODES } from "../permission-modes";
+  import { checkoutOn, placedOn } from "../projects";
   import { rememberSpawn, spawnPrefs } from "../spawnPrefs.svelte";
   import LifetimeChip from "./LifetimeChip.svelte";
   import LocationChip from "./LocationChip.svelte";
@@ -296,14 +297,24 @@
       };
     })
   );
+  /**
+   * A project is offered on every chosen machine where it has a checkout,
+   * as the folder it is there: the first chosen machine that has one, its
+   * primary place first.
+   */
   const projectItems = $derived<ProjectItem[]>(
     cawco.projects
-      .filter((row) => machineIds.includes(row.machineId))
-      .map((row, i) => ({
+      .flatMap((row) => {
+        const place = machineIds
+          .map((id) => checkoutOn(row, id))
+          .find((found) => found !== undefined);
+        return place ? [{ row, place }] : [];
+      })
+      .map(({ row, place }, i) => ({
         id: row.id,
-        machineId: row.machineId,
+        machineId: place.machineId,
         name: row.name,
-        path: row.cwd,
+        path: place.path,
         hue: HUES[(i + 3) % 5],
       }))
   );
@@ -680,7 +691,7 @@
     machineIds = machineIds.includes(id)
       ? machineIds.filter((row) => row !== id)
       : [...machineIds, id];
-    if (project && !machineIds.includes(project.machineId)) {
+    if (project && !machineIds.some((chosen) => placedOn(project, chosen))) {
       projectId = undefined;
     }
     editing = true;
@@ -707,11 +718,13 @@
       cwd: draft.path,
       name: draft.name,
     });
+    // The folder asked about, which may have joined a project whose primary
+    // place is on another machine.
     pickProject({
       id: created.id,
-      machineId: created.machineId,
+      machineId: created.place.machineId,
       name: created.name,
-      path: created.cwd,
+      path: created.place.path,
       hue: HUES[0],
     });
   }
@@ -819,11 +832,16 @@
   function shownModel(draft: SessionDraft): string {
     return draft.usedModel === "default" ? "" : draft.usedModel;
   }
+  /** A project a start on `target` belongs to: one with a place on that machine. */
+  function attachable(
+    id: string | undefined,
+    target: string
+  ): string | undefined {
+    const attached = id ? cawco.project(id) : null;
+    return attached && placedOn(attached, target) ? attached.id : undefined;
+  }
   function spawnOne(target: string, draft: SessionDraft): Promise<string> {
-    const toAttach =
-      draft.projectId && cawco.project(draft.projectId)?.machineId === target
-        ? draft.projectId
-        : undefined;
+    const toAttach = attachable(draft.projectId, target);
     return spawnSession({
       machineId: target,
       cwd: draft.cwd,
@@ -926,10 +944,7 @@
     if (!(ok && current())) {
       return;
     }
-    const toAttach =
-      draft.projectId && cawco.project(draft.projectId)?.machineId === target
-        ? draft.projectId
-        : undefined;
+    const toAttach = attachable(draft.projectId, target);
     const id = await startContinuation(source, draft, {
       summarizer: draft.summarizer,
       target: {

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { mergeProps } from "bits-ui";
   import { tick } from "svelte";
+  import { toast } from "svelte-sonner";
   import DirectoryPicker from "#lib/components/features/DirectoryPicker.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
@@ -81,12 +82,19 @@
     problem = null;
     try {
       // `createProject` refreshes the registry, so the folder is already there.
-      await createProject({
+      const created = await createProject({
         machineId,
         cwd: dir,
         name: name.trim() || leaf(dir),
       });
       open = false;
+      // A checkout of a repository a project already has is that project's
+      // place, not a project of its own: said, since a new one was asked for.
+      if (created.placeAdded) {
+        toast.success(
+          `${leaf(dir)} is now a place of ${created.name}: it is a checkout of the same repository.`
+        );
+      }
     } catch (err) {
       problem = {
         at: "hub",

@@ -61,8 +61,14 @@
     const sessions = cawco.instances.filter(
       (row) => row.machineId === machineId
     ).length;
+    // A project with a checkout (or its hub folder) elsewhere moves there
+    // and stays; only one that lives nowhere else goes.
     const projects = cawco.projects.filter(
-      (row) => row.machineId === machineId
+      (row) =>
+        row.machineId === machineId &&
+        !row.places.some(
+          (place) => place.machineId !== machineId && place.kind !== "workspace"
+        )
     ).length;
     await confirm({
       title: `Remove ${machineLabel(hostname)}?`,

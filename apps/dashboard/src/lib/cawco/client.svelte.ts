@@ -86,7 +86,7 @@ import {
   transcriptUrl,
 } from "./links";
 import { type PendingSelection, selectionExtras } from "./preview/selection";
-import { projectsFor } from "./projects";
+import { placedOn, projectsFor } from "./projects";
 import { type ReloadHold, reloadForProtocol } from "./protocol-reload";
 import { spawnDefaults } from "./spawnPrefs.svelte";
 import type {
@@ -175,13 +175,32 @@ export type Machine = AgentRow;
 /** A session the hub knows about (`GET /api/instances`, and `instances` frames). */
 export type { InstanceRow } from "@cawco/core";
 
-/** A project the hub knows about (`GET /api/projects`). */
+/**
+ * Where a project's files are (WORDS.md: place): a checkout on a machine, a
+ * delegate's workspace while it lives, or the project's folder on the hub.
+ */
+export interface ProjectPlace {
+  createdAt: string;
+  id: string;
+  kind: "checkout" | "workspace" | "hub";
+  machineId: string;
+  path: string;
+  projectId: string;
+}
+
+/**
+ * A project the hub knows about (`GET /api/projects`). `machineId` and `cwd`
+ * are its primary place; `places` holds every place, that one first.
+ */
 export interface ProjectRow {
   createdAt: string;
   cwd: string;
   id: string;
   machineId: string;
   name: string;
+  places: ProjectPlace[];
+  /** The repository its checkouts are of, `host/owner/repo`; null when unknown. */
+  remote: string | null;
 }
 
 /** Only a session the hub can still reach is live; the rest is history. */
@@ -4316,12 +4335,16 @@ export async function machineFs<T>(
   );
 }
 
-/** Names a machine + directory so it can be opened as a project home. */
+/**
+ * Names a machine + directory so it can be opened as a project home. A
+ * checkout of a repository a project already has joins that project as a
+ * place instead (`placeAdded`); `place` is the folder asked about.
+ */
 export async function createProject(project: {
   name: string;
   cwd: string;
   machineId: string;
-}): Promise<ProjectRow> {
+}): Promise<ProjectRow & { place: ProjectPlace; placeAdded: boolean }> {
   const response = await fetch("/api/projects", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -4332,7 +4355,10 @@ export async function createProject(project: {
       `Could not save this project — the hub answered ${response.status}. Try again.`
     );
   }
-  const created = (await response.json()) as ProjectRow;
+  const created = (await response.json()) as ProjectRow & {
+    place: ProjectPlace;
+    placeAdded: boolean;
+  };
   await refresh();
   return created;
 }
@@ -5598,7 +5624,7 @@ export const cawco = {
     return state.projects;
   },
   projectsOn: (machineId: string): ProjectRow[] =>
-    state.projects.filter((project) => project.machineId === machineId),
+    state.projects.filter((project) => placedOn(project, machineId)),
   project: (id: string): ProjectRow | null =>
     state.projects.find((project) => project.id === id) ?? null,
   /** Sessions a project owns: started from it, or running in its checkout.

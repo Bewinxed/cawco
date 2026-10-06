@@ -240,7 +240,8 @@ const refOf = (workspace: WorkspaceRow): WorkspaceRef => ({
 
 /**
  * The item's session: nested under its parent, working in the workspace's
- * checkout, every shell command inside the workspace's boundary.
+ * checkout, every shell command inside the workspace's boundary, and its
+ * parent's project's, as the workspace is one of that project's places.
  */
 const spawnOf = (
   instanceId: string,
@@ -252,6 +253,7 @@ const spawnOf = (
   instanceId,
   cwd: workspace.path,
   harness,
+  ...(parent.projectId ? { projectId: parent.projectId } : {}),
   ...(forkOf ? { resume: { sessionKey: forkOf, fork: true } } : {}),
   ...(model ? { model } : {}),
   ...(type?.effort ? { effort: type.effort } : {}),
@@ -856,6 +858,16 @@ export const createWorkItems = ({
         request.cwd ?? parent.cwd,
         machineId
       );
+      // While it lives, the clone is one of the parent's project's places;
+      // archiving the workspace removes it.
+      if (parent.projectId) {
+        db.addPlace({
+          projectId: parent.projectId,
+          machineId,
+          path: workspace.path,
+          kind: "workspace",
+        });
+      }
       return spawnIn(workspace, settings, parent, request);
     }
     // Awaited before the claim, which files the item in the same step as
@@ -1786,6 +1798,7 @@ export const createWorkItems = ({
       await call(workspace.machineId, CONTROL_WORKSPACE_ARCHIVE, [
         refOf(workspace),
       ]);
+      db.removeWorkspacePlaces(workspace.machineId, workspace.path);
       return (
         db.updateWorkspace(workspace.id, {
           state: "archived",
