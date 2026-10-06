@@ -272,12 +272,6 @@
   const refuse = `${peer} !text-[var(--ink-muted)]`;
   const primary = `${btnBase} px-[var(--space-4)]`;
   const dismiss = btnBase;
-
-  /* A standing grant must read as consequential: warning tint, warning ink,
-     a real edge. */
-  const widen =
-    `${btnBase} border-[var(--status-attn-ink)] !bg-[var(--status-attn-bg)] ` +
-    "!text-[color:var(--status-attn-ink)]";
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
@@ -403,8 +397,10 @@
           {rule.scope}
           — a wider grant than the request above.
         </p>
+        <!-- A standing grant must read as consequential: the kit's grant
+             (warning tint, warning ink, a real edge). -->
         <Button
-          class={widen}
+          class={btnBase}
           disabled={disabledOf("always")}
           failed={failedOf("always")}
           icon={IconShield}
@@ -412,7 +408,7 @@
           onclick={() => answer("always")}
           pending={pendingOf("always")}
           pendingLabel="Allowing…"
-          variant="outline"
+          variant="grant"
         />
       </div>
     {/if}

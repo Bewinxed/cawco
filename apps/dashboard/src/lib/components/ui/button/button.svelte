@@ -29,6 +29,11 @@
           "border-transparent bg-transparent aria-expanded:bg-[var(--surface-hover)]",
         destructive:
           "border-[var(--error-9)] bg-transparent text-[var(--error-11)] hover:bg-[var(--error-3)]",
+        /* A grant wider than what was asked (DESIGN.md, The Consequential
+           Grant Rule): warning tint, warning ink and a real edge, the same at
+           rest and under the pointer, so it is never made more inviting. */
+        grant:
+          "border-[var(--status-attn-ink)] bg-[var(--status-attn-bg)] text-[color:var(--status-attn-ink)] hover:bg-[var(--status-attn-bg)]",
         link: "border-transparent bg-transparent text-link underline-offset-4 hover:bg-transparent hover:underline",
       },
       size: {

@@ -32,6 +32,7 @@
   import { reflow } from "#lib/cawco/motion/rows.svelte.js";
   import { handOver, land } from "#lib/cawco/motion/share.svelte.js";
   import OsMark from "#lib/cawco/OsMark.svelte";
+  import { unpickedMode } from "#lib/cawco/permission-modes.js";
   import StoredSessionRow from "#lib/cawco/StoredSessionRow.svelte";
   import { rememberSpawn, spawnPrefs } from "#lib/cawco/spawnPrefs.svelte.js";
   import MemoryCard from "#lib/components/features/MemoryCard.svelte";
@@ -429,11 +430,13 @@
     if (!project) {
       return;
     }
-    const perm = spawnPrefs.permissionMode;
+    const remembered = spawnPrefs.permissionMode;
     const mod = spawnPrefs.model;
     // This start has no pickers of its own — it runs on what the new-session
     // form was last set to, effort included, since the level was chosen against
-    // that same model.
+    // that same model. Full Send is the exception: with no form its warning is
+    // never read, so this start runs on Bypass, and the form keeps Full Send.
+    const perm = unpickedMode(remembered);
     const level = spawnPrefs.effort;
     const prompt = spawnPrompt.trim() || undefined;
     // The page leaves for the session only once the hub has taken the spawn;
@@ -458,7 +461,7 @@
     rememberSpawn({
       harness: spawnPrefs.harness,
       model: mod,
-      permissionMode: perm,
+      permissionMode: remembered,
       effort: level,
     });
     // The button that started it departed as `session:new`; the tab to land

@@ -16,7 +16,7 @@ In order: agent/model pill, location pill, mode pill, effort slider, options, St
 
 - Agent/model shows the harness's actual 16px logo and the canonical model name. Its single popover contains three ToggleGroup agent tiles, then the model search/list. Uninstalled harnesses are disabled with a machine-specific accessible reason.
 - Location shows machine status and a shortened path. It opens LocationPicker.
-- Mode shows a Solar icon and short name. Its popover contains four RadioGroup rows. Bypass all uses `--status-attn-bg` / `--status-attn-ink` on the trigger.
+- Mode shows a Solar icon and the mode's name. Its popover holds one radio row for each mode the harness is offered (`permission-modes.ts`), each described for that harness. Full Send is confirmed in the app's confirm dialog every time it is picked, uses `--status-attn-bg` / `--status-attn-ink` with a real edge on the trigger, and while it is chosen a warning alert stands above the footer.
 - Effort uses a 150px bits-ui Slider with five 16px Solar detents. Inactive icons use full-opacity `--ink-muted`; the active filled icon rides an 18px spring thumb in `--brand-solid`. The visible 4px track uses `--border-control`. Hover/drag shows the level name. Null shows the harness-measured model default in muted ink and remains omitted from the payload; when unmeasured, it shows high where supported or the first supported level. Unsupported effort collapses inside a reserved slot.
 - Options contains two app Switch controls: Scratch and Bootstrap. Scratch maps to the existing scratch payload. Bootstrap opens the repository location picker.
 - Start is the primary button (`--action-surface` fill, `--on-brand` text, hover `--action-surface-hover`), with the keyboard hint.

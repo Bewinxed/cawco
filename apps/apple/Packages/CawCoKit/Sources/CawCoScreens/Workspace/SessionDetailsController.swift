@@ -219,8 +219,9 @@ public final class SessionDetailsController: ObservedViewController {
     }
 
     private var modes: [String] {
+        guard let harness else { return [] }
         let honoured = report?.capabilities.permissionModes.map(\.rawValue) ?? []
-        return PermissionLook.modes.filter(honoured.contains)
+        return PermissionLook.modes(for: harness, current: permissionMode).filter(honoured.contains)
     }
 
     private var shownPermission: String? { relaunching ? permissionBeforeRelaunch : permissionMode }
@@ -294,14 +295,16 @@ public final class SessionDetailsController: ObservedViewController {
               let mode = Components.Schemas.SpawnPayload.PermissionModePayload(rawValue: next) else { return }
         relaunchFailure = nil
         let id = sessionId
-        guard mode == .bypassPermissions else {
+        // Bypass, and Full Send on top of it, are launch-time decisions for the
+        // harness: entering them from another mode relaunches the session on
+        // them. Between the two the CLI stays in bypass, and a switch is enough.
+        guard PermissionLook.bypasses(next), !PermissionLook.bypasses(permissionMode) else {
             Task { [hub] in
                 do { try await hub.setPermissionMode(instanceId: id, machineId: machineId, mode: mode) } catch { hub.sessions.noteError(id, error.localizedDescription) }
             }
             requestRefresh()
             return
         }
-        // Full access is a launch-time decision for the harness: the session is relaunched on it.
         guard let row, let sessionKey = row.sessionId else {
             relaunchFailure = "no session key on record for \(id); cannot resume"
             requestRefresh()
@@ -649,8 +652,10 @@ public final class SessionDetailsController: ObservedViewController {
             efforts: efforts,
             effort: effort.flatMap { $0 == "none" ? nil : $0 },
             effortOff: effortOff,
+            harness: harness,
             modes: modes.map { ($0, lockPermission) },
             permission: shownPermission,
+            restartsOnFullSend: !PermissionLook.bypasses(permissionMode),
             onEffort: { [weak self] level in self?.changeEffort(level) },
             onPermission: { [weak self] mode in self?.changePermission(mode) }
         ))

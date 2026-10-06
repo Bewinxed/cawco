@@ -14,6 +14,7 @@
     class: className,
     size = "default",
     portalProps,
+    overlayProps,
     children,
     ...restProps
   }: WithoutChild<AlertDialogPrimitive.ContentProps> & {
@@ -21,11 +22,12 @@
     portalProps?: WithoutChildrenOrChild<
       ComponentProps<typeof AlertDialogPortal>
     >;
+    overlayProps?: ComponentProps<typeof AlertDialogOverlay>;
   } = $props();
 </script>
 
 <AlertDialogPortal {...portalProps}>
-  <AlertDialogOverlay />
+  <AlertDialogOverlay {...overlayProps} />
   <AlertDialogPrimitive.Content
     class={cn(
       "kit-dialog group/alert-dialog-content fixed top-1/2 left-1/2 z-50 w-full -translate-x-1/2 -translate-y-1/2 outline-none data-[size=default]:max-w-xs data-[size=sm]:max-w-xs data-[size=default]:sm:max-w-md",
