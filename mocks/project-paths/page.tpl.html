@@ -402,6 +402,7 @@ th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute
 .tog .runs span::before{content:"✓ ";color:var(--ok-ink)}
 .tog .runs span.lead::before{content:"◐ ";color:var(--coral-ink)}
 .keep{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;font-size:12.5px}
+@media (max-width:640px){.keep{grid-template-columns:minmax(0,1fr)}}
 .keep ul{margin:0;padding-left:16px;display:grid;gap:3px}
 .keep b{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:500}
 .sk{display:flex;flex-wrap:wrap;gap:6px}
@@ -630,22 +631,22 @@ th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute
     {id:"mcp",band:"hub",grp:"Front door",kind:"code",t:"MCP · cawco",s:"one toolset per role",d:"One server; the session's credential picks its role and toolset.",talks:["sess","board","mem","cred","dtypes"]},
     {id:"cred",band:"hub",grp:"Front door",kind:"store",t:"Credentials",s:"Jev key, connector keys",d:"Keys stay here. Sessions call tools; they never see tokens.",talks:["mcp","act","jev","ingress"]},
     {id:"proj",band:"hub",grp:"Work",kind:"store",t:"Projects and places",s:"remote, checkouts, folder",d:"One identity with many places: checkouts on any machine, workspaces, the hub folder.",talks:["folder","board","dtypes","api"]},
-    {id:"board",band:"hub",grp:"Work",kind:"store",t:"Board index",s:"tasks are files, rebuilt",d:"An index rebuilt from the task files, for the frontier and board order. Never the truth.",talks:["folder","disp","lead","api","mcp"],jev:"Is this the same work as an open task? (yes/no, fan-out)",fb:"Exact match on files and checks."},
+    {id:"board",band:"hub",grp:"Work",kind:"store",t:"Board index",s:"tasks are files, rebuilt",d:"An index rebuilt from the task files, for the frontier and board order. Never the truth.",talks:["folder","disp","lead","api","mcp"],jev:"Is this the same work as an open task? (yes/no, fan-out)",fb:"The session filing it compares candidates; else exact match on files and checks."},
     {id:"dtypes",band:"hub",grp:"Work",kind:"store",t:"Delegate types",s:"fleet + project files",d:"Harness, model, effort, skills, MCP, role, budget. Project files shadow fleet types.",talks:["disp","proj","mcp"]},
-    {id:"disp",band:"hub",grp:"Work",kind:"code",t:"Dispatcher",s:"frontier, caps, routing",d:"Starts ready tasks under caps and budgets, on a machine that can run the type.",talks:["board","dtypes","daemon","land","brief","wf","api"],jev:"Ready for an agent? Which type fits? Clarity, size, risk? (score, choice)",fb:"A check must exist; the task names its type; board order."},
-    {id:"land",band:"hub",grp:"Work",kind:"code",t:"Checks + landing",s:"run, rebase, push or PR",d:"Runs acceptance checks, then lands through a per-repo queue.",talks:["ws","board","lead","gh","disp"],jev:"Does this report meet each acceptance criterion? (yes/no each)",fb:"Shell checks only, or the lead reviews."},
+    {id:"disp",band:"hub",grp:"Work",kind:"code",t:"Dispatcher",s:"frontier, caps, routing",d:"Starts ready tasks under caps and budgets, on a machine that can run the type.",talks:["board","dtypes","daemon","land","brief","wf","api"],jev:"Ready for an agent? Which type fits? Clarity, size, risk? (score, choice)",fb:"Caw scores and picks a type when it plans; else a check must exist, the task names its type, board order."},
+    {id:"land",band:"hub",grp:"Work",kind:"code",t:"Checks + landing",s:"run, rebase, push or PR",d:"Runs acceptance checks, then lands through a per-repo queue.",talks:["ws","board","lead","gh","disp"],jev:"Does this report meet each acceptance criterion? (yes/no each)",fb:"Caw reviews, never the delegate that did the work; else shell checks, then you."},
     {id:"stages",band:"hub",grp:"Work",kind:"store",t:"Stages and views",s:"per project, six fixed kinds",d:"The project's stages file: names, kinds, hooks, who may move a card, and its views. Board, calendar and pipeline all read it.",talks:["folder","board","disp","rout","act"]},
     {id:"act",band:"hub",grp:"Work",kind:"code",t:"Approved actions",s:"exact call, once, on time",d:"You approve one exact tool call; code runs it once at its time. Never a model.",talks:["cred","x","gh","ios"]},
     {id:"rout",band:"hub",grp:"Time and events",kind:"code",t:"Routines",s:"Effect Cron, run per slot",d:"Each slot fires once; a fresh session or a message to the lead.",talks:["wf","sess","lead","ingress"]},
-    {id:"ingress",band:"hub",grp:"Time and events",kind:"code",t:"Ingress",s:"pollers + optional relay",d:"Polls GitHub and any connector; an optional relay reaches a one-route listener.",talks:["gh","x","rout","cred"],jev:"Which routine or project is this event for? (choice)",fb:"Matcher filters: author, label, regex."},
+    {id:"ingress",band:"hub",grp:"Time and events",kind:"code",t:"Ingress",s:"pollers + optional relay",d:"Polls GitHub and any connector; an optional relay reaches a one-route listener.",talks:["gh","x","rout","cred"],jev:"Which routine or project is this event for? (choice)",fb:"Matcher filters; unmatched events go to Caw's next wake as one batch."},
     {id:"wf",band:"hub",grp:"Time and events",kind:"code",t:"Workflow engine",s:"durable runs, replay",d:"Effect's durable engine under routines and multi-step runs.",talks:["rout","disp"]},
     {id:"folder",band:"hub",grp:"Knowledge",kind:"store",t:"Project folder",s:"git, synced as files",d:"AGENTS.md, tasks, knowledge, assets, memory, routines, skills, delegates.",talks:["proj","board","mem","sess","brief","assets"]},
-    {id:"mem",band:"hub",grp:"Knowledge",kind:"model",t:"Memory + curator",s:"inbox, proposals",d:"Agents write notes; the curator proposes; you tap.",talks:["folder","sess","ios","mcp"],jev:"Lasting fact, scaffolding, secret, untrusted? (choice)",fb:"Rules: repeats in 2+ sessions, provenance tags."},
-    {id:"brief",band:"hub",grp:"Knowledge",kind:"code",t:"Brief builder",s:"what a session starts with",d:"Task, checks, last failure and the right context files.",talks:["folder","mem","disp"],jev:"How much does each file matter for this task? (score each)",fb:"The whole brand kit and the newest notes."},
+    {id:"mem",band:"hub",grp:"Knowledge",kind:"model",t:"Memory + curator",s:"inbox, proposals",d:"Agents write notes; the curator proposes; you tap.",talks:["folder","sess","ios","mcp"],jev:"Lasting fact, scaffolding, secret, untrusted? (choice)",fb:"The curator decides on its next run with its own model; rules filter first."},
+    {id:"brief",band:"hub",grp:"Knowledge",kind:"code",t:"Brief builder",s:"what a session starts with",d:"Task, checks, last failure and the right context files.",talks:["folder","mem","disp"],jev:"How much does each file matter for this task? (score each)",fb:"Caw picks files when it writes the brief; else the whole brand kit and the newest notes."},
     {id:"assets",band:"hub",grp:"Knowledge",kind:"store",t:"Assets",s:"content-addressed",d:"Images and files by hash, versioned, from any session.",talks:["folder","sess"]},
-    {id:"canvas",band:"hub",grp:"Knowledge",kind:"store",t:"Canvas",s:"results, pins, picks",d:"Many per project: the previews and images its sessions showed, side by side. Pins go to the session that made a piece; picks, notes and dials are kept and read by tool.",talks:["prev","sess","folder","land","dash","mcp"],jev:"How closely does each variant follow DESIGN.md? (score each)",fb:"You look at all of them."},
-    {id:"lead",band:"hub",grp:"Agents",kind:"model",t:"Caw · project lead",s:"woken by events",d:"Plans, briefs, recaps. Board tools only, per-project switch.",talks:["board","rout","ios","dash","land","watch"],jev:"Is each recap claim backed by its events? (yes/no each)",fb:"Recaps list events only."},
-    {id:"watch",band:"hub",grp:"Agents",kind:"code",t:"Fleet watch",s:"detectors, one triage",d:"Code detectors; a fresh Caw triage run only when the case is real.",talks:["daemon","lead","ios"],jev:"Stuck? Looping? Off-task? (yes/no)",fb:"A second code signal, tighter caps."},
+    {id:"canvas",band:"hub",grp:"Knowledge",kind:"store",t:"Canvas",s:"results, pins, picks",d:"Many per project: the previews and images its sessions showed, side by side. Pins go to the session that made a piece; picks, notes and dials are kept and read by tool.",talks:["prev","sess","folder","land","dash","mcp"],jev:"How closely does each variant follow DESIGN.md? (score each)",fb:"Caw scores against DESIGN.md, never the session that made it; else you look at all of them."},
+    {id:"lead",band:"hub",grp:"Agents",kind:"model",t:"Caw · project lead",s:"woken by events",d:"Plans, briefs, recaps. Board tools only, per-project switch.",talks:["board","rout","ios","dash","land","watch"],jev:"Is each recap claim backed by its events? (yes/no each)",fb:"Rule: recaps list events only. Caw can't check its own recap."},
+    {id:"watch",band:"hub",grp:"Agents",kind:"code",t:"Fleet watch",s:"detectors, one triage",d:"Code detectors; a fresh Caw triage run only when the case is real.",talks:["daemon","lead","ios"],jev:"Stuck? Looping? Off-task? (yes/no)",fb:"A second code signal wakes Caw's triage, which decides. A session never judges itself."},
     {id:"jev",band:"hub",grp:"Judgments",kind:"model",t:"Jev",s:"typed judgments, opt-in",d:"Yes/no, choice and score over one state, in one call. Never status, never a permission.",talks:["board","disp","land","ingress","mem","brief","canvas","lead","watch","cred","ort"]},
     {id:"daemon",band:"machines",kind:"code",t:"Daemon",s:"process truth",d:"The only authority on what runs on its machine.",talks:["api","sessiond","disp","watch"]},
     {id:"sessiond",band:"machines",kind:"code",t:"sessiond",s:"keeps sessions across deploys",d:"Protocol-blind keeper; ships almost never.",talks:["daemon","sess"]},
@@ -804,26 +805,27 @@ The tray chip overflows at 320px wide…</pre>
         <div class="p2"><b>Verify and escalate</b><span class="hw">Check claims against evidence; uncertain cases go to a person or a reasoning model.</span><span class="cw">Judged checks for non-commit work: one question per acceptance criterion on a report or a post. Recap claims checked against their events. Unsure goes to Caw, then you.</span></div>
         <div class="p2"><b>Respond to changing state</b><span class="hw">Fresh judgments guide the next bounded step; keep inferred state apart from observed facts.</span><span class="cw">Fleet watch re-asks on fresh transcript slices. A Jev answer is never status: the derived-liveness law already keeps those apart.</span></div>
       </div>
+      <p class="a"><b>Jev off: who decides.</b> First, a model already in the loop: the lead, or the session that is asking, with its own model and never about its own work. Questions with no session behind them wait for the lead's next wake and go to it as one batch, not one turn each. Last, the rule. Answers keep Jev's shape (yes/no, choice, score), and the card says who decided.</p>
       <span class="gl">Where it plugs into this design</span>
       <div class="uses"><table>
-        <thead><tr><th>Use</th><th>Kind</th><th>With Jev</th><th>Without Jev</th></tr></thead>
+        <thead><tr><th>Use</th><th>Kind</th><th>With Jev</th><th>Jev off: who decides</th></tr></thead>
         <tbody>
-          <tr><td>Fleet watch (D5)</td><td><span class="ty2">yes/no</span></td><td>Stuck? looping? off-task? Only a yes wakes Caw triage.</td><td class="fb">Second code signal, triage with tighter caps.</td></tr>
-          <tr><td>Memory inbox (D8)</td><td><span class="ty2">choice</span></td><td>Lasting fact, scaffolding, secret, untrusted, duplicate.</td><td class="fb">Rules: repeats in 2+ sessions, provenance tags.</td></tr>
-          <tr><td>Attach or start fresh (D3)</td><td><span class="ty2">yes/no</span></td><td>Does this follow-up need context a brief can't carry? The question <code>checkCold</code> asks the model today.</td><td class="fb">Warm, idle and same task decides alone.</td></tr>
-          <tr><td>Ready to dispatch</td><td><span class="ty2">score</span></td><td>How well specified is this task? Low scores go to needs-info.</td><td class="fb">A check must exist; otherwise the lead decides.</td></tr>
-          <tr><td>Triage skill (D14)</td><td><span class="ty2">choice</span></td><td>needs-info · ready-for-agent · ready-for-human · won't do.</td><td class="fb">The lead model triages (costlier).</td></tr>
-          <tr><td>Duplicates</td><td><span class="ty2">yes/no</span></td><td>Is task A the same work as B? Fan-out over candidates.</td><td class="fb">Exact match on files and checks only.</td></tr>
-          <tr><td>Event routing (D10)</td><td><span class="ty2">choice</span></td><td>Which routine or project does this event belong to?</td><td class="fb">Matcher filters: author, label, regex.</td></tr>
-          <tr><td>Delegate type</td><td><span class="ty2">choice</span></td><td>Which preset fits this brief?</td><td class="fb">The caller names a type, else "medium".</td></tr>
-          <tr><td>Grounded recaps</td><td><span class="ty2">yes/no</span></td><td>Is each recap claim backed by its cited events?</td><td class="fb">Recaps list events only, no prose claims.</td></tr>
-          <tr><td>Judged checks (D6)</td><td><span class="ty2">yes/no ×N</span></td><td>One question per acceptance criterion on a report, brief or post.</td><td class="fb">Shell checks only, or the lead reviews.</td></tr>
-          <tr><td>Brief context</td><td><span class="ty2">score ×N</span></td><td>Rank memory and knowledge files for this task; include the top few.</td><td class="fb">Include the whole brand kit and the newest notes.</td></tr>
-          <tr><td>Phone requests</td><td><span class="ty2">choice + fill</span></td><td>Action, project and time from one sentence.</td><td class="fb">Buttons and pickers in the app.</td></tr>
-          <tr><td>Dispatch order</td><td><span class="ty2">score ×3</span></td><td>Clarity, size and risk per task; code weights them.</td><td class="fb">Rank order on the board.</td></tr>
-          <tr><td>X voice check</td><td><span class="ty2">yes/no ×N</span></td><td>One question per brand-kit rule, on every draft.</td><td class="fb">Lint-style rules: length, banned words, "!".</td></tr>
+          <tr><td>Fleet watch (D5)</td><td><span class="ty2">yes/no</span></td><td>Stuck? looping? off-task? Only a yes wakes Caw triage.</td><td class="fb">A second code signal wakes Caw's triage, which decides. A session never judges whether it is stuck itself.</td></tr>
+          <tr><td>Memory inbox (D8)</td><td><span class="ty2">choice</span></td><td>Lasting fact, scaffolding, secret, untrusted, duplicate.</td><td class="fb">The curator decides on its next run, with its own model. Rules (repeats in 2+ sessions, provenance tags) filter first.</td></tr>
+          <tr><td>Attach or start fresh (D3)</td><td><span class="ty2">yes/no</span></td><td>Does this follow-up need context a brief can't carry? The question <code>checkCold</code> asks the model today.</td><td class="fb">The caller decides with its own model, as <code>checkCold</code> already lets it. No caller: warm, idle and same task.</td></tr>
+          <tr><td>Ready to dispatch</td><td><span class="ty2">score</span></td><td>How well specified is this task? Low scores go to needs-info.</td><td class="fb">The lead scores it when it plans. Lead off: a check must exist.</td></tr>
+          <tr><td>Triage skill (D14)</td><td><span class="ty2">choice</span></td><td>needs-info · ready-for-agent · ready-for-human · won't do.</td><td class="fb">The lead triages with its model, one batch per wake.</td></tr>
+          <tr><td>Duplicates</td><td><span class="ty2">yes/no</span></td><td>Is task A the same work as B? Fan-out over candidates.</td><td class="fb">The session filing the task compares it with candidates code finds. No session: exact match on files and checks.</td></tr>
+          <tr><td>Event routing (D10)</td><td><span class="ty2">choice</span></td><td>Which routine or project does this event belong to?</td><td class="fb">Matcher filters (author, label, regex). Unmatched events go to the lead's next wake as one batch.</td></tr>
+          <tr><td>Delegate type</td><td><span class="ty2">choice</span></td><td>Which preset fits this brief?</td><td class="fb">The delegating session or Caw picks from the catalog with its own model. A routine names its type; else "medium".</td></tr>
+          <tr><td>Grounded recaps</td><td><span class="ty2">yes/no</span></td><td>Is each recap claim backed by its cited events?</td><td class="fb">Rule: recaps list events only. The lead can't check its own recap.</td></tr>
+          <tr><td>Judged checks (D6)</td><td><span class="ty2">yes/no ×N</span></td><td>One question per acceptance criterion on a report, brief or post.</td><td class="fb">The lead reviews with its model, never the delegate that did the work. Lead off: shell checks, then you.</td></tr>
+          <tr><td>Brief context</td><td><span class="ty2">score ×N</span></td><td>Rank memory and knowledge files for this task; include the top few.</td><td class="fb">The lead picks files when it writes the brief. No lead: the whole brand kit and the newest notes.</td></tr>
+          <tr><td>Phone requests</td><td><span class="ty2">choice + fill</span></td><td>Action, project and time from one sentence.</td><td class="fb">The lead reads the sentence with its model. Buttons and pickers always work.</td></tr>
+          <tr><td>Dispatch order</td><td><span class="ty2">score ×3</span></td><td>Clarity, size and risk per task; code weights them.</td><td class="fb">The lead ranks when it plans. Else board order.</td></tr>
+          <tr><td>X voice check</td><td><span class="ty2">yes/no ×N</span></td><td>One question per brand-kit rule, on every draft.</td><td class="fb">The lead or a reviewer type checks each rule, never the writer that drafted it. Else lint-style rules: length, banned words, "!".</td></tr>
         </tbody></table></div>
-      <p class="fine">Rules that hold either way. Off is a mode you can see on every feature ("Jev off · using rules"). On but failing is never quietly downgraded: the feature says Jev failed, which keeps your 2026-09-23 "no fallbacks" decision for errors. Typed answers guarantee the shape, not the truth, so every threshold is tuned on CawCo's own logged cases, a confidence is never permission to act, and Jev never writes status or answers a permission. The key stays in the hub. Text goes to OpenRouter or Typesafe, which is why it is opt-in. Sources: Typesafe's agent skill and the Jev plan in <code>.design-foundations</code>.</p>
+      <p class="fine">Rules that hold either way. Off is a mode you can see on every feature ("Jev off · decided by Caw" or "Jev off · using rules"). On but failing is never quietly downgraded: the feature says Jev failed and does not hand the question to a session, which keeps your 2026-09-23 "no fallbacks" decision for errors. Typed answers guarantee the shape, not the truth, so every threshold is tuned on CawCo's own logged cases, a confidence is never permission to act, and Jev never writes status or answers a permission. The key stays in the hub. Text goes to OpenRouter or Typesafe, which is why it is opt-in. Sources: Typesafe's agent skill and the Jev plan in <code>.design-foundations</code>.</p>
     </article>
     <article class="ans wide" id="todos">
       <header><span class="did">To-dos</span><h3>Can sessions set their own to-dos? Three layers, one word each</h3></header>
@@ -836,6 +838,22 @@ The tray chip overflows at 320px wide…</pre>
         <div class="ly l3"><span class="nm">Plan<small>the harness's own list</small></span><div class="ex"><span class="ck d"><i></i>Read theme store</span><span class="ck"><i></i>Add toggle to header</span><span class="ck"><i></i>Run checks</span></div><span class="wr"><b>Lasts:</b> one session. <b>Writes:</b> the session itself (Claude Code's task tools, OpenCode's todos). CawCo only reads it: the progress ring on the attempt.</span></div>
       </div>
       <p class="a">Yes, at two levels. Every session already keeps its own plan with the harness's native tools, and CawCo already reads it (the task ring on a session). New: the session can tick and add to-dos on the task it is working on through <code>todo_write</code>, which also gives pi a list it lacks. When an attempt ends, plan items left open become proposed to-dos or follow-up tasks for Caw or you to accept. A plan never edits the board by itself.</p>
+      <p class="q">Do nested to-dos collide with the ticket system we adopted from Matt? Can they hook into it? Do agents see overall progress?</p>
+      <div class="keep">
+        <div><b>Task or to-do</b><ul>
+          <li>Needs its own attempt or checks, or can block or run in parallel: a task. to-tasks writes it, with edges. Tasks link; they don't nest.</li>
+          <li>A step in the same attempt and workspace: a to-do. To-dos nest, as indented checkboxes.</li>
+          <li>A to-do that grows is promoted to a task with an edge. Its line becomes <code>- [ ] → #152</code> and ticks when that task lands.</li>
+          <li>Triage, edges and the dispatcher only ever see tasks.</li>
+          <li>With GitHub as the tracker: tasks are issues, a spec is a parent with sub-issues, to-dos are the issue's task list.</li>
+        </ul></div>
+        <div><b>Who sees progress</b><ul>
+          <li>Today, barely: a session sees its own plan, its work item, its own delegates and workflow state. There is no project board to read.</li>
+          <li>Every brief says where its task sits: the spec, what landed upstream, what waits on it.</li>
+          <li><code>board_read</code> by role (D7): a worker reads its project's board and its task's to-dos; Caw reads everything, plus each attempt's plan ring.</li>
+          <li>Progress is derived, never stored: to-dos ticked for a task, tasks landed along the edges for a spec. Ticking every to-do never makes a task done; checks and landing do.</li>
+        </ul></div>
+      </div>
     </article>
     <article class="ans">
       <header><span class="did">D14</span><h3>Our own three skills</h3></header>
@@ -1415,6 +1433,35 @@ resolve        → finish_item → land</pre>
     </article>
   </div>
 
+  <article class="ans wide" id="prims">
+    <header><span class="did">Primitives</span><h3>Task tracking: what's established, and one set for every kind of project</h3></header>
+    <p class="q">Are there established primitives for this, like AG-UI? When I say to-dos, I mean we provide the task tracking primitives. And this covers software and design projects too?</p>
+    <p class="a">No protocol covers the backlog itself. Standards exist for two layers: one session's plan, and a running task's live state between agents. Popular open formats exist for the backlog. CawCo provides the tracking primitives built from those shapes. Projects bring their approach as files.</p>
+    <div class="prim"><table>
+      <thead><tr><th>Layer</th><th>Established</th><th>In CawCo</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td>Plan, inside one session</td><td>Agent Client Protocol's <code>plan</code>: entries marked pending, in_progress or completed; the whole list is resent on every update</td><td>Every harness's plan converted to this shape. CawCo already reads plans; this makes them uniform.</td><td><span class="st2 plan">borrow</span></td></tr>
+        <tr><td>Live state of a running task</td><td>A2A's Task states (submitted, working, input-required, auth-required, completed, failed, canceled, rejected); MCP Tasks, SEP-1686 (working, input_required, completed, failed, cancelled)</td><td>The names for an attempt's derived state. input-required is Needs you. Outside agents can hand CawCo a task and check on it.</td><td><span class="st2 plan">borrow</span></td></tr>
+        <tr><td>Backlog: tasks, edges, stages, to-dos</td><td>No protocol. Backlog.md (MIT: Markdown task files, configurable statuses, acceptance criteria, MCP, kanban); beads (MIT: blocks, parent-child, related, discovered-from, ready work); Linear's fixed state types</td><td>Tasks as files with Backlog.md's sections, beads' four edge types, six fixed kinds (D17). Import from both.</td><td><span class="st2 gap">build · borrowed shapes</span></td></tr>
+        <tr><td>Showing it</td><td>AG-UI 1.0: state, activity, step and subagent events</td><td>Ledger events named after AG-UI's, so an adapter is cheap. A2UI for custom views.</td><td><span class="st2 plan">borrow names</span></td></tr>
+      </tbody></table></div>
+    <p class="a">The primitives: <b>task</b>, <b>edge</b>, <b>stage</b>, <b>to-do</b>, <b>plan</b>, <b>assignment</b> (a delegate type), <b>progress</b> (derived) and <b>live state</b>, all through MCP tools. Why not adopt Backlog.md or beads whole: neither has hub-run checks, leases, landing, role scoping or derived liveness. Their shapes, our engine.</p>
+    <div class="prim"><table>
+      <thead><tr><th></th><th>Software</th><th>Design</th><th>Social, SEO</th></tr></thead>
+      <tbody>
+        <tr><td>Stages</td><td>ready → working → review → done</td><td>brief → explore → review → picked → build → shipped</td><td>idea → draft → review → scheduled → posted → measured</td></tr>
+        <tr><td>A task is</td><td>a vertical slice from to-tasks, with edges</td><td>a screen or a flow</td><td>a post, an article, a campaign</td></tr>
+        <tr><td>To-dos</td><td>steps in the slice</td><td>states to cover: empty, error, dark</td><td>assets, alt text, links</td></tr>
+        <tr><td>Attempts</td><td>fresh or warm session in a workspace</td><td>variants on the canvas; pick one (D19)</td><td>drafts; pick one</td></tr>
+        <tr><td>Checks (code)</td><td>tests, lint, typecheck</td><td>contrast, tokens, screenshot diff</td><td>length, links, banned words</td></tr>
+        <tr><td>Judgments</td><td>does the report meet each criterion</td><td>does it follow <code>DESIGN.md</code></td><td>does it sound like the brand</td></tr>
+        <tr><td>Done means</td><td>landed through the merge queue</td><td>the picked variant becomes a build task</td><td>an approved action posted it</td></tr>
+        <tr><td>Delegate types</td><td>implementer, reviewer</td><td>explorer, builder</td><td>writer, replier, seo</td></tr>
+        <tr><td>Routines</td><td>nightly dependency check</td><td>weekly drift check</td><td>morning drafts, mentions</td></tr>
+      </tbody></table></div>
+    <p class="fine">Everything in a column is the project's own files: skills, delegate types, stages, routines, checks. Swap them freely. Fixed on purpose: the six stage kinds, the role toolsets, and the approval floor for public actions.</p>
+  </article>
+
   <article class="dec" id="d17">
     <header><span class="did">D17</span><h3>Project stages and views</h3><span class="state" data-for="stages">Not picked</span></header>
     <p class="why">Fixed columns fit code. A social, outreach or design project has its own lifecycle. Let the project name its stages; keep the few kinds CawCo reasons about fixed.</p>
@@ -1694,6 +1741,12 @@ read_choices("hero options")
     <li><a href="https://x.com/joshpuckett/status/2107175379903594714">Graphical launch post</a></li>
     <li><a href="https://github.com/joshpuckett/dialkit">DialKit</a></li>
     <li><a href="https://github.com/modelcontextprotocol/ext-apps/blob/main/specification/2026-01-26/apps.mdx">MCP Apps spec</a></li>
+    <li><a href="https://agentclientprotocol.com/protocol/v1/agent-plan">ACP agent plan</a></li>
+    <li><a href="https://modelcontextprotocol.io/seps/1686-tasks">MCP SEP-1686 Tasks</a></li>
+    <li><a href="https://a2a-protocol.org/v0.2.5/specification/">A2A specification</a></li>
+    <li><a href="https://github.com/MrLesk/Backlog.md">Backlog.md</a></li>
+    <li><a href="https://beads.gascity.com/core-concepts/issues">beads issues and dependencies</a></li>
+    <li><a href="https://docs.ag-ui.com/spec/1.0/basic">AG-UI event model</a></li>
   </ul>
 </section>
 </main>
