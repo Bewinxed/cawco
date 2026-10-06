@@ -30,7 +30,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     public var canEditQueued: (String) -> Bool = { _ in false }
     public var onEditQueued: (String) -> Void = { _ in }
     /// The queued message whose words are in the composer.
-    private var taken: String?
+    private var liftedQueued: String?
     /// What queued messages were just replaced with, by id, until the hub's
     /// own record of each new send takes their place.
     private var replacements: [String: String] = [:]
@@ -280,7 +280,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         env.runSteps = { [weak self] id in self.map { $0.steps(id) } ?? [] }
         env.openSession = { [weak self] id in self?.onOpenSession(id) }
         env.openRun = { [weak self] id in self?.onOpenRun(id) }
-        env.isTaken = { [weak self] id in self?.taken == id }
+        env.isTaken = { [weak self] id in self?.liftedQueued == id }
         env.replacement = { [weak self] id in self?.replacements[id] }
         env.canEditQueued = { [weak self] id in self?.canEditQueued(id) ?? false }
         env.editQueued = { [weak self] id in self?.onEditQueued(id) }
@@ -991,7 +991,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     /// the composer, or unfolds it, showing `replacement` when it was
     /// replaced, on the drawer curve, so nothing below it jumps.
     public func foldQueued(_ id: String, folded: Bool, replacement: String?) {
-        if folded { taken = id } else if taken == id { taken = nil }
+        if folded { liftedQueued = id } else if liftedQueued == id { liftedQueued = nil }
         if let replacement { replacements[id] = replacement }
         guard let index = dataSource.indexPath(for: id), let item = items[id],
               let cell = collection.cellForItem(at: index) as? HostCell<UserTurnView> else {

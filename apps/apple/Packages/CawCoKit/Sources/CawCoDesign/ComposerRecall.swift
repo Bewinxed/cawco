@@ -1,6 +1,7 @@
 import CoreImage
 import CoreImage.CIFilterBuiltins
 import UIKit
+import UIKit.UIGestureRecognizerSubclass
 
 // The composer's recall (composer-recall, variant "Wheel"): the composer
 // grows upward out of its history button, absolutely, so nothing above it
@@ -111,7 +112,7 @@ enum Recall {
 
     /// A message on one line: each line break a "⏎".
     static func oneLine(_ text: String) -> String {
-        text.replacingOccurrences(of: #"\s*\n\s*"#, with: " ⏎ ", options: .regularExpression)
+        text.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: #"\s*\n\s*"#, with: " ⏎ ", options: .regularExpression)
     }
 
     /// JavaScript's `Math.round`: halves go up, also below zero.
@@ -742,6 +743,8 @@ final class RecallWheel: NSObject, UIGestureRecognizerDelegate {
     /// Whether keys reach the wheel (↑ or the history button); a hold leaves the keyboard down.
     let keys: Bool
     private(set) var closing = false
+    /// Dismissed: whatever a fold still under way would do next is dropped.
+    private var cut = false
     private(set) var query = ""
 
     private var geometry = RecallGeometry(width: 0, base: 0, button: 0)
@@ -1177,7 +1180,7 @@ final class RecallWheel: NSObject, UIGestureRecognizerDelegate {
         let line = rows.indices.contains(Recall.round(pos)) ? rows[Recall.round(pos)] : nil
         let still = UIAccessibility.isReduceMotionEnabled || composer.window == nil
         let fold = { [weak self] in
-            guard let self else { return }
+            guard let self, !cut else { return }
             // The ghost on the line becomes the field's own text.
             if let text { composer.wheelLanded(text) } else { composer.wheelReturned(caret: caret) }
             line?.isHidden = true
@@ -1191,7 +1194,7 @@ final class RecallWheel: NSObject, UIGestureRecognizerDelegate {
             (composer.superview ?? composer).layoutIfNeeded()
             halo?.base = composer.ring.bounds.height
             let finish = { [weak self] in
-                guard let self else { return }
+                guard let self, !cut else { return }
                 halo?.remove()
                 halo = nil
                 ghosts.removeFromSuperview()
@@ -1207,9 +1210,12 @@ final class RecallWheel: NSObject, UIGestureRecognizerDelegate {
         }
     }
 
-    /// Gone at once, nothing taken (the composer switched conversation).
+    /// Gone at once, nothing taken (the composer switched conversation). It
+    /// cuts a fold still under way short too: what that fold would land and
+    /// send belongs to the conversation being left.
     func dismiss() {
-        guard !closing else { return }
+        guard !cut else { return }
+        cut = true
         closing = true
         spring.stop()
         settled = nil
@@ -1229,9 +1235,9 @@ final class RecallWheel: NSObject, UIGestureRecognizerDelegate {
 /// the touch's place in the window.
 @MainActor
 final class OutsideTouch: UIGestureRecognizer {
-    private let onTouch: (CGPoint) -> Void
+    private let onTouch: @MainActor (CGPoint) -> Void
 
-    init(_ onTouch: @escaping (CGPoint) -> Void) {
+    init(_ onTouch: @escaping @MainActor (CGPoint) -> Void) {
         self.onTouch = onTouch
         super.init(target: nil, action: nil)
         cancelsTouchesInView = false

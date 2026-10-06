@@ -289,7 +289,13 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
         command = hub.sessions.withdraw(row, sendId: id) { [weak self] stage, reason in
             guard let self else { return }
             if stage == .applied, hub.ledger.commands[command]?.outcome == "withdrawn" {
-                sent = hub.sessions.steer(row, text: text, images: images, texts: texts, replaces: id)
+                let replacement = hub.sessions.steer(row, text: text, images: images, texts: texts, replaces: id)
+                sent = replacement
+                // Withdrawn and its replacement never left this device: the words are only here, so they go back
+                // to the composer (as a plain send keeps its draft). A later failure stays a failed row to try again.
+                if hub.ledger.commands[replacement]?.undelivered == true {
+                    keepEdit(id, text, "Couldn't send your edit, and your queued message was already taken back. Your edit is back in the composer.")
+                }
             } else if stage == .applied {
                 keepEdit(id, text, "Claude Code had already read your queued message, so it went as it was. Your edit is back in the composer.")
             } else {

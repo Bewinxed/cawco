@@ -693,18 +693,30 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
         !field.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !attachments.isEmpty
     }
 
+    /// What the button does now. While a queued message is being edited it
+    /// puts the edit in its place, even mid-turn, when the agent is working.
+    private var shownAction: Action {
+        edit != nil ? .send : action
+    }
+
+    /// The dashboard's order (Composer.svelte `onaction`): an edit replaces,
+    /// a working agent stops, then the wheel sends the row on its line.
     private func pressAction() {
         guard !held else { return }
+        if edit != nil {
+            submit()
+            return
+        }
+        if action == .stop {
+            binding?.onStop()
+            return
+        }
         // While the wheel is up, Send sends the row on the field's line as it is (⌘Return).
         if let wheel, !wheel.closing {
             wheel.take(send: true)
             return
         }
-        switch action {
-        case .stop: binding?.onStop()
-        case .send: submit()
-        case .sending: break
-        }
+        if action == .send { submit() }
     }
 
     /// A refused send never eats what was typed: nothing to send, the last
@@ -714,7 +726,12 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
         // A queued message's words go back in its place.
         if let edit {
             let words = field.text.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !words.isEmpty { edit.giveBack(words) }
+            // Unchanged, it simply goes back: nothing to withdraw and send again.
+            if words == edit.entry.text.trimmingCharacters(in: .whitespacesAndNewlines) {
+                edit.giveBack(nil)
+            } else if !words.isEmpty {
+                edit.giveBack(words)
+            }
             return
         }
         guard let binding, writable, !held, action != .sending, hasContent, flight == nil else { return }
@@ -723,6 +740,7 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
     }
 
     private func renderAction(animated: Bool) {
+        let action = shownAction
         let enabled = writable && !held && (action != .send || hasContent || wheel != nil)
         actionBox.isEnabled = enabled && action != .sending
         actionBox.isUserInteractionEnabled = action != .sending

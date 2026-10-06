@@ -228,7 +228,7 @@ final class UserTurnView: UIView, RowContent, UIGestureRecognizerDelegate {
     private let float = FloatNote()
     private let chips = FlowView()
     private let failure = UIStackView()
-    private let tag = ChipLabel(insets: UIEdgeInsets(top: 2, left: 7, bottom: 2, right: 7), radius: Radius.radiusPill)
+    private let takenTag = ChipLabel(insets: UIEdgeInsets(top: 2, left: 7, bottom: 2, right: 7), radius: Radius.radiusPill)
     private let tagRow = UIStackView()
     private var taken = false
     private let reason = WrapLabel(wrap: .pretty) // MessageRow `p.reason`
@@ -250,8 +250,8 @@ final class UserTurnView: UIView, RowContent, UIGestureRecognizerDelegate {
         well.translatesAutoresizingMaskIntoConstraints = false
         words.translatesAutoresizingMaskIntoConstraints = false
         well.addSubview(words)
-        tag.backgroundColor = Palette.statusAttnBg
-        tagRow.addArrangedSubview(tag)
+        takenTag.backgroundColor = Palette.statusAttnBg
+        tagRow.addArrangedSubview(takenTag)
         tagRow.addArrangedSubview(UIView())
         tagRow.isHidden = true
         let content = UIStackView(arrangedSubviews: [tagRow, body, chips, failure])
@@ -322,7 +322,7 @@ final class UserTurnView: UIView, RowContent, UIGestureRecognizerDelegate {
         who.alpha = ghost
         words.alpha = ghost
         configureChips(block)
-        tag.attributedText = Styled.string("Queued · editing it below", TypeScale.typeMeta, color: Palette.statusAttnInk, weight: .medium)
+        takenTag.attributedText = Styled.string("Queued · editing it below", TypeScale.typeMeta, color: Palette.statusAttnInk, weight: .medium)
         fold(taken)
         let reasonText = block.string("sendFailed")
         reason.attributedText = Styled.string("Couldn't send that message." + (reasonText.map { " \($0)" } ?? ""), TypeScale.typeMeta,

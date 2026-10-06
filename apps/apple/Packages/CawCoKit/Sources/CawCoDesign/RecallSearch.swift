@@ -157,14 +157,15 @@ struct RecallSearch {
             }
             combined = both
         }
-        // The score times how many of the query's terms the message matched;
-        // `results.sort(byScore)` is stable, so equal scores keep their order.
-        let results = combined.order.enumerated().compactMap { place, doc -> (Int, Result)? in
+        // The score times how many of the query's terms the message matched.
+        // Equal scores keep the newer first, as the dashboard's SentIndex
+        // sorts them: documents are added newest first, so the lower index.
+        let results = combined.order.compactMap { doc -> Result? in
             guard let hit = combined.hits[doc] else { return nil }
             let quality = Double(max(1, hit.queryTerms.count))
-            return (place, Result(index: doc, score: hit.score * quality, terms: hit.matched))
+            return Result(index: doc, score: hit.score * quality, terms: hit.matched)
         }
-        return results.sorted { $0.1.score != $1.1.score ? $0.1.score > $1.1.score : $0.0 < $1.0 }.map(\.1)
+        return results.sorted { $0.score != $1.score ? $0.score > $1.score : $0.index < $1.index }
     }
 
     /// One document's hit, as `RawResult` holds it.

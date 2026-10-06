@@ -334,8 +334,9 @@ final class QueuedEdit {
         let words = replacement ?? entry.text
         let from = composer.fieldEnd()
         Feel.gaveBack()
-        fold(animated: true)
+        // The edit leaves first: a fold with no motion steps the pill back at once, and only if no edit holds it.
         composer.editLeaves(self, focus: true)
+        fold(animated: true)
         binding?.foldQueued(entry.id, false, replacement)
         let binding = binding
         let id = entry.id
@@ -373,8 +374,8 @@ final class QueuedEdit {
     func dismiss() {
         guard !leaving else { return }
         leaving = true
-        fold(animated: false)
         composer.editLeaves(self, focus: false)
+        fold(animated: false)
         binding?.foldQueued(entry.id, false, nil)
     }
 }

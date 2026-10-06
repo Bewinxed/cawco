@@ -30,9 +30,12 @@ public enum SentMessages {
         return entries
     }
 
-    /// Whether `id` is a send the session has not read yet.
+    /// Whether `id` is a send the session has not read yet (client.svelte.ts
+    /// `canWithdraw`: its state is pending), held back in the queue or already
+    /// among the blocks.
     public static func isQueued(_ id: String, in transcript: SessionTranscript) -> Bool {
         transcript.queued.contains { $0.id == id && ($0.state?.rawValue ?? "pending") == "pending" }
+            || transcript.blocks.contains { $0.id == id && $0.state?.rawValue == "pending" }
     }
 
     /// What a send carried beside its words, for sending it again in its
