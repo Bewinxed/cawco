@@ -1243,6 +1243,29 @@
                       "none"
                     ]
                   },
+                  "group": {
+                    "type": "string"
+                  },
+                  "owns": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "budget": {
+                    "type": "object",
+                    "properties": {
+                      "usd": {
+                        "type": "number"
+                      },
+                      "turns": {
+                        "type": "integer"
+                      },
+                      "minutes": {
+                        "type": "integer"
+                      }
+                    }
+                  },
                   "rank": {
                     "type": "string"
                   },
@@ -1564,6 +1587,35 @@
                       "pr",
                       "none"
                     ]
+                  },
+                  "group": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "owns": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "budget": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "usd": {
+                        "type": "number"
+                      },
+                      "turns": {
+                        "type": "integer"
+                      },
+                      "minutes": {
+                        "type": "integer"
+                      }
+                    }
                   },
                   "checks": {
                     "type": "array",
@@ -3026,6 +3078,23 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "budget": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "usd": {
+                        "type": "number"
+                      },
+                      "turns": {
+                        "type": "integer"
+                      },
+                      "minutes": {
+                        "type": "integer"
+                      }
+                    }
+                  },
                   "dispatch": {
                     "type": "boolean"
                   },
@@ -12365,6 +12434,9 @@
             "lands": {
               "$ref": "#/components/schemas/LandsMode"
             },
+            "budget": {
+              "$ref": "#/components/schemas/WorkBudget"
+            },
             "places": {
               "type": "array",
               "items": {
@@ -12498,6 +12570,9 @@
           },
           "lands": {
             "$ref": "#/components/schemas/LandsMode"
+          },
+          "budget": {
+            "$ref": "#/components/schemas/WorkBudget"
           },
           "places": {
             "type": "array",
@@ -12644,6 +12719,9 @@
           },
           "lands": {
             "$ref": "#/components/schemas/LandsMode"
+          },
+          "budget": {
+            "$ref": "#/components/schemas/WorkBudget"
           },
           "places": {
             "type": "array",
@@ -15069,6 +15147,10 @@
               "type": "string"
             }
           },
+          "budget": {
+            "description": "What an attempt may spend before the hub stops it; null: the project's default.",
+            "$ref": "#/components/schemas/WorkBudget"
+          },
           "checks": {
             "type": "array",
             "items": {
@@ -15086,6 +15168,13 @@
             }
           },
           "foundIn": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "group": {
+            "description": "Its attempts' group: their parent hears one combined report once all have ended.",
             "type": [
               "null",
               "string"
@@ -15134,6 +15223,13 @@
             "type": "number"
           },
           "outputs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "owns": {
+            "description": "Globs of the repository's files an attempt owns.",
             "type": "array",
             "items": {
               "type": "string"
@@ -15246,6 +15342,7 @@
           "description",
           "extra",
           "foundIn",
+          "group",
           "hash",
           "id",
           "labels",
@@ -15254,6 +15351,7 @@
           "needsYou",
           "number",
           "outputs",
+          "owns",
           "parent",
           "path",
           "problems",
@@ -15267,6 +15365,21 @@
           "todos",
           "type"
         ]
+      },
+      "WorkBudget": {
+        "description": "What a work item may spend before the hub stops it: dollars (the usage its\nmachine reports for its session), turns its session ends, and minutes of\nwall time since it started. Each is optional; one reached fails the item.",
+        "type": "object",
+        "properties": {
+          "minutes": {
+            "type": "number"
+          },
+          "turns": {
+            "type": "number"
+          },
+          "usd": {
+            "type": "number"
+          }
+        }
       },
       "Todo": {
         "description": "One to-do, flat in file order.",
@@ -15297,6 +15410,10 @@
               "string"
             ]
           },
+          "proposed": {
+            "description": "Offered by an attempt whose plan left it open (`(proposed)` before its words), not agreed yet.",
+            "type": "boolean"
+          },
           "text": {
             "description": "The words after the box and marker, without the promoted link.",
             "type": "string"
@@ -15308,6 +15425,7 @@
           "id",
           "path",
           "promoted",
+          "proposed",
           "text"
         ]
       },
@@ -15527,6 +15645,10 @@
         "description": "A project's dispatch: its settings, and what the dispatcher would do now.",
         "type": "object",
         "properties": {
+          "budget": {
+            "description": "What an attempt may spend where its task and its delegate call say nothing; null: no limit.",
+            "$ref": "#/components/schemas/WorkBudget"
+          },
           "dispatch": {
             "description": "Whether the hub starts attempts at ready tasks on its own.",
             "type": "boolean"
@@ -15609,15 +15731,22 @@
         "type": "string"
       },
       "AttemptStart": {
-        "description": "An attempt as it started.",
+        "description": "An attempt as it started; or, `queued`, waiting for files a live item owns\n(its ids null until it starts).",
         "type": "object",
         "properties": {
           "instanceId": {
-            "type": "string"
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "lands": {
             "$ref": "#/components/schemas/LandsMode",
             "description": "Where its work lands."
+          },
+          "queued": {
+            "description": "Whether it waits for files a live item owns, to start when they are free.",
+            "type": "boolean"
           },
           "stage": {
             "description": "The stage the task is in now.",
@@ -15638,15 +15767,22 @@
             ]
           },
           "workItemId": {
-            "type": "string"
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "workspaceId": {
-            "type": "string"
+            "type": [
+              "null",
+              "string"
+            ]
           }
         },
         "required": [
           "instanceId",
           "lands",
+          "queued",
           "stage",
           "task",
           "text",

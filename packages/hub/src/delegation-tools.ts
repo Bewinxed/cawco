@@ -10,6 +10,7 @@ import {
   handoffActions,
   SPAWNING_TOOLS,
 } from "./delegation-actions";
+import { budgetParameter, groupParameter, ownsParameter } from "./task-tools";
 import {
   SESSION_TITLE_DESCRIPTION,
   SESSION_TITLE_MAX,
@@ -82,7 +83,7 @@ const finishItemDescription = (lands: LandsMode = "main"): string => {
   const outputs =
     " When the item names outputs, each must be a file at its path in your workspace: the hub copies them into the project's folder, and a missing one comes back to you like a failing check.";
   const close =
-    " Pass `blocked` with the exact command and error text only when something outside your control stops the work; the item then fails with that reason. Anything you noticed outside your brief goes in `findings`, not in the work.";
+    " Pass `blocked` with the exact command and error text only when something outside your control stops the work; the item then fails with that reason. Anything you noticed outside your brief goes in `findings`, not in the work. When your item is an attempt at a task, the first call lists the task's to-dos still open, once, before any check runs: tick each one you finished with todo_write, say in your summary why each other one stays open, and call again.";
   switch (lands) {
     case "branch":
       return `Finish your work item. Commit your work first and do not push. The hub runs the item's acceptance checks in your worktree and returns each result. When all pass, the hub pushes your branch to origin (nothing goes onto the base branch); the item is then done and your parent receives the results. When a check fails or work is left uncommitted, you get the details back: fix the cause and call finish_item again.${outputs}${close}`;
@@ -644,6 +645,9 @@ export function handoffTools(deps: HandoffDeps) {
               "When the checks pass, the hub copies each into the project's folder under assets/<task or item>/ and the report lists them; " +
               "a missing one goes back to the delegate like a failing check. Needs this session to be in a project."
           ),
+        group: groupParameter().optional(),
+        owns: ownsParameter().optional(),
+        budget: budgetParameter().optional(),
       },
       async ({
         prompt,
@@ -660,6 +664,9 @@ export function handoffTools(deps: HandoffDeps) {
         machine,
         lands,
         outputs,
+        group,
+        owns,
+        budget,
       }) => {
         const result = await actions.delegate(prompt, {
           title,
@@ -675,12 +682,16 @@ export function handoffTools(deps: HandoffDeps) {
           machine,
           lands,
           outputs,
+          group,
+          owns,
+          budget,
         });
         const sc = {
           delegateInstanceId: result.id,
           title: result.title,
           workItemId: result.workItemId,
           workspaceId: result.workspaceId,
+          ...(result.queued ? { queued: result.queued } : {}),
         };
         return {
           content: [{ type: "text" as const, text: result.text }],

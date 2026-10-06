@@ -284,10 +284,27 @@ export const projects = sqliteTable("projects", {
    * (`lands:`): onto the default branch, as before there was a choice.
    */
   lands: text("lands").$type<LandsMode>().notNull().default("main"),
+  /**
+   * The budget every work item of the project runs under, field by field,
+   * where neither its delegate call nor its task names one (work-items.ts
+   * `overBudget`). Null: no default.
+   */
+  budget: text("budget", { mode: "json" }).$type<WorkBudget>(),
   createdAt: timestamp("created_at")
     .notNull()
     .$defaultFn(() => new Date()),
 });
+
+/**
+ * What a work item may spend before the hub stops it: dollars (the usage its
+ * machine reports for its session), turns its session ends, and minutes of
+ * wall time since it started. Each is optional; one reached fails the item.
+ */
+export interface WorkBudget {
+  minutes?: number;
+  turns?: number;
+  usd?: number;
+}
 
 /** Where a project's tasks live: CawCo's files, or (later) an outside tracker. */
 export type Tracker = "cawco" | "github" | "linear";
@@ -308,6 +325,11 @@ export const queuedTaskStarts = sqliteTable(
     stage: text("stage").notNull(),
     /** The session that moved the task in, which takes the report; null: the lead. */
     parentInstanceId: text("parent_instance_id"),
+    /**
+     * Why it waits: `cap`, the project runs `max_attempts` already; `owns`,
+     * a live work item owns files this attempt's task owns too.
+     */
+    why: text("why").$type<"cap" | "owns">().notNull().default("cap"),
     queuedAt: timestamp("queued_at")
       .notNull()
       .$defaultFn(() => new Date()),
@@ -794,6 +816,37 @@ export const workItems = sqliteTable(
      * failed item stays there until then, on every screen at once.
      */
     dismissedAt: timestamp("dismissed_at"),
+    /**
+     * The group it was delegated in, under its parent: the parent hears one
+     * combined report once every item of the group has ended (a failure
+     * still reports at once). Null: it reports on its own.
+     */
+    group: text("group_name"),
+    /**
+     * When the group's combined report carried this item; null while it has
+     * not, so a group used again starts a new round.
+     */
+    groupReportedAt: timestamp("group_reported_at"),
+    /**
+     * What a group's combined report says of it: its summary and its landing
+     * line, written when it lands.
+     */
+    digest: text("digest"),
+    /**
+     * Globs of the repository's files this item owns: the hub never runs two
+     * live items whose globs overlap in one repository (work-items.ts
+     * `globsOverlap`). Null: it claims nothing.
+     */
+    owns: text("owns", { mode: "json" }).$type<string[]>(),
+    /** What it may spend before the hub stops it; null: no limit. */
+    budget: text("budget", { mode: "json" }).$type<WorkBudget>(),
+    /** Turns its session has ended since it started. */
+    turns: integer("turns").notNull().default(0),
+    /**
+     * What its session had spent before it began (a follow-up carries on a
+     * session that has history): its spend is the session's past this.
+     */
+    spendBaseUsd: real("spend_base_usd").notNull().default(0),
   },
   (table) => [
     index("work_items_workspace").on(table.workspaceId, table.state),
@@ -801,6 +854,22 @@ export const workItems = sqliteTable(
     index("work_items_task").on(table.projectId, table.taskId),
   ]
 );
+
+/**
+ * A `delegate` call that waits because a live work item owns files it owns
+ * too (work-items.ts): it starts, oldest first, when no live item overlaps
+ * it any more, and its parent is told. Kept here across a hub restart.
+ */
+export const queuedWorkItems = sqliteTable("queued_work_items", {
+  id: text("id").primaryKey(),
+  parentInstanceId: text("parent_instance_id").notNull(),
+  /** The request as `delegate` made it (work-items.ts `WorkItemRequest`). */
+  request: text("request", { mode: "json" }).$type<unknown>().notNull(),
+  title: text("title").notNull(),
+  queuedAt: timestamp("queued_at")
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
 
 /**
  * What a delegate and its parent said to each other through the hub: every ask

@@ -100,16 +100,20 @@ interface TaskFlags {
   startProblem: string | null;
 }
 
-/** What a started attempt answers (the hub's `AttemptStart`). */
+/**
+ * What a started attempt answers (the hub's `AttemptStart`); `queued` while
+ * it waits for files a live item owns, its ids null until it starts.
+ */
 export interface AttemptStart {
-  instanceId: string;
+  instanceId: string | null;
   lands: LandsMode;
+  queued: boolean;
   stage: string;
   task: string;
   text: string;
   type: string | null;
-  workItemId: string;
-  workspaceId: string;
+  workItemId: string | null;
+  workspaceId: string | null;
 }
 
 /** One task as a list shows it: the hub's index row. */
@@ -146,6 +150,8 @@ export interface Todo {
   /** `2.1`: the second top-level to-do's first child. */
   path: string;
   promoted: string | null;
+  /** Left open in an attempt's plan: offered, not agreed (a `(proposed)` line). */
+  proposed: boolean;
   text: string;
 }
 

@@ -13,6 +13,9 @@
  * checks: ["bun test", "bun run lint"]
  * outputs: [post.md]
  * lands: pr
+ * group: theme
+ * owns: [src/theme/**]
+ * budget: {usd: 2, turns: 40, minutes: 30}
  * rank: a0V
  * labels: [ui]
  * ---
@@ -45,6 +48,8 @@
  *   plan item quotes; the hub gives every to-do it adds the next one. A to-do
  *   promoted to a task ends in `→ #152`. A to-do without a marker is named by
  *   its position: `2` is the second top-level one, `2.1` its first child.
+ *   One whose words open with `(proposed)` was left open in an attempt's plan
+ *   and is offered, not agreed: `- [ ] [td-9] (proposed) Cover the edge case`.
  *
  * Writes change only what they own. A field change rewrites that field's
  * line in the front matter (comments, unknown keys and order elsewhere stay);
@@ -58,6 +63,7 @@ import {
   LANDS_MODES,
   type LandsMode,
 } from "@cawco/core";
+import type { WorkBudget } from "./db/schema";
 
 /** The front matter fields a task file knows, in the order a new file writes them. */
 export const TASK_FIELDS = [
@@ -70,6 +76,9 @@ export const TASK_FIELDS = [
   "checks",
   "outputs",
   "lands",
+  "group",
+  "owns",
+  "budget",
   "rank",
   "labels",
 ] as const;
@@ -84,12 +93,18 @@ export const isSingleEdge = (edge: Edge): boolean => SINGLE_EDGES.has(edge);
 
 export interface TaskFields {
   after: string[];
+  /** What an attempt may spend before the hub stops it; null: the project's default. */
+  budget: WorkBudget | null;
   checks: string[];
   foundIn: string | null;
+  /** Its attempts' group under their parent: one combined report once all have ended. */
+  group: string | null;
   labels: string[];
   /** Where an attempt's work lands (`main`, `branch`, `pr`, `none`); null: the project's default. */
   lands: LandsMode | null;
   outputs: string[];
+  /** Globs of the repository's files its attempt owns: no overlapping live item runs beside it. */
+  owns: string[];
   parent: string | null;
   rank: string | null;
   related: string[];
@@ -108,6 +123,8 @@ export interface Todo {
   path: string;
   /** The task it was promoted to (`tsk-152`), when its line ends in `→ #152`. */
   promoted: string | null;
+  /** Offered by an attempt whose plan left it open (`(proposed)` before its words), not agreed yet. */
+  proposed: boolean;
   /** The words after the box and marker, without the promoted link. */
   text: string;
 }
@@ -143,6 +160,9 @@ const TODO_PATH = /^\d{1,4}(?:\.\d{1,4})*$/;
 const TODO_LINE = /^([ \t]*)([-*+]) \[( |x|X)\](?: (.*))?$/;
 const TODO_MARKER = /^\[(td-\d{1,6})\]\s*/;
 const PROMOTED = /(?:^|\s)(?:→|->)\s*#(\d{1,9})\s*$/;
+const PROPOSED = /^\(proposed\)\s*/i;
+const BUDGET_ENTRY =
+  /^\s*(usd|turns|minutes)\s*:\s*\$?([0-9]+(?:\.[0-9]+)?)\s*$/;
 const SECTION = /^##\s+(.*?)(?:\s+#+)?\s*$/;
 const TITLE = /^#\s+(.*?)(?:\s+#+)?\s*$/;
 const FENCE = /^\s*(```|~~~)/;
@@ -316,6 +336,9 @@ const FIELD_KEYS = {
   checks: "checks",
   outputs: "outputs",
   lands: "lands",
+  group: "group",
+  owns: "owns",
+  budget: "budget",
   rank: "rank",
   labels: "labels",
 } as const satisfies Record<TaskField, keyof TaskFields>;
@@ -334,11 +357,22 @@ const renderField = (
   if (value === null || (Array.isArray(value) && value.length === 0)) {
     return;
   }
+  if (typeof value === "object" && !Array.isArray(value)) {
+    return renderBudget(value);
+  }
   const edge = EDGE_FIELDS.has(field);
   if (Array.isArray(value)) {
     return `[${value.map(edge ? renderEdge : renderItem).join(", ")}]`;
   }
   return edge ? renderEdge(value) : renderScalar(value);
+};
+
+/** A budget as front matter writes it: `{usd: 2, turns: 40, minutes: 30}`; nothing when it is empty. */
+const renderBudget = (budget: WorkBudget): string | undefined => {
+  const parts = (["usd", "turns", "minutes"] as const)
+    .filter((key) => budget[key] !== undefined)
+    .map((key) => `${key}: ${budget[key]}`);
+  return parts.length > 0 ? `{${parts.join(", ")}}` : undefined;
 };
 
 const emptyFields = (): TaskFields => ({
@@ -351,6 +385,9 @@ const emptyFields = (): TaskFields => ({
   checks: [],
   outputs: [],
   lands: null,
+  group: null,
+  owns: [],
+  budget: null,
   rank: null,
   labels: [],
 });
@@ -422,6 +459,90 @@ const readLands = (
   return null;
 };
 
+/**
+ * `budget:` — `{usd: 2, turns: 40, minutes: 30}`, or the same keys one per
+ * line under it. Dollars are a positive number; turns and minutes whole
+ * numbers from 1. What does not read goes to `problems`.
+ */
+const readBudget = (
+  line: FrontMatterLine,
+  problems: string[]
+): WorkBudget | null => {
+  const value = withoutComment(line.value);
+  let entries: string[];
+  if (value === "") {
+    entries = line.under.map((under) => withoutComment(under)).filter(Boolean);
+  } else if (value.startsWith("{") && value.endsWith("}")) {
+    entries = value
+      .slice(1, -1)
+      .split(",")
+      .filter((entry) => entry.trim());
+  } else {
+    problems.push(
+      `budget: “${value}” is not a budget like {usd: 2, turns: 40, minutes: 30}.`
+    );
+    return null;
+  }
+  const budget: WorkBudget = {};
+  for (const entry of entries) {
+    const found = BUDGET_ENTRY.exec(entry);
+    const amount = Number(found?.[2]);
+    const key = found?.[1] as keyof WorkBudget | undefined;
+    if (!key || amount <= 0 || (key !== "usd" && !Number.isInteger(amount))) {
+      problems.push(
+        `budget: “${entry.trim()}” is not one of usd (dollars), turns or minutes (whole numbers) with a value above 0.`
+      );
+      continue;
+    }
+    budget[key] = amount;
+  }
+  return Object.keys(budget).length > 0 ? budget : null;
+};
+
+const LIST_FIELDS: ReadonlySet<string> = new Set([
+  "checks",
+  "outputs",
+  "owns",
+  "labels",
+]);
+const SCALAR_FIELDS: ReadonlySet<string> = new Set([
+  "stage",
+  "type",
+  "group",
+  "rank",
+]);
+
+/** Reads one known field into `fields`; false for a key a task file does not know. */
+const readField = (
+  fields: TaskFields,
+  field: string,
+  line: FrontMatterLine,
+  problems: string[]
+): boolean => {
+  if (field === "after" || field === "related") {
+    fields[field] = readEdgeList(field, line, problems);
+  } else if (field === "parent") {
+    fields.parent = readEdge(field, line, problems);
+  } else if (field === "found_in") {
+    fields.foundIn = readEdge(field, line, problems);
+  } else if (LIST_FIELDS.has(field)) {
+    fields[field as "checks" | "outputs" | "owns" | "labels"] = readList(
+      field,
+      line,
+      problems
+    );
+  } else if (SCALAR_FIELDS.has(field)) {
+    fields[field as "stage" | "type" | "group" | "rank"] = scalarOf(line);
+  } else if (field === "budget") {
+    fields.budget = readBudget(line, problems);
+  } else if (field === "lands") {
+    fields.lands = readLands(line, problems);
+  } else {
+    return false;
+  }
+  return true;
+};
+
 /** Reads the known fields of a front matter block; what it cannot read goes to `problems`. */
 const readFields = (
   lines: FrontMatterLine[],
@@ -431,26 +552,7 @@ const readFields = (
   const extra: string[] = [];
   for (const line of lines) {
     const field = line.key;
-    if (field === undefined) {
-      continue;
-    }
-    if (field === "after" || field === "related") {
-      fields[field] = readEdgeList(field, line, problems);
-    } else if (field === "parent") {
-      fields.parent = readEdge(field, line, problems);
-    } else if (field === "found_in") {
-      fields.foundIn = readEdge(field, line, problems);
-    } else if (
-      field === "checks" ||
-      field === "outputs" ||
-      field === "labels"
-    ) {
-      fields[field] = readList(field, line, problems);
-    } else if (field === "stage" || field === "type" || field === "rank") {
-      fields[field] = scalarOf(line);
-    } else if (field === "lands") {
-      fields.lands = readLands(line, problems);
-    } else {
+    if (field !== undefined && !readField(fields, field, line, problems)) {
       extra.push(field);
     }
   }
@@ -523,6 +625,31 @@ interface TodoLine extends Todo {
   line: number;
 }
 
+/** A to-do line's words after its box: its marker, `(proposed)`, text and promoted link. */
+const todoWords = (
+  words: string
+): Pick<Todo, "id" | "promoted" | "proposed" | "text"> => {
+  let text = words;
+  const marker = TODO_MARKER.exec(text);
+  if (marker) {
+    text = text.slice(marker[0].length);
+  }
+  const promoted = PROMOTED.exec(text);
+  if (promoted) {
+    text = text.slice(0, promoted.index).trimEnd();
+  }
+  const proposed = PROPOSED.exec(text);
+  if (proposed) {
+    text = text.slice(proposed[0].length);
+  }
+  return {
+    id: marker?.[1] ?? null,
+    proposed: proposed !== null,
+    text: text.trim(),
+    promoted: promoted ? taskId(Number(promoted[1])) : null,
+  };
+};
+
 /** The checkbox lines of a section, as a tree read off their indentation. */
 const todosOf = (lines: string[], section: BodySection | undefined) => {
   const todos: TodoLine[] = [];
@@ -554,22 +681,11 @@ const todosOf = (lines: string[], section: BodySection | undefined) => {
       topLevel += 1;
       path = String(topLevel);
     }
-    let text = box[4] ?? "";
-    const marker = TODO_MARKER.exec(text);
-    if (marker) {
-      text = text.slice(marker[0].length);
-    }
-    const promoted = PROMOTED.exec(text);
-    if (promoted) {
-      text = text.slice(0, promoted.index).trimEnd();
-    }
     todos.push({
-      id: marker?.[1] ?? null,
+      ...todoWords(box[4] ?? ""),
       path,
-      text: text.trim(),
       done: box[3] !== " ",
       depth: stack.length,
-      promoted: promoted ? taskId(Number(promoted[1])) : null,
       indent,
       line,
     });
@@ -874,7 +990,11 @@ export class TaskDoc {
    * descendant, one level in, or at the end of the list. Answers the new
    * to-do's id, or a refusal sentence.
    */
-  addTodo(text: string, under?: string): { id: string } | string {
+  addTodo(
+    text: string,
+    under?: string,
+    proposed = false
+  ): { id: string } | string {
     const todos = this.todoLines();
     const next =
       Math.max(
@@ -912,7 +1032,11 @@ export class TaskDoc {
           : 2;
       indent = " ".repeat(parent.indent + step);
     }
-    this.body.splice(at, 0, `${indent}- [ ] [${id}] ${text}`);
+    this.body.splice(
+      at,
+      0,
+      `${indent}- [ ] [${id}] ${proposed ? "(proposed) " : ""}${text}`
+    );
     return { id };
   }
 

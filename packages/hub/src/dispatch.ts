@@ -40,6 +40,12 @@
  * - **A retry** of a task whose last attempt failed runs a fresh session in
  *   that attempt's workspace when its clone is still there (else a new one),
  *   briefed with the failure and the to-dos as they stand.
+ * - **Groups, owned files, budgets** (slice 7b). A task's `group:` puts its
+ *   attempts in that group under their parent (one combined report); its
+ *   `owns:` globs keep an attempt from running beside a live item that owns
+ *   overlapping files — such a start is queued (`queued_task_starts`, why
+ *   `owns`) and tried again as items end; its `budget:`, else the project's,
+ *   is what the attempt may spend (work-items.ts).
  *
  * It wakes on events only: a work item ending, a task changing, a setting
  * changing, a machine with a checkout coming online. A slow timer looks
@@ -48,11 +54,12 @@
 import type { InstanceRow, LandsMode } from "@cawco/core";
 import { Elysia, status, t } from "elysia";
 import type { DbShape, PlaceRow, ProjectRow, WorkItemRow } from "./db";
-import type { WorkItemCheck } from "./db/schema";
+import type { WorkBudget, WorkItemCheck } from "./db/schema";
 import { quote, statusCommand } from "./landing";
 import { FolderRefusal, type FolderRefusalStatus } from "./project-folder";
 import type { Stage } from "./stages";
 import {
+  BUDGET,
   hubActor,
   LANDS,
   onFrontier,
@@ -63,7 +70,9 @@ import {
   type TaskView,
 } from "./tasks";
 import {
+  budgetProblem,
   isLive,
+  OwnsOverlap,
   SESSION_TITLE_MAX,
   WorkItemRefusal,
   type WorkItemRequest,
@@ -99,11 +108,16 @@ export interface DispatchDeps {
   ) => LandsMode | undefined;
 }
 
-/** An attempt as it started. */
+/**
+ * An attempt as it started; or, `queued`, waiting for files a live item owns
+ * (its ids null until it starts).
+ */
 export interface AttemptStart {
-  instanceId: string;
+  instanceId: string | null;
   /** Where its work lands. */
   lands: LandsMode;
+  /** Whether it waits for files a live item owns, to start when they are free. */
+  queued: boolean;
   /** The stage the task is in now. */
   stage: string;
   task: string;
@@ -111,12 +125,14 @@ export interface AttemptStart {
   text: string;
   /** The delegate type it runs. */
   type: string | null;
-  workItemId: string;
-  workspaceId: string;
+  workItemId: string | null;
+  workspaceId: string | null;
 }
 
 /** A project's dispatch: its settings, and what the dispatcher would do now. */
 export interface DispatchView {
+  /** What an attempt may spend where its task and its delegate call say nothing; null: no limit. */
+  budget: WorkBudget | null;
   /** Whether the hub starts attempts at ready tasks on its own. */
   dispatch: boolean;
   /** The tasks it would start next, in order. */
@@ -140,6 +156,8 @@ export interface DispatchView {
 
 /** A change to a project's dispatch settings; what is left out stays. */
 export interface DispatchChange {
+  /** The project's default budget; null clears it. */
+  budget?: WorkBudget | null;
   dispatch?: boolean;
   /** Where an attempt lands when its task and type say nothing. */
   lands?: LandsMode;
@@ -227,6 +245,16 @@ const checksOf = (
     ? [defaultCheck(lands, outputs)]
     : commands.map((command) => ({ name: checkName(command), command }));
 
+/** What of a task an attempt's work item carries as it is: outputs, group, owned files, budget. */
+const taskLimits = (
+  task: TaskView
+): Pick<WorkItemRequest, "budget" | "group" | "outputs" | "owns"> => ({
+  ...(task.outputs.length > 0 ? { outputs: task.outputs } : {}),
+  ...(task.group ? { group: task.group } : {}),
+  ...(task.owns.length > 0 ? { owns: task.owns } : {}),
+  ...(task.budget ? { budget: task.budget } : {}),
+});
+
 /** What the brief says happens once the checks pass. */
 const AFTER_CHECKS: Record<LandsMode, string> = {
   main: "When the work is committed, call finish_item: the hub runs these in your workspace and lands your commits on the default branch once they pass.",
@@ -297,8 +325,8 @@ const briefOf = (
           )
           .join(
             "\n"
-          )}\n\nTick each with todo_write as you finish it, and add the steps you find.`
-      : "The task has no open to-dos. Add the steps you find with todo_write as you go.";
+          )}\n\nWhen a plan item carrying an id is completed, the hub ticks that to-do; you can also tick it with todo_write. Add the steps you find. finish_item lists the to-dos still open once: tick or explain each in your summary. Plan items you leave open become proposed to-dos on the task.`
+      : "The task has no open to-dos. Add the steps you find with todo_write as you go; plan items you leave open become proposed to-dos on the task.";
   const waiting = all.filter((each) => each.after.includes(task.id));
   const sits = [
     ...(task.after.length > 0
@@ -310,6 +338,11 @@ const briefOf = (
     ...(task.parent ? [`Its parent: ${line(task.parent)}.`] : []),
     ...(task.outputs.length > 0
       ? [`It produces: ${task.outputs.join(", ")}.`]
+      : []),
+    ...(task.owns.length > 0
+      ? [
+          `It owns: ${task.owns.join(", ")}. No other live work item writes these files while you run; stay inside them.`,
+        ]
       : []),
   ];
   return [
@@ -399,12 +432,16 @@ const pauseOf = (
 
 /** The columns a settings change writes: only what it names; an empty lead clears it. */
 const columnsOf = ({
+  budget,
   dispatch,
   lands,
   leadInstanceId,
   maxAttempts,
   reviewLimit,
 }: DispatchChange) => ({
+  ...(budget === undefined
+    ? {}
+    : { budget: budget && Object.keys(budget).length > 0 ? budget : null }),
   ...(dispatch === undefined ? {} : { dispatch }),
   ...(lands === undefined ? {} : { lands }),
   ...(leadInstanceId === undefined
@@ -594,7 +631,7 @@ export const createDispatcher = ({
         type,
         checks,
         lands,
-        ...(task.outputs.length > 0 ? { outputs: task.outputs } : {}),
+        ...taskLimits(task),
         ...(place ? { cwd: place.path, machineId: place.machineId } : {}),
         ...(previous ? { reuse: previous.workspaceId } : {}),
         task: { id: task.id, projectId: project.id },
@@ -664,7 +701,15 @@ export const createDispatcher = ({
       startable(projectId, task);
       const previous = retry ? retryable(projectId, task) : undefined;
       const active = await activeFor(projectId, task, stage);
-      const started = await launch(project, task, parent, active, previous);
+      let started: WorkItemStart;
+      try {
+        started = await launch(project, task, parent, active, previous);
+      } catch (error) {
+        if (!(error instanceof OwnsOverlap)) {
+          throw error;
+        }
+        return queuedForOwns(project, task, parent, stage, error);
+      }
       // Asked for now: a hook's start that waited for a slot is not needed.
       db.dropQueuedTaskStart(projectId, task.id);
       const now = await moveIn(projectId, task, active, started.item);
@@ -675,6 +720,7 @@ export const createDispatcher = ({
       return {
         task: task.id,
         stage: now,
+        queued: false,
         type: started.item.type,
         lands: started.item.lands,
         workItemId: started.item.id,
@@ -685,6 +731,45 @@ export const createDispatcher = ({
     } finally {
       starting.delete(key);
     }
+  };
+
+  /**
+   * An attempt that waits for files a live item owns: queued, why `owns`,
+   * under the stage the task is in (a hook's own), to start as items end
+   * ({@link drainQueued}) while it is still there; the task stays put.
+   */
+  const queuedForOwns = (
+    project: ProjectRow,
+    task: TaskView,
+    parent: InstanceRow,
+    active: Stage | undefined,
+    overlap: OwnsOverlap
+  ): AttemptStart => {
+    db.queueTaskStart({
+      projectId: project.id,
+      taskId: task.id,
+      stage: task.stage,
+      parentInstanceId: parent.id,
+      why: "owns",
+    });
+    console.log(
+      `[dispatch] ${project.name}: ${task.id} waits for owned files: ${overlap.message}`
+    );
+    return {
+      task: task.id,
+      stage: task.stage,
+      queued: true,
+      type: active?.hooks.runs ?? task.type,
+      lands: landsOf(
+        project,
+        task,
+        active?.hooks.runs ?? task.type ?? undefined
+      ),
+      workItemId: null,
+      workspaceId: null,
+      instanceId: null,
+      text: `Queued an attempt at ${task.id}: ${overlap.message} The hub starts it, reporting to you, when the files are free.`,
+    };
   };
 
   /** How an attempt's start opens: started, or retried in the old workspace or a new one. */
@@ -740,6 +825,7 @@ export const createDispatcher = ({
     return {
       lead: leadProblem ? undefined : lead,
       view: {
+        budget: project.budget,
         dispatch: project.dispatch,
         lands: project.lands,
         leadInstanceId: project.leadInstanceId,
@@ -772,8 +858,11 @@ export const createDispatcher = ({
       }
       try {
         // biome-ignore lint/performance/noAwaitInLoops: one start at a time keeps the cap exact and the folder's commits in order
-        await startAttempt(projectId, id, lead);
-        slots -= 1;
+        const started = await startAttempt(projectId, id, lead);
+        // One queued for owned files took no slot.
+        if (!started.queued) {
+          slots -= 1;
+        }
       } catch (error) {
         console.warn(
           `[dispatch] ${project.name}: ${id} did not start: ${failure(error).message}`
@@ -810,38 +899,60 @@ export const createDispatcher = ({
       return;
     }
     for (const queued of db.queuedTaskStarts(projectId)) {
-      if (liveIn(projectId) >= project.maxAttempts) {
+      const owns = queued.why === "owns";
+      // A start that waited for owned files was asked for, so the cap does
+      // not hold it back; a hook's does.
+      if (!owns && liveIn(projectId) >= project.maxAttempts) {
         return;
       }
       db.dropQueuedTaskStart(projectId, queued.taskId);
       try {
         // biome-ignore lint/performance/noAwaitInLoops: one start at a time keeps the cap exact
-        const stages = await tasks.stages(projectId);
-        const stage = stages.stages.find((each) => each.name === queued.stage);
-        const task = await tasks.get(projectId, queued.taskId);
-        if (
-          !(stage?.kind === "active" && stage.hooks.runs) ||
-          task.stage !== stage.name ||
-          task.liveAttempt
-        ) {
-          continue;
-        }
-        const parent = hookParent(project, queued.parentInstanceId);
-        if (!parent) {
-          note(
-            projectId,
-            task,
-            `${task.id} waited in ${stage.name}, which runs ${stage.hooks.runs}, for a slot, but no session can take the attempt's report now. Set the project's lead and move it in again, or start it with task_start from a session.`
-          );
-          continue;
-        }
-        await startAttempt(projectId, task.id, parent, stage);
+        await runQueued(project, queued);
       } catch (error) {
         console.warn(
           `[dispatch] ${project.name}: ${queued.taskId}'s queued start did not run: ${failure(error).message}`
         );
       }
     }
+  };
+
+  /**
+   * One queued start, taken off the queue: run when its task is still in the
+   * stage it waited in, with no live attempt, and someone to report to — a
+   * hook's from its `runs:` stage, one that waited for owned files from
+   * wherever it was asked. Still overlapping, it queues again.
+   */
+  const runQueued = async (
+    project: ProjectRow,
+    queued: ReturnType<DispatchDeps["db"]["queuedTaskStarts"]>[number]
+  ): Promise<void> => {
+    const owns = queued.why === "owns";
+    const stages = await tasks.stages(project.id);
+    const stage = stages.stages.find((each) => each.name === queued.stage);
+    const task = await tasks.get(project.id, queued.taskId);
+    const hook = stage?.kind === "active" && !!stage.hooks.runs;
+    if (!(hook || owns) || task.stage !== queued.stage || task.liveAttempt) {
+      console.log(
+        `[dispatch] ${project.name}: ${task.id}'s queued start is dropped: it is in ${task.stage}${task.liveAttempt ? " with a live attempt" : ""}, not waiting in ${queued.stage}.`
+      );
+      return;
+    }
+    const parent = hookParent(project, queued.parentInstanceId);
+    if (!parent) {
+      note(
+        project.id,
+        task,
+        `${task.id} waited in ${queued.stage} for ${owns ? "owned files" : "a slot"}, but no session can take the attempt's report now. Set the project's lead and move it in again, or start it with task_start from a session.`
+      );
+      return;
+    }
+    await startAttempt(
+      project.id,
+      task.id,
+      parent,
+      stage?.kind === "active" ? stage : undefined
+    );
   };
 
   /**
@@ -1005,12 +1116,22 @@ export const createDispatcher = ({
     return parent;
   };
 
-  /** A work item ended: its task moves, and its project is looked at again. */
+  /**
+   * A work item ended: its task moves, and its project is looked at again.
+   * One that is no attempt may still have held files a queued start waits
+   * for, so its project is looked at when it has queued starts.
+   */
   const itemEnded = (item: WorkItemRow): void => {
-    if (!(item.projectId && item.taskId)) {
+    const { projectId } = item;
+    if (!projectId) {
       return;
     }
-    const { projectId } = item;
+    if (!item.taskId) {
+      if (db.queuedTaskStarts(projectId).length > 0) {
+        evaluate(projectId);
+      }
+      return;
+    }
     settle(item)
       .catch((error: unknown) =>
         console.warn(
@@ -1175,6 +1296,12 @@ export const createDispatcher = ({
       if (outOfRange) {
         refuse(400, outOfRange);
       }
+      const unbudgeted = change.budget
+        ? budgetProblem(change.budget)
+        : undefined;
+      if (unbudgeted) {
+        refuse(400, unbudgeted);
+      }
       db.setProjectDispatch(projectId, columnsOf(change));
       evaluate(projectId);
       return (await viewOf(projectOf(projectId))).view;
@@ -1243,6 +1370,7 @@ export const dispatchRoutes = (dispatcher: Dispatcher) =>
       "/api/projects/:id/dispatch",
       {
         body: t.Object({
+          budget: t.Optional(t.Nullable(BUDGET)),
           dispatch: t.Optional(t.Boolean()),
           lands: t.Optional(LANDS),
           leadInstanceId: t.Optional(t.Nullable(t.String())),

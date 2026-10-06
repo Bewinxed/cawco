@@ -124,6 +124,53 @@ const landsParameter = () =>
     );
 const lines = (what: string) => z.array(z.string()).optional().describe(what);
 
+/** What a work item may spend before the hub stops it: `delegate`'s and the task tools' one shape. */
+export const budgetParameter = () =>
+  z
+    .object({
+      usd: z
+        .number()
+        .positive()
+        .optional()
+        .describe(
+          "Dollars its session may spend, by the usage its machine reports (Claude and OpenCode)."
+        ),
+      turns: z
+        .number()
+        .int()
+        .min(1)
+        .optional()
+        .describe("Turns its session may end."),
+      minutes: z
+        .number()
+        .int()
+        .min(1)
+        .optional()
+        .describe("Minutes of wall time from its start."),
+    })
+    .describe(
+      "Limits the hub holds the work to. At one, the hub stops the session, fails the item with a sentence naming the budget, and tells the parent. Fields left out fall back to the task's, then the project's."
+    );
+
+/** Globs of the repository's files a work item owns: `delegate`'s and the task tools' one shape. */
+export const ownsParameter = () =>
+  z
+    .array(z.string())
+    .describe(
+      "Globs of the repository's files the work owns, from the repository's root, like ['src/theme/**', 'docs/theme.md']. The hub never runs two live items whose globs overlap in one repository: a later one waits, queued, until the earlier ends. Overlap is judged on each glob's literal part before its first wildcard, so it errs towards waiting."
+    );
+
+/** A group of work items under one parent: `delegate`'s and the task tools' one shape. */
+export const groupParameter = () =>
+  z
+    .string()
+    .trim()
+    .min(1)
+    .max(64)
+    .describe(
+      "A name for work that belongs together, like 'theme'. Items in one group under one parent report once, together, when every one of them has ended (each one's summary and where it landed); a failure still reports at once."
+    );
+
 /**
  * The task tools, bound to the calling session; with no context, the same
  * definitions for discovery, whose handlers refuse.
@@ -220,6 +267,9 @@ export function taskTools(context: TaskToolContext | undefined) {
         checks: lines("Shell commands that must pass, like bun test."),
         outputs: lines("Files it produces that are not commits."),
         lands: landsParameter().optional(),
+        group: groupParameter().optional(),
+        owns: ownsParameter().optional(),
+        budget: budgetParameter().optional(),
         labels: lines("Short labels."),
       },
       async ({ found_in, ...draft }) => {
@@ -231,7 +281,7 @@ export function taskTools(context: TaskToolContext | undefined) {
     ),
     tool(
       "task_update",
-      "Change one of your project's tasks: move its `stage` (checked against the project's stages), or replace its title, description, acceptance criteria, type, checks, outputs, lands or labels. What you leave out stays as written.",
+      "Change one of your project's tasks: move its `stage` (checked against the project's stages), or replace its title, description, acceptance criteria, type, checks, outputs, lands, group, owns, budget or labels. What you leave out stays as written.",
       {
         id: taskRef(),
         stage: z.string().optional(),
@@ -249,6 +299,9 @@ export function taskTools(context: TaskToolContext | undefined) {
           .nullable()
           .optional()
           .describe("Where its attempts land; null: the project's default."),
+        group: groupParameter().nullable().optional(),
+        owns: ownsParameter().optional(),
+        budget: budgetParameter().nullable().optional(),
         labels: lines("Replaces the labels."),
       },
       async ({ id, stage, ...patch }) => {

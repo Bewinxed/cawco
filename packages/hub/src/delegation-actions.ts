@@ -32,7 +32,11 @@ import {
   machineLabel,
   QUESTION_DISMISSED,
 } from "@cawco/core";
-import type { WorkItemCheck, WorkItemSubmission } from "./db/schema";
+import type {
+  WorkBudget,
+  WorkItemCheck,
+  WorkItemSubmission,
+} from "./db/schema";
 import { type KeepAliveRow, promptCacheExpiresAt } from "./keep-alive";
 import { resolveSpawnType } from "./work-items";
 
@@ -451,6 +455,8 @@ export interface HandoffDeps {
   readonly instanceId: string;
   /** Where this session's work item lands, which finish_item's description follows; `main` when unknown. */
   readonly lands?: LandsMode;
+  /** Whether this session leads the project of the work item a session runs: it may steer, answer and stop it. */
+  readonly ledBy?: (instanceId: string) => boolean;
   /** The session's project: its delegate types shadow the fleet's. */
   readonly projectId?: string;
   readonly workflowRunId?: string;
@@ -530,6 +536,12 @@ export interface HandoffActions {
       lands?: LandsMode;
       /** Files in its workspace the hub copies into the project's folder. */
       outputs?: string[];
+      /** Its group under this session: one combined report once all have ended. */
+      group?: string;
+      /** Globs of the repository's files it owns. */
+      owns?: string[];
+      /** What it may spend before the hub stops it. */
+      budget?: WorkBudget;
     }
   ): Promise<DelegateResult>;
   /**
@@ -618,10 +630,18 @@ export interface HandoffResult {
   title: string;
 }
 
-/** A delegation's result: its session, and the work item and workspace it runs in. */
-export interface DelegateResult extends HandoffResult {
-  workItemId: string;
-  workspaceId: string;
+/**
+ * A delegation's result: its session, and the work item and workspace it
+ * runs in; all three null while it waits, queued, for files a live item owns.
+ */
+export interface DelegateResult {
+  id: string | null;
+  /** The queued request's id, while it waits for owned files. */
+  queued: string | null;
+  text: string;
+  title: string;
+  workItemId: string | null;
+  workspaceId: string | null;
 }
 
 /** A work item as the hub answers for it (`GET /api/work-items/:id`). */
@@ -632,13 +652,20 @@ interface WorkItemView {
   workspaceId: string;
 }
 
-/** Resolves a target among the caller's own delegates; anything else is refused. */
+/**
+ * Resolves a target among the caller's own delegates, and the work items of
+ * a project it leads (`ledBy`); anything else is refused.
+ */
 function resolveDelegate(
   peers: Peer[],
   target: string,
-  instanceId: string
+  instanceId: string,
+  ledBy?: (instanceId: string) => boolean
 ): Peer {
-  const mine = peers.filter((peer) => peer.row.parentInstanceId === instanceId);
+  const mine = peers.filter(
+    (peer) =>
+      peer.row.parentInstanceId === instanceId || ledBy?.(peer.row.id) === true
+  );
   try {
     return resolve(mine, target);
   } catch (error) {
@@ -797,6 +824,7 @@ export const handoffActions = ({
   emit,
   authorization,
   projectId,
+  ledBy,
 }: HandoffDeps): HandoffActions => ({
   async continueSession(input) {
     let source = instanceId;
@@ -1038,7 +1066,7 @@ export const handoffActions = ({
   ): Promise<string> {
     const { peers, asleep, own } = await roster(instanceId);
     const peer = urgent
-      ? resolveDelegate(peers, target, instanceId)
+      ? resolveDelegate(peers, target, instanceId, ledBy)
       : resolveHandoff(peers, asleep, target, own);
     if (peer.row.id !== own?.parentInstanceId) {
       await checkCold(peer.row.id, undefined, instanceId);
@@ -1205,14 +1233,16 @@ export const handoffActions = ({
       throw new Error(await response.text());
     }
     const started = (await response.json()) as {
-      instanceId: string;
+      instanceId: string | null;
+      queued: string | null;
       text: string;
       title: string;
-      workItemId: string;
-      workspaceId: string;
+      workItemId: string | null;
+      workspaceId: string | null;
     };
     return {
       id: started.instanceId,
+      queued: started.queued,
       title: started.title,
       text: target
         ? `${started.text} It runs on ${machineLabel(target.hostname)}.`
@@ -1257,7 +1287,7 @@ export const handoffActions = ({
 
   async setItemChecks(target, checks) {
     const { peers } = await roster(instanceId);
-    const peer = resolveDelegate(peers, target, instanceId);
+    const peer = resolveDelegate(peers, target, instanceId, ledBy);
     const response = await fetch(`${hubHttpUrl()}/api/work-items/checks`, {
       method: "POST",
       headers: {
@@ -1283,7 +1313,8 @@ export const handoffActions = ({
     const peer = resolveDelegate(
       ended ? [toPeer(ended, new Map())] : peers,
       target,
-      instanceId
+      instanceId,
+      ledBy
     );
     emit({
       verb: "stop",
@@ -1312,7 +1343,7 @@ export const handoffActions = ({
 
   async interruptDelegate(target: string): Promise<string> {
     const { peers } = await roster(instanceId);
-    const peer = resolveDelegate(peers, target, instanceId);
+    const peer = resolveDelegate(peers, target, instanceId, ledBy);
     emit({
       verb: "control",
       machineId: peer.row.machineId,
@@ -1338,7 +1369,7 @@ export const handoffActions = ({
     deny = false
   ): Promise<string> {
     const { peers } = await roster(instanceId);
-    const peer = resolveDelegate(peers, target, instanceId);
+    const peer = resolveDelegate(peers, target, instanceId, ledBy);
     // The answers alone are all this side has: the delegate's tool call never
     // came here, only the question text and its options did. A question's
     // `updatedInput` has to carry the whole call back or the harness refuses it

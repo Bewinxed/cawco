@@ -93,6 +93,7 @@ import {
   projects,
   projectTasks,
   queuedTaskStarts,
+  queuedWorkItems,
   ruleState,
   rules,
   sentMessages,
@@ -174,6 +175,7 @@ export type WorkflowLogRow = typeof workflowRunLog.$inferSelect;
 export type WorkflowNoticeRow = typeof workflowNotices.$inferSelect;
 export type WorkItemRow = typeof workItems.$inferSelect;
 export type QueuedTaskStartRow = typeof queuedTaskStarts.$inferSelect;
+export type QueuedWorkItemRow = typeof queuedWorkItems.$inferSelect;
 export type WorkspaceRow = typeof workspaces.$inferSelect;
 export type SessionIdentityRow = typeof sessionIdentities.$inferSelect;
 
@@ -354,6 +356,7 @@ export interface DbShape {
   readonly deleteWorkflowNotice: (id: number) => void;
   /** Forgets a task's queued start, if it had one. */
   readonly dropQueuedTaskStart: (projectId: string, taskId: string) => void;
+  readonly dropQueuedWorkItem: (id: string) => void;
   /** Forgets the index rows of task files that are gone. */
   readonly dropTaskIndex: (projectId: string, paths: string[]) => void;
   /** Persist the decision before its reconciler may send anything. */
@@ -428,6 +431,11 @@ export interface DbShape {
   ) => WorkflowLogRow | undefined;
   readonly getWorkflowRun: (id: string) => WorkflowRunRow | undefined;
   readonly getWorkflowStep: (id: string) => WorkflowStepRow | undefined;
+  /** A parent's items in one group that no combined report has carried yet, oldest first. */
+  readonly groupWorkItems: (
+    parentInstanceId: string,
+    group: string
+  ) => WorkItemRow[];
   readonly hiddenSession: (id: string) => boolean;
   readonly insertContinuation: (
     row: Omit<ContinuationRow, "createdAt" | "updatedAt">
@@ -507,6 +515,8 @@ export interface DbShape {
   readonly listWorkflowRuns: (workflowId?: string) => WorkflowRunRow[];
   readonly listWorkflowSteps: (runId: string) => WorkflowStepRow[];
   readonly listWorkflows: () => WorkflowRow[];
+  /** Every work item still `starting`/`running`, fleet-wide. */
+  readonly liveWorkItems: () => WorkItemRow[];
   /** The work items a session delegated that are still `starting`/`running`. */
   readonly liveWorkItemsOf: (parentInstanceId: string) => WorkItemRow[];
   readonly markAgentOffline: (machineId: string) => void;
@@ -776,14 +786,21 @@ export interface DbShape {
   readonly putWorkflowLog: (row: typeof workflowRunLog.$inferInsert) => void;
   /** Every hook start waiting for a slot in the project, oldest first (dispatch.ts). */
   readonly queuedTaskStarts: (projectId: string) => QueuedTaskStartRow[];
+  /** `delegate` calls waiting for files a live item owns, oldest first. */
+  readonly queuedWorkItems: () => QueuedWorkItemRow[];
   /** Queues a hook's start, or replaces the one its task already had. */
   readonly queueTaskStart: (
-    row: Omit<QueuedTaskStartRow, "queuedAt">
+    row: Omit<QueuedTaskStartRow, "queuedAt" | "why"> & {
+      why?: QueuedTaskStartRow["why"];
+    }
   ) => QueuedTaskStartRow;
   /** A supervisor notice kept until its supervisor is live. */
   readonly queueWorkflowNotice: (
     row: typeof workflowNotices.$inferInsert
   ) => void;
+  readonly queueWorkItem: (
+    row: Omit<QueuedWorkItemRow, "queuedAt">
+  ) => QueuedWorkItemRow;
   /**
    * The daemon's own word, arriving every 15s: `liveIds` is exactly what its
    * supervisor is carrying right now (`HeartbeatPayload.instances`).
@@ -931,6 +948,8 @@ export interface DbShape {
     instanceId: string,
     states: SentMessageRow["state"][]
   ) => SentMessageRow[];
+  /** What a harness session has cost, in dollars, by the usage its machine reported. */
+  readonly sessionCostUsd: (sessionId: string) => number;
   readonly sessionIdentity: (
     instanceId: string
   ) => SessionIdentityRow | undefined;
@@ -979,7 +998,12 @@ export interface DbShape {
     change: Partial<
       Pick<
         ProjectRow,
-        "dispatch" | "lands" | "leadInstanceId" | "maxAttempts" | "reviewLimit"
+        | "budget"
+        | "dispatch"
+        | "lands"
+        | "leadInstanceId"
+        | "maxAttempts"
+        | "reviewLimit"
       >
     >
   ) => void;
@@ -1139,6 +1163,9 @@ export interface DbShape {
         | "waitResumeBy"
         | "waitHistory"
         | "prUrl"
+        | "groupReportedAt"
+        | "digest"
+        | "turns"
       >
     >
   ) => WorkItemRow | undefined;
@@ -3726,6 +3753,7 @@ const make = (path: string): DbShape => {
           set: {
             stage: row.stage,
             parentInstanceId: row.parentInstanceId,
+            why: row.why ?? "cap",
             queuedAt: new Date(),
           },
         })
@@ -4066,6 +4094,45 @@ const make = (path: string): DbShape => {
         }
       }
       return counts;
+    },
+    liveWorkItems: () =>
+      db
+        .select()
+        .from(workItems)
+        .where(inArray(workItems.state, ["starting", "running"]))
+        .orderBy(workItems.createdAt)
+        .all(),
+    groupWorkItems: (parentInstanceId, group) =>
+      db
+        .select()
+        .from(workItems)
+        .where(
+          and(
+            eq(workItems.parentInstanceId, parentInstanceId),
+            eq(workItems.group, group),
+            isNull(workItems.groupReportedAt)
+          )
+        )
+        .orderBy(workItems.createdAt)
+        .all(),
+    sessionCostUsd: (sessionId) =>
+      db
+        .select({
+          usd: sql<number>`coalesce(sum(${usageBuckets.costUsd}), 0)`,
+        })
+        .from(usageBuckets)
+        .where(eq(usageBuckets.sessionId, sessionId))
+        .get()?.usd ?? 0,
+    queuedWorkItems: () =>
+      db
+        .select()
+        .from(queuedWorkItems)
+        .orderBy(asc(queuedWorkItems.queuedAt), asc(queuedWorkItems.id))
+        .all(),
+    queueWorkItem: (row) =>
+      db.insert(queuedWorkItems).values(row).returning().get(),
+    dropQueuedWorkItem: (id) => {
+      db.delete(queuedWorkItems).where(eq(queuedWorkItems.id, id)).run();
     },
     liveWorkItemsOf: (parentInstanceId) =>
       db

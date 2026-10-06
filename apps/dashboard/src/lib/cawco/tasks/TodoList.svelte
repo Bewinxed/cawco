@@ -210,6 +210,13 @@
               title="Edit this to-do"
               type="button"
             >
+              {#if todo.proposed}
+                <span
+                  class="proposed"
+                  title="Left open in an attempt's plan: offered, not agreed. Rewording it agrees to it."
+                  >Proposed</span
+                >
+              {/if}
               <span>{todo.text}</span>
               {#if todo.promoted}
                 <span class="promoted">→ {todo.promoted}</span>
@@ -290,6 +297,11 @@
     .text:hover {
       background: var(--surface-hover);
     }
+  }
+  .proposed {
+    flex: none;
+    font: var(--type-meta);
+    color: var(--ink-muted);
   }
   .promoted {
     flex: none;

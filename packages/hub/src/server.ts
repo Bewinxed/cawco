@@ -221,7 +221,7 @@ import { hashFiles, resolveSkill } from "./skills";
 import { createStreamHub } from "./stream";
 import { suggest } from "./suggest";
 import { SupervisorEngine } from "./supervisor";
-import { createTasks, LANDS, taskRoutes } from "./tasks";
+import { BUDGET, createTasks, hubActor, LANDS, taskRoutes } from "./tasks";
 import { dashboardUrl, type TelegramBridge } from "./telegram";
 import {
   createTranscripts,
@@ -2118,7 +2118,9 @@ export const createServer = (
   /**
    * A delegate's report to its parent, as a queued peer message: what its
    * turn said (or why it never started), under the marker the parent's
-   * transcript renders as a report.
+   * transcript renders as a report. A work item of a project with a lead
+   * reports to the lead too, and to the lead alone once its parent has ended
+   * (work-items.ts `reportees`).
    */
   const reportToParent = (
     delegate: InstanceRow,
@@ -2127,12 +2129,20 @@ export const createServer = (
     completion?: { resultId: string; completedAt?: string },
     notice = false
   ): void => {
-    const parent = delegate.parentInstanceId
-      ? db.getInstancesByIds([delegate.parentInstanceId])[0]
-      : undefined;
-    if (!parent) {
-      return;
+    for (const parent of workItems.reportees(delegate)) {
+      reportTo(parent, delegate, body, failed, completion, notice);
     }
+  };
+
+  /** One report, to one of the sessions that hears a delegate's reports. */
+  const reportTo = (
+    parent: InstanceRow,
+    delegate: InstanceRow,
+    body: string,
+    failed: boolean,
+    completion?: { resultId: string; completedAt?: string },
+    notice = false
+  ): void => {
     const label = `${leaf(delegate.cwd)}#${delegate.id.slice(0, 8)}`;
     deliverSend({
       verb: "send",
@@ -7227,6 +7237,13 @@ export const createServer = (
       `${dashboardUrl(registry)}/session/${instanceId}`,
     taskTitle: (projectId, taskId) =>
       db.taskIndex(projectId).find((row) => row.id === taskId)?.title,
+    // The plan ↔ to-do link: the task's to-dos, ticked and proposed as the hub.
+    todos: {
+      read: async (projectId, taskId) =>
+        (await tasks.get(projectId, taskId)).todos,
+      write: (projectId, taskId, changes, reason) =>
+        tasks.todos(projectId, taskId, changes, hubActor(reason)),
+    },
     call: async (machineId, method, args) => {
       const timeout =
         method === CONTROL_WORKSPACE_CREATE ||
@@ -7437,6 +7454,7 @@ export const createServer = (
       dispatcher.retryAttempt(projectId, ref, parent),
     instances: () => withKeepAlive(db.listInstances()),
     instanceById: (id) => db.getInstancesByIds([id])[0],
+    ledBy: (id, leadId) => workItems.ledBy(id, leadId),
     credentialActor: (authorization) => {
       const identity = identities.resolve(authorization);
       return identity
@@ -7505,10 +7523,18 @@ export const createServer = (
       const row = instanceId
         ? db.getInstancesByIds([instanceId])[0]
         : undefined;
-      if (!row || row.parentInstanceId !== requester.id) {
+      // Its parent, or its project's lead: a co-parent of every work item of
+      // the project, which may answer, steer and stop it.
+      if (
+        !(
+          row &&
+          (row.parentInstanceId === requester.id ||
+            workItems.ledBy(row.id, requester.id))
+        )
+      ) {
         throw new WorkItemRefusal(
           403,
-          "you can only control your own delegates"
+          "you can only control your own delegates, or the work items of a project you lead"
         );
       }
       if (envelope.verb === "stop") {
@@ -10428,6 +10454,9 @@ export const createServer = (
             checks: checksSchema,
             lands: t.Optional(LANDS),
             outputs: t.Optional(t.Array(t.String())),
+            group: t.Optional(t.String()),
+            owns: t.Optional(t.Array(t.String())),
+            budget: t.Optional(BUDGET),
           }),
           // A 400 that says which field is missing or malformed, in words:
           // a delegate without a title is refused, never named from its brief.
@@ -10477,8 +10506,20 @@ export const createServer = (
             );
           }
           try {
-            const started = await workItems.start(body);
+            const started = await workItems.delegate(body);
+            // Waiting for files a live item owns: no item yet.
+            if ("queued" in started) {
+              return {
+                queued: started.queued,
+                workItemId: null,
+                workspaceId: null,
+                instanceId: null,
+                title: body.title.trim(),
+                text: started.text,
+              };
+            }
             return {
+              queued: null,
               workItemId: started.item.id,
               workspaceId: started.workspace.id,
               instanceId: started.item.instanceId,
@@ -10758,6 +10799,8 @@ export const createServer = (
               // A checkout coming online can be where a ready task's
               // workspace is cut.
               dispatcher.machineOnline(message.machineId);
+              // A delegate that waited for owned files may start on it now.
+              workItems.resumeQueued();
               // Projects that do not know their repository yet read it from
               // their checkouts here, now that the machine can run git.
               Promise.all(
@@ -11705,22 +11748,23 @@ export const createServer = (
                   pending.resolve(message.requestId);
                   break;
                 }
-                const parent =
-                  parentId && parentId !== message.instanceId
-                    ? db.listInstances().find((r) => r.id === parentId)
-                    : undefined;
                 // A parent whose own work is finished cannot take the ask.
-                const routed =
+                const takes = (row: InstanceRow): boolean =>
                   sender !== undefined &&
-                  parent !== undefined &&
-                  (parent.status === "running" ||
-                    parent.status === "starting" ||
-                    (parent.status === "sleeping" &&
-                      parent.sessionId !== null)) &&
-                  !workItems.refusal(parent, {
+                  (row.status === "running" ||
+                    row.status === "starting" ||
+                    (row.status === "sleeping" && row.sessionId !== null)) &&
+                  !workItems.refusal(row, {
                     kind: "peer",
                     fromSession: sender.id,
                   });
+                // Its parent, else its project's lead, which adopts a work
+                // item whose parent has ended (work-items.ts `reportees`).
+                const parent =
+                  sender && parentId && parentId !== message.instanceId
+                    ? workItems.reportees(sender).find(takes)
+                    : undefined;
+                const routed = sender !== undefined && parent !== undefined;
                 if (routed) {
                   (message.payload as Record<string, unknown>).routedTo =
                     "parent";
@@ -11904,6 +11948,11 @@ export const createServer = (
                   }
                   const turnId = message.instanceId;
                   const endedAt = new Date();
+                  // Every turn of a work item's session counts against its
+                  // budget, whatever answers it; one at the limit stops it.
+                  if (row?.workItemId) {
+                    workItems.countTurn(row);
+                  }
                   /** Whether a rule or the supervisor answered the turn with a reply. */
                   const answered = (): Promise<boolean> =>
                     Promise.all([

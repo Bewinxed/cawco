@@ -46,6 +46,8 @@ const administers = (actor: InstanceRow | undefined): boolean =>
 export function createDelegationMcp(options: {
   instances: () => InstanceRow[];
   instanceById: (id: string) => InstanceRow | undefined;
+  /** Whether `leadId` leads the project of the work item `instanceId` runs (work-items.ts `ledBy`). */
+  ledBy?: (instanceId: string, leadId: string) => boolean;
   forward: (envelope: Envelope, actor: InstanceRow) => Promise<void>;
   credentialActor: (authorization: string | null) => InstanceRow | undefined;
   tools?: ToolFactory;
@@ -355,6 +357,7 @@ export function createDelegationMcp(options: {
         harness: actor.harness as "claude" | "opencode" | "pi",
         canDelegate: actor.canDelegate ?? undefined,
         lands: landsOf(actor),
+        ledBy: (id) => options.ledBy?.(id, actor.id) ?? false,
         workItem: !!actor.parentInstanceId,
         workflowStepId: actor.workflowStepId ?? undefined,
         workflowRunId: actor.workflowRunId ?? undefined,

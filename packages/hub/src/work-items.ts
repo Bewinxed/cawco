@@ -17,6 +17,21 @@
  * has run every check in the item's worktree and seen it pass. The parent's
  * report is built by the hub from those results, never from the session's
  * prose.
+ *
+ * Slice 7b of Projects P1 adds four rules. A **group** (`group`) under one
+ * parent reports once, combined, when every item of it has ended; a failure
+ * still reports at once. **Owned files** (`owns` globs): two live items whose
+ * globs overlap ({@link globsOverlap}) in one repository never run at once —
+ * the later `delegate` is queued (`queued_work_items`) and starts as items
+ * end. A **budget** (dollars, turns, minutes; the call's, else the task's,
+ * else the project's) is checked in one place ({@link overBudget}); at its
+ * limit the item fails, its parent is told, and its session is ended. The
+ * project's **lead** is a co-parent: it may answer, steer and stop the
+ * project's items, hears their reports beside the parent, and alone once the
+ * parent has ended. And the **plan ↔ to-do link**: a task attempt's Claude
+ * Code plan ledger is read on its turn's end, a completed `[td-n]` item ticks
+ * that to-do, `finish_item` asks once about the to-dos still open, and plan
+ * items left open become `(proposed)` to-dos.
  */
 import type {
   CommandResult,
@@ -44,7 +59,11 @@ import {
   withWorkspaceLine,
 } from "@cawco/core";
 import type { DbShape, WorkItemRow, WorkspaceRow } from "./db";
-import type { WorkItemCheck, WorkItemSubmission } from "./db/schema";
+import type {
+  WorkBudget,
+  WorkItemCheck,
+  WorkItemSubmission,
+} from "./db/schema";
 import {
   type BranchOutcome,
   land,
@@ -60,6 +79,8 @@ import {
   writeFolderFiles,
 } from "./project-folder";
 import { placesChanged } from "./project-placements";
+import type { Todo } from "./task-file";
+import type { TodoChanges } from "./tasks";
 import { unwatchedMode } from "./unwatched-mode";
 
 /** How long the name a caller gives a delegate or a started session may run. */
@@ -101,6 +122,173 @@ export class WorkItemRefusal extends Error {
     this.status = status;
   }
 }
+
+/**
+ * A start turned down because a live item owns files this one would own too
+ * ({@link globsOverlap}): the caller queues it until `blocker` ends.
+ */
+export class OwnsOverlap extends WorkItemRefusal {
+  readonly blocker: { id: string; title: string };
+  constructor(blocker: { id: string; title: string }, globs: string) {
+    super(
+      409,
+      `${blocker.title} (work item ${blocker.id}) is live and owns files this work owns too (${globs}); one writer per file, so this waits until it ends.`
+    );
+    this.blocker = blocker;
+  }
+}
+
+// --- file ownership ------------------------------------------------------------
+
+/** Globs one work item may own, and how long one may run. */
+const OWNS_LIMIT = 50;
+const GLOB_LIMIT = 200;
+const GLOB_WILD = /[*?[{]/;
+const LEADING_DOT_SLASH = /^(\.\/)+/;
+const TRAILING_SLASH = /\/+$/;
+
+/** A glob as ownership compares it: no leading `./`, no trailing `/`. */
+const globOf = (raw: string): string =>
+  raw.trim().replace(LEADING_DOT_SLASH, "").replace(TRAILING_SLASH, "");
+
+/** Why owned globs cannot stand, or nothing when they can. */
+export const ownsProblem = (owns: string[]): string | undefined => {
+  if (owns.length > OWNS_LIMIT) {
+    return `owns names ${owns.length} globs; it stops at ${OWNS_LIMIT}.`;
+  }
+  for (const raw of owns) {
+    const glob = globOf(raw);
+    if (!glob || glob.length > GLOB_LIMIT) {
+      return `owns: “${raw}” is not a glob of ${GLOB_LIMIT} characters or fewer.`;
+    }
+    if (glob.startsWith("/") || glob.split("/").includes("..")) {
+      return `owns: “${raw}” reaches outside the repository; name files from its root, like src/theme/** or docs/theme.md.`;
+    }
+  }
+  return undefined;
+};
+
+/**
+ * Whether two owned globs may name one file, judged conservatively on their
+ * literal parts. A glob's literal part is what comes before its first
+ * wildcard (`*`, `?`, `[`, `{`); `src/theme/**` → `src/theme/`, `**` → ``.
+ * Two globs without wildcards are paths, and a path owns everything under
+ * it: they overlap when they are equal or one is a folder of the other. When
+ * either has a wildcard, they overlap when one literal part starts with the
+ * other — `src/*.ts` and `src/ui/a.css` overlap though no file matches both,
+ * which errs towards waiting, never towards two writers.
+ */
+export const globsOverlap = (
+  a: readonly string[],
+  b: readonly string[]
+): string | undefined => {
+  for (const first of a.map(globOf)) {
+    for (const second of b.map(globOf)) {
+      const wild = GLOB_WILD.test(first) || GLOB_WILD.test(second);
+      const [p1] = first.split(GLOB_WILD);
+      const [p2] = second.split(GLOB_WILD);
+      const overlap = wild
+        ? p1.startsWith(p2) || p2.startsWith(p1)
+        : p1 === p2 || p1.startsWith(`${p2}/`) || p2.startsWith(`${p1}/`);
+      if (overlap) {
+        return first === second ? first : `${first} and ${second}`;
+      }
+    }
+  }
+  return undefined;
+};
+
+/** The repository an item works in: its project, else its machine and path. */
+interface RepoRef {
+  machineId: string;
+  path: string;
+  projectId: string | null;
+}
+
+/**
+ * Whether two items work in one repository: one project, or (either without
+ * a project) one machine and one path, a path under the other counting too.
+ */
+const sameRepo = (a: RepoRef, b: RepoRef): boolean =>
+  a.projectId && b.projectId
+    ? a.projectId === b.projectId
+    : a.machineId === b.machineId &&
+      (a.path === b.path ||
+        a.path.startsWith(`${b.path}/`) ||
+        b.path.startsWith(`${a.path}/`));
+
+// --- budgets ---------------------------------------------------------------------
+
+/** Why a budget cannot stand, or nothing when it can. */
+export const budgetProblem = (budget: WorkBudget): string | undefined => {
+  const { usd, turns, minutes } = budget;
+  if (usd !== undefined && !(Number.isFinite(usd) && usd > 0)) {
+    return "budget.usd is a number of dollars above 0.";
+  }
+  for (const [name, value] of [
+    ["turns", turns],
+    ["minutes", minutes],
+  ] as const) {
+    if (value !== undefined && !(Number.isInteger(value) && value >= 1)) {
+      return `budget.${name} is a whole number from 1.`;
+    }
+  }
+  return undefined;
+};
+
+/** What an item has used of a budget: dollars, turns ended, minutes since it started. */
+export interface BudgetUse {
+  minutes: number;
+  turns: number;
+  usd: number;
+}
+
+/**
+ * THE budget check: the sentence that stops an item at its budget, or
+ * nothing while it is within it. Every caller — a turn's end, the sweep,
+ * and later a routine's run (P3) — comes here.
+ */
+export const overBudget = (
+  budget: WorkBudget | null,
+  used: BudgetUse
+): string | undefined => {
+  if (!budget) {
+    return undefined;
+  }
+  if (budget.usd !== undefined && used.usd >= budget.usd) {
+    return `The hub stopped this item at its budget: it spent $${used.usd.toFixed(2)} of its $${budget.usd.toFixed(2)}.`;
+  }
+  if (budget.turns !== undefined && used.turns >= budget.turns) {
+    return `The hub stopped this item at its budget: it ended ${used.turns} of its ${counted(budget.turns, "turn")}.`;
+  }
+  if (budget.minutes !== undefined && used.minutes >= budget.minutes) {
+    return `The hub stopped this item at its budget: it ran ${Math.floor(used.minutes)} of its ${counted(budget.minutes, "minute")}.`;
+  }
+  return undefined;
+};
+
+/** `1 turn`, `40 turns`. */
+const counted = (count: number, one: string): string =>
+  `${count} ${one}${count === 1 ? "" : "s"}`;
+
+/** A budget's fields, each from the first that sets it; null when none does. */
+export const budgetFrom = (
+  ...budgets: (WorkBudget | null | undefined)[]
+): WorkBudget | null => {
+  const merged: WorkBudget = {};
+  for (const budget of [...budgets].reverse()) {
+    Object.assign(
+      merged,
+      Object.fromEntries(
+        Object.entries(budget ?? {}).filter(([, value]) => value !== undefined)
+      )
+    );
+  }
+  return Object.keys(merged).length > 0 ? merged : null;
+};
+
+/** Statuses of a session that has ended: its work items are orphans its project's lead adopts. */
+const ENDED: ReadonlySet<string> = new Set(["stopped", "discarded"]);
 
 /** The delegate type a session the fleet starts runs as when its caller names none. */
 export const DEFAULT_DELEGATE_TYPE = "medium";
@@ -148,6 +336,8 @@ export const resolveSpawnType = (
 
 /** What `delegate` asks for. */
 export interface WorkItemRequest {
+  /** What it may spend before the hub stops it; the project's default fills what this leaves out. */
+  budget?: WorkBudget;
   canDelegate?: boolean;
   /** Its acceptance checks: at least one. */
   checks: WorkItemCheck[];
@@ -159,6 +349,8 @@ export interface WorkItemRequest {
    * Always a new workspace.
    */
   fork?: boolean;
+  /** Its group under its parent: one combined report once every item of it has ended. */
+  group?: string;
   harness?: HarnessKind;
   /** Where its commits go once its checks pass; `main` when left out. */
   lands?: LandsMode;
@@ -170,6 +362,8 @@ export interface WorkItemRequest {
    * copies into its project's folder when it finishes. Needs a project.
    */
   outputs?: string[];
+  /** Globs of the repository's files it owns: it waits while a live item's overlap them. */
+  owns?: string[];
   parentInstanceId: string;
   prompt: string;
   /**
@@ -261,9 +455,63 @@ export interface WorkItemDeps {
     projectId: string,
     taskId: string
   ) => string | undefined;
+  /**
+   * A project task's to-dos (tasks.ts), for the plan ↔ to-do link: read them,
+   * and tick or propose them as the hub. Without it the link is off.
+   */
+  readonly todos?: {
+    read: (projectId: string, taskId: string) => Promise<Todo[]>;
+    write: (
+      projectId: string,
+      taskId: string,
+      changes: TodoChanges,
+      reason: string
+    ) => Promise<unknown>;
+  };
   /** The delegate types a session of the project sees (the fleet's without one), read at dispatch. */
   readonly types: (projectId?: string | null) => DelegateType[];
 }
+
+/** One item of a Claude Code session's plan, as its ledger file on disk says. */
+interface PlanItem {
+  status: string;
+  subject: string;
+}
+
+/** A plan item's to-do id, `[td-3] Persist the choice` → `td-3`. */
+const PLAN_TODO = /\[(td-\d{1,6})\]/;
+/** What separates the ledger's files in one read. */
+const RECORD = "\u001e";
+/** How long reading a session's plan ledger may take. */
+const PLAN_TIMEOUT_MS = 15_000;
+/** Plan items one attempt may leave behind as proposed to-dos. */
+const PROPOSALS_LIMIT = 20;
+/** How often the hub looks at every live item's budget, between turns. */
+const BUDGET_SWEEP_MS = 30_000;
+
+/**
+ * The shell that prints a Claude Code session's plan ledger
+ * (`~/.claude/tasks/<session>/*.json`, as the dashboard reads it), one file
+ * per record; nothing when the session never planned.
+ */
+const ledgerCommand = (sessionId: string): string =>
+  `d="$HOME/.claude/tasks/"${quote(sessionId)}; [ -d "$d" ] || exit 0; for f in "$d"/*.json; do [ -f "$f" ] && { cat "$f"; printf '\\n${RECORD}\\n'; }; done; exit 0`;
+
+/** The ledger's records as plan items; a half-written one is skipped. */
+const planOf = (stdout: string): PlanItem[] =>
+  stdout.split(RECORD).flatMap((record) => {
+    if (!record.trim()) {
+      return [];
+    }
+    try {
+      const raw = JSON.parse(record) as Partial<PlanItem>;
+      return typeof raw.subject === "string"
+        ? [{ subject: raw.subject, status: String(raw.status ?? "pending") }]
+        : [];
+    } catch {
+      return [];
+    }
+  });
 
 /** The last path segment — how the rail names a session. */
 const leaf = (path: string): string =>
@@ -357,18 +605,22 @@ const messageOf = (
 
 /**
  * Who may give finished work another turn: the reader (dashboard or
- * Telegram), or the session that delegated it.
+ * Telegram), the session that delegated it, or its project's lead (a
+ * co-parent of every item of its project).
  */
 const reopens = (
   parentInstanceId: string | null,
-  origin: NeutralOrigin
+  origin: NeutralOrigin,
+  leadInstanceId?: string | null
 ): boolean =>
   origin.kind === "human" ||
-  (origin.kind === "peer" && origin.fromSession === parentInstanceId);
+  (origin.kind === "peer" &&
+    (origin.fromSession === parentInstanceId ||
+      (!!leadInstanceId && origin.fromSession === leadInstanceId)));
 
 /** What anyone else's message to finished work is answered with. */
 const finishedText = (item: WorkItemRow): string =>
-  `${item.title} (${item.id}) is ${item.state}. Only the reader or the session that delegated it can continue it.`;
+  `${item.title} (${item.id}) is ${item.state}. Only the reader, the session that delegated it, or its project's lead can continue it.`;
 
 /** What a message to finished work is answered with once a newer item holds its workspace. */
 const supersededText = (item: WorkItemRow, latest: WorkItemRow): string =>
@@ -453,6 +705,16 @@ export const checksProblem = (checks: WorkItemCheck[]): string | undefined => {
   }
   return undefined;
 };
+
+/** Why a request's title, checks, owned files, budget or group cannot stand; nothing when they can. */
+const requestProblem = (request: WorkItemRequest): string | undefined =>
+  titleProblem(request.title) ??
+  checksProblem(request.checks) ??
+  (request.owns ? ownsProblem(request.owns) : undefined) ??
+  (request.budget ? budgetProblem(request.budget) : undefined) ??
+  (request.group !== undefined && !request.group.trim()
+    ? "group is blank: name it, like 'theme'."
+    : undefined);
 
 /** A path as the project's folder reads it, or undefined when the folder refuses it. */
 const folderPathOf = (raw: string): string | undefined => {
@@ -697,6 +959,7 @@ export const createWorkItems = ({
   sessionUrl,
   spawn,
   taskTitle,
+  todos,
   types,
 }: WorkItemDeps) => {
   /** Turns in a row each live item's session ended without `finish_item`, by item. */
@@ -755,6 +1018,9 @@ export const createWorkItems = ({
       );
       if (after && before && LIVE.has(before.state)) {
         itemEnded?.(after);
+        // After the step that ended it, and after the failure report the
+        // caller sends in that same step.
+        queueMicrotask(() => afterEnd(after));
       }
       return after;
     }
@@ -768,6 +1034,455 @@ export const createWorkItems = ({
         waitReason: null,
         waitResumeBy: null,
       });
+    }
+  };
+
+  // --- the project's lead: co-parent of its project's items -----------------
+
+  /** The item's project's lead, when it has one that is not the item's own session. */
+  const leadFor = (item: WorkItemRow): InstanceRow | undefined => {
+    const id = item.projectId
+      ? db.project(item.projectId)?.leadInstanceId
+      : undefined;
+    const [lead] = id ? db.getInstancesByIds([id]) : [];
+    return lead && lead.id !== item.instanceId ? lead : undefined;
+  };
+
+  /** Whether a message from `origin` may reopen `item`: {@link reopens}, its lead counting. */
+  const mayReopen = (item: WorkItemRow, origin: NeutralOrigin): boolean =>
+    reopens(item.parentInstanceId, origin, leadFor(item)?.id);
+
+  /**
+   * Who hears a delegated session's reports: its parent, and its project's
+   * lead as well when that is another session; only the lead once the parent
+   * has ended (stopped or discarded, or gone), as it adopts the orphan.
+   * Without a lead, the parent alone, as before.
+   */
+  const reportees = (row: InstanceRow): InstanceRow[] => {
+    const [parent] = row.parentInstanceId
+      ? db.getInstancesByIds([row.parentInstanceId])
+      : [];
+    const item = itemOf(row);
+    const lead = item ? leadFor(item) : undefined;
+    if (!lead) {
+      return parent ? [parent] : [];
+    }
+    if (!parent || ENDED.has(parent.status)) {
+      return [lead];
+    }
+    return parent.id === lead.id ? [parent] : [parent, lead];
+  };
+
+  // --- file ownership ---------------------------------------------------------
+
+  /** Owned globs held by starts that have checked and not yet filed their item. */
+  const reserved = new Map<symbol, { repo: RepoRef; owns: string[] }>();
+
+  /** The repository a live item works in. */
+  const repoOfItem = (item: WorkItemRow): RepoRef | undefined => {
+    const [workspace] = db.workspacesNamed(item.workspaceId);
+    return workspace
+      ? {
+          projectId: item.projectId,
+          machineId: workspace.machineId,
+          path: workspace.repoRoot,
+        }
+      : undefined;
+  };
+
+  /** The repository a request would work in: the workspace it names, else its machine and folder. */
+  const repoOfRequest = (
+    request: WorkItemRequest,
+    parent: InstanceRow,
+    projectId: string | null
+  ): RepoRef => {
+    const named = request.workspace ?? request.reuse;
+    const [workspace] = named ? db.workspacesNamed(named.trim()) : [];
+    return workspace
+      ? { projectId, machineId: workspace.machineId, path: workspace.repoRoot }
+      : {
+          projectId,
+          machineId: request.machineId ?? parent.machineId,
+          path: request.cwd ?? parent.cwd,
+        };
+  };
+
+  /** The live item whose owned files overlap `owns` in `repo`, and the globs that do. */
+  const ownsBlocker = (
+    repo: RepoRef,
+    owns: string[]
+  ): { item: { id: string; title: string }; globs: string } | undefined => {
+    for (const item of db.liveWorkItems()) {
+      const theirs = item.owns ?? [];
+      const where = theirs.length > 0 ? repoOfItem(item) : undefined;
+      const globs =
+        where && sameRepo(repo, where) && globsOverlap(owns, theirs);
+      if (globs) {
+        return { item, globs };
+      }
+    }
+    for (const claim of reserved.values()) {
+      const globs =
+        sameRepo(repo, claim.repo) && globsOverlap(owns, claim.owns);
+      if (globs) {
+        return {
+          item: { id: "(starting)", title: "Another start" },
+          globs,
+        };
+      }
+    }
+    return undefined;
+  };
+
+  /**
+   * Holds a start's owned files from its check until its item is filed;
+   * refused with {@link OwnsOverlap} while a live item's overlap them. The
+   * check and the hold are one step. Answers the release.
+   */
+  const claimOwns = (
+    request: WorkItemRequest,
+    parent: InstanceRow,
+    projectId: string | null
+  ): (() => void) => {
+    const owns = request.owns ?? [];
+    if (owns.length === 0) {
+      return () => undefined;
+    }
+    const repo = repoOfRequest(request, parent, projectId);
+    const blocker = ownsBlocker(repo, owns);
+    if (blocker) {
+      throw new OwnsOverlap(blocker.item, blocker.globs);
+    }
+    const key = Symbol("owns");
+    reserved.set(key, { repo, owns });
+    return () => reserved.delete(key);
+  };
+
+  // --- budgets ------------------------------------------------------------------
+
+  /** What an item has used: its session's reported dollars past its base, its turns, its minutes. */
+  const usedBy = (item: WorkItemRow): BudgetUse => {
+    const [row] = db.getInstancesByIds([item.instanceId]);
+    const spent = row?.sessionId ? db.sessionCostUsd(row.sessionId) : 0;
+    return {
+      usd: Math.max(0, spent - item.spendBaseUsd),
+      turns: item.turns,
+      minutes: (Date.now() - item.createdAt.getTime()) / 60_000,
+    };
+  };
+
+  /**
+   * Stops a live item that has reached its budget ({@link overBudget}): it
+   * fails with the sentence that names the budget, its parent (and lead) are
+   * told, and its session is ended. An item whose checks are running is left
+   * to them.
+   */
+  const enforceBudget = (item: WorkItemRow): void => {
+    if (!(item.budget && LIVE.has(item.state)) || item.checkingSince) {
+      return;
+    }
+    const reason = overBudget(item.budget, usedBy(item));
+    if (!reason) {
+      return;
+    }
+    const [row] = db.getInstancesByIds([item.instanceId]);
+    const failed = finish(item, { state: "failed", error: reason });
+    console.log(`[work-items] ${item.id}: ${reason}`);
+    if (row) {
+      report(row, `${reason}${reportLine(failed)}`, true);
+    }
+    end(item.instanceId).catch((error: unknown) =>
+      console.warn(
+        `[work-items] ${item.id} reached its budget, and its session did not end: ${error instanceof Error ? error.message : String(error)}`
+      )
+    );
+  };
+
+  const budgetSweep = setInterval(() => {
+    for (const item of db.liveWorkItems()) {
+      if (item.budget) {
+        enforceBudget(item);
+      }
+    }
+  }, BUDGET_SWEEP_MS);
+  budgetSweep.unref?.();
+
+  // --- groups ---------------------------------------------------------------------
+
+  /** One item's part of its group's combined report. */
+  const groupPart = (item: WorkItemRow, index: number): string => {
+    const head = `${index + 1}. ${item.title} (work item ${item.id.slice(0, 8)}, workspace ${item.workspaceId.slice(0, 8)}): ${item.state}`;
+    if (item.state === "done") {
+      return `${head}\n${(item.digest ?? firstLine(item.result)).trim()}`;
+    }
+    if (item.state === "cancelled") {
+      return `${head}: stopped before it finished.`;
+    }
+    const why = firstLine(item.error) || "no reason was kept";
+    return `${head}, reported when it failed: ${why}`;
+  };
+
+  /**
+   * An item of a group ended: once every item of the group has, the parent
+   * hears ONE report of them all — each one's summary and landing line, and
+   * each failure in a line (it reported at once). A group none of whose items
+   * is done has nothing held, and needs no word.
+   */
+  const settleGroup = (item: WorkItemRow): void => {
+    if (!item.group) {
+      return;
+    }
+    const members = db.groupWorkItems(item.parentInstanceId, item.group);
+    if (members.length === 0 || members.some((each) => LIVE.has(each.state))) {
+      return;
+    }
+    const now = new Date();
+    for (const member of members) {
+      db.updateWorkItem(member.id, { groupReportedAt: now });
+    }
+    const done = members.filter((each) => each.state === "done").length;
+    if (done === 0) {
+      return;
+    }
+    const [row] = db.getInstancesByIds([item.instanceId]);
+    if (!row) {
+      return;
+    }
+    const tally =
+      done === members.length
+        ? `all ${members.length} done`
+        : `${done} done, ${members.length - done} not`;
+    report(
+      row,
+      `Group “${item.group}”: every item has ended (${tally}).\n\n${members.map(groupPart).join("\n\n")}`,
+      false
+    );
+  };
+
+  // --- plan ↔ to-dos ----------------------------------------------------------------
+
+  /** The item's session's plan, read off its machine; undefined when it has none to read. */
+  const planFor = async (
+    item: WorkItemRow
+  ): Promise<PlanItem[] | undefined> => {
+    const [row] = db.getInstancesByIds([item.instanceId]);
+    if (!(row?.sessionId && row.harness === "claude")) {
+      return;
+    }
+    const read = await command(
+      row.machineId,
+      "/",
+      ledgerCommand(row.sessionId),
+      PLAN_TIMEOUT_MS
+    );
+    return read.exitCode === 0 ? planOf(read.stdout) : undefined;
+  };
+
+  /** The task an item is an attempt at, when the plan link can reach it. */
+  const taskOf = (
+    item: WorkItemRow
+  ): { projectId: string; taskId: string } | undefined =>
+    todos && item.projectId && item.taskId
+      ? { projectId: item.projectId, taskId: item.taskId }
+      : undefined;
+
+  /**
+   * Ticks each open to-do of the item's task whose id a completed plan item
+   * carries (`[td-3] …`). One read of the ledger and, when something is to
+   * tick, one commit.
+   */
+  const syncPlan = async (item: WorkItemRow): Promise<void> => {
+    const task = taskOf(item);
+    const plan = task ? await planFor(item) : undefined;
+    if (!(task && todos && plan?.length)) {
+      return;
+    }
+    const completed = new Set(
+      plan
+        .filter((entry) => entry.status === "completed")
+        .map((entry) => PLAN_TODO.exec(entry.subject)?.[1])
+        .filter((id): id is string => id !== undefined)
+    );
+    if (completed.size === 0) {
+      return;
+    }
+    const open = (await todos.read(task.projectId, task.taskId)).filter(
+      (todo) => !todo.done && todo.id && completed.has(todo.id)
+    );
+    if (open.length > 0) {
+      await todos.write(
+        task.projectId,
+        task.taskId,
+        { tick: open.map((todo) => todo.id as string) },
+        `attempt ${item.id.slice(0, 8)}'s plan completed them`
+      );
+    }
+  };
+
+  /** {@link syncPlan} off the turn's path; a machine that cannot answer is logged, not fatal. */
+  const syncSoon = (item: WorkItemRow): void => {
+    if (!(taskOf(item) && LIVE.has(item.state))) {
+      return;
+    }
+    syncPlan(item).catch((error: unknown) =>
+      console.warn(
+        `[work-items] ${item.id}: its plan was not read: ${error instanceof Error ? error.message : String(error)}`
+      )
+    );
+  };
+
+  /**
+   * An item ended: its plan's last ticks land, and the plan items it left
+   * open (without a to-do id) become proposed to-dos on its task — a line
+   * each, `(proposed)`, skipping words the task already has.
+   */
+  const proposeLeftovers = async (item: WorkItemRow): Promise<void> => {
+    const task = taskOf(item);
+    const plan = task ? await planFor(item) : undefined;
+    if (!(task && todos && plan?.length)) {
+      return;
+    }
+    await syncPlan(item);
+    const known = new Set(
+      (await todos.read(task.projectId, task.taskId)).map((todo) =>
+        todo.text.trim().toLowerCase()
+      )
+    );
+    const left = plan
+      .filter(
+        (entry) =>
+          entry.status !== "completed" && !PLAN_TODO.test(entry.subject)
+      )
+      .map((entry) => entry.subject.replace(/\s+/g, " ").trim())
+      .filter((text) => text && !known.has(text.toLowerCase()))
+      .slice(0, PROPOSALS_LIMIT);
+    if (left.length > 0) {
+      await todos.write(
+        task.projectId,
+        task.taskId,
+        { add: [...new Set(left)].map((text) => ({ text, proposed: true })) },
+        `attempt ${item.id.slice(0, 8)} ended ${item.state} with these left open in its plan`
+      );
+    }
+  };
+
+  /** Items whose session was asked once, at finish_item, about the task's unticked to-dos. */
+  const todosAsked = new Set<string>();
+
+  /**
+   * The words that send a `finish_item` back once while the task has open
+   * to-dos (its plan's completed ones ticked first): each listed, to tick or
+   * explain. Nothing on the second call, or when every to-do is ticked.
+   */
+  const untickedText = async (
+    item: WorkItemRow
+  ): Promise<string | undefined> => {
+    const task = taskOf(item);
+    if (!(task && todos) || todosAsked.has(item.id)) {
+      return;
+    }
+    try {
+      await syncPlan(item);
+    } catch (error) {
+      console.warn(
+        `[work-items] ${item.id}: its plan was not read at finish_item: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+    // A task that cannot be read (deleted, a folder that refuses) asks nothing.
+    const open = (
+      await todos.read(task.projectId, task.taskId).catch(() => [])
+    ).filter((todo) => !(todo.done || todo.proposed || todo.promoted));
+    if (open.length === 0) {
+      return;
+    }
+    todosAsked.add(item.id);
+    return `Not yet: ${open.length === 1 ? "this to-do" : `these ${open.length} to-dos`} of ${task.taskId} ${open.length === 1 ? "is" : "are"} not ticked.\n\n${open
+      .map((todo) => `- [${todo.id ?? todo.path}] ${todo.text}`)
+      .join(
+        "\n"
+      )}\n\nTick each one you finished with todo_write, and say in your summary why each other one stays open. Then call finish_item again: the next call runs the checks whatever is ticked.`;
+  };
+
+  /** What follows an item's end, off the step that ended it. */
+  const afterEnd = (item: WorkItemRow): void => {
+    settleGroup(item);
+    drainQueued().catch((error: unknown) =>
+      console.warn(
+        `[work-items] queued delegates did not start: ${error instanceof Error ? error.message : String(error)}`
+      )
+    );
+    if (taskOf(item)) {
+      proposeLeftovers(item).catch((error: unknown) =>
+        console.warn(
+          `[work-items] ${item.id}: its plan's open items were not proposed: ${error instanceof Error ? error.message : String(error)}`
+        )
+      );
+    }
+  };
+
+  // --- delegates waiting on owned files ----------------------------------------------
+
+  let draining = false;
+  let drainAgain = false;
+
+  /**
+   * Starts the `delegate` calls that waited for owned files, oldest first,
+   * each once no live item overlaps it; its parent is told it started, or why
+   * it could not. One drain at a time; an end during one runs it again.
+   */
+  const drainQueued = async (): Promise<void> => {
+    if (draining) {
+      drainAgain = true;
+      return;
+    }
+    draining = true;
+    try {
+      do {
+        drainAgain = false;
+        for (const queued of db.queuedWorkItems()) {
+          // biome-ignore lint/performance/noAwaitInLoops: one start at a time, so each sees the files the last one took
+          await startQueued(queued);
+        }
+      } while (drainAgain);
+    } finally {
+      draining = false;
+    }
+  };
+
+  /** One queued delegate: started when its files are free, its parent told either way. */
+  const startQueued = async (
+    queued: ReturnType<DbShape["queuedWorkItems"]>[number]
+  ): Promise<void> => {
+    const request = queued.request as WorkItemRequest;
+    const [parent] = db.getInstancesByIds([queued.parentInstanceId]);
+    if (!parent) {
+      db.dropQueuedWorkItem(queued.id);
+      return;
+    }
+    const repo = repoOfRequest(
+      request,
+      parent,
+      request.task?.projectId ?? parent.projectId ?? null
+    );
+    if (ownsBlocker(repo, request.owns ?? [])) {
+      return;
+    }
+    try {
+      const started = await start(request);
+      db.dropQueuedWorkItem(queued.id);
+      tell(
+        parent,
+        `Your queued delegate “${queued.title}” has started: the files it owns are free. ${started.text}`
+      );
+    } catch (error) {
+      if (error instanceof OwnsOverlap) {
+        return;
+      }
+      db.dropQueuedWorkItem(queued.id);
+      tell(
+        parent,
+        `Your queued delegate “${queued.title}” could not start: ${error instanceof Error ? error.message : String(error)}`
+      );
     }
   };
 
@@ -977,6 +1692,10 @@ export const createWorkItems = ({
       effort: previous.effort,
       state: "running",
       checks: request.checks,
+      // The session has history: what it spent before is not this item's.
+      spendBaseUsd: session.sessionId
+        ? db.sessionCostUsd(session.sessionId)
+        : 0,
     });
     db.patchInstance(session.id, {
       workItemId: item.id,
@@ -1007,7 +1726,7 @@ export const createWorkItems = ({
         `Continued ${label} as work item ${item.id} in workspace ${workspace.id} (${workspace.path}, branch ${workspace.branch}): ` +
         "the brief is its next message, in the same session and its cached transcript. " +
         "Its report arrives when the hub has run its acceptance checks. Guide it, or continue it after it " +
-        `reports, with handoff("${session.id}", ...).`,
+        `reports, with handoff("${session.id}", ...).${extrasLine(item)}`,
     };
   };
 
@@ -1126,6 +1845,9 @@ export const createWorkItems = ({
     const request = {
       ...asked,
       outputs: outputsOf(asked.outputs) ?? undefined,
+      owns: asked.owns?.length
+        ? [...new Set(asked.owns.map(globOf))]
+        : undefined,
     };
     const [parent] = db.getInstancesByIds([request.parentInstanceId]);
     if (!parent) {
@@ -1137,13 +1859,9 @@ export const createWorkItems = ({
     if (parent.canDelegate === false) {
       throw new WorkItemRefusal(403, LEAF_DELEGATE_REFUSAL);
     }
-    const untitled = titleProblem(request.title);
-    if (untitled) {
-      throw new WorkItemRefusal(400, untitled);
-    }
-    const unchecked = checksProblem(request.checks);
-    if (unchecked) {
-      throw new WorkItemRefusal(400, unchecked);
+    const problem = requestProblem(request);
+    if (problem) {
+      throw new WorkItemRefusal(400, problem);
     }
     const projectId = request.task?.projectId ?? parent.projectId;
     if (request.outputs && !projectId) {
@@ -1155,8 +1873,26 @@ export const createWorkItems = ({
     return { request, parent, projectId };
   };
 
+  /**
+   * Files and spawns an item. Refused with {@link OwnsOverlap} while a live
+   * item owns files it owns too; the files it owns are held from that check
+   * until its item is filed, so two starts never both pass it.
+   */
   const start = async (asked: WorkItemRequest): Promise<WorkItemStart> => {
     const { request, parent, projectId } = admitted(asked);
+    const release = claimOwns(request, parent, projectId);
+    try {
+      return await startAdmitted(request, parent, projectId);
+    } finally {
+      release();
+    }
+  };
+
+  const startAdmitted = async (
+    request: WorkItemRequest,
+    parent: InstanceRow,
+    projectId: string | null
+  ): Promise<WorkItemStart> => {
     if (request.reuse) {
       const again = await reusable(request.reuse, projectId);
       if (again) {
@@ -1201,13 +1937,39 @@ export const createWorkItems = ({
    */
   const placing = (request: WorkItemRequest, parent: InstanceRow) => {
     const projectId = request.task?.projectId ?? parent.projectId;
+    const project = projectId ? db.project(projectId) : undefined;
     return {
       ...(request.task ? { taskId: request.task.id } : {}),
       ...(projectId ? { projectId } : {}),
       lands: request.lands ?? "main",
       outputs: request.outputs?.length ? request.outputs : null,
+      group: request.group?.trim() || null,
+      owns: request.owns?.length ? request.owns : null,
+      budget: budgetFrom(request.budget, project?.budget),
     };
   };
+
+  /** What the caller's start text adds for a group, owned files and a budget. */
+  const extrasLine = (item: WorkItemRow): string =>
+    [
+      item.group
+        ? ` It is in group “${item.group}”: its report waits until every item of the group has ended (a failure reports at once).`
+        : "",
+      item.owns?.length ? ` It owns ${item.owns.join(", ")}.` : "",
+      item.budget
+        ? ` Its budget: ${[
+            item.budget.usd === undefined ? "" : `$${item.budget.usd}`,
+            item.budget.turns === undefined
+              ? ""
+              : counted(item.budget.turns, "turn"),
+            item.budget.minutes === undefined
+              ? ""
+              : counted(item.budget.minutes, "minute"),
+          ]
+            .filter(Boolean)
+            .join(", ")}.`
+        : "",
+    ].join("");
 
   /** A new session in `workspace`, running a new item from the request's brief. */
   const spawnIn = (
@@ -1284,7 +2046,8 @@ export const createWorkItems = ({
         `reports, with handoff("${instanceId}", ...): the message lands in the same session and its cached transcript.` +
         (canDelegate
           ? " It may spawn delegates of its own."
-          : " It is a leaf: it cannot delegate further."),
+          : " It is a leaf: it cannot delegate further.") +
+        extrasLine(item),
     };
   };
 
@@ -1610,6 +2373,24 @@ export const createWorkItems = ({
     }
   };
 
+  /**
+   * The report of an item that just ended through its checks, to its parent;
+   * or, for a done item of a group, held for the group's one report
+   * ({@link settleGroup}) — a failure reports at once. Answers what the
+   * delegate is told of a hold.
+   */
+  const reportOrHold = (
+    row: InstanceRow,
+    ended: WorkItemRow,
+    body: string
+  ): string => {
+    if (ended.state === "done" && ended.group && !ended.groupReportedAt) {
+      return `; your parent hears of it with the rest of group “${ended.group}”`;
+    }
+    report(row, `${body}${reportLine(ended)}`, false);
+    return "";
+  };
+
   /** A pull request's body: what the delegate said it did, its checks, and where its report is. */
   const pullRequestBody = (
     item: WorkItemRow,
@@ -1832,12 +2613,13 @@ export const createWorkItems = ({
     const ended = finish(db.workItem(item.id) ?? item, {
       state: landed ? "done" : "failed",
       result: body,
+      digest: `${submission.summary.trim()}\n${landing.line}${collected.line}`,
       ...(landing.kind === "done" && landing.prUrl
         ? { prUrl: landing.prUrl }
         : {}),
       ...settled,
     });
-    report(row, `${body}${reportLine(ended)}`, false);
+    const held = reportOrHold(row, ended, body);
     if (landing.kind !== "done") {
       return {
         done: false,
@@ -1847,7 +2629,7 @@ export const createWorkItems = ({
     return collected.ok
       ? {
           done: true,
-          text: `All ${count} checks passed. ${landing.line}${collected.line}\n\n${lines}\n\nThe item is done. End your turn.`,
+          text: `All ${count} checks passed. ${landing.line}${collected.line}\n\n${lines}\n\nThe item is done${held}. End your turn.`,
         }
       : {
           done: false,
@@ -1910,6 +2692,68 @@ export const createWorkItems = ({
 
   return {
     start,
+
+    /**
+     * `delegate`: {@link start}, or, while a live item owns files this one
+     * owns too, the request queued until no live item overlaps it (its
+     * parent is told when it starts). Every other refusal is the caller's.
+     */
+    async delegate(
+      asked: WorkItemRequest
+    ): Promise<WorkItemStart | { queued: string; text: string }> {
+      try {
+        return await start(asked);
+      } catch (error) {
+        if (!(error instanceof OwnsOverlap)) {
+          throw error;
+        }
+        const queued = db.queueWorkItem({
+          id: crypto.randomUUID(),
+          parentInstanceId: asked.parentInstanceId,
+          request: asked,
+          title: asked.title.trim(),
+        });
+        return {
+          queued: queued.id,
+          text: `Queued “${queued.title}” (${queued.id}): ${error.message} The hub starts it when no live item owns its files any more, and tells you then.`,
+        };
+      }
+    },
+
+    /** Starts the queued delegates whose files are free: at hub start, and after a machine returns. */
+    resumeQueued(): void {
+      drainQueued().catch((error: unknown) =>
+        console.warn(
+          `[work-items] queued delegates did not start: ${error instanceof Error ? error.message : String(error)}`
+        )
+      );
+    },
+
+    /**
+     * A turn of a delegated session ended: its item's turn count goes up and
+     * its budget is looked at ({@link enforceBudget}). Every turn counts,
+     * whatever answers it.
+     */
+    countTurn(row: InstanceRow): void {
+      const item = itemOf(row);
+      if (!(item && LIVE.has(item.state))) {
+        return;
+      }
+      enforceBudget(update(item.id, { turns: item.turns + 1 }) ?? item);
+    },
+
+    reportees,
+
+    /** Whether `leadId` leads the project of the work item `instanceId` runs: it may answer, steer and stop it. */
+    ledBy(instanceId: string, leadId: string): boolean {
+      const [row] = db.getInstancesByIds([instanceId]);
+      const item = row ? itemOf(row) : undefined;
+      return !!item && leadFor(item)?.id === leadId;
+    },
+
+    stop(): void {
+      clearInterval(budgetSweep);
+    },
 
     /** The one send path adds this to reports, handoffs and asks alike. */
     waitSummary(instanceId: string, parentInstanceId: string): string {
@@ -2038,7 +2882,7 @@ export const createWorkItems = ({
         if (LIVE.has(item.state)) {
           return undefined;
         }
-        if (!reopens(item.parentInstanceId, origin)) {
+        if (!mayReopen(item, origin)) {
           return finishedText(item);
         }
         const [workspace] = db.workspacesNamed(item.workspaceId);
@@ -2111,6 +2955,8 @@ export const createWorkItems = ({
       if (!item) {
         return { body: turn.text, failed: turn.error !== undefined };
       }
+      // The plan's completed to-do ids tick their to-dos, off the turn's path.
+      syncSoon(item);
       if (turn.error === undefined && waitingTurn(item)) {
         return undefined;
       }
@@ -2154,7 +3000,7 @@ export const createWorkItems = ({
     heard(instanceId: string, origin: NeutralOrigin): void {
       const [row] = db.getInstancesByIds([instanceId]);
       const item = row ? itemOf(row) : undefined;
-      if (item && reopens(item.parentInstanceId, origin)) {
+      if (item && mayReopen(item, origin)) {
         quiet.delete(item.id);
       }
     },
@@ -2190,6 +3036,12 @@ export const createWorkItems = ({
         return "The item failed as blocked; your parent has the command and the error. End your turn.";
       }
 
+      // The task's to-dos first: unticked ones are listed once, to tick or
+      // explain; the next call runs the checks.
+      const unticked = await untickedText(item);
+      if (unticked) {
+        return unticked;
+      }
       update(item.id, { submission: request, checkingSince: new Date() });
       return (await settleChecks(item, checks, request)).text;
     },

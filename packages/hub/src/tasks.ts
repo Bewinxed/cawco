@@ -32,7 +32,7 @@
 import type { InstanceRow, LandsMode } from "@cawco/core";
 import { Elysia, t } from "elysia";
 import type { TaskIndexRow, WorkItemRow } from "./db";
-import type { Tracker, WorkItemState } from "./db/schema";
+import type { Tracker, WorkBudget, WorkItemState } from "./db/schema";
 import {
   type FolderAuthor,
   FolderRefusal,
@@ -75,7 +75,7 @@ import {
   taskNumber,
   taskPath,
 } from "./task-file";
-import { isLive } from "./work-items";
+import { budgetProblem, isLive, ownsProblem } from "./work-items";
 
 /**
  * Who moves a task: one of the movers stages.md names, or `hub`, the hub's
@@ -257,11 +257,15 @@ export interface StagesTemplateView {
 export interface TaskView extends TaskFlags {
   acceptance: string;
   after: string[];
+  /** What an attempt may spend before the hub stops it; null: the project's default. */
+  budget: WorkBudget | null;
   checks: string[];
   description: string;
   /** Front matter keys the file carries that a task file does not know; kept as written. */
   extra: string[];
   foundIn: string | null;
+  /** Its attempts' group: their parent hears one combined report once all have ended. */
+  group: string | null;
   /** sha256 hex of the file as read. */
   hash: string;
   id: string;
@@ -274,6 +278,8 @@ export interface TaskView extends TaskFlags {
   needsYou: boolean;
   number: number;
   outputs: string[];
+  /** Globs of the repository's files an attempt owns. */
+  owns: string[];
   parent: string | null;
   path: string;
   problems: string[];
@@ -291,12 +297,15 @@ export interface TaskView extends TaskFlags {
 export interface TaskDraft {
   acceptance?: string;
   after?: string[];
+  budget?: WorkBudget;
   checks?: string[];
   description?: string;
   foundIn?: string;
+  group?: string;
   labels?: string[];
   lands?: LandsMode;
   outputs?: string[];
+  owns?: string[];
   parent?: string;
   rank?: string;
   related?: string[];
@@ -310,12 +319,17 @@ export interface TaskDraft {
 /** A change to a task's fields and owned sections; what is left out stays. Null clears. */
 export interface TaskPatch {
   acceptance?: string;
+  /** What an attempt may spend; null: the project's default. */
+  budget?: WorkBudget | null;
   checks?: string[];
   description?: string;
+  /** Its attempts' group; null: none. */
+  group?: string | null;
   labels?: string[];
   /** Where an attempt's work lands; null: the project's default. */
   lands?: LandsMode | null;
   outputs?: string[];
+  owns?: string[];
   rank?: string | null;
   title?: string;
   type?: string | null;
@@ -323,7 +337,8 @@ export interface TaskPatch {
 
 /** To-do changes made together, in one commit. A to-do is named by id (`td-3`) or position (`2.1`). */
 export interface TodoChanges {
-  add?: { text: string; under?: string }[];
+  /** `proposed`: offered by an attempt's plan, not agreed (a `(proposed)` line). */
+  add?: { text: string; under?: string; proposed?: boolean }[];
   edit?: { todo: string; text: string }[];
   tick?: string[];
   untick?: string[];
@@ -408,6 +423,33 @@ const items = (what: string, list: string[]): string[] => {
     ...new Set(list.map((item) => oneLine(`${what} item`, item, ITEM_LIMIT))),
   ];
 };
+
+/** A budget a caller gave, refused in its own words when it cannot stand. */
+const budgetOf = (budget: WorkBudget): WorkBudget => {
+  const problem = budgetProblem(budget);
+  if (problem) {
+    refuse(400, problem);
+  }
+  return budget;
+};
+
+/** Owned globs a caller gave, refused when one cannot stand. */
+const ownsOf = (owns: string[]): string[] => {
+  const problem = ownsProblem(owns);
+  if (problem) {
+    refuse(400, problem);
+  }
+  return items("owns", owns);
+};
+
+/** A draft's group, owned files and budget as its file's fields. */
+const limitsOf = (
+  draft: TaskDraft
+): Pick<TaskFields, "budget" | "group" | "owns"> => ({
+  group: draft.group ? oneLine("group", draft.group, 64) : null,
+  owns: ownsOf(draft.owns ?? []),
+  budget: draft.budget ? budgetOf(draft.budget) : null,
+});
 
 const typeName = (type: string): string => {
   const name = type.trim();
@@ -524,6 +566,9 @@ const viewOf = (
   checks: parsed.fields.checks,
   outputs: parsed.fields.outputs,
   lands: parsed.fields.lands,
+  group: parsed.fields.group,
+  owns: parsed.fields.owns,
+  budget: parsed.fields.budget,
   rank: parsed.fields.rank,
   labels: parsed.fields.labels,
   description: parsed.description,
@@ -598,7 +643,8 @@ const applyPatch = (doc: TaskDoc, patch: TaskPatch): string => {
     apply();
     changed.push(name);
   };
-  const { title, description, acceptance, type, rank, lands } = patch;
+  const { title, description, acceptance, type, rank, lands, group, budget } =
+    patch;
   if (title !== undefined) {
     set("title", () => doc.setTitle(oneLine("title", title, TITLE_LIMIT)));
   }
@@ -622,6 +668,20 @@ const applyPatch = (doc: TaskDoc, patch: TaskPatch): string => {
   }
   if (lands !== undefined) {
     set("lands", () => doc.setField("lands", lands));
+  }
+  if (group !== undefined) {
+    set("group", () =>
+      doc.setField("group", group ? oneLine("group", group, 64) : null)
+    );
+  }
+  if (budget !== undefined) {
+    set("budget", () =>
+      doc.setField("budget", budget ? budgetOf(budget) : null)
+    );
+  }
+  if (patch.owns !== undefined) {
+    const owns = ownsOf(patch.owns);
+    set("owns", () => doc.setField("owns", owns));
   }
   for (const field of ["checks", "outputs", "labels"] as const) {
     const list = patch[field];
@@ -669,8 +729,8 @@ const applyTodos = (doc: TaskDoc, changes: TodoChanges): string => {
     }
   }
   const added: string[] = [];
-  for (const { text, under } of changes.add ?? []) {
-    const done = doc.addTodo(todoText(text), under);
+  for (const { text, under, proposed } of changes.add ?? []) {
+    const done = doc.addTodo(todoText(text), under, proposed);
     if (typeof done === "string") {
       refuse(404, done);
     } else {
@@ -1267,6 +1327,7 @@ export const createTasks = (store: TaskStore) => {
           checks: items("checks", draft.checks ?? []),
           outputs: items("outputs", draft.outputs ?? []),
           lands: draft.lands ?? null,
+          ...limitsOf(draft),
           rank: draft.rank ? oneLine("rank", draft.rank, 64) : null,
           labels: items("labels", draft.labels ?? []),
         };
@@ -1541,6 +1602,12 @@ export const LANDS = t.Union([
   t.Literal("pr"),
   t.Literal("none"),
 ]);
+/** What a work item may spend (`WorkBudget`): dollars, turns, minutes. */
+export const BUDGET = t.Object({
+  usd: t.Optional(t.Number()),
+  turns: t.Optional(t.Integer()),
+  minutes: t.Optional(t.Integer()),
+});
 const TRACKER = t.Union([
   t.Literal("cawco"),
   t.Literal("github"),
@@ -1587,6 +1654,9 @@ export const taskRoutes = (tasks: Tasks) =>
           checks: t.Optional(t.Array(t.String())),
           outputs: t.Optional(t.Array(t.String())),
           lands: t.Optional(LANDS),
+          group: t.Optional(t.String()),
+          owns: t.Optional(t.Array(t.String())),
+          budget: t.Optional(BUDGET),
           rank: t.Optional(t.String()),
           labels: t.Optional(t.Array(t.String())),
           description: t.Optional(t.String()),
@@ -1619,6 +1689,9 @@ export const taskRoutes = (tasks: Tasks) =>
           type: t.Optional(t.Nullable(t.String())),
           rank: t.Optional(t.Nullable(t.String())),
           lands: t.Optional(t.Nullable(LANDS)),
+          group: t.Optional(t.Nullable(t.String())),
+          owns: t.Optional(t.Array(t.String())),
+          budget: t.Optional(t.Nullable(BUDGET)),
           checks: t.Optional(t.Array(t.String())),
           outputs: t.Optional(t.Array(t.String())),
           labels: t.Optional(t.Array(t.String())),
