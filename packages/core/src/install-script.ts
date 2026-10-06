@@ -49,7 +49,8 @@ umask 077
 main() {
 ${hub ? `  HUB=${shellQuote(hub)}\n` : ""}  REPO=${shellQuote(origin)}
   PUBLIC_KEY=${shellQuote(publicKey)}
-  RELEASE_HOST="\${CAWCO_RELEASE_HOST:-${shellQuote(releaseHost ?? "")}}"
+  RELEASE_HOST=${shellQuote(releaseHost ?? "")}
+  RELEASE_HOST="\${CAWCO_RELEASE_HOST:-$RELEASE_HOST}"
   CHANNEL="\${CAWCO_CHANNEL:-stable}"
   ROOT="\${CAWCO_BINARY_ROOT:-\${XDG_DATA_HOME:-$HOME/.local/share}/cawco/binary}"
   BIN_LINK="$HOME/.local/bin/cawco"
