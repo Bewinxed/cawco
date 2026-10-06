@@ -1629,6 +1629,15 @@
       "$type": "shadow",
       "$value": "0 12px 40px {color.shadow-tint-3}"
     },
+    "shadow-drop": {
+      "$type": "shadow",
+      "$value": "0 14px 28px {color.shadow-tint-2}",
+      "$description": "A drawn shape's drop (the grown composer), set as drop-shadow() filters so it follows the shape, not a box: this far layer, then shadow-drop-near."
+    },
+    "shadow-drop-near": {
+      "$type": "shadow",
+      "$value": "0 2px 4px {color.shadow-tint}"
+    },
     "shadow-inset-sel": {
       "$type": "shadow",
       "$value": "inset 0 1px 1px {color.shadow-tint}"
@@ -2531,6 +2540,26 @@
     "dur-panel": {
       "$type": "duration",
       "$value": "280ms"
+    },
+    "dur-grow": {
+      "$type": "duration",
+      "$value": "320ms",
+      "$description": "The composer growing up out of its history button: into the recall wheel, or by the one row that says a queued message is being edited."
+    },
+    "dur-grow-exit": {
+      "$type": "duration",
+      "$value": "220ms",
+      "$description": "The grown composer folding back into its history button, shorter than its growth."
+    },
+    "dur-lift": {
+      "$type": "duration",
+      "$value": "340ms",
+      "$description": "A queued message's words flying between its bubble and the composer field, either way, two copies crossfading on the drawer curve."
+    },
+    "dur-press-hold": {
+      "$type": "duration",
+      "$value": "380ms",
+      "$description": "How long a touch rests on the composer, keyboard down, before the recall wheel comes up under it."
     },
     "dur-settle": {
       "$type": "duration",

@@ -45,6 +45,9 @@ public final class Ledger {
         public let settlesAt: SettleStage
         public internal(set) var stage: Stage = .submitted
         public internal(set) var reason: String?
+        /// What an applied `send.withdraw` found (`CommandAck.outcome`):
+        /// `withdrawn` before the session read the send, `started` after.
+        public internal(set) var outcome: String?
         /// Known never to have left this device: safe to offer again.
         public internal(set) var undelivered = false
         let at: ContinuousClock.Instant
@@ -187,7 +190,8 @@ public final class Ledger {
                 guard commands[ack.commandId] != nil else {
                     return
                 }
-                advance(ack.commandId, to: Stage(rawValue: ack.stage.rawValue) ?? .failed, reason: ack.reason)
+                advance(ack.commandId, to: Stage(rawValue: ack.stage.rawValue) ?? .failed, reason: ack.reason,
+                        outcome: ack.outcome?.rawValue)
             }
         } catch {
             log.error("stream: unreadable message: \(String(describing: error), privacy: .public)")
@@ -351,7 +355,7 @@ public final class Ledger {
         .failed: [],
     ]
 
-    private func advance(_ id: String, to stage: Stage, reason: String?) {
+    private func advance(_ id: String, to stage: Stage, reason: String?, outcome: String? = nil) {
         guard var record = commands[id], Self.next[record.stage]?.contains(stage) == true else {
             return
         }
@@ -359,6 +363,10 @@ public final class Ledger {
         record.changedAt = clock.now
         if let reason {
             record.reason = reason
+        }
+        // Recorded before the settle runs, so it reads it (the web's `commandRecord(id)?.outcome`).
+        if let outcome {
+            record.outcome = outcome
         }
         commands[id] = record
         log.notice("command \(id, privacy: .public) \(record.kind.rawValue, privacy: .public) on \(record.sessionId, privacy: .public): \(stage.rawValue, privacy: .public)")

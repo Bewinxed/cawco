@@ -407,6 +407,7 @@
   {#if bound}
     <div class="dock" style:width="{bound.transcriptShare * 100}%">
       <Composer
+        agentName={bound.agentName}
         busy={bound.busy}
         commands={bound.commands}
         delegatesOf={bound.delegatesOf}
@@ -422,6 +423,7 @@
         paneVisible={bound.paneVisible}
         previewPhone={bound.previewPhone}
         prompts={bound.prompts}
+        recallOf={bound.recallOf}
         sendError={bound.sendError}
         sending={bound.sending}
         suggest={bound.suggest}

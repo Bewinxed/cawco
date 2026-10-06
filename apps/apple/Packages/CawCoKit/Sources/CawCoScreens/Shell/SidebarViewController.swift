@@ -54,6 +54,7 @@ final class SidebarViewController: ObservedViewController {
     private let newProjectButton = GhostIconButton(.plus, label: "New project")
     private let configureButton = GhostIconButton(.settings, label: "Configure")
     private let themeButton = ThemeButton()
+    private let soundButton = SoundButton()
     private let usage = UsageCell(frame: .zero)
     private var navHeights: [NSLayoutConstraint] = []
 
@@ -486,7 +487,7 @@ final class SidebarViewController: ObservedViewController {
 
         configureButton.addAction(UIAction { [weak self] _ in self?.host?.go(.configure) }, for: .primaryActionTriggered)
         KitTip.attach(to: configureButton, label: "Configure")
-        let account = UIStackView(arrangedSubviews: [user, configureButton, themeButton])
+        let account = UIStackView(arrangedSubviews: [user, configureButton, soundButton, themeButton])
         account.spacing = 4
         account.alignment = .center
         navRow(account)
@@ -1033,6 +1034,67 @@ final class ThemeButton: TapControl {
         KitTip.attach(to: self, label: label)
         let shown = dark ? moon : sun
         let hidden = dark ? sun : moon
+        let still = !animated || UIAccessibility.isReduceMotionEnabled
+        if !still { shown.transform = CGAffineTransform(scaleX: 0.25, y: 0.25) }
+        let apply: @MainActor @Sendable () -> Void = {
+            shown.alpha = 1
+            shown.transform = .identity
+            hidden.alpha = 0
+            if !still { hidden.transform = CGAffineTransform(scaleX: 0.25, y: 0.25) }
+        }
+        if animated { Motion.easeOut.animator(Motion.durControl, animations: apply).startAnimation() } else { apply() }
+    }
+}
+
+/// The Sound switch, beside the theme switch: whether the interface plays
+/// its sounds (the composer's recall), off until the reader turns it on.
+/// The speaker and the crossed speaker swap in place as the theme's glyphs do.
+final class SoundButton: TapControl {
+    private let on = GlyphView(.soundOn, tint: Palette.sidebarForeground)
+    private let off = GlyphView(.soundOff, tint: Palette.sidebarForeground)
+    private var watcher: NSObjectProtocol?
+
+    init() {
+        super.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
+        layer.cornerRadius = Radius.radiusSm
+        for glyph in [on, off] {
+            glyph.isUserInteractionEnabled = false
+            addSubview(glyph)
+            NSLayoutConstraint.activate([glyph.centerXAnchor.constraint(equalTo: centerXAnchor), glyph.centerYAnchor.constraint(equalTo: centerYAnchor)])
+        }
+        NSLayoutConstraint.activate([widthAnchor.constraint(equalToConstant: 30), heightAnchor.constraint(equalToConstant: 30)])
+        isAccessibilityElement = true
+        accessibilityTraits = .button
+        addAction(UIAction { [weak self] _ in self?.flip() }, for: .primaryActionTriggered)
+        addInteraction(UIPointerInteraction(delegate: nil))
+        // Another window's switch turned it.
+        watcher = NotificationCenter.default.addObserver(forName: SoundPreference.changed, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.show(animated: true) }
+        }
+        show(animated: false)
+    }
+
+    @available(*, unavailable)
+    required init?(coder _: NSCoder) {
+        fatalError("SoundButton is built in code")
+    }
+
+    override var isHighlighted: Bool { didSet { backgroundColor = isHighlighted ? Palette.surfaceFill : .clear } }
+
+    private func flip() {
+        SoundPreference.enabled.toggle()
+    }
+
+    /// `icon-swap`: the arriving glyph from 0.25 scale, over `durControl` on the out curve.
+    private func show(animated: Bool) {
+        let enabled = SoundPreference.enabled
+        let label = enabled ? "Sound on" : "Sound off"
+        accessibilityLabel = label
+        accessibilityTraits = enabled ? [.button, .selected] : .button
+        KitTip.attach(to: self, label: label)
+        let shown = enabled ? on : off
+        let hidden = enabled ? off : on
         let still = !animated || UIAccessibility.isReduceMotionEnabled
         if !still { shown.transform = CGAffineTransform(scaleX: 0.25, y: 0.25) }
         let apply: @MainActor @Sendable () -> Void = {

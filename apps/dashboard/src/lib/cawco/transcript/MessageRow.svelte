@@ -1,6 +1,8 @@
 <script lang="ts">
   import { tick, untrack } from "svelte";
+  import { MediaQuery } from "svelte/reactivity";
   import { CURVE, dur, motionOk } from "#lib/cawco/motion/curves.svelte.js";
+  import { folds } from "#lib/cawco/motion/fold.svelte.js";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
   import {
     departBox,
@@ -21,7 +23,6 @@
     commandRecord,
     editAndResend,
     forkFrom,
-    replaceQueued,
     restoreDraft,
     retryFailed,
     retryOf,
@@ -31,8 +32,10 @@
   import { conversationHref } from "../links";
   /** Dispatches one stand-alone transcript message to its renderer by type. */
   import type { Message } from "../types";
+  import { liftedIds } from "./composer-draft.svelte";
   import DocThumb from "./DocThumb.svelte";
   import { disclosure } from "./disclosure.svelte";
+  import { askLift, landing, liftsInto, replacing } from "./lift.svelte";
   import MessageBody from "./MessageBody.svelte";
   import Peer from "./Peer.svelte";
   import Shot from "./Shot.svelte";
@@ -68,7 +71,16 @@
   } = $props();
 
   const kind = $derived(message.type);
-  const offered = $derived(userTurnActions(message));
+  /**
+   * What the row offers. A queued message is edited in the composer, so it
+   * offers Edit only where a composer is writing to its conversation.
+   */
+  const offered = $derived.by(() => {
+    const actions = userTurnActions(message);
+    return actions.edit === "queued" && !liftsInto(message.instanceId)
+      ? { ...actions, edit: null }
+      : actions;
+  });
   const canEdit = $derived(offered.edit === "resend");
   const canFork = $derived(offered.fork);
   const editLabel = $derived(
@@ -83,33 +95,37 @@
   let editor = $state<HTMLTextAreaElement | null>(null);
   let actionsShown = $state(false);
   let actionsFlipped = $state(false);
-  let editWasQueued = $state(false);
-  let queuedCommand = $state<string | null>(null);
+  const coarse = new MediaQuery("(pointer: coarse)");
 
-  $effect(() => {
-    const command = queuedCommand ? commandRecord(queuedCommand) : null;
-    if (command?.stage === "failed" || command?.stage === "applied") {
-      editPending = false;
-      queuedCommand = null;
-      if (command.stage === "failed") {
-        editError = command.reason ?? "The queued message could not be edited.";
-      } else if (command.outcome === "withdrawn") {
-        editing = false;
-      } else {
-        editError = "The session has already read this message.";
-      }
-    }
-  });
+  /*
+   * A queued message can be edited until the session reads it: its words
+   * lift out of this bubble into the composer (lift.svelte.ts), which folds
+   * to its tag while they are away, and opens to take them back.
+   */
+  const queued = $derived(offered.edit === "queued");
+  const lifted = $derived(liftedIds.has(message.id));
+  /** Away in the composer, or on their way back: the bubble's words are not drawn. */
+  const wordsAway = $derived(lifted || landing.has(message.id));
+  /** What the bubble says: its words, or those a replace has just sent for it. */
+  const shownContent = $derived(replacing.get(message.id) ?? message.content);
 
   function touchActions(node: HTMLElement): () => void {
     function reveal(event: MouseEvent): void {
       if (
-        !(window.matchMedia("(pointer: coarse)").matches && hasActions) ||
+        !(coarse.current && hasActions) ||
         editing ||
         !(event.target instanceof Element) ||
         event.target.closest("button, a, input, textarea") ||
         !window.getSelection()?.isCollapsed
       ) {
+        return;
+      }
+      // A queued message offers one thing, so a tap is it: its words go
+      // straight into the composer.
+      if (queued) {
+        if (!lifted) {
+          askLift(message);
+        }
         return;
       }
       actionsShown = true;
@@ -166,7 +182,10 @@
 
   async function startEditing(): Promise<void> {
     actionsShown = false;
-    editWasQueued = offered.edit === "queued";
+    if (queued) {
+      askLift(message);
+      return;
+    }
     editContent = message.content;
     editError = "";
     editing = true;
@@ -183,24 +202,18 @@
   }
 
   async function submitEdit(): Promise<void> {
-    if (!(canEdit || editWasQueued) || editPending || !editContent.trim()) {
+    if (!canEdit || editPending || !editContent.trim()) {
       return;
     }
     editPending = true;
     editError = "";
     try {
-      if (editWasQueued) {
-        queuedCommand = await replaceQueued(message, editContent.trim());
-      } else {
-        await editAndResend(message.instanceId, message.id, editContent.trim());
-        editing = false;
-      }
+      await editAndResend(message.instanceId, message.id, editContent.trim());
+      editing = false;
     } catch (error) {
       editError = error instanceof Error ? error.message : String(error);
     } finally {
-      if (!queuedCommand) {
-        editPending = false;
-      }
+      editPending = false;
     }
   }
 
@@ -305,9 +318,20 @@
       return "not sent";
     }
     if (waiting) {
-      return cawco.session(message.instanceId)?.harness === "claude"
-        ? "queued"
-        : "sent";
+      const here = cawco.session(message.instanceId);
+      if (here?.harness !== "claude") {
+        return "sent";
+      }
+      if (lifted) {
+        return "queued · editing it below";
+      }
+      // On touch, where a tap is how it is edited, it says so.
+      if (queued && coarse.current) {
+        return here.busy
+          ? `queued · ${agentName} is still working · tap to edit`
+          : "queued · tap to edit";
+      }
+      return "queued";
     }
     if (message.metadata?.urgent) {
       return "urgent";
@@ -474,126 +498,136 @@
             you
           />
         {/if}
-        <div {@attach morph()}>
-          {#if editing}
-            <Textarea
-              aria-label="Edit message"
-              disabled={editPending}
-              onkeydown={editKeydown}
-              bind:ref={editor}
-              bind:value={editContent}
-            />
-            <div class="actions">
-              <button
-                class="pressable action"
+        <!-- Folds to the tag above while its words are in the composer, and
+             opens to take them back; the words hide while they fly. -->
+        <div
+          class="lift-fold"
+          {@attach folds(() => !lifted, {
+            ms: dur("--dur-panel"),
+            easing: CURVE.drawer,
+          })}
+        >
+          <div data-lift-words class:away={wordsAway} {@attach morph()}>
+            {#if editing}
+              <Textarea
+                aria-label="Edit message"
                 disabled={editPending}
-                onclick={cancelEditing}
-                type="button"
-              >
-                Cancel edit
-              </button>
-              <button
-                aria-busy={editPending || undefined}
-                aria-disabled={editPending || undefined}
-                class="pressable action"
-                disabled={!((canEdit || editWasQueued) && editContent.trim())}
-                onclick={whileIdle(() => editPending, submitEdit)}
-                type="button"
-              >
-                <PendingContent
-                  failed={!!editError}
-                  label="Send edited message"
-                  pending={editPending}
-                  pendingLabel="Sending…"
-                />
-              </button>
-            </div>
-          {:else}
-            <MessageBody source={message.content} />
-            {#if hasActions || retried}
-              <div
-                class="actions turn-actions"
-                class:flipped={actionsFlipped}
-                class:pending={forkPending || retrying}
-                class:shown={actionsShown}
-                {@attach placeActions}
-              >
-                {#if canEdit || offered.edit === "queued"}
-                  <Tip label={editLabel}>
-                    {#snippet children(
-                      tip
-                    )}
-                      <Button
-                        {...tip}
-                        aria-label={editLabel}
-                        onclick={startEditing}
-                        size="icon-sm"
-                        variant="ghost"
-                      >
-                        <IconPenLine aria-hidden="true" />
-                      </Button>
-                    {/snippet}
-                  </Tip>
-                {/if}
-                {#if recoverable || retried}
-                  <button
-                    aria-busy={retrying || undefined}
-                    aria-disabled={retrying || undefined}
-                    class="pressable action"
-                    onclick={whileIdle(() => retrying, tryAgain)}
-                    type="button"
-                  >
-                    <PendingContent
-                      {failed}
-                      label="Try again"
-                      pending={retrying || (retried && !failed)}
-                      pendingLabel="Sending…"
-                    />
-                  </button>
-                {/if}
-                {#if editable || (retried && heldEdit)}
-                  <button
-                    class="pressable action"
-                    disabled={retrying}
-                    onclick={edit}
-                    type="button"
-                  >
-                    Edit
-                  </button>
-                {/if}
-                {#if canFork}
-                  <Tip label="Fork from here">
-                    {#snippet children(
-                      tip
-                    )}
-                      <Button
-                        {...tip}
-                        aria-busy={forkPending || undefined}
-                        aria-disabled={forkPending || undefined}
-                        aria-label="Fork from here"
-                        class="[--btn-icon:var(--icon-md)]"
-                        onclick={whileIdle<MouseEvent>(
-                          () => forkPending,
-                          branch
-                        )}
-                        size="icon-sm"
-                        variant="ghost"
-                      >
-                        <PendingContent
-                          failed={!!editError}
-                          icon={IconFork}
-                          pending={forkPending}
-                        />
-                      </Button>
-                    {/snippet}
-                  </Tip>
-                {/if}
+                onkeydown={editKeydown}
+                bind:ref={editor}
+                bind:value={editContent}
+              />
+              <div class="actions">
+                <button
+                  class="pressable action"
+                  disabled={editPending}
+                  onclick={cancelEditing}
+                  type="button"
+                >
+                  Cancel edit
+                </button>
+                <button
+                  aria-busy={editPending || undefined}
+                  aria-disabled={editPending || undefined}
+                  class="pressable action"
+                  disabled={!(canEdit && editContent.trim())}
+                  onclick={whileIdle(() => editPending, submitEdit)}
+                  type="button"
+                >
+                  <PendingContent
+                    failed={!!editError}
+                    label="Send edited message"
+                    pending={editPending}
+                    pendingLabel="Sending…"
+                  />
+                </button>
               </div>
+            {:else}
+              <MessageBody source={shownContent} />
+              {#if (hasActions || retried) && !wordsAway}
+                <div
+                  class="actions turn-actions"
+                  class:flipped={actionsFlipped}
+                  class:pending={forkPending || retrying}
+                  class:shown={actionsShown}
+                  {@attach placeActions}
+                >
+                  {#if canEdit || offered.edit === "queued"}
+                    <Tip label={editLabel}>
+                      {#snippet children(
+                        tip
+                      )}
+                        <Button
+                          {...tip}
+                          aria-label={editLabel}
+                          onclick={startEditing}
+                          size="icon-sm"
+                          variant="ghost"
+                        >
+                          <IconPenLine aria-hidden="true" />
+                        </Button>
+                      {/snippet}
+                    </Tip>
+                  {/if}
+                  {#if recoverable || retried}
+                    <button
+                      aria-busy={retrying || undefined}
+                      aria-disabled={retrying || undefined}
+                      class="pressable action"
+                      onclick={whileIdle(() => retrying, tryAgain)}
+                      type="button"
+                    >
+                      <PendingContent
+                        {failed}
+                        label="Try again"
+                        pending={retrying || (retried && !failed)}
+                        pendingLabel="Sending…"
+                      />
+                    </button>
+                  {/if}
+                  {#if editable || (retried && heldEdit)}
+                    <button
+                      class="pressable action"
+                      disabled={retrying}
+                      onclick={edit}
+                      type="button"
+                    >
+                      Edit
+                    </button>
+                  {/if}
+                  {#if canFork}
+                    <Tip label="Fork from here">
+                      {#snippet children(
+                        tip
+                      )}
+                        <Button
+                          {...tip}
+                          aria-busy={forkPending || undefined}
+                          aria-disabled={forkPending || undefined}
+                          aria-label="Fork from here"
+                          class="[--btn-icon:var(--icon-md)]"
+                          onclick={whileIdle<MouseEvent>(
+                            () => forkPending,
+                            branch
+                          )}
+                          size="icon-sm"
+                          variant="ghost"
+                        >
+                          <PendingContent
+                            failed={!!editError}
+                            icon={IconFork}
+                            pending={forkPending}
+                          />
+                        </Button>
+                      {/snippet}
+                    </Tip>
+                  {/if}
+                </div>
+              {/if}
             {/if}
-          {/if}
-          {#if editError}
-            <p class="reason" role="alert">{editError}</p>
-          {/if}
+            {#if editError}
+              <p class="reason" role="alert">{editError}</p>
+            {/if}
+          </div>
         </div>
         {#if message.metadata?.attachments?.length ||
           message.metadata?.images?.length}
@@ -773,6 +807,11 @@
   :global(:root.theme-flip) .well::before,
   :global(:root.theme-flip) .well::after {
     transition: none !important;
+  }
+  /* The words of a queued message while they are in the composer, and on
+     their way back: the flight is them, so the bubble draws none. */
+  .away {
+    visibility: hidden;
   }
   /* Holds the grouped row's clock, floated into the first line. */
   .words {

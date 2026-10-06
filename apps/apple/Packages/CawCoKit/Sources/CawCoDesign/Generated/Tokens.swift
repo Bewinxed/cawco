@@ -269,6 +269,9 @@ public enum Shadow {
     public static let shadowOverlay: [ShadowLayer] = [ShadowLayer(x: 0, y: 18, blur: 48, spread: 0, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.2000), dark: P3(0.0759, 0.0714, 0.0656, 0.7600)), inset: false), ShadowLayer(x: 0, y: 2, blur: 6, spread: 0, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.0900), dark: P3(0.0759, 0.0714, 0.0656, 0.5500)), inset: false), ShadowLayer(x: 0, y: 0, blur: 0, spread: 1, ink: Ink(light: P3(0.0000, 0.0000, 0.0000, 0.0000), dark: P3(0.9247, 0.9128, 0.8883, 0.0700)), inset: true)]
     public static let shadowModal: [ShadowLayer] = [ShadowLayer(x: 0, y: 18, blur: 48, spread: 0, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.2000), dark: P3(0.0759, 0.0714, 0.0656, 0.7600)), inset: false), ShadowLayer(x: 0, y: 2, blur: 6, spread: 0, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.0900), dark: P3(0.0759, 0.0714, 0.0656, 0.5500)), inset: false), ShadowLayer(x: 0, y: 0, blur: 0, spread: 1, ink: Ink(light: P3(0.0000, 0.0000, 0.0000, 0.0000), dark: P3(0.9247, 0.9128, 0.8883, 0.0700)), inset: true)]
     public static let shadowDrawer: [ShadowLayer] = [ShadowLayer(x: 0, y: 12, blur: 40, spread: 0, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.2000), dark: P3(0.0759, 0.0714, 0.0656, 0.7600)), inset: false)]
+    /// A drawn shape's drop (the grown composer), set as drop-shadow() filters so it follows the shape, not a box: this far layer, then shadow-drop-near.
+    public static let shadowDrop: [ShadowLayer] = [ShadowLayer(x: 0, y: 14, blur: 28, spread: 0, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.1400), dark: P3(0.0759, 0.0714, 0.0656, 0.6600)), inset: false)]
+    public static let shadowDropNear: [ShadowLayer] = [ShadowLayer(x: 0, y: 2, blur: 4, spread: 0, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.0900), dark: P3(0.0759, 0.0714, 0.0656, 0.5500)), inset: false)]
     public static let shadowInsetSel: [ShadowLayer] = [ShadowLayer(x: 0, y: 1, blur: 1, spread: 0, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.0900), dark: P3(0.0759, 0.0714, 0.0656, 0.5500)), inset: true)]
     /// Shadow per surface level, paired with --surface-1…8.
     public static let surfaceShadow1: [ShadowLayer] = []
@@ -609,6 +612,18 @@ public enum Motion {
     public static let durPop: TimeInterval = 0.26
     /// In seconds.
     public static let durPanel: TimeInterval = 0.28
+    /// The composer growing up out of its history button: into the recall wheel, or by the one row that says a queued message is being edited.
+    /// In seconds.
+    public static let durGrow: TimeInterval = 0.32
+    /// The grown composer folding back into its history button, shorter than its growth.
+    /// In seconds.
+    public static let durGrowExit: TimeInterval = 0.22
+    /// A queued message's words flying between its bubble and the composer field, either way, two copies crossfading on the drawer curve.
+    /// In seconds.
+    public static let durLift: TimeInterval = 0.34
+    /// How long a touch rests on the composer, keyboard down, before the recall wheel comes up under it.
+    /// In seconds.
+    public static let durPressHold: TimeInterval = 0.38
     /// The existing motion/spring.ts response for non-paging surface settlement. Paging uses UIScrollView's system mechanics.
     /// In seconds.
     public static let durSettle: TimeInterval = 0.4

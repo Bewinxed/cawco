@@ -10,6 +10,7 @@
  * per conversation for as long as the conversation is open, and keeps it
  * across a reload through `draft-store.ts`.
  */
+import { SvelteSet } from "svelte/reactivity";
 import type { SendExtras } from "../client.svelte";
 import { newId } from "../id";
 import type { CapturedSelection, PendingSelection } from "../preview/selection";
@@ -29,6 +30,26 @@ export interface PendingText {
 
 /** The most element notes one message carries. */
 const MAX_SELECTIONS = 12;
+
+/**
+ * The queued messages whose words are in a composer, by uuid, whichever
+ * conversation's: their bubbles fold to their tag while the words are away.
+ */
+export const liftedIds = new SvelteSet<string>();
+
+/**
+ * A queued message whose words are in the composer for editing (lift.svelte.ts).
+ * What the composer held before steps aside until they go back.
+ */
+export interface Lift {
+  /** What the composer held, kept whole until the words go back. */
+  aside: DraftContent;
+  /** The queued message, by its uuid. */
+  id: string;
+  instanceId: string;
+  /** Its words as they are queued: what goes back when the edit is kept. */
+  words: string;
+}
 
 export class ComposerDraft {
   text = $state("");
@@ -52,6 +73,13 @@ export class ComposerDraft {
    * back rather than losing it.
    */
   unsent = $state<DraftContent | null>(null);
+  /** The queued message being edited here, while its words are in the field. */
+  lifted = $state<Lift | null>(null);
+  /**
+   * What became of this conversation's last queued edit, when it did not go
+   * as asked: said over the field until the next keystroke or send.
+   */
+  notice = $state("");
 
   /**
    * What should survive a reload right now: the message being written, or,
@@ -60,6 +88,11 @@ export class ComposerDraft {
    * send until the hub accepts them.
    */
   get keep(): DraftContent {
+    // A queued message's words in the field are its, not new writing: what
+    // they stepped in front of is what a reload brings back.
+    if (this.lifted) {
+      return $state.snapshot(this.lifted.aside);
+    }
     const writing =
       this.text.length > 0 || this.images.length > 0 || this.texts.length > 0;
     // Held in state, the unsent message is a proxy all the way down, and a
@@ -81,6 +114,55 @@ export class ComposerDraft {
     this.images = content.images;
     this.texts = content.texts;
     this.selections = content.selections;
+  }
+
+  /**
+   * A queued message's words come into the field to be edited; what the
+   * field held steps aside, notes and attachments with it.
+   */
+  lift(id: string, instanceId: string, words: string): void {
+    this.lifted = {
+      id,
+      instanceId,
+      words,
+      aside: {
+        text: this.text,
+        images: this.images,
+        texts: $state.snapshot(this.texts),
+        selections: $state.snapshot(this.selections),
+      },
+    };
+    liftedIds.add(id);
+    this.editorOpen = false;
+    this.editing = null;
+    this.text = words;
+    this.images = [];
+    this.texts = [];
+    this.selections = [];
+  }
+
+  /**
+   * The words leave the field (back to their bubble, or sent in its place)
+   * and what stepped aside comes back. Returns what the field held.
+   */
+  putBack(): string {
+    const { lifted } = this;
+    const held = this.text;
+    if (lifted) {
+      this.lifted = null;
+      liftedIds.delete(lifted.id);
+      this.fill(lifted.aside);
+    }
+    return held;
+  }
+
+  /**
+   * An edit that could not replace its message stays to be sent as a new
+   * one: after whatever the field holds, never in place of it.
+   */
+  keepEdit(words: string): void {
+    const typed = this.text.trimEnd();
+    this.text = typed ? `${typed}\n\n${words}` : words;
   }
 
   /** The hub took the last send: nothing of it needs keeping. */
@@ -188,6 +270,9 @@ export class ComposerDraft {
    * than given a name they never had.
    */
   restore(text: string, extras: SendExtras = {}): void {
+    // A queued message being edited here goes back as it was: these words
+    // take the field.
+    this.putBack();
     this.text = text;
     this.selections = extras.selections ?? [];
     this.texts = (extras.attachments ?? []).map((attachment) => ({

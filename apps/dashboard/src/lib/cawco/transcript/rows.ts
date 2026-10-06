@@ -815,8 +815,9 @@ const sameMessage = (a: Message | undefined, b: Message | undefined): boolean =>
  * Where a fold may begin: a turn the reader opened, not a delegate's. Tool
  * results never make it here as messages of their own — the hub's builder
  * folds them into the call — so there is no dangling pair for a cut to split.
+ * The same test names what the reader sent, for the composer's recall.
  */
-const opensTurn = (m: Message): boolean =>
+export const opensTurn = (m: Message): boolean =>
   m.type === "user" && !m.parentToolUseId && !isHarnessNote(m);
 
 /**

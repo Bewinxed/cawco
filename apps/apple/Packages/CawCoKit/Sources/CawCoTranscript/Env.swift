@@ -29,6 +29,14 @@ final class RowEnv {
     /// Opening another session, or a run, in its own view (the host routes it).
     var openSession: (String) -> Void = { _ in }
     var openRun: (String) -> Void = { _ in }
+    /// The queued message whose words are in the composer: its bubble folds to its tag.
+    var isTaken: (String) -> Bool = { _ in false }
+    /// What a queued message was just replaced with, until the hub's own record of the new send arrives.
+    var replacement: (String) -> String? = { _ in nil }
+    /// Whether a queued message can be taken back and edited (Claude's harness only).
+    var canEditQueued: (String) -> Bool = { _ in false }
+    /// Lifts a queued message's words into the composer.
+    var editQueued: (String) -> Void = { _ in }
     /// Rendered blocks, shared by every list this transcript draws.
     let cache = BlockCache()
 

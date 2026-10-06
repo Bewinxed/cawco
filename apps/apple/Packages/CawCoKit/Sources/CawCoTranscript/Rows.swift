@@ -84,10 +84,14 @@ enum Fold {
 
     /// rows.ts `isHarnessNote`: harness plumbing wearing the reader's role.
     static func isHarnessNote(_ block: Block) -> Bool {
-        guard block.type == "user" || block.type == "ui.system_note" else { return false }
-        let head = String(block.content.drop { $0.isWhitespace })
+        isHarnessNote(type: block.type, content: block.content)
+    }
+
+    static func isHarnessNote(type: String, content: String) -> Bool {
+        guard type == "user" || type == "ui.system_note" else { return false }
+        let head = String(content.drop { $0.isWhitespace })
         if head.hasPrefix("[SYSTEM NOTIFICATION") || head.hasPrefix("<task-notification>") { return true }
-        return isReminder(block.content.trimmingCharacters(in: .whitespacesAndNewlines))
+        return isReminder(content.trimmingCharacters(in: .whitespacesAndNewlines))
     }
 
     private static func isReminder(_ text: String) -> Bool {

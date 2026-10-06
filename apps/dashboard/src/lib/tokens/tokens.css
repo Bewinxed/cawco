@@ -413,6 +413,9 @@
       inset 0 0 0 1px var(--night-ring);
     --shadow-modal: var(--shadow-overlay);
     --shadow-drawer: 0 12px 40px var(--shadow-tint-3);
+    /* A drawn shape's drop (the grown composer), set as drop-shadow() filters so it follows the shape, not a box: this far layer, then shadow-drop-near. */
+    --shadow-drop: 0 14px 28px var(--shadow-tint-2);
+    --shadow-drop-near: 0 2px 4px var(--shadow-tint);
     --shadow-inset-sel: inset 0 1px 1px var(--shadow-tint);
     /* Shadow per surface level, paired with --surface-1…8. */
     --surface-shadow-1: none;
@@ -731,6 +734,14 @@
     --dur-wait-grace: 1000ms;
     --dur-pop: 260ms;
     --dur-panel: 280ms;
+    /* The composer growing up out of its history button: into the recall wheel, or by the one row that says a queued message is being edited. */
+    --dur-grow: 320ms;
+    /* The grown composer folding back into its history button, shorter than its growth. */
+    --dur-grow-exit: 220ms;
+    /* A queued message's words flying between its bubble and the composer field, either way, two copies crossfading on the drawer curve. */
+    --dur-lift: 340ms;
+    /* How long a touch rests on the composer, keyboard down, before the recall wheel comes up under it. */
+    --dur-press-hold: 380ms;
     /* The existing motion/spring.ts response for non-paging surface settlement. Paging uses UIScrollView's system mechanics. */
     --dur-settle: 400ms;
     /* A disclosure growing open (collapsible-content); it folds shut over dur-exit. */

@@ -27,6 +27,29 @@ public final class SessionComposerBinding {
     public var attachMenu: UIMenu?
     public var onSend: (String, [ComposerAttachment]) -> Void = { _, _ in }
     public var onStop: () -> Void = {}
+
+    // MARK: Recall and the queued message
+
+    /// What the reader sent in this conversation, newest first: their own
+    /// messages only, never the agent's, a delegate's or a harness note.
+    /// Read once each time the recall wheel opens.
+    public var recall: () -> [RecallEntry] = { [] }
+    /// The reader's newest message, when it is still queued and the harness
+    /// can take it back (client.svelte.ts `canWithdraw`): what ↑ in an empty
+    /// composer lifts out of the transcript.
+    public var editableQueued: () -> RecallEntry? = { nil }
+    /// The transcript's half of editing a queued message: its bubble folds
+    /// to its tag while the words are in the composer (`true`), and unfolds
+    /// when they go back (`false`), showing `replacement` until the hub's
+    /// own record of the new send arrives.
+    public var foldQueued: (_ id: String, _ folded: Bool, _ replacement: String?) -> Void = { _, _, _ in }
+    /// The view the queued message's words are drawn in, while it is on screen.
+    public var queuedWords: (_ id: String) -> UIView? = { _ in nil }
+    /// Marks the bubble whose words were just replaced.
+    public var flashQueued: (_ id: String) -> Void = { _ in }
+    /// Replace the queued message `id` with these words (withdraw, then
+    /// send again in its place).
+    public var onReplaceQueued: (_ id: String, _ text: String) -> Void = { _, _ in }
     /// The composer drawing this binding, while it is the active tab.
     public internal(set) weak var composer: ComposerView?
 
@@ -57,10 +80,33 @@ public final class SessionComposerBinding {
         composer?.loadDraft(of: self)
     }
 
+    /// Lifts the queued message `entry` into the composer to edit (a tap
+    /// on its bubble): the draft steps aside until the words go back.
+    public func editQueued(_ entry: RecallEntry) {
+        composer?.editQueued(entry)
+    }
+
     /// The message went: the draft clears.
     public func sent() {
         draft = ""
         attachments = []
         composer?.loadDraft(of: self)
+    }
+}
+
+/// One message the reader sent here, as the recall wheel lists it.
+public struct RecallEntry: Sendable, Equatable {
+    /// The send's id: its block's, its record's uuid.
+    public let id: String
+    public let text: String
+    public let date: Date?
+    /// Sent and not yet read by the session.
+    public let queued: Bool
+
+    public init(id: String, text: String, date: Date?, queued: Bool) {
+        self.id = id
+        self.text = text
+        self.date = date
+        self.queued = queued
     }
 }
