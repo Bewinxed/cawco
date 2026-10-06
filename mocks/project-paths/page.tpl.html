@@ -554,7 +554,7 @@ th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute
   <a href="#time">Time <span class="n">D9–11</span></a>
   <a href="#face">Words, Caw <span class="n">D12–13</span></a>
   <a href="#procedures">Skills <span class="n">D14–15</span></a>
-  <a href="#kinds">Stages, design <span class="n">D17–20</span></a>
+  <a href="#kinds">Stages, design, decisions <span class="n">D17–21</span></a>
   <a href="#order">Roadmap</a>
   <a href="#sources">Sources</a>
   <div class="meter">
@@ -568,7 +568,7 @@ th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute
   <div class="caw"><img class="caw-l" src="caw/light-ready.webp" alt="Caw" width="104" height="104"><img class="caw-d" src="caw/dark-ready.webp" alt="" width="104" height="104"></div>
   <div>
     <h1>Projects, rethought</h1>
-    <p>Twenty decisions. Each one shows how it would look and how it works. Pick a path per card; I read your picks back from this page.</p>
+    <p>Twenty-one decisions. Each one shows how it would look and how it works. Pick a path per card; I read your picks back from this page.</p>
     <div class="row">
       <span class="pill" id="savestate"><span class="dot"></span><span id="savetext">Connecting…</span></span>
       <button class="btn" id="copypicks" type="button">Copy my picks</button>
@@ -854,6 +854,15 @@ The tray chip overflows at 320px wide…</pre>
           <li>Progress is derived, never stored: to-dos ticked for a task, tasks landed along the edges for a spec. Ticking every to-do never makes a task done; checks and landing do.</li>
         </ul></div>
       </div>
+      <p class="q">We need a toggle that disables the harness's own to-do list so sessions use CawCo's; otherwise they skip CawCo's updates and the two drift.</p>
+      <p class="a">The drift is real, but it comes from to-dos that are done and never ticked, not from the plan being different. The plan is the session's working steps; to-dos are the task's checklist. Turning the native list off has costs: models are trained and nudged to keep it (Claude Code reminds the model when its list goes stale), and CawCo already reads it straight from disk (<code>~/.claude/tasks/&lt;session&gt;/</code>) without storing it, so that layer can't drift. So link the two lists, in code:</p>
+      <ul class="a" style="margin:0;padding-left:18px">
+        <li>The brief asks the session to start its plan from the task's open to-dos, keeping their ids (<code>[td-3] Persist the choice</code>).</li>
+        <li>When a plan item carrying a to-do's id completes, the hub ticks that to-do. CawCo already watches the list.</li>
+        <li><code>finish_item</code> lists any unticked to-dos, and the session ticks or explains each one, like an acceptance check.</li>
+        <li>Plan items still open at the end become proposed to-dos.</li>
+      </ul>
+      <p class="a">The toggle stays as an option per delegate type, "CawCo's list only". It denies the native task tools and gives <code>todo_write</code> an attempt scope. It can be enforced on Claude Code today, because <code>denyTools</code> writes the session's deny settings; the OpenCode adapter can't enforce it yet. pi has no native list, so it always uses CawCo's.</p>
     </article>
     <article class="ans">
       <header><span class="did">D14</span><h3>Our own three skills</h3></header>
@@ -1463,7 +1472,7 @@ resolve        → finish_item → land</pre>
 </section>
 
 <section class="chap" id="kinds">
-  <header><span class="eyebrow">Any kind of work</span><h2>Stages, views and design work</h2><p>A social project needs Draft, Scheduled and Posted. Outreach needs Contacted and Replied. A design project needs one place to see what was made, point at it and pick.</p></header>
+  <header><span class="eyebrow">Any kind of work</span><h2>Stages, views, design work and decisions</h2><p>A social project needs Draft, Scheduled and Posted. Outreach needs Contacted and Replied. A design project needs one place to see what was made, point at it and pick. And any project needs a way to decide things with Caw the way we decided this page.</p></header>
 
   <div class="answers">
     <article class="ans">
@@ -1664,7 +1673,7 @@ views
         <tr><td>Kept after the session ends</td><td>Previews close with their session</td><td><span class="st2 gap">gap · D18</span></td></tr>
         <tr><td>Phone, tablet, desktop side by side</td><td>One frame at the pane's width</td><td><span class="st2 gap">gap · small</span></td></tr>
         <tr><td>Light, dark and reduced motion</td><td>Whatever the page does</td><td><span class="st2 gap">gap · small</span></td></tr>
-        <tr><td>Pins that stay, with replies</td><td>Selections are sent, then gone from the page</td><td><span class="st2 gap">gap · D18</span></td></tr>
+        <tr><td>Comments that stay, with replies</td><td>Selections are sent, then gone from the page</td><td><span class="st2 gap">gap · D18</span></td></tr>
         <tr><td>Picks, notes and dials the model can read</td><td>Only what you send in a message</td><td><span class="st2 gap">gap · D19</span></td></tr>
         <tr><td>Images and exports on the same surface</td><td><code>show_image</code> shows them in the transcript only</td><td><span class="st2 gap">gap · D18</span></td></tr>
         <tr><td>Before and after, screenshot diff</td><td>Checks can diff; nothing shows the two side by side</td><td><span class="st2 gap">gap · small</span></td></tr>
@@ -1716,12 +1725,12 @@ read_choices("hero options")
     </div>
   </article>
   <article class="dec" id="d20">
-    <header><span class="did">D20</span><h3>Comment threads on previews</h3><span class="state" data-for="threads">Not picked</span></header>
-    <p class="why">Comments on this page work well: pin a thread on any element, send it to Claude, and the answer or the change lands in the thread. A preview should work the same way, with the session that made the page in Claude's place.</p>
+    <header><span class="did">D20</span><h3>Comments on previews</h3><span class="state" data-for="threads">Not picked</span></header>
+    <p class="why">Comments on this page work well: pin a comment on any element, send it to Claude, and the answer or the change lands in its replies. A preview should work the same way, with the session that made the page in Claude's place.</p>
     <div class="show">
       <figure class="pane look"><span class="cap">How it would look</span>{{MK:threads}}</figure>
-      <figure class="pane mech"><span class="cap">A thread, end to end</span>
-<pre class="v"><span class="k">a thread</span>
+      <figure class="pane mech"><span class="cap">A comment, end to end</span>
+<pre class="v"><span class="k">a comment</span>
   anchor  file:line, selector,
           a quote, a crop
   page    preview, revision, size
@@ -1737,31 +1746,77 @@ read_choices("hero options")
 <span class="k">the session gets one turn per send</span>
   [t_12] Pricing.svelte:42
   "Make B the only primary button"
-  thread_read · thread_reply
-  thread_resolve
+  comment_read · comment_reply
+  comment_resolve
 
-<span class="k">it answers in the thread</span>
+<span class="k">it answers in the replies</span>
   changed  files, before/after
   asked    a question; stays open
   gone     a new attempt in the
            same workspace (D3)</pre>
       </figure>
     </div>
-    <div class="opts" role="radiogroup" data-group="threads" data-label="D20 Comment threads on previews">
+    <div class="opts" role="radiogroup" data-group="threads" data-label="D20 Comments on previews">
       <button class="opt" type="button" role="radio" data-opt="chips"><b>As today</b><span>Selections go as one message; nothing stays on the page.</span></button>
-      <button class="opt" type="button" role="radio" data-opt="threads"><b>Threads like artifact comments</b><span>Pinned, sent when you say, answered and resolved in place.</span><span class="tag">Recommended</span></button>
-      <button class="opt" type="button" role="radio" data-opt="auto"><b>Threads, sent automatically</b><span>Every comment wakes the session at once.</span><span class="tag warn">Noisy</span></button>
+      <button class="opt" type="button" role="radio" data-opt="threads"><b>Like artifact comments</b><span>Pinned, sent when you say, answered and resolved in place.</span><span class="tag">Recommended</span></button>
+      <button class="opt" type="button" role="radio" data-opt="auto"><b>Comments, sent automatically</b><span>Every comment wakes the session at once.</span><span class="tag warn">Noisy</span></button>
     </div>
     <div class="foot">
       <details class="more"><summary>Details</summary><div class="in">
-        <p><b>Taken from this page's comments.</b> A thread records where it sits: the element's path, the nearest heading and a quote of the element. Writing a comment doesn't send it; you send it when you choose, one thread or several in one turn. The reply says who wrote it. The session resolves a thread after changing something, leaves it open when it asked you something, and you can reopen any thread. Comment text reaches the session as data, never as instructions, and only people who can edit the project can send.</p>
+        <p><b>Taken from this page's comments.</b> A comment records where it sits: the element's path, the nearest heading and a quote of the element. Writing a comment doesn't send it; you send it when you choose, one comment or several in one turn. The reply says who wrote it. The session resolves a comment after changing something, leaves it open when it asked you something, and you can reopen any comment. Comment text reaches the session as data, never as instructions, and only people who can edit the project can send.</p>
         <p><b>Re-anchoring.</b> After an edit, a pin finds its element by file:line first (the picker already records it), then by selector, then by text. A pin that can't be placed goes to a "moved" tray instead of vanishing.</p>
-        <p><b>Polish.</b> Numbered pins, and hovering one outlines its element. A thread list beside the preview, filtered open or resolved. A live dot while the session works. Every change reply carries before/after thumbnails, which the picker's capture already makes, and the lines it changed. Keys: C to comment, Esc to cancel, J and K for next and previous thread. On the phone, press and hold to comment. Motion uses DESIGN.md's existing durations and curves.</p>
-        <p><b>One store.</b> Threads, pins (D18) and picks and dials (D19) live together per canvas. The ledger's event names follow AG-UI's activity events.</p>
+        <p><b>Polish.</b> Numbered pins, and hovering one outlines its element. A comment list beside the preview, filtered open or resolved. A live dot while the session works. Every change reply carries before/after thumbnails, which the picker's capture already makes, and the lines it changed. Keys: C to comment, Esc to cancel, J and K for next and previous comment. On the phone, press and hold to comment. Motion uses DESIGN.md's existing durations and curves.</p>
+        <p><b>One store.</b> Comments, pins (D18) and picks and dials (D19) live together per canvas. The ledger's event names follow AG-UI's activity events.</p>
       </div></details>
       <label class="note">Note <input id="note-threads" data-note="threads" type="text" placeholder="Anything to add"></label>
     </div>
   </article>
+  <article class="dec" id="d21">
+    <header><span class="did">D21</span><h3>Decision pages with Caw</h3><span class="state" data-for="plans">Not picked</span></header>
+    <p class="why">We planned all of this on one page. I wrote it; you picked, wrote notes and commented; I read your picks back, answered and republished. Each part of that is a CawCo primitive already (D18–D20). A decision page is those parts pointed at a decision instead of a design.</p>
+    <div class="show">
+      <figure class="pane look"><span class="cap">How it would look</span>{{MK:plans}}</figure>
+      <figure class="pane mech"><span class="cap">This session, in CawCo</span>
+<pre class="v"><span class="k">what made this work</span>
+  a page Caw writes
+    → decisions/checkout/index.html
+  picks and notes, kept
+    → D19 store, read_choices
+  comments that wake Caw
+    → D20 comments
+  new versions, picks kept
+    → files + git; ids stay
+  mockups by helpers
+    → delegates (D16)
+  "your path" summary
+    → built from the store
+
+<span class="k">new</span>
+  a skill      the page kit
+  Decisions    a tab, progress
+               per page
+  Make tasks   picks → to-tasks
+  canvas view  when it's a graph</pre>
+      </figure>
+    </div>
+    <div class="opts" role="radiogroup" data-group="plans" data-label="D21 Decision pages with Caw">
+      <button class="opt" type="button" role="radio" data-opt="page"><b>Pages</b><span>Caw writes a page; you pick, note and comment. Works on the phone.</span></button>
+      <button class="opt" type="button" role="radio" data-opt="canvas"><b>Canvas</b><span>Cards and edges on Svelte Flow; Caw adds, links and groups.</span></button>
+      <button class="opt" type="button" role="radio" data-opt="both"><b>Pages first, canvas for graphs</b><span>One store; a canvas view when the decisions form a graph.</span><span class="tag">Recommended</span></button>
+    </div>
+    <div class="foot">
+      <details class="more"><summary>Details</summary><div class="in">
+        <p><b>Why a page first.</b> It has a reading order, room for prose and mockups, and it works on a phone. Agents write HTML well, and it's what worked here. A canvas earns its place when the content is spatial: decisions that depend on each other, an architecture map, a task graph, variants side by side. Svelte Flow already draws the workflow canvas, and automatic layout means Caw never places nodes by hand.</p>
+        <p><b>The kit.</b> <code>mocks/project-paths/</code> in this repo is already a small version of it: a contract for mockups, the tokens, a build, and preview and record scripts. It becomes a <code>decision-page</code> skill, written with writing-for-agents, plus CawCo's own components so decision pages look like CawCo.</p>
+        <p><b>How Caw edits one.</b> On a page, Caw edits the file and the preview shows the new revision, with your picks kept because each choice keeps its id. On a canvas, Caw writes <code>decisions.json</code> (cards, edges, groups) or calls <code>decision_add</code>, <code>decision_link</code> and <code>decision_group</code>; your drags save back to the same file.</p>
+        <p><b>Done means tasks.</b> "Make tasks" runs to-tasks over your picks and notes. Each task links back to its card, and the page writes a short decision log so later sessions can read why.</p>
+        <p><b>Wakes and safety.</b> Sending a comment, or "I'm done picking", wakes the session that wrote the page, or Caw if that session has ended. A decision page is agent-written HTML, so it runs sandboxed like any preview, and the bridge checks every message.</p>
+        <p><b>Onboarding is a decision page too.</b> A new project's first one is its setup: stages, delegate types, routines and the relay. You pick, and Caw writes the files.</p>
+      </div></details>
+      <label class="note">Note <input id="note-plans" data-note="plans" type="text" placeholder="Anything to add"></label>
+    </div>
+  </article>
+
 
 
 </section>
@@ -1773,7 +1828,7 @@ read_choices("hero options")
       <span class="fill"></span>
       <div class="ph"><span class="n">0</span><div><b>Admin gap, words, landing</b><br><span>Role-gate admin; task, plan, attempt, routine; hub-owned landing.</span></div></div>
       <div class="ph"><span class="n">1</span><div><b>Projects, tasks as files</b><br><span>Places, hub folder, tracker setting, stages file, dispatcher with all nine upgrades.</span></div></div>
-      <div class="ph"><span class="n">2</span><div><b>Caw lead, iOS</b><br><span>Per-project lead, role toolsets, onboarding with Jev, iOS push and threads.</span></div></div>
+      <div class="ph"><span class="n">2</span><div><b>Caw lead, iOS</b><br><span>Per-project lead, role toolsets, onboarding as a decision page, iOS push and threads.</span></div></div>
       <div class="ph"><span class="n">3</span><div><b>Routines, ingress</b><br><span>Effect Cron, output contract, connector poller, relay, approved actions.</span></div></div>
       <div class="ph"><span class="n">4</span><div><b>Knowledge, skills, canvas</b><br><span>Memory tiers, Jev optional, brand kit, grill, to-tasks, triage, design canvas.</span></div></div>
       <div class="ph"><span class="n">5</span><div><b>Fleet watch</b><br><span>Detectors, Jev gate, triage; retire the old three. Telegram: pending.</span></div></div>

@@ -1,0 +1,370 @@
+<style>
+.mk-plans{display:block;min-width:0;container-type:inline-size;color:var(--ink);font-family:var(--f-body);font-size:12px;line-height:1.4;text-align:left}
+.mk-plans *,.mk-plans *::before,.mk-plans *::after{box-sizing:border-box}
+.mk-plans .mkf-body{gap:8px}
+.mk-plans .mkf-bar{gap:8px}
+.mk-plans .mkf-bar b{flex:none}
+.mk-plans .pl-mono{font-family:var(--f-mono);font-variant-ligatures:none}
+
+/* title bar: context text, view toggle, progress chip */
+.mk-plans .pl-pg{display:none;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.mk-plans .pl-pg2{display:none}
+.mk-plans .pl-seg{position:relative;flex:none;display:inline-grid;grid-template-columns:1fr 1fr;height:22px;padding:2px;background:var(--recess);border:1px solid var(--line);border-radius:7px}
+.mk-plans .pl-thumb{position:absolute;left:2px;top:2px;bottom:2px;width:calc((100% - 4px) / 2);background:var(--raised);border:1px solid var(--line-strong);border-radius:5px}
+.mk-plans .pl-thumb::after{content:"";position:absolute;left:7px;right:7px;bottom:1px;height:2px;border-radius:2px;background:var(--coral)}
+.mk-plans .pl-sg{position:relative;z-index:1;appearance:none;margin:0;padding:0 8px;font:inherit;font-size:10.5px;font-weight:600;line-height:16px;color:var(--muted);background:none;border:0;cursor:default;pointer-events:none}
+.mk-plans .pl-sg1{color:var(--ink)}
+.mk-plans .pl-prog{flex:none;gap:5px;padding:0 8px 0 6px;font-size:10.5px;background:var(--bg)}
+.mk-plans .pl-ring{flex:none;display:block;width:14px;height:14px;overflow:visible}
+.mk-plans .pl-ring circle{fill:none;stroke-width:2;transform:rotate(-90deg);transform-origin:7px 7px}
+.mk-plans .pl-rt{stroke:var(--line-strong)}
+.mk-plans .pl-rf{stroke:var(--coral);stroke-linecap:round;stroke-dasharray:10 10;stroke-dashoffset:4}
+.mk-plans .pl-nn{display:inline-grid;font-weight:600}
+.mk-plans .pl-nn span{grid-area:1/1;text-align:center}
+.mk-plans .pl-n4{opacity:0}
+.mk-plans .pl-pk{display:none;color:var(--muted)}
+
+/* stage: page view at rest, canvas view stacked underneath */
+.mk-plans .pl-stage{position:relative;display:grid;min-width:0}
+.mk-plans .pl-pgp{grid-area:1/1;min-width:0;display:flex;flex-direction:column;gap:8px}
+
+.mk-plans .pl-hd{display:grid;grid-template-columns:24px minmax(0,1fr);align-items:center;column-gap:8px;row-gap:2px;min-width:0}
+.mk-plans .pl-av{flex:none;display:block;width:24px;height:24px}
+.mk-plans .pl-av img{width:100%;height:100%}
+.mk-plans .pl-ht{min-width:0;font-size:12px;line-height:1.35;color:var(--muted)}
+.mk-plans .pl-path{grid-column:2;justify-self:start;min-width:0;padding:0 6px;font-family:var(--f-mono);font-size:10.5px;line-height:17px;color:var(--muted);font-variant-ligatures:none;background:var(--raised);border:1px solid var(--line);border-radius:5px;overflow-wrap:anywhere}
+
+/* decision cards, echoing the host page's: id chip, title, state, option chips, note */
+.mk-plans .pl-card{display:flex;flex-direction:column;gap:7px;min-width:0;padding:8px 10px 10px;background:var(--raised);border:1px solid var(--line);border-radius:var(--r-card)}
+.mk-plans .pl-ch{display:flex;align-items:center;gap:7px;min-width:0;min-height:18px}
+.mk-plans .pl-id{flex:none;padding:0 5px;font-family:var(--f-mono);font-size:10.5px;line-height:16px;color:var(--muted);font-variant-ligatures:none;border:1px solid var(--line);border-radius:5px}
+.mk-plans .pl-ti{min-width:0;font-size:12.5px;font-weight:700;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mk-plans .pl-st{flex:none;margin-left:auto;display:inline-grid;justify-items:end;font-size:10.5px;line-height:16px;color:var(--muted)}
+.mk-plans .pl-st span{grid-area:1/1;white-space:nowrap}
+.mk-plans .pl-st .pl-sp{color:var(--coral-ink);font-weight:600}
+.mk-plans .pl-st .pl-sp2{opacity:0}
+.mk-plans .pl-opts{display:flex;flex-wrap:wrap;gap:5px;min-width:0}
+.mk-plans .pl-opt{position:relative;appearance:none;margin:0;display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 7px 0 6px;font:inherit;font-size:11px;font-weight:500;line-height:1;color:var(--ink);white-space:nowrap;background:var(--raised);border:1px solid var(--line-strong);border-radius:7px;cursor:default;pointer-events:none}
+.mk-plans .pl-opt::before{content:"";flex:none;width:10px;height:10px;border-radius:50%;background:var(--raised);border:1.5px solid var(--line-strong)}
+.mk-plans .pl-opt.pl-pick{background:var(--coral-wash);border-color:var(--coral)}
+.mk-plans .pl-opt.pl-pick::before{background:var(--coral);border-color:var(--coral);box-shadow:inset 0 0 0 2px var(--coral-wash)}
+.mk-plans .pl-note{display:flex;align-items:center;gap:7px;min-width:0;height:24px;padding:0 8px;font-size:11.5px;line-height:1;background:var(--bg);border:1px solid var(--line);border-radius:7px}
+.mk-plans .pl-nk{flex:none;font-family:var(--f-mono);font-size:10px;color:var(--muted);font-variant-ligatures:none}
+.mk-plans .pl-nt{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+.mk-plans .pl-c2b{display:flex;flex-direction:column;gap:7px;min-width:0}
+.mk-plans .pl-th{display:flex;align-items:flex-start;gap:8px;min-width:0;padding:6px 8px;background:var(--recess);border-radius:8px}
+.mk-plans .pl-pin{flex:none;width:16px;height:16px;margin-top:1px;border-radius:50%;background:var(--coral);border:1px solid var(--coral);color:var(--raised);font-family:var(--f-mono);font-size:9.5px;font-weight:700;line-height:14px;text-align:center;box-shadow:0 0 0 1.5px var(--recess);font-variant-ligatures:none}
+.mk-plans .pl-tl{min-width:0;display:flex;flex-direction:column;gap:1px}
+.mk-plans .pl-tl div{font-size:11.5px;line-height:1.4}
+.mk-plans .pl-tl b{font-weight:700;color:var(--coral-ink)}
+.mk-plans .pl-tl .pl-m{color:var(--muted)}
+.mk-plans .pl-tl .pl-m b{color:var(--ink)}
+.mk-plans .pl-tl .pl-mono{font-size:10.5px;color:var(--ink)}
+
+/* bottom bar: Caw reads picks, Make tasks */
+.mk-plans .pl-act{display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:0;padding-top:8px;border-top:1px solid var(--line)}
+.mk-plans .pl-say{display:grid;flex:1 1 auto;min-width:0}
+.mk-plans .pl-say>span{grid-area:1/1;align-self:center;min-width:0;font-size:11.5px;line-height:1.35}
+.mk-plans .pl-sa{color:var(--muted)}
+.mk-plans .pl-sb{display:flex;align-items:center;gap:6px;opacity:0}
+.mk-plans .pl-sb .pl-av{width:16px;height:16px}
+.mk-plans .pl-sb b{font-weight:700}
+.mk-plans .pl-mk{position:relative;flex:none;font-size:12px;padding:4px 11px;pointer-events:none}
+
+/* canvas view: nodes on a dot grid, edges between dependent decisions */
+.mk-plans .pl-cv{--w:76px;grid-area:1/1;position:relative;min-width:0;min-height:0;overflow:hidden;opacity:0;pointer-events:none;background-color:var(--recess);background-image:radial-gradient(circle,var(--line-strong) 0.9px,transparent 1.3px);background-size:14px 14px;background-position:7px 7px;border:1px solid var(--line);border-radius:10px}
+.mk-plans .pl-ed{position:absolute;inset:0;width:100%;height:100%;display:block;overflow:visible}
+.mk-plans .pl-ed path{fill:none;stroke:var(--line-strong);stroke-width:1.5;vector-effect:non-scaling-stroke}
+.mk-plans .pl-nd{position:absolute;z-index:2;left:var(--x);top:var(--y);width:var(--w);transform:translate(-50%,-50%);display:flex;flex-direction:column;gap:1px;padding:4px 6px 5px;background:var(--raised);border:1px solid var(--line-strong);border-radius:8px}
+.mk-plans .pl-nh{display:flex;align-items:center;justify-content:space-between;gap:4px}
+.mk-plans .pl-nh b{font-family:var(--f-mono);font-size:10px;font-weight:700;line-height:14px;color:var(--muted);font-variant-ligatures:none}
+.mk-plans .pl-dt{display:block;flex:none;width:8px;height:8px;border-radius:50%;background:var(--raised);border:1.5px solid var(--line-strong)}
+.mk-plans .pl-nm{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px;line-height:1.3;font-weight:500}
+.mk-plans .pl-nd.pl-on{background:var(--coral-wash);border-color:var(--coral)}
+.mk-plans .pl-nd.pl-on b{color:var(--coral-ink)}
+.mk-plans .pl-nd.pl-on .pl-dt{background:var(--coral);border-color:var(--coral)}
+.mk-plans .pl-nd2::after{content:"";position:absolute;inset:-1px;border-radius:8px;border:1.5px solid var(--coral);opacity:0;pointer-events:none}
+.mk-plans .pl-ah{position:absolute;z-index:3;left:calc(var(--x) - var(--w) / 2);top:var(--y);width:0;height:0;border-style:solid;border-width:3.5px 0 3.5px 6px;border-color:transparent transparent transparent var(--muted);transform:translate(-100%,-50%)}
+
+/* task chips: slide out under Make tasks, sharing a cell with the footer line */
+.mk-plans .pl-low{display:grid;min-width:0}
+.mk-plans .pl-low>*{grid-area:1/1;align-self:start;min-width:0}
+.mk-plans .pl-ft{margin:0;font-size:11px;line-height:1.4;color:var(--muted);text-wrap:pretty}
+.mk-plans .pl-tray{display:flex;flex-wrap:wrap;align-content:flex-start;gap:5px}
+.mk-plans .pl-tk{display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 8px 0 7px;font-size:11px;line-height:1;white-space:nowrap;background:var(--raised);border:1px solid var(--line-strong);border-radius:6px;opacity:0}
+.mk-plans .pl-tk i{font-style:normal;font-family:var(--f-mono);font-size:10px;color:var(--muted);font-variant-ligatures:none}
+
+/* cursors: animation-only, one per target so they hold at any width */
+.mk-plans .pl-cur{display:none;position:absolute;z-index:6;width:13px;height:17px;overflow:visible;pointer-events:none;transform-origin:1px 1px;opacity:0}
+.mk-plans .pl-cur path{fill:var(--ink);stroke:var(--raised);stroke-width:1.4;stroke-linejoin:round}
+.mk-plans .pl-cur1{left:58%;top:52%;--ax:38px;--ay:30px}
+.mk-plans .pl-cur2{left:50%;top:42%;--ax:-40px;--ay:0px}
+.mk-plans .pl-cur3{left:50%;top:42%;--ax:40px;--ay:0px}
+.mk-plans .pl-cur4{left:62%;top:55%;--ax:38px;--ay:30px}
+
+@container (min-width:320px){
+  .mk-plans .pl-pg{display:block}
+}
+@container (min-width:400px){
+  .mk-plans .pl-pg2{display:inline}
+  .mk-plans .pl-hd{grid-template-columns:24px minmax(0,1fr) auto}
+  .mk-plans .pl-path{grid-column:3;justify-self:end}
+}
+@container (min-width:440px){
+  .mk-plans .pl-opt{font-size:11.5px;padding:0 9px 0 7px;gap:6px}
+  .mk-plans .pl-nm{font-size:10.5px}
+  .mk-plans .pl-pk{display:inline}
+  .mk-plans .pl-c2b{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:start;gap:8px}
+  .mk-plans .pl-cv{--w:92px}
+}
+
+/* motion, 10s loop. Cursor 1 picks One page on D2, the count ticks 3 to 4 and Caw's line replaces the hint; cursor 2 flips to Canvas (thumb and underline glide, views cross-fade), D2 is coral and its edge to D4 lights; cursor 3 returns to Page; cursor 4 presses Make tasks and three task chips slide out. Reset, then the still state again. */
+@keyframes mk-pl-cur{
+  0%,2%{opacity:0;transform:translate(var(--ax),var(--ay)) scale(1);animation-timing-function:ease-out}
+  4%{opacity:1;transform:translate(var(--ax),var(--ay)) scale(1);animation-timing-function:cubic-bezier(.45,0,.2,1)}
+  8%,9%{opacity:1;transform:translate(0,0) scale(1);animation-timing-function:ease-out}
+  9.8%{opacity:1;transform:translate(0,0) scale(.82)}
+  11%,13%{opacity:1;transform:translate(0,0) scale(1);animation-timing-function:ease-in}
+  16%,100%{opacity:0;transform:translate(calc(var(--ax) * .4),calc(var(--ay) * .4)) scale(1)}
+}
+@keyframes mk-pl-pick{
+  0%,9%{background-color:var(--raised);border-color:var(--line-strong);transform:scale(1)}
+  10%{transform:scale(.95)}
+  12.5%,94%{background-color:var(--coral-wash);border-color:var(--coral);transform:scale(1)}
+  98%,100%{background-color:var(--raised);border-color:var(--line-strong);transform:scale(1)}
+}
+@keyframes mk-pl-dot{
+  0%,9%{background-color:var(--raised);border-color:var(--line-strong);box-shadow:inset 0 0 0 0 var(--coral-wash)}
+  12.5%,94%{background-color:var(--coral);border-color:var(--coral);box-shadow:inset 0 0 0 2px var(--coral-wash)}
+  98%,100%{background-color:var(--raised);border-color:var(--line-strong);box-shadow:inset 0 0 0 0 var(--coral-wash)}
+}
+@keyframes mk-pl-out{
+  0%,11%{opacity:1;transform:none}
+  14%,94%{opacity:0;transform:translateY(-4px)}
+  98%,100%{opacity:1;transform:none}
+}
+@keyframes mk-pl-in{
+  0%,11%{opacity:0;transform:translateY(4px)}
+  14%,94%{opacity:1;transform:none}
+  98%,100%{opacity:0;transform:translateY(4px)}
+}
+@keyframes mk-pl-ring{
+  0%,11%{stroke-dashoffset:4}
+  14%,94%{stroke-dashoffset:2}
+  98%,100%{stroke-dashoffset:4}
+}
+@keyframes mk-pl-hint{
+  0%,15%{opacity:1;transform:none}
+  18%,44%{opacity:0;transform:translateY(-3px)}
+  47%,100%{opacity:1;transform:none}
+}
+@keyframes mk-pl-caw{
+  0%,15%{opacity:0;transform:translateY(3px)}
+  18%,44%{opacity:1;transform:none}
+  47%,100%{opacity:0;transform:translateY(3px)}
+}
+@keyframes mk-pl-thumb{
+  0%,34.8%{transform:translateX(0)}
+  39.5%,61.5%{transform:translateX(100%)}
+  66.5%,100%{transform:translateX(0)}
+}
+@keyframes mk-pl-sg1{
+  0%,34.8%{color:var(--ink)}
+  38%,61.5%{color:var(--muted)}
+  65%,100%{color:var(--ink)}
+}
+@keyframes mk-pl-sg2{
+  0%,34.8%{color:var(--muted)}
+  38%,61.5%{color:var(--ink)}
+  65%,100%{color:var(--muted)}
+}
+@keyframes mk-pl-page{
+  0%,35%{opacity:1}
+  41%,62%{opacity:0}
+  68%,100%{opacity:1}
+}
+@keyframes mk-pl-canvas{
+  0%,35%{opacity:0}
+  41%,62%{opacity:1}
+  68%,100%{opacity:0}
+}
+@keyframes mk-pl-nd2{
+  0%,9%{background-color:var(--raised);border-color:var(--line-strong)}
+  12.5%,94%{background-color:var(--coral-wash);border-color:var(--coral)}
+  98%,100%{background-color:var(--raised);border-color:var(--line-strong)}
+}
+@keyframes mk-pl-nd2t{
+  0%,9%{color:var(--muted)}
+  12.5%,94%{color:var(--coral-ink)}
+  98%,100%{color:var(--muted)}
+}
+@keyframes mk-pl-nd2d{
+  0%,9%{background-color:var(--raised);border-color:var(--line-strong)}
+  12.5%,94%{background-color:var(--coral);border-color:var(--coral)}
+  98%,100%{background-color:var(--raised);border-color:var(--line-strong)}
+}
+@keyframes mk-pl-ping{
+  0%,43%{opacity:0;transform:scale(1)}
+  44.5%{opacity:.85;transform:scale(1)}
+  54%,100%{opacity:0;transform:scale(1.35,1.5)}
+}
+@keyframes mk-pl-edge{
+  0%,43%{stroke:var(--line-strong)}
+  47%,57%{stroke:var(--coral)}
+  62%,100%{stroke:var(--line-strong)}
+}
+@keyframes mk-pl-ahd{
+  0%,43%{border-left-color:var(--muted)}
+  47%,57%{border-left-color:var(--coral)}
+  62%,100%{border-left-color:var(--muted)}
+}
+@keyframes mk-pl-mk{
+  0%,73%{transform:scale(1);background-color:var(--raised);border-color:var(--line-strong)}
+  74.2%{transform:scale(.94)}
+  76%,86%{transform:scale(1);background-color:var(--coral-wash);border-color:var(--coral)}
+  92%,100%{transform:scale(1);background-color:var(--raised);border-color:var(--line-strong)}
+}
+@keyframes mk-pl-ft{
+  0%,75%{opacity:1}
+  78%,93%{opacity:0}
+  97%,100%{opacity:1}
+}
+@keyframes mk-pl-tk{
+  0%,76%{opacity:0;transform:translateY(-10px);animation-timing-function:cubic-bezier(.2,.8,.2,1)}
+  80%,92%{opacity:1;transform:none;animation-timing-function:ease-in}
+  95%,100%{opacity:0;transform:translateY(-4px)}
+}
+
+.mk-plans.is-live .pl-cur{display:block}
+.mk-plans.is-live .pl-cur1{animation:mk-pl-cur 10s infinite}
+.mk-plans.is-live .pl-cur2{animation:mk-pl-cur 10s infinite 2.5s}
+.mk-plans.is-live .pl-cur3{animation:mk-pl-cur 10s infinite 5.2s}
+.mk-plans.is-live .pl-cur4{animation:mk-pl-cur 10s infinite 6.4s}
+.mk-plans.is-live .pl-opt.pl-click{animation:mk-pl-pick 10s ease-in-out infinite}
+.mk-plans.is-live .pl-opt.pl-click::before{animation:mk-pl-dot 10s ease-in-out infinite}
+.mk-plans.is-live .pl-n3,.mk-plans.is-live .pl-sp1{animation:mk-pl-out 10s ease-in-out infinite}
+.mk-plans.is-live .pl-n4,.mk-plans.is-live .pl-sp2{animation:mk-pl-in 10s ease-in-out infinite}
+.mk-plans.is-live .pl-rf{animation:mk-pl-ring 10s ease-in-out infinite}
+.mk-plans.is-live .pl-sa{animation:mk-pl-hint 10s ease-in-out infinite}
+.mk-plans.is-live .pl-sb{animation:mk-pl-caw 10s ease-in-out infinite}
+.mk-plans.is-live .pl-thumb{animation:mk-pl-thumb 10s ease-in-out infinite}
+.mk-plans.is-live .pl-sg1{animation:mk-pl-sg1 10s ease-in-out infinite}
+.mk-plans.is-live .pl-sg2{animation:mk-pl-sg2 10s ease-in-out infinite}
+.mk-plans.is-live .pl-pgp{animation:mk-pl-page 10s ease-in-out infinite}
+.mk-plans.is-live .pl-cv{animation:mk-pl-canvas 10s ease-in-out infinite}
+.mk-plans.is-live .pl-nd2{animation:mk-pl-nd2 10s ease-in-out infinite}
+.mk-plans.is-live .pl-nd2 .pl-nh b{animation:mk-pl-nd2t 10s ease-in-out infinite}
+.mk-plans.is-live .pl-nd2 .pl-dt{animation:mk-pl-nd2d 10s ease-in-out infinite}
+.mk-plans.is-live .pl-nd2::after{animation:mk-pl-ping 10s ease-out infinite}
+.mk-plans.is-live .pl-ed .pl-e24{animation:mk-pl-edge 10s ease-in-out infinite}
+.mk-plans.is-live .pl-ah.pl-a4{animation:mk-pl-ahd 10s ease-in-out infinite}
+.mk-plans.is-live .pl-mk{animation:mk-pl-mk 10s ease-in-out infinite}
+.mk-plans.is-live .pl-ft{animation:mk-pl-ft 10s ease-in-out infinite}
+.mk-plans.is-live .pl-tk{animation:mk-pl-tk 10s infinite}
+.mk-plans.is-live .pl-tk2{animation-delay:.25s}
+.mk-plans.is-live .pl-tk3{animation-delay:.5s}
+
+@media (prefers-reduced-motion:reduce){
+  .mk-plans *,.mk-plans *::before,.mk-plans *::after{animation:none !important;transition:none !important}
+  .mk-plans .pl-cur{display:none !important}
+}
+</style>
+<div class="mk mk-plans" role="img" aria-label="Caw writes a decision page of cards where you pick options, add notes and comments, Caw reads your picks back, and Make tasks turns them into tasks on the board; the same page can also be seen as a canvas of connected decisions.">
+  <div class="mkf">
+    <div class="mkf-bar">
+      <b>site</b><span class="pl-pg">decisions<span class="pl-pg2"> · checkout</span></span><span class="sp"></span>
+      <span class="pl-seg" aria-hidden="true">
+        <i class="pl-thumb"></i>
+        <button class="pl-sg pl-sg1" type="button" tabindex="-1" aria-hidden="true">Page
+          <svg class="pl-cur pl-cur3" viewBox="0 0 14 18" aria-hidden="true"><path d="M1.5 1.2V14L4.8 11.1 7.1 16.6 9.5 15.6 7.2 10.2H11.8Z"/></svg>
+        </button>
+        <button class="pl-sg pl-sg2" type="button" tabindex="-1" aria-hidden="true">Canvas
+          <svg class="pl-cur pl-cur2" viewBox="0 0 14 18" aria-hidden="true"><path d="M1.5 1.2V14L4.8 11.1 7.1 16.6 9.5 15.6 7.2 10.2H11.8Z"/></svg>
+        </button>
+      </span>
+      <span class="mkchip pl-prog" aria-hidden="true">
+        <svg class="pl-ring" viewBox="0 0 14 14" aria-hidden="true"><circle class="pl-rt" cx="7" cy="7" r="5.5"/><circle class="pl-rf" cx="7" cy="7" r="5.5" pathLength="10"/></svg>
+        <span><span class="pl-mono"><span class="pl-nn"><span class="pl-n3">3</span><span class="pl-n4">4</span></span> of 5</span><span class="pl-pk"> picked</span></span>
+      </span>
+    </div>
+    <div class="mkf-body">
+      <div class="pl-stage" aria-hidden="true">
+
+        <div class="pl-pgp">
+          <div class="pl-hd">
+            <span class="pl-av"><img class="caw-l" src="caw/light-ready.webp" alt="" width="24" height="24"><img class="caw-d" src="caw/dark-ready.webp" alt="" width="24" height="24"></span>
+            <span class="pl-ht">Caw wrote this page from our chat</span>
+            <span class="pl-path">decisions/checkout/</span>
+          </div>
+
+          <div class="pl-card pl-c1">
+            <div class="pl-ch"><span class="pl-id">D1</span><b class="pl-ti">Guest checkout</b><span class="pl-st"><span class="pl-sp">picked</span></span></div>
+            <div class="pl-opts">
+              <button class="pl-opt" type="button" tabindex="-1" aria-hidden="true">Required account</button>
+              <button class="pl-opt pl-pick" type="button" tabindex="-1" aria-hidden="true">Guest, account after</button>
+              <button class="pl-opt" type="button" tabindex="-1" aria-hidden="true">Guest only</button>
+            </div>
+            <div class="pl-note"><span class="pl-nk">note</span><span class="pl-nt">keep Apple Pay first</span></div>
+          </div>
+
+          <div class="pl-card pl-c2">
+            <div class="pl-ch"><span class="pl-id">D2</span><b class="pl-ti">Payment step</b><span class="pl-st"><span class="pl-sp1">open</span><span class="pl-sp pl-sp2">picked</span></span></div>
+            <div class="pl-c2b">
+              <div class="pl-opts">
+                <button class="pl-opt pl-click" type="button" tabindex="-1" aria-hidden="true">One page
+                  <svg class="pl-cur pl-cur1" viewBox="0 0 14 18" aria-hidden="true"><path d="M1.5 1.2V14L4.8 11.1 7.1 16.6 9.5 15.6 7.2 10.2H11.8Z"/></svg>
+                </button>
+                <button class="pl-opt" type="button" tabindex="-1" aria-hidden="true">Two steps</button>
+              </div>
+              <div class="pl-th">
+                <span class="pl-pin">1</span>
+                <div class="pl-tl">
+                  <div><b>You</b> what about saved cards?</div>
+                  <div class="pl-m"><b>Caw</b> added as <span class="pl-mono">D3</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="pl-act">
+            <div class="pl-say">
+              <span class="pl-sa">Caw reads your picks and notes</span>
+              <span class="pl-sb"><span class="pl-av"><img class="caw-l" src="caw/light-ready.webp" alt="" width="16" height="16"><img class="caw-d" src="caw/dark-ready.webp" alt="" width="16" height="16"></span><span><b>Caw</b> Noted. D4 depends on this.</span></span>
+            </div>
+            <button class="btn pl-mk" type="button" tabindex="-1" aria-hidden="true">Make tasks
+              <svg class="pl-cur pl-cur4" viewBox="0 0 14 18" aria-hidden="true"><path d="M1.5 1.2V14L4.8 11.1 7.1 16.6 9.5 15.6 7.2 10.2H11.8Z"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="pl-cv" aria-hidden="true">
+          <svg class="pl-ed" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+            <path d="M16 49C33 49 33 24 50 24"/>
+            <path d="M16 49C33 49 33 74 50 74"/>
+            <path class="pl-e24" d="M50 24H84"/>
+            <path d="M50 74H84"/>
+          </svg>
+          <i class="pl-ah" style="--x:50%;--y:24%"></i>
+          <i class="pl-ah" style="--x:50%;--y:74%"></i>
+          <i class="pl-ah pl-a4" style="--x:84%;--y:24%"></i>
+          <i class="pl-ah" style="--x:84%;--y:74%"></i>
+          <div class="pl-nd pl-on" style="--x:16%;--y:49%"><span class="pl-nh"><b>D1</b><i class="pl-dt"></i></span><span class="pl-nm">Guest</span></div>
+          <div class="pl-nd pl-nd2" style="--x:50%;--y:24%"><span class="pl-nh"><b>D2</b><i class="pl-dt"></i></span><span class="pl-nm">Payment</span></div>
+          <div class="pl-nd pl-on" style="--x:50%;--y:74%"><span class="pl-nh"><b>D3</b><i class="pl-dt"></i></span><span class="pl-nm">Saved cards</span></div>
+          <div class="pl-nd" style="--x:84%;--y:24%"><span class="pl-nh"><b>D4</b><i class="pl-dt"></i></span><span class="pl-nm">Recap</span></div>
+          <div class="pl-nd pl-on" style="--x:84%;--y:74%"><span class="pl-nh"><b>D5</b><i class="pl-dt"></i></span><span class="pl-nm">Expiry</span></div>
+        </div>
+
+      </div>
+      <div class="pl-low">
+        <p class="pl-ft">A decision page is files in the project. Picks, notes and comments are kept; Caw reads them and turns them into tasks.</p>
+        <div class="pl-tray" aria-hidden="true">
+          <span class="pl-tk pl-tk1"><i>tsk-201</i>Guest checkout</span>
+          <span class="pl-tk pl-tk2"><i>tsk-202</i>One-page payment</span>
+          <span class="pl-tk pl-tk3"><i>tsk-203</i>Saved cards</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
