@@ -21,7 +21,7 @@ import {
 } from "node:fs/promises";
 import { join } from "node:path";
 import { machineId } from "@cawco/agent";
-import { SessiondClient } from "@cawco/agent/sessiond-client";
+import { heldSessions, SessiondClient } from "@cawco/agent/sessiond-client";
 import { probeHealth } from "@cawco/core/binary-health";
 import {
   type BinaryInstallation,
@@ -149,7 +149,7 @@ async function readKeeper(): Promise<{
   );
   try {
     return {
-      held: client.procs.filter((proc) => proc.alive).length,
+      held: heldSessions(client.procs),
       epoch: client.epoch,
     };
   } finally {

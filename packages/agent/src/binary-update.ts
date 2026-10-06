@@ -45,8 +45,7 @@ import { verifyManifest } from "@cawco/core/release-manifest";
 import { runtimeVersion } from "@cawco/core/runtime";
 import { sessiondEndpoint } from "@cawco/core/sessiond";
 import { machineId } from "./machine-id";
-import { parseProcId } from "./proc-id";
-import { SessiondClient } from "./sessiond-client";
+import { heldSessions, SessiondClient } from "./sessiond-client";
 
 const POLL_MS = 60_000;
 /** An update that says it is installing for longer than this has lost its helper. */
@@ -83,13 +82,7 @@ async function readKeeper(): Promise<{
   );
   try {
     return {
-      // The OpenCode server is the agent's own helper, alive whenever the agent is: counting it would
-      // keep the keeper from ever moving on a machine that runs OpenCode. Busy sessions are the
-      // busy check's to refuse.
-      held: client.procs.filter(
-        (proc) =>
-          proc.alive && parseProcId(proc.procId).kind !== "opencode-server"
-      ).length,
+      held: heldSessions(client.procs),
       capabilities: client.capabilities,
     };
   } finally {
