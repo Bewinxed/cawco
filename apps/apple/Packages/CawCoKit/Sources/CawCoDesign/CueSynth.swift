@@ -30,6 +30,7 @@
 // The same notice ships in the app as Resources/Licenses/Cuelume.txt.
 
 import Accelerate
+import AudioToolbox
 import AVFoundation
 import os
 import QuartzCore
