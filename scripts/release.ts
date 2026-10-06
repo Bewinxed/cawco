@@ -163,6 +163,7 @@ try {
             "git",
             "log",
             "--format=%s",
+            "--max-count=50",
             range,
             "--",
             "packages",
