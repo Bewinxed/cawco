@@ -16,6 +16,7 @@
     "release.ts",
     "publish-release.ts",
     "release-signing.ts",
+    "probe-restart-turns.ts",
     "binary/**/*.ts",
     "../packages/agent/src/binary-modules.d.ts"
   ]

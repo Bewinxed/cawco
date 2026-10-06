@@ -1,6 +1,5 @@
 import { arch, hostname, platform } from "node:os";
 import type {
-  AgentBusyReport,
   AuthState,
   BuildInfo,
   Envelope,
@@ -24,7 +23,10 @@ import {
   CONTROL_WORKSPACE_MIGRATE,
   UPDATE_CAWCO,
 } from "@cawco/core";
-import type { BinaryUpdateState } from "@cawco/core/binary-updates";
+import {
+  AGENT_RESTARTING,
+  type BinaryUpdateState,
+} from "@cawco/core/binary-updates";
 import { sessiondEndpoint } from "@cawco/core/sessiond";
 import { fetchClaudeLimits } from "@cawco/core/usage/limits";
 import { mergeObserved } from "@cawco/core/usage/observed";
@@ -49,6 +51,7 @@ import { machineId } from "./machine-id";
 import { startMcpGateway } from "./mcp-oauth";
 import { servingPreviews } from "./preview";
 import { parseProcId, SESSION_PROC_KINDS } from "./proc-id";
+import { fenced, setRestartSource } from "./restart";
 import { TranscriptSearchService } from "./search";
 import { resumableSessions, SessionSupervisor } from "./session";
 import { SessiondClient } from "./sessiond-client";
@@ -195,30 +198,6 @@ export const reconnect = Schedule.concat(
  * loop in {@link reconnecting} rather than a schedule combinator.
  */
 export const HEALTHY_CONNECTION = Duration.seconds(60);
-
-/**
- * The one supervisor a daemon process ever runs, for {@link currentBusy} to
- * read — set the moment `startDaemon` constructs it, cleared on its release.
- * Same module-level-latch idiom as {@link latestDeploy}'s `latest`: a fact
- * that changes without anyone reconnecting, read by something in the same
- * process rather than carried over a socket to itself.
- */
-let activeSupervisor: SessionSupervisor | undefined;
-
-/**
- * How many sessions this daemon is carrying mid-turn, once it knows. Before
- * the supervisor exists, unknown is held busy. The updater holds a restart until
- * idle without asking the hub a question the daemon can answer about itself.
- */
-export const currentBusy = async (): Promise<AgentBusyReport> =>
-  activeSupervisor
-    ? await activeSupervisor.busyNow()
-    : {
-        busy: 1,
-        instances: ["agent:supervisor-unavailable"],
-        ready: false,
-        recovery: "recovering",
-      };
 
 /**
  * How many consecutive failures against the pinned URL, and how much wall
@@ -1200,8 +1179,9 @@ export const startDaemon = (auth?: AuthState, rediscover = false) =>
     const supervisor = yield* Effect.acquireRelease(
       Effect.sync(() => {
         const created = new SessionSupervisor();
-        // See {@link currentBusy}: the updater's in-process read of it.
-        activeSupervisor = created;
+        // What a restart would cut is the supervisor's to say from here on
+        // (`restart.ts`); the updater and `cawco service restart` read it.
+        setRestartSource(() => created.restartHolds());
         return created;
       }),
       (running) =>
@@ -1213,9 +1193,7 @@ export const startDaemon = (auth?: AuthState, rediscover = false) =>
           Effect.andThen(
             Effect.sync(() => {
               running.detach();
-              if (activeSupervisor === running) {
-                activeSupervisor = undefined;
-              }
+              setRestartSource(undefined);
             })
           )
         )
@@ -1227,11 +1205,8 @@ export const startDaemon = (auth?: AuthState, rediscover = false) =>
     supervisor.registerDaemonFunction("probeCapabilities", probeCapabilities);
 
     // Updates arrive only as signed builds from the hub: this one object owns
-    // the idle tick, the "Install now" command and the policy the hub pushes.
-    const updater = new BinaryUpdater(
-      () => supervisor.busyNow(),
-      reportBinaryUpdate
-    );
+    // the update tick, the "Install now" command and the policy the hub pushes.
+    const updater = new BinaryUpdater(reportBinaryUpdate);
     supervisor.registerDaemonFunction(UPDATE_CAWCO, () => updater.installNow());
     supervisor.registerDaemonFunction(CONFIGURE_BINARY_UPDATES, () =>
       updater.configure()
@@ -1251,10 +1226,19 @@ export const startDaemon = (auth?: AuthState, rediscover = false) =>
       TranscriptSearchService.create()
     );
     search.start();
-    supervisor.registerDaemonFunction(CONTROL_RUN_COMMAND, runWorkflowCommand);
+    // A command runs as this process's child, so a restart kills it: none starts behind a raised fence.
     supervisor.registerDaemonFunction(
-      CONTROL_WORKSPACE_CREATE,
-      createWorkspace
+      CONTROL_RUN_COMMAND,
+      (cwd, cmd, timeoutMs, workspace) =>
+        fenced()
+          ? Promise.reject(new Error(AGENT_RESTARTING))
+          : runWorkflowCommand(cwd, cmd, timeoutMs, workspace)
+    );
+    // A workspace is cut in this process, so a restart would cut it too: none starts behind a raised fence.
+    supervisor.registerDaemonFunction(CONTROL_WORKSPACE_CREATE, (cwd, id) =>
+      fenced()
+        ? Promise.reject(new Error(AGENT_RESTARTING))
+        : createWorkspace(cwd, id)
     );
     supervisor.registerDaemonFunction(
       CONTROL_WORKSPACE_BOUNDARY,

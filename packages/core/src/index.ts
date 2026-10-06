@@ -518,13 +518,15 @@ export interface UpdateReport {
 /**
  * Install now: stage the machine's channel build and apply it, answering with
  * what happened. The same call a person's "Install now" makes; the automatic
- * path runs the same code when the machine is idle.
+ * path runs the same code once the work a restart would cut has drained.
  */
 export const UPDATE_CAWCO = "updateCawco";
 
 /**
- * Whether this machine's daemon is in the middle of anything — how a restart
- * waits for a good moment instead of cutting a turn in half.
+ * Which of this machine's sessions are mid-turn: what the hub's keep-alive
+ * reads before it pings a session, and what a restart of the session keeper
+ * waits on (that restart kills the turns). An agent restart does not wait on
+ * it: the keeper runs the turns on through one.
  * Answers `{ busy: number; instances: string[] }`.
  */
 export const AGENT_BUSY = "agentBusy";

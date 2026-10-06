@@ -196,6 +196,13 @@ export interface Harness {
   ): Promise<HarnessSession | undefined>;
   // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
   renameSession(sessionKey: string, title: string, dir?: string): Promise<void>;
+  /**
+   * What an agent restart would cut of this adapter's own work, now: the work
+   * it runs in the agent's process, never its runtime's turns. Absent for an
+   * adapter whose runtime holds all of it under the keeper.
+   */
+  // biome-ignore lint/style/useConsistentMethodSignatures: matches the other adapter methods
+  restartHolds?(): import("@cawco/core/binary-updates").RestartHold[];
   /** Exact addresses retained by this adapter, never reconstructed by guessing. */
   // biome-ignore lint/style/useConsistentMethodSignatures: matches adapter methods
   sessionAddresses?(): import("@cawco/core").SessionAddress[];

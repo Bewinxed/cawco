@@ -78,7 +78,8 @@ class Updates {
   }
 
   /**
-   * Queues the install on a machine: it runs when the machine is idle. The
+   * Queues the install on a machine: it runs once the machine's work in
+   * flight has drained, or when its short drain ends, cutting what is left. The
    * answer is not waited on for state. The hub's own machine restarts the hub
    * mid-request and a long install outlives the request, so a 504 or a
    * dropped connection says nothing.

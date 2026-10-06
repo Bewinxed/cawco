@@ -94,7 +94,11 @@ export async function callDelegationTool(
     }
   );
   if (!response.ok) {
-    throw new Error(`CawCo tool ${name}: HTTP ${response.status}`);
+    // A refusal says why in its body (a restarting agent: not started, retry), and the model reads it.
+    const why = await response.text().catch(() => "");
+    throw new Error(
+      `CawCo tool ${name}: HTTP ${response.status}${why ? `: ${why}` : ""}`
+    );
   }
   const result = (await response.json()) as {
     content: { type: "text"; text: string }[];

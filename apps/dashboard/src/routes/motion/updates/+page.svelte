@@ -35,6 +35,11 @@
     "- Fewer hub restarts",
   ].join("\n");
   const NIGHTLY = "0.2.0-nightly.412+abc123def456";
+  /** What a ready build waits on: two relayed tool calls and an image generation. */
+  const WAITING_ON: BinaryUpdateState["waitingOn"] = [
+    { reason: "tool-call", ids: ["delegate#3f2a91c0", "start_session#8b1e"] },
+    { reason: "image", ids: ["image-request-1"] },
+  ];
 
   const CHANNELS: BinaryUpdateChannels = {
     checkedAt: 0,
@@ -109,7 +114,7 @@
       binaryUpdate: update({ phase: "downloading" }),
     }),
     machine("r7", "nixbox", "linux", {
-      binaryUpdate: update({ phase: "ready", waitingFor: 2 }),
+      binaryUpdate: update({ phase: "ready", waitingOn: WAITING_ON }),
     }),
     machine("r8", "Omars-MacBook-Pro", "darwin", {
       binaryUpdate: update({
@@ -176,7 +181,7 @@
           [
             { phase: "installing" },
             { phase: "installed", installedVersion: "1.4.2" },
-            { phase: "ready", waitingFor: 0 },
+            { phase: "ready" },
           ],
           0
         ),
@@ -203,7 +208,7 @@
     noticeFor(
       input({
         policy: ON,
-        machines: trio([{ phase: "ready", waitingFor: 2 }, {}, {}]),
+        machines: trio([{ phase: "ready", waitingOn: WAITING_ON }, {}, {}]),
       }),
       machineLabel
     ),

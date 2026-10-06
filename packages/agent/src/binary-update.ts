@@ -1,8 +1,9 @@
 /**
  * The machine's side of binary updates: learn of a build from the hub, verify
- * and stage it, and apply it through a service-manager-owned helper when
- * `mayReplaceMachineServices` allows. One code path, whether it runs on the
- * idle tick (auto-update on) or because a person pressed "Install now".
+ * and stage it, and apply it through a service-manager-owned helper once a
+ * fence has drained what the restart would cut (`#drain`, below).
+ * One code path, whether it runs on the update tick (auto-update on) or
+ * because a person pressed "Install now".
  *
  * Nothing here ever goes backwards: a build whose signed `sequence` is not
  * above the running one is never installed, a machine other than the hub's own
@@ -11,7 +12,7 @@
  */
 import { readdir, rename, rm } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import type { AgentBusyReport, UpdateReport } from "@cawco/core";
+import type { UpdateReport } from "@cawco/core";
 import {
   archiveMatches,
   readAtMost,
@@ -37,14 +38,21 @@ import {
   versionDirectory,
   writeJsonAtomic,
 } from "@cawco/core/binary-installation";
-import type {
-  BinaryUpdatePolicy,
-  BinaryUpdateState,
+import {
+  type BinaryUpdatePolicy,
+  type BinaryUpdateState,
+  holdPhrases,
+  mergeHolds,
+  type RestartHold,
+  type RestartReadiness,
+  UPDATE_DRAIN_MS,
+  UPDATE_WAIT_CAP_MS,
 } from "@cawco/core/binary-updates";
 import { verifyManifest } from "@cawco/core/release-manifest";
 import { runtimeVersion } from "@cawco/core/runtime";
 import { sessiondEndpoint } from "@cawco/core/sessiond";
 import { machineId } from "./machine-id";
+import { lowerFence, raiseFence, restartReadiness } from "./restart";
 import { heldSessions, SessiondClient } from "./sessiond-client";
 
 const POLL_MS = 60_000;
@@ -55,15 +63,58 @@ const TRIAL_CONFIRM_MS = 60_000;
 /** Minutes to wait before trying a failed download or verification again; the last repeats. */
 const RETRY_DELAYS_MIN = [1, 5, 30, 60];
 
+/** How often a drain looks again. */
+const DRAIN_POLL_MS = 1000;
+/** How long the drain's fence outlives the drain, for the helper to be launched in. */
+const DRAIN_GRACE_MS = 15_000;
+/** The updater's name for its fence on this agent ({@link raiseFence}). */
+const FENCE = "update";
+/** How long a launched helper has to take its lock; one that holds none after it has gone. */
+const HELPER_START_MS = 10_000;
+
+/** Each hold's pieces, by kind: what tells one piece of work from another. */
+const holdKeys = (holds: readonly RestartHold[]): string[] =>
+  holds.flatMap(({ reason, ids }) => ids.map((id) => `${reason}:${id}`));
+
 /**
- * Whether this machine's services may be replaced right now. The retirement
- * fence replaces this one body when its reviewed branch lands.
+ * What replacing this machine's services would cut now: this agent's own
+ * work, and with a full build on the hub's machine the tool calls its hub is
+ * answering, from every machine, for the hub restarts too. A hub that cannot
+ * say is no answer: nothing is applied blind.
  */
-export async function mayReplaceMachineServices(
-  readBusy: () => Promise<AgentBusyReport>
-): Promise<boolean> {
-  const busy = await readBusy();
-  return busy.ready && busy.busy === 0;
+async function readReadiness(
+  hub: string | undefined
+): Promise<RestartReadiness> {
+  const local = restartReadiness();
+  if (!hub) {
+    return local;
+  }
+  const response = await fetch(`${hub}/api/binary-updates/hub-readiness`, {
+    signal: AbortSignal.timeout(5000),
+  });
+  if (!response.ok) {
+    throw new Error(
+      `The hub did not say what its restart would cut: ${response.status}`
+    );
+  }
+  const holds = mergeHolds(
+    local.holds,
+    ((await response.json()) as RestartReadiness).holds
+  );
+  return { ready: holds.length === 0, holds };
+}
+
+/** The hub's fence, for `ms` from now; 0 lowers it. */
+async function fenceHub(hub: string, ms: number): Promise<void> {
+  const response = await fetch(`${hub}/api/binary-updates/hub-fence`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ ms }),
+    signal: AbortSignal.timeout(5000),
+  });
+  if (!response.ok) {
+    throw new Error(`The hub did not take its fence: ${response.status}`);
+  }
 }
 
 let latest: BinaryUpdateState | undefined;
@@ -232,14 +283,22 @@ export class BinaryUpdater {
   #timer: ReturnType<typeof setInterval> | undefined;
   #trialTimer: ReturnType<typeof setInterval> | undefined;
   #healthySince: number | undefined;
-  readonly #readBusy: () => Promise<AgentBusyReport>;
+  /**
+   * The fence this updater raised, while it stands: on this agent, and on the
+   * hub when its restart is part of the update (the hub's url then). Lowered
+   * on every way out but the restart it was raised for.
+   */
+  #fence: { hub: string | undefined; launchedAt?: number } | undefined;
+  /**
+   * The work that outlasted the last drain auto-update ran, by {@link holdKeys}.
+   * While any of it still runs, no fence goes up again for it: the work is
+   * long, and a fence raised every tick would refuse every session's new tool
+   * calls for most of each minute.
+   */
+  readonly #outlasted = new Set<string>();
   readonly #report: (state: BinaryUpdateState) => void;
 
-  constructor(
-    readBusy: () => Promise<AgentBusyReport>,
-    report: (state: BinaryUpdateState) => void
-  ) {
-    this.#readBusy = readBusy;
+  constructor(report: (state: BinaryUpdateState) => void) {
     this.#report = report;
   }
 
@@ -292,12 +351,24 @@ export class BinaryUpdater {
     return this.#state;
   }
 
-  /** Returns a machine waiting for the fence to `available`: the person changed their mind. */
+  /**
+   * Returns a machine waiting to install to `available`: the person changed
+   * their mind. A drain under way sees it at its end and installs nothing.
+   */
   async cancel(): Promise<BinaryUpdateState> {
     this.#flags.commanded = false;
+    this.#outlasted.clear();
+    if (this.#running) {
+      // The drain's own state is in memory; the file says `ready` meanwhile.
+      return this.#state;
+    }
     await this.#load();
     if (this.#state.phase === "ready") {
-      await this.#set({ phase: "available", waitingFor: undefined });
+      await this.#set({
+        phase: "available",
+        waitingOn: undefined,
+        waitingSince: undefined,
+      });
     }
     return this.#state;
   }
@@ -310,10 +381,9 @@ export class BinaryUpdater {
     await this.#running;
     await this.tick();
     const to = this.#state.availableVersion;
-    const waiting =
-      this.#state.phase === "ready" && this.#state.waitingFor !== undefined
-        ? `waiting for ${this.#state.waitingFor} working session${this.#state.waitingFor === 1 ? "" : "s"} to finish`
-        : `update is ${this.#state.phase}`;
+    const waiting = this.#state.waitingOn?.length
+      ? `waiting for work in flight to end: ${holdPhrases(this.#state.waitingOn).join(", ")}`
+      : `update is ${this.#state.phase}`;
     return {
       from,
       to,
@@ -389,6 +459,19 @@ export class BinaryUpdater {
   async #watch(): Promise<void> {
     if (!this.#running) {
       await this.#load();
+      // The helper gave up before it restarted this agent (it says so in the
+      // state), or it is gone without a word (it found another helper's lock):
+      // the fence it was raised for has nothing left to wait for.
+      const launched = this.#fence?.launchedAt;
+      if (
+        this.#fence &&
+        (this.#state.phase !== "installing" ||
+          (launched !== undefined &&
+            Date.now() - launched > HELPER_START_MS &&
+            !(await helperIsLive())))
+      ) {
+        await this.#lowerFence();
+      }
     }
     await this.#noteKeeperRecovery();
     await this.#confirmTrial();
@@ -450,6 +533,7 @@ export class BinaryUpdater {
       await this.#check();
     } catch (error) {
       this.#flags.commanded = false;
+      await this.#lowerFence();
       await this.#set({
         phase: "failed",
         error: error instanceof Error ? error.message : String(error),
@@ -573,6 +657,7 @@ export class BinaryUpdater {
   async #settleNothingNewer(waitsForChannel: boolean): Promise<void> {
     this.#staged = undefined;
     this.#flags.commanded = false;
+    this.#outlasted.clear();
     const target = waitsForChannel ? "waiting-for-channel" : "none";
     // A finished install stays `installed` until the next update, except that a change of channel is what
     // the machine is now waiting on.
@@ -590,7 +675,8 @@ export class BinaryUpdater {
         phase: target,
         availableVersion: undefined,
         notes: undefined,
-        waitingFor: undefined,
+        waitingOn: undefined,
+        waitingSince: undefined,
         error: undefined,
       });
     }
@@ -707,13 +793,6 @@ export class BinaryUpdater {
     if (this.#state.phase !== "ready") {
       return;
     }
-    if (!(await mayReplaceMachineServices(this.#readBusy))) {
-      await this.#set({
-        phase: "ready",
-        waitingFor: (await this.#readBusy()).busy,
-      });
-      return;
-    }
     const keeper = await readKeeper();
     if (
       keeper.held > 0 &&
@@ -724,18 +803,178 @@ export class BinaryUpdater {
       await this.#set({
         phase: "waiting-sessions",
         heldChildren: keeper.held,
-        waitingFor: undefined,
+        waitingOn: undefined,
+        waitingSince: undefined,
       });
       return;
     }
+    // On the hub's machine the update restarts the hub as well.
+    const installation = await readInstallation();
+    await this.#replace(
+      installation?.role === "hub" ? installation.hubUrl : undefined,
+      () => launchApplyHelper(release.manifest.version, keeper.held, false)
+    );
+  }
+
+  /**
+   * Replaces this machine's services once {@link #drain} allows. The fence
+   * stays up until the helper restarts them, and comes down if the helper
+   * cannot be started, or gives up before restarting anything ({@link #watch});
+   * its lease ends it in any case.
+   */
+  async #replace(
+    hub: string | undefined,
+    launch: () => Promise<void>
+  ): Promise<void> {
+    const cut = await this.#drain(hub);
+    if (!cut) {
+      return;
+    }
+    try {
+      await this.#raiseFence(hub, INSTALL_STALE_MS);
+      await this.#set({
+        phase: "installing",
+        heldChildren: undefined,
+        waitingOn: undefined,
+        waitingSince: undefined,
+        cut: cut.length > 0 ? cut : undefined,
+      });
+      this.#flags.commanded = false;
+      this.#outlasted.clear();
+      await this.#tellHub();
+      await launch();
+      this.#fence = { hub, launchedAt: Date.now() };
+    } catch (error) {
+      await this.#lowerFence();
+      throw error;
+    }
+  }
+
+  /**
+   * THE GATE: whether this machine's services may be replaced now. Answers
+   * what the restart will cut (empty: nothing), or undefined for not now, the
+   * state then saying what it waits on. Turns are not work in flight: the
+   * keeper runs them through the restart, and the next agent takes them over.
+   *
+   * Check, raise, check. The fence goes up first, on this agent and on the
+   * hub when the hub restarts too, so nothing new that a restart would cut
+   * starts from here, and the hub is told the machine is installing, so it
+   * keeps new session starts. The work already in flight then gets
+   * {@link UPDATE_DRAIN_MS} to end. Nothing left: replace. Something left: a
+   * person's Install now, or an auto-update that has waited
+   * {@link UPDATE_WAIT_CAP_MS}, replaces anyway and the state records what it cut;
+   * otherwise the fence comes down and a later tick looks again. Work that
+   * outlasted a drain gets no new fence until it has ended
+   * ({@link #outlasted}): a long call is waited out, not fenced every minute.
+   */
+  async #drain(hub: string | undefined): Promise<RestartHold[] | undefined> {
+    const before = this.#state.phase;
+    const capped = (): boolean =>
+      this.#state.waitingSince !== undefined &&
+      Date.now() - this.#state.waitingSince >= UPDATE_WAIT_CAP_MS;
+    if (await this.#cancelled(before)) {
+      return undefined;
+    }
+    if (!(this.#flags.commanded || capped())) {
+      const now = await readReadiness(hub);
+      if (holdKeys(now.holds).some((key) => this.#outlasted.has(key))) {
+        await this.#waitOn(before, now.holds);
+        return undefined;
+      }
+    }
+    this.#outlasted.clear();
+    try {
+      await this.#raiseFence(hub, UPDATE_DRAIN_MS + DRAIN_GRACE_MS);
+      // Said in memory and to the hub, never written: an agent that dies
+      // mid-drain comes back `ready`, not `installing` with no helper.
+      this.#state = {
+        ...this.#state,
+        phase: "installing",
+        updatedAt: Date.now(),
+      };
+      this.#report(this.#state);
+      await this.#tellHub();
+      let reading = await readReadiness(hub);
+      const deadline = Date.now() + UPDATE_DRAIN_MS;
+      while (!reading.ready && Date.now() < deadline) {
+        // biome-ignore lint/performance/noAwaitInLoops: a poll; each look must see the work the previous one saw end
+        await Bun.sleep(DRAIN_POLL_MS);
+        reading = await readReadiness(hub);
+      }
+      if (await this.#cancelled(before)) {
+        return undefined;
+      }
+      if (reading.ready || this.#flags.commanded || capped()) {
+        return reading.holds;
+      }
+      for (const key of holdKeys(reading.holds)) {
+        this.#outlasted.add(key);
+      }
+      await this.#lowerFence();
+      await this.#waitOn(before, reading.holds);
+      // The hub hears now, not at the next heartbeat, that the machine takes starts again.
+      await this.#tellHub().catch(() => undefined);
+      return undefined;
+    } catch (error) {
+      await this.#lowerFence();
+      throw error;
+    }
+  }
+
+  /**
+   * A person's cancel came in during the pass (or the drain): nothing is
+   * installed, a fence raised for it comes down, and a ready build goes back
+   * to `available`. Never with auto-update on, which a cancel does not stop.
+   */
+  async #cancelled(before: BinaryUpdateState["phase"]): Promise<boolean> {
+    if (this.#flags.commanded || this.#policy.autoUpdate) {
+      return false;
+    }
+    const fenced = this.#fence !== undefined;
+    await this.#lowerFence();
     await this.#set({
-      phase: "installing",
-      heldChildren: undefined,
-      waitingFor: undefined,
+      phase: before === "ready" ? "available" : before,
+      waitingOn: undefined,
+      waitingSince: undefined,
     });
-    this.#flags.commanded = false;
-    await this.#tellHub();
-    await launchApplyHelper(release.manifest.version, keeper.held, false);
+    if (fenced) {
+      // The hub was told `installing`: it takes this machine's starts again now.
+      await this.#tellHub().catch(() => undefined);
+    }
+    return true;
+  }
+
+  /** What the update waits on, written only when it changed: every write moves `updatedAt`, which the board reads as news. */
+  async #waitOn(
+    phase: BinaryUpdateState["phase"],
+    holds: RestartHold[]
+  ): Promise<void> {
+    const waitingSince = this.#state.waitingSince ?? Date.now();
+    if (
+      this.#state.phase !== phase ||
+      this.#state.waitingSince !== waitingSince ||
+      JSON.stringify(this.#state.waitingOn) !== JSON.stringify(holds)
+    ) {
+      await this.#set({ phase, waitingOn: holds, waitingSince });
+    }
+  }
+
+  async #raiseFence(hub: string | undefined, ms: number): Promise<void> {
+    raiseFence(FENCE, ms);
+    this.#fence = { hub };
+    if (hub) {
+      await fenceHub(hub, ms);
+    }
+  }
+
+  /** Never throws: it runs on the way out of a failure. A hub fence it cannot lower lapses with its lease. */
+  async #lowerFence(): Promise<void> {
+    const raised = this.#fence;
+    this.#fence = undefined;
+    lowerFence(FENCE);
+    if (raised?.hub) {
+      await fenceHub(raised.hub, 0).catch(() => undefined);
+    }
   }
 
   /**
@@ -773,11 +1012,9 @@ export class BinaryUpdater {
     if (!(this.#flags.commanded || this.#policy.autoUpdate)) {
       return;
     }
-    if (await mayReplaceMachineServices(this.#readBusy)) {
-      await this.#set({ phase: "installing", heldChildren: undefined });
-      this.#flags.commanded = false;
-      await this.#tellHub();
-      await launchApplyHelper(runtimeVersion, 0, true);
-    }
+    // The keeper moves with this agent alone; the hub stays up.
+    await this.#replace(undefined, () =>
+      launchApplyHelper(runtimeVersion, 0, true)
+    );
   }
 }
