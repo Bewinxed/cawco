@@ -246,6 +246,7 @@
     toast.custom(UpdateNotice, {
       id: ID,
       duration: Number.POSITIVE_INFINITY,
+      dismissible: false,
       componentProps: {
         view: demo,
         onaction: () => undefined,

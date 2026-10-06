@@ -718,7 +718,7 @@ Caw stands behind the chosen card as a still picture in a `caw-peek` box whose t
 The card's edge is `border-control`, padding `--space-7` above and `--space-4` elsewhere, and only the card the fleet follows carries the drawn tick and its line.
 
 ### Update notice
-One toast box under one id, on every page: Caw at 48px on the leading edge top level with a 500-weight title, the changes in meta type, and `sm` buttons, the act primary on the trailing edge.
+One toast box under one id, on every page: Caw at 48px on the leading edge top level with a 500-weight title, the changes in meta type, and `sm` buttons, the act primary on the trailing edge and `Configure update behaviour` a ghost on the leading edge. It does not swipe away: closing it acknowledges what it announces for every device, so only its ✕ closes it. The ✕ is a 20px pill chip floating on Caw's top corner, out of the text's way, so the title keeps the whole width; a fine pointer finds it on hover or focus, and touch always sees it.
 Its state changes in place: content cross-fades inside the box, the box follows through `morph()`, and the old Caw leaves within `--dur-fade` before the new one stands.
 
 ### Alert

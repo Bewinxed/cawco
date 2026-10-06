@@ -162,6 +162,9 @@ export function startUpdateNotice(): () => void {
           toast.custom(UpdateNotice, {
             id: ID,
             duration: Number.POSITIVE_INFINITY,
+            // Closing it acknowledges a landing on its machine, for every tab and device, so only its
+            // own ✕ closes it: never a stray swipe.
+            dismissible: false,
             onDismiss: dismiss,
             componentProps: { view, onaction: act, ondismiss: dismiss },
           });

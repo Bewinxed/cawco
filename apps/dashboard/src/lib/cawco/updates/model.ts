@@ -210,7 +210,7 @@ export interface Notice {
   caw: { moves: boolean; status: string };
   /** Machines the notice stands for, by id. */
   closing?: string;
-  /** `Configure updates` is offered. */
+  /** `Configure update behaviour` (Configure › Updates) is offered. */
   configure: boolean;
   /** Show the failure glyph before the title. */
   failed: boolean;
