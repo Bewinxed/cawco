@@ -1,6 +1,7 @@
 import { error } from "@sveltejs/kit";
 import type { Machine, ProjectRow } from "#lib/cawco/client.svelte.js";
 import { type HubFailure, readHub } from "#lib/cawco/hub-read.js";
+import type { TaskList } from "#lib/cawco/project-tasks.js";
 import type { PageLoad } from "./$types";
 
 /** The error page's line for a read the page cannot stand without. */
@@ -20,9 +21,14 @@ const refused = (what: string, failure: HubFailure): never =>
  * the hub's own words, never "No such project" or a machine that seems away.
  */
 export const load: PageLoad = async ({ fetch, params }) => {
-  const [projects, machines] = await Promise.all([
+  const [projects, machines, tasks] = await Promise.all([
     readHub<ProjectRow[]>(fetch, "/api/projects"),
     readHub<Machine[]>(fetch, "/api/agents"),
+    // The rail's Tasks card: a refusal is said on the card, not the page's.
+    readHub<TaskList>(
+      fetch,
+      `/api/projects/${encodeURIComponent(params.id)}/tasks`
+    ),
   ]);
   if (!projects.ok) {
     return refused("the projects", projects);
@@ -35,5 +41,5 @@ export const load: PageLoad = async ({ fetch, params }) => {
     ? (machines.value.find((row) => row.machineId === project.machineId) ??
       null)
     : null;
-  return { project, machine };
+  return { project, machine, tasks };
 };

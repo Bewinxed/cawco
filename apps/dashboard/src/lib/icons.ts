@@ -75,6 +75,8 @@ export {
   default as IconGlobe,
   default as IconToolWeb,
 } from "~icons/solar/global-bold-duotone";
+/** A person is asked for: the Needs-you glyph (DESIGN.md, Session status). */
+export { default as IconNeedsYou } from "~icons/solar/hand-shake-bold-duotone";
 export { default as IconHistory } from "~icons/solar/history-bold-duotone";
 export { default as IconHandoff } from "~icons/solar/inbox-in-bold-duotone";
 export { default as IconInfo } from "~icons/solar/info-circle-bold-duotone";
@@ -82,6 +84,9 @@ export { default as IconKey } from "~icons/solar/key-bold-duotone";
 export { default as IconLaptop } from "~icons/solar/laptop-minimalistic-bold-duotone";
 export { default as IconLayers } from "~icons/solar/layers-bold-duotone";
 export { default as IconLeaf } from "~icons/solar/leaf-bold-duotone";
+export { default as IconLink } from "~icons/solar/link-minimalistic-2-bold-duotone";
+/** Waits on another task that has not landed. */
+export { default as IconLock } from "~icons/solar/lock-keyhole-minimalistic-bold-duotone";
 export { default as IconSparkles } from "~icons/solar/magic-stick-3-bold-duotone";
 export {
   default as IconSearch,
@@ -119,6 +124,8 @@ export {
 } from "~icons/solar/question-circle-bold-duotone";
 export { default as IconDot } from "~icons/solar/record-circle-bold-duotone";
 export { default as IconRefresh } from "~icons/solar/refresh-bold-duotone";
+/** Working: the session status glyph (DESIGN.md, Session status). */
+export { default as IconWorking } from "~icons/solar/refresh-circle-bold-duotone";
 /*
  * The marks a folder can be given by hand (see `FOLDER_MARKS` in
  * lib/cawco/folder-prefs.svelte.ts), picked to span the kinds of work a
