@@ -42,6 +42,19 @@ export interface DiscoverOptions {
 }
 
 /**
+ * A hub already answering on this network or tailnet, for an installer to offer
+ * joining instead of starting a second one. Nothing is cached or written. A Mac
+ * skips the LAN browse: macOS does not let a background service reach
+ * local-network addresses, so only a tailnet address would work for it.
+ */
+export const findExistingHub = async (): Promise<string | undefined> => {
+  const port = Number(readEnv(CAWCO_ENV.hubPort) ?? CAWCO_HUB_PORT);
+  const tailnet = (await tailscaleCandidates(port)).map(({ ip }) => ip);
+  const lan = process.platform === "darwin" ? [] : await browseMdns();
+  return await firstToAnswer([...lan, ...tailnet]);
+};
+
+/**
  * Finds the hub, trying the rungs in order and stopping at the first that
  * answers. Every rung narrates itself through `log`, because the answer to "why
  * did it pick that one" has to be readable without a debugger.

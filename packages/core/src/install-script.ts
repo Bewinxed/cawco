@@ -276,8 +276,26 @@ ${
   HOST="\${HOST:-0.0.0.0}"
   ${CAWCO_ENV.hubPort}="\${${CAWCO_ENV.hubPort}:-${CAWCO_HUB_PORT}}"
   export PORT HOST ${CAWCO_ENV.hubPort}
-  say "starting the hub, dashboard and agent"
-  set -- binary-install hub --hub "http://127.0.0.1:$${CAWCO_ENV.hubPort}" --channel "$CHANNEL"`
+  # A hub already on this network or tailnet: this machine joins it unless a person says to start another.
+  JOINED_EXISTING=0
+  FOUND="$("$ROOT/current/cawco" binary-find-hub </dev/null 2>/dev/null || :)"
+  if [ -n "$FOUND" ]; then
+    say "a CawCo hub is already running at $FOUND"
+    if [ -n "$ASK" ]; then
+      ask_yes "Start a second, separate hub anyway? (No joins that one.)" && FOUND=""
+    else
+      say "this is not a terminal, so this machine starts its own hub. To join that one instead, run: curl -fsSL $FOUND/install.sh | sh"
+      FOUND=""
+    fi
+  fi
+  if [ -n "$FOUND" ]; then
+    say "joining $FOUND"
+    set -- binary-install agent --hub "$FOUND" --channel "$CHANNEL"
+    JOINED_EXISTING=1
+  else
+    say "starting the hub, dashboard and agent"
+    set -- binary-install hub --hub "http://127.0.0.1:$${CAWCO_ENV.hubPort}" --channel "$CHANNEL"
+  fi`
 }
   [ -z "$RELEASE_HOST" ] || set -- "$@" --release-host "$RELEASE_HOST"
   [ -z "$AUTO" ] || set -- "$@" "$AUTO"
@@ -291,12 +309,16 @@ ${
   hub
     ? ""
     : `
-  case "$HOST" in
-    0.0.0.0|::) DASHBOARD_HOST=localhost ;;
-    *:*) DASHBOARD_HOST="[$HOST]" ;;
-    *) DASHBOARD_HOST="$HOST" ;;
-  esac
-  printf '\\nCawCo is ready. Open your dashboard:\\n  %s\\n' "http://$DASHBOARD_HOST:$PORT"
+  if [ "$JOINED_EXISTING" = 1 ]; then
+    printf '\\nThis machine joined the hub at %s. Open that hub'"'"'s dashboard to see it.\\n' "$FOUND"
+  else
+    case "$HOST" in
+      0.0.0.0|::) DASHBOARD_HOST=localhost ;;
+      *:*) DASHBOARD_HOST="[$HOST]" ;;
+      *) DASHBOARD_HOST="$HOST" ;;
+    esac
+    printf '\\nCawCo is ready. Open your dashboard:\\n  %s\\n' "http://$DASHBOARD_HOST:$PORT"
+  fi
 `
 }  case ":$PATH:" in
     *":$HOME/.local/bin:"*) ;;

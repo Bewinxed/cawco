@@ -9,7 +9,7 @@ import {
 } from "@cawco/core";
 import { protocolRange, runtimeCommit } from "@cawco/core/runtime";
 import { ask, closeAsking } from "./ask";
-import { discoverHub, type Hub } from "./discover";
+import { discoverHub, findExistingHub, type Hub } from "./discover";
 import { clearToken, LoginError, login, saveToken } from "./login";
 import {
   isServiceAction,
@@ -525,6 +525,13 @@ const run = async (argv: string[]): Promise<number> => {
       }
       const { rejoinBinary } = await import("./binary-install");
       await rejoinBinary(toHttpBase(args.hub) ?? args.hub);
+      return 0;
+    }
+    case "binary-find-hub": {
+      const url = await findExistingHub();
+      if (url) {
+        console.log(url);
+      }
       return 0;
     }
     case "build-info":
