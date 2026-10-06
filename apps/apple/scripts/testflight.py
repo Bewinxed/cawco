@@ -54,14 +54,24 @@ def group(app):
     return next((g for g in groups if g["attributes"]["isInternalGroup"] and g["attributes"]["name"] == "Internal"), None)
 
 
+def plain(text):
+    """App Store Connect rejects some glyphs in whatsNew - 0.1.11's notes carry
+    U+2715 - so fold the few we use to words and drop the rest, keeping the
+    ordinary typography it does accept."""
+    for glyph, replacement in {"✕": "x", "✖": "x", "✓": "yes", "✔": "yes", "↑": "Up", "↓": "Down", "←": "Left", "→": "Right"}.items():
+        text = text.replace(glyph, replacement)
+    keep = " -–—''\"“”‘’…·()[]{},.:;!?/&%$#@+=*<>|~^`"
+    return "".join(char for char in text if char.isascii() or char in keep)
+
+
 def whats_new(version):
     """The shipped version's own release notes, as TestFlight's what-to-know text."""
     path = ROOT / "source/docs/releases" / f"{version}.md"
     if path.exists():
         bullets = [line[2:].strip() for line in path.read_text().splitlines() if line.strip().startswith(("- ", "* "))]
         if bullets:
-            return f"{version}\n" + "\n".join(bullets)
-    return f"{version}\nCawCo {version} for iPhone and iPad. Connect to your hub to see the live fleet, sessions and transcripts."
+            return plain(f"{version}\n" + "\n".join(bullets))
+    return plain(f"{version}\nCawCo {version} for iPhone and iPad. Connect to your hub to see the live fleet, sessions and transcripts.")
 
 
 def status(app):
@@ -109,8 +119,13 @@ def finish(app, build):
     if not any(t["attributes"]["email"] == owner["attributes"]["email"] for t in members):
         api("POST", "/v1/betaTesters", {"data": {"type": "betaTesters", "attributes": {key: owner["attributes"][key] for key in ["email", "firstName", "lastName"]}, "relationships": {"betaGroups": {"data": [{"type": "betaGroups", "id": internal["id"]}]}}}})
     version = api("GET", f"/v1/builds/{build['id']}/preReleaseVersion")["data"]["attributes"]["version"]
-    if not any(row["attributes"]["locale"] == "en-US" for row in listed(f"/v1/builds/{build['id']}/betaBuildLocalizations")):
-        api("POST", "/v1/betaBuildLocalizations", {"data": {"type": "betaBuildLocalizations", "attributes": {"locale": "en-US", "whatsNew": whats_new(version)}, "relationships": {"build": relationship("builds", build["id"])}}})
+    localizations = listed(f"/v1/builds/{build['id']}/betaBuildLocalizations")
+    english = next((row for row in localizations if row["attributes"]["locale"] == "en-US"), None)
+    notes = whats_new(version)
+    if english is None:
+        api("POST", "/v1/betaBuildLocalizations", {"data": {"type": "betaBuildLocalizations", "attributes": {"locale": "en-US", "whatsNew": notes}, "relationships": {"build": relationship("builds", build["id"])}}})
+    elif not english["attributes"].get("whatsNew"):
+        api("PATCH", f"/v1/betaBuildLocalizations/{english['id']}", {"data": {"type": "betaBuildLocalizations", "id": english["id"], "attributes": {"whatsNew": notes}}})
     api("POST", f"/v1/betaGroups/{internal['id']}/relationships/builds", {"data": [{"type": "builds", "id": build["id"]}]})
     print(f"APP_ID {app} GROUP_ID {internal['id']} BUILD_ID {build['id']}")
     status(app)
