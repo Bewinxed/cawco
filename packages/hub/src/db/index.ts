@@ -91,6 +91,7 @@ import {
   plugins,
   projectPlaces,
   projects,
+  projectTasks,
   ruleState,
   rules,
   sentMessages,
@@ -98,6 +99,7 @@ import {
   skills,
   supervisorConfig,
   supervisorEvents,
+  type Tracker,
   tools,
   usageBuckets,
   usageLimitHistory,
@@ -160,6 +162,8 @@ export type PlaceRow = typeof projectPlaces.$inferSelect;
  * are its primary place, and every place it has, the primary first.
  */
 export type ProjectRow = typeof projects.$inferSelect & { places: PlaceRow[] };
+/** One task file as a project's task index holds it (tasks.ts). */
+export type TaskIndexRow = typeof projectTasks.$inferSelect;
 export type ContinuationRow = typeof continuations.$inferSelect;
 export type WorkflowRow = typeof workflows.$inferSelect;
 export type WorkflowRunRow = typeof workflowRuns.$inferSelect;
@@ -346,6 +350,8 @@ export interface DbShape {
   readonly deleteWorkflow: (id: string) => void;
   /** A kept supervisor notice that has now been sent. */
   readonly deleteWorkflowNotice: (id: number) => void;
+  /** Forgets the index rows of task files that are gone. */
+  readonly dropTaskIndex: (projectId: string, paths: string[]) => void;
   /** Persist the decision before its reconciler may send anything. */
   readonly endInstance: (
     id: string,
@@ -736,6 +742,8 @@ export interface DbShape {
     apiKey?: string | null;
     deniedTools?: string[] | null;
   }) => void;
+  /** Files or refreshes rows of a project's task index, each by its file's path. */
+  readonly putTaskIndex: (rows: TaskIndexRow[]) => void;
   /** Upsert; a patch names only what it changes and the rest stays as it was. */
   readonly putToolPolicy: (
     id: string,
@@ -952,6 +960,8 @@ export interface DbShape {
   readonly setOpenRouterConnection: (apiKey: string) => void;
   /** The repository a project's checkouts are of, once a machine has read it. */
   readonly setProjectRemote: (id: string, remote: string) => void;
+  /** Where the project's tasks live; tasks.ts refuses a tracker not built yet. */
+  readonly setProjectTracker: (id: string, tracker: Tracker) => void;
   /** Turn composer suggestions on or off. Only meaningful while connected. */
   readonly setSuggestWhileTyping: (enabled: boolean) => void;
   /** Closes it. An ask this hub never recorded is nothing to close. */
@@ -1011,6 +1021,8 @@ export interface DbShape {
   ) => typeof fleetMcpOauth.$inferSelect | undefined;
   /** Takes one owed start off the books; true for exactly one caller. */
   readonly takeOwedSpawn: (id: string) => boolean;
+  /** Every row of a project's task index, in id order. */
+  readonly taskIndex: (projectId: string) => TaskIndexRow[];
   readonly touchAgent: (machineId: string) => void;
   /**
    * The session moved. This is the only write anywhere that means it: every
@@ -3653,6 +3665,45 @@ const make = (path: string): DbShape => {
     setProjectRemote: (id, remote) => {
       db.update(projects).set({ remote }).where(eq(projects.id, id)).run();
     },
+    setProjectTracker: (id, tracker) => {
+      db.update(projects).set({ tracker }).where(eq(projects.id, id)).run();
+    },
+    taskIndex: (projectId) =>
+      db
+        .select()
+        .from(projectTasks)
+        .where(eq(projectTasks.projectId, projectId))
+        .orderBy(asc(projectTasks.number), asc(projectTasks.path))
+        .all(),
+    putTaskIndex: (rows) => {
+      if (rows.length === 0) {
+        return;
+      }
+      db.transaction((tx) => {
+        for (const row of rows) {
+          tx.insert(projectTasks)
+            .values(row)
+            .onConflictDoUpdate({
+              target: [projectTasks.projectId, projectTasks.path],
+              set: row,
+            })
+            .run();
+        }
+      });
+    },
+    dropTaskIndex: (projectId, paths) => {
+      if (paths.length === 0) {
+        return;
+      }
+      db.delete(projectTasks)
+        .where(
+          and(
+            eq(projectTasks.projectId, projectId),
+            inArray(projectTasks.path, paths)
+          )
+        )
+        .run();
+    },
     createProject: ({ id, machineId, name, cwd, remote }) =>
       db.transaction((tx) => {
         tx.insert(projects).values({ id, machineId, name, cwd, remote }).run();
@@ -3794,6 +3845,9 @@ const make = (path: string): DbShape => {
           tx.delete(projectPlaces)
             .where(inArray(projectPlaces.projectId, gone))
             .run();
+          tx.delete(projectTasks)
+            .where(inArray(projectTasks.projectId, gone))
+            .run();
           tx.delete(projects).where(inArray(projects.id, gone)).run();
         }
         tx.delete(usageLimits)
@@ -3810,6 +3864,7 @@ const make = (path: string): DbShape => {
           .where(eq(instances.projectId, id))
           .run();
         tx.delete(projectPlaces).where(eq(projectPlaces.projectId, id)).run();
+        tx.delete(projectTasks).where(eq(projectTasks.projectId, id)).run();
         tx.delete(projects).where(eq(projects.id, id)).run();
       });
     },

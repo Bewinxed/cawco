@@ -119,7 +119,16 @@ export interface FolderHistory {
   path: string;
 }
 
-export type FolderRefusalStatus = 400 | 404 | 409 | 413 | 415 | 500 | 503;
+export type FolderRefusalStatus =
+  | 400
+  | 403
+  | 404
+  | 409
+  | 413
+  | 415
+  | 422
+  | 500
+  | 503;
 
 /** A folder request the hub turns down, with the status and the words the caller reads. */
 export class FolderRefusal extends Error {
@@ -367,21 +376,30 @@ const commit = async (
 
 // --- one project at a time ---------------------------------------------------
 
-const turns = new Map<string, Promise<void>>();
-/** Projects whose folder this process has seen made, so a read skips the check. */
-const ready = new Set<string>();
+/**
+ * A queue per key: the function it answers runs `work` once every earlier
+ * turn on the same key has settled. The folder takes one for its commits; a
+ * caller that reads a file, changes it and writes it back (the task files)
+ * takes its own, around those writes.
+ */
+export const turnTaker = () => {
+  const turns = new Map<string, Promise<void>>();
+  return <T>(key: string, work: () => Promise<T>): Promise<T> => {
+    const turn = (turns.get(key) ?? Promise.resolve()).then(work);
+    const tail: Promise<void> = turn.then(noop, noop).then(() => {
+      if (turns.get(key) === tail) {
+        turns.delete(key);
+      }
+    });
+    turns.set(key, tail);
+    return turn;
+  };
+};
 
 /** Runs `work` once every earlier turn on the same project has settled, so commits never interleave. */
-const inTurn = <T>(projectId: string, work: () => Promise<T>): Promise<T> => {
-  const turn = (turns.get(projectId) ?? Promise.resolve()).then(work);
-  const tail: Promise<void> = turn.then(noop, noop).then(() => {
-    if (turns.get(projectId) === tail) {
-      turns.delete(projectId);
-    }
-  });
-  turns.set(projectId, tail);
-  return turn;
-};
+const inTurn = turnTaker();
+/** Projects whose folder this process has seen made, so a read skips the check. */
+const ready = new Set<string>();
 
 /** `lstat`, with undefined for a path that is not there. */
 const lstatIfThere = async (path: string): Promise<Stats | undefined> => {
@@ -798,6 +816,31 @@ export const folderHistory = async (
 };
 
 /**
+ * Every path under `rawDir` that any commit of the folder ever touched,
+ * including files deleted since: what keeps a number handed out once from
+ * being handed out again.
+ */
+export const folderPathsInHistory = async (
+  projectId: string,
+  rawDir: string
+): Promise<string[]> => {
+  const rel = folderPath(rawDir);
+  const root = await forReading(projectId);
+  const out = await git(root, [
+    "log",
+    "--format=",
+    "--name-only",
+    "--no-renames",
+    ...(rel ? ["--", rel] : []),
+  ]);
+  return [...new Set(out.split("\n").filter(Boolean))];
+};
+
+/** Whether the project's folder has been made: a project never written to has none. */
+export const hasProjectFolder = (projectId: string): Promise<boolean> =>
+  exists(join(projectRoot(projectId), ".git"));
+
+/**
  * Moves a deleted project's folder, history and all, to
  * `<data>/projects/.trash/<projectId>-<time>` (never erased). Answers where it
  * went, or undefined when the project never had a folder.
@@ -823,7 +866,8 @@ export const trashProjectFolder = async (
 
 // --- routes ----------------------------------------------------------------
 
-const refused = (error: unknown) => {
+/** A refusal as the route's answer, in its status and words; anything else is thrown on. */
+export const refused = (error: unknown) => {
   if (error instanceof FolderRefusal) {
     return status(error.status, error.message);
   }

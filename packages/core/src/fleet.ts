@@ -256,12 +256,72 @@ export interface AgentFrontMatter {
  */
 export const AGENT_NAME = /^[a-z][a-z0-9-]*$/;
 
-const FRONT_MATTER = /^---\r?\n([\s\S]*?)\r?\n---/;
+const FRONT_MATTER = /^---\r?\n([\s\S]*?)\r?\n---[^\n]*(?:\n|$)/;
 const QUOTED_SCALAR = /^(["'])([\s\S]*)\1$/;
 const LINE_SPLIT = /\r?\n/;
 const TOP_LEVEL_KEY = /^([A-Za-z][A-Za-z0-9_-]*):(.*)$/;
 const INDENTED_LINE = /^\s+\S/;
 const SEQUENCE_ITEM = /^\s*-\s+/;
+/** A line that belongs to the field above it: indented, or a sequence item at the margin. */
+const UNDER_LINE = /^(?:\s+\S|-\s)/;
+
+/**
+ * One top-level line of a front matter block, with the lines that belong to
+ * it: a block scalar's text, a block sequence's items, a plain scalar's
+ * continuation. `key` is absent on a line that names no field (a comment, a
+ * blank, anything else), which then stands alone.
+ */
+export interface FrontMatterLine {
+  key?: string;
+  /** The line exactly as written. */
+  raw: string;
+  /** The lines under it, exactly as written. */
+  under: string[];
+  /** The text after `key:`, trimmed; the trimmed line when there is no key. */
+  value: string;
+}
+
+export interface FrontMatterBlock {
+  /** Everything after the closing `---` line, as written. */
+  body: string;
+  lines: FrontMatterLine[];
+}
+
+/**
+ * A file's front matter, line by line, without interpreting a value: the
+ * shared reader under {@link parseAgentFrontMatter} and the project task file
+ * (the hub's `task-file.ts`), which reads and rewrites single fields in place.
+ * Undefined when the file does not open with a `---` block.
+ */
+export const frontMatterBlock = (
+  content: string
+): FrontMatterBlock | undefined => {
+  const block = FRONT_MATTER.exec(content);
+  if (!block) {
+    return;
+  }
+  const lines: FrontMatterLine[] = [];
+  for (const raw of block[1].split(LINE_SPLIT)) {
+    const last = lines.at(-1);
+    if (last?.key !== undefined && UNDER_LINE.test(raw)) {
+      last.under.push(raw);
+      continue;
+    }
+    const pair = TOP_LEVEL_KEY.exec(raw);
+    lines.push(
+      pair
+        ? { key: pair[1], value: pair[2].trim(), raw, under: [] }
+        : { value: raw.trim(), raw, under: [] }
+    );
+  }
+  return { lines, body: content.slice(block[0].length) };
+};
+
+/** The leading run of `lines` that `pattern` matches. */
+const leading = (lines: string[], pattern: RegExp): string[] => {
+  const end = lines.findIndex((line) => !pattern.test(line));
+  return end === -1 ? lines : lines.slice(0, end);
+};
 
 /** `"a"`, `'a'` or a bare word — YAML's three ways of writing one scalar. */
 const unquote = (value: string): string => {
@@ -285,37 +345,26 @@ const splitList = (value: string): string[] =>
  * be storing the file verbatim. A block scalar (`|`, `>`) folds to one line and
  * a block sequence joins with commas, so both reach the reader as themselves.
  */
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: parses YAML front matter's scalars, folded block scalars, and inline sequences in one pass — see the block comment above for why this stays one function instead of a dependency.
 export const parseAgentFrontMatter = (content: string): AgentFrontMatter => {
-  const block = FRONT_MATTER.exec(content);
+  const block = frontMatterBlock(content);
   if (!block) {
     return {};
   }
 
-  const lines = block[1].split(LINE_SPLIT);
   const fields: Record<string, string> = {};
-  for (let at = 0; at < lines.length; at += 1) {
-    // Top-level keys only: an indented line belongs to whatever opened above it.
-    const pair = TOP_LEVEL_KEY.exec(lines[at]);
-    if (!pair) {
+  // Top-level keys only: an indented line belongs to whatever opened above it.
+  for (const { key, value, under } of block.lines) {
+    if (key === undefined) {
       continue;
     }
-    const [, key, rest] = pair;
-    const value = rest.trim();
-
     if (value.startsWith("|") || value.startsWith(">")) {
-      const folded: string[] = [];
-      while (at + 1 < lines.length && INDENTED_LINE.test(lines[at + 1])) {
-        at += 1;
-        folded.push(lines[at].trim());
-      }
-      fields[key] = folded.join(" ");
+      fields[key] = leading(under, INDENTED_LINE)
+        .map((line) => line.trim())
+        .join(" ");
     } else if (value === "") {
-      const items: string[] = [];
-      while (at + 1 < lines.length && SEQUENCE_ITEM.test(lines[at + 1])) {
-        at += 1;
-        items.push(unquote(lines[at].replace(SEQUENCE_ITEM, "")));
-      }
+      const items = leading(under, SEQUENCE_ITEM).map((line) =>
+        unquote(line.replace(SEQUENCE_ITEM, ""))
+      );
       if (items.length > 0) {
         fields[key] = items.join(", ");
       }

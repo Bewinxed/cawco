@@ -257,10 +257,71 @@ export const projects = sqliteTable("projects", {
    * answered, and for a folder with no remote.
    */
   remote: text("remote"),
+  /**
+   * Where the project's tasks live (§5.2 of the Projects spec): CawCo's own
+   * files in the project folder. GitHub Issues and Linear are named so the
+   * setting is ready for them; the hub refuses them until they are built.
+   */
+  tracker: text("tracker").$type<Tracker>().notNull().default("cawco"),
   createdAt: timestamp("created_at")
     .notNull()
     .$defaultFn(() => new Date()),
 });
+
+/** Where a project's tasks live: CawCo's files, or (later) an outside tracker. */
+export type Tracker = "cawco" | "github" | "linear";
+
+/**
+ * The index of a project's task files (`tasks/<id>-<slug>.md` in its hub
+ * folder, task-file.ts): what a list reads instead of every file. Rebuilt from
+ * the files: a row whose `hash` no longer matches its file's content is read
+ * again, so a hand edit is picked up on the next read. Nothing here is the
+ * truth; the files are.
+ */
+export const projectTasks = sqliteTable(
+  "project_tasks",
+  {
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    /** The file, from the project folder's root: `tasks/tsk-12-fix-toggle.md`. */
+    path: text("path").notNull(),
+    /** `tsk-12`, from the file's name. */
+    id: text("id").notNull(),
+    /** 12: the id's number, for order and for the next id. */
+    number: integer("number").notNull(),
+    title: text("title").notNull(),
+    /** The file's `stage:`; empty when it names none. */
+    stage: text("stage").notNull(),
+    /** The delegate type it is assigned to. */
+    type: text("type"),
+    /** The tasks it waits for (`tsk-…`). */
+    after: text("after", { mode: "json" })
+      .$type<string[]>()
+      .notNull()
+      .default([]),
+    parent: text("parent"),
+    rank: text("rank"),
+    labels: text("labels", { mode: "json" })
+      .$type<string[]>()
+      .notNull()
+      .default([]),
+    todosDone: integer("todos_done").notNull().default(0),
+    todosTotal: integer("todos_total").notNull().default(0),
+    /** What in the file could not be read, in a sentence; null when all of it could. */
+    problem: text("problem"),
+    /** sha256 hex of the file's content as indexed. */
+    hash: text("hash").notNull(),
+    /** When the hub last saw the content change. */
+    updatedAt: timestamp("updated_at")
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (table) => [
+    primaryKey({ columns: [table.projectId, table.path] }),
+    index("project_tasks_id").on(table.projectId, table.id),
+  ]
+);
 
 /**
  * What a place is: a checkout on a machine, a delegate's workspace (kept
@@ -613,6 +674,11 @@ export const workItems = sqliteTable(
     title: text("title").notNull(),
     /** The delegate type it was asked for by name, if any. */
     type: text("type"),
+    /**
+     * The project task this item is an attempt at (`tsk-12`, in its session's
+     * project), if any: the one task whose to-dos its session may write.
+     */
+    taskId: text("task_id"),
     harness: text("harness").notNull(),
     model: text("model"),
     effort: text("effort"),

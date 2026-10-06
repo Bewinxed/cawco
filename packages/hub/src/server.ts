@@ -208,6 +208,7 @@ import { hashFiles, resolveSkill } from "./skills";
 import { createStreamHub } from "./stream";
 import { suggest } from "./suggest";
 import { SupervisorEngine } from "./supervisor";
+import { createTasks, taskRoutes } from "./tasks";
 import type { TelegramBridge } from "./telegram";
 import {
   createTranscripts,
@@ -7314,7 +7315,23 @@ export const createServer = (
     // biome-ignore lint/complexity/noVoid: startup resumes asynchronously and reports its own failure
     void workflowRuntime.resume().catch(console.error);
   }
+  // A project's tasks: files in its hub folder, indexed here (tasks.ts).
+  const tasks = createTasks({
+    project: (id) => db.project(id),
+    projectIds: () => db.listProjects().map((project) => project.id),
+    index: db.taskIndex,
+    put: db.putTaskIndex,
+    drop: db.dropTaskIndex,
+    setTracker: db.setProjectTracker,
+  });
+  if (resumeWorkflows) {
+    // Off the boot path: a folder edited while the hub was down is re-read once.
+    // biome-ignore lint/complexity/noVoid: the catch-up logs its own failures
+    void tasks.syncAll().catch(console.error);
+  }
   const delegationMcp = createDelegationMcp({
+    tasks,
+    workItemTask: (id) => db.workItem(id)?.taskId,
     instances: () => withKeepAlive(db.listInstances()),
     instanceById: (id) => db.getInstancesByIds([id])[0],
     credentialActor: (authorization) => {
@@ -7590,6 +7607,7 @@ export const createServer = (
           db.listProjects().some((project) => project.id === id)
         )
       )
+      .use(taskRoutes(tasks))
       .use(
         joinRoutes({
           online: (machineId) => Boolean(registry.agent(machineId)),

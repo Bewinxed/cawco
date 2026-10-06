@@ -9,6 +9,8 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { adminTools } from "./admin-tools";
 import { handoffInstructions, handoffTools } from "./delegation-tools";
+import { MAINLINE_TASK_TOOLS, TASK_TOOLS, taskTools } from "./task-tools";
+import type { Tasks } from "./tasks";
 
 type ToolFactory = typeof handoffTools;
 
@@ -44,6 +46,10 @@ export function createDelegationMcp(options: {
   forward: (envelope: Envelope, actor: InstanceRow) => Promise<void>;
   credentialActor: (authorization: string | null) => InstanceRow | undefined;
   tools?: ToolFactory;
+  /** Project tasks, for the `task_*` and `todo_write` tools; without it they are not offered. */
+  tasks?: Tasks;
+  /** The task a work item is an attempt at, if any. */
+  workItemTask?: (workItemId: string) => string | null | undefined;
 }) {
   let tools = options.tools ?? handoffTools;
   let admin = adminTools();
@@ -106,6 +112,13 @@ export function createDelegationMcp(options: {
       },
     }),
     ...(withAdmin ? admin : []),
+    // The same split as the admin tools: filing and changing tasks is for the
+    // sessions the operator started; every session reads and writes to-dos.
+    ...(options.tasks
+      ? taskTools(undefined).filter(
+          (tool) => withAdmin || !MAINLINE_TASK_TOOLS.has(tool.name)
+        )
+      : []),
   ];
 
   // Temporary until Phase 2's per-session credentials replace this resolver.
@@ -196,6 +209,34 @@ export function createDelegationMcp(options: {
     return (await entry.handler(input)) as CallToolResult;
   };
 
+  /** A task tool, for its caller's project; the ones that change tasks only for a session that {@link administers}. */
+  const taskCall = async (
+    actor: InstanceRow,
+    name: string,
+    input: Record<string, unknown>
+  ): Promise<CallToolResult> => {
+    const mainline = administers(actor);
+    if (MAINLINE_TASK_TOOLS.has(name) && !mainline) {
+      throw new Error(
+        `${name} isn't available here: only sessions you started file or change tasks, and this one is a delegate, work item or workflow step. Propose the change to the session that started it, with handoff.`
+      );
+    }
+    const entry =
+      options.tasks &&
+      taskTools({
+        actor,
+        mainline,
+        tasks: options.tasks,
+        workItemTask: actor.workItemId
+          ? (options.workItemTask?.(actor.workItemId) ?? null)
+          : null,
+      }).find((tool) => tool.name === name);
+    if (!entry) {
+      throw new Error(`Unknown tool ${name}`);
+    }
+    return (await entry.handler(input)) as CallToolResult;
+  };
+
   /**
    * The tools that act on the fleet rather than on a session: the delegate-type
    * catalog, which anyone may read without an actor, and the `manage_*` tools,
@@ -233,6 +274,13 @@ export function createDelegationMcp(options: {
       const fleet = await fleetCall(binding, name, args, input, authorization);
       if (fleet) {
         return fleet;
+      }
+      if (options.tasks && TASK_TOOLS.has(name)) {
+        return await taskCall(
+          actorOf(binding, args, authorization),
+          name,
+          input
+        );
       }
       const actor = actorOf(binding, args, authorization);
       const emitted: Envelope[] = [];

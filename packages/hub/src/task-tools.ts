@@ -1,0 +1,251 @@
+/**
+ * The task tools on the `cawco` MCP server (§5.3: one server, a toolset per
+ * role; new tools named group first). Every session reads its project's
+ * tasks and writes to-dos; filing and changing tasks belongs to the sessions
+ * the operator started (delegation-mcp's `administers`), and a delegate
+ * proposes those through handoff. A session's project is its instance row's
+ * `projectId`; a delegate's is its parent's.
+ */
+import type { InstanceRow } from "@cawco/core";
+import { z } from "zod";
+import { tool } from "./admin-tools";
+import { EDGES, normaliseTaskRef } from "./task-file";
+import { sessionActor, type TaskList, type Tasks } from "./tasks";
+
+/** Every task tool, by name. */
+export const TASK_TOOLS: ReadonlySet<string> = new Set([
+  "task_create",
+  "task_read",
+  "task_update",
+  "task_link",
+  "todo_write",
+]);
+
+/** The tools that file or change tasks: a session the operator started only. */
+export const MAINLINE_TASK_TOOLS: ReadonlySet<string> = new Set([
+  "task_create",
+  "task_update",
+  "task_link",
+]);
+
+export interface TaskToolContext {
+  actor: InstanceRow;
+  /** A session the operator started, not a delegate, work item or workflow step. */
+  mainline: boolean;
+  tasks: Tasks;
+  /** The task the session's work item is an attempt at, if it has one. */
+  workItemTask: string | null;
+}
+
+const ok = (data: unknown) => ({
+  content: [{ type: "text" as const, text: JSON.stringify(data) }],
+});
+
+/** A list as a model reads it: one short line of fields per task. */
+const compact = (list: TaskList) => ({
+  tasks: list.tasks.map((task) => ({
+    id: task.id,
+    title: task.title,
+    stage: task.stage,
+    ...(task.type ? { type: task.type } : {}),
+    ...(task.after.length > 0 ? { after: task.after } : {}),
+    ...(task.parent ? { parent: task.parent } : {}),
+    ...(task.labels.length > 0 ? { labels: task.labels } : {}),
+    ...(task.todos.total > 0
+      ? { todos: `${task.todos.done}/${task.todos.total}` }
+      : {}),
+    ...(task.problem ? { problem: task.problem } : {}),
+  })),
+  ...(list.problems.length > 0 ? { problems: list.problems } : {}),
+});
+
+const taskRef = () =>
+  z.string().trim().min(1).describe("A task id, like tsk-12.");
+const lines = (what: string) => z.array(z.string()).optional().describe(what);
+
+/**
+ * The task tools, bound to the calling session; with no context, the same
+ * definitions for discovery, whose handlers refuse.
+ */
+export function taskTools(context: TaskToolContext | undefined) {
+  const scope = () => {
+    if (!context) {
+      throw new Error("Discovery cannot execute tools");
+    }
+    const { projectId } = context.actor;
+    if (!projectId) {
+      throw new Error(
+        "This session belongs to no project, so it has no tasks. Start the session in one of a project's places."
+      );
+    }
+    return {
+      projectId,
+      tasks: context.tasks,
+      actor: sessionActor(context.actor),
+    };
+  };
+
+  /** The task todo_write may change: the work item's own, or any one a mainline session names. */
+  const todoTask = (asked: string | undefined): string => {
+    const own = context?.workItemTask ?? null;
+    if (context?.mainline) {
+      const named = asked ?? own;
+      if (!named) {
+        throw new Error(
+          'Name the task whose to-dos you are writing: todo_write({ task: "tsk-12", … }).'
+        );
+      }
+      return named;
+    }
+    if (!own) {
+      throw new Error(
+        "todo_write writes to-dos on your work item's task, and your work item has none. Say what you did in finish_item instead."
+      );
+    }
+    if (asked !== undefined && normaliseTaskRef(asked) !== own) {
+      throw new Error(
+        `You can write to-dos only on ${own}, your work item's task.`
+      );
+    }
+    return own;
+  };
+
+  return [
+    tool(
+      "task_read",
+      "Read your project's tasks. With `id`: that task's file, parsed — stage, edges, checks, description, acceptance criteria, and to-dos with their ids (td-3) and positions (2.1). Without: every task, one line each; `stage` narrows the list.",
+      {
+        id: taskRef().optional(),
+        stage: z
+          .string()
+          .optional()
+          .describe("When listing, only the tasks in this stage."),
+      },
+      async ({ id, stage }) => {
+        const { projectId, tasks } = scope();
+        return ok(
+          id
+            ? await tasks.get(projectId, id)
+            : compact(await tasks.list(projectId, { stage }))
+        );
+      }
+    ),
+    tool(
+      "task_create",
+      "File a task in your project: work that must outlive this conversation or run without you. Returns it, with its id (tsk-12). `stage` defaults to the project's first stage; `after` names the tasks it waits for.",
+      {
+        title: z.string().describe("One line, verb first."),
+        description: z.string().optional(),
+        acceptance: z
+          .string()
+          .optional()
+          .describe("What must be true when it is done, as a markdown list."),
+        todos: lines("Top-level to-dos, one line each."),
+        stage: z.string().optional(),
+        type: z
+          .string()
+          .optional()
+          .describe("The delegate type that should run it."),
+        after: lines("Tasks it waits for, like tsk-3."),
+        parent: z.string().optional(),
+        related: lines("Tasks it relates to, without waiting for them."),
+        found_in: z
+          .string()
+          .optional()
+          .describe("The task whose work turned this one up."),
+        checks: lines("Shell commands that must pass, like bun test."),
+        outputs: lines("Files it produces that are not commits."),
+        labels: lines("Short labels."),
+      },
+      async ({ found_in, ...draft }) => {
+        const { projectId, tasks, actor } = scope();
+        return ok(
+          await tasks.create(projectId, { ...draft, foundIn: found_in }, actor)
+        );
+      }
+    ),
+    tool(
+      "task_update",
+      "Change one of your project's tasks: move its `stage` (checked against the project's stages), or replace its title, description, acceptance criteria, type, checks, outputs or labels. What you leave out stays as written.",
+      {
+        id: taskRef(),
+        stage: z.string().optional(),
+        title: z.string().optional(),
+        description: z.string().optional(),
+        acceptance: z.string().optional(),
+        type: z
+          .string()
+          .nullable()
+          .optional()
+          .describe("A delegate type; null clears it."),
+        checks: lines("Replaces the checks."),
+        outputs: lines("Replaces the outputs."),
+        labels: lines("Replaces the labels."),
+      },
+      async ({ id, stage, ...patch }) => {
+        const { projectId, tasks, actor } = scope();
+        const fields = Object.values(patch).some(
+          (value) => value !== undefined
+        );
+        let task = fields
+          ? await tasks.update(projectId, id, patch, actor)
+          : undefined;
+        if (stage !== undefined) {
+          task = await tasks.move(projectId, id, stage, actor);
+        }
+        return ok(task ?? (await tasks.get(projectId, id)));
+      }
+    ),
+    tool(
+      "task_link",
+      "Add or remove an edge from one task to another: `after` (it waits for that task), `parent`, `related` (no effect on order), or `found_in` (turned up while working on that task).",
+      {
+        id: taskRef(),
+        edge: z.enum(EDGES),
+        to: taskRef(),
+        remove: z.boolean().optional().describe("Take the edge out instead."),
+      },
+      async ({ id, edge, to, remove }) => {
+        const { projectId, tasks, actor } = scope();
+        return ok(await tasks.link(projectId, id, { edge, to, remove }, actor));
+      }
+    ),
+    tool(
+      "todo_write",
+      "Tick, untick, add or reword to-dos on your work item's task; a session the operator started names any task of its project. Name a to-do by its id (td-3) or position (2.1). All changes land together; returns the task's to-dos.",
+      {
+        task: z
+          .string()
+          .optional()
+          .describe("The task, like tsk-12. Defaults to your work item's."),
+        tick: lines("To-dos done."),
+        untick: lines("To-dos not done after all."),
+        add: z
+          .array(
+            z.object({
+              text: z.string().describe("One line."),
+              under: z
+                .string()
+                .optional()
+                .describe("The to-do it is a step of."),
+            })
+          )
+          .optional(),
+        edit: z
+          .array(z.object({ todo: z.string(), text: z.string() }))
+          .optional()
+          .describe("New words for a to-do."),
+      },
+      async ({ task, ...changes }) => {
+        const { projectId, tasks, actor } = scope();
+        const done = await tasks.todos(
+          projectId,
+          todoTask(task),
+          changes,
+          actor
+        );
+        return ok({ id: done.id, todos: done.todos });
+      }
+    ),
+  ];
+}

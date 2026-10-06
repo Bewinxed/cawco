@@ -13,7 +13,8 @@ import { hubHttpUrl } from "./delegation-actions";
 /** API timeout for admin calls — generous for skill installs that fetch from GitHub. */
 const TIMEOUT_MS = 30_000;
 
-function tool<T extends z.ZodRawShape>(
+/** One MCP tool: its zod input as JSON Schema, and a handler that parses its input first. */
+export function tool<T extends z.ZodRawShape>(
   name: string,
   description: string,
   input: T,

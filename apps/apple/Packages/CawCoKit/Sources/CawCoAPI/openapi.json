@@ -294,6 +294,16 @@
               }
             }
           },
+          "403": {
+            "description": "getApiProjectsByIdFolder 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
           "404": {
             "description": "getApiProjectsByIdFolder 404",
             "content": {
@@ -337,6 +347,11 @@
           "422": {
             "description": "getApiProjectsByIdFolder 422",
             "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
               "application/problem+json": {
                 "schema": {
                   "$ref": "#/components/schemas/ValidationErrorResponse"
@@ -409,6 +424,16 @@
               }
             }
           },
+          "403": {
+            "description": "getApiProjectsByIdFolderFile 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
           "404": {
             "description": "getApiProjectsByIdFolderFile 404",
             "content": {
@@ -452,6 +477,11 @@
           "422": {
             "description": "getApiProjectsByIdFolderFile 422",
             "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
               "application/problem+json": {
                 "schema": {
                   "$ref": "#/components/schemas/ValidationErrorResponse"
@@ -540,6 +570,16 @@
               }
             }
           },
+          "403": {
+            "description": "putApiProjectsByIdFolderFile 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
           "404": {
             "description": "putApiProjectsByIdFolderFile 404",
             "content": {
@@ -583,6 +623,11 @@
           "422": {
             "description": "putApiProjectsByIdFolderFile 422",
             "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
               "application/problem+json": {
                 "schema": {
                   "$ref": "#/components/schemas/ValidationErrorResponse"
@@ -662,6 +707,16 @@
               }
             }
           },
+          "403": {
+            "description": "deleteApiProjectsByIdFolderFile 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
           "404": {
             "description": "deleteApiProjectsByIdFolderFile 404",
             "content": {
@@ -705,6 +760,11 @@
           "422": {
             "description": "deleteApiProjectsByIdFolderFile 422",
             "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
               "application/problem+json": {
                 "schema": {
                   "$ref": "#/components/schemas/ValidationErrorResponse"
@@ -787,6 +847,16 @@
               }
             }
           },
+          "403": {
+            "description": "getApiProjectsByIdFolderHistory 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
           "404": {
             "description": "getApiProjectsByIdFolderHistory 404",
             "content": {
@@ -830,6 +900,11 @@
           "422": {
             "description": "getApiProjectsByIdFolderHistory 422",
             "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
               "application/problem+json": {
                 "schema": {
                   "$ref": "#/components/schemas/ValidationErrorResponse"
@@ -849,6 +924,1396 @@
           },
           "503": {
             "description": "getApiProjectsByIdFolderHistory 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/tasks": {
+      "get": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "stage",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiProjectsByIdTasks",
+        "responses": {
+          "200": {
+            "description": "getApiProjectsByIdTasks 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiProjectsByIdTasks200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "getApiProjectsByIdTasks 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "getApiProjectsByIdTasks 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "getApiProjectsByIdTasks 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "getApiProjectsByIdTasks 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "getApiProjectsByIdTasks 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "getApiProjectsByIdTasks 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiProjectsByIdTasks 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "getApiProjectsByIdTasks 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "getApiProjectsByIdTasks 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string"
+                  },
+                  "stage": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string"
+                  },
+                  "after": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "parent": {
+                    "type": "string"
+                  },
+                  "related": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "foundIn": {
+                    "type": "string"
+                  },
+                  "checks": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "outputs": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "rank": {
+                    "type": "string"
+                  },
+                  "labels": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "acceptance": {
+                    "type": "string"
+                  },
+                  "todos": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "title"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiProjectsByIdTasks",
+        "responses": {
+          "200": {
+            "description": "postApiProjectsByIdTasks 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiProjectsByIdTasks 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "postApiProjectsByIdTasks 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiProjectsByIdTasks 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiProjectsByIdTasks 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "postApiProjectsByIdTasks 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "postApiProjectsByIdTasks 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiProjectsByIdTasks 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "postApiProjectsByIdTasks 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "postApiProjectsByIdTasks 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/tasks/{taskId}": {
+      "get": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "taskId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiProjectsByIdTasksByTaskId",
+        "responses": {
+          "200": {
+            "description": "getApiProjectsByIdTasksByTaskId 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "getApiProjectsByIdTasksByTaskId 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "getApiProjectsByIdTasksByTaskId 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "getApiProjectsByIdTasksByTaskId 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "getApiProjectsByIdTasksByTaskId 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "getApiProjectsByIdTasksByTaskId 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "getApiProjectsByIdTasksByTaskId 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiProjectsByIdTasksByTaskId 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "getApiProjectsByIdTasksByTaskId 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "getApiProjectsByIdTasksByTaskId 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "taskId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "acceptance": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "rank": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "checks": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "outputs": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "labels": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "patchApiProjectsByIdTasksByTaskId",
+        "responses": {
+          "200": {
+            "description": "patchApiProjectsByIdTasksByTaskId 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "patchApiProjectsByIdTasksByTaskId 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "patchApiProjectsByIdTasksByTaskId 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "patchApiProjectsByIdTasksByTaskId 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "patchApiProjectsByIdTasksByTaskId 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "patchApiProjectsByIdTasksByTaskId 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "patchApiProjectsByIdTasksByTaskId 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "patchApiProjectsByIdTasksByTaskId 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "patchApiProjectsByIdTasksByTaskId 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "patchApiProjectsByIdTasksByTaskId 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/tasks/{taskId}/stage": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "taskId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "stage": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "stage"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiProjectsByIdTasksByTaskIdStage",
+        "responses": {
+          "200": {
+            "description": "postApiProjectsByIdTasksByTaskIdStage 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiProjectsByIdTasksByTaskIdStage 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "postApiProjectsByIdTasksByTaskIdStage 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiProjectsByIdTasksByTaskIdStage 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiProjectsByIdTasksByTaskIdStage 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "postApiProjectsByIdTasksByTaskIdStage 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "postApiProjectsByIdTasksByTaskIdStage 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiProjectsByIdTasksByTaskIdStage 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "postApiProjectsByIdTasksByTaskIdStage 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "postApiProjectsByIdTasksByTaskIdStage 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/tasks/{taskId}/links": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "taskId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "edge": {
+                    "type": "string",
+                    "enum": [
+                      "after",
+                      "parent",
+                      "related",
+                      "found_in"
+                    ]
+                  },
+                  "to": {
+                    "type": "string"
+                  },
+                  "remove": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "edge",
+                  "to"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiProjectsByIdTasksByTaskIdLinks",
+        "responses": {
+          "200": {
+            "description": "postApiProjectsByIdTasksByTaskIdLinks 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiProjectsByIdTasksByTaskIdLinks 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "postApiProjectsByIdTasksByTaskIdLinks 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiProjectsByIdTasksByTaskIdLinks 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiProjectsByIdTasksByTaskIdLinks 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "postApiProjectsByIdTasksByTaskIdLinks 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "postApiProjectsByIdTasksByTaskIdLinks 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiProjectsByIdTasksByTaskIdLinks 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "postApiProjectsByIdTasksByTaskIdLinks 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "postApiProjectsByIdTasksByTaskIdLinks 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/tasks/{taskId}/todos": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "taskId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "type": "string"
+                  },
+                  "under": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "text"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiProjectsByIdTasksByTaskIdTodos",
+        "responses": {
+          "200": {
+            "description": "postApiProjectsByIdTasksByTaskIdTodos 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiProjectsByIdTasksByTaskIdTodos 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "postApiProjectsByIdTasksByTaskIdTodos 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiProjectsByIdTasksByTaskIdTodos 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiProjectsByIdTasksByTaskIdTodos 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "postApiProjectsByIdTasksByTaskIdTodos 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "postApiProjectsByIdTasksByTaskIdTodos 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiProjectsByIdTasksByTaskIdTodos 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "postApiProjectsByIdTasksByTaskIdTodos 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "postApiProjectsByIdTasksByTaskIdTodos 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/tasks/{taskId}/todos/{todo}": {
+      "patch": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "taskId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "todo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "done": {
+                    "type": "boolean"
+                  },
+                  "text": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "patchApiProjectsByIdTasksByTaskIdTodosByTodo",
+        "responses": {
+          "200": {
+            "description": "patchApiProjectsByIdTasksByTaskIdTodosByTodo 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "patchApiProjectsByIdTasksByTaskIdTodosByTodo 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "patchApiProjectsByIdTasksByTaskIdTodosByTodo 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "patchApiProjectsByIdTasksByTaskIdTodosByTodo 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "patchApiProjectsByIdTasksByTaskIdTodosByTodo 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "patchApiProjectsByIdTasksByTaskIdTodosByTodo 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "patchApiProjectsByIdTasksByTaskIdTodosByTodo 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "patchApiProjectsByIdTasksByTaskIdTodosByTodo 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "patchApiProjectsByIdTasksByTaskIdTodosByTodo 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "patchApiProjectsByIdTasksByTaskIdTodosByTodo 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/tracker": {
+      "put": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "tracker": {
+                    "type": "string",
+                    "enum": [
+                      "cawco",
+                      "github",
+                      "linear"
+                    ]
+                  }
+                },
+                "required": [
+                  "tracker"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "putApiProjectsByIdTracker",
+        "responses": {
+          "200": {
+            "description": "putApiProjectsByIdTracker 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/putApiProjectsByIdTracker200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "putApiProjectsByIdTracker 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "putApiProjectsByIdTracker 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "putApiProjectsByIdTracker 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "putApiProjectsByIdTracker 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "putApiProjectsByIdTracker 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "putApiProjectsByIdTracker 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "putApiProjectsByIdTracker 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "putApiProjectsByIdTracker 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "putApiProjectsByIdTracker 503",
             "content": {
               "text/plain": {
                 "schema": {
@@ -7037,6 +8502,42 @@
           "ok"
         ]
       },
+      "getApiProjectsByIdTasks200": {
+        "type": "object",
+        "properties": {
+          "tracker": {
+            "$ref": "#/components/schemas/Tracker"
+          },
+          "tasks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TaskSummary"
+            }
+          },
+          "problems": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "problems",
+          "tasks",
+          "tracker"
+        ]
+      },
+      "putApiProjectsByIdTracker200": {
+        "type": "object",
+        "properties": {
+          "tracker": {
+            "$ref": "#/components/schemas/Tracker"
+          }
+        },
+        "required": [
+          "tracker"
+        ]
+      },
       "getApiBinaryUpdatesMachines200": {
         "type": "object",
         "properties": {
@@ -7166,6 +8667,10 @@
                   "type": "string",
                   "format": "date-time"
                 },
+                "updatedAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
                 "slug": {
                   "type": "string"
                 },
@@ -7183,10 +8688,6 @@
                   "items": {
                     "$ref": "#/components/schemas/WorkflowInput"
                   }
-                },
-                "updatedAt": {
-                  "type": "string",
-                  "format": "date-time"
                 }
               },
               "required": [
@@ -7229,6 +8730,10 @@
             "type": "string",
             "format": "date-time"
           },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
           "slug": {
             "type": "string"
           },
@@ -7246,10 +8751,6 @@
             "items": {
               "$ref": "#/components/schemas/WorkflowInput"
             }
-          },
-          "updatedAt": {
-            "type": "string",
-            "format": "date-time"
           }
         },
         "required": [
@@ -7301,6 +8802,10 @@
             "type": "string",
             "format": "date-time"
           },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
           "slug": {
             "type": "string"
           },
@@ -7318,10 +8823,6 @@
             "items": {
               "$ref": "#/components/schemas/WorkflowInput"
             }
-          },
-          "updatedAt": {
-            "type": "string",
-            "format": "date-time"
           }
         },
         "required": [
@@ -7359,6 +8860,10 @@
             "type": "string",
             "format": "date-time"
           },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
           "slug": {
             "type": "string"
           },
@@ -7376,10 +8881,6 @@
             "items": {
               "$ref": "#/components/schemas/WorkflowInput"
             }
-          },
-          "updatedAt": {
-            "type": "string",
-            "format": "date-time"
           }
         },
         "required": [
@@ -8100,6 +9601,18 @@
               "cwd": {
                 "type": "string"
               },
+              "projectId": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "title": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
               "updatedAt": {
                 "type": "string",
                 "format": "date-time"
@@ -8124,12 +9637,6 @@
                   "string"
                 ]
               },
-              "projectId": {
-                "type": [
-                  "null",
-                  "string"
-                ]
-              },
               "parentInstanceId": {
                 "type": [
                   "null",
@@ -8137,12 +9644,6 @@
                 ]
               },
               "parentToolUseId": {
-                "type": [
-                  "null",
-                  "string"
-                ]
-              },
-              "title": {
                 "type": [
                   "null",
                   "string"
@@ -8336,6 +9837,18 @@
                 "cwd": {
                   "type": "string"
                 },
+                "projectId": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "title": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
                 "updatedAt": {
                   "type": "string",
                   "format": "date-time"
@@ -8360,12 +9873,6 @@
                     "string"
                   ]
                 },
-                "projectId": {
-                  "type": [
-                    "null",
-                    "string"
-                  ]
-                },
                 "parentInstanceId": {
                   "type": [
                     "null",
@@ -8373,12 +9880,6 @@
                   ]
                 },
                 "parentToolUseId": {
-                  "type": [
-                    "null",
-                    "string"
-                  ]
-                },
-                "title": {
                   "type": [
                     "null",
                     "string"
@@ -9651,6 +11152,9 @@
                 "string"
               ]
             },
+            "tracker": {
+              "$ref": "#/components/schemas/Tracker"
+            },
             "places": {
               "type": "array",
               "items": {
@@ -9694,7 +11198,8 @@
             "machineId",
             "name",
             "places",
-            "remote"
+            "remote",
+            "tracker"
           ]
         }
       },
@@ -9758,6 +11263,9 @@
               "string"
             ]
           },
+          "tracker": {
+            "$ref": "#/components/schemas/Tracker"
+          },
           "places": {
             "type": "array",
             "items": {
@@ -9803,7 +11311,8 @@
           "place",
           "placeAdded",
           "places",
-          "remote"
+          "remote",
+          "tracker"
         ]
       },
       "deleteApiProjectsById200": {
@@ -9877,6 +11386,9 @@
               "string"
             ]
           },
+          "tracker": {
+            "$ref": "#/components/schemas/Tracker"
+          },
           "places": {
             "type": "array",
             "items": {
@@ -9922,7 +11434,8 @@
           "place",
           "placeAdded",
           "places",
-          "remote"
+          "remote",
+          "tracker"
         ]
       },
       "deleteApiProjectsByIdPlacesByPlaceId200": {
@@ -11873,6 +13386,296 @@
           "date",
           "message",
           "sha"
+        ]
+      },
+      "Tracker": {
+        "description": "Where a project's tasks live: CawCo's files, or (later) an outside tracker.",
+        "enum": [
+          "cawco",
+          "github",
+          "linear"
+        ],
+        "type": "string"
+      },
+      "TaskSummary": {
+        "description": "One task as a list shows it: the index's row.",
+        "type": "object",
+        "properties": {
+          "after": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "id": {
+            "type": "string"
+          },
+          "labels": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "number": {
+            "type": "number"
+          },
+          "parent": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "path": {
+            "type": "string"
+          },
+          "problem": {
+            "description": "What in the file could not be read, in a sentence; null when all of it could.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "rank": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "stage": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "todos": {
+            "type": "object",
+            "properties": {
+              "done": {
+                "type": "number"
+              },
+              "total": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "done",
+              "total"
+            ]
+          },
+          "type": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "updatedAt": {
+            "description": "When the hub last saw the file's content change, ms epoch.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "after",
+          "id",
+          "labels",
+          "number",
+          "parent",
+          "path",
+          "problem",
+          "rank",
+          "stage",
+          "title",
+          "todos",
+          "type",
+          "updatedAt"
+        ]
+      },
+      "TaskView": {
+        "description": "One task, its file read whole.",
+        "type": "object",
+        "properties": {
+          "acceptance": {
+            "type": "string"
+          },
+          "after": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "checks": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "description": {
+            "type": "string"
+          },
+          "extra": {
+            "description": "Front matter keys the file carries that a task file does not know; kept as written.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "foundIn": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "hash": {
+            "description": "sha256 hex of the file as read.",
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "labels": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "number": {
+            "type": "number"
+          },
+          "outputs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "parent": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "path": {
+            "type": "string"
+          },
+          "problems": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "rank": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "related": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "sections": {
+            "description": "The body's other `## ` sections, as written.",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "heading": {
+                  "type": "string"
+                },
+                "text": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "heading",
+                "text"
+              ]
+            }
+          },
+          "stage": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "todos": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Todo"
+            }
+          },
+          "type": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "acceptance",
+          "after",
+          "checks",
+          "description",
+          "extra",
+          "foundIn",
+          "hash",
+          "id",
+          "labels",
+          "number",
+          "outputs",
+          "parent",
+          "path",
+          "problems",
+          "rank",
+          "related",
+          "sections",
+          "stage",
+          "title",
+          "todos",
+          "type"
+        ]
+      },
+      "Todo": {
+        "description": "One to-do, flat in file order.",
+        "type": "object",
+        "properties": {
+          "depth": {
+            "description": "Nesting: 0 for a top-level to-do.",
+            "type": "number"
+          },
+          "done": {
+            "type": "boolean"
+          },
+          "id": {
+            "description": "Its marker, `td-3`; null on a to-do written without one.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "path": {
+            "description": "Its position: `2` the second top-level to-do, `2.1` that one's first child.",
+            "type": "string"
+          },
+          "promoted": {
+            "description": "The task it was promoted to (`tsk-152`), when its line ends in `→ #152`.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "text": {
+            "description": "The words after the box and marker, without the promoted link.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "depth",
+          "done",
+          "id",
+          "path",
+          "promoted",
+          "text"
         ]
       },
       "JoinInfo": {
