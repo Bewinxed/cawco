@@ -11,14 +11,21 @@ public enum SentMessages {
     /// Newest first: the sends still waiting, newest first, then the rest of
     /// the conversation from its end. A send read overtakes every pending
     /// send accepted before it, so nothing waiting is older than what was read.
+    /// Each text once, the newest (recall.ts `sentByReader`): "continue" sent
+    /// ten times is one row.
     public static func recall(_ transcript: SessionTranscript) -> [RecallEntry] {
         var entries: [RecallEntry] = []
-        for block in transcript.queued.reversed() {
-            if let entry = entry(block) { entries.append(entry) }
+        var seen = Set<String>()
+        func add(_ block: Components.Schemas.TranscriptBlock) {
+            guard let entry = entry(block), seen.insert(entry.text.trimmingCharacters(in: .whitespacesAndNewlines)).inserted else { return }
+            entries.append(entry)
         }
-        let waiting = Set(entries.map(\.id))
+        for block in transcript.queued.reversed() {
+            add(block)
+        }
+        let waiting = Set(transcript.queued.map(\.id))
         for block in transcript.blocks.reversed() where !waiting.contains(block.id) {
-            if let entry = entry(block) { entries.append(entry) }
+            add(block)
         }
         return entries
     }
