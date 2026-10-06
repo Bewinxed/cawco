@@ -2,7 +2,7 @@
 
 **UI wordmark:** “Caw&Co”, set in the landing's Nunito Variable face. Product names in sentences, page titles and notices remain “CawCo”.
 
-**Date:** 2026-08-21 · **Status:** confirmed
+**Date:** 2026-08-21 · **Status:** confirmed · **Amended:** 2026-10-06 (projects: the terms from `.design-foundations/plans/2026-10-06-projects.md` §3; the tone register once called "Routine" is now "Readout", because a routine is scheduled work)
 **Doctorate authority:** `content-design` (design-for-ai 4.2.0) — voice/tone per Podmajersky (2019), error
 formula per Yifrah (2017), plain language per Redish (2007), destructive confirmation per Nielsen
 #5 (1994) and the microcopy-patterns catalog. **Pairs with DESIGN.md** (visual tokens, LOCKED) and
@@ -118,7 +118,7 @@ mapped to what each needs the words to do and how far the voice is allowed to mo
 | **Destructive confirm** | Serious, specific, no humor or softening | Name the exact consequence and permanence; the confirm button is [Verb]+[Object]. Never "Yes, delete" alone. | "Delete this session? Its transcript and permissions are removed from the fleet. This cannot be undone." → [Cancel] [Delete session] |
 | **Waiting / streaming** | Steady, determinate, honest | Show what is countable, never a bare "something is happening"; say what the wait means and that it holds state. | "11 / 17 steps" ; "Running — the caret in place; output streams below the turn." |
 | **Permission / approval** | Neutral, honest, no nudge | Give the operator the fact they need to decide safely: the target, its blast radius, what is *not* widened; never subtley push the grant. The register is calm and the grant is not made more attractive. | "This deletes the SvelteKit build cache… recreated by the next build; nothing outside `apps/dashboard` is touched." ; "Approving covers this one command. It does not widen what the agent may run later." |
-| **Routine** | Quiet, minimal, structure register | Say as little as the operator needs; a healthy state is stated once and then silent. No personality, no exclamation, no self-congratulation. | "2 of 3 machines online" ; "Showing 8 of 24" ; a status word: `working` / `idle` / `done` / `needs you` / `error`. |
+| **Readout** | Quiet, minimal, structure register | Say as little as the operator needs; a healthy state is stated once and then silent. No personality, no exclamation, no self-congratulation. | "2 of 3 machines online" ; "Showing 8 of 24" ; a status word: `working` / `idle` / `done` / `needs you` / `error`. |
 
 ---
 
@@ -149,9 +149,30 @@ it actually means.
 | Which builds a fleet follows: Stable (tagged releases) or Nightly (every build of main) | **channel** | The Updates section's two cards. | "track", "stream", "ring" |
 | No session working on that machine | **idle** | When a ready build installs by itself. | "free", "quiet" |
 | Daily cost against a limit | **spend** (the number) / **budget** (the limit) | The Usage surface's total and threshold. | "cost" when the operator-facing term for the whole surface is Spend/Usage |
+| One identity for work across machines, folders and kinds of work (code, a launch, an X account) | **project** | The project page, its threads, its tasks. | "workspace" (that is a clone); "repo" when the project is more than one |
+| Where a project's files are: a checkout on a machine, a delegate's clone, the hub folder | **place** | The project's places list. | "location", "mount" |
+| A clone plus branch kept for one task | **workspace** | A delegate's or attempt's working copy, `ws-4f2a`. | "worktree" in copy (fine as the git term in code) |
+| The unit of work a project tracks | **task** | A task file, a card in a view, `tsk-142`. | "ticket", "card" (a card is how a view draws it), "issue" (unless it is the GitHub issue) |
+| Where a task is in its project's own lifecycle, named by the project (Draft, Scheduled, Posted) | **stage** | The task file's `stage:` and a view's columns. | "status" (status words are liveness: `working` / `idle` / `done` / `needs you`); "column" as the concept |
+| The fixed category a stage belongs to: to do, active, waiting, you, done, dropped | **kind** | `stages.md`; how CawCo knows what a stage means. | "type", "category" |
+| A checklist line inside a task | **to-do** | The task file's checklist; ticked by you, Caw or the attempt's session. | "subtask" (a subtask that needs its own attempt is a task) |
+| A session's own step list, kept by its harness | **plan** | The progress ring on a session. | "todos", "tasks" (Claude Code's own name for it) in CawCo copy |
+| One session's try at a task, possibly over many runs | **attempt** | A task's attempts list; "fresh attempt". | "run" (a run is one turn's execution); "try" as a noun |
+| Work that happens on a schedule or when an event arrives | **routine** | The routines list, "next run 08:55". | "job", "automation", "schedule" (a routine *has* a schedule), "cron" in copy |
+| A saved way of looking at a project's tasks: board, table, calendar, pipeline | **view** | The view picker; "Ask Caw for a view". | "board" alone (the board is the fleet board); "layout" |
+| A pannable surface holding previews, images and cards | **canvas** | A project's canvases; a decision page's canvas view. | "whiteboard", "artboard" |
+| A note pinned to an element in a preview, with its replies | **comment** | Pins on a preview and the comment list beside it. | "thread" (a thread is a conversation with Caw), "annotation" |
+| A conversation with Caw in a project | **thread** | The project's threads. | "chat", "comment" |
+| A page of decisions Caw writes with you, where you pick, note and comment | **decision page** | The Decisions tab; "Make tasks". | "plan" (that is the harness's list), "proposal" (that is the memory curator's) |
+| A project's preset of harness, model, effort, skills, tools and budget that a delegate runs as | **delegate type** | `delegates/writer.md`; the type picker. | "persona", "agent", "profile" |
+| One exact tool call you approved, run once by the hub at its time | **approved action** | "Posts at 12:30" rows; approval cards. | "scheduled post" as the general term, "automation" |
+| A signed-in outside service whose key the hub holds | **connection** | Settings › Connections; `x-brand`. | "integration", "account" (an account is what a connection signs in as) |
+| The optional public path that lets push-only services reach the hub | **relay** | "Relay off · Set up". | "tunnel", "webhook server" in copy |
 
 **Banned-synonym quick list** (for the gate and for writers): `run` ≡ entity, `session` ≡ execution,
-`agent` ≡ entity, `delegate` ≡ in-session child, `subagent` ≡ separate session, "We" as error subject.
+`agent` ≡ entity, `delegate` ≡ in-session child, `subagent` ≡ separate session, "We" as error subject,
+`ticket`/`card` ≡ task, `status` ≡ stage, `job`/`automation` ≡ routine, `run` ≡ attempt, `plan` ≡ decision page,
+`thread` ≡ comment on a preview, "the board" ≡ a project's tasks.
 The compound noun **"delegate rows"** is legitimate: it names the subset of the board that *are*
 delegated sessions (spanning `DelegateRow.svelte`), not a misuse of the term.
 
