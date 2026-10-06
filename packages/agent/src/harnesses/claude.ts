@@ -875,9 +875,20 @@ class ClaudeSession implements HarnessSession {
         canUseTool: (
           toolName,
           toolInput,
-          { requestId, suggestions, toolUseID, signal }
+          {
+            requestId,
+            suggestions,
+            toolUseID,
+            signal,
+            decisionReason,
+            blockedPath,
+          }
         ) =>
           new Promise<PermissionResult>((resolve) => {
+            // Why the CLI asked: a session in bypass is never meant to be asked, so the reason is the evidence.
+            console.log(
+              `[claude] permission asked: ${toolName}${decisionReason ? ` — ${decisionReason}` : ""}${blockedPath ? ` (path ${blockedPath})` : ""}`
+            );
             this.#permissions.set(requestId, resolve);
             // The CLI withdrew the ask (an interrupt mid-ask): nobody can
             // answer it any more, and the hub hears so.
