@@ -76,7 +76,6 @@ import { browser } from "$app/env";
 import { goto } from "$app/navigation";
 import type { Activity } from "./activity";
 import { activityOf, runningSubagents } from "./activity";
-import { checkDeployToast } from "./deploy-toast.svelte";
 import { hubFailure } from "./hub-read";
 import { newId } from "./id";
 import {
@@ -85,9 +84,11 @@ import {
   instanceForSession,
   transcriptUrl,
 } from "./links";
+import { unpickedMode } from "./permission-modes";
 import { type PendingSelection, selectionExtras } from "./preview/selection";
 import { placedOn, projectsFor } from "./projects";
 import { type ReloadHold, reloadForProtocol } from "./protocol-reload";
+import { checkServedBuild } from "./served-build.svelte";
 import { spawnDefaults } from "./spawnPrefs.svelte";
 import type {
   CommandRecord,
@@ -2487,6 +2488,12 @@ const streamHost: StreamHost = {
       markUnreached(record);
       return;
     }
+    // A withdraw is a queued message's edit, and the composer it was edited
+    // in says what became of it, over the field that holds the words again
+    // (transcript/lift.svelte.ts).
+    if (record.kind === "send.withdraw") {
+      return;
+    }
     // A parked permission card renders its own refusal (`Couldn't send that
     // answer.`) against the very command id it holds. It only does so while it
     // is still on screen: answering removes the request from `pending`, so an
@@ -2658,10 +2665,15 @@ export interface CommandIntents {
   "permission.answer": { requestId: string; result: PermissionResult };
   /** `replaces`: the failed send this one retries, which the hub then retires. */
   send: { text: string; extras?: SendExtras; replaces?: string };
+  /**
+   * `replacementId`: the id the replacement goes out under once the queued
+   * send is withdrawn, known before it goes, so the words can fly into its row.
+   */
   "send.withdraw": {
     sendId: string;
     extras: SendExtras;
     replacement: string;
+    replacementId: string;
   };
   "set-effort": { effort: EffortLevel };
   "set-model": { model: string };
@@ -3157,10 +3169,17 @@ export function canWithdraw(message: Message): boolean {
   );
 }
 
+/**
+ * Puts new words in place of a queued send: withdraws it, and once the hub
+ * says it was withdrawn, sends the words with its pictures and files. Returns
+ * the withdraw's command id, whose record says how it went (`applied` with
+ * the outcome `withdrawn`, or the session read the send first), and the id
+ * the replacement goes out under.
+ */
 export async function replaceQueued(
   message: Message,
   replacement: string
-): Promise<string> {
+): Promise<{ withdraw: string; replacement: string }> {
   if (!canWithdraw(message)) {
     throw new Error("This message can no longer be edited in the queue.");
   }
@@ -3169,7 +3188,8 @@ export async function replaceQueued(
       src ? [imageBytes(src, mediaType)] : []
     )
   );
-  return submitCommand(
+  const replacementId = newId();
+  const withdraw = submitCommand(
     message.instanceId,
     session(message.instanceId).machineId,
     "send.withdraw",
@@ -3182,8 +3202,10 @@ export async function replaceQueued(
         images,
       },
       replacement,
+      replacementId,
     }
   );
+  return { withdraw, replacement: replacementId };
 }
 
 /** One action table for every surface that draws the reader's own turns. */
@@ -3308,7 +3330,7 @@ function streamEffectsFor<K extends CommandKind>(
   const target = session(instanceId);
   switch (kind) {
     case "send.withdraw": {
-      const { sendId, extras, replacement } =
+      const { sendId, extras, replacement, replacementId } =
         intent as CommandIntents["send.withdraw"];
       return {
         settled: (stage) => {
@@ -3323,11 +3345,13 @@ function streamEffectsFor<K extends CommandKind>(
               take(target, block as TranscriptBlock, "removed");
               place(target);
             }
-            submitCommand(instanceId, target.machineId, "send", {
-              text: replacement,
-              extras,
-              replaces: sendId,
-            });
+            submitCommand(
+              instanceId,
+              target.machineId,
+              "send",
+              { text: replacement, extras, replaces: sendId },
+              replacementId
+            );
           }
         },
       };
@@ -3614,8 +3638,8 @@ function connect(): void {
     lastSubscriptionKey = "";
     syncSubscriptions();
     resumePendingSends(streamState, streamHost);
-    // biome-ignore lint/complexity/noVoid: fire-and-forget — the toast shows itself when the served build is newer
-    void checkDeployToast();
+    // biome-ignore lint/complexity/noVoid: fire-and-forget — the update notice says it when the served build is newer
+    void checkServedBuild();
     // biome-ignore lint/complexity/noVoid: fire-and-forget — the settings page and the notice read the policy once it lands
     void updates.loadPolicy();
   };
@@ -3976,8 +4000,13 @@ export async function forkSession({
     },
     scratch: {},
     ...(source?.model ? { model: source.model } : {}),
+    // A branch is a new session nobody picked a mode for, so a Full Send
+    // source branches on Bypass (`unpickedMode`): Full Send is only ever a
+    // confirmed choice.
     ...(source?.permissionMode
-      ? { permissionMode: source.permissionMode as PermissionMode }
+      ? {
+          permissionMode: unpickedMode(source.permissionMode as PermissionMode),
+        }
       : {}),
     ...(isEffortLevel(source?.effort) ? { effort: source.effort } : {}),
   });
@@ -5093,7 +5122,8 @@ function effortToResend(
 
 /**
  * `bypassPermissions` is a launch decision — the SDK refuses to switch a running
- * session into it — so a session that wants it now is started again in place:
+ * session into it — and so is `fullSend`, which runs the CLI in bypass. A
+ * session that wants either from another mode is started again in place:
  * same instance id, same hub row, its own SDK session resumed, so the new
  * process reads the whole conversation back. A side quest relaunches the same
  * way; the agent keeps it in the checkout it was already working in.

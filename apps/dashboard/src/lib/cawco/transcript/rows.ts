@@ -544,8 +544,9 @@ const settledOf = (messages: Message[]): Message[] => {
  * moment its ask lands: its call reaches the transcript a frame or two before
  * the ask does, and drawing it there meant a "needs you" card flashed in the
  * transcript and the tail jumped twice as it came and went. So an unanswered
- * question is left out whenever the session's asks reach the reader — every
- * mode but bypass, where no ask is ever raised and the row is all there is.
+ * question is left out in every mode: no mode answers a question for the
+ * reader. Bypass and Full Send included — Full Send answers Claude Code's
+ * safety checks, never a question — so its ask always comes to the composer.
  */
 const drawnOf = (session: SessionState): Message[] => {
   const settled = settledOf(session.messages);
@@ -554,16 +555,11 @@ const drawnOf = (session: SessionState): Message[] => {
       ask.toolUseId ? [ask.toolUseId] : []
     )
   );
-  const asksReachReader = session.permissionMode !== "bypassPermissions";
   const waiting = (m: Message): boolean =>
-    asksReachReader &&
-    isQuestionMsg(m) &&
-    (m.metadata?.toolStatus ?? "pending") === "pending";
-  return gated.size === 0 && !asksReachReader
-    ? settled
-    : settled.filter(
-        (m) => !((m.toolCallId && gated.has(m.toolCallId)) || waiting(m))
-      );
+    isQuestionMsg(m) && (m.metadata?.toolStatus ?? "pending") === "pending";
+  return settled.filter(
+    (m) => !((m.toolCallId && gated.has(m.toolCallId)) || waiting(m))
+  );
 };
 
 /**
@@ -819,8 +815,9 @@ const sameMessage = (a: Message | undefined, b: Message | undefined): boolean =>
  * Where a fold may begin: a turn the reader opened, not a delegate's. Tool
  * results never make it here as messages of their own — the hub's builder
  * folds them into the call — so there is no dangling pair for a cut to split.
+ * The same test names what the reader sent, for the composer's recall.
  */
-const opensTurn = (m: Message): boolean =>
+export const opensTurn = (m: Message): boolean =>
   m.type === "user" && !m.parentToolUseId && !isHarnessNote(m);
 
 /**

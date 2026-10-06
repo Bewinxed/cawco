@@ -1,25 +1,61 @@
 <script lang="ts">
-  import type { PermissionMode } from "@cawco/core";
+  import type { HarnessKind, PermissionMode } from "@cawco/core";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
-  /** Permission-mode rows (§1.8, §2.11): sliding fill + mounted check. */
+  /**
+   * Permission-mode rows (§1.8, §2.11): sliding fill + mounted check. Every
+   * pick of Full Send is confirmed first, in the app's one confirmation
+   * dialog, which says what it allows beyond Bypass and what still stops;
+   * only its own button applies it. The rows stay open under it, so a
+   * Cancel lands back on the row it was asked from.
+   */
   import Check from "~icons/solar/check-circle-bold-duotone";
+  import { confirm } from "../confirm.svelte";
+  import { fullSendCopy } from "../permission-modes";
   import { permissionLook } from "./permission-look";
 
   let {
     modes,
     value,
     onchange,
+    harness,
+    restarts = false,
     embedded = false,
   }: {
     modes: { value: PermissionMode; disabled: boolean; reason?: string }[];
     value: PermissionMode | null;
-    onchange: (mode: PermissionMode) => void;
+    onchange: (mode: PermissionMode) => unknown;
+    /** The harness the modes are described for. */
+    harness: HarnessKind | undefined;
+    /** Switching into Full Send restarts a running session in place. */
+    restarts?: boolean;
     embedded?: boolean;
   } = $props();
   const uid = $props.id();
   const rows = $derived(
-    modes.map((mode) => ({ ...mode, ...permissionLook(mode.value) }))
+    modes.map((mode) => ({ ...mode, ...permissionLook(mode.value, harness) }))
   );
+  function pick(mode: PermissionMode) {
+    if (mode !== "fullSend" || value === "fullSend") {
+      onchange(mode);
+      return;
+    }
+    // Offered only where it has words (permission-modes.ts): never unread.
+    const copy = fullSendCopy(harness);
+    if (!copy) {
+      return;
+    }
+    // biome-ignore lint/complexity/noVoid: the dialog answers itself; a Cancel changes nothing
+    void confirm({
+      title: "Switch to Full Send?",
+      body: restarts ? [...copy.confirm, copy.restarts] : copy.confirm,
+      confirmLabel: "Switch to Full Send",
+      pendingLabel: "Switching…",
+      grant: true,
+      run: async () => {
+        await onchange("fullSend");
+      },
+    });
+  }
   const index = $derived(
     Math.max(
       0,
@@ -54,7 +90,7 @@
       data-fh="1"
       data-perm={row.value}
       disabled={row.disabled}
-      onclick={() => onchange(row.value)}
+      onclick={() => pick(row.value)}
       role="radio"
       style={`--delay:${i * 35}ms`}
       type="button"

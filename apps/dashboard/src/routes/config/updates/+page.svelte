@@ -79,7 +79,7 @@
     }
     if (chosen === "nightly") {
       return policy.autoUpdate
-        ? "Switching moves each machine to Nightly's latest build when it is idle."
+        ? "Switching moves each machine to Nightly's latest build once its work in flight ends."
         : "Switching moves each machine to Nightly's latest build when you install it.";
     }
     return "Switching keeps each machine on the build it runs until Stable has a newer one.";
@@ -114,13 +114,13 @@
     checking = false;
   }
 
-  // A person on this page has seen what landed: acknowledge it once each.
+  // A person on this page has seen what landed: acknowledge each landing once.
   const acknowledged = new Set<string>();
   $effect(() => {
     for (const machine of machines) {
-      const state = machine.binaryUpdate;
-      if (state?.unseen) {
-        const key = `${machine.machineId}:${state.updatedAt}`;
+      const landing = machine.binaryUpdate?.landed;
+      if (landing) {
+        const key = `${machine.machineId}:${landing.at}`;
         if (!acknowledged.has(key)) {
           acknowledged.add(key);
           // biome-ignore lint/complexity/noVoid: the acknowledgement reports through the next machine frame
@@ -244,7 +244,7 @@
         <SwitchField
           checked={policy.autoUpdate}
           hint={policy.autoUpdate
-            ? "Each machine installs a new build once none of its sessions is working."
+            ? "Each machine installs a new build once its work in flight ends, within 30 minutes. Turns keep running through it."
             : "Off — a new build waits until you install it."}
           id="auto-update"
           label="Install updates automatically"

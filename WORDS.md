@@ -147,7 +147,8 @@ it actually means.
 | A standing instruction the hub enforces on every session: what to watch for and what to answer | **rule** | The Rules surface and its rows. | "policy", "permission set" |
 | One released version of CawCo | **build** | What a machine runs and what an update installs. | "release" in Configure copy (the release host is a service, not the thing a machine runs) |
 | Which builds a fleet follows: Stable (tagged releases) or Nightly (every build of main) | **channel** | The Updates section's two cards. | "track", "stream", "ring" |
-| No session working on that machine | **idle** | When a ready build installs by itself. | "free", "quiet" |
+| No session working on that machine | **idle** | A machine's status word. Not when a build installs: see work in flight. | "free", "quiet" |
+| What a restart would cut: the tool calls, image generations, commands, session starts and hand-offs a machine's daemon carries itself (and on the hub's machine, the tool calls the hub is answering). Never a turn: the keeper runs it through a restart | **work in flight** | When a ready build installs: it waits for the work in flight to end. | "busy", "idle" (sessions can be working with nothing in flight) |
 | Daily cost against a limit | **spend** (the number) / **budget** (the limit) | The Usage surface's total and threshold. | "cost" when the operator-facing term for the whole surface is Spend/Usage |
 | One identity for work across machines, folders and kinds of work (code, a launch, an X account) | **project** | The project page, its threads, its tasks. | "workspace" (that is a clone); "repo" when the project is more than one |
 | Where a project's files are: a checkout on a machine, a delegate's clone, the hub folder | **place** | The project's places list. | "location", "mount" |

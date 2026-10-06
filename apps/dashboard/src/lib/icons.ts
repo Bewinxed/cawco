@@ -153,5 +153,7 @@ export {
   default as IconSubagents,
   default as IconToolTask,
 } from "~icons/solar/users-group-rounded-bold-duotone";
+export { default as IconSoundOff } from "~icons/solar/volume-cross-bold-duotone";
+export { default as IconSound } from "~icons/solar/volume-loud-bold-duotone";
 export { default as IconColumns } from "~icons/solar/widget-2-bold-duotone";
 export { default as IconWindow } from "~icons/solar/window-frame-bold-duotone";

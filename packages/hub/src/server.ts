@@ -216,6 +216,7 @@ import {
   type HistoryRead,
   type TranscriptPayload,
 } from "./transcripts";
+import { unwatchedMode } from "./unwatched-mode";
 import { UsageCounter } from "./usage-count";
 import {
   createWorkItems,
@@ -410,6 +411,7 @@ const permissionModeSchema = t.Union([
   t.Literal("plan"),
   t.Literal("dontAsk"),
   t.Literal("auto"),
+  t.Literal("fullSend"),
 ]);
 
 const continueBody = t.Object({
@@ -574,6 +576,15 @@ const peekSessionSettings = (
   }
   if (frame.subtype === "init") {
     return { model: frame.model, permissionMode: frame.permissionMode };
+  }
+  // A mode the session moved to mid-turn (plan mode, Full Send ended), filed
+  // now rather than at the next turn's `init`, so a restart restores it.
+  if (
+    frame.subtype === "status" &&
+    typeof frame.permissionMode === "string" &&
+    !frame.parent_tool_use_id
+  ) {
+    return { permissionMode: frame.permissionMode };
   }
   if (frame.subtype === "model_fallback") {
     return { model: frame.fallback_model };
@@ -3030,7 +3041,8 @@ export const createServer = (
 
   /**
    * The session's own word on its settings, written on its row: every `init`
-   * names its model and permission mode, a `model_fallback` the model
+   * names its model and permission mode, a main-loop `status` that names a
+   * mode that mode, a `model_fallback` the model
    * that answers instead of the one asked for, and a successful mode control
    * the mode the harness just applied. True when the row moved. A
    * mode the session's harness does not have is not recorded (`settleMode`'s
@@ -4603,14 +4615,16 @@ export const createServer = (
    * whatever happened. Its transcript is tagged as scratch, so the stored
    * catalogs leave it out too. A cancel rejects the wait and stops it from
    * outside ({@link cancelContinuation}); `cancelled` keeps a spawn that was
-   * still in flight from being asked anything.
+   * still in flight from being asked anything. `mode` is the one it runs in
+   * ({@link continuationSummary} picks it).
    */
   const summariserRun = async (
     source: ContinuationSource & { machineId: string },
     summarizer: { harness: HarnessKind; model: string },
     prompt: string,
     id: string,
-    cancelled: () => boolean
+    cancelled: () => boolean,
+    mode: PermissionMode
   ): Promise<string> => {
     const answered = new Promise<void>((resolve, reject) => {
       turnWaiters.set(id, { machineId: source.machineId, resolve, reject });
@@ -4633,7 +4647,7 @@ export const createServer = (
         "summariser",
         // The hub's own worker, which nobody watches: it never parks on a
         // permission prompt, as workflow steps and supervisors never do.
-        "bypassPermissions"
+        mode
       );
       if (cancelled()) {
         throw new Error(CONTINUATION_CANCELLED);
@@ -5125,6 +5139,10 @@ export const createServer = (
       throw new Error("a summarising continuation has no summariser prompt");
     }
     const cancelled = () => cancelledContinuation(row.id);
+    // Caused by the session that called continue_session, whose mode the
+    // tool files on the request as the target's fallback. The dashboard
+    // sends none: the owner's continuation is caused by no session.
+    const mode = unwatchedMode(row.request.target.fallbackPermissionMode);
     const current = row.summariserInstanceId;
     if (db.getInstancesByIds([current]).length === 0) {
       return summariserRun(
@@ -5132,7 +5150,8 @@ export const createServer = (
         row.request.summarizer,
         prompt,
         current,
-        cancelled
+        cancelled,
+        mode
       );
     }
     const answered = await storedAnswer(current, false);
@@ -5150,7 +5169,8 @@ export const createServer = (
       row.request.summarizer,
       prompt,
       replacement,
-      cancelled
+      cancelled,
+      mode
     );
   };
 
@@ -7290,7 +7310,10 @@ export const createServer = (
           title,
           canDelegate: true,
         },
-        "bypassPermissions"
+        // Spawned only for a run the owner launched or re-ran from the
+        // dashboard (a session's launch supervises it itself; a child run
+        // has its parent's supervisor or none): caused by no session.
+        unwatchedMode(undefined)
       );
       deliverSend({
         verb: "send",
@@ -7667,8 +7690,8 @@ export const createServer = (
               }
             }
           },
-          acknowledge: (machineId) =>
-            callAgent(machineId, ACKNOWLEDGE_BINARY_UPDATE, [], 10_000),
+          acknowledge: (machineId, at) =>
+            callAgent(machineId, ACKNOWLEDGE_BINARY_UPDATE, [at], 10_000),
           cancel: (machineId) =>
             callAgent(machineId, CANCEL_BINARY_UPDATE, [], 10_000),
           configure: (machineId, policy: BinaryUpdatePolicy) =>

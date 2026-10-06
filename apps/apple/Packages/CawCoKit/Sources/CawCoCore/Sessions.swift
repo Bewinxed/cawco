@@ -283,13 +283,16 @@ public final class SessionsStore {
 
     /// A user turn (core `SendPayload`): its words, and what it carries
     /// beside them, images as base64 with no `data:` prefix and texts the
-    /// reader attached or pasted at length.
-    public func steer(_ row: InstanceRow, text: String, images: [(mediaType: String, data: Data)] = [], texts: [(name: String, content: String)] = []) -> String {
+    /// reader attached or pasted at length. `replaces` names the send this
+    /// one stands in for (a withdrawn queued send), which the hub then retires.
+    public func steer(_ row: InstanceRow, text: String, images: [(mediaType: String, data: Data)] = [], texts: [(name: String, content: String)] = [],
+                      replaces: String? = nil) -> String {
         let uuid = UUID().uuidString.lowercased()
-        let message: [String: any Sendable] = [
+        var message: [String: any Sendable] = [
             "type": "user", "uuid": uuid, "origin": ["kind": "human"],
             "message": ["role": "user", "content": text],
         ]
+        if let replaces { message["replaces"] = replaces }
         var body: [String: any Sendable] = ["instanceId": row.id, "message": message]
         if !images.isEmpty {
             body["images"] = images.map { ["mediaType": $0.mediaType, "data": $0.data.base64EncodedString()] as [String: any Sendable] }
@@ -299,6 +302,20 @@ public final class SessionsStore {
         }
         let payload = try! OpenAPIValueContainer(unvalidatedValue: body)
         return hub.ledger.submit(kind: .send, sessionId: row.id, machineId: row.machineId, payload: payload, settlesAt: .accepted)
+    }
+
+    /// Takes back a send the session has not read yet (`send.withdraw`,
+    /// client.svelte.ts `replaceQueued`): the hub asks the harness to recall
+    /// it, and its `applied` acknowledgement says what it found, `withdrawn`
+    /// or `started` (`Ledger.Command.outcome`). Only Claude's harness recalls
+    /// a single pending send. `settled` hears the command's last word.
+    /// `send.withdraw`, by its wire name: the generator spells a dotted case its own way.
+    private static let withdrawKind = Components.Schemas.CommandKind(rawValue: "send.withdraw")!
+
+    public func withdraw(_ row: InstanceRow, sendId: String, settled: @escaping (Ledger.Stage, String?) -> Void) -> String {
+        hub.ledger.submit(kind: Self.withdrawKind, sessionId: row.id, machineId: row.machineId,
+                          payload: try! OpenAPIValueContainer(unvalidatedValue: ["sendId": sendId] as [String: any Sendable]),
+                          settlesAt: .applied, effects: Ledger.Effects(settled: settled))
     }
 
     public func stop(_ row: InstanceRow) -> String {

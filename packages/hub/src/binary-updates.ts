@@ -36,14 +36,16 @@ import type {
 } from "@cawco/core/binary-updates";
 import { runtimeVersion } from "@cawco/core/runtime";
 import { Elysia, t } from "elysia";
+import { hidden } from "./hidden";
+import { fenceHub, hubRestartReadiness } from "./restart-holds";
 
 /** How long a discovered release is served before the host is asked again. */
 const RELEASE_TTL_MS = 15 * 60_000;
 
 interface Options {
-  /** Marks a machine's finished update as seen; resolves to the control answer. */
-  acknowledge: (machineId: string) => Promise<unknown>;
-  /** Returns a machine waiting for sessions or idle to `available`. */
+  /** Marks a machine's landing finished at `at` as seen; resolves to the control answer. */
+  acknowledge: (machineId: string, at: number) => Promise<unknown>;
+  /** Returns a machine waiting to install (on work in flight, or on its keeper) to `available`. */
   cancel: (machineId: string) => Promise<unknown>;
   /** Tell an online machine its policy changed; resolves when it answered. */
   configure: (
@@ -247,10 +249,14 @@ export function createBinaryUpdates(options: Options) {
     )
     .post(
       "/api/binary-updates/machines/:machineId/acknowledge",
-      async ({ params }) => {
-        // The agent answers with its state; taking it now means the board stops showing the update as
-        // unseen at once, not at the machine's next report.
-        const state = (await options.acknowledge(params.machineId)) as
+      {
+        // The landing seen, by when it finished: only that one is cleared.
+        body: t.Object({ at: t.Number() }),
+      },
+      async ({ params, body }) => {
+        // The agent answers with its state; taking it now means the board stops showing the landing at
+        // once, not at the machine's next report.
+        const state = (await options.acknowledge(params.machineId, body.at)) as
           | BinaryUpdateState
           | undefined;
         if (state?.phase) {
@@ -265,6 +271,17 @@ export function createBinaryUpdates(options: Options) {
         await options.cancel(params.machineId);
         return { ok: true };
       }
+    )
+    // The hub's own machine, before its update restarts this hub: what the
+    // restart would cut (the tool calls held open here, from every machine),
+    // and the fence that refuses new ones until it happens. `ms: 0` lowers it.
+    .get("/api/binary-updates/hub-readiness", hidden, () =>
+      hubRestartReadiness()
+    )
+    .post(
+      "/api/binary-updates/hub-fence",
+      { ...hidden, body: t.Object({ ms: t.Number({ minimum: 0 }) }) },
+      ({ body }) => fenceHub(body.ms)
     )
     // What every machine other than the hub's own applies: the build the hub runs.
     .get("/api/binary-updates/release", async ({ status }) => {

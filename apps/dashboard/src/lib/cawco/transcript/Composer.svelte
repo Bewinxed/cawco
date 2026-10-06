@@ -44,13 +44,28 @@
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { reflow } from "#lib/cawco/motion/rows.svelte.js";
   import { departBox } from "#lib/cawco/motion/share.svelte.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import { whileIdle } from "#lib/components/ui/button/pending-content.svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Command from "#lib/components/ui/command/index.js";
+  import { Kbd } from "#lib/components/ui/kbd/index.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
-  import { IconClose, IconPlus, IconSend, IconStop } from "#lib/icons.js";
-  import { cawco, type SendExtras } from "../client.svelte";
+  import {
+    IconClose,
+    IconHistory,
+    IconPlus,
+    IconSend,
+    IconStop,
+  } from "#lib/icons.js";
+  import {
+    cawco,
+    readOlderPage,
+    replaceQueued,
+    type SendExtras,
+    userTurnActions,
+  } from "../client.svelte";
   import { cleanDetail } from "../command-detail";
+  import { felt } from "../feel.svelte";
   import { mcpSignInIntent, signInToMcp } from "../fleet";
   import { newId } from "../id";
   import SelectionChip from "../preview/SelectionChip.svelte";
@@ -60,14 +75,36 @@
     type SuggestCandidate,
     suggestions,
   } from "../suggest.svelte";
+  import type { Message } from "../types";
   import type { ComposerDraft, PendingImage } from "./composer-draft.svelte";
   import { stand } from "./composer-presence.svelte";
   import DelegateTray from "./DelegateTray.svelte";
   import DocThumb from "./DocThumb.svelte";
+  import { GrownShape, measureShape } from "./grown";
+  import {
+    asBubble,
+    asField,
+    bubbleBox,
+    bubbleWords,
+    fieldBox,
+    LEFT_BY,
+    landing as landingWords,
+    liftAsk,
+    notEdited,
+    readFirst,
+    replacing,
+    startFlight,
+    watchReplace,
+    writesTo,
+  } from "./lift.svelte";
+  import RecallWheel from "./RecallWheel.svelte";
+  import { sentByReader } from "./recall";
+  import { opensTurn } from "./rows";
   import SuggestionChips from "./SuggestionChips.svelte";
 
   let {
     draft,
+    agentName = "The agent",
     busy = false,
     sending = false,
     sendError = "",
@@ -84,6 +121,7 @@
     leading,
     suggest,
     delegatesOf,
+    recallOf,
     switchDir = 0,
     landing = { done: Promise.resolve(), ms: () => 0 },
   }: {
@@ -93,6 +131,8 @@
      * another draft shows that conversation's words.
      */
     draft: ComposerDraft;
+    /** The agent answering here, by name, for what the composer says about it. */
+    agentName?: string;
     busy?: boolean;
     /**
      * Whether the last message this composer sent is still unacknowledged — out
@@ -146,6 +186,13 @@
      * on surfaces with no session behind them.
      */
     delegatesOf?: string;
+    /**
+     * The conversation whose sent messages the composer recalls (↑, the
+     * history button, a held press on a touch screen), and whose queued
+     * message it lifts out of the transcript to edit. Absent on surfaces
+     * with no session behind them.
+     */
+    recallOf?: string;
     /**
      * Which way the tab strip moved when this composer was last handed
      * another conversation's draft: 1 to a tab on the right, -1 to one on
@@ -944,6 +991,7 @@
     dismissed = false;
     if (event.type === "input") {
       sendBlock = "";
+      draft.notice = "";
     }
   }
 
@@ -975,7 +1023,7 @@
   }
 
   let sendBlock = $state("");
-  const sendNotice = $derived(sendError || sendBlock);
+  const sendNotice = $derived(sendError || sendBlock || draft.notice);
 
   function submit(
     via: (text: string, extras: SendExtras, id: string) => void = onsubmit
@@ -989,6 +1037,7 @@
       return;
     }
     sendBlock = "";
+    draft.notice = "";
     // `/mcp auth <server>` for a fleet server is this browser's own sign-in,
     // not a message: the agent's machine may have no browser at all (a phone is
     // the browser here), and the hub holds the credentials either way.
@@ -1058,6 +1107,12 @@
   }
 
   function onkeydown(event: KeyboardEvent): void {
+    // While the wheel is up its keys are its own; what it leaves (a key
+    // typed into a draft of your own, any key once it is folding away)
+    // reaches the field as usual.
+    if ((recall && wheel?.key(event)) || recallKey(event)) {
+      return;
+    }
     // BEFORE the menu: mod+Enter is "interrupt and send" (the shortcut sheet's
     // long-standing promise), and a half-picked menu must not swallow it — the
     // urgency is the point. The menu is dismissed by the submit itself.
@@ -1075,17 +1130,746 @@
     }
   }
 
+  /**
+   * The keys recall answers, never over the `/` and `@` menu: while a
+   * queued message is edited, Enter and mod+Enter put the words in its
+   * place and Esc gives them back as they were; otherwise ↑ with nothing
+   * before the caret lifts your queued message, or brings up what you sent.
+   * True when the key was recall's.
+   */
+  function recallKey(event: KeyboardEvent): boolean {
+    if (menuOpen) {
+      return false;
+    }
+    if (draft.lifted) {
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        replaceLifted();
+        return true;
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        giveBack();
+        return true;
+      }
+      return false;
+    }
+    const bare = !(
+      event.shiftKey ||
+      event.altKey ||
+      event.ctrlKey ||
+      event.metaKey
+    );
+    // The wheel still folding away (it takes no keys then): ↑ brings it
+    // straight back up once it has landed, a close caught mid-way turning back.
+    if (recall && event.key === "ArrowUp" && bare) {
+      event.preventDefault();
+      reopen = true;
+      return true;
+    }
+    if (!(event.key === "ArrowUp" && bare && startsRecall())) {
+      return false;
+    }
+    event.preventDefault();
+    const queued = draft.hasContent ? null : liftable();
+    if (queued) {
+      liftQueued(queued);
+    } else {
+      openRecall(true);
+    }
+    return true;
+  }
+
+  /**
+   * The action button stops a turn in flight, except while a queued message
+   * is being edited: then it sends the edit in its place, as Enter does.
+   */
+  const stops = $derived(busy && !draft.lifted);
+
   function onaction(): void {
     if (held) {
       submit();
       return;
     }
-    if (busy) {
+    if (draft.lifted) {
+      replaceLifted();
+    } else if (busy) {
       onstop();
+    } else if (recall) {
+      // The wheel up: what sits on the line goes, as mod+Enter sends it.
+      wheel?.send();
     } else {
       submit();
     }
   }
+
+  /* ---- recall: what you sent, and your queued message ----------------- */
+
+  /** The box the pill stands in, which the grown shape and its rows share. */
+  let shell = $state<HTMLElement>();
+  let pill = $state<HTMLFormElement>();
+  let historyButton = $state<HTMLButtonElement>();
+  const recalled = $derived(recallOf ? cawco.session(recallOf) : null);
+
+  /**
+   * The wheel, while it is up: whether keys reach it from the field (a held
+   * press leaves the keyboard down), the composer's text when it came up,
+   * and where the caret stood in it.
+   */
+  let recall = $state<{
+    keys: boolean;
+    text: string;
+    caret: [number, number];
+    measured: ReturnType<typeof measureShape>;
+  } | null>(null);
+  let wheel = $state<ReturnType<typeof RecallWheel>>();
+  /** ↑ pressed while the wheel was folding: it comes up again once folded. */
+  let reopen = false;
+  /** The wheel's row on the field's line, for a screen reader. */
+  let recallActive = $state<string>();
+  /** The grown shape is the composer: the pill's own surface steps aside. */
+  let wheeling = $state(false);
+  const recallId = `recall-${newId()}`;
+  /** What the wheel rolls, read only while it is up. */
+  const sentHere = $derived(
+    recall && recalled ? sentByReader(recalled.messages) : []
+  );
+
+  /**
+   * ↑ starts recall only from an empty field or with the caret at its very
+   * start, so in a draft it still moves the caret, as a shell's does.
+   */
+  function startsRecall(): boolean {
+    if (!(recallOf && field) || recall || draft.lifted) {
+      return false;
+    }
+    const { selectionStart: from, selectionEnd: to } = field;
+    return from === to && (draft.text === "" || from === 0);
+  }
+
+  /** Your newest message, when it is queued and can still be edited. */
+  function liftable(): Message | null {
+    const messages = recalled?.messages ?? [];
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      if (opensTurn(messages[i])) {
+        return userTurnActions(messages[i]).edit === "queued"
+          ? messages[i]
+          : null;
+      }
+    }
+    return null;
+  }
+
+  function openRecall(keys: boolean): void {
+    if (
+      !(recallOf && field && shell && pill && historyButton) ||
+      recall ||
+      draft.lifted
+    ) {
+      return;
+    }
+    // Every size first, before anything is written: one layout per open.
+    recall = {
+      keys,
+      text: draft.text,
+      caret: [field.selectionStart, field.selectionEnd],
+      measured: measureShape(shell, pill, historyButton, field),
+    };
+    wheeling = true;
+    dismissed = true;
+    // Keys reach the wheel from the field, also when the button opened it.
+    if (keys) {
+      field.focus();
+    }
+  }
+
+  /** The wheel's pick, into the field: the caret after it, ready to edit. */
+  function recallTake(text: string): void {
+    wheeling = false;
+    draft.text = text;
+  }
+
+  /** Back to the draft, the caret where it was, so a key typed lands there. */
+  function recallBack(): void {
+    wheeling = false;
+    if (recall && field) {
+      field.setSelectionRange(...recall.caret);
+    }
+  }
+
+  async function recallDone(send: boolean): Promise<void> {
+    const was = recall;
+    const again = reopen;
+    reopen = false;
+    recall = null;
+    await tick();
+    const took = was?.text !== draft.text;
+    // Back to the draft and asked for again: it comes straight back up. A
+    // pick taken or sent stands; the ↑ was too late for it.
+    if (again && !took && !send) {
+      openRecall(was?.keys ?? true);
+      return;
+    }
+    // Back to the field if you were typing in it, or to edit what you took;
+    // a hold put away leaves the keyboard down.
+    if (was?.keys || took) {
+      field?.focus();
+    }
+    if (took) {
+      field?.setSelectionRange(draft.text.length, draft.text.length);
+    }
+    if (send) {
+      submit();
+    }
+  }
+
+  /** The history button: the wheel, or back from it; or keep a queued edit. */
+  function onhistory(): void {
+    if (swallowClick) {
+      return;
+    }
+    if (recall) {
+      wheel?.back();
+    } else if (draft.lifted) {
+      giveBack();
+    } else {
+      openRecall(true);
+    }
+  }
+
+  // A composer handed another conversation's draft puts the last one's
+  // wheel away at once: what it rolled was that conversation's.
+  $effect.pre(() => {
+    // biome-ignore lint/complexity/noVoid: read-only dependency — re-runs when the composer is pointed at another conversation's draft
+    void draft;
+    untrack(() => {
+      recall = null;
+      reopen = false;
+      wheeling = false;
+    });
+  });
+
+  // While the wheel is up, a press anywhere outside the composer puts it
+  // away, back to the draft. The grown shape is the composer's: a press on
+  // it, around the rows, rolls the wheel as a press on the rows does.
+  $effect(() => {
+    if (!recall) {
+      return;
+    }
+    const outside = (event: PointerEvent) => {
+      const target = event.target as Element;
+      if (!shell?.contains(target)) {
+        wheel?.back();
+      } else if (target.closest(".grown-halo")) {
+        wheel?.grab(event);
+      }
+    };
+    document.addEventListener("pointerdown", outside, true);
+    return () => document.removeEventListener("pointerdown", outside, true);
+  });
+
+  // A touch the wheel is rolling must not pan the page under it. Pointer
+  // events cannot cancel a pan, and touch-action alone has not always held
+  // on iOS Safari, so the touch's own moves are cancelled while it belongs
+  // to the wheel: one that began on the composer, or the held press that
+  // brought the wheel up mid-touch.
+  $effect(() => {
+    if (!recall) {
+      return;
+    }
+    let ours = untrack(() => !!hold?.live);
+    const began = (event: TouchEvent) => {
+      ours = !!shell?.contains(event.target as Node);
+    };
+    const moved = (event: TouchEvent) => {
+      if (ours && event.cancelable) {
+        event.preventDefault();
+      }
+    };
+    document.addEventListener("touchstart", began, {
+      capture: true,
+      passive: true,
+    });
+    document.addEventListener("touchmove", moved, {
+      capture: true,
+      passive: false,
+    });
+    return () => {
+      document.removeEventListener("touchstart", began, true);
+      document.removeEventListener("touchmove", moved, true);
+    };
+  });
+
+  /*
+   * A held press on a touch screen. With the keyboard down the composer is
+   * a control you can hold: a touch or a pen resting on it --dur-press-hold
+   * brings the wheel up under it, and dragging while still holding rolls
+   * it. Lifting leaves it up: a tap on a row takes it, a tap outside puts it
+   * away. Moving first is a scroll or a selection, never a hold; while the
+   * field is being typed in (keyboard up) every touch is the field's:
+   * scrolling it, selecting, pasting.
+   */
+  const SLOP = 8;
+  let hold = $state.raw<{
+    id: number;
+    x: number;
+    y: number;
+    from: number;
+    live: boolean;
+    timer: ReturnType<typeof setTimeout>;
+    lastY: number;
+    lastAt: number;
+    flick: number;
+  } | null>(null);
+  let swallowClick = false;
+
+  function onholddown(event: PointerEvent): void {
+    if (
+      event.pointerType === "mouse" ||
+      !recallOf ||
+      recall ||
+      draft.lifted ||
+      document.activeElement === field
+    ) {
+      return;
+    }
+    // Its own controls answer a press themselves; the history button is
+    // the wheel's, so a hold on it is a hold.
+    const control = (event.target as Element).closest("button, a, input");
+    if (control && control !== historyButton) {
+      return;
+    }
+    const press = {
+      id: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+      from: event.clientY,
+      live: false,
+      lastY: event.clientY,
+      lastAt: 0,
+      flick: 0,
+      timer: setTimeout(() => {
+        if (hold?.id !== press.id) {
+          return;
+        }
+        hold.live = true;
+        hold.from = hold.lastY;
+        hold.lastAt = performance.now();
+        felt("hold");
+        openRecall(false);
+      }, dur("--dur-press-hold")),
+    };
+    hold = press;
+  }
+
+  $effect(() => {
+    const moved = (event: PointerEvent) => {
+      const press = hold;
+      if (!press || event.pointerId !== press.id) {
+        return;
+      }
+      if (!press.live) {
+        if (
+          Math.hypot(event.clientX - press.x, event.clientY - press.y) > SLOP
+        ) {
+          clearTimeout(press.timer);
+          hold = null;
+        } else {
+          press.lastY = event.clientY;
+        }
+        return;
+      }
+      event.preventDefault();
+      const now = performance.now();
+      press.flick =
+        (event.clientY - press.lastY) / Math.max(1, now - press.lastAt);
+      press.lastY = event.clientY;
+      press.lastAt = now;
+      wheel?.follow(event.clientY - press.from);
+    };
+    const lifted = (event: PointerEvent) => {
+      const press = hold;
+      if (!press || event.pointerId !== press.id) {
+        return;
+      }
+      clearTimeout(press.timer);
+      hold = null;
+      if (!press.live) {
+        return;
+      }
+      // The press is spent: no click on what it lifted from, no focus in
+      // the field.
+      swallowClick = true;
+      setTimeout(() => {
+        swallowClick = false;
+      }, dur("--dur-press-hold"));
+      wheel?.release(press.flick);
+    };
+    document.addEventListener("pointermove", moved, { passive: false });
+    document.addEventListener("pointerup", lifted);
+    document.addEventListener("pointercancel", lifted);
+    return () => {
+      document.removeEventListener("pointermove", moved);
+      document.removeEventListener("pointerup", lifted);
+      document.removeEventListener("pointercancel", lifted);
+    };
+  });
+
+  /** iOS still starts its own press gestures under a live hold: the callout, the focus on lift. */
+  function onholdnative(event: Event): void {
+    if (hold?.live || swallowClick) {
+      event.preventDefault();
+    }
+  }
+  function onholdclick(event: MouseEvent): void {
+    if (swallowClick) {
+      event.stopPropagation();
+      event.preventDefault();
+      swallowClick = false;
+    }
+  }
+
+  /*
+   * While a press is held on the composer, and while the wheel it brought
+   * up is up, nothing on the page selects: iOS would otherwise turn the hold
+   * into a text selection and drag it across the page. Only for a hold: the
+   * switch restyles the whole page, which a key or a click has no need of.
+   */
+  $effect(() => {
+    if (!(hold || (recall && !recall.keys))) {
+      return;
+    }
+    const root = document.documentElement;
+    root.classList.add("composer-holding");
+    getSelection()?.removeAllRanges();
+    const refuse = (event: Event) => event.preventDefault();
+    document.addEventListener("selectstart", refuse);
+    return () => {
+      root.classList.remove("composer-holding");
+      document.removeEventListener("selectstart", refuse);
+    };
+  });
+
+  /*
+   * Your queued message, edited in the composer. Its words lift out of their
+   * bubble into the field (lift.svelte.ts) while the composer grows one row
+   * out of its history button to say so; Enter puts the edit in its place,
+   * Esc (or Keep it, on a touch screen) gives the words back as they were.
+   * What the field held steps aside meanwhile and comes back after. The
+   * edit belongs to its conversation's draft: a switch away leaves it
+   * there, and coming back finds it as it was.
+   */
+  /** The grown row while a queued message is edited, and where it stands. */
+  let edit = $state<{
+    inset: number;
+    base: number;
+    row: number;
+    shown: boolean;
+  } | null>(null);
+  let editShape: GrownShape | null = null;
+  /** The sizes a lift read before it wrote anything, for the row it grows. */
+  let liftSizes: ReturnType<typeof measureShape> | null = null;
+  let editRow = $state<HTMLElement>();
+  /** The field's words are flying: it draws them only once they land. */
+  let wordsLanded = $state(true);
+  /** The flight `wordsLanded` waits for; a newer one owns it. */
+  let landingTurn = 0;
+  function landAfter(done: Promise<void> | number): void {
+    landingTurn += 1;
+    const mine = landingTurn;
+    wordsLanded = false;
+    const land = () => {
+      if (landingTurn === mine) {
+        wordsLanded = true;
+      }
+    };
+    if (typeof done === "number") {
+      setTimeout(land, done);
+    } else {
+      done.then(land);
+    }
+  }
+
+  async function liftQueued(message: Message): Promise<void> {
+    if (!(field && recallOf) || draft.lifted || recall) {
+      return;
+    }
+    // Both ends first, then the change: one layout.
+    if (shell && pill && historyButton) {
+      liftSizes = measureShape(shell, pill, historyButton, field);
+    }
+    const words = bubbleWords(message.id);
+    const from = words ? bubbleBox(words) : null;
+    const trip = from && words ? startFlight(asBubble(words), from) : null;
+    draft.lift(message.id, message.instanceId, message.content);
+    felt("take");
+    field.focus();
+    await tick();
+    const end = draft.text.length;
+    field.setSelectionRange(end, end);
+    if (!trip) {
+      field.scrollTop = field.scrollHeight;
+      return;
+    }
+    // The field fits its new words in the frame after they land in it
+    // (motion/autosize): the height it is growing to is read once it has.
+    const flown = new Promise<void>((done) => {
+      requestAnimationFrame(async () => {
+        if (!field) {
+          trip.cancel();
+          done();
+          return;
+        }
+        const height =
+          Number.parseFloat(field.style.height) || field.offsetHeight;
+        // A long message opens scrolled to its end, where the caret is.
+        const to = fieldBox(field, { height, whole: natural });
+        await trip.fly(asField(field, draft.text), to);
+        done();
+        field.scrollTop = field.scrollHeight;
+      });
+    });
+    landAfter(flown);
+  }
+
+  /**
+   * The words go back to their bubble: as they were, or as `replaced` says
+   * they now are. What stepped aside comes back into the field.
+   */
+  async function giveBack(replaced?: string): Promise<void> {
+    const lift = draft.lifted;
+    if (!(lift && field)) {
+      return;
+    }
+    const leaving = draft.text;
+    const from = fieldBox(field);
+    const trip = startFlight(asField(field, leaving), from);
+    // What the field holds again shows once the words leaving it are gone.
+    if (motionOk.current) {
+      landAfter(dur("--dur-lift") * LEFT_BY);
+    }
+    if (replaced !== undefined) {
+      replacing.set(lift.id, replaced);
+    }
+    landingWords.add(lift.id);
+    felt("give back");
+    draft.putBack();
+    field.focus();
+    await tick();
+    const words = bubbleWords(lift.id);
+    if (!words) {
+      trip.cancel();
+      landingWords.delete(lift.id);
+      return;
+    }
+    // The bubble opens from its tag; on a transcript held at its foot it
+    // opens upward, so its words land that much higher than they stand now.
+    const log = words.closest('[role="log"]');
+    const fold = words.parentElement;
+    const atFoot =
+      !!log && log.scrollHeight - log.scrollTop - log.clientHeight < 2;
+    const grows = atFoot && fold ? words.offsetHeight - fold.offsetHeight : 0;
+    const to = bubbleBox(words, grows);
+    if (to) {
+      await trip.fly(asBubble(words), to);
+    } else {
+      trip.cancel();
+    }
+    landingWords.delete(lift.id);
+  }
+
+  /** Enter while editing: the field's words go in the queued message's place. */
+  async function replaceLifted(): Promise<void> {
+    const lift = draft.lifted;
+    const message = recalled?.messages.find((m) => m.id === lift?.id);
+    if (!(lift && message)) {
+      return;
+    }
+    const words = draft.text.trim();
+    if (!words) {
+      sendBlock = "Write a message before sending.";
+      return;
+    }
+    if (words === lift.words.trim()) {
+      giveBack();
+      return;
+    }
+    try {
+      const sent = await replaceQueued(message, words);
+      // Read while the replace was on its way out: the edit is already
+      // back in the field, and the withdraw can only say so again.
+      if (draft.lifted !== lift) {
+        return;
+      }
+      giveBack(words);
+      watchReplace(draft, {
+        id: lift.id,
+        instanceId: lift.instanceId,
+        withdraw: sent.withdraw,
+        replacement: sent.replacement,
+        words,
+        agent: agentName,
+      });
+    } catch (error) {
+      // The words stay in the field, still the queued message's: Enter
+      // tries again, Esc keeps it as it was.
+      if (draft.lifted === lift) {
+        sendBlock = notEdited(
+          error instanceof Error ? error.message : String(error)
+        );
+      }
+    }
+  }
+
+  /**
+   * The queued message was read while its words were in the field: it can
+   * no longer be edited, and the edit stays, with why, to send anew.
+   */
+  function settleLift(): void {
+    const edited = draft.putBack();
+    draft.keepEdit(edited);
+    draft.notice = `${readFirst(agentName)} Your edit is still in the composer.`;
+  }
+
+  $effect(() => {
+    const lift = draft.lifted;
+    if (!lift) {
+      return;
+    }
+    const message = cawco
+      .session(lift.instanceId)
+      ?.messages.find((m) => m.id === lift.id);
+    if (!(message && userTurnActions(message).edit === "queued")) {
+      untrack(settleLift);
+    }
+  });
+
+  $effect(() => {
+    if (recallOf) {
+      return writesTo(recallOf);
+    }
+  });
+
+  // A row asked to lift its message (its Edit, or a tap on touch): the
+  // composer writing to that conversation takes it.
+  $effect(() => {
+    const asked = liftAsk.message;
+    if (!asked || asked.instanceId !== recallOf) {
+      return;
+    }
+    untrack(() => {
+      liftAsk.message = null;
+      if (draft.lifted?.id !== asked.id) {
+        if (draft.lifted) {
+          giveBack();
+        }
+        liftQueued(asked);
+      }
+    });
+  });
+
+  /** Grows the editing row out of the history button. */
+  function growEdit(): void {
+    if (!(shell && pill && historyButton && field)) {
+      return;
+    }
+    if (editShape) {
+      editShape.morphTo(1, editShape.ext, dur("--dur-grow"));
+      if (edit) {
+        edit.shown = true;
+      }
+      return;
+    }
+    // Measured by the lift before it wrote; a draft lifted elsewhere (a
+    // conversation switched to) is measured here.
+    const { size } =
+      liftSizes ?? measureShape(shell, pill, historyButton, field);
+    liftSizes = null;
+    const { row } = size;
+    const shape = new GrownShape(shell, size, row, { frosted: false });
+    editShape = shape;
+    // Inset past the shoulders' curve, so nothing sits against the slope.
+    edit = {
+      inset: Math.round(shape.taper() + size.r + size.headroom),
+      base: size.base,
+      row,
+      shown: false,
+    };
+    shape.morphTo(1, row, dur("--dur-grow"));
+    // Partway up, once there is room for them.
+    setTimeout(
+      () => {
+        if (edit && editShape === shape) {
+          edit.shown = true;
+        }
+      },
+      motionOk.current ? dur("--dur-control") : 0
+    );
+  }
+
+  async function foldEdit(): Promise<void> {
+    const shape = editShape;
+    if (!shape) {
+      return;
+    }
+    if (edit) {
+      edit.shown = false;
+    }
+    await shape.morphTo(0, shape.ext, dur("--dur-grow-exit"));
+    // Grown again while it folded: it stays.
+    if (editShape === shape && !draft.lifted) {
+      shape.remove();
+      editShape = null;
+      edit = null;
+    }
+  }
+
+  $effect(() => {
+    const lifting = !!draft.lifted;
+    if (!(shell && pill && historyButton)) {
+      return;
+    }
+    untrack(() => (lifting ? growEdit() : foldEdit()));
+  });
+
+  // The field grows and shrinks as the words are edited: the grown shape and
+  // its row stay on the pill's top edge.
+  $effect(() => {
+    const node = pill;
+    if (!(node && edit)) {
+      return;
+    }
+    const sizes = new ResizeObserver(([entry]) => {
+      const base = entry.borderBoxSize[0].blockSize;
+      if (editShape && edit && Math.abs(base - edit.base) > 0.5) {
+        edit.base = base;
+        editShape.base = base;
+      }
+    });
+    sizes.observe(node, { box: "border-box" });
+    return () => sizes.disconnect();
+  });
+
+  $effect(() => {
+    if (editRow && editShape && edit) {
+      // What it says comes up from inside the shape, never above its edge.
+      editShape.clip(editRow, () => ({
+        left: edit?.inset ?? 0,
+        bottom: edit?.base ?? 0,
+        height: edit?.row ?? 0,
+      }));
+    }
+  });
+
+  $effect(() => () => {
+    editShape?.remove();
+    editShape = null;
+  });
+
+  /** Whose queued sends this harness calls queued, for the wheel's rows. */
+  const queuedWord = $derived(
+    recalled?.harness === "claude" ? "Queued" : undefined
+  );
 
   /** base64 without the `data:` prefix — the wire shape images travel in. */
   function readImage(file: File): Promise<PendingImage> {
@@ -1347,181 +2131,265 @@
       <p class="send-error" role="alert" transition:unfold>{sendNotice}</p>
     {/if}
 
-    <form
-      aria-label="Message the agent"
-      class="cin field-shell"
-      onsubmit={(e) => e.preventDefault()}
-    >
-      <input
-        accept="image/*,text/*,.md,.json,.csv,.log"
-        class="hidden-file"
-        multiple
-        onchange={onpick}
-        type="file"
-        bind:this={fileInput}
-      >
-
-      {#if menuOpen}
-        <!-- Above the input, not over it: the sentence being written stays legible
-           while its next word is being chosen. -->
-        <!-- Focus never leaves the textarea: the menu swallows the mousedown that
-           would blur it, so a clicked row lands on the message being written. -->
-        <!-- biome-ignore lint/a11y/noStaticElementInteractions: role="presentation" is deliberate — this wrapper is never meant to be announced; the mousedown handler only preventDefaults so focus stays on the textarea, it is not a user interaction target. -->
+    <!-- The pill, and what grows up out of it over the transcript: the
+         recall wheel, or the row that says a queued message is being
+         edited. Both stand on the pill's foot, absolutely, so nothing above
+         them moves. -->
+    <div class="shell" bind:this={shell} class:rolling={!!recall}>
+      {#if recall && shell && pill}
+        <RecallWheel
+          draft={recall.text}
+          id={recallId}
+          keys={recall.keys}
+          measured={recall.measured}
+          more={!!recalled?.cursor}
+          older={() => {
+            if (recallOf) {
+              // biome-ignore lint/complexity/noVoid: the page lands in the session, which the wheel reads
+              void readOlderPage(recallOf);
+            }
+          }}
+          onback={recallBack}
+          ondone={recallDone}
+          ontake={recallTake}
+          {pill}
+          {queuedWord}
+          sent={sentHere}
+          {shell}
+          bind:this={wheel}
+          bind:active={recallActive}
+        />
+      {/if}
+      {#if edit}
+        <!-- What is happening, and the two ways out: the keys on a desk, a
+             button on a touch screen, which has no Esc. -->
         <div
-          class="menu kit-pop"
-          data-side="top"
-          data-state="open"
-          id="composer-menu"
-          onmousedown={(event) => event.preventDefault()}
-          role="presentation"
-          out:menuOut
+          class="edit-row"
+          bind:this={editRow}
+          style:--edit-inset="{edit.inset}px"
+          style:bottom="{edit.base}px"
+          style:height="{edit.row}px"
+          class:shown={edit.shown}
         >
-          <Command.Root loop shouldFilter={false} bind:value={highlight}>
-            <Command.List>
-              {#each sections as section (section.key)}
-                <Command.Group heading={section.heading}>
-                  {#each section.entries as entry (entry.id)}
-                    <Command.Item
-                      id={domIds.get(entry.id)}
-                      onSelect={() => choose(entry)}
-                      value={entry.id}
-                    >
-                      <span class="e-label">{entry.label}</span>
-                      {#if entry.detail}
-                        <span class="e-detail">{entry.detail}</span>
-                      {/if}
-                    </Command.Item>
-                  {/each}
-                </Command.Group>
-              {/each}
-            </Command.List>
-          </Command.Root>
+          <span class="what">Editing your queued message</span>
+          <span class="hint">
+            <Kbd>Enter</Kbd>
+            replaces it · <Kbd>Esc</Kbd> keeps it
+          </span>
+          <Button
+            class="keep touch-hit"
+            onclick={() => giveBack()}
+            size="xs"
+            variant="ghost"
+          >
+            Keep it
+          </Button>
         </div>
       {/if}
+      <!-- With the keyboard down a touch screen's pill is a control to hold
+         (the wheel comes up under it); the field being typed in keeps its
+         touches. -->
+      <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: the press handlers read a touch held on the pill for the recall wheel; everything it leads to is also a key (↑) and a button (history) -->
+      <form
+        aria-label="Message the agent"
+        class="cin field-shell"
+        onclickcapture={onholdclick}
+        oncontextmenu={onholdnative}
+        onpointerdown={onholddown}
+        onsubmit={(e) => e.preventDefault()}
+        ontouchend={onholdnative}
+        bind:this={pill}
+        class:grown={!!edit}
+        class:wheeling={wheeling}
+      >
+        <input
+          accept="image/*,text/*,.md,.json,.csv,.log"
+          class="hidden-file"
+          multiple
+          onchange={onpick}
+          type="file"
+          bind:this={fileInput}
+        >
 
-      <!-- A label, so the pill's padding above and below the 34px field
+        {#if menuOpen}
+          <!-- Above the input, not over it: the sentence being written stays legible
+           while its next word is being chosen. -->
+          <!-- Focus never leaves the textarea: the menu swallows the mousedown that
+           would blur it, so a clicked row lands on the message being written. -->
+          <!-- biome-ignore lint/a11y/noStaticElementInteractions: role="presentation" is deliberate — this wrapper is never meant to be announced; the mousedown handler only preventDefaults so focus stays on the textarea, it is not a user interaction target. -->
+          <div
+            class="menu kit-pop"
+            data-side="top"
+            data-state="open"
+            id="composer-menu"
+            onmousedown={(event) => event.preventDefault()}
+            role="presentation"
+            out:menuOut
+          >
+            <Command.Root loop shouldFilter={false} bind:value={highlight}>
+              <Command.List>
+                {#each sections as section (section.key)}
+                  <Command.Group heading={section.heading}>
+                    {#each section.entries as entry (entry.id)}
+                      <Command.Item
+                        id={domIds.get(entry.id)}
+                        onSelect={() => choose(entry)}
+                        value={entry.id}
+                      >
+                        <span class="e-label">{entry.label}</span>
+                        {#if entry.detail}
+                          <span class="e-detail">{entry.detail}</span>
+                        {/if}
+                      </Command.Item>
+                    {/each}
+                  </Command.Group>
+                {/each}
+              </Command.List>
+            </Command.Root>
+          </div>
+        {/if}
+
+        <!-- A label, so the pill's padding above and below the 34px field
          focuses it: its touch area is the field's. -->
-      <label class="field touch-hit" class:folded>
-        <textarea
-          aria-activedescendant={activeDescendant}
-          aria-autocomplete="list"
-          aria-controls="composer-menu"
-          aria-expanded={menuOpen}
-          aria-label="Message the agent"
-          onblur={() => {
-            dismissed = true;
-            refocus(false);
-          }}
-          onclick={noteCaret}
-          onfocus={() => refocus(true)}
-          oninput={noteCaret}
-          {onkeydown}
-          onkeyup={noteCaret}
-          {onpaste}
-          onselect={noteCaret}
-          ontransitioncancel={(event) => {
-            if (event.propertyName === "height") {
-              folding = false;
-            }
-          }}
-          ontransitionend={(event) => {
-            if (event.propertyName === "height") {
-              folding = false;
-            }
-          }}
-          placeholder={hint}
-          role="combobox"
-          bind:this={field}
-          class:cue-bottom={cueBottom && !folded}
-          class:cue-top={cueTop && !folded}
-          class:flying={flight !== null}
-          class:folding
-          bind:value={draft.text}
-          {@attach autosize(() => draft.text, {
-            held: () => holding,
-            fold: folds,
-            measured: (whole) => {
-              natural = whole;
-            },
-          })}
-          {@attach fitHint}
-          {@attach scrollCue}
-        ></textarea>
-        {#if flight}
-          <!-- Each layer is its text and, drawn clear after it, the rest of
+        <label class="field touch-hit" class:folded>
+          <textarea
+            aria-activedescendant={recall ? recallActive : activeDescendant}
+            aria-autocomplete="list"
+            aria-controls={recall ? recallId : "composer-menu"}
+            aria-expanded={menuOpen || !!recall}
+            aria-label="Message the agent"
+            onblur={() => {
+              dismissed = true;
+              refocus(false);
+            }}
+            onclick={noteCaret}
+            onfocus={() => refocus(true)}
+            oninput={noteCaret}
+            {onkeydown}
+            onkeyup={noteCaret}
+            {onpaste}
+            onselect={noteCaret}
+            ontransitioncancel={(event) => {
+              if (event.propertyName === "height") {
+                folding = false;
+              }
+            }}
+            ontransitionend={(event) => {
+              if (event.propertyName === "height") {
+                folding = false;
+              }
+            }}
+            placeholder={hint}
+            role="combobox"
+            bind:this={field}
+            class:cue-bottom={cueBottom && !folded}
+            class:cue-top={cueTop && !folded}
+            class:flying={flight !== null || !wordsLanded}
+            class:folding
+            bind:value={draft.text}
+            {@attach autosize(() => draft.text, {
+              held: () => holding,
+              fold: folds,
+              measured: (whole) => {
+                natural = whole;
+              },
+            })}
+            {@attach fitHint}
+            {@attach scrollCue}
+          ></textarea>
+          {#if flight}
+            <!-- Each layer is its text and, drawn clear after it, the rest of
                the text it will be (`data-rest`), so it lays out whole. The
                trailing zero-width space holds a final empty line open, as
                the field does. -->
-          <span aria-hidden="true" class="flight">
-            <span
-              class="flight-text"
-              data-rest="{flight.outRest}&#8203;"
-              bind:this={flightOut}
-              style:inline-size="{flight.outWrap}px"
-              style:opacity={flight.from.opacity}
-              style:transform={flight.from.transform}
-              style:translate="0 {flight.outDrop}px"
-              >{flight.out}</span
-            >
-            <span
-              class="flight-text"
-              data-rest="{flight.text.slice(typed.length)}&#8203;"
-              bind:this={flightIn}
-              style:opacity="0"
-              style:translate="0 {inDrop}px"
-              >{typed}</span
-            >
-          </span>
-        {/if}
-        {#if folded}
-          <!-- What the folded field keeps out of sight, over its faded line
+            <span aria-hidden="true" class="flight">
+              <span
+                class="flight-text"
+                data-rest="{flight.outRest}&#8203;"
+                bind:this={flightOut}
+                style:inline-size="{flight.outWrap}px"
+                style:opacity={flight.from.opacity}
+                style:transform={flight.from.transform}
+                style:translate="0 {flight.outDrop}px"
+                >{flight.out}</span
+              >
+              <span
+                class="flight-text"
+                data-rest="{flight.text.slice(typed.length)}&#8203;"
+                bind:this={flightIn}
+                style:opacity="0"
+                style:translate="0 {inDrop}px"
+                >{typed}</span
+              >
+            </span>
+          {/if}
+          {#if folded}
+            <!-- What the folded field keeps out of sight, over its faded line
                end: standing in the field, it takes none of the field's width,
                so the text wraps as it does unfolded. -->
-          <span aria-hidden="true" class="more"
-            >+{lines - 1} {lines === 2 ? "line" : "lines"}</span
-          >
-        {/if}
-      </label>
+            <span aria-hidden="true" class="more"
+              >+{lines - 1} {lines === 2 ? "line" : "lines"}</span
+            >
+          {/if}
+        </label>
 
-      <div class="ctrls">
-        {@render leading?.()}
-        <button
-          aria-label="Attach a file or image"
-          class="att-btn touch-hit"
-          onclick={() => fileInput?.click()}
-          type="button"
-        >
-          <IconPlus />
-        </button>
-        <!-- Pending from the press until the hub takes the message: the glyph
+        <div class="ctrls">
+          {@render leading?.()}
+          <button
+            aria-label="Attach a file or image"
+            class="att-btn touch-hit"
+            onclick={() => fileInput?.click()}
+            type="button"
+          >
+            <IconPlus />
+          </button>
+          {#if recallOf}
+            <!-- What you sent here: the wheel grows up out of this button,
+               and folds back into it. -->
+            <button
+              aria-controls={recall ? recallId : undefined}
+              aria-expanded={!!recall}
+              aria-label={draft.lifted
+                ? "Keep your queued message as it was"
+                : "Show what you sent here"}
+              class="history-btn touch-hit"
+              onclick={onhistory}
+              type="button"
+              bind:this={historyButton}
+            >
+              <IconHistory />
+            </button>
+          {/if}
+          <!-- Pending from the press until the hub takes the message: the glyph
            slot turns to the kit spinner and presses are swallowed. -->
-        <button
-          aria-busy={sending || undefined}
-          aria-disabled={sending || held || undefined}
-          aria-label={busy ? "Stop the agent" : "Send message"}
-          class="stop touch-hit pressable"
-          disabled={!(busy || sending || draft.hasContent)}
-          onclick={whileIdle(() => sending, onaction)}
-          type="button"
-        >
-          <!-- The one control that changes meaning mid-turn. `{#key}` re-creates
+          <button
+            aria-busy={sending || undefined}
+            aria-disabled={sending || held || undefined}
+            aria-label={stops ? "Stop the agent" : "Send message"}
+            class="stop touch-hit pressable"
+            disabled={!(busy || sending || draft.hasContent || recall)}
+            onclick={whileIdle(() => sending, onaction)}
+            type="button"
+          >
+            <!-- The one control that changes meaning mid-turn. `{#key}` re-creates
              the glyph on every flip, so BOTH directions of the swap animate in;
              the box it sits in is untouched, so send↔stop never moves or
              resizes under a thumb already travelling toward it. -->
-          {#key sending ? "wait" : busy}
-            <span class="swap" out:glyphOut>
-              {#if sending}
-                <Spinner aria-hidden="true" role="presentation" />
-              {:else if busy}
-                <IconStop />
-              {:else}
-                <IconSend />
-              {/if}
-            </span>
-          {/key}
-        </button>
-      </div>
-    </form>
+            {#key sending ? "wait" : stops}
+              <span class="swap" out:glyphOut>
+                {#if sending}
+                  <Spinner aria-hidden="true" role="presentation" />
+                {:else if stops}
+                  <IconStop />
+                {:else}
+                  <IconSend />
+                {/if}
+              </span>
+            {/key}
+          </button>
+        </div>
+      </form>
+    </div>
   </div>
 </div>
 
@@ -1618,10 +2486,19 @@
      (app.css `--c-composer-*`), which every transcript keeps clear. It is
      the panel material (app.css `--material-*`), so the transcript shows
      faintly through it, and opaque where translucency is turned down. */
+  /* The pill's box, which what grows out of it shares: the grown shape is
+     drawn behind the pill and its rows over it. Grown, the shape's edge is
+     the control border and never the ring: the grown composer is plainly
+     where the keys go, the caret and the row on the line say the rest, and
+     the pill, stepped aside, draws none. */
+  .shell {
+    position: relative;
+  }
   .cin {
     --cin-pad: var(--c-composer-inset);
     --cin-ctl: var(--c-composer-field);
     position: relative;
+    z-index: 2;
     border: 1px solid var(--border-control);
     background: var(--material-panel);
     -webkit-backdrop-filter: blur(var(--material-blur))
@@ -1640,6 +2517,24 @@
     align-items: flex-end;
     gap: var(--space-2);
     box-shadow: var(--shadow-tile);
+
+    /* While it is grown, the grown shape is the composer: the pill's own
+       surface steps aside. */
+    &.wheeling,
+    &.grown {
+      outline: none;
+      background: transparent;
+      border-color: transparent;
+      box-shadow: none;
+      -webkit-backdrop-filter: none;
+      backdrop-filter: none;
+    }
+    /* Keyboard down, a touch screen's pill is a control to hold, so the
+       page does not pan from it; typed in, its touches are the field's. */
+    &:not(:focus-within) {
+      touch-action: none;
+      -webkit-touch-callout: none;
+    }
   }
   .field {
     position: relative;
@@ -1904,6 +2799,7 @@
     }
   }
   .att-btn,
+  .history-btn,
   .stop {
     width: var(--cin-ctl);
     height: var(--cin-ctl);
@@ -1928,12 +2824,25 @@
     background: var(--surface-raised);
     color: var(--ink-muted);
   }
-  .att-btn :global(svg) {
+  .att-btn :global(svg),
+  .history-btn :global(svg) {
     width: 16px;
     height: 16px;
   }
+  /* What you sent: a quiet ghost beside Attach, lit while the wheel is up. */
+  .history-btn {
+    border: 0;
+    background: transparent;
+    color: var(--ink-muted);
+
+    &[aria-expanded="true"] {
+      background: var(--surface-hover);
+      color: var(--ink-strong);
+    }
+  }
   @media (hover: hover) and (pointer: fine) {
-    .att-btn:hover {
+    .att-btn:hover,
+    .history-btn:hover {
       background: var(--surface-hover);
       color: var(--ink-strong);
     }
@@ -1981,6 +2890,7 @@
   }
   @media (prefers-reduced-motion: no-preference) {
     .att-btn:active,
+    .history-btn:active,
     .stop:active:not(:disabled) {
       transform: scale(var(--press-scale));
     }
@@ -2125,5 +3035,161 @@
     .prompts {
       margin-bottom: calc(var(--space-4) - var(--space-2));
     }
+  }
+
+  /* The wheel's rows stand in the field's place: its own text, caret and
+     hint are clear meanwhile. */
+  .wheeling textarea,
+  .wheeling textarea::placeholder {
+    color: transparent;
+    caret-color: transparent;
+  }
+  .wheeling .more {
+    visibility: hidden;
+  }
+
+  /* The grown shape and its frosted fade (grown.ts), made as it grows:
+     behind the pill, the bands under the shape. The drop and the bands
+     come in once it stands still. */
+  .shell :global(.grown-halo) {
+    position: absolute;
+    z-index: 1;
+    inset-inline: 0;
+    bottom: 0;
+    pointer-events: none;
+    transition: filter var(--dur-fade) var(--ease-out);
+
+    & :global(svg) {
+      display: block;
+      inline-size: 100%;
+      block-size: 100%;
+      overflow: visible;
+    }
+  }
+  /* While the wheel is up the grown shape is part of the composer: its
+     margins take a press (rolling the wheel) and never pan the page. */
+  .shell.rolling :global(.grown-halo) {
+    pointer-events: auto;
+    touch-action: none;
+  }
+  .shell :global(.grown-halo.settled) {
+    filter: drop-shadow(var(--shadow-drop)) drop-shadow(var(--shadow-drop-near));
+  }
+  .shell :global(.grown-band) {
+    position: absolute;
+    z-index: 0;
+    inset-inline: 0;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity var(--dur-fade) var(--ease-out);
+  }
+  .shell :global(.grown-band.settled) {
+    opacity: 1;
+  }
+
+  /* The row the composer grows while a queued message is edited: what is
+     happening, and the two ways out. Inset past the shoulders' curve, and
+     clear of the fade at the grown top. */
+  .edit-row {
+    position: absolute;
+    z-index: 3;
+    inset-inline: var(--edit-inset);
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding-block-start: var(--space-1);
+    font-size: var(--text-meta);
+    font-weight: var(--weight-strong);
+    color: var(--ink-muted);
+    pointer-events: none;
+  }
+  /* The label and the hints come up with the shape, out of a slight blur,
+     one after the other, and sink back as it folds. */
+  .what,
+  .hint,
+  .edit-row :global(.keep) {
+    opacity: 0;
+    filter: blur(4px);
+    transition:
+      opacity var(--dur-fade) var(--ease-out),
+      filter var(--dur-fade) var(--ease-out);
+
+    @media (prefers-reduced-motion: no-preference) {
+      translate: 0 var(--pop-rise);
+      transition:
+        opacity var(--dur-fade) var(--ease-out),
+        translate var(--dur-panel) var(--ease-drawer),
+        filter var(--dur-fade) var(--ease-out);
+    }
+  }
+  .what {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin-inline-end: auto;
+    color: var(--ink-row);
+
+    /* A dot, not a pill: a rounded tag beside the curved shoulder reads as
+       a second, clashing curve. */
+    &::before {
+      content: "";
+      inline-size: var(--status-dot-size);
+      block-size: var(--status-dot-size);
+      border-radius: 50%;
+      background: var(--selected-icon);
+    }
+  }
+  .hint {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    white-space: nowrap;
+  }
+  .shown .what,
+  .shown .hint,
+  .shown :global(.keep) {
+    opacity: 1;
+    translate: none;
+    filter: none;
+  }
+  .shown .hint,
+  .shown :global(.keep) {
+    transition-delay: var(--dur-stagger);
+  }
+  /* A touch screen has no Esc: a button keeps the message as it was. */
+  .edit-row :global(.keep) {
+    display: none;
+    pointer-events: auto;
+  }
+  @media (pointer: coarse) {
+    .hint {
+      display: none;
+    }
+    .edit-row :global(.keep) {
+      display: inline-flex;
+    }
+  }
+  @media (width < 640px) {
+    .hint {
+      display: none;
+    }
+  }
+
+  /* The words in flight between a queued bubble and the field
+     (lift.svelte.ts): fixed over the page, cut to each end's box. */
+  :global(.lift-copy) {
+    position: fixed;
+    z-index: 50;
+    overflow: hidden;
+    pointer-events: none;
+    color: var(--ink-strong);
+  }
+  /* While a press is held on the composer and while the wheel is up,
+     nothing on the page selects. */
+  :global(html.composer-holding),
+  :global(html.composer-holding *) {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
   }
 </style>

@@ -24,6 +24,7 @@
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
+  import SoundSwitcher from "#lib/components/ui/SoundSwitcher.svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Sidebar from "#lib/components/ui/sidebar/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
@@ -1132,7 +1133,7 @@
           </Sidebar.MenuButton>
         </Sidebar.MenuItem>
       </Sidebar.Menu>
-      <!-- Configure and the theme: the pair of settings in the corner. -->
+      <!-- Configure, the theme and sound: the settings in the corner. -->
       <Tip label="Configure">
         {#snippet children(
           tip
@@ -1151,6 +1152,7 @@
         {/snippet}
       </Tip>
       <ThemeSwitcher />
+      <SoundSwitcher />
     </div>
   </Sidebar.Footer>
   <SessionHover within={railEl} />

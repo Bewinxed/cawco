@@ -214,7 +214,12 @@ final class PieceView: UIView, RowContent {
 /// top edge, its last the bottom; a hairline in the seam's coral parts two
 /// messages of one run. Sending and queued read at reduced presence, with a
 /// note in the clock's place.
-final class UserTurnView: UIView, RowContent {
+///
+/// A queued message the harness can take back lifts into the composer on a
+/// tap (composer-recall); a touch screen says so in its note. While its
+/// words are in the composer the bubble folds down to its tag ("Queued ·
+/// editing it below") on an empty well, and unfolds when they come back.
+final class UserTurnView: UIView, RowContent, UIGestureRecognizerDelegate {
     private let env: RowEnv
     private let who = WhoView()
     private let well = WellSurface()
@@ -223,6 +228,9 @@ final class UserTurnView: UIView, RowContent {
     private let float = FloatNote()
     private let chips = FlowView()
     private let failure = UIStackView()
+    private let takenTag = ChipLabel(insets: UIEdgeInsets(top: 2, left: 7, bottom: 2, right: 7), radius: Radius.radiusPill)
+    private let tagRow = UIStackView()
+    private var taken = false
     private let reason = WrapLabel(wrap: .pretty) // MessageRow `p.reason`
     private let retry = UIButton(type: .system)
     private var wellTop: NSLayoutConstraint!
@@ -242,7 +250,11 @@ final class UserTurnView: UIView, RowContent {
         well.translatesAutoresizingMaskIntoConstraints = false
         words.translatesAutoresizingMaskIntoConstraints = false
         well.addSubview(words)
-        let content = UIStackView(arrangedSubviews: [body, chips, failure])
+        takenTag.backgroundColor = Palette.statusAttnBg
+        tagRow.addArrangedSubview(takenTag)
+        tagRow.addArrangedSubview(UIView())
+        tagRow.isHidden = true
+        let content = UIStackView(arrangedSubviews: [tagRow, body, chips, failure])
         content.axis = .vertical
         content.spacing = Space.space2
         words.pin(content)
@@ -274,6 +286,9 @@ final class UserTurnView: UIView, RowContent {
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (view: UserTurnView, _: UITraitCollection) in
             view.retry.layer.borderColor = Palette.wellEdge.resolvedColor(with: view.traitCollection).cgColor
         }
+        let lift = UITapGestureRecognizer(target: self, action: #selector(lifted))
+        lift.delegate = self
+        well.addGestureRecognizer(lift)
     }
 
     @available(*, unavailable)
@@ -286,7 +301,11 @@ final class UserTurnView: UIView, RowContent {
         self.block = block
         let failed = block.state == "failed"
         let waiting = block.state == "pending" || block.queued
-        let note: String? = failed ? "not sent" : waiting ? "queued" : block.meta["urgent"] as? Bool == true ? "urgent" : nil
+        taken = waiting && env.isTaken(block.id)
+        // On a touch screen, a queued message that can be edited says how.
+        let tappable = waiting && !taken && Self.touch && env.canEditQueued(block.id)
+        let queuedNote = tappable ? "queued · \(env.agentName) is still working · tap to edit" : "queued"
+        let note: String? = taken ? nil : failed ? "not sent" : waiting ? queuedNote : block.meta["urgent"] as? Bool == true ? "urgent" : nil
         let clock = failed || waiting ? nil : Item.clock(block.date)
         who.isHidden = turn.grouped
         who.configure(.init(name: "You", clock: clock, note: note, you: true))
@@ -298,11 +317,13 @@ final class UserTurnView: UIView, RowContent {
         body.floatSize = float.isHidden ? .zero : FloatNote.size(floated ?? "")
         // The words stand in the well, its padding either side of them.
         body.fitWidth = fitWidth.map { $0 - 2 * Space.space2 }
-        body.configure(block.content, style: .well)
-        let ghost = waiting ? Effect.ghostPresence : 1
+        body.configure(env.replacement(block.id) ?? block.content, style: .well)
+        let ghost = waiting && !taken ? Effect.ghostPresence : 1
         who.alpha = ghost
         words.alpha = ghost
         configureChips(block)
+        takenTag.attributedText = Styled.string("Queued · editing it below", TypeScale.typeMeta, color: Palette.statusAttnInk, weight: .medium)
+        fold(taken)
         let reasonText = block.string("sendFailed")
         reason.attributedText = Styled.string("Couldn't send that message." + (reasonText.map { " \($0)" } ?? ""), TypeScale.typeMeta,
                                               color: Palette.statusFailInk, lineBreak: .byWordWrapping)
@@ -312,6 +333,57 @@ final class UserTurnView: UIView, RowContent {
         failure.isHidden = !failed
         retry.isHidden = !failed || env.hub?.fleet.byId[env.sessionId]?.isLive != true
         retry.layer.borderColor = Palette.wellEdge.resolvedColor(with: traitCollection).cgColor
+    }
+
+    /// Folded down to its tag while its words are in the composer
+    /// (`.row-user.taken`): an empty well on the control edge, nothing below it moving.
+    private func fold(_ folded: Bool) {
+        tagRow.isHidden = !folded
+        body.isHidden = folded
+        if folded {
+            chips.isHidden = true
+            failure.isHidden = true
+            float.isHidden = true
+        }
+        well.taken = folded
+    }
+
+    /// A touch screen: where tapping the message is how it is edited.
+    private static var touch: Bool {
+        #if targetEnvironment(macCatalyst)
+        false
+        #else
+        true
+        #endif
+    }
+
+    /// The view the message's words are drawn in, for the flight to the composer.
+    var wordsView: UIView { body }
+
+    /// A replaced message's bubble, marked once.
+    func flash() {
+        well.flash()
+    }
+
+    @objc private func lifted() {
+        guard let block, !taken, block.state == "pending" || block.queued, env.canEditQueued(block.id) else { return }
+        env.editQueued(block.id)
+    }
+
+    /// Not during a text selection, and not on an attachment or a link's own control.
+    func gestureRecognizer(_: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        guard let block, block.state == "pending" || block.queued else { return false }
+        if touch.view is UIControl || touch.view?.isDescendant(of: chips) == true { return false }
+        return !Self.selecting(in: body)
+    }
+
+    func gestureRecognizer(_: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith _: UIGestureRecognizer) -> Bool {
+        true
+    }
+
+    private static func selecting(in view: UIView) -> Bool {
+        if let text = view as? UITextView, text.selectedRange.length > 0 { return true }
+        return view.subviews.contains { selecting(in: $0) }
     }
 
     private func configureChips(_ block: Block) {
@@ -363,6 +435,8 @@ final class UserTurnView: UIView, RowContent {
 final class WellSurface: UIView {
     var grouped = false { didSet { setNeedsLayout() } }
     var runsOn = false { didSet { setNeedsLayout() } }
+    /// Its words are in the composer: no surface, the control ink for its edge.
+    var taken = false { didSet { if taken != oldValue { setNeedsLayout() } } }
     var inset = 0.0
     var pad = 0.0
     private let surface = CAShapeLayer()
@@ -393,7 +467,7 @@ final class WellSurface: UIView {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         surface.path = shape.cgPath
-        surface.fillColor = Palette.surfaceRecessDeep.resolvedColor(with: traitCollection).cgColor
+        surface.fillColor = taken ? UIColor.clear.cgColor : Palette.surfaceRecessDeep.resolvedColor(with: traitCollection).cgColor
         // The edge: every side but the ones this part leaves open.
         let half = rect.insetBy(dx: 0.5, dy: 0.5)
         let path = UIBezierPath()
@@ -416,13 +490,38 @@ final class WellSurface: UIView {
             path.addArc(withCenter: CGPoint(x: half.minX + topR, y: half.minY + topR), radius: topR, startAngle: -.pi / 2, endAngle: .pi, clockwise: false)
         }
         edge.path = path.cgPath
-        edge.strokeColor = Palette.wellEdge.resolvedColor(with: traitCollection).cgColor
+        edge.strokeColor = (taken ? Palette.borderControl : Palette.wellEdge).resolvedColor(with: traitCollection).cgColor
         // The hairline from the message above, across the text column only.
         seam.isHidden = !grouped
         seam.frame = CGRect(x: rect.minX + pad, y: -1, width: rect.width - pad * 2, height: 1)
         seam.backgroundColor = Palette.seam.resolvedColor(with: traitCollection).cgColor
         CATransaction.commit()
     }
+
+    /// Its words were just replaced (`.row-user.flash`): a 2pt brand ring
+    /// that fades back to the well's own edge.
+    func flash() {
+        flashRing?.removeFromSuperlayer()
+        let ring = CAShapeLayer()
+        flashRing = ring
+        let rect = bounds.inset(by: UIEdgeInsets(top: 0, left: inset, bottom: 0, right: 0)).insetBy(dx: 1, dy: 1)
+        ring.path = UIBezierPath(roundedRect: rect, cornerRadius: Radius.wellR - 1).cgPath
+        ring.fillColor = nil
+        ring.lineWidth = 2
+        ring.strokeColor = Palette.brandSolid.resolvedColor(with: traitCollection).cgColor
+        ring.opacity = 0
+        layer.addSublayer(ring)
+        // Rests invisible once it has faded; the next flash takes it away.
+        guard !UIAccessibility.isReduceMotionEnabled else { return }
+        let fade = CABasicAnimation(keyPath: "opacity")
+        fade.fromValue = 1
+        fade.toValue = 0
+        fade.duration = Motion.durHold
+        fade.timingFunction = Motion.easeOut.function
+        ring.add(fade, forKey: "flash")
+    }
+
+    private var flashRing: CAShapeLayer?
 }
 
 /// Children in rows that wrap (`flex-wrap: wrap`), each at its own size.

@@ -33,7 +33,7 @@
     morphMs as morphDuration,
   } from "../motion/curves.svelte";
   import { morph } from "../motion/morph.svelte";
-  import { PERMISSION_MODES } from "../permission-modes";
+  import { bypasses, permissionModesFor } from "../permission-modes";
   import ModelSection from "../spawn/ModelSection.svelte";
   import { modelName } from "../spawn/model-entries";
   import NsPopover from "../spawn/NsPopover.svelte";
@@ -152,9 +152,11 @@
     return null;
   });
   const modes = $derived(
-    PERMISSION_MODES.filter((mode) =>
-      report?.capabilities.permissionModes.includes(mode.value)
-    )
+    harness
+      ? permissionModesFor(harness, session?.permissionMode).filter((mode) =>
+          report?.capabilities.permissionModes.includes(mode.value)
+        )
+      : []
   );
   const editable = $derived(
     cawco.status === "connected" &&
@@ -390,13 +392,15 @@
       return;
     }
     relaunchFailure = null;
-    if (next !== "bypassPermissions") {
+    // Bypass, and Full Send on top of it, are launch-time decisions for the
+    // harness: entering them from another mode starts the session again in
+    // place. Between the two the CLI stays in bypass, and a switch is enough.
+    if (!bypasses(next) || bypasses(session?.permissionMode)) {
       submitCommand(sessionId, machineId, "set-permission-mode", {
         mode: next,
       });
       return;
     }
-    // Full access is a launch-time decision for the harness.
     permissionBeforeRelaunch = session?.permissionMode ?? null;
     relaunching = true;
     const id = sessionId;
@@ -572,8 +576,10 @@
                 value: mode.value,
                 disabled: !editable || pending("permission"),
               })),
+              harness,
               permission: shownPermission,
               onpermission: changePermission,
+              restartsOnFullSend: !bypasses(session?.permissionMode),
             }}
           />
         </div>
@@ -782,7 +788,7 @@
     min-width: 0;
   }
   /* The card's width holds the longest names whole ("Opus 5.5 · 1M",
-     "medium", "Full access") with the chips' insides drawn in a little. */
+     "medium", "Accept edits") with the chips' insides drawn in a little. */
   .settings :global(.ns-chip-btn) {
     gap: 4px;
   }

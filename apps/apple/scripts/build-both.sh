@@ -131,7 +131,7 @@ while IFS= read -r line <&"$MAC_OUTPUT"; do
 done
 if [[ ${line:-} != READY ]]; then wait "$MAC_PID"; exit 1; fi
 echo "BUILD DIRECTORY mac:~/build/cawco-apple/$BUILD"
-rsync -a --delete \
+rsync -rlpD --checksum --delete \
   --exclude .build --exclude DerivedData \
   --exclude CawCo.xcodeproj --exclude CawCo/Info.plist \
   -e "ssh -F $HOME/.ssh/config -o BatchMode=yes" \

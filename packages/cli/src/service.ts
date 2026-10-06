@@ -3,7 +3,13 @@ import { chmod, mkdir } from "node:fs/promises";
 import { homedir, platform } from "node:os";
 import { dirname, join } from "node:path";
 import type { AgentRow } from "@cawco/core";
-import { CAWCO_ENV, CAWCO_HUB_PORT, readEnv } from "@cawco/core";
+import {
+  CAWCO_ENV,
+  CAWCO_HUB_PORT,
+  CAWCO_MCP_CALLBACK_PORT,
+  readEnv,
+} from "@cawco/core";
+import { holdPhrases, type RestartReadiness } from "@cawco/core/binary-updates";
 import { standalone } from "@cawco/core/runtime";
 import { sessiondEndpoint } from "@cawco/core/sessiond";
 
@@ -632,7 +638,8 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
      * also what makes recovery simple: systemd tears down the remainder, the
      * fresh sessiond starts on a new epoch with an empty register, and `restore()`
      * runs. `cawco-agent.service` needs no KillMode tuning at all once the
-     * children live over here — its restart is free by construction. So
+     * children live over here — its restart kills no child by construction,
+     * and cuts only what the agent carries itself ({@link clearToRestart}). So
      * {@link unit} emits no `KillMode=` for anybody, and that absence is the
      * decision, not an oversight.
      */
@@ -707,12 +714,16 @@ const SERVICES = servicesFor(HERE);
 
 /**
  * What `--dev` changes, per service. Only what is here is watched, and the
- * daemon is deliberately absent: it hosts the sessions, so a restart lands in
- * the middle of somebody's turn and loses it. Restarting the hub costs nothing
- * by comparison — the sessions live in the daemons, which reconnect with
- * backoff, and everything the hub knows is already on disk. The dashboard is in
- * here only because the built bundle cannot reload itself; vite's dev server
- * picks up an edited source file without any restart at all.
+ * daemon is deliberately absent: every edit would restart it, and a restart
+ * cuts what it carries itself (the tool calls it relays, the image
+ * generations and commands it runs). The turns are not cut — the keeper runs
+ * them and the next agent takes them over — but that is still not something
+ * a saved file should do. Restarting the hub costs little by comparison: the
+ * sessions live in the daemons, which reconnect with backoff, everything the
+ * hub knows is already on disk, and only the tool calls it is answering at
+ * that moment are cut. The dashboard is in here only because the built bundle
+ * cannot reload itself; vite's dev server picks up an edited source file
+ * without any restart at all.
  */
 // sessiond is absent for the same reason and more sharply: restarting it kills
 // every harness child in its cgroup, so a source edit must never bounce it.
@@ -1316,11 +1327,12 @@ interface BusyReport {
 }
 
 /**
- * How many of this machine's sessions are mid-turn, or `unknown` when the hub
- * could not be asked at all — it is down, or it is old enough not to have the
- * route. A hub that cannot answer is never read as an idle one.
+ * How many of this machine's sessions are mid-turn, in words, or `unknown`
+ * when the hub could not be asked at all — it is down, or it is old enough not
+ * to have the route. A hub that cannot answer is never read as an idle one.
+ * What a restart of the session keeper waits on: it kills the turns.
  */
-const agentBusy = async (): Promise<number | "unknown"> => {
+const sessionsMidTurn = async (): Promise<string[] | "unknown"> => {
   const hub = await joinedHub();
   if (!hub) {
     return "unknown";
@@ -1330,80 +1342,130 @@ const agentBusy = async (): Promise<number | "unknown"> => {
   const report = await probeJson<BusyReport>(
     `${hub}/api/agents/${await machineId()}/busy`
   );
-  return report?.ready === true && typeof report.busy === "number"
-    ? report.busy
+  if (!(report?.ready === true && typeof report.busy === "number")) {
+    return "unknown";
+  }
+  return report.busy > 0
+    ? [`${report.busy} session${report.busy === 1 ? "" : "s"} mid-turn`]
+    : [];
+};
+
+/**
+ * Where this machine's agent says what its restart would cut: its own
+ * loopback gateway, so the answer needs no hub and comes from the one process
+ * that knows.
+ */
+const agentGateway = (): string =>
+  `http://127.0.0.1:${process.env.CAWCO_MCP_CALLBACK_PORT ?? CAWCO_MCP_CALLBACK_PORT}`;
+
+/**
+ * What restarting the agent would cut now, in words, or `unknown` when it
+ * did not answer. With `fenceMs` the agent first raises its fence for that
+ * long (0 lowers it), so the answer holds until the restart: nothing new that
+ * a restart would cut starts behind it.
+ */
+const agentCut = async (fenceMs?: number): Promise<string[] | "unknown"> => {
+  const answer = await fetch(
+    `${agentGateway()}${fenceMs === undefined ? "/restart" : "/restart/fence"}`,
+    {
+      ...(fenceMs === undefined
+        ? {}
+        : {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ ms: fenceMs }),
+          }),
+      signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
+    }
+  ).catch(() => undefined);
+  if (!answer?.ok) {
+    return "unknown";
+  }
+  const readiness = (await answer.json().catch(() => undefined)) as
+    | RestartReadiness
+    | undefined;
+  return Array.isArray(readiness?.holds)
+    ? holdPhrases(readiness.holds)
     : "unknown";
 };
 
 export interface RestartRequest {
-  /** What {@link agentBusy} found, or `0` for a service that hosts no sessions. */
-  readonly busy: number | "unknown";
-  readonly force: boolean;
   /**
-   * Which session-hosting service is being restarted. Only the wording of a
-   * refusal depends on it — the gate itself is the same one, which is the
-   * point: sessiond earns the daemon's protection by going through here.
+   * What a restart would cut now, in words: empty when nothing, `unknown`
+   * when nobody could say. For the agent, the work it carries itself; for
+   * sessiond, the sessions mid-turn.
    */
-  readonly id?: "agent" | "sessiond";
+  readonly cut: readonly string[] | "unknown";
+  readonly force: boolean;
+  /** Which session-hosting service is being restarted: what that costs differs. */
+  readonly id: "agent" | "sessiond";
   readonly whenIdle: boolean;
 }
 
 export type RestartDecision =
   | { readonly kind: "go" }
-  | { readonly kind: "wait"; readonly busy: number }
+  | { readonly kind: "wait"; readonly cut: readonly string[] }
   | { readonly kind: "refuse"; readonly reason: string };
-
-const sessions = (count: number): string =>
-  `${count} session${count === 1 ? "" : "s"}`;
 
 /**
  * What restarting each session-hosting service actually costs, said in the
- * refusal. They are not the same sentence: the daemon loses the turn it is
- * relaying, while sessiond takes the harness children down with it — the
- * `KillMode=control-group` on its own unit, doing exactly what it is for.
+ * refusal. They are not the same sentence. A turn outlives the agent: its
+ * harness child runs it under the session keeper and the next agent takes it
+ * over, so an agent restart cuts only what the agent carries itself. sessiond
+ * takes the harness children down with it — the `KillMode=control-group` on
+ * its own unit, doing exactly what it is for.
  */
 const RESTART_COST: Record<"agent" | "sessiond", string> = {
-  agent: "a restart ends that work",
+  agent:
+    "the agent carries that work itself, so a restart ends it (the turns run on in the session keeper, and the next agent takes them over)",
   sessiond:
-    "a restart kills the harness children in its cgroup and ends that work",
+    "a restart of the session keeper kills every harness child in its cgroup, and those turns end where they stand",
 };
 
 /**
- * Whether restarting the daemon now is allowed to interrupt what it is doing.
- * The daemon is the one service that hosts the user's work, so the only way to
- * restart it while it is busy — or while nobody can say whether it is — is to
- * ask for that outright.
+ * Whether restarting a session-hosting service now may cut what it is doing.
+ * The only way to restart one while it would cut something — or while nobody
+ * can say — is to ask for that outright.
  */
 export const restartDecision = ({
-  busy,
+  cut,
   whenIdle,
   force,
-  id = "agent",
+  id,
 }: RestartRequest): RestartDecision => {
   if (force) {
     return { kind: "go" };
   }
-  if (busy === "unknown") {
+  if (cut === "unknown") {
     return {
       kind: "refuse",
-      reason: `could not ask the hub whether this machine is busy, and restarting the ${id} blind ends whatever turn is in flight. Restart anyway with --force.`,
+      reason:
+        id === "agent"
+          ? `this machine's agent did not say what a restart would cut (nothing answered at ${agentGateway()}/restart), so it was left alone. Restart anyway with --force.`
+          : `could not ask the hub whether this machine's sessions are mid-turn, and ${RESTART_COST.sessiond}. Restart anyway with --force.`,
     };
   }
-  if (busy === 0) {
+  if (cut.length === 0) {
     return { kind: "go" };
   }
   if (whenIdle) {
-    return { kind: "wait", busy };
+    return { kind: "wait", cut };
   }
   return {
     kind: "refuse",
-    reason: `the ${id} on this machine is mid-turn in ${sessions(busy)}, and ${RESTART_COST[id]}. Wait for it to finish with --when-idle, or restart anyway with --force.`,
+    reason: `restarting the ${id} now would cut ${cut.join(", ")}: ${RESTART_COST[id]}. Wait for it to end with --when-idle, or restart anyway with --force.`,
   };
 };
 
 /** How often `--when-idle` asks again, and how long it keeps asking. */
 const IDLE_POLL_MS = 2000;
 const IDLE_TIMEOUT_MS = 5 * 60 * 1000;
+/**
+ * How long the agent's fence stands for the restart this verb is about to
+ * make: past the service manager's stop and start, and it lapses by itself
+ * should the restart never come.
+ */
+const RESTART_FENCE_MS = 60_000;
 
 /**
  * One line that rewrites itself, so a five-minute wait leaves one line behind
@@ -1418,80 +1480,92 @@ const waiting = (line: string): void => {
   }
 };
 
-const waitForIdle = async (
-  busy: number,
-  note: (line: string) => void
-): Promise<void> => {
-  const deadline = Date.now() + IDLE_TIMEOUT_MS;
-  let outstanding = busy;
-  try {
-    for (;;) {
-      waiting(`waiting for ${sessions(outstanding)} to finish…`);
-      // biome-ignore lint/performance/noAwaitInLoops: a retry poll — each wait must see the effect of the previous one before deciding whether to keep polling.
-      await Bun.sleep(IDLE_POLL_MS);
-      const now = await agentBusy();
-      // The hub going away mid-wait is the same not-knowing as never reaching it.
-      if (now === "unknown") {
-        throw new ServiceError(
-          "the hub stopped answering while waiting, so the agent was left alone. Restart anyway with --force."
-        );
-      }
-      if (now === 0) {
-        break;
-      }
-      outstanding = now;
-      if (Date.now() > deadline) {
-        throw new ServiceError(
-          `${sessions(outstanding)} still mid-turn after ${IDLE_TIMEOUT_MS / 60_000} minutes, so the agent was left alone. Try again, or restart anyway with --force.`
-        );
-      }
-    }
-  } finally {
-    // Whatever happened, the line that was rewriting itself is finished with.
-    if (process.stdout.isTTY) {
-      process.stdout.write("\n");
-    }
-  }
-  note("every session finished");
-};
-
 /**
  * The services that hold the user's work, and so the ones whose restart has to
- * be asked for. The hub and the dashboard hold nothing a restart can interrupt;
- * the daemon is relaying live turns, and sessiond owns the processes producing
- * them.
+ * be asked for. The hub and the dashboard hold nothing of this machine's that a
+ * restart can interrupt; the daemon carries what it relays and runs, and
+ * sessiond owns the processes running the turns.
  */
 const HOSTS_SESSIONS: readonly ServiceId[] = ["sessiond", "agent"];
 
 /**
- * Asked before a session-hosting service is restarted. One machine's busy count
- * answers for both of them: they are the two ends of the same sessions, so
- * `--when-idle` and `--force` mean the same thing on either.
+ * The agent's second look, behind its fence. Clear: the fence stands for the
+ * restart. Work started since the first look: the fence comes down, and that
+ * work is the answer, a refusal or more waiting.
+ */
+const fencedLook = async (whenIdle: boolean): Promise<boolean> => {
+  const behind = await agentCut(RESTART_FENCE_MS);
+  if (behind !== "unknown" && behind.length === 0) {
+    return true;
+  }
+  await agentCut(0);
+  const again = restartDecision({
+    cut: behind,
+    whenIdle,
+    force: false,
+    id: "agent",
+  });
+  if (again.kind === "refuse") {
+    throw new ServiceError(again.reason);
+  }
+  return false;
+};
+
+/**
+ * Asked before a session-hosting service is restarted: a restart that would
+ * cut nothing, or the person's `--force`, goes ahead; `--when-idle` waits up to
+ * five minutes for that. The agent's last look is taken behind its fence
+ * (check, raise, check), so nothing new that the restart would cut starts
+ * between that look and the restart. Answers whether the fence went up, for
+ * the caller to lower should the restart then fail.
  */
 const clearToRestart = async (
   spec: ServiceSpec,
   { whenIdle, force }: Pick<RestartRequest, "whenIdle" | "force">,
   note: (line: string) => void
-): Promise<void> => {
+): Promise<boolean> => {
   if (!HOSTS_SESSIONS.includes(spec.id)) {
-    return;
+    return false;
   }
-  const busy = await agentBusy();
-  const decision = restartDecision({
-    busy,
-    whenIdle,
-    force,
-    id: spec.id as "agent" | "sessiond",
-  });
-  switch (decision.kind) {
-    case "go":
-      return;
-    case "refuse":
-      throw new ServiceError(decision.reason);
-    case "wait":
-      return waitForIdle(decision.busy, note);
-    default:
-      throw new ServiceError("unreachable: unknown restart decision kind");
+  const id = spec.id as "agent" | "sessiond";
+  const read = id === "agent" ? () => agentCut() : sessionsMidTurn;
+  const deadline = Date.now() + IDLE_TIMEOUT_MS;
+  let waited = false;
+  try {
+    for (;;) {
+      const decision = restartDecision({
+        // biome-ignore lint/performance/noAwaitInLoops: a retry poll — each look must see the effect of the previous one before deciding whether to keep polling.
+        cut: await read(),
+        whenIdle,
+        force,
+        id,
+      });
+      if (decision.kind === "refuse") {
+        throw new ServiceError(decision.reason);
+      }
+      if (decision.kind === "wait") {
+        waiting(`waiting for ${decision.cut.join(", ")} to end…`);
+      } else if (force || id !== "agent") {
+        return false;
+      } else if (await fencedLook(whenIdle)) {
+        if (waited) {
+          note("nothing left that a restart would cut");
+        }
+        return true;
+      }
+      waited = true;
+      if (Date.now() > deadline) {
+        throw new ServiceError(
+          `the ${id} would still cut work in flight after ${IDLE_TIMEOUT_MS / 60_000} minutes, so it was left alone. Try again, or restart anyway with --force.`
+        );
+      }
+      await Bun.sleep(IDLE_POLL_MS);
+    }
+  } finally {
+    // Whatever happened, the line that was rewriting itself is finished with.
+    if (waited && process.stdout.isTTY) {
+      process.stdout.write("\n");
+    }
   }
 };
 
@@ -1687,14 +1761,14 @@ export interface ServiceOptions {
     wrapper: string;
   };
   follow: boolean;
-  /** `restart` only: interrupt them, or restart without knowing whether it will. */
+  /** `restart` only: cut the work in flight, or restart without knowing whether it will. */
   force: boolean;
   /** Which services the verb acts on. `logs` reads exactly one. */
   ids: readonly ServiceId[];
   /** Which flavour `install` writes. Every other verb reads the mode off disk. */
   mode: ServiceMode;
   note: (line: string) => void;
-  /** `restart` only: wait for the daemon's sessions rather than refusing. */
+  /** `restart` only: wait for what the restart would cut to end, rather than refusing. */
   whenIdle: boolean;
 }
 
@@ -1766,13 +1840,21 @@ export const service = async (
         if (index > 0) {
           note("");
         }
-        // Asked per service and not up front, so the two that are safe to bounce
+        // Asked per service and not up front, so the services asked nothing
         // are already back up by the time the daemon's question is answered.
         // biome-ignore lint/performance/noAwaitInLoops: services restart one at a time so each one's notes print in its own order and a failure is attributable to the service that caused it.
-        await clearToRestart(spec, { whenIdle, force }, note);
-        await (mac
-          ? restartLaunchAgent(spec, note)
-          : restartSystemdUnit(spec, note));
+        const fenced = await clearToRestart(spec, { whenIdle, force }, note);
+        try {
+          await (mac
+            ? restartLaunchAgent(spec, note)
+            : restartSystemdUnit(spec, note));
+        } catch (error) {
+          // The restart did not happen: the agent takes new work again now, not when its fence lapses.
+          if (fenced) {
+            await agentCut(0);
+          }
+          throw error;
+        }
       }
       return;
     case "status":

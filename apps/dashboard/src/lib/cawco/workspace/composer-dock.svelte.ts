@@ -19,6 +19,8 @@ import type { ComposerDraft } from "../transcript/composer-draft.svelte";
 
 /** Everything the composer takes from the conversation it is writing to. */
 export interface ComposerBinding {
+  /** The agent answering here, by name, for what the composer says about it. */
+  readonly agentName: string;
   readonly busy: boolean;
   readonly commands: AvailableCommand[];
   /** The session whose delegates the composer's tray shows. */
@@ -33,6 +35,8 @@ export interface ComposerBinding {
   readonly paneVisible: boolean;
   readonly previewPhone: boolean;
   prompts: Snippet;
+  /** The conversation whose sent messages the composer recalls. */
+  readonly recallOf: string;
   /** Why the last send failed; empty when it did not. */
   readonly sendError: string;
   readonly sending: boolean;

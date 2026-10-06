@@ -413,7 +413,13 @@ async function claudeSessionFile(
 
 export const CLAUDE_CAPABILITIES: HarnessCapabilities = {
   interrupt: true,
-  permissionModes: ["default", "acceptEdits", "plan", "bypassPermissions"],
+  permissionModes: [
+    "default",
+    "acceptEdits",
+    "plan",
+    "bypassPermissions",
+    "fullSend",
+  ],
   setModel: true,
   effort: true,
   contextUsage: true,
@@ -636,6 +642,114 @@ const INTERACTIVE_TOOLS: ReadonlySet<string> = new Set([
 /** The `canUseTool` callback, parked until `resolvePermission` answers it. */
 type PermissionResolver = (result: PermissionResult) => void;
 
+/** CawCo's `fullSend` is the CLI's `bypassPermissions`: the SDK never sees CawCo's own mode. */
+const sdkMode = (
+  mode: import("@cawco/core").PermissionMode
+): import("@anthropic-ai/claude-agent-sdk").PermissionMode =>
+  mode === "fullSend" ? "bypassPermissions" : mode;
+
+/** A permission answer in the SDK's words: any `setMode` it carries names the CLI's mode. */
+const sdkPermissionResult = (
+  result: import("@cawco/core").PermissionResult
+): PermissionResult =>
+  (result.behavior === "allow" && result.updatedPermissions
+    ? {
+        ...result,
+        updatedPermissions: result.updatedPermissions.map((update) =>
+          update.type === "setMode"
+            ? { ...update, mode: sdkMode(update.mode) }
+            : update
+        ),
+      }
+    : result) as PermissionResult;
+
+/**
+ * A session's permission mode, in CawCo's words and the CLI's. Bypass is the
+ * CLI's own: the safety checks it still raises there (a shell -c script it
+ * cannot parse, a cd with git, protected paths) go to the owner like any ask.
+ * Full Send is CawCo's: the CLI in bypass, and this host answering those asks
+ * too, as the SDK documents a host may. It holds only while the CLI says it is
+ * in bypass: the CLI reporting any other mode (plan mode entered or left, a
+ * `setMode` an "Always allow" carried) ends it, and only the owner choosing it
+ * again brings it back.
+ */
+class SessionMode {
+  /** The CLI's mode: what CawCo last set, then what the CLI last said. */
+  #cli: import("@anthropic-ai/claude-agent-sdk").PermissionMode | undefined;
+  #fullSend: boolean;
+
+  constructor(mode: import("@cawco/core").PermissionMode | undefined) {
+    this.#fullSend = mode === "fullSend";
+    this.#cli = mode && sdkMode(mode);
+  }
+
+  /** The mode the CLI is in, as far as this session knows: what a spawn launches it in. */
+  get cli():
+    | import("@anthropic-ai/claude-agent-sdk").PermissionMode
+    | undefined {
+    return this.#cli;
+  }
+
+  /** CawCo sets the mode: a mode control's, or an answer's `setMode`. */
+  choose(mode: import("@cawco/core").PermissionMode): void {
+    this.#fullSend = mode === "fullSend";
+    this.#cli = sdkMode(mode);
+  }
+
+  /** The CLI says its mode (`init`, `status`). */
+  observe(mode: import("@anthropic-ai/claude-agent-sdk").PermissionMode): void {
+    this.#cli = mode;
+    if (mode !== "bypassPermissions") {
+      this.#fullSend = false;
+    }
+  }
+
+  /** The mode said outward: Full Send while it holds, else the CLI's own. */
+  get reported(): import("@cawco/core").PermissionMode | undefined {
+    return this.#fullSend ? "fullSend" : this.#cli;
+  }
+
+  /**
+   * Whether an ask is answered here rather than put to the owner: Full Send,
+   * with the CLI in bypass, and never a question to him, a plan approval, or
+   * an ask his own `permissions.ask` rule forced.
+   */
+  answersHostSide(toolName: string, matchedAskRule: unknown): boolean {
+    return (
+      this.#fullSend &&
+      this.#cli === "bypassPermissions" &&
+      !(matchedAskRule || INTERACTIVE_TOOLS.has(toolName))
+    );
+  }
+}
+
+/**
+ * Why the CLI asked, as the log says it: a session in bypass is never meant
+ * to be asked, so the reason is the evidence. One Full Send answered says so.
+ */
+const askLine = (
+  toolName: string,
+  {
+    decisionReason,
+    blockedPath,
+    matchedAskRule,
+  }: {
+    decisionReason?: string;
+    blockedPath?: string;
+    matchedAskRule?: unknown;
+  },
+  answered: boolean
+): string =>
+  `[claude] permission asked: ${toolName}${decisionReason ? ` — ${decisionReason}` : ""}${blockedPath ? ` (path ${blockedPath})` : ""}${matchedAskRule ? " [ask rule]" : ""}${answered ? " [full send: answered]" : ""}`;
+
+/** Whether an SDK frame is the main loop's word on its mode: an `init`, or a `status` that names one. */
+const modeFrame = (
+  message: SDKMessage
+): message is Extract<SDKMessage, { subtype: "init" | "status" }> =>
+  message.type === "system" &&
+  (message.subtype === "init" || message.subtype === "status") &&
+  !(message as { parent_tool_use_id?: string | null }).parent_tool_use_id;
+
 class ClaudeSession implements HarnessSession {
   readonly harness = "claude" as const;
   sessionId: string | null = null;
@@ -705,15 +819,15 @@ class ClaudeSession implements HarnessSession {
   readonly #stored: boolean;
   readonly instanceId: string;
   #lastRequestAt: number | undefined;
-  /** The permission mode the CLI is in now: the one it started with, then each `setPermissionMode`. */
-  #mode: string | undefined;
+  /** The permission mode: the one it started (or was adopted) with, each `setPermissionMode`, and the CLI's own word. */
+  readonly #mode: SessionMode;
 
   constructor(
     instanceId: string,
     ctx: HarnessContext,
     workdir: string,
     options: unknown,
-    permissionMode: string | undefined,
+    permissionMode: import("@cawco/core").PermissionMode | undefined,
     model: string | undefined,
     effort: EffortLevel | undefined,
     resume: SpawnPayload["resume"],
@@ -739,7 +853,10 @@ class ClaudeSession implements HarnessSession {
   ) {
     this.instanceId = instanceId;
     this.#ctx = ctx;
-    this.#mode = permissionMode;
+    // Before the `Query` below exists: an attach replays the asks the previous
+    // host left open as soon as it does, and they are decided in this mode.
+    this.#mode = new SessionMode(permissionMode);
+    const cliMode = this.#mode.cli;
     this.#launchCredential = ctx.sessionCredential;
     const mcpServers: Record<string, McpServerConfig> = {
       ...((
@@ -827,12 +944,7 @@ class ClaudeSession implements HarnessSession {
             }
           : {}),
         ...(persistSession === false ? { persistSession: false } : {}),
-        ...(permissionMode
-          ? {
-              permissionMode:
-                permissionMode as import("@anthropic-ai/claude-agent-sdk").PermissionMode,
-            }
-          : {}),
+        ...(cliMode ? { permissionMode: cliMode } : {}),
         ...(model && { model }),
         env: sessionEnv(
           (options as { env?: Record<string, string | undefined> } | undefined)
@@ -845,7 +957,7 @@ class ClaudeSession implements HarnessSession {
         ...(effort && { effort }),
         // Enables switching into bypass through the mode picker; does not select it.
         allowDangerouslySkipPermissions: true,
-        ...(permissionMode === "bypassPermissions" && {
+        ...(cliMode === "bypassPermissions" && {
           // Bypass mode must also let the model run commands outside the sandbox
           // via `dangerouslyDisableSandbox` — otherwise the SDK auto-denies such
           // Bash calls (`sandboxOverride`) without ever reaching `canUseTool`.
@@ -896,14 +1008,19 @@ class ClaudeSession implements HarnessSession {
           }
         ) =>
           new Promise<PermissionResult>((resolve) => {
-            // Why the CLI asked: a session in bypass is never meant to be asked, so the reason is the evidence.
-            console.log(
-              `[claude] permission asked: ${toolName}${decisionReason ? ` — ${decisionReason}` : ""}${blockedPath ? ` (path ${blockedPath})` : ""}${matchedAskRule ? " [ask rule]" : ""}`
+            // Full Send answers here what the CLI still asks in bypass ({@link SessionMode}); plain bypass does not.
+            const answered = this.#mode.answersHostSide(
+              toolName,
+              matchedAskRule
             );
-            // Bypass means bypass. The CLI still raises its own safety checks in that mode (a shell -c script it
-            // cannot parse, a cd with git, protected paths); the SDK documents answering them host-side. What stays
-            // with the owner: questions to him, plan approval, and any ask his own `permissions.ask` rule forced.
-            if (this.#answersHostSide(toolName, matchedAskRule)) {
+            console.log(
+              askLine(
+                toolName,
+                { decisionReason, blockedPath, matchedAskRule },
+                answered
+              )
+            );
+            if (answered) {
               resolve({
                 behavior: "allow",
                 updatedInput: toolInput,
@@ -1129,6 +1246,15 @@ class ClaudeSession implements HarnessSession {
           this.sessionId = message.session_id;
           ctx.session(message.session_id);
         }
+        // The CLI's own word on its mode, which it changes itself too (plan
+        // mode, an "Always allow" that carried a `setMode`). What goes out is
+        // CawCo's: `fullSend` while Full Send holds, which is what the hub
+        // records and the next spawn or adoption of this session restores.
+        if (modeFrame(message) && message.permissionMode !== undefined) {
+          this.#mode.observe(message.permissionMode);
+          (neutral as { permissionMode?: string }).permissionMode =
+            this.#mode.reported;
+        }
         // TODO(servedModel wiring): a spawn's own `model` can be an alias
         // ('sonnet') the SDK resolves to a dated id; `neutral.message.model`
         // on this first assistant frame is what really served the turn, and
@@ -1324,14 +1450,6 @@ class ClaudeSession implements HarnessSession {
     this.#input.push(outgoing);
   }
 
-  /** Whether this ask is answered here: a bypass session, a tool that asks no question, no ask rule of the owner's. */
-  #answersHostSide(toolName: string, matchedAskRule: unknown): boolean {
-    return (
-      this.#mode === "bypassPermissions" &&
-      !(matchedAskRule || INTERACTIVE_TOOLS.has(toolName))
-    );
-  }
-
   async control(method: string, args: unknown[]): Promise<unknown> {
     if (method === CONTROL_WITHDRAW_SEND) {
       if (typeof args[0] !== "string" || !args[0]) {
@@ -1362,6 +1480,14 @@ class ClaudeSession implements HarnessSession {
       await this.#readEffort();
       return undefined;
     }
+    // The CLI is told its own mode (`fullSend` is its bypass); the session
+    // takes the mode CawCo was asked for once the CLI is in it.
+    if (method === CONTROL_SET_PERMISSION_MODE) {
+      const mode = args[0] as import("@cawco/core").PermissionMode;
+      await this.#handle.setPermissionMode(sdkMode(mode));
+      this.#mode.choose(mode);
+      return undefined;
+    }
     const handle = this.#handle as unknown as Record<
       string,
       (...a: unknown[]) => unknown
@@ -1370,9 +1496,6 @@ class ClaudeSession implements HarnessSession {
       throw new Error(`unknown control method: ${method}`);
     }
     const answer = await handle[method](...args);
-    if (method === CONTROL_SET_PERMISSION_MODE) {
-      this.#mode = args[0] as string;
-    }
     // A model switch moves the effort with it: onto a model without effort,
     // or down to the new model's ceiling.
     if (method === CONTROL_SET_MODEL) {
@@ -1464,15 +1587,28 @@ class ClaudeSession implements HarnessSession {
     };
   }
 
-  resolvePermission(requestId: string, result: PermissionResult): void {
+  resolvePermission(
+    requestId: string,
+    result: import("@cawco/core").PermissionResult
+  ): void {
     const resolve = this.#permissions.get(requestId);
     if (!resolve) {
       throw new Error(`no permission request ${requestId}`);
     }
     this.#permissions.delete(requestId);
+    // An answer that moves the session into Full Send (an approved plan, say)
+    // puts the CLI in bypass; the session is Full Send from here.
+    if (
+      result.behavior === "allow" &&
+      result.updatedPermissions?.some(
+        (update) => update.type === "setMode" && update.mode === "fullSend"
+      )
+    ) {
+      this.#mode.choose("fullSend");
+    }
     const question = this.#openQuestions.get(requestId);
     if (!question) {
-      resolve(result);
+      resolve(sdkPermissionResult(result));
       return;
     }
 
@@ -1491,7 +1627,7 @@ class ClaudeSession implements HarnessSession {
     // SDK rejects that input for the `questions` it no longer has. The parked
     // call is put back underneath, which is what the dashboard sends when it
     // answers one of these itself.
-    resolve(settledQuestionResult(question, result));
+    resolve(sdkPermissionResult(settledQuestionResult(question, result)));
   }
 
   async interrupt(): Promise<void> {
@@ -1926,6 +2062,7 @@ export class ClaudeHarness implements Harness {
       head: proc.head,
       sessionId: spec.resume?.sessionKey ?? null,
       turnRunning: await this.turnRunning(ctx.instanceId, proc.head),
+      permissionMode: spec.permissionMode,
     });
   }
 
@@ -1997,6 +2134,8 @@ export class ClaudeHarness implements Harness {
       sessionId: string | null;
       /** {@link turnRunning}'s answer for this child. */
       turnRunning: boolean;
+      /** The mode the hub stored for it: the asks replayed at attach are decided in it. */
+      permissionMode?: import("@cawco/core").PermissionMode;
     }
   ): Promise<HarnessSession> {
     const client = await this.sessiond();
@@ -2065,12 +2204,14 @@ export class ClaudeHarness implements Harness {
         text: `cawco: sessiond's replay window overflowed; this transcript resumes at line ${start + 1}`,
       } as unknown as NeutralMessage);
     }
+    // The stored mode goes in at construction, ahead of the prelude's asks.
+    // The launch options it also sets are never used: nothing is spawned.
     const session = new ClaudeSession(
       instanceId,
       ctx,
       ctx.cwd,
       undefined,
-      undefined,
+      options.permissionMode,
       undefined,
       undefined,
       undefined,

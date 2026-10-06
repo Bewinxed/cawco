@@ -33,6 +33,7 @@ import type {
   WorkflowRunRow,
   WorkflowStepRow,
 } from "../db";
+import { unwatchedMode } from "../unwatched-mode";
 import { failureText, receiptOf } from "./refs";
 
 /** What the steps need from the run around them. */
@@ -87,6 +88,8 @@ export interface StepContext {
 export const HOLD_DEADLINE_MS = 60 * 60_000;
 /** How many times one step is held; out of attempts again after that, it fails. */
 const MAX_HOLDS = 2;
+/** How a run's `launchedBy` opens when a session launched it. */
+const AGENT_LAUNCH = "agent:";
 
 const active = (run: WorkflowRunRow) =>
   !run.state.__ending && (run.status === "running" || run.status === "waiting");
@@ -183,6 +186,25 @@ export function createSteps(ctx: StepContext) {
           ...(run.supervisorInstanceId ? [] : ["AskUserQuestion"]),
         ]
       : undefined;
+
+  /**
+   * The mode an attempt's session starts in ({@link unwatchedMode}), caused
+   * by the session that launched the run's top-level run — its `launchedBy`
+   * is `agent:<id>` then (the launch route writes it) — and by no session when
+   * the owner launched or re-ran it from the dashboard. A child run's own
+   * `launchedBy` names no one, so the top-level run's is read.
+   */
+  const stepMode = (run: WorkflowRunRow): PermissionMode => {
+    let top = run;
+    while (top.parentRunId) {
+      top = runOf(top.parentRunId);
+    }
+    const launcher = top.launchedBy.startsWith(AGENT_LAUNCH)
+      ? top.launchedBy.slice(AGENT_LAUNCH.length)
+      : undefined;
+    const [cause] = launcher ? db.getInstancesByIds([launcher]) : [];
+    return unwatchedMode(cause?.permissionMode);
+  };
 
   /** The prompt an attempt is handed: its refs filled, notes and retry cause added. */
   const briefOf = (
@@ -289,7 +311,7 @@ export function createSteps(ctx: StepContext) {
           workflowStepId: step.id,
         },
         // Nobody watches a step's tool asks.
-        "bypassPermissions"
+        stepMode(run)
       );
     }
     if (!active(runOf(run.id))) {

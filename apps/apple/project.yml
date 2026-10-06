@@ -15,7 +15,7 @@ settings:
     SWIFT_VERSION: "6.0"
     SWIFT_APPROACHABLE_CONCURRENCY: YES
     SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
-    MARKETING_VERSION: "0.1.0"
+    MARKETING_VERSION: "0.1.11"
     CURRENT_PROJECT_VERSION: "1"
 targets:
   # One UIKit app: iPhone, iPad and, through Mac Catalyst, the Mac. It holds

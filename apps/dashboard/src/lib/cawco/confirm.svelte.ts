@@ -24,13 +24,22 @@
  */
 
 export interface ConfirmRequest {
-  /** The consequence, in plain words — what is lost, whether it can be undone. */
-  body?: string;
+  /**
+   * The consequence, in plain words — what is lost, whether it can be undone.
+   * Several strings are several paragraphs.
+   */
+  body?: string | string[];
   cancelLabel?: string;
   /** The confirm button's label. Say the verb ('Remove everywhere'), not 'OK'. */
   confirmLabel?: string;
   /** Paints the confirm button as destructive. Defaults on for a delete-shaped verb. */
   destructive?: boolean;
+  /**
+   * Paints the confirm button as a consequential grant, shield and warning
+   * tint (DESIGN.md, The Consequential Grant Rule): it allows more than a
+   * person has allowed so far.
+   */
+  grant?: boolean;
   /** What the confirm button says while `run` runs ("Deleting…"). */
   pendingLabel: string;
   /** The work the confirm button starts. */

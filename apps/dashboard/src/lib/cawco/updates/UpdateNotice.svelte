@@ -24,7 +24,7 @@
   }: {
     /** Read through, so the mounted box follows when the notice changes. */
     view: { notice: Notice; onPage: boolean };
-    onaction: (action: "retry" | "install-all") => void;
+    onaction: (action: NonNullable<Notice["action"]>) => void;
     ondismiss: () => void;
     /** Sonner's own, given to a custom toast. */
     closeToast?: () => void;
@@ -68,14 +68,14 @@
   </div>
   <button
     aria-label="Dismiss"
-    class="x"
+    class="x touch-hit pointer-hit"
     onclick={() => {
       ondismiss();
       closeToast?.();
     }}
     type="button"
   >
-    <IconClose class="size-4" />
+    <IconClose class="size-3" />
   </button>
 
   {#if notice.lines.length > 0 || notice.closing}
@@ -99,16 +99,29 @@
   {#if (notice.configure && !view.onPage) || notice.action}
     <div class="buttons">
       {#if notice.configure && !view.onPage}
-        <Button href="/config/updates" size="sm" variant="outline"
-          >Configure updates</Button
+        <Button class="quiet" href="/config/updates" size="sm" variant="ghost"
+          >Configure update behaviour</Button
         >
       {/if}
       {#if notice.action === "retry"}
-        <Button label="Retry" onclick={() => onaction("retry")} size="sm" />
+        <Button
+          class="primary"
+          label="Retry"
+          onclick={() => onaction("retry")}
+          size="sm"
+        />
       {:else if notice.action === "install-all"}
         <Button
+          class="primary"
           label="Install now"
           onclick={() => onaction("install-all")}
+          size="sm"
+        />
+      {:else if notice.action === "reload"}
+        <Button
+          class="primary"
+          label="Reload"
+          onclick={() => onaction("reload")}
           size="sm"
         />
       {/if}
@@ -118,8 +131,9 @@
 
 <style>
   .notice {
+    position: relative;
     display: grid;
-    grid-template-columns: 48px 1fr 20px;
+    grid-template-columns: 48px 1fr;
     column-gap: var(--space-3);
     row-gap: 2px;
     inline-size: 100%;
@@ -159,14 +173,39 @@
   .words :global(.fail) {
     color: var(--status-fail-ink);
   }
+  /* The close chip floats on Caw's top corner, out of the text's way, so
+     the title keeps the whole width. A mouse finds it on hover or focus;
+     touch, which has no hover and no swipe here, always sees it. */
   .x {
-    grid-column: 3;
-    align-self: start;
+    position: absolute;
+    inset-block-start: 6px;
+    inset-inline-start: 6px;
+    display: grid;
+    place-items: center;
+    inline-size: 20px;
+    block-size: 20px;
+    border: 1px solid var(--border-control);
+    border-radius: var(--radius-pill);
+    background: var(--surface-raised);
+    box-shadow: var(--shadow-tile);
     color: var(--ink-muted);
     cursor: pointer;
+    transition: opacity var(--dur-fade) var(--ease-out);
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .x {
+      opacity: 0;
+    }
+    .notice:hover .x,
+    .notice:focus-within .x {
+      opacity: 1;
+    }
+    .x:hover {
+      color: var(--ink-strong);
+    }
   }
   .body {
-    grid-column: 2 / 4;
+    grid-column: 2;
     display: grid;
     gap: 2px;
     font: var(--type-meta);
@@ -182,15 +221,31 @@
   .closing {
     color: var(--ink-muted);
   }
+  /* The words keep one left edge beside Caw; the buttons need no such edge,
+     so their row takes the whole width under him. */
   .buttons {
-    grid-column: 2 / 4;
+    grid-column: 1 / -1;
     display: flex;
+    flex-wrap: wrap;
     justify-content: space-between;
     gap: 8px;
     margin-top: 8px;
   }
+  /* The way to the settings is there to be found, not to compete with the act. */
+  .buttons > :global(.quiet) {
+    color: var(--ink-muted);
+  }
+  @media (hover: hover) {
+    .buttons > :global(.quiet:hover) {
+      color: var(--ink-strong);
+    }
+  }
   .buttons > :global(*) {
     flex: 1;
+  }
+  /* The quiet way to the settings hugs its words at the leading edge at every width. */
+  .buttons > :global(.quiet) {
+    flex: none;
   }
   @media (min-width: 640px) {
     .buttons > :global(*) {
@@ -198,6 +253,10 @@
     }
     .buttons {
       justify-content: space-between;
+    }
+    /* The primary stands at the trailing edge, also when it is the only button. */
+    .buttons > :global(.primary) {
+      margin-inline-start: auto;
     }
   }
 </style>

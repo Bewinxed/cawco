@@ -144,7 +144,6 @@ async function bringUp(options: BinaryInstallOptions): Promise<void> {
     installedVersion: runtimeVersion,
     channel: options.policy.channel,
     updatedAt: Date.now(),
-    unseen: false,
     hostsHub: options.role === "hub",
   } satisfies BinaryUpdateState);
   // Saved the way `up` saves a hub it was told, so the agent unit finds it.

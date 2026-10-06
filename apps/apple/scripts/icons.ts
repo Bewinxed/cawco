@@ -132,6 +132,10 @@ const SOLAR_ICONS = [
   "link-bold-duotone", // SessionDetails: Copy link
   "layers-minimalistic-bold-duotone", // ContextMeter: IconWindow
   "branching-paths-up-bold-duotone", // IconFork
+  // The composer's recall and the Sound switch.
+  "history-bold-duotone", // IconHistory: the composer's history button
+  "volume-loud-bold-duotone", // Sound on
+  "volume-cross-bold-duotone", // Sound off
 ];
 
 /**

@@ -45,6 +45,7 @@ import {
   sessiondEndpoint,
 } from "@cawco/core/sessiond";
 import { parseProcId } from "./proc-id";
+import { holdRestart } from "./restart";
 
 /**
  * What an update must wait for: the keeper's live children, less the OpenCode
@@ -250,6 +251,13 @@ export class SessiondClient {
   readonly #acks = new Map<string, (ack: SessiondAck) => void>();
   /** Sent but not yet settled — re-sent once at reconnect under the same id (§8). */
   readonly #unacked = new Map<string, SessiondClientMessage>();
+  /**
+   * Each unsettled mutation's hold on an agent restart: a message, an answer,
+   * a signal or a start on its way into the keeper, which a restart now would
+   * cut with nobody left to learn whether it landed. Let go with the ack, or
+   * with the connection.
+   */
+  readonly #holds = new Map<string, () => void>();
   readonly #listeners = new Map<string, ProcListener>();
   /** Listeners already told their child is gone: a death reaches each once. */
   readonly #toldExit = new WeakSet<ProcListener>();
@@ -262,6 +270,10 @@ export class SessiondClient {
     socket.on("data", (chunk: string) => this.#onData(chunk));
     socket.on("close", () => {
       this.#closed = true;
+      for (const release of this.#holds.values()) {
+        release();
+      }
+      this.#holds.clear();
       this.onClose.emit("close");
     });
     socket.on("error", () => {
@@ -381,6 +393,8 @@ export class SessiondClient {
       }
       case "ack": {
         this.#unacked.delete(message.commandId);
+        this.#holds.get(message.commandId)?.();
+        this.#holds.delete(message.commandId);
         this.#acks.get(message.commandId)?.(message);
         this.#acks.delete(message.commandId);
         return;
@@ -442,11 +456,22 @@ export class SessiondClient {
     return new Promise((resolve, reject) => {
       this.#acks.set(message.commandId, resolve);
       this.#unacked.set(message.commandId, message);
+      this.#holds.set(
+        message.commandId,
+        holdRestart(
+          message.type === "spawn" ? "starting" : "write",
+          "procId" in message
+            ? `${message.type}:${message.procId}`
+            : message.type
+        )
+      );
       try {
         this.#send(message);
       } catch (error) {
         this.#acks.delete(message.commandId);
         this.#unacked.delete(message.commandId);
+        this.#holds.get(message.commandId)?.();
+        this.#holds.delete(message.commandId);
         reject(error as Error);
       }
     });

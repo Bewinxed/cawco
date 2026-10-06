@@ -78,7 +78,8 @@ class Updates {
   }
 
   /**
-   * Queues the install on a machine: it runs when the machine is idle. The
+   * Queues the install on a machine: it runs once the machine's work in
+   * flight has drained, or when its short drain ends, cutting what is left. The
    * answer is not waited on for state. The hub's own machine restarts the hub
    * mid-request and a long install outlives the request, so a 504 or a
    * dropped connection says nothing.
@@ -129,29 +130,47 @@ class Updates {
     }).catch(() => null);
   }
 
-  /** Machines acknowledged here, by `machineId:updatedAt`: seen before the socket says so. */
+  /**
+   * Landings acknowledged here, by `machineId:at`: seen before the socket
+   * says so. Keyed by the landing, never by `updatedAt`, which moves with
+   * every write the machine makes.
+   */
   seen = new SvelteSet<string>();
+
+  /**
+   * How many Home update cards are on screen. While one is, the card is the
+   * landing's surface and the toast does not say it too.
+   */
+  cards = $state(0);
 
   /** The machines with the optimistic `seen` marks applied. */
   withSeen<T extends UpdateMachine>(machines: T[]): T[] {
     return machines.map((machine) => {
       const state = machine.binaryUpdate;
-      return state && this.seen.has(`${machine.machineId}:${state.updatedAt}`)
-        ? { ...machine, binaryUpdate: { ...state, unseen: false } }
+      return state?.landed &&
+        this.seen.has(`${machine.machineId}:${state.landed.at}`)
+        ? { ...machine, binaryUpdate: { ...state, landed: undefined } }
         : machine;
     });
   }
 
-  async acknowledge(machine: {
-    machineId: string;
-    binaryUpdate?: { updatedAt: number };
-  }): Promise<void> {
-    if (machine.binaryUpdate) {
-      this.seen.add(`${machine.machineId}:${machine.binaryUpdate.updatedAt}`);
+  /**
+   * A person saw the machine's landing: it is cleared on the machine, so it
+   * is gone from every tab and device, not only this one.
+   */
+  async acknowledge(machine: UpdateMachine): Promise<void> {
+    const landing = machine.binaryUpdate?.landed;
+    if (!landing) {
+      return;
     }
+    this.seen.add(`${machine.machineId}:${landing.at}`);
     await fetch(
       `/api/binary-updates/machines/${machine.machineId}/acknowledge`,
-      { method: "POST" }
+      {
+        method: "POST",
+        headers: JSON_HEADERS,
+        body: JSON.stringify({ at: landing.at }),
+      }
     ).catch(() => null);
   }
 }

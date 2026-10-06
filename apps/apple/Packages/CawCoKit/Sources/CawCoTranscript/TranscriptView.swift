@@ -25,6 +25,15 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     public var onOpenRun: (String) -> Void = { _ in }
     /// "Back to the fleet", from the state an unreachable id shows.
     public var onReturnToFleet: () -> Void = {}
+    /// Whether a queued message can be taken back and edited, and lifting
+    /// it into the composer (a tap on its bubble).
+    public var canEditQueued: (String) -> Bool = { _ in false }
+    public var onEditQueued: (String) -> Void = { _ in }
+    /// The queued message whose words are in the composer.
+    private var liftedQueued: String?
+    /// What queued messages were just replaced with, by id, until the hub's
+    /// own record of each new send takes their place.
+    private var replacements: [String: String] = [:]
     private let paneState = PaneState()
 
     private let collection: UICollectionView
@@ -271,6 +280,10 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         env.runSteps = { [weak self] id in self.map { $0.steps(id) } ?? [] }
         env.openSession = { [weak self] id in self?.onOpenSession(id) }
         env.openRun = { [weak self] id in self?.onOpenRun(id) }
+        env.isTaken = { [weak self] id in self?.liftedQueued == id }
+        env.replacement = { [weak self] id in self?.replacements[id] }
+        env.canEditQueued = { [weak self] id in self?.canEditQueued(id) ?? false }
+        env.editQueued = { [weak self] id in self?.onEditQueued(id) }
     }
 
     deinit {
@@ -501,6 +514,11 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             }
             branches = map
             queued = transcript.queued.compactMap(Block.init)
+            // A replaced message's stand-in words go with it.
+            if !replacements.isEmpty {
+                let held = Set(blocks.map(\.id) + queued.map(\.id))
+                replacements = replacements.filter { held.contains($0.key) }
+            }
             dirty = true
         }
         let tail = transcript.tail
@@ -521,9 +539,9 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     }
 
     /// The rows the reader sees: settled first (rows.ts `drawnOf` — an
-    /// unanswered question is the composer's while asks reach the reader).
+    /// unanswered question is the composer's in every mode: no mode answers
+    /// a question for the reader, Bypass and Full Send included).
     private func settledRows() -> [Row] {
-        let bypass = factsValue("permissionMode") as? String == "bypassPermissions"
         // History joins the list a stretch a frame, newest first: a long
         // session's older page set as Markdown in one go was 80 ms of a frame
         // for rows far above the reader. A reader restored to a row is given
@@ -535,13 +553,13 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         }
         // The same blocks fold into the same rows: a long session's are folded
         // when its blocks change, not on every frame its tail or its fleet moves.
-        let stamp = "\(revision)|\(taken)|\(bypass)"
+        let stamp = "\(revision)|\(taken)"
         if let folded, folded.stamp == stamp {
             voices = folded.voices
             return folded.rows
         }
         let drawn = blocks.suffix(taken).filter { block in
-            !(Fold.isQuestion(block) && block.toolStatus == "pending" && !bypass)
+            !(Fold.isQuestion(block) && block.toolStatus == "pending")
                 && block.type != "send.ref" && block.type != "system.init"
         }
         var voices = Voices()
@@ -645,7 +663,13 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             }
             let built = builder.items(rows, railAbove: rail)
             rail = built.railBelow
-            return built.items
+            // Whether each can be lifted into the composer: its note reads it. Its fold and
+            // stand-in words are drawn into the cell directly (`foldQueued`), on their own clock.
+            return built.items.map { item in
+                var item = item
+                item.print += "\(canEditQueued(item.id))"
+                return item
+            }
         }
         out += queuedItems(true)
         if reasoning || (indicating && received.isEmpty) {
@@ -959,6 +983,55 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         cell.contentView.transform = .identity
         // A delegate's card off the screen is the card leaving (tray.svelte.ts `trayCard`).
         (cell as? HostCell<DelegateView>)?.row.untrack()
+    }
+
+    // MARK: A queued message in the composer
+
+    /// Folds the queued message `id` down to its tag while its words are in
+    /// the composer, or unfolds it, showing `replacement` when it was
+    /// replaced, on the drawer curve, so nothing below it jumps.
+    public func foldQueued(_ id: String, folded: Bool, replacement: String?) {
+        if folded { liftedQueued = id } else if liftedQueued == id { liftedQueued = nil }
+        if let replacement { replacements[id] = replacement }
+        guard let index = dataSource.indexPath(for: id), let item = items[id],
+              let cell = collection.cellForItem(at: index) as? HostCell<UserTurnView> else {
+            dirty = true
+            return
+        }
+        let change: @MainActor () -> Void = {
+            cell.configure(item)
+            cell.contentView.layoutIfNeeded()
+            cell.invalidateIntrinsicContentSize()
+            self.collection.layoutIfNeeded()
+        }
+        guard !UIAccessibility.isReduceMotionEnabled, window != nil else {
+            change()
+            return
+        }
+        Motion.easeDrawer.animator(Motion.durPanel, animations: change).startAnimation()
+    }
+
+    /// The replaced words did not go in after all: the message shows its own again.
+    public func dropReplacement(_ id: String) {
+        guard replacements.removeValue(forKey: id) != nil else { return }
+        if let index = dataSource.indexPath(for: id), let item = items[id],
+           let cell = collection.cellForItem(at: index) as? HostCell<UserTurnView> {
+            cell.configure(item)
+        }
+        dirty = true
+    }
+
+    /// The view the queued message's words are drawn in, while it is in the list's view.
+    public func queuedWords(_ id: String) -> UIView? {
+        guard let index = dataSource.indexPath(for: id), let cell = collection.cellForItem(at: index) as? HostCell<UserTurnView>,
+              let row = cell.row else { return nil }
+        let box = row.wordsView.convert(row.wordsView.bounds, to: collection)
+        return box.intersects(visibleBox) ? row.wordsView : nil
+    }
+
+    public func flashQueued(_ id: String) {
+        guard let index = dataSource.indexPath(for: id), let cell = collection.cellForItem(at: index) as? HostCell<UserTurnView> else { return }
+        cell.row?.flash()
     }
 
     // MARK: Disclosure

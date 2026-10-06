@@ -72,6 +72,7 @@ import {
   mcpFleetState,
   PROVIDER_RETRY,
 } from "@cawco/core";
+import type { RestartHold } from "@cawco/core/binary-updates";
 // The protocol subpath, never the `@cawco/core` barrel: `sessiond.ts` reaches
 // for `node:os` and the barrel is imported by the browser bundle (see f2e1c4c).
 import { type ProcSpec, sessiondEndpoint } from "@cawco/core/sessiond";
@@ -101,6 +102,7 @@ import type { Harness, HarnessContext, HarnessSession } from "../harness";
 import { HarnessRecoveryRefused, SessionAddressRefused } from "../harness";
 import { isMachineAgent } from "../machine-agent";
 import { OPENCODE_SERVER_PROC_ID, parseProcId } from "../proc-id";
+import { fenced, holdRestart, withRestartHold } from "../restart";
 import { ensureSessiond, SessiondClient } from "../sessiond-client";
 import { resolveBin } from "../tools";
 import {
@@ -731,6 +733,10 @@ return ({
  * A question always routes — the parent session, or the user, answers it. Only
  * `acceptEdits` is left to the caller: granting edits alone needs the
  * permission's own type, which this decision does not see.
+ *
+ * Full Send is bypass here. Bypass already answers every tool ask opencode
+ * raises: it has no safety check of its own that outlasts bypass, no plan
+ * approval to put to the owner, and an ask names no rule it came from.
  */
 export function autoAllows(
   permissionMode: string | undefined,
@@ -739,7 +745,9 @@ export function autoAllows(
   if (kind === "question") {
     return false;
   }
-  return permissionMode === "bypassPermissions";
+  return (
+    permissionMode === "bypassPermissions" || permissionMode === "fullSend"
+  );
 }
 
 /** opencode's own name for the tool a question rides on. */
@@ -888,7 +896,13 @@ const COMMAND_KINDS: Partial<Record<string, SlashCommand["kind"]>> = {
 
 export const OPENCODE_CAPABILITIES: HarnessCapabilities = {
   interrupt: true,
-  permissionModes: ["default", "acceptEdits", "plan", "bypassPermissions"],
+  permissionModes: [
+    "default",
+    "acceptEdits",
+    "plan",
+    "bypassPermissions",
+    "fullSend",
+  ],
   setModel: true,
   effort: true,
   contextUsage: true,
@@ -1439,6 +1453,15 @@ export class OpencodeSession implements HarnessSession {
   get turnInFlight(): boolean {
     // biome-ignore lint/suspicious/noUnnecessaryConditions: server events and dispatch methods update these fields outside this getter
     return this.#busy || this.#turnOpen;
+  }
+
+  /**
+   * The sends this process holds that the server has not been handed: queued
+   * behind the config gate or behind one still being written. They live in
+   * this process alone, so an agent restart loses them.
+   */
+  get unhanded(): number {
+    return this.#queue.length;
   }
 
   /**
@@ -2889,6 +2912,8 @@ export class OpencodeSession implements HarnessSession {
     this.#turnOpen = true;
     this.#turnPrompt = messageID;
     this.#noteServerActivity();
+    // Held until the server has it: a restart before then loses the send.
+    const handed = holdRestart("write", `prompt:${messageID}`);
     // biome-ignore lint/complexity/noVoid: fire-and-forget: #prompt itself is not awaited by its callers
     void reached(
       this.#client.session.promptAsync({
@@ -2944,7 +2969,8 @@ export class OpencodeSession implements HarnessSession {
         this.#ctx.busy(false);
         this.#ctx.rejected(uuid, error);
         this.#drained(messageID);
-      });
+      })
+      .finally(handed);
   }
 
   /**
@@ -3044,6 +3070,7 @@ export class OpencodeSession implements HarnessSession {
     }
     this.#turnOpen = true;
     this.#turnPrompt = messageID;
+    const handed = holdRestart("write", `command:${messageID}`);
     // biome-ignore lint/complexity/noVoid: fire-and-forget: #commandOrPrompt itself is not awaited by its callers
     void this.#client.session
       .command({
@@ -3061,7 +3088,8 @@ export class OpencodeSession implements HarnessSession {
         if (res.error) {
           this.#ctx.rejected(uuid, new Error(errorText(res.error)));
         }
-      });
+      })
+      .finally(handed);
   }
 
   /**
@@ -3409,10 +3437,12 @@ export class OpencodeSession implements HarnessSession {
     this.#resolvedGates.add(requestId);
     this.#ctx.permissionResolved?.(requestId);
     // biome-ignore lint/complexity/noVoid: fire-and-forget: #replyPermission itself is not awaited by its callers
-    void reached(
-      this.#client.permission.reply(
-        { requestID: requestId, directory: this.#directory, reply: response },
-        { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
+    void withRestartHold("write", `permission:${requestId}`, () =>
+      reached(
+        this.#client.permission.reply(
+          { requestID: requestId, directory: this.#directory, reply: response },
+          { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
+        )
       )
     ).catch((error: unknown) =>
       console.warn(`[opencode] permission reply failed: ${String(error)}`)
@@ -3421,10 +3451,12 @@ export class OpencodeSession implements HarnessSession {
 
   #replyQuestion(id: string, answers: string[][]): Promise<void> {
     return (
-      reached(
-        this.#client.question.reply(
-          { requestID: id, directory: this.#directory, answers },
-          { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
+      withRestartHold("write", `question:${id}`, () =>
+        reached(
+          this.#client.question.reply(
+            { requestID: id, directory: this.#directory, answers },
+            { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
+          )
         )
       )
         .then((res) => {
@@ -3443,10 +3475,12 @@ export class OpencodeSession implements HarnessSession {
 
   #rejectQuestion(id: string): Promise<void> {
     return (
-      reached(
-        this.#client.question.reject(
-          { requestID: id, directory: this.#directory },
-          { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
+      withRestartHold("write", `question:${id}`, () =>
+        reached(
+          this.#client.question.reject(
+            { requestID: id, directory: this.#directory },
+            { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
+          )
         )
       )
         .then((res) => {
@@ -3993,6 +4027,47 @@ export class OpencodeHarness implements Harness {
     );
   }
 
+  /**
+   * What an agent restart would cut of this adapter's work: the operations it
+   * runs against the server from this process (a config apply that replaces
+   * the server, a session it is opening, an MCP change, a handoff between two
+   * server generations), the starts queued behind a config apply, and the
+   * sends it holds that the server has not been handed. The server's own
+   * turns are not on it: the server runs under the keeper, and the next agent
+   * reads them back.
+   */
+  restartHolds(): RestartHold[] {
+    return [
+      {
+        reason: "opencode",
+        ids: [
+          ...(this.#applyGate || this.#checkingPublication
+            ? ["config-apply"]
+            : []),
+          ...Array.from({ length: this.#opening }, (_, n) => `opening:${n}`),
+          ...Array.from(
+            { length: this.#mutatingMcp },
+            (_, n) => `mcp-change:${n}`
+          ),
+          ...[...this.#migrations.keys()].map((id) => `handoff:${id}`),
+          // A session being taken back is the supervisor's to name (a start
+          // in flight), and a reconcile only reads the server back, which the
+          // next agent does again: neither is named here.
+        ],
+      },
+      {
+        reason: "starting",
+        ids: this.#pendingSpawns.map((pending) => pending.spec.instanceId),
+      },
+      {
+        reason: "opencode-send",
+        ids: [...this.#sessions.values()]
+          .filter((session) => session.unhanded > 0)
+          .map((session) => session.instanceId),
+      },
+    ];
+  }
+
   /** No local turn maps participate in the server's idle decision. */
   // biome-ignore lint/suspicious/useAwait: the Harness contract returns a promise; activity reporting itself is deliberately synchronous
   async busyInstances(): Promise<string[]> {
@@ -4134,6 +4209,12 @@ export class OpencodeHarness implements Harness {
       this.#desiredVersion === this.#appliedVersion
     ) {
       this.#configState = "applied";
+      return;
+    }
+    if (fenced()) {
+      // The agent is about to restart, and an apply cut half-way leaves two
+      // servers to sort out: it waits, and the watcher tries a pending one again.
+      this.#configState = "pending";
       return;
     }
 

@@ -122,6 +122,10 @@ public enum Glyph: String, CaseIterable, Sendable {
     case fork = "branching-paths-up-bold-duotone"
     /// PiLogo.svelte: one ink, drawn in the text colour.
     case logoPi = "logo-pi"
+    // The composer's history button, and the Sound switch.
+    case history = "history-bold-duotone"
+    case soundOn = "volume-loud-bold-duotone"
+    case soundOff = "volume-cross-bold-duotone"
 
     /// The web's names for glyphs the transcript already carries under its own.
     public static let send = Glyph.toolMessage // plain-2-bold-duotone (IconSend)

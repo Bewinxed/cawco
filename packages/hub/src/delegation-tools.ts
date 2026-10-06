@@ -487,6 +487,8 @@ export function handoffTools(deps: HandoffDeps) {
           .describe(
             "Overrides the type's model. Omit to run the type's own model."
           ),
+        // Never `fullSend`: only the owner puts a session in Full Send. A
+        // session that is in it passes it on by leaving this out.
         permissionMode: z
           .enum([
             "default",

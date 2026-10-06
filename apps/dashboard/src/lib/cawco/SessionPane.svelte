@@ -848,6 +848,12 @@
     };
   });
 
+  // A queued message being edited here goes back as it was when the
+  // conversation closes: its bubble is whole wherever it is next drawn.
+  $effect(() => () => {
+    draft.putBack();
+  });
+
   // The hub took the send: the message it carried needs no keeping.
   $effect(() => {
     const stage = latestCommandFor(viewId, "send")?.stage;
@@ -988,6 +994,9 @@
    */
   const binding: ComposerBinding = {
     draft,
+    get agentName() {
+      return agentName;
+    },
     get busy() {
       return session?.busy ?? false;
     },
@@ -1016,6 +1025,9 @@
       return (100 - previewShare) / 100;
     },
     get delegatesOf() {
+      return viewId;
+    },
+    get recallOf() {
       return viewId;
     },
     onsubmit,
@@ -1182,6 +1194,7 @@
               </p>
             {:else if writable && !browser}
               <Composer
+                {agentName}
                 busy={session.busy}
                 {commands}
                 delegatesOf={viewId}
@@ -1195,6 +1208,7 @@
                 paneVisible={visible}
                 previewPhone={phone}
                 prompts={parkedPrompts}
+                recallOf={viewId}
                 sendError={sendFailure}
                 {sending}
                 {suggest}

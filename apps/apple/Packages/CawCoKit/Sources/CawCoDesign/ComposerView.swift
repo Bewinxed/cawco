@@ -26,15 +26,21 @@ public enum ComposerAttachment: Sendable, Equatable {
 ///   radius or padding on focus. A draft of several lines folds to its first
 ///   line, "+N lines" on its faded end, when the field is not being written
 ///   in, and opens again over `durMorph`.
-/// - Attach and Send/Stop are 34pt boxes (radius 12 − 7), bottom-aligned,
-///   10pt apart. Send and Stop are one box: its glyph swaps (`icon-swap`:
+/// - History, Attach and Send/Stop are 34pt boxes (radius 12 − 7),
+///   bottom-aligned, 10pt apart. History opens the recall wheel
+///   (ComposerRecall.swift). Send and Stop are one box: its glyph swaps (`icon-swap`:
 ///   opacity, scale 0.25→1, a 4pt blur clearing) over `durControl`, a spinner
 ///   while the send is in flight; empty and idle it rests at 55% with no
 ///   gradient. Both scale to `pressScale` under the finger.
 /// - Parked prompts stand in their own column above (`prompts`), 11pt apart,
 ///   so a card coming or going never moves the pill.
+/// - Recall (composer-recall, "Wheel"): ↑ in an empty field or with the
+///   caret at its start, the history button, or a hold on the composer while
+///   the keyboard is down brings up what the reader sent here; ↑ in an empty
+///   field while their newest message is queued and can be withdrawn lifts
+///   that message's words into the field to edit instead (ComposerQueuedEdit.swift).
 @MainActor
-public final class ComposerView: UIView, UITextViewDelegate {
+public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizerDelegate {
     /// What the action box does now.
     public enum Action: Equatable, Sendable {
         case send
@@ -75,20 +81,33 @@ public final class ComposerView: UIView, UITextViewDelegate {
     private var errorBox: UIView?
     private let chips = UIStackView()
     private let chipsRow = UIScrollView()
-    private let ring = UIView()
-    private let pill = UIView()
+    let ring = UIView()
+    let pill = UIView()
     private let material = UIVisualEffectView(effect: UIBlurEffect(style: .systemUltraThinMaterial))
     private let tint = UIView()
     let field = ComposerField(usingTextLayoutManager: true)
     private let hint = KitLabel(ComposerView.fieldRole, ink: Palette.inkMuted, tracking: -0.01)
     private let more = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
     private let attach = PressBox()
+    /// Opens the recall wheel (composer-recall `#history-btn`).
+    let historyBox = PressBox()
     private let actionBox = PressBox()
     private let gradient = CAGradientLayer()
     private var glyph: SwapGlyph?
     private var fieldHeight: NSLayoutConstraint!
     private var folded = false
     private var lines = 1
+
+    /// The recall wheel, while it is up (and while it folds away).
+    private(set) var wheel: RecallWheel?
+    /// A queued message being edited, while its words are in the field.
+    private(set) var edit: QueuedEdit?
+    /// While it is grown, the grown shape is the composer: the pill's own
+    /// surface steps aside (`.cin.wheeling`, `.cin.grown`).
+    var grown = false {
+        didSet { if grown != oldValue { paint() } }
+    }
+    private let holdPress = UILongPressGestureRecognizer()
 
     /// The field's face: the body face at 16pt on the UI leading (20pt lines).
     static let fieldRole = TypeRole(weight: .regular, size: 16 ... 16, leading: TypeScale.leadingUi, family: FontFamily.fontBody)
@@ -230,7 +249,7 @@ public final class ComposerView: UIView, UITextViewDelegate {
         field.accessibilityIdentifier = "steer-message"
         field.translatesAutoresizingMaskIntoConstraints = false
         field.onPaste = { [weak self] long in self?.attachPaste(long) }
-        field.onReturn = { [weak self] in self?.submit() }
+        field.onReturn = { [weak self] in self?.returned() }
         hint.text = Self.hintShort
         hint.isUserInteractionEnabled = false
         hint.translatesAutoresizingMaskIntoConstraints = false
@@ -240,13 +259,17 @@ public final class ComposerView: UIView, UITextViewDelegate {
         more.translatesAutoresizingMaskIntoConstraints = false
 
         attach.configure(glyph: .plus, accessibility: "Attach a file or image")
+        historyBox.configure(glyph: .history, accessibility: "Show what you sent")
+        historyBox.addAction(UIAction { [weak self] _ in self?.historyPressed() }, for: .primaryActionTriggered)
+        historyBox.addAction(UIAction { _ in Feel.prepare() }, for: .touchDown)
+        historyBox.accessibilityIdentifier = "composer-history"
         actionBox.addAction(UIAction { [weak self] _ in self?.pressAction() }, for: .primaryActionTriggered)
         actionBox.accessibilityIdentifier = "send-steer"
         gradient.cornerRadius = Radius.radiusLg - Self.inset
         gradient.cornerCurve = .continuous
         actionBox.layer.insertSublayer(gradient, at: 0)
 
-        let controls = UIStackView(arrangedSubviews: [attach, actionBox])
+        let controls = UIStackView(arrangedSubviews: [historyBox, attach, actionBox])
         // A coarse pointer's gap, so each 34pt box's 44pt touch area meets its neighbour's.
         controls.spacing = 10
         controls.alignment = .center
@@ -269,6 +292,8 @@ public final class ComposerView: UIView, UITextViewDelegate {
             controls.bottomAnchor.constraint(equalTo: field.bottomAnchor),
             attach.widthAnchor.constraint(equalToConstant: Self.control),
             attach.heightAnchor.constraint(equalToConstant: Self.control),
+            historyBox.widthAnchor.constraint(equalToConstant: Self.control),
+            historyBox.heightAnchor.constraint(equalToConstant: Self.control),
             actionBox.widthAnchor.constraint(equalToConstant: Self.control),
             actionBox.heightAnchor.constraint(equalToConstant: Self.control),
             hint.leadingAnchor.constraint(equalTo: field.leadingAnchor),
@@ -281,16 +306,27 @@ public final class ComposerView: UIView, UITextViewDelegate {
         ])
         controls.setContentHuggingPriority(.required, for: .horizontal)
         controls.setContentCompressionResistancePriority(.required, for: .horizontal)
+
+        // A hold on the composer, keyboard down, brings the wheel up under the finger; a touch or a pen, never a pointer.
+        holdPress.minimumPressDuration = Motion.durPressHold
+        holdPress.allowableMovement = 8
+        holdPress.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.direct.rawValue), NSNumber(value: UITouch.TouchType.pencil.rawValue)]
+        holdPress.delegate = self
+        holdPress.addTarget(self, action: #selector(held(_:)))
+        pill.addGestureRecognizer(holdPress)
+        field.onDeleteBackward = { [weak self] in self?.wheelBackspace() ?? true }
     }
 
     private func paint() {
         let traits = traitCollection
-        pill.layer.borderColor = Palette.borderControl.resolvedColor(with: traits).cgColor
+        pill.layer.borderColor = grown ? UIColor.clear.cgColor : Palette.borderControl.resolvedColor(with: traits).cgColor
         attach.layer.borderColor = Palette.borderControl.resolvedColor(with: traits).cgColor
+        historyBox.layer.borderColor = Palette.borderControl.resolvedColor(with: traits).cgColor
         gradient.colors = Palette.actionSurface.colors(for: traits)
         let opaque = UIAccessibility.isReduceTransparencyEnabled
-        material.isHidden = opaque
-        tint.backgroundColor = opaque ? Palette.surfaceRaised : Palette.materialPanel
+        material.isHidden = opaque || grown
+        tint.backgroundColor = grown ? .clear : opaque ? Palette.surfaceRaised : Palette.materialPanel
+        if grown { ring.boxShadow = [] } else if ring.boxShadow.isEmpty { ring.boxShadow = Shadow.shadowTile }
     }
 
     @objc private func transparencyChanged() {
@@ -305,6 +341,7 @@ public final class ComposerView: UIView, UITextViewDelegate {
         CATransaction.commit()
         fitHint()
         maskField()
+        edit?.relayout()
     }
 
     // MARK: The binding
@@ -322,6 +359,9 @@ public final class ComposerView: UIView, UITextViewDelegate {
             if let next { render(next) }
             return
         }
+        // The wheel and a queued message's words belong to the conversation they came from.
+        wheel?.dismiss()
+        edit?.dismiss()
         let shown = field.text ?? ""
         binding?.composer = nil
         binding = next
@@ -365,6 +405,14 @@ public final class ComposerView: UIView, UITextViewDelegate {
     /// The draft as the pane set it (restored, sent, an attachment added).
     func loadDraft(of source: SessionComposerBinding) {
         guard source === binding else { return }
+        // While a queued message's words are in the field, the draft that
+        // stepped aside is what changed: it comes back when they go.
+        if let edit {
+            edit.draft = source.draft
+            edit.attachments = source.attachments
+            return
+        }
+        wheel?.dismiss()
         endFlight()
         setField(source.draft)
         attachments = source.attachments
@@ -516,6 +564,8 @@ public final class ComposerView: UIView, UITextViewDelegate {
     /// A keystroke mid-flight lands the flight first, then goes at the end
     /// of the whole draft, never into the half-typed one.
     public func textView(_: UITextView, shouldChangeTextIn _: NSRange, replacementText text: String) -> Bool {
+        // While the wheel is up, what is typed filters it, or takes the reader back to their draft.
+        if let wheel, !wheel.closing { return text.isEmpty ? wheel.backspace() : wheel.typed(text) }
         guard flight != nil else { return true }
         endFlight()
         field.insertText(text)
@@ -523,8 +573,9 @@ public final class ComposerView: UIView, UITextViewDelegate {
     }
 
     public func textViewDidChange(_: UITextView) {
-        // Typed in place: the text is the reader's, and any hold lets go.
-        binding?.draft = field.text ?? ""
+        // Typed in place: the text is the reader's, and any hold lets go. A
+        // queued message's words being edited are not the draft.
+        if edit == nil { binding?.draft = field.text ?? "" }
         hold?.cancel()
         holding = false
         textChanged(animated: true)
@@ -642,26 +693,55 @@ public final class ComposerView: UIView, UITextViewDelegate {
         !field.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !attachments.isEmpty
     }
 
+    /// What the button does now. While a queued message is being edited it
+    /// puts the edit in its place, even mid-turn, when the agent is working.
+    private var shownAction: Action {
+        edit != nil ? .send : action
+    }
+
+    /// The dashboard's order (Composer.svelte `onaction`): an edit replaces,
+    /// a working agent stops, then the wheel sends the row on its line.
     private func pressAction() {
         guard !held else { return }
-        switch action {
-        case .stop: binding?.onStop()
-        case .send: submit()
-        case .sending: break
+        if edit != nil {
+            submit()
+            return
         }
+        if action == .stop {
+            binding?.onStop()
+            return
+        }
+        // While the wheel is up, Send sends the row on the field's line as it is (⌘Return).
+        if let wheel, !wheel.closing {
+            wheel.take(send: true)
+            return
+        }
+        if action == .send { submit() }
     }
 
     /// A refused send never eats what was typed: nothing to send, the last
     /// one still out, or a swipe still carrying the conversation leaves the
     /// draft as it is. The pane clears it once it has the message.
     private func submit() {
+        // A queued message's words go back in its place.
+        if let edit {
+            let words = field.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            // Unchanged, it simply goes back: nothing to withdraw and send again.
+            if words == edit.entry.text.trimmingCharacters(in: .whitespacesAndNewlines) {
+                edit.giveBack(nil)
+            } else if !words.isEmpty {
+                edit.giveBack(words)
+            }
+            return
+        }
         guard let binding, writable, !held, action != .sending, hasContent, flight == nil else { return }
         let words = field.text.trimmingCharacters(in: .whitespacesAndNewlines)
         binding.onSend(words, attachments)
     }
 
     private func renderAction(animated: Bool) {
-        let enabled = writable && !held && (action != .send || hasContent)
+        let action = shownAction
+        let enabled = writable && !held && (action != .send || hasContent || wheel != nil)
         actionBox.isEnabled = enabled && action != .sending
         actionBox.isUserInteractionEnabled = action != .sending
         actionBox.alpha = enabled || action == .sending ? 1 : 0.55
@@ -707,8 +787,16 @@ public final class ComposerView: UIView, UITextViewDelegate {
         attachments.append(.text(name: "Pasted text · \(text.count.formatted()) chars", content: text))
     }
 
+    override public var keyCommands: [UIKeyCommand]? {
+        recallKeys
+    }
+
+    override public func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        grownHit(point, with: event) ?? super.hitTest(point, with: event)
+    }
+
     private func renderAttachments() {
-        binding?.attachments = attachments
+        if edit == nil { binding?.attachments = attachments }
         chips.arrangedSubviews.forEach { $0.removeFromSuperview() }
         for (index, attachment) in attachments.enumerated() {
             let chip = AttachmentChip(attachment) { [weak self] in
@@ -726,6 +814,238 @@ public final class ComposerView: UIView, UITextViewDelegate {
     }
 }
 
+// MARK: Recall and the queued message
+
+extension ComposerView {
+    /// Recall starts only from an empty field or with the caret at its very
+    /// start, so ↑ in a draft still moves the caret.
+    private var canStartRecall: Bool {
+        let range = field.selectedRange
+        return binding != nil && range.length == 0 && (field.text.isEmpty || range.location == 0)
+    }
+
+    /// ↑ to start, and while the wheel or a queued edit is up, its keys.
+    fileprivate var recallKeys: [UIKeyCommand] {
+        guard field.isFirstResponder else { return [] }
+        var keys: [UIKeyCommand] = []
+        if let wheel, !wheel.closing {
+            keys = [
+                UIKeyCommand(input: UIKeyCommand.inputUpArrow, modifierFlags: [], action: #selector(recallUp)),
+                UIKeyCommand(input: UIKeyCommand.inputDownArrow, modifierFlags: [], action: #selector(recallDown)),
+                UIKeyCommand(input: "\r", modifierFlags: [], action: #selector(recallTake)),
+                UIKeyCommand(input: "\r", modifierFlags: .command, action: #selector(recallSend)),
+                UIKeyCommand(input: "\r", modifierFlags: .control, action: #selector(recallSend)),
+                UIKeyCommand(input: UIKeyCommand.inputEscape, modifierFlags: [], action: #selector(recallEscape)),
+            ]
+        } else if edit != nil {
+            keys = [UIKeyCommand(input: UIKeyCommand.inputEscape, modifierFlags: [], action: #selector(recallEscape))]
+        } else if canStartRecall, flight == nil {
+            keys = [UIKeyCommand(input: UIKeyCommand.inputUpArrow, modifierFlags: [], action: #selector(recallUp))]
+        }
+        for key in keys { key.wantsPriorityOverSystemBehavior = true }
+        return keys
+    }
+
+    /// ↑: rolls the wheel back; or, in an empty field, lifts out the queued
+    /// message when it can be edited, and otherwise brings the wheel up.
+    @objc private func recallUp() {
+        if let wheel {
+            wheel.up()
+            return
+        }
+        guard edit == nil, canStartRecall, let binding else { return }
+        if field.text.isEmpty, let queued = binding.editableQueued() {
+            editQueued(queued)
+        } else {
+            openWheel(keys: true)
+        }
+    }
+
+    @objc private func recallDown() { wheel?.down() }
+    @objc private func recallTake() { wheel?.take(send: false) }
+    @objc private func recallSend() { wheel?.take(send: true) }
+
+    @objc private func recallEscape() {
+        if let wheel { wheel.escape() } else { edit?.giveBack(nil) }
+    }
+
+    /// Return from the field (the software keyboard's too).
+    func returned() {
+        if let wheel, !wheel.closing { wheel.take(send: false) } else { submit() }
+    }
+
+    /// A backspace the field is about to take; false keeps it from the field.
+    private func wheelBackspace() -> Bool {
+        guard let wheel, !wheel.closing else { return true }
+        return wheel.backspace()
+    }
+
+    private func historyPressed() {
+        if let wheel {
+            wheel.backToDraft()
+        } else if let edit {
+            edit.giveBack(nil)
+        } else if binding != nil {
+            openWheel(keys: true)
+        }
+    }
+
+    /// Brings the wheel up. `keys`: the field takes focus, so keys reach the
+    /// wheel; a hold leaves the keyboard down.
+    private func openWheel(keys: Bool) {
+        guard let binding, wheel == nil, edit == nil else { return }
+        endFlight()
+        // Focus first, so a folded draft opens to its height before anything is measured.
+        if keys { field.becomeFirstResponder() }
+        (superview ?? self).layoutIfNeeded()
+        let wheel = RecallWheel(composer: self, entries: binding.recall(), draft: field.text ?? "", caret: field.selectedRange, keys: keys)
+        self.wheel = wheel
+        wheel.open()
+        renderAction(animated: true)
+    }
+
+    /// The field's own words and surface step aside while the wheel is up.
+    func wheelStepsIn() {
+        grown = true
+        field.alpha = 0
+        hint.alpha = 0
+        more.alpha = 0
+    }
+
+    /// The field takes what the wheel took, as the reader's draft.
+    func wheelLanded(_ text: String) {
+        field.text = text
+        binding?.draft = text
+        textChanged(animated: false)
+    }
+
+    /// The draft, with the caret where the reader left it, so a key typed lands there.
+    func wheelReturned(caret: NSRange) {
+        if caret.location + caret.length <= (field.text as NSString).length { field.selectedRange = caret }
+    }
+
+    /// The wheel is folding away: the field and its surface are back.
+    func wheelStepsOut() {
+        field.alpha = 1
+        hint.alpha = 1
+        more.alpha = 1
+        if edit == nil { grown = false }
+    }
+
+    func wheelEnded(_ ended: RecallWheel, focus: Bool, caretAtEnd: Bool, send: Bool) {
+        guard wheel === ended else { return }
+        wheel = nil
+        renderAction(animated: true)
+        // Back to the field when the reader was typing in it, or to edit what they took.
+        if focus { field.becomeFirstResponder() }
+        if caretAtEnd { field.selectedRange = NSRange(location: (field.text as NSString).length, length: 0) }
+        if send { submit() }
+    }
+
+    /// A grown shape finished folding: the pill's surface comes back unless
+    /// another has grown meanwhile.
+    func stepOutIfIdle() {
+        if wheel == nil, edit == nil { grown = false }
+    }
+
+    // MARK: The queued message
+
+    /// Lifts `entry`'s words into the field (↑, or a tap on its bubble). The
+    /// draft, if there is one, steps aside until they go back.
+    func editQueued(_ entry: RecallEntry) {
+        guard let binding, edit == nil, wheel == nil else { return }
+        endFlight()
+        let words = binding.queuedWords(entry.id)
+        let edit = QueuedEdit(entry, composer: self, binding: binding, draft: field.text ?? "", attachments: attachments, caret: field.selectedRange)
+        self.edit = edit
+        edit.begin(from: words)
+    }
+
+    /// The queued message's words are in the field now, the draft's
+    /// attachments set aside with it.
+    func editEnters(_ text: String) {
+        attachments = []
+        field.text = text
+        textChanged(animated: false)
+        field.selectedRange = NSRange(location: (text as NSString).length, length: 0)
+        (superview ?? self).layoutIfNeeded()
+    }
+
+    /// The words went back: the draft returns as it was, caret and all,
+    /// and the field keeps the keys when `focus`.
+    func editLeaves(_ left: QueuedEdit, focus: Bool) {
+        guard edit === left else { return }
+        edit = nil
+        field.text = left.draft
+        attachments = left.attachments
+        textChanged(animated: false)
+        let caret = left.caret
+        if caret.location + caret.length <= (left.draft as NSString).length { field.selectedRange = caret }
+        if focus { field.becomeFirstResponder() }
+    }
+
+    func scrollFieldToEnd() {
+        field.layoutIfNeeded()
+        let bottom = max(0, field.contentSize.height - field.bounds.height)
+        field.setContentOffset(CGPoint(x: 0, y: bottom), animated: false)
+    }
+
+    /// The part of the field the reader can see, where words land: inside
+    /// its padding, at its scroll.
+    func fieldEnd() -> LiftEnd {
+        let inset = field.textContainerInset
+        let box = field.convert(CGRect(x: 0, y: field.contentOffset.y + inset.top, width: field.bounds.width,
+                                       height: max(0, field.bounds.height - inset.top - inset.bottom)), to: nil)
+        return LiftEnd(box: box, scroll: field.contentOffset.y, attributes: LiftEnd.wrapping(Self.fieldRole.attributes(color: Palette.inkStrong)))
+    }
+
+    // MARK: The hold
+
+    /// Only a hold that starts off the field while it is being written in,
+    /// and off the attach and send boxes, with nothing else up.
+    public func gestureRecognizer(_ recognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        guard recognizer === holdPress else { return true }
+        guard binding != nil, wheel == nil, edit == nil, let view = touch.view else { return false }
+        if view.isDescendant(of: actionBox) || view.isDescendant(of: attach) { return false }
+        if field.isFirstResponder, view.isDescendant(of: field) { return false }
+        Feel.prepare()
+        return true
+    }
+
+    /// The field's own presses wait for the hold to fail while it is not
+    /// being written in, so a hold never starts editing or a selection.
+    public func gestureRecognizer(_ recognizer: UIGestureRecognizer, shouldBeRequiredToFailBy other: UIGestureRecognizer) -> Bool {
+        recognizer === holdPress && !field.isFirstResponder && (other.view?.isDescendant(of: field) ?? false)
+    }
+
+    @objc private func held(_ press: UILongPressGestureRecognizer) {
+        let y = press.location(in: self).y
+        switch press.state {
+        case .began:
+            guard wheel == nil, edit == nil else { return }
+            Feel.hold()
+            openWheel(keys: false)
+            wheel?.holdBegan(at: y)
+        case .changed:
+            wheel?.holdMoved(to: y)
+        case .ended, .cancelled, .failed:
+            wheel?.holdEnded()
+        default:
+            break
+        }
+    }
+
+    /// The rows above the pill and the edit row's Keep it, which stand
+    /// outside the composer's bounds, where a touch lands on them.
+    fileprivate func grownHit(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        for view in [wheel?.ghostsView, edit?.keepButton].compactMap(\.self) where view.window != nil && !view.isHidden {
+            let inside = convert(point, to: view)
+            if view.point(inside: inside, with: event), let hit = view.hitTest(inside, with: event) { return hit }
+        }
+        return nil
+    }
+}
+
 // MARK: The field
 
 /// The composer's text view: Return sends (Shift-Return is a new line on a
@@ -733,6 +1053,12 @@ public final class ComposerView: UIView, UITextViewDelegate {
 final class ComposerField: UITextView {
     var onReturn: () -> Void = {}
     var onPaste: (String) -> Void = { _ in }
+    /// Asked before a backspace; false keeps it from the text (the wheel's filter took it).
+    var onDeleteBackward: () -> Bool = { true }
+
+    override func deleteBackward() {
+        if onDeleteBackward() { super.deleteBackward() }
+    }
 
     override func paste(_ sender: Any?) {
         if let text = UIPasteboard.general.string, text.count > ComposerView.largePaste {
