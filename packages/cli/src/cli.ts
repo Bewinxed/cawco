@@ -440,7 +440,12 @@ const runService = async (args: Args): Promise<number> => {
   // Naming nothing means the whole stack, which is what someone setting a
   // machine up wants; `logs` is the exception and says so itself.
   const ids = named.length > 0 ? named : SERVICE_IDS;
+  // On a binary install every unit starts through the wrapper, never a build's own path, or an
+  // update would restart the build it was meant to replace.
+  const { readInstallation } = await import("@cawco/core/binary-installation");
+  const { binaryLayout } = await import("./binary-install");
   await service(args.action, {
+    ...((await readInstallation()) ? { binaryLayout: binaryLayout() } : {}),
     ids,
     mode: args.dev ? "dev" : "prod",
     follow: args.follow,
