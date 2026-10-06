@@ -24,7 +24,7 @@
   }: {
     /** Read through, so the mounted box follows when the notice changes. */
     view: { notice: Notice; onPage: boolean };
-    onaction: (action: "retry" | "install-all") => void;
+    onaction: (action: NonNullable<Notice["action"]>) => void;
     ondismiss: () => void;
     /** Sonner's own, given to a custom toast. */
     closeToast?: () => void;
@@ -104,11 +104,24 @@
         >
       {/if}
       {#if notice.action === "retry"}
-        <Button label="Retry" onclick={() => onaction("retry")} size="sm" />
+        <Button
+          class="primary"
+          label="Retry"
+          onclick={() => onaction("retry")}
+          size="sm"
+        />
       {:else if notice.action === "install-all"}
         <Button
+          class="primary"
           label="Install now"
           onclick={() => onaction("install-all")}
+          size="sm"
+        />
+      {:else if notice.action === "reload"}
+        <Button
+          class="primary"
+          label="Reload"
+          onclick={() => onaction("reload")}
           size="sm"
         />
       {/if}
@@ -198,6 +211,10 @@
     }
     .buttons {
       justify-content: space-between;
+    }
+    /* The primary stands at the trailing edge, also when it is the only button. */
+    .buttons > :global(.primary) {
+      margin-inline-start: auto;
     }
   }
 </style>

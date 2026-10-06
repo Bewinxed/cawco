@@ -43,6 +43,24 @@ export interface BinaryUpdateChannels {
   checkedAt: number;
 }
 
+/**
+ * An install or a rollback that finished, held until a person acknowledges
+ * that very one. It is the event a notice announces, so nothing but the
+ * finish of an install or rollback sets it, and only an acknowledgement
+ * naming its `at` clears it: the state's other writes carry it through
+ * unchanged, and the session keeper moving to the build later is part of
+ * the same update, not a new one.
+ */
+export interface BinaryUpdateLanding {
+  /** When it finished, in milliseconds: the landing's identity. */
+  at: number;
+  /** The landed build's release notes. */
+  notes?: string;
+  outcome: "installed" | "rolled-back";
+  /** The build installed, or the build that failed and was rolled back. */
+  version: string;
+}
+
 export interface BinaryUpdateState {
   availableVersion?: string;
   channel: BinaryUpdatePolicy["channel"];
@@ -56,12 +74,13 @@ export interface BinaryUpdateState {
   installedVersion: string;
   /** The build the session keeper could not start on; not retried by itself. */
   keeperFailedVersion?: string;
+  /** The finished install or rollback nobody has acknowledged yet. */
+  landed?: BinaryUpdateLanding;
   notes?: string;
   phase: BinaryUpdatePhase;
   /** The version the session keeper's link names; differs from the build while it holds children. */
   sessiondVersion?: string;
-  /** True from a finished install until a person has acknowledged it. */
-  unseen: boolean;
+  /** When anything in this state last changed. Not an identity for anything. */
   updatedAt: number;
   /** Sessions working now, while `ready` waits for the machine to be idle. */
   waitingFor?: number;

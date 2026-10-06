@@ -11,14 +11,15 @@
    * Then the rows stay as last known and greyed, there is no headline and
    * no Caw, and the status line says the hub is gone.
    */
+  import { untrack } from "svelte";
   import { TextMorph } from "torph/svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import { IconPlus } from "#lib/icons.js";
   import Attention from "~icons/solar/hand-shake-bold-duotone";
   import { cawco } from "../client.svelte";
-  import { deployPending } from "../deploy-toast.svelte";
   import { crossIn, crossOut, morphMs } from "../motion/curves.svelte";
   import { reflow } from "../motion/rows.svelte";
+  import { servedNewer } from "../served-build.svelte";
   import { newSession } from "../spawn/new-session.svelte";
   import UsageMeter from "../UsageMeter.svelte";
   import { updatedNotice } from "../updates/model";
@@ -39,20 +40,40 @@
   } = $props();
 
   const stale = $derived(!home.live);
-  /** The update nobody has seen, until it is dismissed. */
+  /** The landing nobody has acknowledged, until it is dismissed. */
   const updated = $derived(
-    updates.policy && !deployPending()
-      ? updatedNotice(updates.withSeen(cawco.machines), updates.policy)
-      : null
+    variant === "page" ? updatedNotice(updates.withSeen(cawco.machines)) : null
   );
-  function dismissUpdate(): void {
-    for (const id of updated?.machineIds ?? []) {
-      const machine = cawco.machines.find((row) => row.machineId === id);
-      if (machine) {
-        // biome-ignore lint/complexity/noVoid: the acknowledgement reports through the next machine frame
-        void updates.acknowledge(machine);
-      }
+  // While the card is on screen it is the landing's one surface: the toast stands aside.
+  $effect(() => {
+    if (!updated) {
+      return;
     }
+    // Untracked: the count is written here, never followed.
+    untrack(() => {
+      updates.cards += 1;
+    });
+    return () => {
+      untrack(() => {
+        updates.cards -= 1;
+      });
+    };
+  });
+  function acknowledgeUpdate(): Promise<unknown> {
+    return Promise.all(
+      (updated?.machineIds ?? []).map((id) => {
+        const machine = cawco.machines.find((row) => row.machineId === id);
+        return machine ? updates.acknowledge(machine) : undefined;
+      })
+    );
+  }
+  function dismissUpdate(): void {
+    // biome-ignore lint/complexity/noVoid: the acknowledgement reports through the next machine frame
+    void acknowledgeUpdate();
+  }
+  function reloadForUpdate(): void {
+    // biome-ignore lint/complexity/noVoid: the reload waits on the acknowledgement, and nothing waits on the reload
+    void acknowledgeUpdate().finally(() => location.reload());
   }
   /**
    * The tabs are changing their rows and driving the list's height
@@ -146,7 +167,7 @@
        `waiting`), so the tab row is where it will be and the list
        cross-fades in under it; nothing else here is claimed before then. -->
   <div class="groups">
-    {#if variant === "page" && updated}
+    {#if updated}
       <!-- An update nobody has seen stays here until it is dismissed. -->
       <section
         aria-label="Update"
@@ -155,7 +176,11 @@
         in:crossIn
         out:crossOut
       >
-        <UpdateCard notice={updated} ondismiss={dismissUpdate} />
+        <UpdateCard
+          notice={updated}
+          ondismiss={dismissUpdate}
+          onreload={servedNewer() ? reloadForUpdate : undefined}
+        />
       </section>
     {/if}
 

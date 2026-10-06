@@ -3,7 +3,7 @@
    * UPDATE STATES — every look of the update screens from fixtures, with no
    * hub needed: the channel cards (the fleet on Stable, then on Nightly with
    * Stable chosen), one table row for each row of the Update cell, and the
-   * six notices, each also shown as the real toast.
+   * seven notices, each also shown as the real toast.
    */
   import { machineLabel } from "@cawco/core";
   import type {
@@ -51,7 +51,6 @@
     hostsHub: false,
     notes: NOTES,
     phase: "none",
-    unseen: false,
     updatedAt: 1,
     ...over,
   });
@@ -142,20 +141,30 @@
 
   const input = (over: Partial<NoticeInput>): NoticeInput => ({
     commanded: new Set(),
-    deployPending: false,
     dismissed: new Set(),
     installingDismissed: false,
     machines: [],
     policy: OFF,
+    stale: false,
     ...over,
   });
+  const LANDED = {
+    at: 1,
+    outcome: "installed",
+    version: "1.4.2",
+    notes: NOTES,
+  } as const;
   const NOTICES: Notice[] = [
     noticeFor(
       input({
         machines: trio([
           {},
           {},
-          { phase: "failed-rolled-back", failedVersion: "1.4.2", unseen: true },
+          {
+            phase: "failed-rolled-back",
+            failedVersion: "1.4.2",
+            landed: { at: 1, outcome: "rolled-back", version: "1.4.2" },
+          },
         ]),
       }),
       machineLabel
@@ -202,22 +211,25 @@
       input({
         policy: ON,
         machines: trio([
-          { phase: "installed", installedVersion: "1.4.2", unseen: true },
+          { phase: "installed", installedVersion: "1.4.2", landed: LANDED },
           {},
           {},
         ]),
       }),
       machineLabel
     ),
+    noticeFor(
+      input({ stale: true, machines: trio([{}, {}, {}]) }),
+      machineLabel
+    ),
   ].filter((notice): notice is Notice => notice !== null);
 
   const UPDATED = updatedNotice(
     trio([
-      { phase: "installed", installedVersion: "1.4.2", unseen: true },
+      { phase: "installed", installedVersion: "1.4.2", landed: LANDED },
       {},
       {},
-    ]),
-    ON
+    ])
   ) as Notice;
 
   // The real toast: one id, and the box changes in place.
@@ -260,7 +272,7 @@
     <UpdateTable machines={ROWS} policy={OFF} />
   </section>
 
-  <h1>Notices 1 to 6</h1>
+  <h1>Notices 1 to 7</h1>
   <div class="notices" data-states="notices">
     {#each NOTICES as notice (notice.kind)}
       <div class="one" data-notice={notice.kind}>
@@ -282,6 +294,10 @@
   <h1>Updated, unseen, on Home</h1>
   <div class="home-card" data-states="update-card">
     <UpdateCard notice={UPDATED} ondismiss={noop} />
+  </div>
+  <h1>Updated, unseen, on Home, in a tab older than the dashboard</h1>
+  <div class="home-card" data-states="update-card-reload">
+    <UpdateCard notice={UPDATED} ondismiss={noop} onreload={noop} />
   </div>
 </main>
 

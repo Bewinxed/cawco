@@ -220,7 +220,6 @@ export class BinaryUpdater {
     installedVersion: runtimeVersion,
     channel: "stable",
     updatedAt: Date.now(),
-    unseen: false,
     hostsHub: false,
   };
   /** Whether this machine runs the hub: it then considers the channel's newest build, not its hub's. */
@@ -280,9 +279,16 @@ export class BinaryUpdater {
     return this.#state;
   }
 
-  async acknowledge(): Promise<BinaryUpdateState> {
+  /**
+   * A person saw the landing finished at `at`. Only that one is cleared: an
+   * acknowledgement that crossed a newer landing on its way leaves the newer
+   * one to be seen.
+   */
+  async acknowledge(at: unknown): Promise<BinaryUpdateState> {
     await this.#load();
-    await this.#set({ unseen: false });
+    if (this.#state.landed && this.#state.landed.at === at) {
+      await this.#set({ landed: undefined });
+    }
     return this.#state;
   }
 
@@ -357,7 +363,7 @@ export class BinaryUpdater {
       availableVersion: note,
       error:
         "The new build did not become healthy and the helper never reported back; the previous build was restored on its next start",
-      unseen: true,
+      landed: { at: Date.now(), outcome: "rolled-back", version: note },
     });
     await rm(recoveredPath(), { force: true });
   }

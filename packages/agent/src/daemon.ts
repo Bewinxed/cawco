@@ -1239,8 +1239,8 @@ export const startDaemon = (auth?: AuthState, rediscover = false) =>
     supervisor.registerDaemonFunction(CANCEL_BINARY_UPDATE, () =>
       updater.cancel()
     );
-    supervisor.registerDaemonFunction(ACKNOWLEDGE_BINARY_UPDATE, () =>
-      updater.acknowledge()
+    supervisor.registerDaemonFunction(ACKNOWLEDGE_BINARY_UPDATE, (at) =>
+      updater.acknowledge(at)
     );
     yield* Effect.addFinalizer(() => Effect.sync(() => updater.stop()));
     yield* Effect.forkScoped(Effect.promise(() => updater.start()));

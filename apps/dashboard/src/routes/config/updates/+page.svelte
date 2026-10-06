@@ -114,13 +114,13 @@
     checking = false;
   }
 
-  // A person on this page has seen what landed: acknowledge it once each.
+  // A person on this page has seen what landed: acknowledge each landing once.
   const acknowledged = new Set<string>();
   $effect(() => {
     for (const machine of machines) {
-      const state = machine.binaryUpdate;
-      if (state?.unseen) {
-        const key = `${machine.machineId}:${state.updatedAt}`;
+      const landing = machine.binaryUpdate?.landed;
+      if (landing) {
+        const key = `${machine.machineId}:${landing.at}`;
         if (!acknowledged.has(key)) {
           acknowledged.add(key);
           // biome-ignore lint/complexity/noVoid: the acknowledgement reports through the next machine frame

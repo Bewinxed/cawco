@@ -195,7 +195,7 @@ export const installable = (
 
 // ── the notice ───────────────────────────────────────────────────────────
 
-export type NoticeKind = 1 | 2 | 3 | 4 | 5 | 6;
+export type NoticeKind = 1 | 2 | 3 | 4 | 5 | 6 | 7;
 export type LineState = "plain" | "done" | "busy" | "wait";
 
 export interface NoticeLine {
@@ -205,7 +205,7 @@ export interface NoticeLine {
 
 export interface Notice {
   /** The primary button, when the notice has one. */
-  action?: "retry" | "install-all";
+  action?: "retry" | "install-all" | "reload";
   /** Caw: a still mark, or (needs-you) the one that moves. */
   caw: { moves: boolean; status: string };
   /** Machines the notice stands for, by id. */
@@ -228,14 +228,17 @@ export interface Notice {
 export interface NoticeInput {
   /** The machines whose install this tab commanded. */
   commanded: ReadonlySet<string>;
-  /** `deployPending()`: the reload toast is up. */
-  deployPending: boolean;
   /** Notices 4 and 5 the person dismissed, as `"{number}:{version}"`. */
   dismissed: ReadonlySet<string>;
   /** Whether notice 2 was dismissed for this exact commanded set. */
   installingDismissed: boolean;
   machines: UpdateMachine[];
   policy: BinaryUpdatePolicy;
+  /**
+   * The dashboard serving this tab is a newer build than the tab
+   * (served-build.svelte.ts), and the person has not waved the reload off.
+   */
+  stale: boolean;
 }
 
 const doneOn = (u: BinaryUpdateState): boolean =>
@@ -276,16 +279,13 @@ const shownVersion = (version: string | undefined): string =>
 /** 1. A rollback nobody has seen. */
 function rolledBack({ machines, name }: Ctx): Notice | null {
   const [machine] = machines
-    .filter((m) => {
-      const state = stateOf(m);
-      return state.phase === "failed-rolled-back" && state.unseen;
-    })
+    .filter((m) => stateOf(m).landed?.outcome === "rolled-back")
     .sort(byName);
   if (!machine) {
     return null;
   }
   const state = stateOf(machine);
-  const v = shownVersion(state.failedVersion ?? state.availableVersion);
+  const v = shownVersion(state.landed?.version);
   const cur = displayVersion(state.installedVersion);
   return {
     kind: 1,
@@ -461,32 +461,29 @@ function heldBack({ input, machines }: Ctx): Notice | null {
 }
 
 /**
- * 6. A build landed that nobody watched. The toast shows the first three
- * note lines; the Home card shows `notes`, every line.
+ * 6. A build landed that nobody has acknowledged. The toast shows the first
+ * three note lines; the Home card shows `notes`, every line. It stands for
+ * the landing itself (`landed`), so nothing else the machine reports
+ * afterwards brings it back once it is acknowledged.
  */
-export function updatedNotice(
-  machines: UpdateMachine[],
-  policy: BinaryUpdatePolicy
-): Notice | null {
+export function updatedNotice(machines: UpdateMachine[]): Notice | null {
   const landed = machines
-    .filter((m) => isOnline(m) && m.binaryUpdate)
-    .filter((m) => {
-      const { row } = cellFor(m, policy);
-      return (row === 8 || row === 12) && stateOf(m).unseen;
-    })
+    .filter(
+      (m) => isOnline(m) && m.binaryUpdate?.landed?.outcome === "installed"
+    )
     .sort(byName);
   const [lead] = landed;
-  if (!lead) {
+  const landing = lead?.binaryUpdate?.landed;
+  if (!landing) {
     return null;
   }
-  const state = stateOf(lead);
-  const v = displayVersion(state.installedVersion);
+  const v = displayVersion(landing.version);
   return {
     kind: 6,
     title: `CawCo updated to ${v}`,
     failed: false,
-    lines: noticeNotes(state.notes),
-    notes: noteLines(state.notes),
+    lines: noticeNotes(landing.notes),
+    notes: noteLines(landing.notes),
     configure: true,
     caw: { status: "sleeping", moves: false },
     machineIds: landed.map((m) => m.machineId),
@@ -494,18 +491,38 @@ export function updatedNotice(
   };
 }
 
+/** 7. This tab is older than the dashboard serving it, and nothing landed to say why. */
+const RELOAD: Notice = {
+  kind: 7,
+  title: "CawCo updated",
+  failed: false,
+  lines: [{ state: "plain", text: "Reload to get the new version." }],
+  configure: false,
+  action: "reload",
+  caw: { status: "sleeping", moves: false },
+  machineIds: [],
+  version: "",
+};
+
+/** A landing's notice on a tab that is older than it: it offers the reload. */
+const withReload = (notice: Notice | null): Notice | null =>
+  notice ? { ...notice, action: "reload" } : null;
+
 /** Notices 4 and 5 the person already dismissed are not shown again. */
 const unlessDismissed = (notice: Notice | null, input: NoticeInput) =>
   notice && input.dismissed.has(dismissKey(notice)) ? null : notice;
 
-/** The one notice the screen shows, or null. First match wins. */
+/**
+ * The one notice the screen shows, or null. First match wins. A tab older
+ * than the dashboard serving it is one notice too, not a second box: the
+ * landing that replaced the dashboard says so and offers the reload, and
+ * with no landing to announce the reload says it alone. Everything else
+ * waits for the reload, since an old tab may misread what it is sent.
+ */
 export function noticeFor(
   input: NoticeInput,
   label: (hostname: string) => string
 ): Notice | null {
-  if (input.deployPending) {
-    return null;
-  }
   const ctx: Ctx = {
     input,
     machines: input.machines.filter(
@@ -513,12 +530,19 @@ export function noticeFor(
     ),
     name: (machine) => label(machine.hostname),
   };
+  if (input.stale) {
+    return (
+      withReload(landedAll(ctx)) ??
+      withReload(updatedNotice(input.machines)) ??
+      RELOAD
+    );
+  }
   return (
     rolledBack(ctx) ??
     installing(ctx) ??
     landedAll(ctx) ??
     unlessDismissed(waitsForYou(ctx), input) ??
     unlessDismissed(heldBack(ctx), input) ??
-    updatedNotice(input.machines, input.policy)
+    updatedNotice(input.machines)
   );
 }

@@ -76,7 +76,6 @@ import { browser } from "$app/env";
 import { goto } from "$app/navigation";
 import type { Activity } from "./activity";
 import { activityOf, runningSubagents } from "./activity";
-import { checkDeployToast } from "./deploy-toast.svelte";
 import { hubFailure } from "./hub-read";
 import { newId } from "./id";
 import {
@@ -88,6 +87,7 @@ import {
 import { type PendingSelection, selectionExtras } from "./preview/selection";
 import { projectsFor } from "./projects";
 import { type ReloadHold, reloadForProtocol } from "./protocol-reload";
+import { checkServedBuild } from "./served-build.svelte";
 import { spawnDefaults } from "./spawnPrefs.svelte";
 import type {
   CommandRecord,
@@ -3595,8 +3595,8 @@ function connect(): void {
     lastSubscriptionKey = "";
     syncSubscriptions();
     resumePendingSends(streamState, streamHost);
-    // biome-ignore lint/complexity/noVoid: fire-and-forget — the toast shows itself when the served build is newer
-    void checkDeployToast();
+    // biome-ignore lint/complexity/noVoid: fire-and-forget — the update notice says it when the served build is newer
+    void checkServedBuild();
     // biome-ignore lint/complexity/noVoid: fire-and-forget — the settings page and the notice read the policy once it lands
     void updates.loadPolicy();
   };

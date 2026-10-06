@@ -1,8 +1,9 @@
 <script lang="ts">
   /**
    * An update the person has not seen, left on Home until they dismiss it:
-   * the title, every release-note line as a list, and Dismiss. Nothing
-   * installs from here. The card recipe is NeedsCard's.
+   * the title, every release-note line as a list, and Dismiss, with Reload
+   * beside it when this tab is older than the dashboard the update brought.
+   * Nothing installs from here. The card recipe is NeedsCard's.
    */
   import { Button } from "#lib/components/ui/button/index.js";
   import type { Notice } from "../updates/model";
@@ -10,9 +11,12 @@
   let {
     notice,
     ondismiss,
+    onreload,
   }: {
     notice: Notice;
     ondismiss: () => void;
+    /** Given while this tab is older than the dashboard serving it. */
+    onreload?: () => void;
   } = $props();
 </script>
 
@@ -27,6 +31,9 @@
   {/if}
   <div class="actions">
     <Button onclick={ondismiss} size="sm" variant="secondary">Dismiss</Button>
+    {#if onreload}
+      <Button onclick={onreload} size="sm">Reload</Button>
+    {/if}
   </div>
 </article>
 
@@ -58,6 +65,7 @@
   .actions {
     display: flex;
     justify-content: flex-end;
+    gap: var(--space-2);
     margin-top: var(--space-1);
   }
 </style>

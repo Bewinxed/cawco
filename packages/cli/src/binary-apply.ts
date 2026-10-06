@@ -242,7 +242,7 @@ export async function applyBinary(
     await note(
       `failed ${error instanceof Error ? error.message : String(error)}`
     );
-    await writeState(await readUpdateState(), {
+    await writeState({
       phase: "failed",
       error: error instanceof Error ? error.message : String(error),
     });
@@ -251,12 +251,15 @@ export async function applyBinary(
   }
 }
 
-async function writeState(
-  before: BinaryUpdateState | undefined,
-  state: Partial<BinaryUpdateState>
-): Promise<void> {
+/**
+ * Lays `state` over the state as it stands now, read at the write, never over
+ * a copy taken when the helper started: the agent writes the same file while
+ * an install or a keeper move runs, and an acknowledgement it took meanwhile
+ * must not be written back over.
+ */
+async function writeState(state: Partial<BinaryUpdateState>): Promise<void> {
   await writeJsonAtomic(updateStatePath(), {
-    ...before,
+    ...(await readUpdateState()),
     ...state,
     updatedAt: Date.now(),
   });
@@ -452,15 +455,15 @@ async function keeperState(
   }
 }
 
-/** The keeper by itself (`--keeper-only`): move it to the running build and say what became of it. */
+/**
+ * The keeper by itself (`--keeper-only`): move it to the running build and
+ * say what became of it. The move finishes an update already announced when
+ * its build landed, so it announces nothing of its own.
+ */
 async function moveKeeperAlone(version: string): Promise<void> {
-  const before = await readUpdateState();
   const move = await moveKeeper(version);
   await prune();
-  await writeState(before, {
-    ...(await keeperState(move, version)),
-    ...(move.outcome === "moved" ? { unseen: true } : {}),
-  });
+  await writeState(await keeperState(move, version));
 }
 
 /** `VACUUM INTO` a copy of the hub database beside it, named for the build it belongs to. */
@@ -488,7 +491,6 @@ async function applyBuild(version: string): Promise<void> {
       `Refusing build ${version}: its sequence ${manifest.sequence} is not above the running ${running.sequence}`
     );
   }
-  const before = await readUpdateState();
   const previous = installed.installedVersion;
   const keeperAtStart = await readKeeperVersion();
   if (!keeperAtStart) {
@@ -501,7 +503,7 @@ async function applyBuild(version: string): Promise<void> {
     db !== undefined && manifest.schemaVersion !== running.schemaVersion;
   const sinceMs = Date.now();
   let backup: string | undefined;
-  await writeState(before, { phase: "installing", heldChildren: undefined });
+  await writeState({ phase: "installing", heldChildren: undefined });
   const marker = (): TrialMarker => ({
     deadline: Math.floor(Date.now() / 1000) + TRIAL_S,
     previous,
@@ -541,13 +543,18 @@ async function applyBuild(version: string): Promise<void> {
     }
     await writeJsonAtomic(trialPath(), marker());
     await prune();
-    await writeState(before, {
+    await writeState({
       ...(await keeperState(move, version)),
       installedVersion: version,
       availableVersion: version,
       channel: manifest.channel,
       notes: manifest.notes,
-      unseen: true,
+      landed: {
+        at: Date.now(),
+        outcome: "installed",
+        version,
+        notes: manifest.notes,
+      },
     });
   } catch (error) {
     let message = error instanceof Error ? error.message : String(error);
@@ -563,7 +570,7 @@ async function applyBuild(version: string): Promise<void> {
     } catch (rollbackError) {
       message += ` Putting the previous build back also failed: ${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}`;
     }
-    await writeState(before, {
+    await writeState({
       phase: "failed-rolled-back",
       installedVersion: previous,
       sessiondVersion: await readKeeperVersion(),
@@ -572,7 +579,7 @@ async function applyBuild(version: string): Promise<void> {
       channel: manifest.channel,
       notes: manifest.notes,
       error: message,
-      unseen: true,
+      landed: { at: Date.now(), outcome: "rolled-back", version },
     });
   }
 }

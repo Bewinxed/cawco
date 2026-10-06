@@ -538,6 +538,24 @@
             }
           }
         ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "at": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "at"
+                ]
+              }
+            }
+          }
+        },
         "operationId": "postApiBinaryUpdatesMachinesByMachineIdAcknowledge",
         "responses": {
           "200": {
@@ -546,6 +564,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/postApiBinaryUpdatesMachinesByMachineIdAcknowledge200"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiBinaryUpdatesMachinesByMachineIdAcknowledge 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -12349,6 +12377,10 @@
             "description": "The build the session keeper could not start on; not retried by itself.",
             "type": "string"
           },
+          "landed": {
+            "$ref": "#/components/schemas/BinaryUpdateLanding",
+            "description": "The finished install or rollback nobody has acknowledged yet."
+          },
           "notes": {
             "type": "string"
           },
@@ -12359,11 +12391,8 @@
             "description": "The version the session keeper's link names; differs from the build while it holds children.",
             "type": "string"
           },
-          "unseen": {
-            "description": "True from a finished install until a person has acknowledged it.",
-            "type": "boolean"
-          },
           "updatedAt": {
+            "description": "When anything in this state last changed. Not an identity for anything.",
             "type": "number"
           },
           "waitingFor": {
@@ -12376,8 +12405,37 @@
           "hostsHub",
           "installedVersion",
           "phase",
-          "unseen",
           "updatedAt"
+        ]
+      },
+      "BinaryUpdateLanding": {
+        "description": "An install or a rollback that finished, held until a person acknowledges\nthat very one. It is the event a notice announces, so nothing but the\nfinish of an install or rollback sets it, and only an acknowledgement\nnaming its `at` clears it: the state's other writes carry it through\nunchanged, and the session keeper moving to the build later is part of\nthe same update, not a new one.",
+        "type": "object",
+        "properties": {
+          "at": {
+            "description": "When it finished, in milliseconds: the landing's identity.",
+            "type": "number"
+          },
+          "notes": {
+            "description": "The landed build's release notes.",
+            "type": "string"
+          },
+          "outcome": {
+            "enum": [
+              "installed",
+              "rolled-back"
+            ],
+            "type": "string"
+          },
+          "version": {
+            "description": "The build installed, or the build that failed and was rolled back.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "at",
+          "outcome",
+          "version"
         ]
       },
       "BinaryUpdatePhase": {

@@ -7596,8 +7596,8 @@ export const createServer = (
               }
             }
           },
-          acknowledge: (machineId) =>
-            callAgent(machineId, ACKNOWLEDGE_BINARY_UPDATE, [], 10_000),
+          acknowledge: (machineId, at) =>
+            callAgent(machineId, ACKNOWLEDGE_BINARY_UPDATE, [at], 10_000),
           cancel: (machineId) =>
             callAgent(machineId, CANCEL_BINARY_UPDATE, [], 10_000),
           configure: (machineId, policy: BinaryUpdatePolicy) =>

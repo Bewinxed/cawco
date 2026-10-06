@@ -41,8 +41,8 @@ import { Elysia, t } from "elysia";
 const RELEASE_TTL_MS = 15 * 60_000;
 
 interface Options {
-  /** Marks a machine's finished update as seen; resolves to the control answer. */
-  acknowledge: (machineId: string) => Promise<unknown>;
+  /** Marks a machine's landing finished at `at` as seen; resolves to the control answer. */
+  acknowledge: (machineId: string, at: number) => Promise<unknown>;
   /** Returns a machine waiting for sessions or idle to `available`. */
   cancel: (machineId: string) => Promise<unknown>;
   /** Tell an online machine its policy changed; resolves when it answered. */
@@ -247,10 +247,14 @@ export function createBinaryUpdates(options: Options) {
     )
     .post(
       "/api/binary-updates/machines/:machineId/acknowledge",
-      async ({ params }) => {
-        // The agent answers with its state; taking it now means the board stops showing the update as
-        // unseen at once, not at the machine's next report.
-        const state = (await options.acknowledge(params.machineId)) as
+      {
+        // The landing seen, by when it finished: only that one is cleared.
+        body: t.Object({ at: t.Number() }),
+      },
+      async ({ params, body }) => {
+        // The agent answers with its state; taking it now means the board stops showing the landing at
+        // once, not at the machine's next report.
+        const state = (await options.acknowledge(params.machineId, body.at)) as
           | BinaryUpdateState
           | undefined;
         if (state?.phase) {
