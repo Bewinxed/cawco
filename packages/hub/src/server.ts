@@ -212,6 +212,7 @@ import {
   type HistoryRead,
   type TranscriptPayload,
 } from "./transcripts";
+import { unwatchedMode } from "./unwatched-mode";
 import { UsageCounter } from "./usage-count";
 import {
   createWorkItems,
@@ -4610,14 +4611,16 @@ export const createServer = (
    * whatever happened. Its transcript is tagged as scratch, so the stored
    * catalogs leave it out too. A cancel rejects the wait and stops it from
    * outside ({@link cancelContinuation}); `cancelled` keeps a spawn that was
-   * still in flight from being asked anything.
+   * still in flight from being asked anything. `mode` is the one it runs in
+   * ({@link continuationSummary} picks it).
    */
   const summariserRun = async (
     source: ContinuationSource & { machineId: string },
     summarizer: { harness: HarnessKind; model: string },
     prompt: string,
     id: string,
-    cancelled: () => boolean
+    cancelled: () => boolean,
+    mode: PermissionMode
   ): Promise<string> => {
     const answered = new Promise<void>((resolve, reject) => {
       turnWaiters.set(id, { machineId: source.machineId, resolve, reject });
@@ -4640,7 +4643,7 @@ export const createServer = (
         "summariser",
         // The hub's own worker, which nobody watches: it never parks on a
         // permission prompt, as workflow steps and supervisors never do.
-        "bypassPermissions"
+        mode
       );
       if (cancelled()) {
         throw new Error(CONTINUATION_CANCELLED);
@@ -5132,6 +5135,10 @@ export const createServer = (
       throw new Error("a summarising continuation has no summariser prompt");
     }
     const cancelled = () => cancelledContinuation(row.id);
+    // Caused by the session that called continue_session, whose mode the
+    // tool files on the request as the target's fallback. The dashboard
+    // sends none: the owner's continuation is caused by no session.
+    const mode = unwatchedMode(row.request.target.fallbackPermissionMode);
     const current = row.summariserInstanceId;
     if (db.getInstancesByIds([current]).length === 0) {
       return summariserRun(
@@ -5139,7 +5146,8 @@ export const createServer = (
         row.request.summarizer,
         prompt,
         current,
-        cancelled
+        cancelled,
+        mode
       );
     }
     const answered = await storedAnswer(current, false);
@@ -5157,7 +5165,8 @@ export const createServer = (
       row.request.summarizer,
       prompt,
       replacement,
-      cancelled
+      cancelled,
+      mode
     );
   };
 
@@ -7274,7 +7283,10 @@ export const createServer = (
           title,
           canDelegate: true,
         },
-        "bypassPermissions"
+        // Spawned only for a run the owner launched or re-ran from the
+        // dashboard (a session's launch supervises it itself; a child run
+        // has its parent's supervisor or none): caused by no session.
+        unwatchedMode(undefined)
       );
       deliverSend({
         verb: "send",

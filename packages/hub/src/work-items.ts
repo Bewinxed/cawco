@@ -42,6 +42,7 @@ import {
 } from "@cawco/core";
 import type { DbShape, WorkItemRow, WorkspaceRow } from "./db";
 import type { WorkItemCheck, WorkItemSubmission } from "./db/schema";
+import { unwatchedMode } from "./unwatched-mode";
 
 /** How long the name a caller gives a delegate or a started session may run. */
 export const SESSION_TITLE_MAX = 48;
@@ -901,7 +902,9 @@ export const createWorkItems = ({
         item.id,
         // Autonomous by definition: it must never sit waiting on a tool
         // permission prompt nobody is watching for. Questions still ask.
-        "bypassPermissions"
+        // Its parent caused it: Full Send only when the parent is in it now,
+        // read off its row as it stands after the workspace was cut.
+        unwatchedMode(db.getInstancesByIds([parent.id])[0]?.permissionMode)
       );
       send(
         messageOf(
