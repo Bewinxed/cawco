@@ -1,0 +1,129 @@
+<style>
+.mk-brandkit{width:100%;min-width:0;font-size:12px;line-height:1.4;color:var(--ink)}
+.mk-brandkit .mkf-body{gap:7px}
+.mk-brandkit .bk-read{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink);font-weight:500}
+.mk-brandkit .bk-read img{width:20px;height:20px;flex:none}
+.mk-brandkit .bk-kit{display:flex;flex-direction:column;gap:6px;min-width:0}
+.mk-brandkit .bk-row{display:flex;flex-wrap:wrap;gap:6px;min-width:0}
+.mk-brandkit .bk-c{position:relative;flex:1 1 200px;min-width:0;background:var(--raised);border:1px solid var(--line);border-radius:10px;padding:8px 10px;display:flex;flex-direction:column;gap:6px}
+.mk-brandkit .bk-c.wide{flex:2 1 280px}
+.mk-brandkit .bk-c.lead{flex:1.3 1 240px}
+.mk-brandkit .bk-c.side{flex:1 1 200px}
+.mk-brandkit .bk-c.slim{flex:1 1 130px}
+.mk-brandkit .bk-c.full{flex:1 1 100%}
+.mk-brandkit .bk-h{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600;line-height:1.2}
+.mk-brandkit .bk-c::after{content:"";position:absolute;inset:-1px;border-radius:inherit;border:1.5px solid var(--coral);background:color-mix(in oklab,var(--coral) 9%,transparent);opacity:0;pointer-events:none}
+.mk-brandkit .bk-rd{position:absolute;top:6px;right:8px;opacity:0;font-family:var(--f-mono);font-size:10px;line-height:16px;padding:0 6px;border:1.5px solid var(--ink);border-radius:6px;background:var(--raised);color:var(--ink);z-index:1;pointer-events:none}
+
+.mk-brandkit .bk-c.slim .bk-rd{top:auto;bottom:7px}
+.mk-brandkit .bk-voice{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}
+.mk-brandkit .bk-voice li{position:relative;padding-left:12px;font-size:11.5px;line-height:1.35}
+.mk-brandkit .bk-voice li::before{content:"";position:absolute;left:1px;top:.5em;width:5px;height:5px;border-radius:2px;background:var(--coral)}
+
+.mk-brandkit .bk-dd{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.mk-brandkit .bk-q{display:flex;flex-direction:column;gap:3px;min-width:0;padding:6px 7px;border-radius:8px;background:var(--recess)}
+.mk-brandkit .bk-q b{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:700;color:var(--ink)}
+.mk-brandkit .bk-q b svg{width:10px;height:10px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.mk-brandkit .bk-q span{font-size:11.5px;line-height:1.35}
+.mk-brandkit .bk-q.no span{color:var(--muted);text-decoration:line-through}
+
+.mk-brandkit .bk-chips{display:flex;flex-wrap:wrap;gap:5px}
+.mk-brandkit .bk-chips .mkchip{font-size:11.5px;line-height:20px;padding:0 9px;border-radius:999px}
+
+.mk-brandkit .bk-kw{display:flex;flex-direction:column;gap:6px}
+.mk-brandkit .bk-f{display:flex;flex-direction:column;gap:0;padding:3px 6px;margin:0 -6px;border-radius:7px}
+.mk-brandkit .bk-f.exp{background:var(--warn-wash);color:var(--warn-ink)}
+.mk-brandkit .bk-f1{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.mk-brandkit .bk-f1 span{font-size:12px;font-weight:600;min-width:0;overflow-wrap:anywhere}
+.mk-brandkit .bk-f2{font-family:var(--f-mono);font-size:10.5px;color:var(--muted);overflow-wrap:anywhere}
+.mk-brandkit .bk-f.exp .bk-f2{color:inherit}
+.mk-brandkit .bk-f .mkchip{flex:none;font-size:10.5px;font-weight:600}
+.mk-brandkit .bk-f.exp .mkchip.warn{background:var(--raised);border:1px solid var(--warn-ink)}
+
+.mk-brandkit .bk-as{display:grid;grid-template-columns:repeat(auto-fit,minmax(88px,1fr));gap:8px}
+.mk-brandkit .bk-a{display:flex;flex-direction:column;gap:3px;min-width:0}
+.mk-brandkit .bk-th{display:block;aspect-ratio:12/5;border-radius:6px;border:1px solid var(--line)}
+.mk-brandkit .bk-a span{font-family:var(--f-mono);font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mk-brandkit .bk-th.bk-hero{background:radial-gradient(circle at 72% 42%,var(--coral) 0 17%,transparent 18%),linear-gradient(135deg,var(--coral-wash),var(--recess))}
+.mk-brandkit .bk-th.og{background:linear-gradient(var(--ink) 0 0) 12% 28%/52% 9% no-repeat,linear-gradient(var(--muted) 0 0) 12% 52%/36% 7% no-repeat,linear-gradient(var(--muted) 0 0) 12% 68%/28% 7% no-repeat,linear-gradient(var(--coral) 0 0) 88% 86%/14% 10% no-repeat,var(--recess)}
+.mk-brandkit .bk-th.logo{background:radial-gradient(circle at 50% 50%,var(--ink) 0 20%,transparent 21%),radial-gradient(circle at 50% 50%,transparent 0 30%,var(--coral) 31% 37%,transparent 38%),var(--raised)}
+.mk-brandkit .bk-th.shot{background:linear-gradient(var(--line-strong) 0 0) 8% 70%/26% 62% no-repeat,linear-gradient(var(--line-strong) 0 0) 50% 70%/26% 62% no-repeat,linear-gradient(var(--coral-wash) 0 0) 92% 70%/26% 62% no-repeat,linear-gradient(var(--line) 0 0) 0 0/100% 16% no-repeat,var(--recess)}
+
+/* motion: a session reads the kit section by section, the expired fact pulses. 9s loop */
+.mk-brandkit.is-live .bk-c::after{animation:mk-bk-lit 9s ease-in-out infinite;animation-delay:calc(var(--i)*1.5s)}
+.mk-brandkit.is-live .bk-rd{animation:mk-bk-rd 9s ease-in-out infinite;animation-delay:calc(var(--i)*1.5s)}
+.mk-brandkit.is-live .bk-f.exp .mkchip.warn{animation:mk-bk-pulse 9s ease-in-out infinite;animation-delay:3.1s}
+@keyframes mk-bk-lit{
+  0%{opacity:0}
+  4%,14%{opacity:1}
+  18%,100%{opacity:0}
+}
+@keyframes mk-bk-rd{
+  0%{opacity:0;transform:translateY(3px)}
+  4%,14%{opacity:1;transform:none}
+  18%,100%{opacity:0;transform:translateY(-3px)}
+}
+@keyframes mk-bk-pulse{
+  0%,16%,100%{box-shadow:0 0 0 0 transparent;transform:none}
+  3%{box-shadow:0 0 0 0 color-mix(in oklab,var(--warn-ink) 55%,transparent);transform:scale(1.06)}
+  7%{box-shadow:0 0 0 6px transparent;transform:none}
+  10%{box-shadow:0 0 0 0 color-mix(in oklab,var(--warn-ink) 55%,transparent);transform:scale(1.06)}
+  14%{box-shadow:0 0 0 6px transparent;transform:none}
+}
+@media (prefers-reduced-motion:reduce){
+  .mk-brandkit *,.mk-brandkit *::after{animation:none!important;transition:none!important}
+}
+</style>
+<div class="mk mk-brandkit" role="img" aria-label="A brand kit for a non-code project: voice, do and don't, audiences, keyword facts with expiry dates, and assets. Every skill in the project reads it.">
+  <div class="mkf">
+    <div class="mkf-bar"><b>launch-q4</b><span>· Brand kit</span><span class="sp"></span><span class="mkchip">knowledge project</span></div>
+    <div class="mkf-body">
+      <div class="bk-read"><img class="caw-l" src="caw/light-ready.webp" alt="" width="20" height="20"><img class="caw-d" src="caw/dark-ready.webp" alt="" width="20" height="20"><span>Every skill in this project reads this kit</span></div>
+      <div class="bk-kit">
+        <div class="bk-row">
+          <section class="bk-c lead" style="--i:0">
+            <span class="bk-h">Voice</span><span class="bk-rd">seo-audit</span>
+            <ul class="bk-voice"><li>Short sentences. No exclamation marks.</li><li>Say what it does, then stop.</li><li>Name the tool. Skip the hype.</li></ul>
+          </section>
+          <section class="bk-c side" style="--i:1">
+            <span class="bk-h">Do / Don't</span><span class="bk-rd">seo-audit</span>
+            <div class="bk-dd">
+              <div class="bk-q"><b><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M1.5 5.5l2.3 2.3L8.5 2.5"/></svg>Do</b><span>Self-host your agents.</span></div>
+              <div class="bk-q no"><b><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M2 2l6 6M8 2L2 8"/></svg>Don't</b><span>Unlock AI power.</span></div>
+            </div>
+          </section>
+        </div>
+        <div class="bk-row">
+          <section class="bk-c wide" style="--i:2">
+            <span class="bk-h">Keyword facts</span><span class="bk-rd">seo-audit</span>
+            <div class="bk-kw">
+              <div class="bk-f">
+                <div class="bk-f1"><span>self-hosted agent dashboard</span><span class="mkchip ok">8 wk left</span></div>
+                <div class="bk-f2">1.2k/mo · source: Ahrefs · expires 2026-12-01</div>
+              </div>
+              <div class="bk-f exp">
+                <div class="bk-f1"><span>agent fleet manager</span><span class="mkchip warn">expired</span></div>
+                <div class="bk-f2">880/mo · source: Semrush · expires 2026-09-15</div>
+              </div>
+            </div>
+          </section>
+          <section class="bk-c slim" style="--i:3">
+            <span class="bk-h">Audiences</span><span class="bk-rd">seo-audit</span>
+            <div class="bk-chips"><span class="mkchip">indie devs</span><span class="mkchip">small agencies</span></div>
+          </section>
+        </div>
+        <div class="bk-row">
+          <section class="bk-c full" style="--i:4">
+            <span class="bk-h">Assets</span><span class="bk-rd">seo-audit</span>
+            <div class="bk-as">
+              <div class="bk-a"><i class="bk-th bk-hero"></i><span>hero-v3.png</span></div>
+              <div class="bk-a"><i class="bk-th og"></i><span>og-card.png</span></div>
+              <div class="bk-a"><i class="bk-th logo"></i><span>logo-mark.svg</span></div>
+              <div class="bk-a"><i class="bk-th shot"></i><span>board-shot.png</span></div>
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

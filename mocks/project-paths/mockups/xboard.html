@@ -1,0 +1,239 @@
+<style>
+.mk-xboard{--xh:88px;--xi:56px;--sl:calc(var(--xh) + 6px);display:block;min-width:0;color:var(--ink);font-family:var(--f-body);font-size:12px;line-height:1.3;text-align:left}
+.mk-xboard *,.mk-xboard *::before,.mk-xboard *::after{box-sizing:border-box}
+.mk-xboard .mkf-body{padding:8px;gap:8px}
+.mk-xboard .xb-scroll{overflow-x:auto;overflow-y:hidden;border-radius:10px;scrollbar-width:thin;scrollbar-color:var(--line-strong) transparent}
+.mk-xboard .xb-track{position:relative;display:grid;grid-template-columns:repeat(5,minmax(96px,1fr));column-gap:5px;min-width:500px}
+.mk-xboard .xb-col{min-height:222px;padding:7px 0 0;background:var(--recess);border-radius:10px}
+.mk-xboard .xb-col.xb-cy{background:var(--coral-wash)}
+.mk-xboard .xb-ch{display:flex;align-items:center;gap:5px;height:16px;padding:0 8px;font-size:11px;font-weight:700;white-space:nowrap}
+.mk-xboard .xb-col.xb-cy .xb-ch{color:var(--coral-ink)}
+.mk-xboard .xb-ch .mkdot{width:6px;height:6px;flex:none}
+.mk-xboard .xb-n{margin-left:auto;display:block;height:14px;min-width:8px;overflow:hidden;text-align:right;font-family:var(--f-mono);font-size:10.5px;font-weight:500;line-height:14px;color:var(--muted)}
+.mk-xboard .xb-col.xb-cy .xb-n{color:var(--coral-ink)}
+.mk-xboard .xb-ns{display:flex;flex-direction:column}
+.mk-xboard .xb-ns i{display:block;height:14px;font-style:normal}
+
+/* cards: absolutely placed so one of them can travel */
+.mk-xboard .xb-card{position:absolute;z-index:1;--sh:var(--xh);top:calc(28px + var(--s) * (var(--sh) + 6px));left:calc(var(--c) * ((100% - 20px) / 5 + 5px) + 3px);width:calc((100% - 20px) / 5 - 6px);height:var(--sh);display:flex;flex-direction:column;gap:3px;padding:5px 5px 5px 6px;background:var(--raised);border:1px solid var(--line-strong);border-radius:8px;min-width:0;overflow:hidden}
+.mk-xboard .xb-idea{--sh:var(--xi)}
+.mk-xboard .xb-you{background:var(--coral-wash);border-color:var(--coral)}
+.mk-xboard .xb-r1{display:flex;align-items:center;justify-content:space-between;gap:4px;height:13px;min-width:0}
+.mk-xboard .xb-pl{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:9px;line-height:11px;padding:0 5px;border:1px solid var(--line-strong);border-radius:4px;color:var(--muted)}
+.mk-xboard .xb-th{flex:none;display:block;width:18px;height:12px;border-radius:3px;background:linear-gradient(150deg,var(--line-strong) 0%,var(--recess) 55%,var(--coral-wash) 100%)}
+.mk-xboard .xb-rp{display:inline-flex;align-items:center;gap:3px;font-size:9px;line-height:13px;color:var(--muted);white-space:nowrap}
+.mk-xboard .xb-rp svg{width:9px;height:9px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.mk-xboard .xb-t{height:26px;overflow:hidden;font-size:10px;line-height:13px;font-weight:500;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.mk-xboard .xb-re{display:flex;flex-direction:column;-webkit-line-clamp:unset}
+.mk-xboard .xb-re b{font-family:var(--f-mono);font-size:9px;line-height:13px;font-weight:500;color:var(--coral-ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mk-xboard .xb-re span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+.mk-xboard .xb-ft{position:relative;height:30px;margin-top:auto}
+.mk-xboard .xb-ct{position:absolute;left:0;right:0;top:0;height:12px;display:flex;align-items:center;justify-content:space-between;font-family:var(--f-mono);font-size:9px;line-height:12px;color:var(--muted);font-variant-ligatures:none}
+.mk-xboard .xb-ct b{font-weight:500;color:var(--ink)}
+.mk-xboard .xb-ly{position:absolute;left:0;right:0;top:15px;height:15px;display:flex;align-items:center;gap:3px;font-size:9px;white-space:nowrap;color:var(--muted)}
+.mk-xboard .xb-b{font:inherit;font-size:9px;font-weight:600;line-height:13px;padding:0 5px;border-radius:5px;border:1px solid var(--line-strong);background:var(--raised);color:var(--ink);cursor:default}
+.mk-xboard .xb-pri{border-color:var(--coral);color:var(--coral-ink)}
+.mk-xboard .xb-dts{display:inline-flex;gap:2px}
+.mk-xboard .xb-dts i{display:block;width:3px;height:3px;border-radius:50%;background:var(--muted)}
+.mk-xboard .xb-okc{display:inline-flex;align-items:center;gap:4px;font-weight:600;color:var(--ok-ink)}
+.mk-xboard .xb-okc i{display:block;width:7px;height:4px;margin:-2px 1px 0 0;border-left:1.6px solid currentColor;border-bottom:1.6px solid currentColor;transform:rotate(-45deg)}
+.mk-xboard .xb-st{position:absolute;left:0;right:0;top:1px;height:28px;display:flex;flex-direction:column}
+.mk-xboard .xb-ln{display:flex;align-items:center;gap:3px;height:13px;font-size:9px;line-height:13px;color:var(--muted);white-space:nowrap}
+.mk-xboard .xb-ln b{font-family:var(--f-mono);font-size:9px;font-weight:500;color:var(--ink)}
+.mk-xboard .xb-rl{display:block;height:13px;overflow:hidden}
+.mk-xboard .xb-rs{display:flex;flex-direction:column}
+.mk-xboard .xb-rs i{display:block;height:13px;font-family:var(--f-mono);font-style:normal;font-size:9px;font-weight:500;line-height:13px;color:var(--ink);text-align:right}
+
+/* resting state: the draft waits in Needs you, only that footer layer shows */
+.mk-xboard .xb-a{--c:2;--s:0;background:var(--coral-wash);border-color:var(--coral)}
+.mk-xboard .xb-a .xb-fd,.mk-xboard .xb-a .xb-fs,.mk-xboard .xb-a .xb-fp{opacity:0}
+
+/* ---- motion: one draft travels Drafting > Needs you > Scheduled > Posted ---- */
+@keyframes xb-a{
+  0%,10%{transform:translate(calc(-1 * (100% + 11px)),0);opacity:1}
+  17%,36%{transform:translate(0,0);opacity:1}
+  44%,58%{transform:translate(calc(100% + 11px),0);opacity:1}
+  66%,92%{transform:translate(calc(2 * (100% + 11px)),0);opacity:1}
+  96%{transform:translate(calc(2 * (100% + 11px)),0);opacity:0}
+  96.01%{transform:translate(calc(-1 * (100% + 11px)),0);opacity:0}
+  100%{transform:translate(calc(-1 * (100% + 11px)),0);opacity:1}
+}
+@keyframes xb-abg{
+  0%,10%{background-color:var(--raised);border-color:var(--line-strong)}
+  14%,36%{background-color:var(--coral-wash);border-color:var(--coral)}
+  40%,100%{background-color:var(--raised);border-color:var(--line-strong)}
+}
+@keyframes xb-d2{0%,10%{transform:translateY(var(--sl))}17%,92%{transform:translateY(0)}99%,100%{transform:translateY(var(--sl))}}
+@keyframes xb-n1{0%,10%{transform:translateY(calc(-1 * var(--sl)))}17%,36%{transform:translateY(0)}44%,100%{transform:translateY(calc(-1 * var(--sl)))}}
+@keyframes xb-s1{0%,36%{transform:translateY(0)}44%,58%{transform:translateY(var(--sl))}66%,100%{transform:translateY(0)}}
+@keyframes xb-p1{0%,58%{transform:translateY(0)}66%,95%{transform:translateY(var(--sl))}100%{transform:translateY(0)}}
+@keyframes xb-i3{0%,18%{opacity:0;transform:translateY(8px)}24%,92%{opacity:1;transform:none}96%,100%{opacity:0;transform:translateY(8px)}}
+@keyframes xb-fd{0%,12%{opacity:1}14%,96%{opacity:0}96.01%,100%{opacity:1}}
+@keyframes xb-fn{0%,12%{opacity:0}14%,36%{opacity:1}38%,100%{opacity:0}}
+@keyframes xb-fs{0%,38%{opacity:0}40%,60%{opacity:1}62%,100%{opacity:0}}
+@keyframes xb-fp{0%,64%{opacity:0}66%,93%{opacity:1}95%,100%{opacity:0}}
+@keyframes xb-ct{0%,62%{opacity:1}64%,94%{opacity:0}96%,100%{opacity:1}}
+@keyframes xb-press{
+  0%,29%{transform:none;background-color:var(--raised);color:var(--coral-ink)}
+  31%,34%{transform:scale(.88);background-color:var(--coral);color:var(--bg)}
+  36%,100%{transform:none;background-color:var(--raised);color:var(--coral-ink)}
+}
+@keyframes xb-rv{0%,67.9%{transform:translateY(0)}68%,71.9%{transform:translateY(-13px)}72%,75.9%{transform:translateY(-26px)}76%,79.9%{transform:translateY(-39px)}80%,100%{transform:translateY(-52px)}}
+@keyframes xb-rk{0%,69.9%{transform:translateY(0)}70%,73.9%{transform:translateY(-13px)}74%,77.9%{transform:translateY(-26px)}78%,100%{transform:translateY(-39px)}}
+@keyframes xb-n-i{0%,22%{transform:translateY(-14px)}22.01%,95%{transform:translateY(0)}95.01%,100%{transform:translateY(-14px)}}
+@keyframes xb-n-d{0%,13.5%{transform:translateY(-14px)}13.51%,95%{transform:translateY(0)}95.01%,100%{transform:translateY(-14px)}}
+@keyframes xb-n-n{0%,13.5%{transform:translateY(-14px)}13.51%,40%{transform:translateY(0)}40.01%,100%{transform:translateY(-14px)}}
+@keyframes xb-n-s{0%,40%{transform:translateY(0)}40.01%,62%{transform:translateY(-14px)}62.01%,100%{transform:translateY(0)}}
+@keyframes xb-n-p{0%,62%{transform:translateY(0)}62.01%,95%{transform:translateY(-14px)}95.01%,100%{transform:translateY(0)}}
+@keyframes xb-dot{0%,60%,100%{transform:translateY(0);opacity:.45}30%{transform:translateY(-2px);opacity:1}}
+@keyframes xb-pulse{0%,100%{box-shadow:0 0 0 0 var(--coral-wash)}50%{box-shadow:0 0 0 4px var(--coral-wash)}}
+
+@media (prefers-reduced-motion:no-preference){
+  .mk-xboard.is-live .xb-a{z-index:3;animation:xb-a 10s cubic-bezier(.2,.8,.2,1) infinite,xb-abg 10s ease-in-out infinite;will-change:transform}
+  .mk-xboard.is-live .xb-d2{animation:xb-d2 10s cubic-bezier(.2,.8,.2,1) infinite;will-change:transform}
+  .mk-xboard.is-live .xb-n1{animation:xb-n1 10s cubic-bezier(.2,.8,.2,1) infinite;will-change:transform}
+  .mk-xboard.is-live .xb-s1{animation:xb-s1 10s cubic-bezier(.2,.8,.2,1) infinite;will-change:transform}
+  .mk-xboard.is-live .xb-p1{animation:xb-p1 10s cubic-bezier(.2,.8,.2,1) infinite;will-change:transform}
+  .mk-xboard.is-live .xb-i3{animation:xb-i3 10s cubic-bezier(.2,.8,.2,1) infinite}
+  .mk-xboard.is-live .xb-a .xb-fd{animation:xb-fd 10s linear infinite}
+  .mk-xboard.is-live .xb-a .xb-fn{animation:xb-fn 10s linear infinite}
+  .mk-xboard.is-live .xb-a .xb-fs{animation:xb-fs 10s linear infinite}
+  .mk-xboard.is-live .xb-a .xb-fp{animation:xb-fp 10s linear infinite}
+  .mk-xboard.is-live .xb-a .xb-ct{animation:xb-ct 10s linear infinite}
+  .mk-xboard.is-live .xb-a .xb-pri{animation:xb-press 10s ease-in-out infinite}
+  .mk-xboard.is-live .xb-rv{animation:xb-rv 10s linear infinite}
+  .mk-xboard.is-live .xb-rk{animation:xb-rk 10s linear infinite}
+  .mk-xboard.is-live .xb-ci .xb-ns{animation:xb-n-i 10s linear infinite}
+  .mk-xboard.is-live .xb-cd .xb-ns{animation:xb-n-d 10s linear infinite}
+  .mk-xboard.is-live .xb-cn .xb-ns{animation:xb-n-n 10s linear infinite}
+  .mk-xboard.is-live .xb-cs .xb-ns{animation:xb-n-s 10s linear infinite}
+  .mk-xboard.is-live .xb-cp .xb-ns{animation:xb-n-p 10s linear infinite}
+  .mk-xboard.is-live .xb-dts i{animation:xb-dot 1s ease-in-out infinite}
+  .mk-xboard.is-live .xb-dts i:nth-child(2){animation-delay:.15s}
+  .mk-xboard.is-live .xb-dts i:nth-child(3){animation-delay:.3s}
+  .mk-xboard.is-live .xb-cy .mkdot{animation:xb-pulse 2.4s ease-in-out infinite}
+}
+@media (prefers-reduced-motion:reduce){
+  .mk-xboard *,.mk-xboard *::before,.mk-xboard *::after{animation:none !important;transition:none !important}
+}
+</style>
+<div class="mk mk-xboard" role="img" aria-label="Board for the x-growth project: a draft moves from Drafting to Needs you, waits for your Approve, is scheduled for 12:30, then posts and its views count up, while a new idea lands in Ideas.">
+  <div class="mkf">
+    <div class="mkf-bar"><b>x-growth</b><span>board</span><span class="sp"></span><span class="mkchip">@you · X</span></div>
+    <div class="mkf-body">
+      <div class="xb-scroll">
+        <div class="xb-track">
+          <div class="xb-col xb-ci"><div class="xb-ch"><span>Ideas</span><span class="xb-n"><span class="xb-ns"><i>3</i><i>2</i></span></span></div></div>
+          <div class="xb-col xb-cd"><div class="xb-ch"><span>Drafting</span><span class="xb-n"><span class="xb-ns"><i>1</i><i>2</i></span></span></div></div>
+          <div class="xb-col xb-cy xb-cn"><div class="xb-ch"><span class="mkdot you"></span><span>Needs you</span><span class="xb-n"><span class="xb-ns"><i>2</i><i>1</i></span></span></div></div>
+          <div class="xb-col xb-cs"><div class="xb-ch"><span>Scheduled</span><span class="xb-n"><span class="xb-ns"><i>1</i><i>2</i></span></span></div></div>
+          <div class="xb-col xb-cp"><div class="xb-ch"><span>Posted</span><span class="xb-n"><span class="xb-ns"><i>1</i><i>2</i></span></span></div></div>
+
+          <!-- Ideas -->
+          <div class="xb-card xb-idea" style="--c:0;--s:0">
+            <div class="xb-r1"><span class="xb-pl">build log</span></div>
+            <div class="xb-t">How the hub finds your machines with mDNS</div>
+          </div>
+          <div class="xb-card xb-idea" style="--c:0;--s:1">
+            <div class="xb-r1"><span class="xb-pl">self-hosting</span></div>
+            <div class="xb-t">Running a whole fleet from one Pi at home</div>
+          </div>
+          <div class="xb-card xb-idea xb-i3" style="--c:0;--s:2">
+            <div class="xb-r1"><span class="xb-pl">fleets</span></div>
+            <div class="xb-t">Reuse the board screenshot format</div>
+          </div>
+
+          <!-- Drafting -->
+          <div class="xb-card xb-d2" style="--c:1;--s:0">
+            <div class="xb-r1"><span class="xb-pl">self-hosting</span></div>
+            <div class="xb-t">Why the hub stays on your own machine. Your keys never leave.</div>
+            <div class="xb-ft">
+              <div class="xb-ct"><span>61/280</span><b>17:30</b></div>
+              <div class="xb-ly"><span class="xb-dts"><i></i><i></i><i></i></span>drafting</div>
+            </div>
+          </div>
+
+          <!-- Needs you: a reply and the travelling post -->
+          <div class="xb-card xb-you xb-n1" style="--c:2;--s:1">
+            <div class="xb-r1"><span class="xb-rp"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M4 2L1.5 4.5 4 7"/><path d="M1.5 4.5H6a2.5 2.5 0 0 1 2.5 2.5V8"/></svg>Reply to</span></div>
+            <div class="xb-t xb-re"><b>@sample_reader</b><span>Yes, it runs on a Pi.</span></div>
+            <div class="xb-ft">
+              <div class="xb-ct"><span>50/280</span></div>
+              <div class="xb-ly"><button class="btn xb-b xb-pri" type="button" tabindex="-1" aria-hidden="true">Approve</button><button class="btn xb-b" type="button" tabindex="-1" aria-hidden="true">Edit</button></div>
+            </div>
+          </div>
+
+          <!-- Scheduled -->
+          <div class="xb-card xb-s1" style="--c:3;--s:0">
+            <div class="xb-r1"><span class="xb-pl">build log</span><i class="xb-th"></i></div>
+            <div class="xb-t">Week 12: mDNS discovery shipped, one bug fixed, one rewritten.</div>
+            <div class="xb-ft">
+              <div class="xb-ct"><span>62/280</span><b>15:00</b></div>
+              <div class="xb-ly"><span class="xb-okc"><i></i>Approved</span></div>
+            </div>
+          </div>
+
+          <!-- Posted -->
+          <div class="xb-card xb-p1" style="--c:4;--s:0">
+            <div class="xb-r1"><span class="xb-pl">self-hosting</span></div>
+            <div class="xb-t">Self-hosted agents, one rule: nothing posts without you.</div>
+            <div class="xb-ft">
+              <div class="xb-st">
+                <span class="xb-ln"><b>2.1k</b> views</span>
+                <span class="xb-ln"><b>56</b> likes</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- the post that travels (rests in Needs you) -->
+          <div class="xb-card xb-a">
+            <div class="xb-r1"><span class="xb-pl">fleets</span><i class="xb-th"></i></div>
+            <div class="xb-t">Shipped the fleet board today. One page, every agent, every machine.</div>
+            <div class="xb-ft">
+              <div class="xb-ct"><span>68/280</span><b>12:30</b></div>
+              <div class="xb-ly xb-fd"><span class="xb-dts"><i></i><i></i><i></i></span>drafting</div>
+              <div class="xb-ly xb-fn"><button class="btn xb-b xb-pri" type="button" tabindex="-1" aria-hidden="true">Approve</button><button class="btn xb-b" type="button" tabindex="-1" aria-hidden="true">Edit</button></div>
+              <div class="xb-ly xb-fs"><span class="xb-okc"><i></i>Approved</span></div>
+              <div class="xb-st xb-fp">
+                <span class="xb-ln"><span class="xb-rl"><span class="xb-rs xb-rv"><i>0</i><i>120</i><i>480</i><i>860</i><i>1.2k</i></span></span>views</span>
+                <span class="xb-ln"><span class="xb-rl"><span class="xb-rs xb-rk"><i>0</i><i>9</i><i>21</i><i>38</i></span></span>likes</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+(function(){
+  var root=document.querySelector('.mk-xboard');
+  if(!root) return;
+  var sc=root.querySelector('.xb-scroll'),track=root.querySelector('.xb-track');
+  if(!sc||!track) return;
+  var reduce=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var timers=[],touched=false,CYCLE=10000;
+  // [ms into the loop, column in view]: on narrow screens the box follows the travelling post
+  var plan=[[0,1],[1000,2],[4000,3],[6200,4],[9500,1]];
+  ['pointerdown','wheel','touchstart'].forEach(function(ev){sc.addEventListener(ev,function(){touched=true;},{passive:true});});
+  function pan(col){
+    if(touched) return;
+    var room=sc.scrollWidth-sc.clientWidth;
+    if(room<4) return;
+    var cw=(track.offsetWidth-20)/5;
+    var left=col*(cw+5)-(sc.clientWidth-cw)/2;
+    sc.scrollTo({left:Math.max(0,Math.min(room,left)),behavior:'smooth'});
+  }
+  function cycle(){
+    timers=[];
+    plan.forEach(function(p){timers.push(setTimeout(function(){pan(p[1]);},p[0]));});
+    timers.push(setTimeout(cycle,CYCLE));
+  }
+  function stop(){timers.forEach(clearTimeout);timers=[];}
+  function start(){stop();if(reduce) return;cycle();}
+  root.addEventListener('mk:live',start);
+  root.addEventListener('mk:idle',stop);
+  if(root.classList.contains('is-live')) start();
+})();
+</script>

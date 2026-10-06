@@ -1,0 +1,192 @@
+<style>
+.mk-roles{display:block;width:100%;container-type:inline-size;color:var(--ink);font-family:var(--f-body);font-size:12px;line-height:1.4}
+.mk-roles *,.mk-roles *::before,.mk-roles *::after{box-sizing:border-box}
+.mk-roles .mono{font-family:var(--f-mono)}
+.mk-roles .mkf-bar .mono{font-size:11px}
+.mk-roles .vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+/* segmented control */
+.mk-roles .segw{display:grid;gap:5px}
+.mk-roles .seg{display:flex;flex-wrap:wrap;gap:2px;padding:2px;background:var(--recess);border:1px solid var(--line);border-radius:10px}
+.mk-roles .seg button{flex:1 1 auto;font:inherit;font-size:12px;font-weight:600;line-height:1.3;color:var(--muted);background:transparent;border:1px solid transparent;border-radius:8px;padding:5px 8px;cursor:pointer;white-space:nowrap;transition:background .2s ease,color .2s ease,border-color .2s ease}
+.mk-roles .seg button:hover{color:var(--ink)}
+.mk-roles .seg button[aria-selected="true"]{background:var(--coral-wash);color:var(--coral-ink);border-color:var(--coral)}
+.mk-roles .seg button:focus-visible{outline:2px solid var(--coral);outline-offset:2px}
+.mk-roles .au{height:2px;margin-inline:6px;border-radius:1px;background:var(--line);overflow:hidden}
+.mk-roles .au i{display:block;height:100%;background:var(--coral);transform:scaleX(0);transform-origin:left}
+.mk-roles:not(.is-auto) .au{visibility:hidden}
+
+@container (max-width:400px){.mk-roles .seg{display:grid;grid-template-columns:repeat(6,minmax(0,1fr))}.mk-roles .seg button{grid-column:span 2}.mk-roles .seg button:nth-child(n+4){grid-column:span 3}}
+
+/* panels share one grid cell so the box never changes height */
+.mk-roles .pns{display:grid}
+.mk-roles .pn{grid-area:1/1;visibility:hidden;display:flex;flex-direction:column;gap:9px;min-width:0}
+.mk-roles .pn.on{visibility:visible}
+
+.mk-roles .sum{display:flex;flex-wrap:wrap;align-items:center;gap:5px 10px}
+.mk-roles .num{font:600 22px/1 var(--f-mono);letter-spacing:-.02em;display:inline-block}
+.mk-roles .lab{font-size:12px;color:var(--muted);margin-left:-5px}
+.mk-roles .sb{display:inline-flex;gap:2px;align-items:center}
+.mk-roles .sb i{display:block;width:7px;height:12px;border-radius:2px;background:var(--ink)}
+.mk-roles .sb i.df{background:var(--line-strong)}
+.mk-roles .lgd{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);white-space:nowrap}
+.mk-roles .sw{display:inline-block;width:10px;height:10px;border-radius:3px;background:var(--ink)}
+.mk-roles .sw.df{background:var(--recess);border:1px solid var(--line-strong)}
+.mk-roles .am{display:inline-block;flex:none;width:6px;height:6px;border-radius:50%;background:var(--coral)}
+
+.mk-roles .gs{display:flex;flex-wrap:wrap;gap:6px}
+.mk-roles .g{position:relative;display:flex;flex-wrap:wrap;align-items:center;gap:4px;padding:15px 6px 6px;border:1px solid var(--line);border-radius:10px;background:var(--raised);min-width:0}
+.mk-roles .rl-gl{position:absolute;top:3px;left:8px;font:500 9.5px/1 var(--f-mono);letter-spacing:.02em;color:var(--muted)}
+.mk-roles .tc{display:inline-flex;align-items:center;gap:5px;font:500 11.5px/20px var(--f-mono);padding:0 8px;border-radius:6px;border:1px solid var(--ink);white-space:nowrap}
+.mk-roles .tc.ld{background:var(--ink);color:var(--bg)}
+.mk-roles .tc.df{background:var(--recess);border-color:var(--line-strong);color:var(--muted)}
+.mk-roles .tc.ask{padding-right:7px}
+.mk-roles .tc.no{background:transparent;border-color:var(--line);color:var(--muted);text-decoration:line-through;text-decoration-color:var(--muted)}
+.mk-roles .nv{display:flex;flex-wrap:wrap;align-items:center;gap:4px;padding:8px 0 0;border-top:1px dashed var(--line-strong)}
+.mk-roles .nl{font-size:11px;color:var(--muted);margin-right:4px}
+
+/* motion */
+@keyframes mk-roles-fill{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+@keyframes mk-roles-in{from{opacity:0;transform:translateY(5px) scale(.96)}to{opacity:1;transform:none}}
+.mk-roles.is-live.is-auto .au i{animation:mk-roles-fill 3s linear infinite}
+.mk-roles.is-live .pn.on .tc,.mk-roles.is-live .pn.on .sb i{animation:mk-roles-in .38s cubic-bezier(.2,.8,.2,1) both;animation-delay:calc(var(--i,0)*45ms)}
+.mk-roles.is-live .pn.on .num{animation:mk-roles-in .38s cubic-bezier(.2,.8,.2,1) both}
+
+@media (prefers-reduced-motion:reduce){
+  .mk-roles .au{display:none}
+  .mk-roles *,.mk-roles *::before,.mk-roles *::after{transition:none!important;animation:none!important}
+}
+</style>
+<div class="mk mk-roles is-auto">
+  <div class="mkf">
+    <div class="mkf-bar"><b>Tool surface</b><span>by session role</span><span class="sp"></span><span class="mono">tools/list</span></div>
+    <div class="mkf-body">
+      <div class="segw">
+        <div class="seg" role="tablist" aria-label="Session role">
+        <button type="button" role="tab" id="mk-roles-t0" aria-controls="mk-roles-p0" aria-selected="true" tabindex="0">Worker</button>
+        <button type="button" role="tab" id="mk-roles-t1" aria-controls="mk-roles-p1" aria-selected="false" tabindex="-1">Delegate</button>
+        <button type="button" role="tab" id="mk-roles-t2" aria-controls="mk-roles-p2" aria-selected="false" tabindex="-1">Lead</button>
+        <button type="button" role="tab" id="mk-roles-t3" aria-controls="mk-roles-p3" aria-selected="false" tabindex="-1">Overseer</button>
+        <button type="button" role="tab" id="mk-roles-t4" aria-controls="mk-roles-p4" aria-selected="false" tabindex="-1">Web-facing</button>
+        </div>
+        <div class="au" aria-hidden="true"><i></i></div>
+      </div>
+      <div class="pns">
+      <div class="pn on" role="tabpanel" id="mk-roles-p0" aria-labelledby="mk-roles-t0">
+        <div class="sum">
+          <span class="num">6</span><span class="lab">tools</span>
+          <span class="sb" aria-hidden="true"><i style="--i:0"></i><i style="--i:1"></i><i style="--i:2"></i><i style="--i:3"></i><i class="df" style="--i:4"></i><i class="df" style="--i:5"></i></span>
+          <span class="lgd"><i class="sw"></i>4 always loaded</span>
+          <span class="lgd"><i class="sw df"></i>2 deferred</span>
+        </div>
+        <div class="gs">
+          <div class="g"><span class="rl-gl">core</span><span class="tc ld" style="--i:0">handoff</span><span class="tc ld" style="--i:1">delegate</span><span class="tc ld" style="--i:2">send_to_user</span></div>
+          <div class="g"><span class="rl-gl">board</span><span class="tc ld" style="--i:3">board_read</span></div>
+          <div class="g"><span class="rl-gl">task</span><span class="tc df" style="--i:4">task_write</span></div>
+          <div class="g"><span class="rl-gl">knowledge</span><span class="tc df" style="--i:5">knowledge_search</span></div>
+        </div>
+      </div>
+      <div class="pn" role="tabpanel" id="mk-roles-p1" aria-labelledby="mk-roles-t1">
+        <div class="sum">
+          <span class="num">4</span><span class="lab">tools</span>
+          <span class="sb" aria-hidden="true"><i style="--i:0"></i><i style="--i:1"></i><i style="--i:2"></i><i class="df" style="--i:3"></i></span>
+          <span class="lgd"><i class="sw"></i>3 always loaded</span>
+          <span class="lgd"><i class="sw df"></i>1 deferred</span>
+        </div>
+        <div class="gs">
+          <div class="g"><span class="rl-gl">item</span><span class="tc ld" style="--i:0">finish_item</span><span class="tc ld" style="--i:1">wait_item</span></div>
+          <div class="g"><span class="rl-gl">core</span><span class="tc ld" style="--i:2">handoff</span></div>
+          <div class="g"><span class="rl-gl">todo</span><span class="tc df" style="--i:3">todo_write</span></div>
+        </div>
+      </div>
+      <div class="pn" role="tabpanel" id="mk-roles-p2" aria-labelledby="mk-roles-t2">
+        <div class="sum">
+          <span class="num">10</span><span class="lab">tools</span>
+          <span class="sb" aria-hidden="true"><i style="--i:0"></i><i style="--i:1"></i><i style="--i:2"></i><i style="--i:3"></i><i class="df" style="--i:4"></i><i class="df" style="--i:5"></i><i class="df" style="--i:6"></i><i class="df" style="--i:7"></i><i class="df" style="--i:8"></i><i class="df" style="--i:9"></i></span>
+          <span class="lgd"><i class="sw"></i>4 always loaded</span>
+          <span class="lgd"><i class="sw df"></i>6 deferred</span>
+          <span class="lgd"><i class="am"></i>2 asks you first</span>
+        </div>
+        <div class="gs">
+          <div class="g"><span class="rl-gl">core</span><span class="tc ld" style="--i:0">handoff</span><span class="tc ld" style="--i:1">delegate</span><span class="tc ld" style="--i:2">send_to_user</span></div>
+          <div class="g"><span class="rl-gl">board</span><span class="tc ld" style="--i:3">board_read</span><span class="tc df" style="--i:4">board_write</span></div>
+          <div class="g"><span class="rl-gl">task</span><span class="tc df" style="--i:5">task_write</span></div>
+          <div class="g"><span class="rl-gl">knowledge</span><span class="tc df" style="--i:6">knowledge_search</span><span class="tc df" style="--i:7">knowledge_write</span></div>
+          <div class="g"><span class="rl-gl">routine</span><span class="tc df ask" style="--i:8">routine_write<i class="am" aria-hidden="true"></i><span class="vh"> (asks you first)</span></span></div>
+          <div class="g"><span class="rl-gl">settings</span><span class="tc df ask" style="--i:9">settings_write<i class="am" aria-hidden="true"></i><span class="vh"> (asks you first)</span></span></div>
+        </div>
+      </div>
+      <div class="pn" role="tabpanel" id="mk-roles-p3" aria-labelledby="mk-roles-t3">
+        <div class="sum">
+          <span class="num">5</span><span class="lab">tools</span>
+          <span class="sb" aria-hidden="true"><i style="--i:0"></i><i style="--i:1"></i><i style="--i:2"></i><i class="df" style="--i:3"></i><i class="df" style="--i:4"></i></span>
+          <span class="lgd"><i class="sw"></i>3 always loaded</span>
+          <span class="lgd"><i class="sw df"></i>2 deferred</span>
+          <span class="lgd"><i class="am"></i>1 asks you first</span>
+        </div>
+        <div class="gs">
+          <div class="g"><span class="rl-gl">fleet</span><span class="tc ld" style="--i:0">fleet_read</span><span class="tc ld" style="--i:1">list_sessions</span></div>
+          <div class="g"><span class="rl-gl">control</span><span class="tc ld" style="--i:2">stop</span><span class="tc df" style="--i:3">interrupt</span></div>
+          <div class="g"><span class="rl-gl">admin</span><span class="tc df ask" style="--i:4">admin_hooks_write<i class="am" aria-hidden="true"></i><span class="vh"> (asks you first)</span></span></div>
+        </div>
+      </div>
+      <div class="pn" role="tabpanel" id="mk-roles-p4" aria-labelledby="mk-roles-t4">
+        <div class="sum">
+          <span class="num">4</span><span class="lab">tools</span>
+          <span class="sb" aria-hidden="true"><i style="--i:0"></i><i style="--i:1"></i><i style="--i:2"></i><i class="df" style="--i:3"></i></span>
+          <span class="lgd"><i class="sw"></i>3 always loaded</span>
+          <span class="lgd"><i class="sw df"></i>1 deferred</span>
+        </div>
+        <div class="gs">
+          <div class="g"><span class="rl-gl">core</span><span class="tc ld" style="--i:0">send_to_user</span><span class="tc ld" style="--i:1">handoff</span></div>
+          <div class="g"><span class="rl-gl">knowledge</span><span class="tc ld" style="--i:2">knowledge_search</span></div>
+          <div class="g"><span class="rl-gl">task</span><span class="tc df" style="--i:3">task_propose</span></div>
+        </div>
+        <div class="nv"><span class="nl">never in this role</span><span class="tc no">admin_hooks_write</span><span class="tc no">admin_mcp_servers_write</span></div>
+      </div>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+(function(){
+  var root=document.querySelector('.mk-roles');
+  if(!root)return;
+  var tabs=[].slice.call(root.querySelectorAll('[role="tab"]'));
+  var panels=[].slice.call(root.querySelectorAll('[role="tabpanel"]'));
+  var fill=root.querySelector('.au i');
+  var cur=0;
+  function select(n,focus){
+    n=(n+tabs.length)%tabs.length;
+    cur=n;
+    for(var i=0;i<tabs.length;i++){
+      var on=i===n;
+      tabs[i].setAttribute('aria-selected',on?'true':'false');
+      tabs[i].setAttribute('tabindex',on?'0':'-1');
+      panels[i].classList.toggle('on',on);
+    }
+    if(focus)tabs[n].focus();
+  }
+  function stopAuto(){root.classList.remove('is-auto')}
+  tabs.forEach(function(t,i){
+    t.addEventListener('click',function(){stopAuto();select(i,false)});
+  });
+  var seg=root.querySelector('.seg');
+  seg.addEventListener('keydown',function(e){
+    var k=e.key,n=null;
+    if(k==='ArrowRight'||k==='ArrowDown')n=cur+1;
+    else if(k==='ArrowLeft'||k==='ArrowUp')n=cur-1;
+    else if(k==='Home')n=0;
+    else if(k==='End')n=tabs.length-1;
+    if(n===null)return;
+    e.preventDefault();
+    stopAuto();
+    select(n,true);
+  });
+  seg.addEventListener('focusin',stopAuto);
+  /* the 3 s sweep drives the cycle: no timers, nothing runs while off screen */
+  if(fill)fill.addEventListener('animationiteration',function(){
+    if(root.classList.contains('is-auto')&&root.classList.contains('is-live'))select(cur+1,false);
+  });
+})();
+</script>

@@ -1,0 +1,201 @@
+<style>
+.mk-board{--h:70px;display:block;min-width:0;color:var(--ink);font-family:var(--f-body);font-size:12px;line-height:1.3;text-align:left}
+.mk-board *,.mk-board *::before,.mk-board *::after{box-sizing:border-box}
+.mk-board .mkf-body{padding:8px;gap:8px}
+.mk-board .mkb-scroll{overflow-x:auto;overflow-y:hidden;border-radius:10px;scrollbar-width:thin;scrollbar-color:var(--line-strong) transparent}
+.mk-board .mkb-track{position:relative;display:grid;grid-template-columns:repeat(5,minmax(96px,1fr));column-gap:6px;min-width:504px}
+.mk-board .mkb-col{background:var(--recess);border-radius:10px;min-height:190px;padding:7px 0 0}
+.mk-board .mkb-col.you{background:var(--coral-wash)}
+.mk-board .mkb-ch{display:flex;align-items:center;gap:5px;padding:0 8px;height:16px;font-size:11px;font-weight:700;white-space:nowrap}
+.mk-board .mkb-col.you .mkb-ch{color:var(--coral-ink)}
+.mk-board .mkb-ch .mkdot{width:6px;height:6px;flex:none}
+.mk-board .mkb-n{margin-left:auto;display:block;height:14px;min-width:8px;overflow:hidden;text-align:right;font-family:var(--f-mono);font-size:10.5px;font-weight:500;line-height:14px;color:var(--muted)}
+.mk-board .mkb-col.you .mkb-n{color:var(--coral-ink)}
+.mk-board .mkb-strip{display:flex;flex-direction:column}
+.mk-board .mkb-strip i{display:block;height:14px;font-style:normal}
+
+.mk-board .mkb-card{position:absolute;z-index:1;top:calc(30px + var(--s) * (var(--h) + 6px));left:calc(var(--c) * ((100% - 24px) / 5 + 6px) + 4px);width:calc((100% - 24px) / 5 - 8px);height:var(--h);display:flex;flex-direction:column;gap:3px;padding:6px 6px 5px 7px;background:var(--raised);border:1px solid var(--line-strong);border-radius:9px;min-width:0}
+.mk-board .mkb-card.you{background:var(--coral-wash);border-color:var(--coral)}
+.mk-board .mkb-card.blocked{opacity:.62}
+.mk-board .mkb-ring{position:absolute;inset:-1px;border:1.5px solid var(--ink);border-radius:9px;pointer-events:none}
+.mk-board .mkb-id{display:flex;align-items:center;gap:4px;height:12px;font-family:var(--f-mono);font-size:10px;color:var(--muted);font-variant-ligatures:none;white-space:nowrap}
+.mk-board .mkb-card.you .mkb-id{color:var(--coral-ink)}
+.mk-board .mkb-gh{position:relative;flex:none;display:block;width:9px;height:9px;border:1.5px solid currentColor;border-radius:50%}
+.mk-board .mkb-gh::after{content:"";position:absolute;inset:1.5px;border-radius:50%;background:currentColor}
+.mk-board .mkb-t{font-size:11px;font-weight:600;line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.mk-board .mkb-ft{position:relative;height:14px;margin-top:auto;font-size:10px;color:var(--muted)}
+.mk-board .mkb-ft>*{position:absolute;left:0;top:0;right:0;height:14px;display:flex;align-items:center;gap:5px;white-space:nowrap}
+.mk-board .mkb-m{flex:1;min-width:0;height:4px;border-radius:2px;background:var(--recess);overflow:hidden}
+.mk-board .mkb-m i{display:block;height:100%;width:100%;background:var(--muted);transform-origin:0 50%;transform:scaleX(var(--p,.5))}
+.mk-board .mkb-mono{font-family:var(--f-mono);font-variant-ligatures:none}
+.mk-board .mkb-mono b{font-weight:500;color:var(--ok-ink)}
+.mk-board .mkb-mono u{text-decoration:none;color:var(--err-ink)}
+.mk-board .mkb-ok{display:flex;align-items:center;gap:5px;color:var(--ok-ink);font-weight:600}
+.mk-board .mkb-ok i{display:block;width:8px;height:4px;margin:-2px 1px 0 0;border-left:1.8px solid currentColor;border-bottom:1.8px solid currentColor;transform:rotate(-45deg)}
+.mk-board .mkb-you{color:var(--coral-ink);font-weight:600}
+.mk-board .mkb-you .mkdot{width:6px;height:6px}
+.mk-board .mkb-after{display:inline-flex;align-items:center;gap:4px;align-self:flex-start;width:auto;right:auto;padding:0 4px;border-radius:4px;background:var(--recess);color:var(--muted)}
+.mk-board .mkb-after b{font-family:var(--f-mono);font-weight:500;color:var(--ink);font-variant-ligatures:none}
+.mk-board .mkb-lock{position:relative;flex:none;display:block;width:7px;height:5px;margin-top:2px;border-radius:1px;background:currentColor}
+.mk-board .mkb-lock::before{content:"";position:absolute;left:.75px;top:-4px;width:3.5px;height:4px;border:1.5px solid currentColor;border-bottom:0;border-radius:3px 3px 0 0}
+
+.mk-board .mkb-key{display:flex;flex-wrap:wrap;gap:4px 14px;padding:0 4px 2px;font-size:10.5px;color:var(--muted)}
+.mk-board .mkb-key span{display:inline-flex;align-items:center;gap:5px}
+.mk-board .mkb-key b{font-family:var(--f-mono);font-weight:500;color:var(--ink);font-variant-ligatures:none}
+.mk-board .mkb-key .mkb-lock{color:var(--muted)}
+.mk-board .mkdot.live{position:relative}
+
+/* A = #142 travels. Offsets are one column (own width + 8px inset + 6px gap) and one slot. */
+@keyframes mkb-a{
+  0%,8%{transform:translate(0,0);opacity:1}
+  16%,44%{transform:translate(calc(100% + 14px),calc(var(--h) + 6px));opacity:1}
+  52%,66%{transform:translate(calc(3 * (100% + 14px)),calc(var(--h) + 6px));opacity:1}
+  74%,92%{transform:translate(calc(4 * (100% + 14px)),calc(var(--h) + 6px));opacity:1}
+  94%{transform:translate(calc(4 * (100% + 14px)),calc(var(--h) + 6px));opacity:0}
+  94.01%{transform:translate(0,0);opacity:0}
+  100%{transform:translate(0,0);opacity:1}
+}
+@keyframes mkb-b{
+  0%,74%{transform:translateY(0);opacity:.62}
+  78%{transform:translateY(0);opacity:1}
+  86%,94%{transform:translateY(calc(-1 * (var(--h) + 6px)));opacity:1}
+  99%,100%{transform:translateY(0);opacity:.62}
+}
+@keyframes mkb-fq{0%,10%{opacity:1}12%,94%{opacity:0}94.01%,100%{opacity:1}}
+@keyframes mkb-fr{0%,14%{opacity:0}16%,44%{opacity:1}46%,100%{opacity:0}}
+@keyframes mkb-fv{0%,48%{opacity:0}50%,66%{opacity:1}68%,100%{opacity:0}}
+@keyframes mkb-fd{0%,70%{opacity:0}72%,92%{opacity:1}93%,100%{opacity:0}}
+@keyframes mkb-bt{0%,72%{opacity:1}76%,94%{opacity:0}99%,100%{opacity:1}}
+@keyframes mkb-bq{0%,74%{opacity:0}78%,94%{opacity:1}98%,100%{opacity:0}}
+@keyframes mkb-fill{0%,16%{transform:scaleX(.12)}44%,100%{transform:scaleX(.58)}}
+@keyframes mkb-n1{0%,12%{transform:translateY(0)}12.01%,95%{transform:translateY(-14px)}95.01%,100%{transform:translateY(0)}}
+@keyframes mkb-n2{0%,12%{transform:translateY(0)}12.01%,48%{transform:translateY(-14px)}48.01%,100%{transform:translateY(0)}}
+@keyframes mkb-n3{0%,48%{transform:translateY(0)}48.01%,70%{transform:translateY(-14px)}70.01%,100%{transform:translateY(0)}}
+@keyframes mkb-n4{0%,70%{transform:translateY(0)}70.01%,93%{transform:translateY(-14px)}93.01%,100%{transform:translateY(0)}}
+@keyframes mkb-pulse{0%,100%{box-shadow:0 0 0 0 var(--coral-wash)}50%{box-shadow:0 0 0 4px var(--coral-wash)}}
+@keyframes mkb-live{0%,100%{box-shadow:0 0 0 0 var(--ok-wash)}50%{box-shadow:0 0 0 3px var(--ok-wash)}}
+
+.mk-board.is-live .mkb-a{z-index:3;animation:mkb-a 10s cubic-bezier(.2,.8,.2,1) infinite;will-change:transform}
+.mk-board.is-live .mkb-b{animation:mkb-b 10s cubic-bezier(.2,.8,.2,1) infinite;will-change:transform}
+.mk-board.is-live .mkb-a .f-q{animation:mkb-fq 10s linear infinite}
+.mk-board.is-live .mkb-a .f-r{animation:mkb-fr 10s linear infinite}
+.mk-board.is-live .mkb-a .f-v{animation:mkb-fv 10s linear infinite}
+.mk-board.is-live .mkb-a .f-d{animation:mkb-fd 10s linear infinite}
+.mk-board.is-live .mkb-a .mkb-ring{animation:mkb-fr 10s linear infinite}
+.mk-board.is-live .mkb-a .f-r .mkb-m i{animation:mkb-fill 10s linear infinite}
+.mk-board.is-live .mkb-b .f-t{animation:mkb-bt 10s linear infinite}
+.mk-board.is-live .mkb-b .f-q{animation:mkb-bq 10s linear infinite}
+.mk-board.is-live .mkb-n1 .mkb-strip{animation:mkb-n1 10s linear infinite}
+.mk-board.is-live .mkb-n2 .mkb-strip{animation:mkb-n2 10s linear infinite}
+.mk-board.is-live .mkb-n3 .mkb-strip{animation:mkb-n3 10s linear infinite}
+.mk-board.is-live .mkb-n4 .mkb-strip{animation:mkb-n4 10s linear infinite}
+.mk-board.is-live .mkb-you .mkdot{animation:mkb-pulse 2.4s ease-in-out infinite}
+.mk-board.is-live .mkdot.live{animation:mkb-live 2.4s ease-in-out infinite}
+
+/* resting state: A sits in Ready, B is blocked, only the first footer layer shows */
+.mk-board .mkb-a .f-r,.mk-board .mkb-a .f-v,.mk-board .mkb-a .f-d,.mk-board .mkb-a .mkb-ring,.mk-board .mkb-b .f-q{opacity:0}
+.mk-board .mkb-a .f-r .mkb-m i{transform:scaleX(.12)}
+
+@media (prefers-reduced-motion:reduce){
+  .mk-board *,.mk-board *::before,.mk-board *::after{animation:none !important;transition:none !important}
+}
+</style>
+<div class="mk mk-board" role="img" aria-label="Board for project site: when task #142 reaches Done, the task that was waiting on it, #151, loses its after tag and moves to Ready.">
+  <div class="mkf">
+    <div class="mkf-bar"><b>site</b><span>board</span><span class="sp"></span><span class="mkchip">6 tasks</span></div>
+    <div class="mkf-body">
+      <div class="mkb-scroll">
+        <div class="mkb-track">
+          <div class="mkb-col"><div class="mkb-ch"><span>Ready</span><span class="mkb-n mkb-n1"><span class="mkb-strip"><i>2</i><i>1</i></span></span></div></div>
+          <div class="mkb-col"><div class="mkb-ch"><span>Running</span><span class="mkb-n mkb-n2"><span class="mkb-strip"><i>1</i><i>2</i></span></span></div></div>
+          <div class="mkb-col you"><div class="mkb-ch"><span>Needs you</span><span class="mkb-n"><span class="mkb-strip"><i>1</i></span></span></div></div>
+          <div class="mkb-col"><div class="mkb-ch"><span>Review</span><span class="mkb-n mkb-n3"><span class="mkb-strip"><i>1</i><i>2</i></span></span></div></div>
+          <div class="mkb-col"><div class="mkb-ch"><span>Done</span><span class="mkb-n mkb-n4"><span class="mkb-strip"><i>1</i><i>2</i></span></span></div></div>
+
+          <!-- #151 waits on #142 -->
+          <div class="mkb-card mkb-b blocked" style="--c:0;--s:1">
+            <div class="mkb-id"><i class="mkb-gh"></i>#151</div>
+            <div class="mkb-t">Add dark mode toggle</div>
+            <div class="mkb-ft">
+              <span class="f-t mkb-after"><i class="mkb-lock"></i>after <b>#142</b></span>
+              <span class="f-q">queued</span>
+            </div>
+          </div>
+          <!-- running: tsk-9 -->
+          <div class="mkb-card" style="--c:1;--s:0">
+            <i class="mkb-ring"></i>
+            <div class="mkb-id">tsk-9</div>
+            <div class="mkb-t">Write launch brief</div>
+            <div class="mkb-ft"><span><i class="mkdot live"></i><span class="mkb-m"><i style="--p:.62"></i></span></span></div>
+          </div>
+          <!-- needs you -->
+          <div class="mkb-card you" style="--c:2;--s:0">
+            <div class="mkb-id"><i class="mkb-gh"></i>#146</div>
+            <div class="mkb-t">Cut v0.4 release</div>
+            <div class="mkb-ft"><span class="mkb-you"><i class="mkdot you"></i>Approve</span></div>
+          </div>
+          <!-- review -->
+          <div class="mkb-card" style="--c:3;--s:0">
+            <div class="mkb-id">tsk-5</div>
+            <div class="mkb-t">Draft changelog</div>
+            <div class="mkb-ft"><span class="mkb-mono"><b>+42</b> <u>-8</u></span></div>
+          </div>
+          <!-- done -->
+          <div class="mkb-card" style="--c:4;--s:0">
+            <div class="mkb-id"><i class="mkb-gh"></i>#130</div>
+            <div class="mkb-t">Bump Bun to 1.3</div>
+            <div class="mkb-ft"><span class="mkb-ok"><i></i>done</span></div>
+          </div>
+          <!-- #142 travels -->
+          <div class="mkb-card mkb-a" style="--c:0;--s:0">
+            <i class="mkb-ring"></i>
+            <div class="mkb-id"><i class="mkb-gh"></i>#142</div>
+            <div class="mkb-t">Fix tray chip overflow</div>
+            <div class="mkb-ft">
+              <span class="f-q">queued</span>
+              <span class="f-r"><i class="mkdot live"></i><span class="mkb-m"><i></i></span></span>
+              <span class="f-v mkb-mono"><b>+18</b> <u>-3</u></span>
+              <span class="f-d mkb-ok"><i></i>done</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="mkb-key">
+        <span><i class="mkb-gh"></i><b>#142</b> GitHub issue</span>
+        <span><b>tsk-9</b> CawCo task</span>
+        <span><i class="mkb-lock"></i>blocked by</span>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+(function(){
+  var root=document.querySelector('.mk-board');
+  if(!root) return;
+  var sc=root.querySelector('.mkb-scroll'), track=root.querySelector('.mkb-track');
+  if(!sc||!track) return;
+  var reduce=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var timers=[], touched=false, CYCLE=10000;
+  // [ms into the loop, column that should be in view] follows the moving card on narrow screens
+  var plan=[[0,0],[900,1],[4500,3],[6700,4],[9300,0]];
+  ['pointerdown','wheel','touchstart'].forEach(function(ev){sc.addEventListener(ev,function(){touched=true;},{passive:true});});
+  function pan(col){
+    if(touched) return;
+    var room=sc.scrollWidth-sc.clientWidth;
+    if(room<4) return;
+    var cw=(track.offsetWidth-24)/5;
+    var left=col*(cw+6)-(sc.clientWidth-cw)/2;
+    sc.scrollTo({left:Math.max(0,Math.min(room,left)),behavior:'smooth'});
+  }
+  function cycle(){
+    timers=[];
+    plan.forEach(function(p){timers.push(setTimeout(function(){pan(p[1]);},p[0]));});
+    timers.push(setTimeout(cycle,CYCLE));
+  }
+  function stop(){timers.forEach(clearTimeout);timers=[];}
+  function start(){stop();if(reduce) return;cycle();}
+  root.addEventListener('mk:live',start);
+  root.addEventListener('mk:idle',stop);
+  if(root.classList.contains('is-live')) start();
+})();
+</script>

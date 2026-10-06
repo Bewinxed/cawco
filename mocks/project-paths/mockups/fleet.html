@@ -1,0 +1,162 @@
+<style>
+.mk-fleet{container-type:inline-size;width:100%;font-family:var(--f-body);color:var(--ink)}
+.mk-fleet .mkf-body{gap:8px}
+.mk-fleet .fl-lab{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+
+/* queue slot: quiet state and the needs-you row share one cell */
+.mk-fleet .fl-slot{display:grid}
+.mk-fleet .fl-slot>*{grid-area:1/1}
+.mk-fleet .fl-row{display:grid;grid-template-columns:24px minmax(0,1fr);gap:10px;align-items:start;background:var(--raised);border:1px solid var(--coral);border-radius:var(--r-card);padding:10px 12px}
+.mk-fleet .fl-main{min-width:0;display:flex;flex-direction:column;gap:8px}
+.mk-fleet .fl-txt{font-size:13px;line-height:1.4;color:var(--ink)}
+.mk-fleet .fl-txt b{font-weight:700}
+.mk-fleet .fl-txt .sub{color:var(--muted)}
+.mk-fleet .fl-acts{display:flex;flex-wrap:wrap;gap:6px}
+.mk-fleet .fl-b{font-size:11.5px;line-height:1.4;padding:2px 11px;border-radius:7px}
+.mk-fleet .fl-b.you{border-color:var(--coral);background:var(--coral-wash);color:var(--coral-ink)}
+.mk-fleet .fl-quiet{display:flex;align-items:center;justify-content:center;gap:8px;border:1px dashed var(--line-strong);border-radius:var(--r-card);color:var(--muted);font-size:12.5px;opacity:0;pointer-events:none}
+
+/* pipeline: detectors (code) -> triage (model) -> outcomes */
+.mk-fleet .fl-pipe{display:grid;grid-template-columns:auto minmax(18px,1fr) auto minmax(18px,1fr) auto;align-items:stretch;background:var(--recess);border-radius:10px;padding:10px}
+.mk-fleet .fl-det{display:grid;grid-template-rows:repeat(4,1fr);gap:6px;justify-items:end;align-items:center}
+.mk-fleet .fl-out{display:grid;grid-template-rows:repeat(3,1fr);gap:6px;justify-items:start;align-items:center}
+.mk-fleet .fl-pipe .mkchip{white-space:normal;text-align:center;line-height:14px;padding:2px 7px}
+.mk-fleet .fl-ln{position:relative;min-width:0}
+.mk-fleet .fl-ln .in{position:absolute;inset:0 3px}
+.mk-fleet .fl-ln svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+.mk-fleet .fl-ln line{stroke:var(--line-strong);stroke-width:1.5}
+.mk-fleet .fl-ln line.hot1{stroke:var(--warn-ink)}
+.mk-fleet .fl-ln line.hot2{stroke:var(--coral)}
+.mk-fleet .fl-dot{position:absolute;width:7px;height:7px;margin:-3.5px 0 0 -3.5px;border-radius:50%;opacity:0;left:0;top:50%}
+.mk-fleet .fl-dot.d1{background:var(--warn-ink)}
+.mk-fleet .fl-dot.d2{background:var(--coral)}
+.mk-fleet .fl-tri{align-self:center;flex-direction:column;gap:0;padding:3px 8px}
+.mk-fleet .fl-tri b{font-weight:700;font-size:11.5px;line-height:15px}
+.mk-fleet .fl-tri .d{font-family:var(--f-mono);font-size:10px;line-height:13px;color:var(--muted)}
+
+/* detector 1 fired, the path to needs-you is lit (the finished state) */
+.mk-fleet .fl-det .mkchip.hit{background:var(--warn-wash);border-color:transparent;color:var(--warn-ink)}
+
+@container (max-width:380px){
+  .mk-fleet .fl-pipe{padding:8px 6px}
+  .mk-fleet .fl-pipe .mkchip{padding:2px 5px;font-size:10.5px}
+  .mk-fleet .fl-tri .d{font-size:9.5px}
+}
+
+/* ---- motion: one detector fires, a pulse reaches triage, needs-you lights, the row slides in ---- */
+@media (prefers-reduced-motion:no-preference){
+  .mk-fleet.is-live .fl-det .mkchip.hit{animation:fl-det 8s ease-in-out -4.4s infinite}
+  .mk-fleet.is-live .fl-ln line.hot1{animation:fl-l1 8s ease-in-out -4.4s infinite}
+  .mk-fleet.is-live .fl-ln line.hot2{animation:fl-l2 8s ease-in-out -4.4s infinite}
+  .mk-fleet.is-live .fl-dot.d1{animation:fl-d1 8s ease-in-out -4.4s infinite}
+  .mk-fleet.is-live .fl-dot.d2{animation:fl-d2 8s ease-in-out -4.4s infinite}
+  .mk-fleet.is-live .fl-tri{animation:fl-tri 8s ease-in-out -4.4s infinite}
+  .mk-fleet.is-live .fl-tri .d{animation:fl-dec 8s ease-in-out -4.4s infinite}
+  .mk-fleet.is-live .fl-out .mkchip.you{animation:fl-you 8s ease-in-out -4.4s infinite}
+  .mk-fleet.is-live .fl-row{animation:fl-row 8s cubic-bezier(.2,.8,.2,1) -4.4s infinite}
+  .mk-fleet.is-live .fl-quiet{animation:fl-quiet 8s ease-in-out -4.4s infinite}
+
+  @keyframes fl-det{
+    0%,5%{background:var(--raised);border-color:var(--muted);color:var(--ink)}
+    9%,92%{background:var(--warn-wash);border-color:transparent;color:var(--warn-ink)}
+    96%,100%{background:var(--raised);border-color:var(--muted);color:var(--ink)}}
+  @keyframes fl-l1{
+    0%,12%{stroke:var(--line-strong)}
+    18%,92%{stroke:var(--warn-ink)}
+    96%,100%{stroke:var(--line-strong)}}
+  @keyframes fl-l2{
+    0%,34%{stroke:var(--line-strong)}
+    40%,92%{stroke:var(--coral)}
+    96%,100%{stroke:var(--line-strong)}}
+  @keyframes fl-d1{
+    0%,11%{left:0;top:12.5%;opacity:0}
+    13%{left:0;top:12.5%;opacity:1}
+    25%{left:100%;top:50%;opacity:1}
+    27%,100%{left:100%;top:50%;opacity:0}}
+  @keyframes fl-d2{
+    0%,33%{left:0;top:50%;opacity:0}
+    35%{left:0;top:50%;opacity:1}
+    44%{left:100%;top:50%;opacity:1}
+    46%,100%{left:100%;top:50%;opacity:0}}
+  @keyframes fl-tri{
+    0%,24%{transform:scale(1)}
+    29%{transform:scale(1.07)}
+    35%,100%{transform:scale(1)}}
+  @keyframes fl-dec{
+    0%,26%{opacity:0}
+    31%,92%{opacity:1}
+    96%,100%{opacity:0}}
+  @keyframes fl-you{
+    0%,44%{background:var(--raised);border-color:var(--line-strong);color:var(--ink)}
+    49%,92%{background:var(--coral-wash);border-color:var(--coral);color:var(--coral-ink)}
+    96%,100%{background:var(--raised);border-color:var(--line-strong);color:var(--ink)}}
+  @keyframes fl-row{
+    0%,46%{opacity:0;transform:translateY(-14px);box-shadow:0 0 0 0 transparent}
+    54%{opacity:1;transform:none;box-shadow:0 0 0 0 var(--coral-wash)}
+    60%{opacity:1;transform:none;box-shadow:0 0 0 5px var(--coral-wash)}
+    68%,92%{opacity:1;transform:none;box-shadow:0 0 0 0 transparent}
+    96%,100%{opacity:0;transform:translateY(-14px);box-shadow:0 0 0 0 transparent}}
+  @keyframes fl-quiet{
+    0%,46%{opacity:1}
+    52%,92%{opacity:0}
+    96%,100%{opacity:1}}
+}
+</style>
+<div class="mk mk-fleet" role="img" aria-label="Fleet-wide watching: cheap code detectors watch every session, one fires, a triage model makes one decision, and the result lands in your Needs you queue with Caw attached.">
+  <div class="mkf">
+    <div class="mkf-bar"><b>Fleet · Home</b><span>2 machines · 5 sessions</span><span class="sp"></span><span class="mkdot live"></span><span>watching</span></div>
+    <div class="mkf-body">
+      <div class="fl-lab">Needs you</div>
+      <div class="fl-slot">
+        <div class="fl-quiet" aria-hidden="true">
+          <img class="caw-l" src="caw/light-idle.webp" alt="" width="24" height="24"><img class="caw-d" src="caw/dark-idle.webp" alt="" width="24" height="24">
+          <span>Nothing needs you</span>
+        </div>
+        <div class="fl-row">
+          <div><img class="caw-l" src="caw/light-needs-you.webp" alt="" width="24" height="24"><img class="caw-d" src="caw/dark-needs-you.webp" alt="" width="24" height="24"></div>
+          <div class="fl-main">
+            <div class="fl-txt"><b>launch-q4</b> · writer session stalled 18 min · <span class="sub">second source agrees</span></div>
+            <div class="fl-acts">
+              <button class="btn fl-b you" type="button" tabindex="-1" aria-hidden="true">Nudge lead</button>
+              <button class="btn fl-b" type="button" tabindex="-1" aria-hidden="true">Open</button>
+              <button class="btn fl-b" type="button" tabindex="-1" aria-hidden="true">Stop</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="fl-lab" style="margin-top:4px">Watching every session</div>
+      <div class="fl-pipe">
+        <div class="fl-det">
+          <span class="mkchip code hit">no output 15 min</span>
+          <span class="mkchip code">same tool ×5</span>
+          <span class="mkchip code">spend over budget</span>
+          <span class="mkchip code">checks failed ×3</span>
+        </div>
+        <div class="fl-ln"><div class="in">
+          <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+            <line x1="0" y1="37.5" x2="100" y2="50" vector-effect="non-scaling-stroke"/>
+            <line x1="0" y1="62.5" x2="100" y2="50" vector-effect="non-scaling-stroke"/>
+            <line x1="0" y1="87.5" x2="100" y2="50" vector-effect="non-scaling-stroke"/>
+            <line class="hot1" x1="0" y1="12.5" x2="100" y2="50" vector-effect="non-scaling-stroke"/>
+          </svg>
+          <i class="fl-dot d1"></i>
+        </div></div>
+        <span class="mkchip model fl-tri"><b>triage</b><span class="d">1 decision</span></span>
+        <div class="fl-ln"><div class="in">
+          <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+            <line x1="0" y1="50" x2="100" y2="16.7" vector-effect="non-scaling-stroke"/>
+            <line x1="0" y1="50" x2="100" y2="83.3" vector-effect="non-scaling-stroke"/>
+            <line class="hot2" x1="0" y1="50" x2="100" y2="50" vector-effect="non-scaling-stroke"/>
+          </svg>
+          <i class="fl-dot d2"></i>
+        </div></div>
+        <div class="fl-out">
+          <span class="mkchip code">templated nudge</span>
+          <span class="mkchip you">needs-you</span>
+          <span class="mkchip code">stop</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

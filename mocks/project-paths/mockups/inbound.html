@@ -1,0 +1,114 @@
+<style>
+.mk-inbound{display:block;width:100%;color:var(--ink);font-family:var(--f-body);font-size:12px;line-height:1.4}
+.mk-inbound *,.mk-inbound *::before,.mk-inbound *::after{box-sizing:border-box}
+.mk-inbound .mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+
+/* poll strip */
+.mk-inbound .poll{display:flex;align-items:center;gap:8px;padding:6px 9px;background:var(--recess);border:1px solid var(--line);border-radius:8px;font-size:10.5px;line-height:1.5;color:var(--muted)}
+.mk-inbound .pd{flex:none;width:7px;height:7px;border-radius:50%;background:var(--ok-ink);position:relative}
+.mk-inbound .pd::after{content:"";position:absolute;inset:-3px;border-radius:50%;border:1.5px solid var(--ok-ink);opacity:0}
+.mk-inbound .poll b{font-weight:500;color:var(--ink)}
+
+/* feed: absolutely stacked rows moved by transform only */
+.mk-inbound .feed{position:relative;list-style:none;margin:0;padding:0;height:202px;overflow:hidden}
+.mk-inbound .ev{position:absolute;left:0;right:0;top:0;height:46px;display:flex;align-items:center;gap:10px;padding:0 10px;background:var(--raised);border:1px solid var(--line);border-radius:10px;transform:translateY(calc(var(--k,0)*52px));transition:transform .6s cubic-bezier(.2,.8,.2,1),opacity .45s ease}
+.mk-inbound .ev.ent{opacity:0;transform:translateY(-52px)}
+.mk-inbound .ev.out{opacity:0}
+.mk-inbound .src{flex:none;justify-content:center;min-width:54px;background:transparent;border-color:var(--line-strong);color:var(--muted)}
+.mk-inbound .evb{min-width:0;flex:1 1 0;display:flex;flex-direction:column;gap:3px}
+.mk-inbound .e1,.mk-inbound .e2{display:flex;align-items:center;gap:6px;min-width:0;white-space:nowrap;overflow:hidden}
+.mk-inbound .e1{font-size:11px}
+.mk-inbound .e1 em{font-style:normal;color:var(--muted)}
+.mk-inbound .e2{font-size:11.5px;color:var(--muted)}
+.mk-inbound .e2 .mkchip{flex:none;line-height:16px;font-size:10.5px}
+.mk-inbound .ar{flex:none;color:var(--muted)}
+.mk-inbound .rn{color:var(--ink);font-weight:600;overflow:hidden;text-overflow:ellipsis}
+
+/* the muted duplicate */
+.mk-inbound .ev.dup{background:transparent;border-style:dashed}
+.mk-inbound .ev.dup .e1{color:var(--muted)}
+
+/* motion: only while on screen */
+@keyframes mk-ib-flash{0%{background:var(--warn-wash);border-color:var(--warn-ink)}100%{background:transparent;border-color:var(--line)}}
+@keyframes mk-ib-ring{0%{transform:scale(.6);opacity:.8}100%{transform:scale(1.7);opacity:0}}
+.mk-inbound.is-live .ev.flash{animation:mk-ib-flash 2s ease-out 1}
+.mk-inbound.is-live .pd.tick::after{animation:mk-ib-ring .9s ease-out 1}
+
+@media (prefers-reduced-motion:reduce){
+  .mk-inbound *,.mk-inbound *::before,.mk-inbound *::after{transition:none!important;animation:none!important}
+}
+</style>
+<div class="mk mk-inbound" role="img" aria-label="An inbound events log for project launch-q4. New deliveries slide in at the top: matching events start a routine, unmatched ones are kept for seven days, and a duplicate delivery flashes and is dropped.">
+  <div class="mkf">
+    <div class="mkf-bar"><b>Inbound</b><span>launch-q4</span></div>
+    <div class="mkf-body">
+      <div class="poll"><i class="pd"></i><span class="mono">poll every 60 s · last <b>304</b> · 0 of 5,000 calls used</span></div>
+      <ul class="feed" data-f="feed">
+        <li class="ev dup" style="--k:0" data-k="0"><span class="mkchip src">github</span><div class="evb"><div class="e1 mono">pull_request.closed<em>#158</em></div><div class="e2"><span class="ar">→</span><span class="mkchip">duplicate</span><span>dropped</span></div></div></li>
+        <li class="ev" style="--k:1" data-k="1"><span class="mkchip src">github</span><div class="evb"><div class="e1 mono">pull_request.closed<em>#158</em></div><div class="e2"><span class="ar">→</span><span class="mkchip ok">matched</span><span class="rn">Land and recap</span></div></div></li>
+        <li class="ev" style="--k:2" data-k="2"><span class="mkchip src">relay</span><div class="evb"><div class="e1 mono">stripe.checkout<em>evt_3f..</em></div><div class="e2"><span class="ar">→</span><span class="mkchip">no match</span><span>kept 7 days</span></div></div></li>
+        <li class="ev" style="--k:3" data-k="3"><span class="mkchip src">github</span><div class="evb"><div class="e1 mono">issues.opened<em>#160</em></div><div class="e2"><span class="ar">→</span><span class="mkchip ok">matched</span><span class="rn">Morning triage</span></div></div></li>
+      </ul>
+    </div>
+  </div>
+</div>
+<script>
+(function(){
+  var root=document.querySelector('.mk-inbound');
+  if(!root)return;
+  var reduce=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var feed=root.querySelector('[data-f="feed"]');
+  var pd=root.querySelector('.pd');
+  var REST=feed.innerHTML;
+  var EV=[
+    {s:'github',t:'issues.opened',r:'#160',k:'m',x:'Morning triage'},
+    {s:'relay',t:'stripe.checkout',r:'evt_3f..',k:'n'},
+    {s:'github',t:'pull_request.closed',r:'#158',k:'m',x:'Land and recap'},
+    {s:'github',t:'pull_request.closed',r:'#158',k:'d'}
+  ];
+  var idx=0,timer=0,live=false;
+
+  function res(e){
+    if(e.k==='m')return '<span class="ar">→</span><span class="mkchip ok">matched</span><span class="rn">'+e.x+'</span>';
+    if(e.k==='n')return '<span class="ar">→</span><span class="mkchip">no match</span><span>kept 7 days</span>';
+    return '<span class="ar">→</span><span class="mkchip">duplicate</span><span>dropped</span>';
+  }
+  function make(e){
+    var li=document.createElement('li');
+    li.className='ev ent'+(e.k==='d'?' dup flash':'');
+    li.setAttribute('data-k','0');
+    li.style.setProperty('--k',0);
+    li.innerHTML='<span class="mkchip src">'+e.s+'</span><div class="evb"><div class="e1 mono">'+e.t+'<em>'+e.r+'</em></div><div class="e2">'+res(e)+'</div></div>';
+    return li;
+  }
+  function arrive(){
+    var e=EV[idx%EV.length];idx++;
+    var rows=feed.children,i,r,k;
+    for(i=0;i<rows.length;i++){
+      r=rows[i];
+      if(r.classList.contains('out'))continue;
+      k=+r.getAttribute('data-k')+1;
+      r.setAttribute('data-k',k);
+      r.style.setProperty('--k',k);
+      if(k>3){r.classList.add('out');(function(x){setTimeout(function(){if(x.parentNode===feed)feed.removeChild(x)},800)})(r)}
+    }
+    var li=make(e);
+    feed.insertBefore(li,feed.firstChild);
+    void li.offsetWidth;
+    li.classList.remove('ent');
+    pd.classList.remove('tick');void pd.offsetWidth;pd.classList.add('tick');
+  }
+  function schedule(ms){timer=setTimeout(function(){if(!live)return;arrive();schedule(2200)},ms)}
+  function start(){
+    if(reduce||live)return;
+    live=true;schedule(900);
+  }
+  function halt(){
+    live=false;clearTimeout(timer);timer=0;
+    feed.innerHTML=REST;idx=0;pd.classList.remove('tick');
+  }
+  root.addEventListener('mk:live',start);
+  root.addEventListener('mk:idle',halt);
+  if(root.classList.contains('is-live'))start();
+})();
+</script>

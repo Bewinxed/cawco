@@ -1,0 +1,168 @@
+<style>
+.mk-xvoice{width:100%;font-family:var(--f-body);color:var(--ink);text-align:left}
+.mk-xvoice *,.mk-xvoice *::before,.mk-xvoice *::after{box-sizing:border-box}
+
+/* progress */
+.mk-xvoice .xv-top{display:flex;align-items:center;gap:10px;font-size:11.5px;line-height:16px;color:var(--muted)}
+.mk-xvoice .xv-prog b{font-family:var(--f-mono);font-size:11px;font-weight:500;color:var(--ink)}
+.mk-xvoice .xv-pips{margin-left:auto;display:flex;gap:3px}
+.mk-xvoice .xv-pips i{display:block;width:16px;height:4px;border-radius:2px;background:var(--line-strong);transition:background-color .3s ease-in-out}
+.mk-xvoice .xv-pips i.xv-on{background:var(--coral)}
+
+/* the two candidates */
+.mk-xvoice .xv-pair{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:8px}
+.mk-xvoice .xv-c{position:relative;min-width:0;display:flex;flex-direction:column;gap:6px;background:var(--raised);border:1.5px solid var(--line-strong);border-radius:var(--r-card);padding:8px 10px 10px;transition:opacity .35s ease-in-out,border-color .25s ease-in-out,background-color .25s ease-in-out}
+.mk-xvoice .xv-hd{display:flex;align-items:center;gap:6px;min-height:18px}
+.mk-xvoice .xv-k{display:grid;place-items:center;width:18px;height:18px;border-radius:6px;border:1px solid var(--line-strong);font-family:var(--f-mono);font-size:10.5px;line-height:1;color:var(--muted);transition:border-color .25s ease-in-out,color .25s ease-in-out}
+.mk-xvoice .xv-badge{margin-left:auto;display:grid;place-items:center;width:18px;height:18px;border-radius:50%;background:var(--coral);opacity:0;transform:scale(.6);transition:opacity .25s ease-in-out,transform .3s cubic-bezier(.2,.8,.2,1)}
+.mk-xvoice .xv-badge i{display:block;width:8px;height:4px;margin-top:-2px;border-left:1.8px solid var(--bg);border-bottom:1.8px solid var(--bg);transform:rotate(-45deg)}
+.mk-xvoice .xv-tx{margin:0;min-height:2.8em;font-size:13px;line-height:1.4;transition:opacity .16s ease-in-out}
+.mk-xvoice .xv-tx.xv-swap{opacity:0}
+.mk-xvoice .xv-c.xv-pick{border-color:var(--coral);background:var(--coral-wash)}
+.mk-xvoice .xv-c.xv-pick .xv-k{border-color:var(--coral);color:var(--coral-ink)}
+.mk-xvoice .xv-c.xv-pick .xv-badge{opacity:1;transform:none}
+.mk-xvoice .xv-c.xv-off{opacity:.5}
+
+/* what was learned */
+.mk-xvoice .xv-learn{display:flex;flex-direction:column;gap:8px;background:var(--recess);border-radius:var(--r-card);padding:9px 10px 10px}
+.mk-xvoice .xv-lh{font-size:11.5px;line-height:16px;color:var(--muted)}
+.mk-xvoice .xv-rules{display:flex;flex-wrap:wrap;gap:6px}
+.mk-xvoice .xv-rule{display:inline-flex;align-items:center;gap:6px;font-size:12px;line-height:20px;padding:0 10px 0 8px;border-radius:999px;border:1px solid var(--line);background:transparent;color:transparent;transition:background-color .3s ease-in-out,color .3s ease-in-out,border-color .3s ease-in-out}
+.mk-xvoice .xv-rule i{display:block;flex:none;width:7px;height:4px;margin-top:-2px;border-left:1.8px solid transparent;border-bottom:1.8px solid transparent;transform:rotate(-45deg);transition:border-color .3s ease-in-out}
+.mk-xvoice .xv-rule.xv-on{background:var(--raised);border-color:var(--line-strong);color:var(--ink)}
+.mk-xvoice .xv-rule.xv-on i{border-color:var(--coral)}
+.mk-xvoice .xv-meter{display:flex;align-items:center;gap:8px;font-size:11.5px;line-height:16px;color:var(--muted)}
+.mk-xvoice .xv-bar{flex:1;min-width:24px;height:6px;border-radius:3px;background:var(--bg);overflow:hidden}
+.mk-xvoice .xv-bar i{display:block;height:100%;background:var(--coral);transform-origin:0 50%;transform:scaleX(var(--p,.54));transition:transform .6s cubic-bezier(.2,.8,.2,1)}
+.mk-xvoice .xv-pc{min-width:3.4ch;text-align:right;font-family:var(--f-mono);font-size:11px;color:var(--ink);font-variant-numeric:tabular-nums}
+
+/* ---- motion: the picked card gives a small press ---- */
+@media (prefers-reduced-motion:no-preference){
+  @keyframes xv-pop{0%{transform:scale(1)}40%{transform:scale(.97)}100%{transform:scale(1)}}
+  .mk-xvoice.is-live .xv-c.xv-pick{animation:xv-pop .4s cubic-bezier(.2,.8,.2,1)}
+}
+@media (prefers-reduced-motion:reduce){
+  .mk-xvoice .xv-c,.mk-xvoice .xv-badge,.mk-xvoice .xv-bar i,.mk-xvoice .xv-rule,.mk-xvoice .xv-rule i,.mk-xvoice .xv-pips i{transition:none}
+  .mk-xvoice .xv-tx{transition:none}
+}
+</style>
+<div class="mk mk-xvoice" role="img" aria-label="Teaching your voice: Caw shows two draft posts, you pick the one that sounds like you, and each pick adds a rule to your voice profile and raises the voice confidence meter.">
+  <div class="mkf">
+    <div class="mkf-bar"><b>Which sounds like you?</b></div>
+    <div class="mkf-body">
+
+      <div class="xv-top">
+        <span class="xv-prog">Voice · round <b class="xv-rn">2</b> of 5</span>
+        <span class="xv-pips" aria-hidden="true"><i class="xv-on"></i><i class="xv-on"></i><i></i><i></i><i></i></span>
+      </div>
+
+      <div class="xv-pair">
+        <div class="xv-c xv-ca xv-pick">
+          <div class="xv-hd"><span class="xv-k">A</span><span class="xv-badge"><i></i></span></div>
+          <p class="xv-tx">Shipped the fleet board today. One page, every agent, every machine.</p>
+        </div>
+        <div class="xv-c xv-cb xv-off">
+          <div class="xv-hd"><span class="xv-k">B</span><span class="xv-badge"><i></i></span></div>
+          <p class="xv-tx">🚀 HUGE news!!! Our new board is INSANE, you need to see this!!!</p>
+        </div>
+      </div>
+
+      <div class="xv-learn">
+        <div class="xv-lh">Voice rules learned so far</div>
+        <div class="xv-rules">
+          <span class="xv-rule xv-on"><i></i>Short sentences</span>
+          <span class="xv-rule xv-on"><i></i>No exclamation marks</span>
+          <span class="xv-rule"><i></i>Name the concrete thing</span>
+        </div>
+        <div class="xv-meter">
+          <span>Voice confidence</span>
+          <span class="xv-bar"><i></i></span>
+          <b class="xv-pc">54%</b>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+<script>
+(function(){
+  var root=document.querySelector('.mk-xvoice');
+  if(!root) return;
+  var mq=window.matchMedia?window.matchMedia('(prefers-reduced-motion: reduce)'):null;
+  var cA=root.querySelector('.xv-ca'),cB=root.querySelector('.xv-cb');
+  var tA=cA.querySelector('.xv-tx'),tB=cB.querySelector('.xv-tx');
+  var rn=root.querySelector('.xv-rn');
+  var pips=[].slice.call(root.querySelectorAll('.xv-pips i'));
+  var rules=[].slice.call(root.querySelectorAll('.xv-rule'));
+  var fill=root.querySelector('.xv-bar i'),pc=root.querySelector('.xv-pc');
+  var R=[
+    {a:'So excited to share that our agents now stay online after a reconnect',b:'Fixed the reconnect bug. Agents stay online.',pick:'b'},
+    {a:'Shipped the fleet board today. One page, every agent, every machine.',b:'🚀 HUGE news!!! Our new board is INSANE, you need to see this!!!',pick:'a'},
+    {a:'Moved the hub to a Raspberry Pi. It idles at 40 MB.',b:'Game changer: our hub now runs on tiny hardware. So light.',pick:'a'}
+  ];
+  var CONF=[12,31,54,78];
+  var REST=2,shown=54,raf=0,timers=[],running=false;
+
+  function setTexts(d,swap){
+    if(!swap){tA.textContent=d.a;tB.textContent=d.b;return;}
+    tA.classList.add('xv-swap');tB.classList.add('xv-swap');
+    timers.push(setTimeout(function(){
+      tA.textContent=d.a;tB.textContent=d.b;
+      tA.classList.remove('xv-swap');tB.classList.remove('xv-swap');
+    },170));
+  }
+  function meter(v,instant){
+    fill.style.setProperty('--p',v/100);
+    cancelAnimationFrame(raf);
+    if(instant){shown=v;pc.textContent=v+'%';return;}
+    var from=shown,t0=null;
+    function f(ts){
+      if(t0===null) t0=ts;
+      var k=Math.min(1,(ts-t0)/600),e=1-Math.pow(1-k,3);
+      shown=Math.round(from+(v-from)*e);
+      pc.textContent=shown+'%';
+      if(k<1) raf=requestAnimationFrame(f);
+    }
+    raf=requestAnimationFrame(f);
+  }
+  function show(round,phase,instant){
+    var d=R[round-1];
+    var picked=phase!=='show',learned=phase==='learn'?round:round-1;
+    rn.textContent=round;
+    cA.classList.toggle('xv-pick',picked&&d.pick==='a');
+    cA.classList.toggle('xv-off',picked&&d.pick!=='a');
+    cB.classList.toggle('xv-pick',picked&&d.pick==='b');
+    cB.classList.toggle('xv-off',picked&&d.pick!=='b');
+    pips.forEach(function(p,i){p.classList.toggle('xv-on',i<(picked?round:round-1));});
+    rules.forEach(function(r,i){r.classList.toggle('xv-on',i<learned);});
+    meter(CONF[learned],instant);
+  }
+  function at(ms,fn){timers.push(setTimeout(fn,ms));}
+  function run(){
+    var t=0;timers=[];
+    R.forEach(function(d,i){
+      var r=i+1;
+      at(t,function(){setTexts(d,true);show(r,'show');});t+=700;
+      at(t,function(){show(r,'pick');});t+=700;
+      at(t,function(){show(r,'learn');});t+=(i===R.length-1)?2200:1000;
+    });
+    at(t,run);
+  }
+  function start(){
+    if(running||(mq&&mq.matches)) return;
+    running=true;
+    at(2400,run);
+  }
+  function stop(){
+    running=false;
+    timers.forEach(clearTimeout);timers=[];
+    cancelAnimationFrame(raf);
+    tA.classList.remove('xv-swap');tB.classList.remove('xv-swap');
+    setTexts(R[REST-1],false);
+    show(REST,'learn',true);
+  }
+  root.addEventListener('mk:live',start);
+  root.addEventListener('mk:idle',stop);
+  if(root.classList.contains('is-live')) start();
+})();
+</script>

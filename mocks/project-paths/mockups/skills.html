@@ -1,0 +1,121 @@
+<style>
+.mk-skills{display:block;min-width:0;container-type:inline-size;color:var(--ink);font-family:var(--f-body);font-size:12px;line-height:1.3;text-align:left}
+.mk-skills *,.mk-skills *::before,.mk-skills *::after{box-sizing:border-box}
+.mk-skills .mks-wrap{display:flex;flex-direction:column;gap:10px;min-width:0}
+@container (min-width:470px){
+  .mk-skills .mks-wrap{flex-direction:row;align-items:stretch}
+  .mk-skills .mks-term{flex:0 0 210px}
+  .mk-skills .mks-bd{flex:1 1 0}
+}
+.mk-skills .mks-term,.mk-skills .mks-bd{min-width:0;border:1px solid var(--line-strong);border-radius:var(--r-card);overflow:hidden;display:flex;flex-direction:column}
+.mk-skills .mks-term{background:var(--recess)}
+.mk-skills .mks-bd{background:var(--bg)}
+.mk-skills .mks-bar{height:30px;flex:none;display:flex;align-items:center;gap:8px;padding:0 10px;border-bottom:1px solid var(--line);background:var(--raised);font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden}
+.mk-skills .mks-bar b{color:var(--ink);font-weight:600}
+.mk-skills .mks-bar .sp{flex:1}
+.mk-skills .mks-bar .mkchip{font-size:10.5px;line-height:17px}
+
+.mk-skills .mks-lines{padding:10px 12px 12px;display:flex;flex-direction:column;gap:1px}
+.mk-skills .mks-ln{position:relative;height:18px;white-space:pre;font-family:var(--f-mono);font-size:11.5px;line-height:18px;font-variant-ligatures:none}
+.mk-skills .mks-ln.gap{margin-top:7px}
+.mk-skills .mks-ln .t{display:inline-block;vertical-align:top}
+.mk-skills .mks-ln::after{content:"";position:absolute;left:0;top:3px;width:.6em;height:12px;background:var(--coral);opacity:0}
+.mk-skills .mks-ln .pr{color:var(--coral-ink);font-weight:600}
+.mk-skills .mks-ln .mut{color:var(--muted)}
+.mk-skills .mks-ln .no{font-weight:600}
+.mk-skills .mks-ln.ok{color:var(--ok-ink)}
+
+.mk-skills .mks-grid{flex:1;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:auto auto 20px auto 16px auto 8px;column-gap:8px;padding:8px 8px 0}
+.mk-skills .mks-lane{background:var(--recess);border-radius:10px;grid-row:1 / -1}
+.mk-skills .mks-lane.l1{grid-column:1}
+.mk-skills .mks-lane.l2{grid-column:2}
+.mk-skills .mks-lh{position:relative;display:flex;align-items:center;gap:6px;padding:7px 10px 6px;font-size:11px;font-weight:700;grid-row:1}
+.mk-skills .mks-lh.h1{grid-column:1}
+.mk-skills .mks-lh.h2{grid-column:2}
+.mk-skills .mks-lh em{margin-left:auto;font-style:normal;font-family:var(--f-mono);font-size:10.5px;font-weight:500;color:var(--muted)}
+.mk-skills .mks-card{position:relative;margin:0 6px;background:var(--raised);border:1px solid var(--line-strong);border-radius:9px;padding:6px 8px;display:flex;flex-direction:column;gap:4px;min-width:0}
+.mk-skills .mks-card.c0{grid-column:1;grid-row:2}
+.mk-skills .mks-card.c1{grid-column:2;grid-row:4}
+.mk-skills .mks-card.c2{grid-column:2;grid-row:6}
+.mk-skills .mks-ct{display:flex;align-items:baseline;gap:6px;min-width:0}
+.mk-skills .mks-no{flex:none;font-family:var(--f-mono);font-size:10.5px;color:var(--muted);font-variant-ligatures:none}
+.mk-skills .mks-tt{font-size:11.5px;font-weight:600;line-height:1.25;min-width:0}
+.mk-skills .mks-tag{display:inline-flex;align-items:center;gap:4px;align-self:flex-start;height:15px;padding:0 5px;border-radius:4px;background:var(--recess);color:var(--muted);font-size:10px;white-space:nowrap}
+.mk-skills .mks-tag b{font-family:var(--f-mono);font-weight:500;color:var(--ink);font-variant-ligatures:none}
+.mk-skills .mks-tag.ready{background:transparent;padding:0}
+.mk-skills .mks-card.blocked .mks-tt{color:var(--muted)}
+.mk-skills .mks-lock{position:relative;flex:none;display:block;width:7px;height:5px;margin-top:2px;border-radius:1px;background:currentColor}
+.mk-skills .mks-lock::before{content:"";position:absolute;left:.75px;top:-4px;width:3.5px;height:4px;border:1.5px solid currentColor;border-bottom:0;border-radius:3px 3px 0 0}
+
+.mk-skills .mks-con{position:relative;pointer-events:none}
+.mk-skills .mks-con.a{grid-column:1 / -1;grid-row:3}
+.mk-skills .mks-con.b{grid-column:2;grid-row:5}
+.mk-skills .mks-con i{position:absolute;display:block}
+.mk-skills .mks-con.a .v1{left:calc((100% - 8px) / 4 - 1px);top:0;height:calc(50% + 1px);border-left:2px dotted var(--muted)}
+.mk-skills .mks-con.a .h{left:calc((100% - 8px) / 4 - 1px);right:calc((100% - 8px) / 4 - 1px);top:calc(50% - 1px);border-top:2px dotted var(--muted)}
+.mk-skills .mks-con.a .v2{right:calc((100% - 8px) / 4 - 1px);top:calc(50% - 1px);bottom:0;border-left:2px dotted var(--muted)}
+.mk-skills .mks-con.b .v2{left:calc(50% - 1px);top:0;bottom:0;border-left:2px dotted var(--muted)}
+.mk-skills .mks-con .v2::after{content:"";position:absolute;left:-5px;bottom:-1px;border:4px solid transparent;border-top:5px solid var(--muted);border-bottom:0}
+
+@keyframes mks-l0{0%,4%{clip-path:inset(0 0 0 0)}4.01%,6%{clip-path:inset(0 100% 0 0);animation-timing-function:steps(13,end)}14%,100%{clip-path:inset(0 0 0 0)}}
+@keyframes mks-c0{0%,5.99%{opacity:0}6%{opacity:1;transform:translateX(0);animation-timing-function:steps(13,end)}14%{opacity:1;transform:translateX(13ch)}14.01%,100%{opacity:0}}
+@keyframes mks-l1{0%,4%{clip-path:inset(0 0 0 0)}4.01%,18%{clip-path:inset(0 100% 0 0);animation-timing-function:steps(19,end)}27%,100%{clip-path:inset(0 0 0 0)}}
+@keyframes mks-c1{0%,17.99%{opacity:0}18%{opacity:1;transform:translateX(0);animation-timing-function:steps(19,end)}27%{opacity:1;transform:translateX(19ch)}27.01%,100%{opacity:0}}
+@keyframes mks-l2{0%,4%{clip-path:inset(0 0 0 0)}4.01%,34%{clip-path:inset(0 100% 0 0);animation-timing-function:steps(23,end)}44%,100%{clip-path:inset(0 0 0 0)}}
+@keyframes mks-c2{0%,33.99%{opacity:0}34%{opacity:1;transform:translateX(0);animation-timing-function:steps(23,end)}44%{opacity:1;transform:translateX(23ch)}44.01%,100%{opacity:0}}
+@keyframes mks-l3{0%,4%{clip-path:inset(0 0 0 0)}4.01%,52%{clip-path:inset(0 100% 0 0);animation-timing-function:steps(22,end)}62%,100%{clip-path:inset(0 0 0 0)}}
+@keyframes mks-c3{0%,51.99%{opacity:0}52%{opacity:1;transform:translateX(0);animation-timing-function:steps(22,end)}62%{opacity:1;transform:translateX(22ch)}62.01%,100%{opacity:0}}
+@keyframes mks-l4{0%,4%{clip-path:inset(0 0 0 0)}4.01%,70%{clip-path:inset(0 100% 0 0);animation-timing-function:steps(21,end)}80%,100%{clip-path:inset(0 0 0 0)}}
+@keyframes mks-c4{0%,69.99%{opacity:0}70%{opacity:1;transform:translateX(0);animation-timing-function:steps(21,end)}80%{opacity:1;transform:translateX(21ch)}80.01%,100%{opacity:0}}
+@keyframes mks-k0{0%,3%{opacity:1;transform:none}4.5%,22%{opacity:0;transform:translate(-14px,-6px)}29%,100%{opacity:1;transform:none}}
+@keyframes mks-k1{0%,3%{opacity:1;transform:none}4.5%,40%{opacity:0;transform:translate(-14px,-6px)}47%,100%{opacity:1;transform:none}}
+@keyframes mks-k2{0%,3%{opacity:1;transform:none}4.5%,58%{opacity:0;transform:translate(-14px,-6px)}65%,100%{opacity:1;transform:none}}
+@keyframes mks-n0{0%,3%{opacity:1}4.5%,45%{opacity:0}49%,100%{opacity:1}}
+@keyframes mks-n1{0%,3%{opacity:1}4.5%,63%{opacity:0}67%,100%{opacity:1}}
+.mk-skills.is-live .mks-l0 .t{animation:mks-l0 10s steps(1) infinite}
+.mk-skills.is-live .mks-l1 .t{animation:mks-l1 10s steps(1) infinite}
+.mk-skills.is-live .mks-l2 .t{animation:mks-l2 10s steps(1) infinite}
+.mk-skills.is-live .mks-l3 .t{animation:mks-l3 10s steps(1) infinite}
+.mk-skills.is-live .mks-l4 .t{animation:mks-l4 10s steps(1) infinite}
+.mk-skills.is-live .mks-l0::after{animation:mks-c0 10s steps(1) infinite}
+.mk-skills.is-live .mks-l1::after{animation:mks-c1 10s steps(1) infinite}
+.mk-skills.is-live .mks-l2::after{animation:mks-c2 10s steps(1) infinite}
+.mk-skills.is-live .mks-l3::after{animation:mks-c3 10s steps(1) infinite}
+.mk-skills.is-live .mks-l4::after{animation:mks-c4 10s steps(1) infinite}
+.mk-skills.is-live .mks-card.c0{animation:mks-k0 10s cubic-bezier(.2,.8,.2,1) infinite}
+.mk-skills.is-live .mks-card.c1{animation:mks-k1 10s cubic-bezier(.2,.8,.2,1) infinite}
+.mk-skills.is-live .mks-card.c2{animation:mks-k2 10s cubic-bezier(.2,.8,.2,1) infinite}
+.mk-skills.is-live .mks-con.a{animation:mks-n0 10s ease-out infinite}
+.mk-skills.is-live .mks-con.b{animation:mks-n1 10s ease-out infinite}
+
+@media (prefers-reduced-motion:reduce){
+  .mk-skills *,.mk-skills *::before,.mk-skills *::after{animation:none !important;transition:none !important}
+}
+</style>
+<div class="mk mk-skills" role="img" aria-label="A model runs the to-tickets skill in a session and prints three tickets; each ticket becomes a task on the project board, and tickets that come after another land in Blocked until it is done.">
+  <div class="mks-wrap">
+    <div class="mks-term">
+      <div class="mks-bar"><span class="mkchip model">Claude Code</span><span>site</span><span class="sp"></span><span class="mkdot live"></span></div>
+      <div class="mks-lines">
+        <div class="mks-ln mks-l0"><span class="t"><span class="pr">&gt;</span> /to-tickets</span></div>
+        <div class="mks-ln gap mks-l1"><span class="t"><span class="no">01</span> Schema for tasks</span></div>
+        <div class="mks-ln mks-l2"><span class="t"><span class="no">02</span> Board API <span class="mut">(after 01)</span></span></div>
+        <div class="mks-ln mks-l3"><span class="t"><span class="no">03</span> Board UI <span class="mut">(after 02)</span></span></div>
+        <div class="mks-ln gap ok mks-l4"><span class="t">added 3 tasks to site</span></div>
+      </div>
+    </div>
+    <div class="mks-bd">
+      <div class="mks-bar"><b>site</b><span>board</span><span class="sp"></span><span class="mkchip">3 tasks</span></div>
+      <div class="mks-grid">
+        <div class="mks-lane l1"></div><div class="mks-lane l2"></div>
+        <div class="mks-lh h1">Ready<em>1</em></div>
+        <div class="mks-lh h2">Blocked<em>2</em></div>
+        <div class="mks-card c0"><div class="mks-ct"><span class="mks-no">01</span><span class="mks-tt">Schema for tasks</span></div><span class="mks-tag ready">queued</span></div>
+        <div class="mks-con a"><i class="v1"></i><i class="h"></i><i class="v2"></i></div>
+        <div class="mks-card c1 blocked"><div class="mks-ct"><span class="mks-no">02</span><span class="mks-tt">Board API</span></div><span class="mks-tag"><i class="mks-lock"></i>after <b>01</b></span></div>
+        <div class="mks-con b"><i class="v2"></i></div>
+        <div class="mks-card c2 blocked"><div class="mks-ct"><span class="mks-no">03</span><span class="mks-tt">Board UI</span></div><span class="mks-tag"><i class="mks-lock"></i>after <b>02</b></span></div>
+      </div>
+    </div>
+  </div>
+</div>

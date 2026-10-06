@@ -1,0 +1,196 @@
+<style>
+.mk-routines{display:block;width:100%;container-type:inline-size;color:var(--ink);font-family:var(--f-body);font-size:12px;line-height:1.4}
+.mk-routines *,.mk-routines *::before,.mk-routines *::after{box-sizing:border-box}
+.mk-routines .mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.mk-routines .mkf-bar .mono{font-size:11px}
+
+.mk-routines .list{display:flex;flex-direction:column;gap:6px}
+.mk-routines .rt{background:var(--raised);border:1px solid var(--line);border-radius:10px;padding:9px 10px 10px;display:grid;gap:8px;min-width:0}
+.mk-routines .rt-h{display:flex;align-items:center;gap:7px;min-width:0}
+.mk-routines .rt-n{font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.mk-routines .rt-h .mkchip{flex:none}
+.mk-routines .rt-h .sp{flex:1 1 0}
+.mk-routines .rt-m{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;min-width:0}
+.mk-routines .sch{font-size:11.5px;color:var(--ink);white-space:nowrap}
+.mk-routines .nx{display:inline-flex;align-items:baseline;gap:5px;white-space:nowrap}
+.mk-routines .nx i{font-style:normal;font-size:10.5px;color:var(--muted)}
+.mk-routines .nx b{font-size:11.5px;font-weight:500;min-width:11ch}
+.mk-routines .tail{display:flex;align-items:center;gap:10px;margin-left:auto}
+
+@container (max-width:400px){.mk-routines .tgl{display:none}}
+
+/* last 8 runs */
+.mk-routines .runs{display:flex;align-items:center;justify-content:flex-start;gap:4px;width:100px;height:12px;overflow:hidden;flex:none;transition:opacity .2s ease}
+.mk-routines .runs i{flex:none;display:block;width:9px;height:9px;border-radius:50%;background:var(--ok-ink);transition:width .5s cubic-bezier(.2,.8,.2,1),margin .5s cubic-bezier(.2,.8,.2,1),opacity .4s ease,transform .5s cubic-bezier(.2,.8,.2,1)}
+.mk-routines .runs i.sk{background:transparent;box-shadow:inset 0 0 0 1.5px var(--warn-ink)}
+.mk-routines .runs i.fl{background:var(--err-ink);border-radius:2px}
+.mk-routines .runs i.out{width:0;margin-left:-4px;opacity:0;transform:scale(.4)}
+.mk-routines .runs i.in{opacity:0;transform:scale(.3)}
+.mk-routines .runs.dim{opacity:.1}
+
+/* pause toggle (on = paused) */
+.mk-routines .tgw{display:inline-flex;align-items:center;gap:6px;flex:none}
+.mk-routines .tgl{font-size:11px;color:var(--muted)}
+.mk-routines .tg{position:relative;width:28px;height:16px;padding:0;border-radius:999px;border:1px solid var(--line-strong);background:var(--recess);cursor:default}
+.mk-routines .tg i{position:absolute;top:2px;left:2px;width:10px;height:10px;border-radius:50%;background:var(--muted);transition:transform .2s ease}
+.mk-routines .tg.on{background:var(--coral-wash);border-color:var(--coral)}
+.mk-routines .tg.on i{transform:translateX(12px);background:var(--coral)}
+
+.mk-routines .btn{font-size:11.5px;padding:3px 9px;line-height:1.4;border-radius:7px}
+.mk-routines .rt.paused .rt-n,.mk-routines .rt.paused .sch{color:var(--muted)}
+.mk-routines .rt.paused .nx b{color:var(--muted);font-weight:400}
+.mk-routines .rt.paused .runs{opacity:.6}
+
+.mk-routines .key{display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px;padding:2px 2px 0;font-size:10.5px;color:var(--muted)}
+.mk-routines .key span{display:inline-flex;align-items:center;gap:5px}
+.mk-routines .key i{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--ok-ink)}
+.mk-routines .key i.sk{background:transparent;box-shadow:inset 0 0 0 1.5px var(--warn-ink)}
+.mk-routines .key i.fl{background:var(--err-ink);border-radius:2px}
+
+/* motion: only while on screen */
+@keyframes mk-rt-fire{0%{box-shadow:0 0 0 0 var(--ok-wash);border-color:var(--ok-ink)}100%{box-shadow:0 0 0 7px transparent;border-color:var(--line)}}
+@keyframes mk-rt-tick{0%{opacity:.35}100%{opacity:1}}
+.mk-routines.is-live .rt.fire{animation:mk-rt-fire 1.1s ease-out 1}
+.mk-routines.is-live .nx b.tick{animation:mk-rt-tick .45s ease-out 1}
+
+@media (prefers-reduced-motion:reduce){
+  .mk-routines *,.mk-routines *::before,.mk-routines *::after{transition:none!important;animation:none!important}
+}
+</style>
+<div class="mk mk-routines" role="img" aria-label="A routines list for project launch-q4. Each routine shows its schedule, a countdown to the next run and its last eight runs; the first routine counts down, fires, and adds a new ok run to its history.">
+  <div class="mkf">
+    <div class="mkf-bar"><b>Routines</b><span>launch-q4</span><span class="sp"></span><span class="mono">3 routines</span></div>
+    <div class="mkf-body">
+      <div class="list">
+
+        <div class="rt" data-r="1">
+          <div class="rt-h">
+            <b class="rt-n">Morning triage</b>
+            <span class="mkchip">fresh session</span>
+            <span class="sp"></span>
+            <span class="tgw"><span class="tgl">Pause</span><button type="button" class="tg" tabindex="-1" aria-hidden="true"><i></i></button></span>
+          </div>
+          <div class="rt-m">
+            <span class="sch mono">weekdays 08:55</span>
+            <span class="nx"><i>next</i><b class="mono" data-f="cd">in 2 h 14 m</b></span>
+            <span class="tail">
+              <span class="runs" data-f="runs"><i></i><i></i><i class="sk"></i><i></i><i></i><i></i><i class="fl"></i><i></i></span>
+              <button type="button" class="btn" tabindex="-1" aria-hidden="true">Run now</button>
+            </span>
+          </div>
+        </div>
+
+        <div class="rt paused" data-r="2">
+          <div class="rt-h">
+            <b class="rt-n">SEO audit</b>
+            <span class="mkchip">top 20 pages</span>
+            <span class="sp"></span>
+            <span class="tgw"><span class="tgl">Pause</span><button type="button" class="tg on" tabindex="-1" aria-hidden="true"><i></i></button></span>
+          </div>
+          <div class="rt-m">
+            <span class="sch mono">Mon 09:00</span>
+            <span class="nx"><i>next</i><b class="mono">paused</b></span>
+            <span class="tail">
+              <span class="runs"><i></i><i></i><i></i><i class="sk"></i><i></i><i></i><i></i><i></i></span>
+              <button type="button" class="btn" tabindex="-1" aria-hidden="true">Run now</button>
+            </span>
+          </div>
+        </div>
+
+        <div class="rt" data-r="3">
+          <div class="rt-h">
+            <b class="rt-n">Weekly recap</b>
+            <span class="mkchip">to #launch-q4</span>
+            <span class="sp"></span>
+            <span class="tgw"><span class="tgl">Pause</span><button type="button" class="tg" tabindex="-1" aria-hidden="true"><i></i></button></span>
+          </div>
+          <div class="rt-m">
+            <span class="sch mono">Fri 17:00</span>
+            <span class="nx"><i>next</i><b class="mono">in 3 d 6 h</b></span>
+            <span class="tail">
+              <span class="runs"><i></i><i></i><i></i><i class="fl"></i><i></i><i></i><i></i><i></i></span>
+              <button type="button" class="btn" tabindex="-1" aria-hidden="true">Run now</button>
+            </span>
+          </div>
+        </div>
+
+      </div>
+      <div class="key"><span>last 8 runs</span><span><i></i>ok</span><span><i class="sk"></i>skipped, overlap</span><span><i class="fl"></i>failed</span></div>
+    </div>
+  </div>
+</div>
+<script>
+(function(){
+  var root=document.querySelector('.mk-routines');
+  if(!root)return;
+  var reduce=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var row=root.querySelector('[data-r="1"]');
+  var cd=root.querySelector('[data-f="cd"]');
+  var runs=root.querySelector('[data-f="runs"]');
+  var REST='in 2 h 14 m',RESTRUNS=runs.innerHTML,START=134;
+  var timers=[],raf=0,live=false;
+
+  function fmt(m){
+    if(m<=0)return 'now';
+    if(m>=60)return 'in '+Math.floor(m/60)+' h '+(m%60)+' m';
+    return 'in '+m+' m';
+  }
+  function later(fn,ms){timers.push(setTimeout(fn,ms))}
+  function clear(){
+    while(timers.length)clearTimeout(timers.pop());
+    if(raf){cancelAnimationFrame(raf);raf=0}
+  }
+  function bump(){cd.classList.remove('tick');void cd.offsetWidth;cd.classList.add('tick')}
+  function restore(){
+    cd.textContent=REST;cd.classList.remove('tick');
+    runs.innerHTML=RESTRUNS;runs.classList.remove('dim');
+    row.classList.remove('fire');
+  }
+
+  function countdown(dur,done){
+    var t0=0;
+    function frame(ts){
+      if(!live)return;
+      if(!t0)t0=ts;
+      var k=Math.min(1,(ts-t0)/dur);
+      var e=k*k*(3-2*k);               /* ease-in-out */
+      var m=Math.round(START*(1-e));
+      var s=fmt(m);
+      if(cd.textContent!==s)cd.textContent=s;
+      if(k<1)raf=requestAnimationFrame(frame);else{raf=0;done()}
+    }
+    raf=requestAnimationFrame(frame);
+  }
+  function fire(){
+    row.classList.remove('fire');void row.offsetWidth;row.classList.add('fire');
+    var first=runs.firstElementChild;
+    var n=document.createElement('i');n.className='in';
+    runs.appendChild(n);
+    void n.offsetWidth;
+    n.className='';
+    first.className+=' out';
+    later(function(){if(first.parentNode===runs)runs.removeChild(first)},600);
+  }
+  function loop(){
+    restore();
+    later(function(){
+      countdown(2400,function(){
+        fire();
+        later(function(){cd.textContent=REST;bump()},1300);
+        later(function(){runs.classList.add('dim')},4100);
+        later(function(){loop()},4400);
+      });
+    },900);
+  }
+  function start(){
+    if(reduce||live)return;
+    live=true;loop();
+  }
+  function halt(){
+    live=false;clear();restore();
+  }
+  root.addEventListener('mk:live',start);
+  root.addEventListener('mk:idle',halt);
+  if(root.classList.contains('is-live'))start();
+})();
+</script>

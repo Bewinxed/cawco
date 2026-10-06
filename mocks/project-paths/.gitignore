@@ -1,0 +1,4 @@
+out/
+_preview-*.html
+_record-*.html
+node_modules

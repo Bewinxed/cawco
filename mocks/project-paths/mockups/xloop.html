@@ -1,0 +1,154 @@
+<style>
+.mk-xloop{--xl-go:color-mix(in oklab,var(--coral) 22%,var(--coral-wash));width:100%;min-width:0;font-family:var(--f-body);color:var(--ink);font-size:12px;line-height:1.4}
+.mk-xloop .mkf-body{gap:8px;position:relative}
+.mk-xloop .xl-card{min-width:0;background:var(--raised);border:1px solid var(--line);border-radius:var(--r-card);padding:8px 10px 9px}
+.mk-xloop .xl-hd{display:flex;flex-wrap:wrap;align-items:center;gap:3px 8px;min-width:0}
+.mk-xloop .xl-hd b{font-size:12.5px;font-weight:700}
+.mk-xloop .xl-lb{font-family:var(--f-mono);font-size:10px;color:var(--muted)}
+.mk-xloop .xl-hd .xl-lb{margin-left:auto}
+
+/* bar chart: median views by post type */
+.mk-xloop .xl-plot{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;align-items:end;margin-top:6px;border-bottom:1px solid var(--line-strong)}
+.mk-xloop .xl-col{display:flex;flex-direction:column;align-items:center;gap:3px;min-width:0}
+.mk-xloop .xl-val{font-family:var(--f-mono);font-size:10.5px;font-weight:600;line-height:1.2;color:var(--muted)}
+.mk-xloop .xl-bar{display:block;width:100%;max-width:46px;height:calc(var(--v) * 22px);border-radius:5px 5px 0 0;background:var(--line-strong);transform-origin:50% 100%}
+.mk-xloop .xl-col.xl-win .xl-bar{background:var(--coral)}
+.mk-xloop .xl-col.xl-win .xl-val{color:var(--coral-ink)}
+.mk-xloop .xl-ax{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin-top:4px}
+.mk-xloop .xl-ax span{font-family:var(--f-mono);font-size:9.5px;line-height:1.2;text-align:center;color:var(--muted);white-space:nowrap}
+
+/* curator proposal */
+.mk-xloop .xl-prop{border-color:var(--coral);display:flex;flex-direction:column;gap:7px}
+.mk-xloop .xl-claim{font-size:13px;font-weight:600;line-height:1.4;text-wrap:pretty}
+.mk-xloop .xl-act{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px 10px}
+.mk-xloop .xl-prov{display:flex;flex-wrap:wrap;gap:4px}
+.mk-xloop .xl-prov .mkchip{font-family:var(--f-mono);font-size:10.5px;color:var(--muted)}
+.mk-xloop .xl-btns{display:flex;align-items:center;gap:5px;margin-left:auto}
+.mk-xloop .xl-btns .btn{position:relative;font-size:11.5px;line-height:1.35;padding:3px 9px;border-radius:7px;white-space:nowrap;pointer-events:none}
+.mk-xloop .xl-btns .xl-go{background:var(--xl-go);border-color:var(--coral);color:var(--coral-ink);font-weight:700}
+.mk-xloop .xl-btns .xl-drop{background:transparent;border-color:transparent;color:var(--muted);font-weight:500}
+.mk-xloop .xl-gw{position:relative;display:inline-flex}
+.mk-xloop .xl-cur{position:absolute;right:-4px;top:11px;width:14px;height:14px;opacity:0;pointer-events:none;z-index:2}
+.mk-xloop .xl-cur path{fill:var(--ink);stroke:var(--raised);stroke-width:1}
+
+/* the chip that carries the rule across */
+.mk-xloop .xl-link{position:relative;height:0;z-index:4}
+.mk-xloop .xl-fly{position:absolute;right:10px;top:-9px;opacity:0;pointer-events:none}
+
+/* next Monday's draft */
+.mk-xloop .xl-dr{display:grid;grid-template-columns:62px minmax(0,1fr);gap:10px;align-items:stretch;margin-top:6px}
+.mk-xloop .xl-th{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:minmax(0,1fr) minmax(0,1fr);gap:4px;padding:5px;border-radius:8px;border:1px solid var(--line);background:linear-gradient(135deg,var(--coral-wash),var(--recess));min-height:46px}
+.mk-xloop .xl-th i{display:block;border-radius:4px;background:var(--raised);border:1px solid var(--line)}
+.mk-xloop .xl-th i:first-child{grid-row:1/3}
+.mk-xloop .xl-th i:last-child{background:var(--coral-wash);border-color:var(--coral)}
+.mk-xloop .xl-dt{display:flex;flex-direction:column;justify-content:space-between;gap:3px;min-width:0}
+.mk-xloop .xl-dt p{font-size:12.5px;line-height:1.4;font-weight:500;text-wrap:pretty}
+.mk-xloop .xl-use{margin-left:auto;transform-origin:100% 50%}
+
+/* motion: bars grow, the proposal lights up, you press, the rule chip flies to the draft (11s) */
+@media (prefers-reduced-motion:no-preference){
+  .mk-xloop.is-live .xl-bar,.mk-xloop.is-live .xl-val,.mk-xloop.is-live .xl-prop,.mk-xloop.is-live .xl-draft,.mk-xloop.is-live .xl-use,.mk-xloop.is-live .xl-go,.mk-xloop.is-live .xl-cur,.mk-xloop.is-live .xl-fly{animation-duration:11s;animation-delay:-8.3s;animation-iteration-count:infinite;animation-timing-function:cubic-bezier(.2,.8,.2,1)}
+  .mk-xloop.is-live .xl-col:nth-child(1) .xl-bar{animation-name:xloop-b1}
+  .mk-xloop.is-live .xl-col:nth-child(2) .xl-bar{animation-name:xloop-b2}
+  .mk-xloop.is-live .xl-col:nth-child(3) .xl-bar{animation-name:xloop-b3}
+  .mk-xloop.is-live .xl-col:nth-child(4) .xl-bar{animation-name:xloop-b4}
+  .mk-xloop.is-live .xl-col.xl-win .xl-bar{animation-name:xloop-win}
+  .mk-xloop.is-live .xl-val{animation-name:xloop-val;animation-timing-function:ease-in-out}
+  .mk-xloop.is-live .xl-prop{animation-name:xloop-prop}
+  .mk-xloop.is-live .xl-go{animation-name:xloop-press;animation-timing-function:ease-in-out}
+  .mk-xloop.is-live .xl-cur{animation-name:xloop-cur}
+  .mk-xloop.is-live .xl-fly{animation-name:xloop-fly}
+  .mk-xloop.is-live .xl-use{animation-name:xloop-use}
+  .mk-xloop.is-live .xl-draft{animation-name:xloop-draft;animation-timing-function:ease-in-out}
+}
+@keyframes xloop-b1{0%,3%{transform:scaleY(.03)}13%,94%{transform:scaleY(1)}99%,100%{transform:scaleY(.03)}}
+@keyframes xloop-b2{0%,5%{transform:scaleY(.03)}15%,94%{transform:scaleY(1)}99%,100%{transform:scaleY(.03)}}
+@keyframes xloop-b3{0%,7%{transform:scaleY(.03)}17%,94%{transform:scaleY(1)}99%,100%{transform:scaleY(.03)}}
+@keyframes xloop-b4{0%,9%{transform:scaleY(.03)}19%,94%{transform:scaleY(1)}99%,100%{transform:scaleY(.03)}}
+@keyframes xloop-win{
+  0%,3%{transform:scaleY(.03);background:var(--line-strong)}
+  13%{transform:scaleY(1);background:var(--line-strong)}
+  21%,94%{transform:scaleY(1);background:var(--coral)}
+  98.5%{transform:scaleY(.03);background:var(--coral)}
+  99%,100%{transform:scaleY(.03);background:var(--line-strong)}
+}
+@keyframes xloop-val{0%,15%{opacity:0}21%,94%{opacity:1}98%,100%{opacity:0}}
+@keyframes xloop-prop{
+  0%,26%{opacity:.25;transform:translateY(8px);background:var(--raised)}
+  32%,46%{opacity:1;transform:none;background:var(--coral-wash)}
+  56%,93%{opacity:1;transform:none;background:var(--raised)}
+  99%,100%{opacity:.25;transform:translateY(8px);background:var(--raised)}
+}
+@keyframes xloop-press{
+  0%,52%{transform:none;background:var(--xl-go);box-shadow:none}
+  55%,58%{transform:translateY(1px) scale(.94);background:color-mix(in oklab,var(--coral) 40%,var(--coral-wash));box-shadow:0 0 0 4px color-mix(in oklab,var(--coral) 26%,transparent)}
+  64%,100%{transform:none;background:var(--xl-go);box-shadow:none}
+}
+@keyframes xloop-cur{
+  0%,44%{opacity:0;transform:translate(26px,22px)}
+  51%{opacity:1;transform:translate(2px,2px)}
+  54%,57%{opacity:1;transform:translate(0,0) scale(.88)}
+  62%{opacity:1;transform:translate(10px,8px)}
+  66%,100%{opacity:0;transform:translate(26px,22px)}
+}
+@keyframes xloop-fly{
+  0%,56%{opacity:0;transform:translate(-80px,-20px) scale(.85)}
+  60%{opacity:1;transform:translate(-80px,-20px) scale(1)}
+  71%{opacity:1;transform:translate(0,28px) scale(1)}
+  74%,100%{opacity:0;transform:translate(0,32px) scale(.8)}
+}
+@keyframes xloop-use{
+  0%,71%{opacity:0;transform:scale(.6)}
+  77%,94%{opacity:1;transform:none}
+  99%,100%{opacity:0;transform:scale(.6)}
+}
+@keyframes xloop-draft{
+  0%,70%{border-color:var(--line);background:var(--raised)}
+  75%,81%{border-color:var(--coral);background:var(--coral-wash)}
+  90%,100%{border-color:var(--line);background:var(--raised)}
+}
+@media (prefers-reduced-motion:reduce){
+  .mk-xloop *,.mk-xloop *::after{animation:none!important;transition:none!important}
+}
+</style>
+<div class="mk mk-xloop" role="img" aria-label="Every week the curator looks at what performed, here screenshots at 2.4 times median views, and proposes a playbook rule. You approve it, and next Monday's draft uses it.">
+  <div class="mkf">
+    <div class="mkf-bar"><b>x-growth</b><span>· Weekly recap</span><span class="sp"></span><span class="mkchip model">curator</span></div>
+    <div class="mkf-body">
+
+      <div class="xl-card xl-chart">
+        <div class="xl-hd"><b>Median views by post type</b><span class="xl-lb">last 3 weeks</span></div>
+        <div class="xl-plot" aria-hidden="true">
+          <div class="xl-col xl-win" style="--v:2.4"><span class="xl-val">2.4x</span><i class="xl-bar"></i></div>
+          <div class="xl-col" style="--v:1.4"><span class="xl-val">1.4x</span><i class="xl-bar"></i></div>
+          <div class="xl-col" style="--v:1"><span class="xl-val">1.0x</span><i class="xl-bar"></i></div>
+          <div class="xl-col" style="--v:.8"><span class="xl-val">0.8x</span><i class="xl-bar"></i></div>
+        </div>
+        <div class="xl-ax" aria-hidden="true"><span>screenshot</span><span>thread</span><span>link</span><span>text</span></div>
+      </div>
+
+      <div class="xl-card xl-prop">
+        <p class="xl-claim">Posts with a screenshot got 2.4x median views over 3 weeks. Add to the playbook?</p>
+        <div class="xl-act">
+          <span class="xl-prov"><span class="mkchip">21 posts</span><span class="mkchip">3 weeks</span></span>
+          <span class="xl-btns" aria-hidden="true">
+            <span class="xl-gw"><button type="button" class="btn xl-go" tabindex="-1">Looks good</button><svg class="xl-cur" viewBox="0 0 16 16"><path d="M2 1l11 5.5-4.6 1.4L6.5 13z"/></svg></span>
+            <button type="button" class="btn" tabindex="-1">Edit</button>
+            <button type="button" class="btn xl-drop" tabindex="-1">Drop</button>
+          </span>
+        </div>
+      </div>
+
+      <div class="xl-link" aria-hidden="true"><span class="mkchip you xl-fly">→ project memory</span></div>
+
+      <div class="xl-card xl-draft">
+        <div class="xl-hd"><b>Next Monday's draft</b><span class="mkchip you xl-use">uses: screenshot rule</span></div>
+        <div class="xl-dr">
+          <div class="xl-th" aria-hidden="true"><i></i><i></i><i></i></div>
+          <div class="xl-dt"><p>This week's fleet board, one page for every agent.</p><span class="xl-lb">Mon 09:00 · X · waits for you</span></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>

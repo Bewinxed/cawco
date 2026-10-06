@@ -1,0 +1,210 @@
+<style>
+.mk-xreply{container-type:inline-size;width:100%;min-width:0;font-family:var(--f-body);color:var(--ink);font-size:12px;line-height:1.4}
+.mk-xreply .mkf-body{gap:8px;padding:12px}
+.mk-xreply .xr-flow{width:min(100%,420px);margin:0 auto;display:flex;flex-direction:column;min-width:0}
+
+/* nodes: dashed = code, solid ink = model, coral = you */
+.mk-xreply .xr-n{position:relative;min-width:0;background:var(--raised);border:1px solid var(--line-strong);border-radius:12px;padding:6px 10px}
+.mk-xreply .xr-n.xr-model{border:1.5px solid var(--ink)}
+.mk-xreply .xr-n.xr-code{border-style:dashed;border-color:var(--muted)}
+.mk-xreply .xr-n.xr-you{background:var(--coral-wash);border-color:var(--coral)}
+.mk-xreply .xr-r{display:flex;align-items:center;gap:6px;min-width:0}
+.mk-xreply .xr-t{font-size:12.5px;font-weight:700;line-height:1.3}
+.mk-xreply .xr-s{font-size:11.5px;color:var(--muted);line-height:1.35}
+.mk-xreply .xr-k{margin-left:auto;font-family:var(--f-mono);font-size:9.5px;color:var(--muted);letter-spacing:.02em}
+.mk-xreply .xr-you .xr-k{color:var(--coral-ink)}
+.mk-xreply .xr-lb{font-family:var(--f-mono);font-size:10px;color:var(--muted);letter-spacing:.02em}
+
+/* incoming mention */
+.mk-xreply .xr-in .xr-q{margin-top:4px;padding-left:8px;border-left:2px solid var(--line-strong);font-size:12.5px;line-height:1.4;font-style:italic}
+.mk-xreply .xr-in .xr-r span.xr-lb{margin-left:auto}
+
+/* drafter */
+.mk-xreply .xr-dr{padding:6px 10px 7px}
+.mk-xreply .xr-tools{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px}
+.mk-xreply .xr-tools span{font-family:var(--f-mono);font-size:10.5px;line-height:17px;padding:0 6px;border:1px solid var(--line);border-radius:5px;background:var(--bg);color:var(--ink)}
+
+/* edges */
+.mk-xreply .xr-ed{position:relative;flex:none;height:13px;width:100%;--d:8px}
+.mk-xreply .xr-ed::before,.mk-xreply .xr-gap::before{content:"";position:absolute;left:50%;top:0;bottom:4px;width:1.5px;margin-left:-.75px;background:var(--muted)}
+.mk-xreply .xr-ed::after,.mk-xreply .xr-gap::after{content:"";position:absolute;left:50%;bottom:0;margin-left:-4px;border-left:4px solid transparent;border-right:4px solid transparent;border-top:5px solid var(--muted)}
+.mk-xreply .xr-p{position:absolute;left:50%;top:0;width:7px;height:7px;margin-left:-3.5px;border-radius:50%;background:var(--ink);box-shadow:0 0 0 3px color-mix(in oklab,var(--ink) 14%,transparent);opacity:0;pointer-events:none;z-index:2}
+.mk-xreply .xr-a4 .xr-p{background:var(--coral);box-shadow:0 0 0 3px color-mix(in oklab,var(--coral) 22%,transparent)}
+
+/* the blocked side branch */
+.mk-xreply .xr-gap{position:relative;flex:none;height:64px;--d:57px}
+.mk-xreply .xr-br{position:absolute;left:50%;top:9px;width:40px;height:14px}
+.mk-xreply .xr-br i{position:absolute;top:6px;height:0}
+.mk-xreply .xr-br .l1{left:0;width:14px;border-top:1.5px solid var(--muted)}
+.mk-xreply .xr-br .l2{left:26px;width:14px;border-top:1.5px dashed var(--line-strong)}
+.mk-xreply .xr-xb{position:absolute;left:13px;top:0;width:14px;height:14px;border-radius:50%;background:var(--err-wash);color:var(--err-ink);display:grid;place-items:center;z-index:2}
+.mk-xreply .xr-xb svg{width:8px;height:8px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round}
+.mk-xreply .xr-bp{position:absolute;left:50%;top:9px;margin-top:3.5px;margin-left:-1px;width:7px;height:7px;border-radius:50%;background:var(--ink);box-shadow:0 0 0 3px color-mix(in oklab,var(--ink) 14%,transparent);opacity:0;z-index:3;pointer-events:none}
+.mk-xreply .xr-xn{position:absolute;right:0;top:2px;width:calc(50% - 40px);min-width:0;padding:5px 7px 6px;border:1px solid var(--line-strong);border-radius:10px;background:transparent}
+.mk-xreply .xr-xn .xr-lb{display:block;font-size:10.5px;color:var(--ink);line-height:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mk-xreply .xr-xn .mkchip{display:block;margin-top:3px;white-space:normal;font-size:10px;line-height:1.25;padding:2px 5px;border-radius:5px;text-wrap:balance}
+
+/* draft, approve, poster, result */
+.mk-xreply .xr-dm .xr-tx{margin-top:3px;font-size:12.5px;line-height:1.4}
+.mk-xreply .xr-ap{padding:5px 10px}
+.mk-xreply .xr-pt .xr-s{margin-top:1px}
+.mk-xreply .xr-ok{padding:5px 10px;border-color:var(--line-strong)}
+.mk-xreply .xr-ok .xr-chk{flex:none;width:16px;height:16px;border-radius:50%;background:var(--ok-wash);color:var(--ok-ink);display:grid;place-items:center}
+.mk-xreply .xr-ok .xr-chk svg{width:10px;height:10px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.mk-xreply .xr-ok .xr-lb{margin-left:auto;font-size:10.5px}
+@container (min-width:400px){
+  .mk-xreply .xr-gap{height:48px;--d:41px}
+}
+ /* motion: a mention slides in, a pulse walks the main path, the blocked branch gets stopped (10s) */
+@media (prefers-reduced-motion:no-preference){
+  .mk-xreply.is-live .xr-in{animation:xreply-in 10s cubic-bezier(.2,.8,.2,1) infinite}
+  .mk-xreply.is-live .xr-p{animation-duration:10s;animation-timing-function:ease-in-out;animation-iteration-count:infinite}
+  .mk-xreply.is-live .xr-a1 .xr-p{animation-name:xreply-a1}
+  .mk-xreply.is-live .xr-gap .xr-p{animation-name:xreply-a2}
+  .mk-xreply.is-live .xr-a3 .xr-p{animation-name:xreply-a3}
+  .mk-xreply.is-live .xr-a4 .xr-p{animation-name:xreply-a4}
+  .mk-xreply.is-live .xr-a5 .xr-p{animation-name:xreply-a5}
+  .mk-xreply.is-live .xr-bp{animation:xreply-bp 10s ease-in infinite}
+  .mk-xreply.is-live .xr-xb{animation:xreply-xb 10s ease-in-out infinite}
+  .mk-xreply.is-live .xr-xn{animation:xreply-xn 10s ease-in-out infinite}
+  .mk-xreply.is-live .xr-dr{animation:xreply-lit-dr 10s ease-in-out infinite}
+  .mk-xreply.is-live .xr-dm{animation:xreply-lit-dm 10s ease-in-out infinite}
+  .mk-xreply.is-live .xr-ap{animation:xreply-ap 10s ease-in-out infinite}
+  .mk-xreply.is-live .xr-pt{animation:xreply-lit-pt 10s ease-in-out infinite}
+  .mk-xreply.is-live .xr-ok{animation:xreply-ok 10s ease-in-out infinite}
+}
+
+@keyframes xreply-in{
+  0%{transform:translateX(-18px);opacity:0}
+  6%,95%{transform:none;opacity:1}
+  100%{transform:none;opacity:0}
+}
+@keyframes xreply-bp{
+  0%,24%{opacity:0;transform:translateX(0)}
+  25%{opacity:1;transform:translateX(0)}
+  30%{opacity:1;transform:translateX(15px)}
+  31%,100%{opacity:0;transform:translateX(15px)}
+}
+@keyframes xreply-xb{
+  0%,29%{transform:none}
+  31%{transform:translateX(-2px) scale(1.25)}
+  33%{transform:translateX(2px) scale(1.25)}
+  35%{transform:translateX(-1px) scale(1.15)}
+  38%,100%{transform:none}
+}
+@keyframes xreply-xn{
+  0%,29%{background:transparent;border-color:var(--line-strong)}
+  32%,38%{background:var(--err-wash);border-color:var(--err-ink)}
+  48%,100%{background:transparent;border-color:var(--line-strong)}
+}
+@keyframes xreply-ap{
+  0%,58%{transform:none;background:var(--coral-wash);box-shadow:none}
+  61%,66%{transform:scale(.97);background:color-mix(in oklab,var(--coral) 34%,var(--coral-wash));box-shadow:0 0 0 4px color-mix(in oklab,var(--coral) 24%,transparent)}
+  71%,100%{transform:none;background:var(--coral-wash);box-shadow:none}
+}
+@keyframes xreply-ok{
+  0%,86%{background:var(--raised);border-color:var(--line-strong)}
+  90%,95%{background:color-mix(in oklab,var(--ok-wash) 45%,var(--raised));border-color:var(--ok-ink)}
+  99%,100%{background:var(--raised);border-color:var(--line-strong)}
+}
+@keyframes xreply-a1{
+  0%,8%{opacity:0;transform:translateY(0)}
+  8.6%{opacity:1;transform:translateY(0)}
+  16.4%{opacity:1;transform:translateY(var(--d))}
+  17%,100%{opacity:0;transform:translateY(var(--d))}
+}
+@keyframes xreply-a2{
+  0%,34%{opacity:0;transform:translateY(0)}
+  34.6%{opacity:1;transform:translateY(0)}
+  45.4%{opacity:1;transform:translateY(var(--d))}
+  46%,100%{opacity:0;transform:translateY(var(--d))}
+}
+@keyframes xreply-a3{
+  0%,53%{opacity:0;transform:translateY(0)}
+  53.6%{opacity:1;transform:translateY(0)}
+  59.4%{opacity:1;transform:translateY(var(--d))}
+  60%,100%{opacity:0;transform:translateY(var(--d))}
+}
+@keyframes xreply-a4{
+  0%,70%{opacity:0;transform:translateY(0)}
+  70.6%{opacity:1;transform:translateY(0)}
+  76.4%{opacity:1;transform:translateY(var(--d))}
+  77%,100%{opacity:0;transform:translateY(var(--d))}
+}
+@keyframes xreply-a5{
+  0%,81%{opacity:0;transform:translateY(0)}
+  81.6%{opacity:1;transform:translateY(0)}
+  87.4%{opacity:1;transform:translateY(var(--d))}
+  88%,100%{opacity:0;transform:translateY(var(--d))}
+}
+@keyframes xreply-lit-dr{
+  0%,16%{background:var(--raised);box-shadow:none}
+  19%,25%{background:var(--recess);box-shadow:0 0 0 3px color-mix(in oklab,var(--ink) 12%,transparent)}
+  28%,100%{background:var(--raised);box-shadow:none}
+}
+@keyframes xreply-lit-dm{
+  0%,46%{background:var(--raised);box-shadow:none}
+  49%,55%{background:var(--recess);box-shadow:0 0 0 3px color-mix(in oklab,var(--ink) 12%,transparent)}
+  58%,100%{background:var(--raised);box-shadow:none}
+}
+@keyframes xreply-lit-pt{
+  0%,77%{background:var(--raised);box-shadow:none}
+  80%,86%{background:var(--recess);box-shadow:0 0 0 3px color-mix(in oklab,var(--ink) 12%,transparent)}
+  89%,100%{background:var(--raised);box-shadow:none}
+}
+@media (prefers-reduced-motion:reduce){
+  .mk-xreply *,.mk-xreply *::after{animation:none!important;transition:none!important}
+}
+</style>
+<div class="mk mk-xreply" role="img" aria-label="A mention from outside is untrusted. A web-facing drafter can only write a draft, because it has no posting tool. You approve the exact text, and a plain program posts it, once per mention.">
+  <div class="mkf">
+    <div class="mkf-body">
+      <div class="xr-flow">
+
+        <div class="xr-n xr-in">
+          <div class="xr-r"><span class="mkchip warn">untrusted</span><span class="xr-lb">mention · 09:12</span></div>
+          <p class="xr-q">@sample_reader: does this work with OpenCode too?</p>
+        </div>
+
+        <div class="xr-ed xr-a1" aria-hidden="true"><i class="xr-p"></i></div>
+
+        <div class="xr-n xr-model xr-dr">
+          <div class="xr-r"><span class="xr-t">Reply drafter</span><span class="mkchip">web-facing</span><span class="xr-k">model</span></div>
+          <div class="xr-tools"><span>draft_reply</span><span>knowledge_search</span></div>
+        </div>
+
+        <div class="xr-gap" aria-hidden="true">
+          <i class="xr-p"></i>
+          <div class="xr-br"><i class="l1"></i><i class="l2"></i><span class="xr-xb"><svg viewBox="0 0 8 8"><path d="M1.5 1.5l5 5M6.5 1.5l-5 5"/></svg></span></div>
+          <i class="xr-bp"></i>
+          <div class="xr-xn"><span class="xr-lb">X API · post</span><span class="mkchip err">no posting tool in this role</span></div>
+        </div>
+
+        <div class="xr-n xr-dm">
+          <div class="xr-r"><span class="xr-lb">Draft</span></div>
+          <p class="xr-tx">Yes. OpenCode, Claude Code and pi run side by side.</p>
+        </div>
+
+        <div class="xr-ed xr-a3" aria-hidden="true"><i class="xr-p"></i></div>
+
+        <div class="xr-n xr-you xr-ap">
+          <div class="xr-r"><i class="mkdot you"></i><span class="xr-t">You · Approve</span><span class="xr-k">you</span></div>
+        </div>
+
+        <div class="xr-ed xr-a4" aria-hidden="true"><i class="xr-p"></i></div>
+
+        <div class="xr-n xr-code xr-pt">
+          <div class="xr-r"><span class="xr-t">Poster</span><span class="xr-k">code</span></div>
+          <p class="xr-s">posts exactly the approved text · keys in the hub</p>
+        </div>
+
+        <div class="xr-ed xr-a5" aria-hidden="true"><i class="xr-p"></i></div>
+
+        <div class="xr-n xr-ok">
+          <div class="xr-r"><span class="xr-chk"><svg viewBox="0 0 12 12"><path d="M2.5 6.3l2.2 2.2 4.8-5"/></svg></span><span class="xr-t">Reply posted</span><span class="xr-lb">1 per mention</span></div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>

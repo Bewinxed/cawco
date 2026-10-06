@@ -1,0 +1,118 @@
+<style>
+@property --mka-p{syntax:"<integer>";inherits:false;initial-value:23}
+.mk-attempts{display:block;min-width:0;container-type:inline-size;color:var(--ink);font-family:var(--f-body);font-size:12.5px;line-height:1.4;text-align:left}
+.mk-attempts *,.mk-attempts *::before,.mk-attempts *::after{box-sizing:border-box}
+.mk-attempts .mka-stage{display:flex;gap:10px;padding:8px;background:var(--recess);border:1px solid var(--line);border-radius:var(--r-tray);min-width:0}
+.mk-attempts .mka-ghost{flex:1 1 0;min-width:0;display:flex;flex-direction:column;gap:6px;padding-top:2px}
+.mk-attempts .mka-ghost i{display:block;height:46px;border-radius:9px;background:var(--bg);border:1px solid var(--line);opacity:.7}
+.mk-attempts .mka-ghost i:first-child{height:34px}
+.mk-attempts .mka-ghost i.pick{border-color:var(--coral);opacity:1}
+.mk-attempts .mka-drawer{flex:0 1 360px;margin-left:auto;min-width:0;width:100%;max-width:360px;background:var(--raised);border:1px solid var(--line-strong);border-radius:14px;padding:11px 14px 11px;display:flex;flex-direction:column;gap:9px}
+@container (max-width:470px){.mk-attempts .mka-ghost{display:none}.mk-attempts .mka-drawer{max-width:none}}
+
+.mk-attempts .mka-head{display:flex;flex-direction:column;gap:4px}
+.mk-attempts .mka-top{display:flex;align-items:center;gap:8px;min-width:0}
+.mk-attempts .mka-id{font-family:var(--f-mono);font-size:12px;color:var(--muted);font-variant-ligatures:none}
+.mk-attempts .mka-top .mkchip{margin-left:auto}
+.mk-attempts .mka-title{font-size:15.5px;font-weight:700;line-height:1.25}
+
+.mk-attempts .mka-sec{display:flex;flex-direction:column;gap:5px;padding-top:8px;border-top:1px solid var(--line)}
+.mk-attempts .mka-lbl{display:flex;align-items:center;gap:8px;height:16px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.mk-attempts .mka-cols{margin-left:auto;display:flex;gap:6px}
+.mk-attempts .mka-cols i{display:block;width:18px;text-align:center;font-style:normal;font-family:var(--f-mono);font-size:9.5px;font-weight:500;letter-spacing:0;text-transform:none}
+.mk-attempts .mka-checks{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:1px}
+.mk-attempts .mka-checks li{display:flex;align-items:center;gap:6px;height:22px}
+.mk-attempts .mka-checks code{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--f-mono);font-size:12px;font-variant-ligatures:none}
+.mk-attempts .mka-m{position:relative;flex:none;display:block;width:18px;height:18px;border-radius:50%}
+.mk-attempts .mka-m.ok{background:var(--ok-wash)}
+.mk-attempts .mka-m.ok::after{content:"";position:absolute;left:5.5px;top:5px;width:7px;height:4px;border-left:1.8px solid var(--ok-ink);border-bottom:1.8px solid var(--ok-ink);transform:rotate(-45deg)}
+.mk-attempts .mka-m.bad{background:var(--err-wash)}
+.mk-attempts .mka-m.bad::before,.mk-attempts .mka-m.bad::after{content:"";position:absolute;left:4.5px;top:8.1px;width:9px;height:1.8px;border-radius:1px;background:var(--err-ink);transform:rotate(45deg)}
+.mk-attempts .mka-m.bad::after{transform:rotate(-45deg)}
+.mk-attempts .mka-m.wait{border:1.5px dashed var(--line-strong)}
+
+.mk-attempts .mka-att{display:flex;flex-direction:column;gap:6px;padding:8px 10px;border:1px solid var(--line-strong);border-radius:10px;background:var(--bg)}
+.mk-attempts .mka-att.run{border:1.5px solid var(--ink);padding:7px 9.5px}
+.mk-attempts .mka-row{display:flex;align-items:center;gap:7px;min-width:0;white-space:nowrap}
+.mk-attempts .mka-row b{font-size:13px;font-weight:700}
+.mk-attempts .mka-row .mono{font-family:var(--f-mono);font-size:11.5px;font-variant-ligatures:none}
+.mk-attempts .mka-row .mut{color:var(--muted);font-size:12px}
+.mk-attempts .mka-row .push{margin-left:auto}
+.mk-attempts .mka-meter{display:flex;align-items:flex-end;gap:8px;position:relative;padding-top:12px}
+.mk-attempts .mka-bar{position:relative;flex:1;min-width:0;height:7px;border-radius:4px;background:var(--recess);overflow:hidden}
+.mk-attempts .mka-fill{position:absolute;inset:0;background:linear-gradient(90deg,var(--muted) 0 40%,var(--warn-ink) 40% 100%)}
+.mk-attempts .mka-cover{position:absolute;inset:0;background:var(--recess);transform:translateX(23%)}
+.mk-attempts .mka-tick{position:absolute;left:40%;top:0;bottom:0;width:1.5px;background:var(--ink)}
+.mk-attempts .mka-tl{position:absolute;left:0;right:0;top:0;height:11px;pointer-events:none}
+.mk-attempts .mka-tl span{position:absolute;left:40%;top:0;transform:translateX(-50%);font-family:var(--f-mono);font-size:9.5px;line-height:11px;color:var(--muted)}
+.mk-attempts .mka-pct{flex:none;width:34px;text-align:right;font-family:var(--f-mono);font-size:12px;font-weight:500;line-height:7px;counter-reset:mka-p var(--mka-p);color:var(--muted);align-self:center;margin-top:9px}
+.mk-attempts .mka-pct::before{content:counter(mka-p) "%";line-height:1}
+
+.mk-attempts .mka-acts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.mk-attempts .btn{font-size:12.5px;line-height:1.2;padding:7px 6px;border-width:1.5px;white-space:normal;pointer-events:none;text-align:center;display:flex;align-items:center;justify-content:center}
+.mk-attempts .btn.go{background:var(--coral-wash);border-color:var(--coral);color:var(--coral-ink)}
+.mk-attempts .btn.alt{background:var(--raised);border-color:var(--line-strong);color:var(--ink)}
+.mk-attempts .mka-rule{font-size:11.5px;line-height:1.35;color:var(--muted);text-align:center;margin-top:-2px}
+
+@keyframes mka-p{0%,6%{--mka-p:23}75%,90%{--mka-p:52}96%,100%{--mka-p:23}}
+@keyframes mka-cover{0%,6%{transform:translateX(23%)}75%,90%{transform:translateX(52%)}96%,100%{transform:translateX(23%)}}
+@keyframes mka-pcol{0%,46.4%{color:var(--muted)}46.5%,90%{color:var(--warn-ink)}96%,100%{color:var(--muted)}}
+@keyframes mka-cont{
+  0%,46.4%{background-color:var(--coral-wash);border-color:var(--coral);color:var(--coral-ink);opacity:1}
+  50%,90%{background-color:var(--recess);border-color:var(--line);color:var(--muted);opacity:.6}
+  96%,100%{background-color:var(--coral-wash);border-color:var(--coral);color:var(--coral-ink);opacity:1}
+}
+@keyframes mka-new{
+  0%,46.4%{background-color:var(--raised);border-color:var(--line-strong);color:var(--ink)}
+  50%,90%{background-color:var(--coral-wash);border-color:var(--coral);color:var(--coral-ink)}
+  96%,100%{background-color:var(--raised);border-color:var(--line-strong);color:var(--ink)}
+}
+@keyframes mka-live{0%,100%{box-shadow:0 0 0 0 var(--ok-wash)}50%{box-shadow:0 0 0 3px var(--ok-wash)}}
+.mk-attempts.is-live .mka-pct{animation:mka-p 10s linear infinite,mka-pcol 10s linear infinite}
+.mk-attempts.is-live .mka-cover{animation:mka-cover 10s linear infinite;will-change:transform}
+.mk-attempts.is-live .btn.go{animation:mka-cont 10s ease-in-out infinite}
+.mk-attempts.is-live .btn.alt{animation:mka-new 10s ease-in-out infinite}
+.mk-attempts.is-live .mkdot.live{animation:mka-live 2.4s ease-in-out infinite}
+
+@media (prefers-reduced-motion:reduce){
+  .mk-attempts *,.mk-attempts *::before,.mk-attempts *::after{animation:none !important;transition:none !important}
+}
+</style>
+<div class="mk mk-attempts" role="img" aria-label="Task drawer for #151: attempt 2 is running at 23 percent context, so Continue this session is available; once context passes 40 percent it greys out and New attempt becomes the primary action.">
+  <div class="mka-stage">
+    <div class="mka-ghost" aria-hidden="true"><i></i><i class="pick"></i><i></i></div>
+    <div class="mka-drawer">
+      <div class="mka-head">
+        <div class="mka-top"><span class="mka-id">#151</span><span class="mkchip"><span class="mkdot live"></span>Running</span></div>
+        <div class="mka-title">Add dark mode toggle</div>
+      </div>
+      <div class="mka-sec">
+        <div class="mka-lbl"><span>Checks</span><span class="mka-cols"><i>1</i><i>2</i></span></div>
+        <ul class="mka-checks">
+          <li><code>bun run typecheck</code><i class="mka-m ok"></i><i class="mka-m wait"></i></li>
+          <li><code>bun test</code><i class="mka-m bad"></i><i class="mka-m wait"></i></li>
+          <li><code>bun run lint</code><i class="mka-m ok"></i><i class="mka-m wait"></i></li>
+        </ul>
+      </div>
+      <div class="mka-sec">
+        <div class="mka-lbl"><span>Attempts</span></div>
+        <div class="mka-att">
+          <div class="mka-row"><b>Attempt 1</b><span class="mkchip err">failed</span><span class="mono">checks 2/3</span><span class="mut push">ended</span></div>
+        </div>
+        <div class="mka-att run">
+          <div class="mka-row"><b>Attempt 2</b><span class="mkchip"><span class="mkdot live"></span>running</span><span class="mono push">ws-4f2a</span></div>
+          <div class="mka-meter">
+            <div class="mka-tl"><span>40%</span></div>
+            <div class="mka-bar"><i class="mka-fill"></i><i class="mka-cover"></i><i class="mka-tick"></i></div>
+            <span class="mka-pct"></span>
+          </div>
+        </div>
+      </div>
+      <div class="mka-acts">
+        <button class="btn go" type="button" tabindex="-1" aria-hidden="true">Continue this session</button>
+        <button class="btn alt" type="button" tabindex="-1" aria-hidden="true">New attempt</button>
+      </div>
+      <div class="mka-rule">Continue only while idle, on this task, under 40% context</div>
+    </div>
+  </div>
+</div>

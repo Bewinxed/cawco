@@ -1,0 +1,185 @@
+<style>
+.mk-thread{container-type:inline-size;width:100%;font-family:var(--f-body);color:var(--ink)}
+.mk-thread .th-sep{color:var(--line-strong)}
+.mk-thread .mkf-body{gap:8px}
+
+/* event row: dashed = done by code */
+.mk-thread .th-ev{align-self:center;max-width:100%;display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:0 7px;border:1px dashed var(--muted);border-radius:8px;background:var(--raised);padding:2px 10px;font-size:11.5px;line-height:18px;color:var(--muted)}
+.mk-thread .th-ev b{font-weight:600;color:var(--ink)}
+.mk-thread .th-ev .t{font-family:var(--f-mono);font-size:11px}
+
+/* a message row: avatar + content */
+.mk-thread .th-m{display:grid;grid-template-columns:22px minmax(0,1fr);gap:8px;align-items:start}
+.mk-thread .th-av{grid-area:1/1;position:relative;width:22px;height:22px}
+.mk-thread .th-av>span{position:absolute;inset:0;transition:opacity .25s ease-in-out}
+.mk-thread .th-av .wk{opacity:0}
+.mk-thread .th-c{grid-area:1/2;min-width:0;display:flex;flex-direction:column;gap:6px}
+.mk-thread .th-name{display:flex;align-items:baseline;gap:6px;font-size:12px;line-height:22px;margin-top:-3px}
+.mk-thread .th-name b{font-weight:700}
+.mk-thread .th-name .t{font-family:var(--f-mono);font-size:10.5px;color:var(--muted)}
+.mk-thread .th-tx{font-size:13px;line-height:1.4}
+
+/* typing indicator sits in the same cell as the content */
+.mk-thread .th-typing{grid-area:1/2;align-self:start;justify-self:start;display:inline-flex;gap:4px;align-items:center;background:var(--recess);border-radius:12px;padding:8px 11px;opacity:0;pointer-events:none;transition:opacity .2s ease-in-out}
+.mk-thread .th-typing i{display:block;width:5px;height:5px;border-radius:50%;background:var(--muted)}
+
+/* inline mini task cards */
+.mk-thread .th-tasks{display:flex;flex-wrap:wrap;gap:6px}
+.mk-thread .th-task{flex:1 1 170px;min-width:0;background:var(--raised);border:1px solid var(--line);border-radius:10px;padding:6px 9px;display:flex;flex-direction:column;gap:5px}
+.mk-thread .th-task .h{display:flex;align-items:baseline;gap:6px;font-size:12.5px;font-weight:600;line-height:1.3}
+.mk-thread .th-task .id{font-family:var(--f-mono);font-size:11px;font-weight:500;color:var(--muted)}
+.mk-thread .th-task .meta{display:flex;flex-wrap:wrap;gap:4px;margin-top:auto}
+.mk-thread .th-task code{font-size:10.5px}
+
+/* duplicate note: the thing you act on */
+.mk-thread .th-note{background:var(--recess);border-left:3px solid var(--coral);border-radius:4px 10px 10px 4px;padding:6px 8px 6px 10px;display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;font-size:12.5px;line-height:1.35}
+.mk-thread .th-note .q{flex:1 1 150px;min-width:0}
+.mk-thread .th-note code{font-size:11px}
+.mk-thread .th-btns{display:flex;gap:6px}
+.mk-thread .th-b{font-size:11.5px;line-height:1.4;padding:2px 10px;border-radius:7px;transition:background-color .2s ease-in-out,opacity .3s ease-in-out,transform .2s ease-in-out}
+.mk-thread .th-merge{border-color:var(--coral);color:var(--coral-ink)}
+
+/* your reply */
+.mk-thread .th-you{display:flex;justify-content:flex-end;align-items:center;gap:7px}
+.mk-thread .th-you .t{font-family:var(--f-mono);font-size:10.5px;color:var(--muted)}
+.mk-thread .th-you .bub{background:var(--coral-wash);border:1px solid var(--coral);border-radius:14px 14px 4px 14px;padding:4px 12px;font-size:13px;line-height:1.4}
+
+/* recap card */
+.mk-thread .th-recap{background:var(--raised);border:1px solid var(--line);border-radius:10px;padding:7px 10px 8px;display:flex;flex-direction:column;gap:3px}
+.mk-thread .th-recap .hd{display:flex;align-items:baseline;gap:6px;font-size:12px;font-weight:700;margin-bottom:1px}
+.mk-thread .th-recap .hd .t{font-family:var(--f-mono);font-size:10.5px;font-weight:500;color:var(--muted)}
+.mk-thread .th-line{display:flex;align-items:center;gap:7px;font-size:12.5px;line-height:20px;min-width:0}
+.mk-thread .th-line .x{flex:1;min-width:0}
+.mk-thread .th-line .mkchip{font-family:var(--f-mono);font-size:10px;line-height:15px;padding:0 5px;color:var(--muted)}
+
+/* composer */
+.mk-thread .th-comp{display:flex;align-items:center;gap:8px;background:var(--raised);border:1px solid var(--line-strong);border-radius:12px;padding:5px 5px 5px 12px}
+.mk-thread .th-comp .th-ph{flex:1;min-width:0;color:var(--muted);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mk-thread .th-comp .th-go{font-size:12px;font-weight:600;line-height:1.4;padding:3px 11px;border-radius:8px;border-color:var(--coral);background:var(--coral-wash);color:var(--coral-ink)}
+
+@container (max-width:380px){
+  .mk-thread .mkf-bar .mkchip{display:none}
+}
+
+/* ---- motion: messages arrive in sequence while the root is on screen ---- */
+@media (prefers-reduced-motion:no-preference){
+  .mk-thread.is-live .th-r{transition:opacity .3s ease-in-out,transform .4s cubic-bezier(.2,.8,.2,1)}
+  .mk-thread.is-live.s-on .th-r{opacity:0;transform:translateY(6px)}
+  .mk-thread.is-live.s-ev .th-r[data-r="ev"],
+  .mk-thread.is-live.s-a1 .th-r[data-r="a1"],
+  .mk-thread.is-live.s-m1 .th-r[data-r="m1"],
+  .mk-thread.is-live.s-you .th-r[data-r="you"],
+  .mk-thread.is-live.s-a2 .th-r[data-r="a2"],
+  .mk-thread.is-live.s-m2 .th-r[data-r="m2"]{opacity:1;transform:none;transition-delay:calc(var(--i,0)*110ms)}
+
+  /* working: avatar swaps to the working still, typing dots show */
+  .mk-thread.is-live.s-w1 .th-m1 .th-av .wk,
+  .mk-thread.is-live.s-w2 .th-m2 .th-av .wk{opacity:1}
+  .mk-thread.is-live.s-w1 .th-m1 .th-av .rd,
+  .mk-thread.is-live.s-w2 .th-m2 .th-av .rd{opacity:0}
+  .mk-thread.is-live.s-w1 .th-m1 .th-typing,
+  .mk-thread.is-live.s-w2 .th-m2 .th-typing{opacity:1}
+  .mk-thread.is-live .th-typing i{animation:th-dot 1s ease-in-out infinite}
+  .mk-thread.is-live .th-typing i:nth-child(2){animation-delay:.15s}
+  .mk-thread.is-live .th-typing i:nth-child(3){animation-delay:.3s}
+  @keyframes th-dot{0%,60%,100%{transform:translateY(0);opacity:.45}30%{transform:translateY(-3px);opacity:1}}
+
+  /* your reply presses Merge */
+  .mk-thread.is-live.s-you .th-merge{background:var(--coral-wash);transform:scale(.95)}
+  .mk-thread.is-live.s-you .th-keep{opacity:.4}
+}
+@media (prefers-reduced-motion:reduce){
+  .mk-thread .th-r,.mk-thread .th-av>span,.mk-thread .th-b{transition:none}
+}
+</style>
+<div class="mk mk-thread" role="img" aria-label="A project thread: a routine finds three new GitHub issues, Caw the project lead files two tasks and asks whether to merge a likely duplicate, you answer in one line, and later Caw posts a recap where every claim cites an event id.">
+  <div class="mkf">
+    <div class="mkf-bar"><b>site · Caw</b><span class="th-sep">/</span><span>Morning</span><span class="sp"></span><span class="mkchip model">project lead</span></div>
+    <div class="mkf-body">
+
+      <div class="th-ev th-r" data-r="ev"><b>Routine</b><span>·</span><span class="t">08:55</span><span>·</span><span>3 new GitHub issues</span></div>
+
+      <div class="th-m th-m1">
+        <div class="th-av th-r" data-r="a1">
+          <span class="rd"><img class="caw-l" src="caw/light-ready.webp" alt="" width="22" height="22"><img class="caw-d" src="caw/dark-ready.webp" alt="" width="22" height="22"></span>
+          <span class="wk"><img class="caw-l" src="caw/light-working.webp" alt="" width="22" height="22"><img class="caw-d" src="caw/dark-working.webp" alt="" width="22" height="22"></span>
+        </div>
+        <div class="th-typing" aria-hidden="true"><i></i><i></i><i></i></div>
+        <div class="th-c">
+          <div class="th-name th-r" data-r="m1"><b>Caw</b><span class="t">08:56</span></div>
+          <div class="th-tx th-r" data-r="m1" style="--i:1">Filed 2 tasks from the 3 issues.</div>
+          <div class="th-tasks">
+            <div class="th-task th-r" data-r="m1" style="--i:2">
+              <div class="h"><span class="id">#142</span><span>Fix tray chip overflow</span></div>
+              <div class="meta"><span class="mkchip code">check <code>bun test</code></span></div>
+            </div>
+            <div class="th-task th-r" data-r="m1" style="--i:3">
+              <div class="h"><span class="id">#151</span><span>Add dark mode toggle</span></div>
+              <div class="meta"><span class="mkchip">after #142</span></div>
+            </div>
+          </div>
+          <div class="th-note th-r" data-r="m1" style="--i:4">
+            <span class="q">1 likely duplicate of <code>#120</code> — merge?</span>
+            <span class="th-btns">
+              <button class="btn th-b th-merge" type="button" tabindex="-1" aria-hidden="true">Merge</button>
+              <button class="btn th-b th-keep" type="button" tabindex="-1" aria-hidden="true">Keep both</button>
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div class="th-you th-r" data-r="you"><span class="t">08:58</span><span class="bub">Merge it</span></div>
+
+      <div class="th-m th-m2">
+        <div class="th-av th-r" data-r="a2">
+          <span class="rd"><img class="caw-l" src="caw/light-ready.webp" alt="" width="22" height="22"><img class="caw-d" src="caw/dark-ready.webp" alt="" width="22" height="22"></span>
+          <span class="wk"><img class="caw-l" src="caw/light-working.webp" alt="" width="22" height="22"><img class="caw-d" src="caw/dark-working.webp" alt="" width="22" height="22"></span>
+        </div>
+        <div class="th-typing" aria-hidden="true"><i></i><i></i><i></i></div>
+        <div class="th-c">
+          <div class="th-recap th-r" data-r="m2">
+            <div class="hd"><span>Since 09:00</span><span class="t">09:14</span></div>
+            <div class="th-line"><span class="mkdot live"></span><span class="x">#142 landed</span><span class="mkchip code">ev-3121</span></div>
+            <div class="th-line"><span class="mkdot"></span><span class="x">#151 retried fresh</span><span class="mkchip code">ev-3126</span></div>
+            <div class="th-line"><span class="mkdot you"></span><span class="x">Review queue full</span><span class="mkchip code">ev-3130</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="th-comp"><span class="th-ph">Message the project…</span><button class="btn th-go" type="button" tabindex="-1" aria-hidden="true">Send</button></div>
+    </div>
+  </div>
+</div>
+<script>
+(function(){
+  var root=document.querySelector('.mk-thread');
+  if(!root) return;
+  var mq=window.matchMedia?window.matchMedia('(prefers-reduced-motion: reduce)'):null;
+  var all=['s-on','s-ev','s-a1','s-w1','s-m1','s-you','s-a2','s-w2','s-m2'];
+  var steps=[
+    ['s-on'],
+    ['s-on','s-ev'],
+    ['s-on','s-ev','s-a1','s-w1'],
+    ['s-on','s-ev','s-a1','s-m1'],
+    ['s-on','s-ev','s-a1','s-m1','s-you'],
+    ['s-on','s-ev','s-a1','s-m1','s-you','s-a2','s-w2'],
+    ['s-on','s-ev','s-a1','s-m1','s-you','s-a2','s-m2']
+  ];
+  var ms=[400,450,1000,1700,1000,1000,4200];
+  var i=0,t=0,running=false;
+  function apply(c){for(var k=0;k<all.length;k++){root.classList.toggle(all[k],c.indexOf(all[k])>-1);}}
+  function tick(){
+    apply(steps[i]);
+    t=setTimeout(function(){i=(i+1)%steps.length;tick();},ms[i]);
+  }
+  function start(){
+    if(running||(mq&&mq.matches)) return;
+    running=true;i=0;
+    t=setTimeout(tick,2800);
+  }
+  function stop(){running=false;clearTimeout(t);apply([]);}
+  root.addEventListener('mk:live',start);
+  root.addEventListener('mk:idle',stop);
+  if(root.classList.contains('is-live')) start();
+})();
+</script>

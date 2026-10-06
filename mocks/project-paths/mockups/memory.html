@@ -1,0 +1,145 @@
+<style>
+.mk-memory{width:100%;min-width:0;font-size:12px;line-height:1.4;color:var(--ink)}
+.mk-memory .mkf-body{gap:7px}
+.mk-memory .ms-top{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px 10px}
+.mk-memory .ms-inbox{display:flex;flex-wrap:wrap;align-items:center;gap:3px 7px;font-size:11.5px;color:var(--muted);min-width:0}
+.mk-memory .ms-inbox b{font-family:var(--f-mono);font-size:11px;font-weight:600;color:var(--ink)}
+.mk-memory .ms-pm{position:relative;display:inline-flex;align-items:center;gap:7px;padding:3px 4px 3px 10px;border:1px solid var(--line-strong);border-radius:999px;background:var(--raised);font-size:11.5px;font-weight:600;white-space:nowrap}
+.mk-memory .ms-cnt{display:grid;place-items:center;min-width:24px;height:18px;border-radius:999px;background:var(--recess);font-family:var(--f-mono);font-size:11px;font-weight:600;overflow:hidden}
+.mk-memory .ms-cnt i{grid-area:1/1;font-style:normal;line-height:18px}
+.mk-memory .ms-cnt i+i{opacity:0}
+.mk-memory .ms-cards{display:flex;flex-direction:column;min-width:0}
+.mk-memory .ms-cw{display:grid;grid-template-rows:1fr;margin-bottom:6px;position:relative}
+.mk-memory .ms-cw:last-child{margin-bottom:0}
+.mk-memory .ms-card{min-height:0;min-width:0;background:var(--raised);border:1px solid var(--line);border-radius:var(--r-card);padding:7px 10px;display:flex;flex-direction:column;gap:4px;transform-origin:92% 0}
+.mk-memory .ms-claim{font-size:13px;font-weight:600;line-height:1.35}
+.mk-memory .ms-claim code{font-size:.9em;font-weight:500;background:var(--recess);border-radius:4px;padding:0 3px}
+.mk-memory .ms-prov{display:flex;flex-wrap:wrap;gap:4px}
+.mk-memory .ms-prov .mkchip{font-family:var(--f-mono);font-size:10.5px;color:var(--muted)}
+.mk-memory .ms-act{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px 10px}
+.mk-memory .ms-what{display:inline-flex;align-items:center;flex-wrap:wrap;gap:2px 6px;min-width:0;font-size:11.5px;font-weight:600;padding:2px 7px;border-radius:6px}
+.mk-memory .ms-what.add{background:var(--coral-wash);color:var(--coral-ink)}
+.mk-memory .ms-what.sup{background:var(--recess);color:var(--ink)}
+.mk-memory .ms-what svg{width:11px;height:11px;flex:none;stroke:currentColor;fill:none;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.mk-memory .ms-what s{font-family:var(--f-mono);font-size:10.5px;font-weight:400;color:var(--muted)}
+.mk-memory .ms-btns{display:flex;align-items:center;gap:5px;margin-left:auto}
+.mk-memory .btn{position:relative;font-size:11.5px;line-height:1.35;padding:3px 9px;border-radius:7px;white-space:nowrap;pointer-events:none}
+.mk-memory .btn.go{background:var(--coral-wash);border-color:var(--coral);color:var(--coral-ink);font-weight:700}
+.mk-memory .btn.go::after{content:"";position:absolute;inset:-1px;border-radius:inherit;border:1.5px solid var(--coral);opacity:0}
+.mk-memory .btn.drop{background:transparent;border-color:transparent;color:var(--muted);font-weight:500}
+.mk-memory .ms-gw{position:relative;display:inline-flex}
+.mk-memory .ms-cur{position:absolute;right:-4px;top:11px;width:14px;height:14px;opacity:0;pointer-events:none}
+.mk-memory .ms-cur path{fill:var(--ink);stroke:var(--raised);stroke-width:1}
+.mk-memory .ms-foot{display:flex;align-items:center;gap:7px;color:var(--muted);font-size:11.5px}
+
+/* motion: one loop, 7s. press, fly into the pill, count ticks, next card moves up, reset */
+.mk-memory.is-live .ms-c1{z-index:2;animation:mk-ms-slot 7s cubic-bezier(.2,.8,.2,1) infinite}
+.mk-memory.is-live .ms-c1 .ms-card{animation:mk-ms-fly 7s cubic-bezier(.2,.8,.2,1) infinite}
+.mk-memory.is-live .ms-c1 .btn.go{animation:mk-ms-press 7s ease-in-out infinite}
+.mk-memory.is-live .ms-c1 .btn.go::after{animation:mk-ms-ring 7s ease-out infinite}
+.mk-memory.is-live .ms-c1 .ms-cur{animation:mk-ms-cur 7s cubic-bezier(.2,.8,.2,1) infinite}
+.mk-memory.is-live .ms-cnt i:first-child{animation:mk-ms-n0 7s cubic-bezier(.2,.8,.2,1) infinite}
+.mk-memory.is-live .ms-cnt i+i{animation:mk-ms-n1 7s cubic-bezier(.2,.8,.2,1) infinite}
+.mk-memory.is-live .ms-pm{animation:mk-ms-pm 7s ease-in-out infinite}
+@keyframes mk-ms-slot{
+  0%,25%{grid-template-rows:1fr;margin-bottom:6px}
+  39%,90%{grid-template-rows:0fr;margin-bottom:0}
+  97%,100%{grid-template-rows:1fr;margin-bottom:6px}
+}
+@keyframes mk-ms-fly{
+  0%,20%{transform:none;opacity:1;background:var(--raised);border-color:var(--line)}
+  23%{transform:translateY(-2px) scale(.985);opacity:1;background:var(--coral-wash);border-color:var(--coral)}
+  28%{transform:translateY(-12px) scale(.5);opacity:1;background:var(--coral-wash);border-color:var(--coral)}
+  34%{transform:translateY(-36px) scale(.08);opacity:.9;background:var(--coral-wash);border-color:var(--coral)}
+  36%,89%{transform:translateY(-40px) scale(.04);opacity:0;background:var(--coral-wash);border-color:var(--coral)}
+  90%{transform:none;opacity:0;background:var(--raised);border-color:var(--line)}
+  97%,100%{transform:none;opacity:1;background:var(--raised);border-color:var(--line)}
+}
+@keyframes mk-ms-press{
+  0%,13%{transform:none;background:var(--coral-wash);box-shadow:none}
+  16%,19%{transform:translateY(1px) scale(.94);background:color-mix(in oklab,var(--coral) 38%,var(--coral-wash));box-shadow:inset 0 0 0 1.5px var(--coral),0 0 0 4px color-mix(in oklab,var(--coral) 28%,transparent)}
+  24%,100%{transform:none;background:var(--coral-wash);box-shadow:none}
+}
+@keyframes mk-ms-ring{
+  0%,15%{opacity:0;transform:scale(1)}
+  16%{opacity:.8;transform:scale(1)}
+  26%,100%{opacity:0;transform:scale(1.5,1.9)}
+}
+@keyframes mk-ms-cur{
+  0%,5%{opacity:0;transform:translate(26px,22px)}
+  12%{opacity:1;transform:translate(2px,2px)}
+  16%,18%{opacity:1;transform:translate(0,0) scale(.88)}
+  24%{opacity:1;transform:translate(10px,8px)}
+  28%,100%{opacity:0;transform:translate(26px,22px)}
+}
+@keyframes mk-ms-n0{
+  0%,33%{opacity:1;transform:none}
+  38%,91%{opacity:0;transform:translateY(-60%)}
+  92%{opacity:0;transform:none}
+  97%,100%{opacity:1;transform:none}
+}
+@keyframes mk-ms-n1{
+  0%,32%{opacity:0;transform:translateY(60%)}
+  38%,90%{opacity:1;transform:none}
+  96%,100%{opacity:0;transform:none}
+}
+@keyframes mk-ms-pm{
+  0%,32%{background:var(--raised);border-color:var(--line-strong);transform:none}
+  36%{background:var(--coral-wash);border-color:var(--coral);transform:scale(1.05)}
+  43%{background:var(--coral-wash);border-color:var(--coral);transform:none}
+  57%,100%{background:var(--raised);border-color:var(--line-strong);transform:none}
+}
+@media (prefers-reduced-motion:reduce){
+  .mk-memory *,.mk-memory *::after{animation:none!important;transition:none!important}
+}
+</style>
+<div class="mk mk-memory" role="img" aria-label="A curator proposes notes from past sessions. You approve one, and it moves into project memory.">
+  <div class="mkf">
+    <div class="mkf-bar"><b>launch-q4</b><span>· Memory · 3 proposals</span><span class="sp"></span><span class="mkchip model">curator</span></div>
+    <div class="mkf-body">
+      <div class="ms-top">
+        <div class="ms-inbox"><span>Inbox</span><span>·</span><b>41 notes</b><span>·</span><span class="mkchip you">3 ready to promote</span></div>
+        <div class="ms-pm"><span>Project memory</span><span class="ms-cnt"><i>12</i><i>13</i></span></div>
+      </div>
+      <div class="ms-cards">
+        <div class="ms-cw ms-c1"><div class="ms-card">
+          <p class="ms-claim">Headlines under 60 characters performed best in Q3 tests</p>
+          <div class="ms-prov"><span class="mkchip">2 sessions</span><span class="mkchip">obelisk, macbook</span><span class="mkchip">3 weeks</span></div>
+          <div class="ms-act">
+            <span class="ms-what add"><b>+</b>Add to project memory</span>
+            <span class="ms-btns">
+              <span class="ms-gw"><button type="button" class="btn go" tabindex="-1" aria-hidden="true">Looks good</button><svg class="ms-cur" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 1l11 5.5-4.6 1.4L6.5 13z"/></svg></span>
+              <button type="button" class="btn" tabindex="-1" aria-hidden="true">Edit</button>
+              <button type="button" class="btn drop" tabindex="-1" aria-hidden="true">Drop</button>
+            </span>
+          </div>
+        </div></div>
+        <div class="ms-cw ms-c2"><div class="ms-card">
+          <p class="ms-claim">Use <code>bun run typecheck</code>, not <code>tsc</code>, in this repo</p>
+          <div class="ms-prov"><span class="mkchip">4 sessions</span><span class="mkchip">obelisk</span><span class="mkchip">5 days</span></div>
+          <div class="ms-act">
+            <span class="ms-what sup"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M1.5 4h8M7.5 1.8L9.7 4 7.5 6.2M10.5 8h-8M4.5 5.8L2.3 8l2.2 2.2"/></svg>Supersedes an older note <s>Typecheck with tsc --noEmit</s></span>
+            <span class="ms-btns">
+              <button type="button" class="btn go" tabindex="-1" aria-hidden="true">Looks good</button>
+              <button type="button" class="btn" tabindex="-1" aria-hidden="true">Edit</button>
+              <button type="button" class="btn drop" tabindex="-1" aria-hidden="true">Drop</button>
+            </span>
+          </div>
+        </div></div>
+        <div class="ms-cw ms-c3"><div class="ms-card">
+          <p class="ms-claim">Brand voice: no exclamation marks</p>
+          <div class="ms-prov"><span class="mkchip">3 sessions</span><span class="mkchip">macbook</span><span class="mkchip">2 weeks</span></div>
+          <div class="ms-act">
+            <span class="ms-what add"><b>+</b>Add to project memory</span>
+            <span class="ms-btns">
+              <button type="button" class="btn go" tabindex="-1" aria-hidden="true">Looks good</button>
+              <button type="button" class="btn" tabindex="-1" aria-hidden="true">Edit</button>
+              <button type="button" class="btn drop" tabindex="-1" aria-hidden="true">Drop</button>
+            </span>
+          </div>
+        </div></div>
+      </div>
+      <div class="ms-foot"><span class="mkchip code">filter</span><span>Routine, heartbeat and web-tainted notes are never proposed</span></div>
+    </div>
+  </div>
+</div>

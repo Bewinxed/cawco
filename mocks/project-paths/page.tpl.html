@@ -1,0 +1,1469 @@
+<title>CawCo Project Paths</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Nunito:wght@900&display=swap">
+<style>
+/* Layout: a decision ledger for a visual reader. Every card = one line of why, then "how it would look" (an animated mockup) beside "how it works" (a vertical diagram), then the paths to pick. Detail folds away. */
+:root{
+  --bg: oklch(96.6% .008 85);
+  --raised: oklch(99.3% .004 85);
+  --recess: oklch(94.4% .010 84);
+  --line: oklch(89% .013 82);
+  --line-strong: oklch(85.4% .014 82);
+  --ink: oklch(29.5% .010 70);
+  --muted: oklch(49.5% .014 74);
+  --coral: oklch(64.5% .175 33);
+  --coral-ink: oklch(50% .150 32);
+  --coral-wash: oklch(94.6% .030 38);
+  --warn-ink: oklch(37% .074 88.4);
+  --warn-wash: oklch(91.4% .087 93.2);
+  --err-ink: oklch(36% .110 15);
+  --err-wash: oklch(90% .050 12);
+  --ok-ink: oklch(33.8% .076 121.9);
+  --ok-wash: oklch(81% .098 115.5);
+  --show-light: block;
+  --show-dark: none;
+  --f-body: "Figtree", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --f-mark: "Nunito", "Figtree", ui-rounded, system-ui, sans-serif;
+  --r-card: 12px;
+  --r-tray: 18px;
+  --ease: cubic-bezier(.2,.8,.2,1);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg: oklch(21% .005 70); --raised: oklch(24.8% .006 70); --recess: oklch(18.4% .004 70);
+    --line: oklch(31.4% .008 70); --line-strong: oklch(35.2% .009 70);
+    --ink: oklch(93.4% .010 82); --muted: oklch(77.8% .012 78);
+    --coral: oklch(66.5% .170 33); --coral-ink: oklch(80% .100 34); --coral-wash: oklch(28% .060 32);
+    --warn-ink: oklch(85% .131 92.3); --warn-wash: oklch(37% .074 88.4);
+    --err-ink: oklch(86% .070 12); --err-wash: oklch(30% .080 12);
+    --ok-ink: oklch(81% .098 115.5); --ok-wash: oklch(33.8% .076 121.9);
+    --show-light: none; --show-dark: block;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg: oklch(21% .005 70); --raised: oklch(24.8% .006 70); --recess: oklch(18.4% .004 70);
+  --line: oklch(31.4% .008 70); --line-strong: oklch(35.2% .009 70);
+  --ink: oklch(93.4% .010 82); --muted: oklch(77.8% .012 78);
+  --coral: oklch(66.5% .170 33); --coral-ink: oklch(80% .100 34); --coral-wash: oklch(28% .060 32);
+  --warn-ink: oklch(85% .131 92.3); --warn-wash: oklch(37% .074 88.4);
+  --err-ink: oklch(86% .070 12); --err-wash: oklch(30% .080 12);
+  --ok-ink: oklch(81% .098 115.5); --ok-wash: oklch(33.8% .076 121.9);
+  --show-light: none; --show-dark: block;
+  color-scheme: dark;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased}
+a{color:var(--coral-ink);text-underline-offset:2px}
+code{font-family:var(--f-mono);font-size:.86em;font-variant-ligatures:none}
+h1,h2,h3,h4{text-wrap:balance;margin:0;line-height:1.2;font-weight:500}
+p{margin:0}
+.caw-l{display:var(--show-light)} .caw-d{display:var(--show-dark)}
+.wrap{max-width:1180px;margin:0 auto;padding-inline:16px;padding-block:24px 72px;display:grid;grid-template-columns:184px minmax(0,1fr);gap:36px}
+@media (max-width:980px){.wrap{grid-template-columns:minmax(0,1fr);gap:18px}}
+main{min-width:0;display:flex;flex-direction:column;gap:44px}
+
+/* index */
+nav.idx{position:sticky;top:calc(env(safe-area-inset-top,0px) + 20px);align-self:start;display:flex;flex-direction:column;gap:2px;font-size:13.5px}
+nav.idx .mark{font-family:var(--f-mark);font-weight:900;letter-spacing:-.045em;font-size:22px;line-height:1;margin-bottom:14px}
+nav.idx a{color:var(--muted);text-decoration:none;padding:6px 10px;border-radius:8px;display:flex;justify-content:space-between;gap:8px}
+nav.idx a:hover{background:var(--recess);color:var(--ink)}
+nav.idx a .n{font-family:var(--f-mono);font-size:11px;font-variant-numeric:tabular-nums}
+nav.idx .meter{margin-top:14px;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--raised);display:grid;gap:8px}
+@media (max-width:980px){
+  nav.idx{position:static;flex-direction:row;overflow-x:auto;gap:4px;padding-bottom:4px}
+  nav.idx .mark,nav.idx .meter{display:none}
+  nav.idx a{white-space:nowrap;border:1px solid var(--line);background:var(--raised)}
+}
+.bar{height:6px;border-radius:3px;background:var(--recess);overflow:hidden}
+.bar i{display:block;height:100%;background:var(--coral);width:0;transition:width .4s var(--ease)}
+.small{font-size:12.5px;color:var(--muted)}
+
+/* hero */
+.hero{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:22px;align-items:center}
+.hero .caw img{width:104px;height:104px}
+.hero h1{font-size:32px;letter-spacing:-.015em}
+.hero p{color:var(--muted);max-width:56ch;margin-top:6px}
+.hero .row{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;align-items:center}
+.ring{width:92px;height:92px;position:relative}
+.ring svg{width:100%;height:100%;transform:rotate(-90deg)}
+.ring .trk{fill:none;stroke:var(--recess);stroke-width:8}
+.ring .val{fill:none;stroke:var(--coral);stroke-width:8;stroke-linecap:round;transition:stroke-dashoffset .5s var(--ease)}
+.ring span{position:absolute;inset:0;display:grid;place-items:center;font-family:var(--f-mono);font-size:13px;text-align:center;line-height:1.2}
+.ring span small{display:block;font-family:var(--f-body);font-size:10.5px;color:var(--muted)}
+@media (max-width:640px){.hero{grid-template-columns:auto minmax(0,1fr)} .hero .ring{display:none} .hero .caw img{width:72px;height:72px} .hero h1{font-size:26px}}
+.pill{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;padding:4px 10px;border-radius:999px;border:1px solid var(--line);background:var(--raised);color:var(--muted)}
+.pill .dot{width:7px;height:7px;border-radius:50%;background:var(--muted)}
+.pill.live .dot{background:var(--coral)}
+.btn{font:inherit;font-size:13px;font-weight:500;color:var(--ink);background:var(--raised);border:1px solid var(--line-strong);border-radius:8px;padding:6px 12px;cursor:pointer}
+.btn:hover{background:var(--recess)}
+:focus-visible{outline:2px solid var(--coral);outline-offset:2px}
+
+.callout{border-radius:var(--r-card);padding:12px 14px;background:var(--err-wash);color:var(--err-ink);display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 12px;align-items:start}
+.callout .ic{grid-row:span 2;width:28px;height:28px;border-radius:50%;border:2px solid currentColor;display:grid;place-items:center;font-weight:600;font-family:var(--f-mono)}
+.callout b{font-weight:600}
+.callout p{font-size:13.5px}
+
+/* chapters */
+.chap{display:flex;flex-direction:column;gap:16px;scroll-margin-top:20px}
+.chap>header{display:flex;flex-direction:column;gap:4px}
+.eyebrow{font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:500}
+.chap h2{font-size:24px}
+.chap>header p{color:var(--muted);max-width:64ch;font-size:14px}
+
+/* overview */
+.overview{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;align-items:start}
+@media (max-width:820px){.overview{grid-template-columns:minmax(0,1fr)}}
+.ov-copy{display:flex;flex-direction:column;gap:12px}
+.ov-copy h2{font-size:24px}
+.ov-copy ol{margin:0;padding:0;list-style:none;display:grid;gap:8px;counter-reset:o}
+.ov-copy li{display:grid;grid-template-columns:28px minmax(0,1fr);gap:10px;align-items:start;font-size:14px}
+.ov-copy li::before{counter-increment:o;content:counter(o);font-family:var(--f-mono);font-size:12px;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;background:var(--recess);color:var(--muted)}
+.ov-copy li::before{grid-row:span 2}
+.ov-copy li>*{grid-column:2}
+.ov-copy li b{font-weight:500}
+.ov-copy li span{color:var(--muted)}
+
+/* evidence tiles */
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px}
+.tile{background:var(--raised);border:1px solid var(--line);border-radius:var(--r-card);padding:14px;display:flex;flex-direction:column;gap:6px;min-width:0;position:relative;overflow:hidden}
+.tile .fig{font-family:var(--f-mono);font-weight:500;font-size:26px;letter-spacing:-.02em;line-height:1.1;font-variant-numeric:tabular-nums}
+.tile .fig::after{content:"";display:block;height:2px;width:28px;background:var(--coral);margin-top:8px;border-radius:1px;transform-origin:left}
+.tiles.is-live .tile .fig::after{animation:grow 1.2s var(--ease) both}
+.tiles.is-live .tile:nth-child(2) .fig::after{animation-delay:.08s}.tiles.is-live .tile:nth-child(3) .fig::after{animation-delay:.16s}.tiles.is-live .tile:nth-child(4) .fig::after{animation-delay:.24s}.tiles.is-live .tile:nth-child(5) .fig::after{animation-delay:.32s}.tiles.is-live .tile:nth-child(6) .fig::after{animation-delay:.4s}.tiles.is-live .tile:nth-child(7) .fig::after{animation-delay:.48s}.tiles.is-live .tile:nth-child(8) .fig::after{animation-delay:.56s}.tiles.is-live .tile:nth-child(9) .fig::after{animation-delay:.64s}.tiles.is-live .tile:nth-child(10) .fig::after{animation-delay:.72s}
+@keyframes grow{0%{transform:scaleX(.15)}100%{transform:scaleX(1)}}
+.tile .say{font-size:13px;line-height:1.4}
+.tile .les{font-size:12.5px;color:var(--coral-ink);margin-top:auto;padding-top:6px;border-top:1px dashed var(--line-strong)}
+.tile .so{font-size:11px;color:var(--muted)}
+.tile .so a{color:var(--muted)}
+
+/* decision cards */
+.dec{background:var(--raised);border:1px solid var(--line);border-radius:var(--r-tray);padding:18px;display:flex;flex-direction:column;gap:14px;scroll-margin-top:16px;min-width:0}
+.dec>header{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.did{font-family:var(--f-mono);font-size:12px;color:var(--muted);border:1px solid var(--line);border-radius:6px;padding:1px 6px}
+.dec h3{font-size:19px;flex:1 1 240px}
+.state{font-size:12px;color:var(--muted);display:inline-flex;gap:6px;align-items:center}
+.state::before{content:"";width:8px;height:8px;border-radius:50%;border:1.5px solid var(--line-strong)}
+.state.on{color:var(--coral-ink)}
+.state.on::before{background:var(--coral);border-color:var(--coral)}
+.why{color:var(--muted);font-size:14.5px;max-width:72ch;margin-top:-6px}
+.show{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:12px;align-items:start}
+.show.solo{grid-template-columns:minmax(0,1fr)}
+@media (max-width:900px){.show{grid-template-columns:minmax(0,1fr)}}
+.pane{margin:0;background:var(--recess);border-radius:var(--r-card);padding:12px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.cap{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:500;display:flex;align-items:center;gap:6px}
+.cap::before{content:"";width:6px;height:6px;border-radius:2px;background:var(--muted)}
+.pane.look .cap::before{background:var(--coral)}
+.pending{border:1px dashed var(--line-strong);border-radius:var(--r-card);padding:24px;text-align:center;color:var(--muted);font-size:13px}
+pre.v{margin:0;font-family:var(--f-mono);font-size:12px;line-height:1.6;overflow-x:auto;white-space:pre;color:var(--ink);font-variant-ligatures:none}
+pre.v .add{display:block;background:var(--coral-wash);color:var(--coral-ink)}
+pre.v .del{display:block;color:var(--muted);text-decoration:line-through;text-decoration-color:var(--line-strong)}
+pre.v .c{color:var(--muted)}
+pre.v .k{color:var(--coral-ink);font-weight:500}
+.opts{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:8px}
+.opt{font:inherit;text-align:left;cursor:pointer;background:var(--bg);color:var(--ink);border:1px solid var(--line-strong);border-radius:var(--r-card);padding:10px 12px;display:flex;flex-direction:column;gap:3px;position:relative;min-width:0;transition:border-color .16s,background-color .16s,transform .16s var(--ease)}
+.opt:hover{border-color:var(--muted)}
+.opt:active{transform:scale(.985)}
+.opt b{font-size:14px;font-weight:500;padding-right:22px}
+.opt span{font-size:12.5px;color:var(--muted);line-height:1.4}
+.opt .tag{align-self:flex-start;font-size:10.5px;font-weight:500;letter-spacing:.02em;border-radius:6px;padding:1px 6px;background:var(--recess);color:var(--ink);margin-top:3px}
+.opt .tag.warn{background:var(--warn-wash);color:var(--warn-ink)}
+.opt::after{content:"";position:absolute;top:11px;right:12px;width:14px;height:14px;border-radius:50%;border:1.5px solid var(--line-strong);transition:background-color .16s,border-color .16s}
+.opts[data-multi] .opt::after{border-radius:4px}
+.opt.on{border-color:var(--coral);background:var(--coral-wash)}
+.opt.on::after{background:var(--coral);border-color:var(--coral);box-shadow:inset 0 0 0 3px var(--coral-wash)}
+.gl{font-size:12px;font-weight:500;color:var(--muted)}
+.grp{display:flex;flex-direction:column;gap:6px}
+.foot{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.foot details{flex:1 1 260px;min-width:0}
+details.more summary{cursor:pointer;font-size:12.5px;color:var(--muted);list-style:none;display:inline-flex;align-items:center;gap:6px}
+details.more summary::-webkit-details-marker{display:none}
+details.more summary::before{content:"+";font-family:var(--f-mono);width:16px;height:16px;border-radius:4px;border:1px solid var(--line-strong);display:grid;place-items:center;font-size:11px}
+details.more[open] summary::before{content:"−"}
+details.more .in{margin-top:10px;display:flex;flex-direction:column;gap:10px;font-size:13.5px;color:var(--muted)}
+.note{display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--muted);flex:1 1 220px}
+.note input{flex:1;min-width:0;font:inherit;font-size:14px;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:7px 10px}
+@media (pointer:coarse){.note input{font-size:16px}}
+.tbl{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:12.5px;min-width:480px}
+th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:500}
+.who{display:inline-block;font-size:11px;font-weight:500;border-radius:6px;padding:1px 7px;white-space:nowrap}
+.who.code{border:1px dashed var(--muted);color:var(--ink)}
+.who.llm{background:var(--ink);color:var(--bg)}
+.who.you{background:var(--coral-wash);color:var(--coral-ink)}
+
+/* vertical diagrams (same key everywhere) */
+.dg{display:flex;flex-direction:column;align-items:center;padding-block:4px;min-width:0;width:100%}
+.dg.in{padding-block:0}
+.legend{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-bottom:12px}
+.lg{font-size:11px;font-weight:500;border-radius:6px;padding:2px 8px;border:1px solid var(--line-strong);background:var(--raised);color:var(--ink)}
+.lg.code{border-style:dashed;border-color:var(--muted)}
+.lg.model{border:1.5px solid var(--ink)}
+.lg.store{border-top:3px double var(--line-strong)}
+.lg.you{background:var(--coral-wash);border-color:var(--coral);color:var(--coral-ink)}
+.lg.ext{background:transparent;color:var(--muted)}
+.node{width:min(100%,380px);background:var(--raised);border:1px solid var(--line-strong);border-radius:12px;padding:9px 12px;display:flex;flex-direction:column;gap:2px;position:relative;min-width:0}
+.node .t{font-weight:500;font-size:13.5px;line-height:1.3;padding-right:48px}
+.node .s{font-size:12px;color:var(--muted);line-height:1.4}
+.node .k{position:absolute;top:10px;right:10px;font-family:var(--f-mono);font-size:10px;color:var(--muted)}
+.node.code{border-style:dashed;border-color:var(--muted)}
+.node.model{border:1.5px solid var(--ink)}
+.node.store{border-top:3px double var(--line-strong)}
+.node.you{background:var(--coral-wash);border-color:var(--coral)}
+.node.you .k,.node.you .s{color:var(--coral-ink)}
+.node.ext{background:transparent;border-color:var(--line-strong)}
+.node.ask{border-radius:999px;align-items:center;text-align:center}
+.node.ask .t{padding-right:0}
+.node.ask .k{display:none}
+.node.sm{padding:8px 10px}
+.node.sm .t{font-size:12.5px;padding-right:40px}
+.node.sm .s{font-size:11.5px}
+.node .wk{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+.node .wk span{font-size:11px;border:1px solid var(--line);border-radius:999px;padding:0 7px;line-height:18px;color:var(--muted);background:var(--bg)}
+.edge{display:flex;flex-direction:column;align-items:center;max-width:100%}
+.edge .ln{display:block;width:1.5px;height:12px;background:var(--muted);position:relative;overflow:visible}
+.edge .lb{font-size:11.5px;line-height:1.35;color:var(--muted);background:var(--bg);border:1px solid var(--line);border-radius:999px;padding:1px 9px;margin-block:2px;text-align:center;max-width:320px}
+.edge .ar{display:block;width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:6px solid var(--muted)}
+.edge .ar.up{border-top:0;border-bottom:6px solid var(--muted)}
+.loop{font-size:11.5px;color:var(--muted);margin-top:6px;max-width:380px;text-align:center;line-height:1.4}
+.row{display:grid;gap:10px;width:min(100%,700px);align-items:start}
+.row.r2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.row.r3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.row.r4{grid-template-columns:repeat(4,minmax(0,1fr))}
+@media (max-width:1100px){.show .row.r4{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:640px){.row.r3,.row.r4{grid-template-columns:repeat(2,minmax(0,1fr))}.row.r2{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:420px){.row.r3,.row.r4{grid-template-columns:minmax(0,1fr)}}
+.show .row.r2{grid-template-columns:minmax(0,1fr)}
+.row .node{width:100%}
+.col{display:flex;flex-direction:column;align-items:center;min-width:0}
+.box{border:1px solid var(--line-strong);border-radius:16px;padding:26px 10px 12px;position:relative;width:min(100%,700px);display:flex;flex-direction:column;align-items:center;min-width:0}
+.box.live{border-style:dashed;border-color:var(--muted)}
+.box.alt{border-color:var(--line);background:var(--bg)}
+.box>.bl{position:absolute;top:8px;left:12px;right:12px;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .box{width:100%}
+/* a pulse runs down every connector while the diagram is on screen */
+.dg.is-live .edge .ln::after{content:"";position:absolute;left:-1.5px;top:0;width:4.5px;height:5px;border-radius:3px;background:var(--coral);opacity:0;animation:drip 2.6s ease-in infinite;animation-delay:var(--d,0s)}
+@keyframes drip{0%{transform:translateY(-4px);opacity:0}15%{opacity:1}70%{transform:translateY(10px);opacity:1}100%{transform:translateY(12px);opacity:0}}
+.seq{display:flex;flex-direction:column;gap:6px;width:100%;max-width:620px;margin-inline:auto}
+.st{display:grid;grid-template-columns:24px minmax(0,1fr);gap:10px;align-items:start}
+.st .n{font-family:var(--f-mono);font-size:11.5px;color:var(--muted);text-align:right;padding-top:8px;font-variant-numeric:tabular-nums}
+.st .m{background:var(--raised);border:1px solid var(--line);border-radius:10px;padding:6px 10px;display:flex;flex-direction:column;gap:3px;min-width:0;transition:border-color .2s,background-color .2s,transform .2s var(--ease)}
+.st.wake .m{border:1.5px solid var(--ink)}
+.st.now .m{background:var(--coral-wash);border-color:var(--coral);transform:translateX(4px)}
+.st.now .n{color:var(--coral-ink)}
+.st .ft{display:flex;flex-wrap:wrap;align-items:center;gap:5px}
+.st .msg{font-size:12.5px;line-height:1.4}
+.st .to{font-size:11.5px;color:var(--muted)}
+.st .wt{margin-left:auto;font-size:10.5px;font-weight:500;color:var(--ink)}
+.ac{font-size:11px;font-weight:500;border-radius:6px;padding:0 7px;line-height:18px;border:1px solid var(--line-strong);color:var(--ink);background:var(--raised)}
+.ac.you{background:var(--coral-wash);border-color:var(--coral);color:var(--coral-ink)}
+.ac.caw{background:var(--ink);border-color:var(--ink);color:var(--bg)}
+.ac.hub{border-style:dashed;border-color:var(--muted)}
+.ac.wk{border:1.5px solid var(--ink)}
+
+/* shared mock chrome */
+.mkf{background:var(--bg);border:1px solid var(--line-strong);border-radius:14px;overflow:hidden;min-width:0;text-align:left}
+.mkf-bar{height:32px;display:flex;align-items:center;gap:8px;padding:0 12px;border-bottom:1px solid var(--line);background:var(--raised);font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden}
+.mkf-bar b{color:var(--ink);font-weight:500}
+.mkf-bar .sp{flex:1}
+.mkf-body{padding:12px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.mkphone{width:min(100%,300px);margin:0 auto;border:1px solid var(--line-strong);border-radius:30px;padding:9px;background:var(--raised)}
+.mkphone-screen{border-radius:22px;overflow:hidden;background:var(--bg);display:flex;flex-direction:column;min-height:420px}
+.mkchip{display:inline-flex;align-items:center;gap:4px;font-size:11px;line-height:18px;padding:0 7px;border-radius:6px;border:1px solid var(--line-strong);background:var(--raised);color:var(--ink);white-space:nowrap}
+.mkchip.code{border-style:dashed;border-color:var(--muted)}
+.mkchip.model{border:1.5px solid var(--ink)}
+.mkchip.you{background:var(--coral-wash);border-color:var(--coral);color:var(--coral-ink)}
+.mkchip.ok{background:var(--ok-wash);border-color:transparent;color:var(--ok-ink)}
+.mkchip.warn{background:var(--warn-wash);border-color:transparent;color:var(--warn-ink)}
+.mkchip.err{background:var(--err-wash);border-color:transparent;color:var(--err-ink)}
+.mkdot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--muted)}
+.mkdot.live{background:var(--ok-ink)}
+.mkdot.you{background:var(--coral)}
+
+/* my mockups: onboarding, naming preview, name collision, roadmap, poses */
+.onb{display:flex;flex-direction:column;align-items:center;gap:12px;padding:22px 12px 16px}
+.onb .caw img{width:80px;height:80px}
+.onb.is-live .caw{animation:enter .8s var(--ease) both}
+@keyframes enter{0%{transform:scale(.92) translateY(6px)}100%{transform:none}}
+.onb h4{font-size:19px;text-align:center}
+.onb .composer{width:100%;max-width:520px;background:var(--raised);border:1px solid var(--line-strong);border-radius:14px;padding:10px 10px 10px 14px;display:flex;gap:10px;align-items:flex-end}
+.onb .typed{flex:1;min-height:42px;font-size:14px;color:var(--ink);min-width:0}
+.onb .typed .cur{display:inline-block;width:1.5px;height:1em;background:var(--coral);vertical-align:-2px;margin-left:1px}
+.onb.is-live .typed .cur{animation:blink 1s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+.onb .go{font:inherit;font-weight:500;font-size:13px;background:var(--coral);color:oklch(18% .01 40);border:0;border-radius:8px;padding:7px 14px}
+.onb .chips{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;max-width:560px}
+.onb .chip{font-size:12px;border:1px solid var(--line);background:var(--raised);border-radius:999px;padding:3px 10px;transition:border-color .2s,background-color .2s,color .2s}
+.onb .chip.hot{border-color:var(--coral);background:var(--coral-wash);color:var(--coral-ink)}
+.onb .tpls{width:100%;display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;margin-top:36px}
+.onb .tpl{position:relative;background:var(--raised);border:1px solid var(--line);border-radius:var(--r-card);padding:10px;display:flex;flex-direction:column;gap:3px;min-width:0;transition:border-color .25s,transform .25s var(--ease)}
+.onb .tpl b{font-size:13px;font-weight:500}
+.onb .tpl span{font-size:11.5px;color:var(--muted);line-height:1.35}
+.onb .tpl .kind{font-family:var(--f-mono);font-size:10px;color:var(--muted)}
+.onb .tpl.sug{border-color:var(--coral)}
+.onb .tpl .peek{position:absolute;right:8px;top:-32px;width:48px;height:32px;overflow:hidden;pointer-events:none}
+.onb .tpl .peek img{width:48px;height:48px;transition:transform .5s var(--ease)}
+.onb .tpl:not(.sug) .peek img{transform:translateY(100%)}
+.onb .tpl .fit{font-size:10.5px;color:var(--coral-ink);font-weight:500;visibility:hidden}
+.onb .tpl.sug .fit{visibility:visible}
+
+.namer{display:flex;flex-direction:column;gap:8px}
+.namer .row2{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;background:var(--raised);border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-size:13px}
+.namer .w{color:var(--coral-ink);font-weight:500;transition:opacity .2s}
+.namer .w.swap{opacity:.2}
+.namer .empty{background:var(--raised);border:1px dashed var(--line-strong);border-radius:10px;padding:14px;text-align:center;font-size:13px;color:var(--muted)}
+.namer .ring2{display:inline-flex;align-items:center;gap:6px}
+.namer .ring2 i{width:14px;height:14px;border-radius:50%;background:conic-gradient(var(--coral) 0 60%,var(--line-strong) 60% 100%)}
+.namer .hint{font-size:11.5px;color:var(--muted)}
+
+.collide{display:flex;flex-direction:column;gap:10px;font-family:var(--f-mono);font-size:12px}
+.collide .ln2{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.collide .p{border:1px solid var(--line-strong);border-radius:6px;padding:2px 7px;background:var(--raised)}
+.collide .p.srv{border-style:dashed}
+.collide .eq{color:var(--muted)}
+.collide .out{border-radius:6px;padding:2px 7px;background:var(--err-wash);color:var(--err-ink);transition:transform .5s var(--ease)}
+.collide.is-live .out.a{animation:clash 4s var(--ease) infinite}
+.collide.is-live .out.b{animation:clash 4s var(--ease) infinite reverse}
+@keyframes clash{0%,100%{transform:none}45%,55%{transform:translateX(6px)}}
+.collide .verdict{font-family:var(--f-body);font-size:12.5px;color:var(--muted)}
+.collide .good{border-radius:6px;padding:2px 7px;background:var(--ok-wash);color:var(--ok-ink)}
+
+.road{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:0;position:relative}
+.road::before{content:"";position:absolute;left:8%;right:8%;top:17px;height:2px;background:var(--line-strong)}
+.road .fill{position:absolute;left:8%;top:17px;height:2px;width:0;background:var(--coral)}
+.road.is-live .fill{animation:roadfill 6s var(--ease) infinite}
+@keyframes roadfill{0%{width:0}80%,100%{width:84%}}
+.road .ph{display:flex;flex-direction:column;align-items:center;gap:8px;padding:0 6px;text-align:center;position:relative;z-index:1}
+.road .ph .n{width:36px;height:36px;border-radius:50%;background:var(--raised);border:2px solid var(--line-strong);display:grid;place-items:center;font-family:var(--f-mono);font-size:12px}
+.road .ph:first-child .n{border-color:var(--coral);color:var(--coral-ink)}
+.road .ph b{font-size:13px;font-weight:500;line-height:1.3}
+.road .ph span{font-size:11.5px;color:var(--muted);line-height:1.35}
+@media (max-width:820px){
+  .road{grid-template-columns:minmax(0,1fr);gap:12px}
+  .road::before{left:17px;right:auto;top:18px;bottom:18px;width:2px;height:auto}
+  .road .fill{display:none}
+  .road .ph{flex-direction:row;align-items:flex-start;text-align:left;gap:12px;padding:0}
+  .road .ph .n{flex:none}
+}
+
+.poses{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px}
+.pose{background:var(--recess);border-radius:var(--r-card);padding:12px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.pose .art{height:96px;border:1px dashed var(--line-strong);border-radius:10px;display:grid;place-items:center;position:relative;background:var(--bg)}
+.pose .art img{width:80px;height:80px;opacity:.28;filter:grayscale(1)}
+.pose .art .tg{position:absolute;top:6px;left:6px;font-size:10px;font-family:var(--f-mono);color:var(--muted)}
+.pose .art .prop{position:absolute;bottom:10px;right:12px;font-size:10.5px;color:var(--coral-ink);background:var(--coral-wash);border-radius:6px;padding:0 6px}
+.pose header{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.pose b{font-size:14px;font-weight:500}
+.pose .kind{font-family:var(--f-mono);font-size:11px;color:var(--muted)}
+.pose p{font-size:12.5px;color:var(--muted);line-height:1.4}
+.reuse{display:flex;flex-wrap:wrap;gap:12px;justify-content:center}
+.reuse figure{margin:0;display:flex;flex-direction:column;align-items:center;gap:2px;width:78px}
+.reuse img{width:60px;height:60px}
+.reuse figcaption{font-size:11px;color:var(--muted);text-align:center;line-height:1.3}
+.srcs{columns:2 280px;column-gap:24px;font-size:12.5px;color:var(--muted);margin:0;padding-left:18px}
+.srcs a{color:var(--muted)}
+.srcs li{break-inside:avoid;margin-bottom:4px}
+
+
+/* your path + answers */
+.picks{display:flex;flex-wrap:wrap;gap:6px}
+.picks .pk{display:inline-flex;align-items:center;gap:6px;font-size:12px;border:1px solid var(--line);background:var(--raised);border-radius:999px;padding:3px 10px 3px 4px}
+.picks .pk i{font-style:normal;font-family:var(--f-mono);font-size:10.5px;color:var(--muted);background:var(--recess);border-radius:999px;padding:1px 6px}
+.picks .pk.on{border-color:var(--coral);background:var(--coral-wash);color:var(--coral-ink)}
+.picks .pk.off{color:var(--muted);border-style:dashed}
+.answers{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+@media (max-width:900px){.answers{grid-template-columns:minmax(0,1fr)}}
+.ans{background:var(--raised);border:1px solid var(--line);border-radius:var(--r-tray);padding:16px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.ans.wide{grid-column:1/-1}
+.ans header{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.ans h3{font-size:16px;flex:1 1 200px}
+.ans .q{font-size:13px;color:var(--muted);border-left:2px solid var(--coral);padding:2px 0 2px 10px;font-style:italic}
+.ans .a{font-size:13.5px}
+.ans .twin{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+@media (max-width:640px){.ans .twin{grid-template-columns:minmax(0,1fr)}}
+.ans:not(.wide) .twin{grid-template-columns:minmax(0,1fr)}
+.ans .fine{font-size:12px;color:var(--muted)}
+.trk{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.trk .t{border:1px solid var(--line-strong);border-radius:8px;padding:4px 10px;font-size:12.5px;background:var(--bg)}
+.trk .t.def{border-color:var(--coral);background:var(--coral-wash);color:var(--coral-ink)}
+.trk .or{font-size:11.5px;color:var(--muted)}
+.tog{display:flex;flex-direction:column;gap:6px;background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:10px}
+.tog .sw{display:flex;align-items:center;gap:8px;font-size:13px}
+.tog .sw i{width:30px;height:18px;border-radius:9px;background:var(--line-strong);position:relative;flex:none}
+.tog .sw i::after{content:"";position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:var(--raised);transition:transform .3s var(--ease)}
+.tog.is-live .sw i{animation:togbg 5s var(--ease) infinite}
+.tog.is-live .sw i::after{animation:togknob 5s var(--ease) infinite}
+@keyframes togbg{0%,45%{background:var(--coral)}55%,100%{background:var(--line-strong)}}
+@keyframes togknob{0%,45%{transform:translateX(12px)}55%,100%{transform:none}}
+.tog .runs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 10px;font-size:12px}
+.tog .runs span::before{content:"✓ ";color:var(--ok-ink)}
+.tog .runs span.lead::before{content:"◐ ";color:var(--coral-ink)}
+.keep{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;font-size:12.5px}
+.keep ul{margin:0;padding-left:16px;display:grid;gap:3px}
+.keep b{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:500}
+.sk{display:flex;flex-wrap:wrap;gap:6px}
+.sk span{font-family:var(--f-mono);font-size:12px;border:1.5px solid var(--ink);border-radius:8px;padding:3px 9px}
+
+/* X example storyboard */
+.story{display:flex;flex-direction:column;gap:14px}
+.step{display:grid;grid-template-columns:minmax(0,260px) minmax(0,1fr);gap:16px;align-items:start;background:var(--raised);border:1px solid var(--line);border-radius:var(--r-tray);padding:16px}
+@media (max-width:900px){.step{grid-template-columns:minmax(0,1fr)}}
+.step .sx{display:flex;flex-direction:column;gap:8px;position:sticky;top:16px}
+.step .sn{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;font-family:var(--f-mono);font-size:13px;background:var(--coral-wash);color:var(--coral-ink);border:1px solid var(--coral)}
+.step h3{font-size:17px}
+.step p{font-size:13.5px;color:var(--muted)}
+.step .pane{background:var(--recess)}
+.guard{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px}
+.guard div{background:var(--raised);border:1px solid var(--line);border-radius:var(--r-card);padding:10px 12px;display:flex;flex-direction:column;gap:3px}
+.guard b{font-size:13px;font-weight:500}
+.guard span{font-size:12px;color:var(--muted)}
+.creates{display:flex;flex-wrap:wrap;gap:6px}
+
+
+/* Jev card */
+.jev-on{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+@media (max-width:760px){.jev-on{grid-template-columns:minmax(0,1fr)}}
+.jev-on .o{background:var(--bg);border:1px solid var(--line-strong);border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:4px}
+.jev-on .o b{font-size:13px;font-weight:500}
+.jev-on .o span{font-size:12px;color:var(--muted)}
+.jev-on .o.rec{border-color:var(--coral);background:var(--coral-wash)}
+.jev-on .o.rec span{color:var(--coral-ink)}
+.jq{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+@media (max-width:760px){.jq{grid-template-columns:minmax(0,1fr)}}
+.jq .q2{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.jq .q2 .ty{font-family:var(--f-mono);font-size:11px;color:var(--muted)}
+.jq .q2 .qq{font-size:12.5px}
+.jq .bars{display:flex;flex-direction:column;gap:4px}
+.jq .br{display:grid;grid-template-columns:minmax(0,1fr) 40px;gap:6px;align-items:center;font-size:11.5px}
+.jq .br .tr{height:6px;border-radius:3px;background:var(--recess);overflow:hidden;position:relative}
+.jq .br .tr i{position:absolute;inset:0 auto 0 0;width:var(--v);background:var(--muted);border-radius:3px;transform-origin:left}
+.jq .br.top .tr i{background:var(--coral)}
+.jq .br .pv{font-family:var(--f-mono);font-size:11px;color:var(--muted);text-align:right}
+.jq .br .lb2{grid-column:1/-1;color:var(--muted)}
+.jq.is-live .br .tr i{animation:barin 3.6s var(--ease) infinite}
+@keyframes barin{0%{transform:scaleX(.05)}35%,100%{transform:scaleX(1)}}
+.uses{overflow-x:auto}
+.uses table{min-width:620px}
+.uses td:first-child{font-weight:500}
+.ty2{font-family:var(--f-mono);font-size:10.5px;border:1px solid var(--line-strong);border-radius:5px;padding:0 5px;white-space:nowrap}
+.fb{color:var(--muted)}
+/* to-dos layers */
+.layers{display:flex;flex-direction:column;gap:8px}
+.ly{display:grid;grid-template-columns:110px minmax(0,1fr) minmax(0,190px);gap:10px;align-items:start;background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:10px}
+@media (max-width:640px){.ly{grid-template-columns:minmax(0,1fr)}}
+.ly .nm{font-weight:500;font-size:13px}
+.ly .nm small{display:block;font-family:var(--f-mono);font-size:10.5px;color:var(--muted);font-weight:400}
+.ly .ex{font-size:12px;display:flex;flex-direction:column;gap:3px}
+.ly .ex .ck{display:flex;gap:6px;align-items:center}
+.ly .ex .ck i{width:12px;height:12px;border-radius:3px;border:1.5px solid var(--line-strong);flex:none}
+.ly .ex .ck.d i{background:var(--ok-ink);border-color:var(--ok-ink)}
+.ly .ex .ck.d{color:var(--muted);text-decoration:line-through}
+.ly .wr{font-size:11.5px;color:var(--muted)}
+.ly .wr b{color:var(--ink);font-weight:500}
+.ly.l1{border-color:var(--line-strong)}
+.ly.l3{border-style:dashed}
+.layers .arrow{font-size:11.5px;color:var(--muted);text-align:center}
+.layers.is-live .ly.l3 .ck:nth-child(2) i{animation:tick 4s var(--ease) infinite}
+@keyframes tick{0%,40%{background:transparent;border-color:var(--line-strong)}50%,100%{background:var(--ok-ink);border-color:var(--ok-ink)}}
+/* primitives check */
+.prim{overflow-x:auto}
+.prim table{min-width:640px}
+.st2{font-size:11px;font-weight:500;border-radius:6px;padding:1px 7px;white-space:nowrap}
+.st2.has{background:var(--ok-wash);color:var(--ok-ink)}
+.st2.plan{background:var(--recess);color:var(--ink);border:1px solid var(--line-strong)}
+.st2.gap{background:var(--warn-wash);color:var(--warn-ink)}
+
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{animation:none!important;transition:none!important}
+}
+</style>
+
+<div class="wrap">
+<nav class="idx" aria-label="Chapters">
+  <div class="mark">Caw&amp;Co</div>
+  <a href="#path">Your path <span class="n">16</span></a>
+  <a href="#xexample">Example: X</a>
+  <a href="#research">Evidence <span class="n">10</span></a>
+  <a href="#shape">Shape <span class="n">D1–3</span></a>
+  <a href="#runs">Who runs it <span class="n">D4–7</span></a>
+  <a href="#knowledge">Knowledge <span class="n">D8</span></a>
+  <a href="#time">Time <span class="n">D9–11</span></a>
+  <a href="#face">Words, Caw <span class="n">D12–13</span></a>
+  <a href="#procedures">Skills <span class="n">D14–15</span></a>
+  <a href="#order">Roadmap</a>
+  <a href="#sources">Sources</a>
+  <div class="meter">
+    <div class="small"><span class="cnt">0</span> of <span class="tot">0</span> picked</div>
+    <div class="bar"><i class="barfill"></i></div>
+  </div>
+</nav>
+
+<main>
+<section class="hero">
+  <div class="caw"><img class="caw-l" src="caw/light-ready.webp" alt="Caw" width="104" height="104"><img class="caw-d" src="caw/dark-ready.webp" alt="" width="104" height="104"></div>
+  <div>
+    <h1>Projects, rethought</h1>
+    <p>Fifteen decisions. Each one shows how it would look and how it works. Pick a path per card; I read your picks back from this page.</p>
+    <div class="row">
+      <span class="pill" id="savestate"><span class="dot"></span><span id="savetext">Connecting…</span></span>
+      <button class="btn" id="copypicks" type="button">Copy my picks</button>
+    </div>
+  </div>
+  <div class="ring" aria-hidden="true">
+    <svg viewBox="0 0 100 100"><circle class="trk" cx="50" cy="50" r="42"/><circle class="val" id="ringval" cx="50" cy="50" r="42" stroke-dasharray="263.9" stroke-dashoffset="263.9"/></svg>
+    <span><span><b class="cnt">0</b>/<span class="tot">0</span><small>picked</small></span></span>
+  </div>
+</section>
+
+<div class="callout" role="note">
+  <span class="ic" aria-hidden="true">!</span>
+  <b>Found in the code: fix this whatever you pick</b>
+  <p>The seven <code>manage_*</code> admin tools are offered to every session and run before its credential is checked (<code>delegation-mcp.ts:174</code>). A session that reads a poisoned page could write a hook that runs on every machine.</p>
+</div>
+
+<section class="overview">
+  <figure class="pane mech" style="margin:0"><span class="cap">The recommended shape</span>{{DG_OVERVIEW}}</figure>
+  <div class="ov-copy">
+    <span class="eyebrow">In one picture</span>
+    <h2>Code coordinates, models judge, you decide</h2>
+    <ol>
+      <li><b>You talk to the project.</b><span>Caw is its lead: threads, briefs, recaps.</span></li>
+      <li><b>Tasks live on a board.</b><span>GitHub stays the record for repos.</span></li>
+      <li><b>Code dispatches and lands.</b><span>Frontier, caps, checks, merge queue.</span></li>
+      <li><b>Sessions are cheap, workspaces last.</b><span>A fresh session per attempt.</span></li>
+      <li><b>Everything wakes Caw by event.</b><span>No model polls, none writes status.</span></li>
+    </ol>
+  </div>
+</section>
+
+
+<section class="chap" id="path">
+  <header><span class="eyebrow">Your path</span><h2>Your picks, and answers to your notes</h2><p>Read from this page on 2026-10-06. Change a pick and this list updates.</p></header>
+  <div class="picks" id="pathlist" aria-live="polite"></div>
+  <div class="answers">
+    <article class="ans">
+      <header><span class="did">D2</span><h3>Tasks as files; you choose the tracker</h3></header>
+      <p class="q">User chooses whether to use GitHub, Linear, or just CawCo (file over app, CawCo tracks stuff as files).</p>
+      <div class="trk"><span class="t def">CawCo · files</span><span class="or">or</span><span class="t">GitHub Issues</span><span class="or">or</span><span class="t">Linear</span><span class="or">→ one record per project, never two-way</span></div>
+<pre class="v"><span class="c">x-growth/tasks/</span>142-fix-tray-chip.md
+---
+status: ready
+after: [138]
+checks: ["bun test", "bun run lint"]
+rank: a0V
+labels: [ui]
+---
+The tray chip overflows at 320px wide…</pre>
+      <p class="a">Agreed. The file is the truth, like the project page's docs already are. The hub keeps an index rebuilt from the files for the frontier and board order. Live state (attempts, workspaces, running) stays in the hub. Agents write through <code>board_write</code>; a hand edit is picked up by hash; git keeps history.</p>
+    </article>
+    <article class="ans">
+      <header><span class="did">D4</span><h3>Caw lead, on or off per project</h3></header>
+      <p class="q">Lead can be enabled or disabled per project by user?</p>
+      <div class="tog anim" aria-label="A per-project switch for the Caw lead; with it off, the board, dispatcher, routines and checks still run.">
+        <div class="sw"><i></i><span><b>Caw lead</b> · site</span></div>
+        <div class="runs"><span>Board</span><span>Dispatcher</span><span>Routines</span><span>Hub checks</span><span class="lead">Caw wakes on events (only when on)</span></div>
+      </div>
+      <p class="a">Yes. Off means you write the briefs and nothing wakes a model. Default on for projects made with Caw, off for migrated ones, so there is no surprise spend. Each lead shows its own spend.</p>
+    </article>
+    <article class="ans wide">
+      <header><span class="did">D3</span><h3>Reuse the warmth check; add compress and continue</h3></header>
+      <p class="q">We kinda have a check for cache warmth, reuse it? We can also have compress and continue integrated here somehow?</p>
+      <div class="dg" role="img" aria-label="A new message for a task: if the session is idle, on this task and its cache is warm, continue it; if not but the history matters, compress and continue; otherwise start fresh."><div class="node "><span class="t">New message for a task</span></div><div class="edge"><i class="ln"></i><i class="ar"></i></div><div class="node code ask"><span class="k">code</span><span class="t">Idle, same task, cache still warm?</span></div><p class="loop">the same promptCacheExpiresAt test checkCold uses today</p><div class="row r2"><div class="box alt"><span class="bl">Yes</span><div class="dg in"><div class="node model sm"><span class="k">model</span><span class="t">Continue that session</span><span class="s">warm cache, cheap</span></div></div></div><div class="box alt"><span class="bl">No</span><div class="dg in"><div class="node code ask sm"><span class="k">code</span><span class="t">Does the history matter?</span></div><div class="row r2"><div class="col"><div class="edge"><i class="ln"></i><span class="lb">yes</span><i class="ln"></i><i class="ar"></i></div><div class="node model sm"><span class="k">model</span><span class="t">Compress and continue</span><span class="s">continue_session, same workspace</span></div></div><div class="col"><div class="edge"><i class="ln"></i><span class="lb">no</span><i class="ln"></i><i class="ar"></i></div><div class="node model sm"><span class="k">model</span><span class="t">Fresh session</span><span class="s">brief + last failure</span></div></div></div></div></div></div></div>
+      <p class="a">Yes to both. <code>checkCold</code> in <code>delegation-actions.ts</code> already refuses a cold follow-up once with the cost; the attach rule uses the same test. <code>continue_session</code> is the middle branch. D3 is still open on the board above; this rule is what I would pick.</p>
+    </article>
+    <article class="ans wide" id="jev">
+      <header><span class="did">Jev</span><h3>Jev: how it gets turned on, what it does, what happens without it</h3></header>
+      <p class="q">Jev should be enabled through onboarding via OpenRouter OAuth, or with your own API key for Jev itself. Jev can do a lot more. When it's not enabled we need some sort of fallback.</p>
+      <span class="gl">Turning it on, in onboarding and in Settings</span>
+      <div class="jev-on">
+        <div class="o rec"><b>Connect OpenRouter</b><span>OAuth (PKCE), already shipped in Settings. The key stays in the hub DB.</span></div>
+        <div class="o"><b>Use your own Jev key</b><span>Typesafe's API directly, entered once, held by the hub.</span></div>
+        <div class="o"><b>Not now</b><span>Every feature runs in its "without Jev" mode, and says so.</span></div>
+      </div>
+      <span class="gl">What Jev answers (no text generation; one call, many questions in parallel; ~0.5 s; $0.042 per million input tokens)</span>
+      <div class="jq anim" aria-label="Three Jev question types with example probabilities.">
+        <div class="q2"><span class="ty">yes / no</span><span class="qq">Is this session stuck on the same error?</span><div class="bars"><div class="br top"><span class="tr"><i style="--v:91%"></i></span><span class="pv">0.91</span></div></div></div>
+        <div class="q2"><span class="ty">choice · up to 255 options</span><span class="qq">Which routine does this event belong to?</span><div class="bars">
+          <div class="br top"><span class="tr"><i style="--v:78%"></i></span><span class="pv">0.78</span><span class="lb2">mentions</span></div>
+          <div class="br"><span class="tr"><i style="--v:15%"></i></span><span class="pv">0.15</span><span class="lb2">morning drafts</span></div>
+          <div class="br"><span class="tr"><i style="--v:7%"></i></span><span class="pv">0.07</span><span class="lb2">none</span></div></div></div>
+        <div class="q2"><span class="ty">score · 2 to 10 levels</span><span class="qq">How ready is this task for an agent?</span><div class="bars">
+          <div class="br"><span class="tr"><i style="--v:8%"></i></span><span class="pv">1</span><span class="lb2">vague</span></div>
+          <div class="br"><span class="tr"><i style="--v:22%"></i></span><span class="pv">2</span><span class="lb2">needs a check</span></div>
+          <div class="br top"><span class="tr"><i style="--v:70%"></i></span><span class="pv">3</span><span class="lb2">ready</span></div></div></div>
+      </div>
+      <span class="gl">Where it plugs into this design</span>
+      <div class="uses"><table>
+        <thead><tr><th>Use</th><th>Kind</th><th>With Jev</th><th>Without Jev</th></tr></thead>
+        <tbody>
+          <tr><td>Fleet watch (D5)</td><td><span class="ty2">yes/no</span></td><td>Stuck? looping? off-task? Only a yes wakes Caw triage.</td><td class="fb">Second code signal, triage with tighter caps.</td></tr>
+          <tr><td>Memory inbox (D8)</td><td><span class="ty2">choice</span></td><td>Lasting fact, scaffolding, secret, untrusted, duplicate.</td><td class="fb">Rules: repeats in 2+ sessions, provenance tags.</td></tr>
+          <tr><td>Attach or start fresh (D3)</td><td><span class="ty2">yes/no</span></td><td>Does this follow-up need context a brief can't carry? The question <code>checkCold</code> asks the model today.</td><td class="fb">Warm, idle and same task decides alone.</td></tr>
+          <tr><td>Ready to dispatch</td><td><span class="ty2">score</span></td><td>How well specified is this task? Low scores go to needs-info.</td><td class="fb">A check must exist; otherwise the lead decides.</td></tr>
+          <tr><td>Triage skill (D14)</td><td><span class="ty2">choice</span></td><td>needs-info · ready-for-agent · ready-for-human · won't do.</td><td class="fb">The lead model triages (costlier).</td></tr>
+          <tr><td>Duplicates</td><td><span class="ty2">yes/no</span></td><td>Is task A the same work as B? Fan-out over candidates.</td><td class="fb">Exact match on files and checks only.</td></tr>
+          <tr><td>Event routing (D10)</td><td><span class="ty2">choice</span></td><td>Which routine or project does this event belong to?</td><td class="fb">Matcher filters: author, label, regex.</td></tr>
+          <tr><td>Delegate type</td><td><span class="ty2">choice</span></td><td>Which preset fits this brief?</td><td class="fb">The caller names a type, else "medium".</td></tr>
+          <tr><td>Grounded recaps</td><td><span class="ty2">yes/no</span></td><td>Is each recap claim backed by its cited events?</td><td class="fb">Recaps list events only, no prose claims.</td></tr>
+          <tr><td>X voice check</td><td><span class="ty2">yes/no ×N</span></td><td>One question per brand-kit rule, on every draft.</td><td class="fb">Lint-style rules: length, banned words, "!".</td></tr>
+        </tbody></table></div>
+      <p class="fine">Two rules hold either way. Off is a mode you can see on every feature ("Jev off · using rules"). On but failing is never quietly downgraded: the feature says Jev failed, which keeps your 2026-09-23 "no fallbacks" decision for errors. Jev runs through OpenRouter or Typesafe, so text leaves your network; that is why it is opt-in. I could not open docs.typesafe.ai/agent-skill from here (blocked), so this card uses the Jev plan in <code>.design-foundations</code> and the <code>w.jev</code> types; send it over and I'll fold in the rest.</p>
+    </article>
+    <article class="ans wide" id="todos">
+      <header><span class="did">To-dos</span><h3>Can sessions set their own to-dos? Three layers, one word each</h3></header>
+      <p class="q">Are agent sessions able to set their todos etc? Where does this fit?</p>
+      <div class="layers anim" aria-label="Three layers: board tasks, a task's to-dos, and a session's plan.">
+        <div class="ly l1"><span class="nm">Task<small>tasks/151-dark-mode.md</small></span><div class="ex"><span>#151 Add dark mode toggle · after #142 · checks 3</span></div><span class="wr"><b>Lasts:</b> until done. <b>Writes:</b> you, Caw (<code>board_write</code>), workers in their project (<code>task_write</code>).</span></div>
+        <div class="arrow">↓ inside the task file</div>
+        <div class="ly"><span class="nm">To-dos<small>checklist in the file</small></span><div class="ex"><span class="ck d"><i></i>Token for the toggle</span><span class="ck"><i></i>Persist the choice</span><span class="ck"><i></i>Screenshot both themes</span></div><span class="wr"><b>Lasts:</b> with the task. <b>Writes:</b> you, Caw, and the attempt's session through <code>todo_write</code> (its own task only).</span></div>
+        <div class="arrow">↓ inside one attempt</div>
+        <div class="ly l3"><span class="nm">Plan<small>the harness's own list</small></span><div class="ex"><span class="ck d"><i></i>Read theme store</span><span class="ck"><i></i>Add toggle to header</span><span class="ck"><i></i>Run checks</span></div><span class="wr"><b>Lasts:</b> one session. <b>Writes:</b> the session itself (Claude Code's task tools, OpenCode's todos). CawCo only reads it: the progress ring on the attempt.</span></div>
+      </div>
+      <p class="a">Yes, at two levels. Every session already keeps its own plan with the harness's native tools, and CawCo already reads it (the task ring on a session). New: the session can tick and add to-dos on the task it is working on through <code>todo_write</code>, which also gives pi a list it lacks. When an attempt ends, plan items left open become proposed to-dos or follow-up tasks for Caw or you to accept. A plan never edits the board by itself.</p>
+    </article>
+    <article class="ans">
+      <header><span class="did">D14</span><h3>Our own three skills</h3></header>
+      <p class="q">Are these valuable here?</p>
+      <div class="keep"><div><b>Keep the ideas</b><ul><li>end-to-end tasks with blocking edges</li><li>acceptance criteria per task</li><li>interview before planning</li><li>triage states</li></ul></div><div><b>Drop the plumbing</b><ul><li>their tracker setup</li><li>scanning files for ready work</li><li>in-harness implementers</li></ul></div></div>
+      <div class="sk"><span>grill</span><span>to-tasks</span><span>triage</span></div>
+      <p class="a">CawCo's board and dispatcher replace the plumbing. Three slim skills, any harness: interview to a spec, spec to tasks with edges and checks, and triage.</p>
+    </article>
+    <article class="ans">
+      <header><span class="did">D11</span><h3>Telegram pending; the iOS app first</h3></header>
+      <p class="q">Only if Telegram is enabled. Disable Telegram for now, put it in pending; focus on the iOS app to push more users there.</p>
+      <div class="twin">
+        <figure class="pane mech" style="margin:0"><span class="cap">What the app needs first</span><div class="dg" role="img" aria-label="iOS push: the hub sends a content-free push through Apple, the phone wakes the app, and the app fetches the details from the hub over the tailnet."><div class="node code"><span class="k">code</span><span class="t">Hub</span><span class="s">something needs you</span></div><div class="edge"><i class="ln"></i><span class="lb">content-free payload</span><i class="ln"></i><i class="ar"></i></div><div class="node ext"><span class="k">outside</span><span class="t">Apple push service</span><span class="s">"site needs you", nothing else</span></div><div class="edge"><i class="ln"></i><i class="ar"></i></div><div class="node you"><span class="k">you</span><span class="t">Your phone</span><span class="s">CawCo app</span></div><div class="edge"><i class="ln"></i><span class="lb">fetches details over the tailnet</span><i class="ln"></i><i class="ar"></i></div><div class="node code"><span class="k">code</span><span class="t">Hub</span><span class="s">the ask, the diff, the draft</span></div></div></figure>
+        <div class="tog" style="align-self:start"><b style="font-size:13px;font-weight:500">Found in apps/apple</b><span class="fine">Home, sessions, delegate tray, new project and the assistant panel are there. Push notifications are not: no <code>UNUserNotification</code> or APNs anywhere. Telegram is what reaches you today when the app is closed.</span><span class="fine">So, in order: push from the hub (content-free, an Apple push key on the hub), then Caw's project threads, then approvals in the app. Telegram topics wait in pending.</span></div>
+      </div>
+    </article>
+  </div>
+</section>
+
+<section class="chap" id="xexample">
+  <header><span class="eyebrow">Example</span><h2>A project that grows an X account</h2><p>A test of the primitives: drafting posts, answering mentions, learning what works. API access is assumed; every post waits for you because that is what you asked Caw for.</p></header>
+  <div class="story">
+    <div class="step"><div class="sx"><span class="sn">1</span><h3>Set it up by talking to Caw</h3><p>One message. Caw proposes the whole project and shows it before anything runs.</p></div><figure class="pane look" style="margin:0">{{MK:xsetup}}</figure></div>
+    <div class="step"><div class="sx"><span class="sn">2</span><h3>Teach it your voice</h3><p>Five rounds of "which sounds like you?". Each pick becomes a rule in the brand kit.</p></div><figure class="pane look" style="margin:0">{{MK:xvoice}}</figure></div>
+    <div class="step"><div class="sx"><span class="sn">3</span><h3>What Caw creates</h3><p>A project folder, three routines and a connector whose keys never leave the hub.</p></div><figure class="pane mech" style="margin:0">
+<pre class="v">x-growth/
+├── AGENTS.md              <span class="c"># voice rules from step 2</span>
+├── knowledge/
+│   ├── brand-kit.md       <span class="c"># voice · do/don't · audiences</span>
+│   ├── pillars.md         <span class="c"># fleets · self-hosting · build log</span>
+│   └── facts/             <span class="c"># best times, followers; dated, expire</span>
+├── assets/                <span class="c"># screenshots, clips</span>
+├── memory/                <span class="c"># playbook + inbox</span>
+├── tasks/                 <span class="c"># one file per post or reply</span>
+└── routines/
+    ├── morning-drafts.md  <span class="c"># weekdays 08:45 · fresh session</span>
+    ├── mentions.md        <span class="c"># on mention · poll 60 s</span>
+    └── weekly-recap.md    <span class="c"># Fri 17:00 · numbers → proposals</span></pre>
+      <div class="creates"><span class="mkchip code">X connector · keys in the hub</span><span class="mkchip code">budget · $3 a day</span><span class="mkchip you">approval · every post</span><span class="mkchip model">lead · Caw</span></div>
+    </figure></div>
+    <div class="step"><div class="sx"><span class="sn">4</span><h3>The day's posts cross the board</h3><p>Drafts land in Needs you. Approved posts wait in Scheduled. Posted ones carry their numbers.</p></div><figure class="pane look" style="margin:0">{{MK:xboard}}</figure></div>
+    <div class="step"><div class="sx"><span class="sn">5</span><h3>Approve from your phone</h3><p>One push, one stack. Approve, edit or drop; approved posts go out at their slot.</p></div><figure class="pane look" style="margin:0">{{MK:xphone}}</figure></div>
+    <div class="step"><div class="sx"><span class="sn">6</span><h3>Replies, drafted safely</h3><p>Mentions are untrusted input. The session that reads them can draft, never post. Code posts exactly what you approved.</p></div><figure class="pane look" style="margin:0">{{MK:xreply}}</figure></div>
+    <div class="step"><div class="sx"><span class="sn">7</span><h3>It learns what works, with your OK</h3><p>Friday's recap turns numbers into a proposal. One tap and next week's drafts use it.</p></div><figure class="pane look" style="margin:0">{{MK:xloop}}</figure></div>
+  </div>
+  <div class="guard">
+    <div><b>Every post waits for you</b><span>Your own rule from step 1, enforced by the hub.</span></div>
+    <div><b>Mentions can't post</b><span>The drafting session has no posting tool.</span></div>
+    <div><b>Keys stay in the hub</b><span>Sessions never see the X credentials.</span></div>
+    <div><b>Spend is capped</b><span>A daily budget per routine.</span></div>
+  </div>
+  <article class="ans wide" id="xprim">
+    <header><span class="did">Check</span><h3>Do the primitives cover it?</h3></header>
+    <div class="prim"><table>
+      <thead><tr><th>Step</th><th>Primitive</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td>Set up by talking</td><td>Caw lead, onboarding templates, project folder</td><td><span class="st2 plan">planned · P1–P2</span></td></tr>
+        <tr><td>Teach the voice</td><td><code>grill</code> skill, brand kit as project memory; Jev scores each rule</td><td><span class="st2 plan">planned · P4</span></td></tr>
+        <tr><td>Morning drafts</td><td>Routine (cron) → fresh session in the web-facing role</td><td><span class="st2 plan">planned · P3</span></td></tr>
+        <tr><td>Drafts as cards</td><td>Tasks as files with a non-commit output (the post text, media)</td><td><span class="st2 plan">planned · P1, D6</span></td></tr>
+        <tr><td>Approve from the phone</td><td>Needs-you + iOS push</td><td><span class="st2 plan">planned · P2</span></td></tr>
+        <tr><td>Post at 12:30</td><td><b>Approved action</b>: an exact tool call you approved, run by the hub through the connector at a set time, once (outbox, idempotency key)</td><td><span class="st2 gap">gap · new</span></td></tr>
+        <tr><td>Notice new mentions</td><td><b>Connector poller</b>: poll any connector tool on a schedule and diff the results into inbound events (today's plan polls GitHub only)</td><td><span class="st2 gap">gap · widen D10</span></td></tr>
+        <tr><td>Draft replies safely</td><td>Role toolsets (D7): drafter has no posting tool</td><td><span class="st2 plan">planned · P2</span></td></tr>
+        <tr><td>Keys out of sessions</td><td>Hub-held credentials (the fleet MCP proxy already does this)</td><td><span class="st2 has">exists</span></td></tr>
+        <tr><td>Numbers per post</td><td>Routine reads stats, writes them into the task file as dated facts</td><td><span class="st2 plan">planned · P3–P4</span></td></tr>
+        <tr><td>Weekly learning</td><td>Recap routine → curator proposal → project memory</td><td><span class="st2 plan">planned · P4</span></td></tr>
+        <tr><td>Daily budget</td><td>Budgets (D6) applied to routine runs, not only delegates</td><td><span class="st2 gap">gap · small</span></td></tr>
+      </tbody></table></div>
+    <p class="a">Mostly yes. Two real gaps: an <b>approved action</b> primitive (you approve an exact call; code runs it once, at a time, never a model), and a <b>generic connector poller</b> for ingress. Budgets also need to cover routine runs. All three also serve code projects: "merge this PR at 18:00", "watch this API", "cap this routine".</p>
+  </article>
+</section>
+<section class="chap" id="research">
+  <header><span class="eyebrow">Evidence</span><h2>Ten numbers that shaped the paths</h2></header>
+  <div class="tiles">
+    <article class="tile"><span class="fig">6 apps</span><span class="say">ChatGPT, Claude, Cowork, Gemini, Perplexity, Manus: one shape. Instructions, files, chats, memory per project.</span><span class="les">A project is a folder agents can read.</span><span class="so"><a href="https://simonwillison.net/2025/Aug/22/project-memory/">Willison</a> · <a href="https://community.openai.com/t/chatgpt-project-files-are-not-working-at-all/1095271">OpenAI forum</a></span></article>
+    <article class="tile"><span class="fig">~50%</span><span class="say">Cowork's Dispatch on non-trivial tasks, and only while the laptop is awake.</span><span class="les">Daemons on every machine fix that.</span><span class="so"><a href="https://support.claude.com/en/articles/12138966-release-notes">Release notes</a> · <a href="https://www.theregister.com/security/2026/01/15/anthropics-files-api-exfiltration-risk-resurfaces-in-cowork/5202464">The Register</a></span></article>
+    <article class="tile"><span class="fig">Apr 2026</span><span class="say">Vibe Kanban shut down. What lasted keeps GitHub or Linear as the record.</span><span class="les">The board is a view, not a rival tracker.</span><span class="so"><a href="https://github.com/openai/symphony/blob/main/SPEC.md">Symphony SPEC</a></span></article>
+    <article class="tile"><span class="fig">+91%</span><span class="say">PR review time on AI-heavy teams. Delivery stayed flat.</span><span class="les">Stop dispatching when review is full.</span><span class="so"><a href="https://www.faros.ai/blog/key-takeaways-from-the-dora-report-2025">Faros</a></span></article>
+    <article class="tile"><span class="fig">10k→200k</span><span class="say">Tokens per turn after 20 loops in one session.</span><span class="les">Keep the workspace, replace the session.</span><span class="so"><a href="https://github.com/anthropics/claude-plugins-official/issues/125">plugins #125</a></span></article>
+    <article class="tile"><span class="fig">−3% · +20%</span><span class="say">Success and cost with LLM-written context files. Human-written: +4%.</span><span class="les">You write rules; agents write to an inbox.</span><span class="so"><a href="https://arxiv.org/abs/2602.11988">ETH Zurich</a></span></article>
+    <article class="tile"><span class="fig">1 catch-up</span><span class="say">Claude's scheduled tasks run fresh and catch up once, within 7 days.</span><span class="les">One fire, one session, one deliverable.</span><span class="so"><a href="https://code.claude.com/docs/en/desktop-scheduled-tasks">Docs</a></span></article>
+    <article class="tile"><span class="fig">16 of 27</span><span class="say">Manual orchestration actions that needed no judgement in a logged 10-day run.</span><span class="les">Code coordinates; models judge.</span><span class="so"><a href="https://github.com/theyashgupta/dispatch/blob/main/docs/research/orchestration-research.md">Dispatch</a></span></article>
+    <article class="tile"><span class="fig">30–50</span><span class="say">Tools before Claude's tool choice degrades. GitHub's MCP cut 101 to 52.</span><span class="les">One server, a toolset per role.</span><span class="so"><a href="https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool">Tool search</a></span></article>
+    <article class="tile"><span class="fig">3–8</span><span class="say">Agents steipete runs in one folder. No tracker: "just talk to it".</span><span class="les">Talking stays the main interface.</span><span class="so"><a href="https://steipete.me/posts/just-talk-to-it">steipete.me</a></span></article>
+  </div>
+</section>
+
+<section class="chap" id="shape">
+  <header><span class="eyebrow">Shape</span><h2>What a project is, where its work lives</h2></header>
+
+  <article class="dec" id="d1">
+    <header><span class="did">D1</span><h3>What is a project?</h3><span class="state" data-for="project">Not picked</span></header>
+    <p class="why">Today: one folder on one machine. The same repo on two machines is two projects.</p>
+    <div class="show">
+      <figure class="pane look"><span class="cap">How it would look</span>{{MK:places}}</figure>
+      <figure class="pane mech"><span class="cap">How it works</span>
+<pre class="v"> projects
+   id, name
+<span class="del">-  machineId, cwd</span><span class="add">+  remote?   github.com/you/site
++  places[]  checkouts + workspaces
++  folder    hub-kept, versioned</span></pre>
+      </figure>
+    </div>
+    <div class="opts" role="radiogroup" data-group="project" data-label="D1 What is a project">
+      <button class="opt" type="button" role="radio" data-opt="today"><b>One folder, one machine</b><span>As today.</span></button>
+      <button class="opt" type="button" role="radio" data-opt="places"><b>One identity, many places</b><span>Remote, checkouts, workspaces, hub folder.</span><span class="tag">Recommended</span></button>
+      <button class="opt" type="button" role="radio" data-opt="hubonly"><b>Hub folder only</b><span>Repos become attached sources.</span></button>
+    </div>
+    <div class="foot">
+      <details class="more"><summary>Details</summary><div class="in"><p>Existing rows migrate as one place each. Marketing work gets a home: the hub folder holds AGENTS.md, knowledge, assets, memory, routines and project skills, synced to machines as files. "Hub folder only" is simpler, but code still lives in checkouts, so repo projects would have two copies of the truth.</p></div></details>
+      <label class="note">Note <input id="note-project" data-note="project" type="text" placeholder="Anything to add"></label>
+    </div>
+  </article>
+
+  <article class="dec" id="d2">
+    <header><span class="did">D2</span><h3>Where do tasks live?</h3><span class="state" data-for="taskhome">Not picked</span></header>
+    <p class="why">Agent boards that competed with GitHub died. Two-way sync gives one field two owners.</p>
+    <div class="show">
+      <figure class="pane look"><span class="cap">How it would look</span>{{MK:board}}</figure>
+      <figure class="pane mech"><span class="cap">How it works</span>{{DG_D2}}</figure>
+    </div>
+    <div class="opts" role="radiogroup" data-group="taskhome" data-label="D2 Where tasks live">
+      <button class="opt" type="button" role="radio" data-opt="cawco"><b>CawCo board for everything</b><span>GitHub gets comments and PR links only.</span></button>
+      <button class="opt" type="button" role="radio" data-opt="split"><b>GitHub if opted in, else CawCo</b><span>Never two-way.</span><span class="tag">Recommended</span></button>
+      <button class="opt" type="button" role="radio" data-opt="twoway"><b>Two-way sync</b><span>Per-field owners; org-only webhooks.</span><span class="tag warn">Costly</span></button>
+      <button class="opt" type="button" role="radio" data-opt="none"><b>No board, just talk</b><span>Work lives in threads.</span></button>
+    </div>
+    <div class="foot">
+      <details class="more"><summary>Details</summary><div class="in"><p>Columns are derived from live state, never dragged into "Running". GitHub owns issue fields; CawCo owns rank, edges, attempts and checks. Projects v2 webhooks exist only for org projects, so user projects are polled.</p></div></details>
+      <label class="note">Note <input id="note-taskhome" data-note="taskhome" type="text" placeholder="Anything to add"></label>
+    </div>
+  </article>
+
+  <article class="dec" id="d3">
+    <header><span class="did">D3</span><h3>Task → session: spawn or attach?</h3><span class="state" data-for="attempts">Not picked</span></header>
+    <p class="why">Keep the workspace per task. Make sessions cheap. Attach only while it is clearly cheaper.</p>
+    <div class="show">
+      <figure class="pane look"><span class="cap">How it would look</span>{{MK:attempts}}</figure>
+      <figure class="pane mech"><span class="cap">How it works</span>{{DG_D3}}</figure>
+    </div>
+    <div class="opts" role="radiogroup" data-group="attempts" data-label="D3 Task to session">
+      <button class="opt" type="button" role="radio" data-opt="fresh"><b>Always fresh</b><span>Predictable; loses warm cache.</span></button>
+      <button class="opt" type="button" role="radio" data-opt="hybrid"><b>Fresh, attach when warm</b><span>Idle, same task, under 40% context.</span><span class="tag">Recommended</span></button>
+      <button class="opt" type="button" role="radio" data-opt="owners"><b>Area owners</b><span>Long-lived sessions own an area.</span></button>
+    </div>
+    <div class="foot">
+      <details class="more"><summary>Details</summary><div class="in">
+<pre class="v">attach_or_spawn(task, message)
+  s = task.latest_attempt.session
+  if s is live and idle and s.task == task and s.context &lt; 40%
+    continue s                     <span class="c"># warm cache</span>
+  else
+    new session in task.workspace  <span class="c"># brief + last failure + batched comments</span></pre>
+      <p>Running, Checking and Landing are read live from the attempt, never stored: the derived-liveness law applied to the board.</p></div></details>
+      <label class="note">Note <input id="note-attempts" data-note="attempts" type="text" placeholder="Anything to add"></label>
+    </div>
+  </article>
+</section>
+
+<section class="chap" id="runs">
+  <header><span class="eyebrow">Who runs it</span><h2>Caw, the fleet watch, delegates, tools</h2><p>These replace the supervisor, autopilot and assistant panel: a small model's one-shot verdict per turn, with no tools, memory or board.</p></header>
+
+  <article class="dec" id="d4">
+    <header><span class="did">D4</span><h3>The project lead</h3><span class="state" data-for="lead">Not picked</span></header>
+    <p class="why">You talk to the project in threads. Caw files, briefs, answers and recaps. He wakes on events.</p>
+    <div class="show">
+      <figure class="pane look"><span class="cap">How it would look</span>{{MK:thread}}</figure>
+      <figure class="pane mech"><span class="cap">A day, step by step</span>{{DG_D4}}</figure>
+    </div>
+    <div class="opts" role="radiogroup" data-group="lead" data-label="D4 Project lead">
+      <button class="opt" type="button" role="radio" data-opt="nolead"><b>No lead</b><span>You write every brief.</span></button>
+      <button class="opt" type="button" role="radio" data-opt="event"><b>Caw, woken by events</b><span>Board tools, no edit tools.</span><span class="tag">Recommended</span></button>
+      <button class="opt" type="button" role="radio" data-opt="always"><b>Always-on watcher</b><span>Reads every transcript live.</span><span class="tag warn">Costly</span></button>
+    </div>
+    <div class="foot">
+      <details class="more"><summary>Who does what</summary><div class="in"><div class="tbl"><table>
+        <thead><tr><th>Duty</th><th>Who</th></tr></thead>
+        <tbody>
+          <tr><td>Status, liveness, stalls</td><td><span class="who code">code</span></td></tr>
+          <tr><td>Frontier, caps, retries, landing</td><td><span class="who code">code</span></td></tr>
+          <tr><td>Exact dedupe (same files, same check)</td><td><span class="who code">code</span> proposes, <span class="who llm">lead</span> confirms</td></tr>
+          <tr><td>Plan, split, write briefs and checks</td><td><span class="who llm">lead</span></td></tr>
+          <tr><td>Read a failed check, retry or rescope</td><td><span class="who llm">lead</span></td></tr>
+          <tr><td>Recaps, each claim citing an event id</td><td><span class="who llm">lead</span></td></tr>
+          <tr><td>Permissions, merges, config writes</td><td><span class="who you">you</span></td></tr>
+        </tbody></table></div>
+        <p>Gas Town's docs show prompt-only role rules break under pressure, so the lead simply has no edit or shell tools.</p></div></details>
+      <label class="note">Note <input id="note-lead" data-note="lead" type="text" placeholder="Anything to add"></label>
+    </div>
+  </article>
+
+  <article class="dec" id="d5">
+    <header><span class="did">D5</span><h3>Watching the whole fleet</h3><span class="state" data-for="fleet">Not picked</span></header>
+    <p class="why">Detectors in code, two sources, then one short Caw decision. Nudges go to the lead.</p>
+    <div class="show">
+      <figure class="pane look"><span class="cap">How it would look</span>{{MK:fleet}}</figure>
+      <figure class="pane mech"><span class="cap">How it works</span>{{DG_D5}}</figure>
+    </div>
+    <div class="opts" role="radiogroup" data-group="fleet" data-label="D5 Fleet oversight">
+      <button class="opt" type="button" role="radio" data-opt="retire"><b>Detectors only</b><span>Retire the three; raise needs-you rows.</span></button>
+      <button class="opt" type="button" role="radio" data-opt="triage"><b>Detectors + Caw triage</b><span>Fresh context, one decision, exits.</span><span class="tag">Recommended</span></button>
+      <button class="opt" type="button" role="radio" data-opt="supervisor"><b>Upgrade the supervisor</b><span>Bigger model, tools.</span></button>
+      <button class="opt" type="button" role="radio" data-opt="resident"><b>Resident fleet session</b><span>Sees and nudges everything.</span><span class="tag warn">Costly</span></button>
+    </div>
+    <div class="foot">
+      <details class="more"><summary>Details</summary><div class="in"><p>Gas Town built "Boot" for exactly this: wake, decide once, exit, because a resident watcher burned money in idle towns. Its docs also record false stuck alarms from a single heartbeat store, hence the second source.</p></div></details>
+      <label class="note">Note <input id="note-fleet" data-note="fleet" type="text" placeholder="Anything to add"></label>
+    </div>
+  </article>
+
+  <article class="dec" id="d6">
+    <header><span class="did">D6</span><h3>Delegate upgrades, first</h3><span class="state" data-for="delegates">Not picked</span></header>
+    <p class="why">Pick any. Landing is just a sentence in the brief today, so "done" never meant "on main".</p>
+    <div class="show">
+      <figure class="pane look"><span class="cap">How it would look</span>{{MK:delegates}}</figure>
+      <figure class="pane mech"><span class="cap">The call grows</span>
+<pre class="v"> delegate(prompt, checks, type, …)
+<span class="add">+  task:    "tsk-7f2"
++  after:   ["tsk-a", "tsk-b"]
++  lands:   main | branch | pr
++  machine: "any"
++  group:   "auth-rework"
++  retry:   "fresh"
++  owns:    ["src/board/**"]
++  outputs: ["report.md"]
++  budget:  { usd: 4, min: 90 }</span></pre>
+      </figure>
+    </div>
+    <div class="opts" data-multi data-group="delegates" data-label="D6 Delegate upgrades">
+      <button class="opt" type="button" aria-pressed="false" data-opt="landing"><b>Hub-owned landing</b><span>Verified push, merge queue.</span><span class="tag">First</span></button>
+      <button class="opt" type="button" aria-pressed="false" data-opt="edges"><b>Queued + edges</b><span>Blocked waits, never fails.</span></button>
+      <button class="opt" type="button" aria-pressed="false" data-opt="caps"><b>Caps, backpressure</b><span>Pause while review is full.</span></button>
+      <button class="opt" type="button" aria-pressed="false" data-opt="group"><b>Group join</b><span>One report per group.</span></button>
+      <button class="opt" type="button" aria-pressed="false" data-opt="retry"><b>Fresh retry</b><span>New session, same workspace.</span></button>
+      <button class="opt" type="button" aria-pressed="false" data-opt="owns"><b>File ownership</b><span>Overlaps never run at once.</span></button>
+      <button class="opt" type="button" aria-pressed="false" data-opt="outputs"><b>Non-commit outputs</b><span>Reports, images into assets.</span></button>
+      <button class="opt" type="button" aria-pressed="false" data-opt="authority"><b>Lead authority</b><span>Co-parent, adopts orphans.</span></button>
+      <button class="opt" type="button" aria-pressed="false" data-opt="budgets"><b>Budgets</b><span>Cost, turns, time.</span></button>
+    </div>
+    <div class="foot">
+      <details class="more"><summary>Details</summary><div class="in"><p>Edges live on tasks, so a retried blocker never leaves dependents pointing at a dead attempt. A dependent's workspace is cut after its blockers land, from the new base. A failed blocker marks dependents blocked, not failed.</p></div></details>
+      <label class="note">Note <input id="note-delegates" data-note="delegates" type="text" placeholder="Anything to add"></label>
+    </div>
+  </article>
+
+  <article class="dec" id="d7">
+    <header><span class="did">D7</span><h3>One MCP server, or several?</h3><span class="state" data-for="mcp">Not picked</span></header>
+    <p class="why">Which tools each role sees matters more than how many servers there are.</p>
+    <div class="show">
+      <figure class="pane look"><span class="cap">Try the roles</span>{{MK:roles}}</figure>
+      <figure class="pane mech"><span class="cap">Why not several servers</span>
+        <div class="collide anim" role="img" aria-label="In OpenCode, server cawco_admin with tool rules_write and server cawco with tool admin_rules_write both become cawco_admin_rules_write.">
+          <div class="ln2"><span class="p srv">cawco_admin</span><span class="eq">+</span><span class="p">rules_write</span><span class="eq">→</span><span class="out a">cawco_admin_rules_write</span></div>
+          <div class="ln2"><span class="p srv">cawco</span><span class="eq">+</span><span class="p">admin_rules_write</span><span class="eq">→</span><span class="out b">cawco_admin_rules_write</span></div>
+          <p class="verdict">OpenCode joins server and tool with "_": two different tools, one name.</p>
+          <div class="ln2"><span class="p srv">cawco</span><span class="eq">+</span><span class="p">role from credential</span><span class="eq">→</span><span class="good">one list per role</span></div>
+          <p class="verdict">The 2026-07-28 MCP spec lets the tool list vary by credential.</p>
+        </div>
+      </figure>
+    </div>
+    <div class="opts" role="radiogroup" data-group="mcp" data-label="D7 MCP surface">
+      <button class="opt" type="button" role="radio" data-opt="roles"><b>One server, toolset per role</b><span>Admin via CLI + skill.</span><span class="tag">Recommended</span></button>
+      <button class="opt" type="button" role="radio" data-opt="servers"><b>Several servers</b><span>Collision traps, more connections.</span></button>
+      <button class="opt" type="button" role="radio" data-opt="cli"><b>CLI for almost all</b><span>Loses cards, structured results.</span></button>
+    </div>
+    <div class="foot">
+      <details class="more"><summary>Details</summary><div class="in"><p>New tools are named group first (<code>board_write</code>, <code>admin_hooks_read</code>) so a pattern allows or denies a group. Admin tools split into read and write; writes ask you first. Existing hot names (<code>delegate</code>, <code>handoff</code>) stay. pi gained native MCP on 2026-09-29, so it can share the same names.</p></div></details>
+      <label class="note">Note <input id="note-mcp" data-note="mcp" type="text" placeholder="Anything to add"></label>
+    </div>
+  </article>
+</section>
+
+<section class="chap" id="knowledge">
+  <header><span class="eyebrow">Knowledge</span><h2>Memory, brand kits, assets</h2></header>
+  <article class="dec" id="d8">
+    <header><span class="did">D8</span><h3>Does memory change?</h3><span class="state" data-for="memory">Not picked</span></header>
+    <p class="why">You own the rules. Agents write to an inbox. A weekly curator proposes; you tap.</p>
+    <div class="show">
+      <figure class="pane look"><span class="cap">How it would look</span>{{MK:memory}}</figure>
+      <figure class="pane mech"><span class="cap">How it works</span>{{DG_D8}}</figure>
+    </div>
+    <div class="show solo">
+      <figure class="pane look"><span class="cap">A knowledge project's brand kit</span>{{MK:brandkit}}</figure>
+    </div>
+    <div class="opts" role="radiogroup" data-group="memory" data-label="D8 Memory">
+      <button class="opt" type="button" role="radio" data-opt="keep"><b>Keep the fleet file</b><span>Per-repo CLAUDE.md only.</span></button>
+      <button class="opt" type="button" role="radio" data-opt="tiers"><b>Tiers + inbox + curator</b><span>Files and grep.</span><span class="tag">Recommended</span></button>
+      <button class="opt" type="button" role="radio" data-opt="vector"><b>A memory service</b><span>mem0 or Zep.</span></button>
+    </div>
+    <div class="foot">
+      <details class="more"><summary>Details</summary><div class="in"><p>Routine, heartbeat, subagent and web-tainted notes never become candidates (OpenClaw's audit found most auto-captured memories were noise). Memory benchmarks are contested; a plain filesystem agent beat Mem0's graph variant on LoCoMo in Letta's test.</p></div></details>
+      <label class="note">Note <input id="note-memory" data-note="memory" type="text" placeholder="Anything to add"></label>
+    </div>
+  </article>
+</section>
+
+<section class="chap" id="time">
+  <header><span class="eyebrow">Time</span><h2>Routines, webhooks, your phone</h2></header>
+
+  <article class="dec" id="d9">
+    <header><span class="did">D9</span><h3>How routines run</h3><span class="state" data-for="routines">Not picked</span></header>
+    <p class="why">Schedules live in the hub's SQLite. Effect 4, already here, parses cron with time zones.</p>
+    <div class="show">
+      <figure class="pane look"><span class="cap">How it would look</span>{{MK:routines}}</figure>
+      <figure class="pane mech"><span class="cap">Each tick</span>
+<pre class="v"><span class="k">tick</span>
+  BEGIN IMMEDIATE
+    insert run(routine, slot)   <span class="c"># fires once</span>
+    next = Cron.next(cron, now) <span class="c"># misses collapse</span>
+  COMMIT
+  overlap?  skip, say why
+  else      fresh session
+<span class="k">hub start</span>
+  one catch-up, newest slot
+<span class="k">output</span>
+  NO_REPLY           silent
+  AUTOMATION_FAILED  retry, Telegram
+  anything else      the deliverable</pre>
+      </figure>
+    </div>
+    <div class="opts" role="radiogroup" data-group="routines" data-label="D9 Routines">
+      <button class="opt" type="button" role="radio" data-opt="hub"><b>Hub tables + Effect Cron</b><span>No new dependency.</span><span class="tag">Recommended</span></button>
+      <button class="opt" type="button" role="radio" data-opt="native"><b>Harness schedulers</b><span>Not neutral; die with the process.</span></button>
+      <button class="opt" type="button" role="radio" data-opt="engine"><b>Add a job engine</b><span>A second durable runtime.</span></button>
+    </div>
+    <div class="foot">
+      <details class="more"><summary>Details</summary><div class="in"><p>Agent-created routines expire after 7 days unless you keep them. A new routine runs once right away as a test. Infra status and the task's result are reported separately.</p></div></details>
+      <label class="note">Note <input id="note-routines" data-note="routines" type="text" placeholder="Anything to add"></label>
+    </div>
+  </article>
+
+  <article class="dec" id="d10">
+    <header><span class="did">D10</span><h3>Webhooks, hub never public</h3><span class="state" data-for="ingress">Not picked</span></header>
+    <p class="why">Poll by default; a 304 is free. An optional relay only ever reaches a one-route listener.</p>
+    <div class="show">
+      <figure class="pane look"><span class="cap">How it would look</span>{{MK:inbound}}</figure>
+      <figure class="pane mech"><span class="cap">How it works</span>{{DG_D10}}</figure>
+    </div>
+    <div class="opts" role="radiogroup" data-group="ingress" data-label="D10 Webhooks">
+      <button class="opt" type="button" role="radio" data-opt="poll"><b>Poll only</b><span>Zero exposure.</span></button>
+      <button class="opt" type="button" role="radio" data-opt="pollrelay"><b>Poll + optional relay</b><span>Marketing webhooks too.</span><span class="tag">Recommended</span></button>
+    </div>
+    <div class="foot">
+      <label class="note">Note <input id="note-ingress" data-note="ingress" type="text" placeholder="Anything to add"></label>
+    </div>
+  </article>
+
+  <article class="dec" id="d11">
+    <header><span class="did">D11</span><h3>The project, from your phone</h3><span class="state" data-for="phone">Not picked</span></header>
+    <p class="why">Telegram today only answers asks. A topic per project gives Caw a place to talk.</p>
+    <div class="show">
+      <figure class="pane look"><span class="cap">How it would look</span>{{MK:telegram}}</figure>
+      <figure class="pane mech"><span class="cap">The group</span>
+<pre class="v">CawCo  <span class="c">(topics on)</span>
+├── # fleet       <span class="c">needs-you, stalls, spend</span>
+├── # site        <span class="c">recaps · reply to steer</span>
+└── # launch-q4   <span class="c">reviews: Approve · Changes</span></pre>
+      </figure>
+    </div>
+    <div class="opts" role="radiogroup" data-group="phone" data-label="D11 Phone">
+      <button class="opt" type="button" role="radio" data-opt="reply"><b>Reply-only</b><span>As today.</span></button>
+      <button class="opt" type="button" role="radio" data-opt="dm"><b>One DM with Caw</b><span>Routes by project name.</span></button>
+      <button class="opt" type="button" role="radio" data-opt="topics"><b>A topic per project</b><span>Recaps and reviews in place.</span><span class="tag">Recommended</span></button>
+    </div>
+    <div class="foot">
+      <label class="note">Note <input id="note-phone" data-note="phone" type="text" placeholder="Anything to add"></label>
+    </div>
+  </article>
+</section>
+
+<section class="chap" id="face">
+  <header><span class="eyebrow">Words, Caw</span><h2>What things are called, and who you talk to</h2></header>
+
+  <article class="dec" id="d12">
+    <header><span class="did">D12</span><h3>Names, before any UI</h3><span class="state" data-for="wordsunit">Not picked</span></header>
+    <p class="why">One word per concept. Pick, and the preview rewrites itself.</p>
+    <div class="show">
+      <figure class="pane look"><span class="cap">Live preview</span>
+        <div class="namer" aria-live="polite">
+          <div class="row2"><span><b>site</b> · 4 <span class="w" data-w="units">tasks</span> ready</span><span class="btn" aria-hidden="true">New <span class="w" data-w="unit">task</span></span></div>
+          <div class="row2"><span><span class="w" data-w="Sched">Routine</span> · Morning triage</span><span class="small">next run 08:55</span></div>
+          <div class="row2"><span>Session · Fix tray chip</span><span class="ring2"><i></i><span class="w" data-w="plan">plan</span> 3/5</span></div>
+          <div class="empty">Your <span class="w" data-w="units">tasks</span> will appear here. File one to see it on the board.</div>
+          <span class="hint" id="namehint">Showing the recommended words until you pick.</span>
+        </div>
+      </figure>
+      <figure class="pane mech"><span class="cap">The options</span>
+<pre class="v"><span class="k">concept</span>          <span class="k">A</span>        <span class="k">B</span>         <span class="k">C</span>
+board unit       task     ticket    card
+session's list   plan     tasks     tasks
+one try at it    attempt  attempt   attempt
+scheduled work   routine  schedule  automation</pre>
+      </figure>
+    </div>
+    <div class="grp"><span class="gl">Board unit</span>
+      <div class="opts" role="radiogroup" data-group="wordsunit" data-label="D12 Board unit name">
+        <button class="opt" type="button" role="radio" data-opt="task"><b>Task</b><span>Session's list becomes "plan".</span><span class="tag">Recommended</span></button>
+        <button class="opt" type="button" role="radio" data-opt="ticket"><b>Ticket</b><span>Help-desk feel for marketing.</span></button>
+        <button class="opt" type="button" role="radio" data-opt="card"><b>Card</b><span>Names the UI, not the work.</span></button>
+      </div>
+    </div>
+    <div class="grp"><span class="gl">Scheduled work</span>
+      <div class="opts" role="radiogroup" data-group="wordssched" data-label="D12 Scheduled work name">
+        <button class="opt" type="button" role="radio" data-opt="routine"><b>Routine</b><span>Rename the tone register.</span><span class="tag">Recommended</span></button>
+        <button class="opt" type="button" role="radio" data-opt="schedule"><b>Schedule</b><span>Odd for event triggers.</span></button>
+        <button class="opt" type="button" role="radio" data-opt="automation"><b>Automation</b><span>Codex's word.</span></button>
+      </div>
+    </div>
+    <div class="foot">
+      <label class="note">Note <input id="note-wordsunit" data-note="wordsunit" type="text" placeholder="Anything to add"></label>
+    </div>
+  </article>
+
+  <article class="dec" id="d13">
+    <header><span class="did">D13</span><h3>Caw at the centre</h3><span class="state" data-for="caw">Not picked</span></header>
+    <p class="why">You start a project by talking to Caw. His poses carry the personality; the copy stays calm.</p>
+    <div class="show solo">
+      <figure class="pane look"><span class="cap">New project</span>
+        <div class="onb anim" aria-label="New-project screen: Caw above a composer, starter prompts, and template cards with Caw peeking over the suggested one.">
+          <div class="caw"><img class="caw-l" src="caw/light-ready.webp" alt="" width="80" height="80"><img class="caw-d" src="caw/dark-ready.webp" alt="" width="80" height="80"></div>
+          <h4>What are we working on?</h4>
+          <div class="composer"><div class="typed"><span class="tx">Set up a board for github.com/you/site</span><span class="cur"></span></div><span class="go">Start</span></div>
+          <div class="chips">
+            <span class="chip hot" data-i="0">Set up a board for github.com/you/site</span>
+            <span class="chip" data-i="1">Plan the Q4 launch campaign</span>
+            <span class="chip" data-i="2">Audit our top 20 pages every Monday</span>
+            <span class="chip" data-i="3">Turn our voice doc into a brand kit</span>
+          </div>
+          <div class="tpls">
+            <div class="tpl sug" data-t="0"><div class="peek"><img class="caw-l" src="caw/light-working.webp" alt="" width="48" height="48"><img class="caw-d" src="caw/dark-working.webp" alt="" width="48" height="48"></div><span class="fit">Fits your prompt</span><span class="kind">code</span><b>Ship from a GitHub repo</b><span>Issues as tasks · PRs · morning triage</span></div>
+            <div class="tpl" data-t="1"><div class="peek"><img class="caw-l" src="caw/light-working.webp" alt="" width="48" height="48"><img class="caw-d" src="caw/dark-working.webp" alt="" width="48" height="48"></div><span class="fit">Fits your prompt</span><span class="kind">knowledge</span><b>Launch campaign</b><span>Brand kit · brief · calendar · review gate</span></div>
+            <div class="tpl" data-t="2"><div class="peek"><img class="caw-l" src="caw/light-working.webp" alt="" width="48" height="48"><img class="caw-d" src="caw/dark-working.webp" alt="" width="48" height="48"></div><span class="fit">Fits your prompt</span><span class="kind">knowledge</span><b>SEO program</b><span>Keyword facts · weekly audit · content tasks</span></div>
+            <div class="tpl" data-t="3"><div class="peek"><img class="caw-l" src="caw/light-working.webp" alt="" width="48" height="48"><img class="caw-d" src="caw/dark-working.webp" alt="" width="48" height="48"></div><span class="fit">Fits your prompt</span><span class="kind">knowledge</span><b>Brand kit</b><span>Voice · do and don't · audiences · assets</span></div>
+          </div>
+        </div>
+      </figure>
+    </div>
+    <div class="show solo">
+      <figure class="pane mech"><span class="cap">Statuses that keep their meaning in a project</span>
+        <div class="reuse">
+          <figure><img class="caw-l" src="caw/light-ready.webp" alt="" width="60" height="60"><img class="caw-d" src="caw/dark-ready.webp" alt="" width="60" height="60"><figcaption>ready<br>project idle</figcaption></figure>
+          <figure><img class="caw-l" src="caw/light-working.webp" alt="" width="60" height="60"><img class="caw-d" src="caw/dark-working.webp" alt="" width="60" height="60"><figcaption>working<br>lead thinking</figcaption></figure>
+          <figure><img class="caw-l" src="caw/light-needs-you.webp" alt="" width="60" height="60"><img class="caw-d" src="caw/dark-needs-you.webp" alt="" width="60" height="60"><figcaption>needs-you<br>a question</figcaption></figure>
+          <figure><img class="caw-l" src="caw/light-done.webp" alt="" width="60" height="60"><img class="caw-d" src="caw/dark-done.webp" alt="" width="60" height="60"><figcaption>done<br>task landed</figcaption></figure>
+          <figure><img class="caw-l" src="caw/light-trying.webp" alt="" width="60" height="60"><img class="caw-d" src="caw/dark-trying.webp" alt="" width="60" height="60"><figcaption>trying<br>a retry</figcaption></figure>
+          <figure><img class="caw-l" src="caw/light-idle.webp" alt="" width="60" height="60"><img class="caw-d" src="caw/dark-idle.webp" alt="" width="60" height="60"><figcaption>idle<br>nothing due</figcaption></figure>
+        </div>
+      </figure>
+    </div>
+    <div class="opts" role="radiogroup" data-group="caw" data-label="D13 Caw's role">
+      <button class="opt" type="button" role="radio" data-opt="waits"><b>Waits and statuses only</b><span>As today.</span></button>
+      <button class="opt" type="button" role="radio" data-opt="lead"><b>Caw is the lead's face</b><span>Onboarding, threads, recaps.</span><span class="tag">Recommended</span></button>
+      <button class="opt" type="button" role="radio" data-opt="fleetonly"><b>Fleet level only</b><span>Projects stay plain.</span></button>
+    </div>
+    <div class="foot">
+      <details class="more"><summary>References</summary><div class="in"><p>Caw peeks over the template he suggests, the same move DESIGN.md gives the channel cards (<code>caw-peek</code>). Seen in <a href="https://mobbin.com/screens/b5761aab-ebe2-4882-909f-7a74c0955dca">Gamma</a>, <a href="https://mobbin.com/screens/9a9b1268-e0d5-4873-900b-aa75e9a81177">Notion AI</a>, <a href="https://mobbin.com/screens/2e10afc9-7866-492f-9e43-2813af44235f">Cofounder</a>, <a href="https://mobbin.com/flows/80ef83ef-f872-4825-b18d-6b193d60a9aa">Finch</a>. He moves only while something is going on, and the needs-you wave is never a hello.</p></div></details>
+      <label class="note">Note <input id="note-caw" data-note="caw" type="text" placeholder="Anything to add"></label>
+    </div>
+  </article>
+
+  <section class="dec" id="poses" aria-labelledby="poses-h">
+    <header><span class="did">Poses</span><h3 id="poses-h">Eight new poses to generate</h3></header>
+    <p class="why">Grey Caw is a stand-in. Copy a prompt and run it locally with MiniMax.</p>
+    <div class="poses" id="poselist"></div>
+    <details class="more"><summary>Shared prompt bases</summary><div class="in">
+<pre class="v" id="base-still" style="white-space:pre-wrap">STILL BASE: Caw, the small round fluffy crow from the attached pose sheet. Keep his exact design, proportions and inks (black, vermilion, eye white, yellow); do not redraw or restyle him. Flat vector fills, no gradients, no texture, no shading. Plain flat paper background (#F4F0E6), no shadow, no text, no other characters. Full body centred in a square 512 x 512 frame with clear margin on every side. Any prop in flat cream.</pre>
+<pre class="v" id="base-motion" style="white-space:pre-wrap">MOTION BASE: Animate from the attached still. Hand-drawn keyframe animation held on twos, locked camera, the same flat inks, plain paper background throughout. Caw stays wholly inside a 3.5% safe margin on every frame. About 5 seconds, 124 frames at 24 fps. A loop ends on exactly the starting drawing; an enter starts on an empty frame and ends on the still.</pre>
+    </div></details>
+  </section>
+</section>
+
+<section class="chap" id="procedures">
+  <header><span class="eyebrow">Skills</span><h2>Procedures, and where they apply</h2></header>
+
+  <article class="dec" id="d14">
+    <header><span class="did">D14</span><h3>Matt Pocock's skills for code</h3><span class="state" data-for="skills">Not picked</span></header>
+    <p class="why">CawCo becomes a fourth tracker for them. The skills run unchanged; the frontier becomes real.</p>
+    <div class="show">
+      <figure class="pane look"><span class="cap">How it would look</span>{{MK:skills}}</figure>
+      <figure class="pane mech"><span class="cap">The tracker mapping</span>
+<pre class="v">publish ticket → board_write create
+blocked by     → board_write link
+frontier       → board_read ready
+claim          → hub lease  <span class="c"># code</span>
+implementer    → delegate   <span class="c"># hub checks</span>
+resolve        → finish_item → land</pre>
+      </figure>
+    </div>
+    <div class="opts" role="radiogroup" data-group="skills" data-label="D14 Engineering skills">
+      <button class="opt" type="button" role="radio" data-opt="adopt"><b>Adopt, pinned</b><span>With a CawCo tracker doc.</span><span class="tag">Recommended</span></button>
+      <button class="opt" type="button" role="radio" data-opt="own"><b>Write our own</b><span>Same ideas, CawCo's tools.</span></button>
+      <button class="opt" type="button" role="radio" data-opt="noskills"><b>None by default</b><span>Talk first.</span></button>
+    </div>
+    <div class="foot">
+      <label class="note">Note <input id="note-skills" data-note="skills" type="text" placeholder="Anything to add"></label>
+    </div>
+  </article>
+
+  <article class="dec" id="d15">
+    <header><span class="did">D15</span><h3>Project skills and MCP servers</h3><span class="state" data-for="scope">Not picked</span></header>
+    <p class="why">Project scope exists, but reaches one folder. Delegates and other machines never see it.</p>
+    <div class="show">
+      <figure class="pane look"><span class="cap">How it would look</span>{{MK:scope}}</figure>
+      <figure class="pane mech"><span class="cap">How it works</span>
+<pre class="v"> skill seo-audit  scope: project
+<span class="del">-  &lt;cwd&gt;/.claude/skills on one machine</span><span class="add">+  every place of the project
++    obelisk  ~/code/site
++    macbook  ~/src/site
++    ws-4f2a  delegate clone
++    hub folder</span></pre>
+      </figure>
+    </div>
+    <div class="opts" role="radiogroup" data-group="scope" data-label="D15 Scoped skills">
+      <button class="opt" type="button" role="radio" data-opt="folder"><b>One folder</b><span>As today.</span></button>
+      <button class="opt" type="button" role="radio" data-opt="follow"><b>Follow the project</b><span>Every checkout and workspace.</span><span class="tag">Recommended</span></button>
+      <button class="opt" type="button" role="radio" data-opt="served"><b>Served per session</b><span>Nothing on disk.</span></button>
+    </div>
+    <div class="foot">
+      <label class="note">Note <input id="note-scope" data-note="scope" type="text" placeholder="Anything to add"></label>
+    </div>
+  </article>
+</section>
+
+<section class="chap" id="order">
+  <header><span class="eyebrow">Roadmap</span><h2>With your picks</h2></header>
+  <div class="pane mech" style="padding:18px 12px">
+    <div class="road anim" role="img" aria-label="Six phases with your picks: admin gap, words and landing; projects, tasks as files and the dispatcher; Caw lead, role toolsets and iOS push; routines and ingress; knowledge and skills; fleet watch. Telegram is pending.">
+      <span class="fill"></span>
+      <div class="ph"><span class="n">0</span><div><b>Admin gap, words, landing</b><br><span>Role-gate admin; task, plan, attempt, routine; hub-owned landing.</span></div></div>
+      <div class="ph"><span class="n">1</span><div><b>Projects, tasks as files</b><br><span>Places, hub folder, tracker setting, dispatcher with all nine upgrades.</span></div></div>
+      <div class="ph"><span class="n">2</span><div><b>Caw lead, iOS</b><br><span>Per-project lead, role toolsets, onboarding with Jev, iOS push and threads.</span></div></div>
+      <div class="ph"><span class="n">3</span><div><b>Routines, ingress</b><br><span>Effect Cron, output contract, connector poller, relay, approved actions.</span></div></div>
+      <div class="ph"><span class="n">4</span><div><b>Knowledge, skills</b><br><span>Memory tiers, Jev optional, brand kit, grill, to-tasks, triage.</span></div></div>
+      <div class="ph"><span class="n">5</span><div><b>Fleet watch</b><br><span>Detectors, Jev gate, triage; retire the old three. Telegram: pending.</span></div></div>
+    </div>
+  </div>
+</section>
+
+<section class="chap" id="sources">
+  <header><span class="eyebrow">Sources</span><h2>Where this came from</h2><p>Read 2026-10-06. Some vendor sites were blocked from the research container; those points rest on more than one search excerpt.</p></header>
+  <ul class="srcs">
+    <li><a href="https://steipete.me/posts/just-talk-to-it">steipete: Just Talk To It</a></li>
+    <li><a href="https://github.com/openclaw/openclaw">OpenClaw docs</a></li>
+    <li><a href="https://github.com/openai/symphony/blob/main/SPEC.md">OpenAI Symphony SPEC</a></li>
+    <li><a href="https://github.com/pingdotgg/t3code/pull/2829">T3 Code orchestrator v2</a></li>
+    <li><a href="https://github.com/pingdotgg/t3code/pull/15057">T3 Code server-side PR watching</a></li>
+    <li><a href="https://github.com/steveyegge/gastown">Gas Town</a></li>
+    <li><a href="https://github.com/gastownhall/beads">beads</a></li>
+    <li><a href="https://github.com/theyashgupta/dispatch/blob/main/docs/standards/orchestration-design.md">Dispatch orchestration design</a></li>
+    <li><a href="https://code.claude.com/docs/en/agent-teams">Claude Code agent teams</a></li>
+    <li><a href="https://code.claude.com/docs/en/claude-projects">Claude Code projects</a></li>
+    <li><a href="https://code.claude.com/docs/en/agent-view">Claude Code agent view</a></li>
+    <li><a href="https://code.claude.com/docs/en/routines">Claude Code routines</a></li>
+    <li><a href="https://www.anthropic.com/engineering/multi-agent-research-system">Anthropic: multi-agent research</a></li>
+    <li><a href="https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents">Anthropic: long-running harnesses</a></li>
+    <li><a href="https://www.anthropic.com/engineering/writing-tools-for-agents">Anthropic: writing tools</a></li>
+    <li><a href="https://platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool">Tool search</a></li>
+    <li><a href="https://github.com/github/github-mcp-server/discussions/1182">GitHub MCP toolsets</a></li>
+    <li><a href="https://blog.modelcontextprotocol.io/posts/2026-07-28/">MCP 2026-07-28</a></li>
+    <li><a href="https://github.com/earendil-works/pi/releases">pi releases</a></li>
+    <li><a href="https://github.com/mattpocock/skills">mattpocock/skills</a></li>
+    <li><a href="https://github.com/anthropics/knowledge-work-plugins/tree/main/marketing">Anthropic marketing plugin</a></li>
+    <li><a href="https://support.claude.com/en/articles/14116274-organize-your-tasks-with-projects-in-claude-cowork">Cowork projects</a></li>
+    <li><a href="https://simonwillison.net/2026/Jan/12/claude-cowork/">Willison on Cowork</a></li>
+    <li><a href="https://arxiv.org/abs/2602.11988">ETH context files study</a></li>
+    <li><a href="https://www.letta.com/blog/benchmarking-ai-agent-memory/">Letta memory benchmark</a></li>
+    <li><a href="https://linear.app/developers/agent-interaction">Linear agent interaction</a></li>
+    <li><a href="https://docs.github.com/en/rest/using-the-rest-api/best-practices-for-using-the-rest-api">GitHub conditional requests</a></li>
+    <li><a href="https://github.com/standard-webhooks/standard-webhooks/blob/main/spec/standard-webhooks.md">Standard Webhooks</a></li>
+  </ul>
+</section>
+</main>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  var reduce = false;
+  try { reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch (e) {}
+
+  /* ---- live/idle: animations run only while on screen ---- */
+  var live = Array.prototype.slice.call(document.querySelectorAll(".mk, .anim, .dg, .seq, .tiles"));
+  document.querySelectorAll(".dg").forEach(function(dg){
+    dg.querySelectorAll(".edge .ln").forEach(function(ln, i){ ln.style.setProperty("--d", (i * 0.22).toFixed(2) + "s"); });
+  });
+  function setLive(el, on){
+    if (el.classList.contains("is-live") === on) return;
+    el.classList.toggle("is-live", on);
+    el.dispatchEvent(new CustomEvent(on ? "mk:live" : "mk:idle"));
+  }
+  if (!reduce && "IntersectionObserver" in window) {
+    var io = new IntersectionObserver(function(entries){
+      entries.forEach(function(en){ setLive(en.target, en.isIntersecting); });
+    }, { threshold: 0.2 });
+    live.forEach(function(el){ io.observe(el); });
+  }
+
+  /* ---- D4 timeline playhead ---- */
+  document.querySelectorAll(".seq").forEach(function(seq){
+    var steps = seq.querySelectorAll(".st"), i = -1, t = null;
+    function tick(){ steps.forEach(function(s){ s.classList.remove("now"); }); i = (i + 1) % (steps.length + 2); if (i < steps.length) steps[i].classList.add("now"); }
+    seq.addEventListener("mk:live", function(){ if (!t) t = setInterval(tick, 1300); });
+    seq.addEventListener("mk:idle", function(){ clearInterval(t); t = null; steps.forEach(function(s){ s.classList.remove("now"); }); i = -1; });
+  });
+
+  /* ---- D13 onboarding: type a prompt, Caw peeks over the template it fits ---- */
+  (function(){
+    var root = document.querySelector(".onb"); if (!root) return;
+    var tx = root.querySelector(".tx"), chips = root.querySelectorAll(".chip"), tpls = root.querySelectorAll(".tpl");
+    var prompts = Array.prototype.map.call(chips, function(c){ return c.textContent; });
+    var k = 0, timers = [];
+    function clear(){ timers.forEach(clearTimeout); timers = []; }
+    function show(n){
+      chips.forEach(function(c, j){ c.classList.toggle("hot", j === n); });
+      tpls.forEach(function(t, j){ t.classList.toggle("sug", j === n); });
+    }
+    function type(n){
+      var text = prompts[n], j = 0;
+      show(-1); tx.textContent = "";
+      (function step(){
+        if (!root.classList.contains("is-live")) return;
+        tx.textContent = text.slice(0, ++j);
+        if (j < text.length) timers.push(setTimeout(step, 38));
+        else timers.push(setTimeout(function(){ show(n); timers.push(setTimeout(function(){ k = (k + 1) % prompts.length; type(k); }, 2600)); }, 300));
+      })();
+    }
+    root.addEventListener("mk:live", function(){ clear(); type(k); });
+    root.addEventListener("mk:idle", function(){ clear(); tx.textContent = prompts[k]; show(k); });
+  })();
+
+  /* ---- poses ---- */
+  var POSES = [
+    {id:"greet", kind:"enter + rest", base:"ready", prop:"", where:"First open of a new project.",
+     still:"Standing facing the viewer, one wing raised to shoulder height in a small hello, head tilted slightly, eyes on the viewer.",
+     motion:"Enter. Starts on an empty frame; Caw pops into place mid-hop, lands, settles, and raises one wing in a small hello; ends on the still."},
+    {id:"listening", kind:"rest", base:"idle", prop:"", where:"While you type in a thread. Still.",
+     still:"Sitting, head tilted toward the lower right as if reading something being typed beside him, one eye a little wider, wings folded."},
+    {id:"presenting", kind:"enter + rest", base:"ready", prop:"card", where:"Beside templates and proposed setups.",
+     still:"Standing, holding up a blank cream card with both wings at chest height, the card facing the viewer, eyes on the viewer over the card.",
+     motion:"Enter. Starts on an empty frame; Caw appears holding the card behind his back, brings it round to the front and lifts it to chest height; ends on the still."},
+    {id:"pinning", kind:"enter", base:"working", prop:"note", where:"Board empty state; a task filed.",
+     still:"Standing beside a small cream note card at head height to his right, one wing still pressed flat against it, pleased.",
+     motion:"Enter. Starts on an empty frame; Caw appears holding a cream note, presses it flat at head height to his right, taps it twice with his wing; ends on the still."},
+    {id:"dispatching", kind:"enter", base:"done", prop:"plane", where:"The lead starts an attempt.",
+     still:"Standing in a follow-through pose after a throw, one wing extended forward toward the upper right, watching something leave.",
+     motion:"Enter. Starts on an empty frame; Caw appears holding a cream paper plane, throws it toward the upper right; the plane flies out of frame while he holds the follow-through; ends on the still."},
+    {id:"recap", kind:"rest", base:"idle", prop:"scroll", where:"Recaps; while you were away.",
+     still:"Sitting, holding a long cream paper scroll unrolled in front of him with both wings, reading it closely."},
+    {id:"routine", kind:"rest", base:"ready", prop:"watch", where:"Routines empty state; next run.",
+     still:"Standing, holding a small round cream pocket watch on a short chain in one wing, looking down at it."},
+    {id:"stash", kind:"enter", base:"done", prop:"box", where:"Knowledge empty state; a memory accepted.",
+     still:"Standing beside a small round cream box at his feet, lid open, looking down into it with satisfaction.",
+     motion:"Enter. Starts on an empty frame; Caw appears holding a small yellow button, admires it, and tucks it into a cream box at his feet; ends on the still."}
+  ];
+  var baseStill = document.getElementById("base-still").textContent.replace(/^STILL BASE: /, "");
+  var baseMotion = document.getElementById("base-motion").textContent.replace(/^MOTION BASE: /, "");
+  var poselist = document.getElementById("poselist");
+  POSES.forEach(function(p){
+    var el = document.createElement("article"); el.className = "pose";
+    var art = document.createElement("div"); art.className = "art";
+    ["light","dark"].forEach(function(m){ var im = document.createElement("img"); im.className = m === "light" ? "caw-l" : "caw-d"; im.src = "caw/" + m + "-" + p.base + ".webp"; im.alt = ""; im.width = 80; im.height = 80; art.appendChild(im); });
+    var tg = document.createElement("span"); tg.className = "tg"; tg.textContent = "to generate"; art.appendChild(tg);
+    if (p.prop) { var pr = document.createElement("span"); pr.className = "prop"; pr.textContent = "+ " + p.prop; art.appendChild(pr); }
+    el.appendChild(art);
+    var h = document.createElement("header");
+    var b = document.createElement("b"); b.textContent = p.id;
+    var k = document.createElement("span"); k.className = "kind"; k.textContent = p.kind;
+    h.appendChild(b); h.appendChild(k); el.appendChild(h);
+    var w = document.createElement("p"); w.textContent = p.where; el.appendChild(w);
+    var text = "STILL\n" + baseStill + " " + p.still + (p.motion ? "\n\nMOTION\n" + baseMotion + " " + p.motion : "");
+    var btn = document.createElement("button"); btn.className = "btn"; btn.type = "button"; btn.textContent = "Copy prompt";
+    btn.addEventListener("click", function(){ copy(text, btn); });
+    el.appendChild(btn);
+    poselist.appendChild(el);
+  });
+
+  function copy(text, btn){
+    var done = function(){ var t = btn.textContent; btn.textContent = "Copied"; setTimeout(function(){ btn.textContent = t; }, 1400); };
+    try { navigator.clipboard.writeText(text).then(done, function(){ fallback(text); done(); }); }
+    catch (e) { fallback(text); done(); }
+  }
+  function fallback(text){
+    var ta = document.createElement("textarea"); ta.value = text; ta.setAttribute("readonly", ""); ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand("copy"); } catch (e) {}
+    document.body.removeChild(ta);
+  }
+
+  /* ---- picks ---- */
+  var groups = Array.prototype.slice.call(document.querySelectorAll(".opts[data-group]"));
+  var state = {}, LS = "cawco-paths-picks";
+  try { var cached = JSON.parse(localStorage.getItem(LS) || "{}"); if (cached && typeof cached === "object") state = cached; } catch (e) {}
+  var db = null, writing = {}, again = {};
+  document.querySelectorAll(".tot").forEach(function(e){ e.textContent = groups.length; });
+
+  function labelOf(g, id){ var b = g.querySelector('.opt[data-opt="' + id + '"] b'); return b ? b.textContent : id; }
+  function picked(s){ return !!(s && (s.choice || (s.choices && s.choices.length))); }
+
+  var WORDS = {
+    task: {unit:"task", units:"tasks", plan:"plan"},
+    ticket: {unit:"ticket", units:"tickets", plan:"tasks"},
+    card: {unit:"card", units:"cards", plan:"tasks"},
+    routine: {Sched:"Routine"}, schedule: {Sched:"Schedule"}, automation: {Sched:"Automation"}
+  };
+  function renderWords(){
+    var u = (state.wordsunit && state.wordsunit.choice) || "task";
+    var sc = (state.wordssched && state.wordssched.choice) || "routine";
+    var map = Object.assign({}, WORDS[u], WORDS[sc]);
+    document.querySelectorAll(".namer .w").forEach(function(w){
+      var v = map[w.dataset.w]; if (!v || w.textContent === v) return;
+      w.classList.add("swap");
+      setTimeout(function(){ w.textContent = v; w.classList.remove("swap"); }, reduce ? 0 : 160);
+    });
+    var hint = document.getElementById("namehint");
+    if (hint) hint.textContent = (state.wordsunit && state.wordsunit.choice) || (state.wordssched && state.wordssched.choice) ? "Showing your picks." : "Showing the recommended words until you pick.";
+  }
+
+  function render(){
+    var n = 0;
+    groups.forEach(function(g){
+      var gid = g.dataset.group, s = state[gid] || {}, multi = g.hasAttribute("data-multi");
+      g.querySelectorAll(".opt").forEach(function(b){
+        var on = multi ? (s.choices || []).indexOf(b.dataset.opt) >= 0 : s.choice === b.dataset.opt;
+        b.classList.toggle("on", on);
+        b.setAttribute(multi ? "aria-pressed" : "aria-checked", on ? "true" : "false");
+      });
+      if (picked(s)) n++;
+      var st = document.querySelector('.state[data-for="' + gid + '"]');
+      if (st) {
+        if (picked(s)) { st.textContent = multi ? (s.choices.length + " picked") : "Picked"; st.classList.add("on"); }
+        else { st.textContent = "Not picked"; st.classList.remove("on"); }
+      }
+    });
+    document.querySelectorAll("input[data-note]").forEach(function(inp){
+      if (document.activeElement === inp) return;
+      var s = state[inp.dataset.note]; inp.value = (s && s.note) || "";
+    });
+    document.querySelectorAll(".cnt").forEach(function(e){ e.textContent = n; });
+    document.querySelectorAll(".barfill").forEach(function(e){ e.style.width = (groups.length ? 100 * n / groups.length : 0) + "%"; });
+    var rv = document.getElementById("ringval");
+    if (rv) rv.setAttribute("stroke-dashoffset", (263.9 * (1 - (groups.length ? n / groups.length : 0))).toFixed(1));
+    renderWords();
+    var pl = document.getElementById("pathlist");
+    if (pl) {
+      pl.textContent = "";
+      groups.forEach(function(g){
+        var st = state[g.dataset.group] || {}, multi = g.hasAttribute("data-multi");
+        var el = document.createElement("span"); el.className = "pk " + (picked(st) ? "on" : "off");
+        var i = document.createElement("i"); i.textContent = g.dataset.label.split(" ")[0];
+        var val = multi ? ((st.choices || []).length ? st.choices.length + " picked" : "not picked") : (st.choice ? labelOf(g, st.choice) : "not picked");
+        el.appendChild(i); el.appendChild(document.createTextNode(val));
+        pl.appendChild(el);
+      });
+    }
+  }
+
+  function setStatus(kind){
+    var pill = document.getElementById("savestate"), t = document.getElementById("savetext");
+    pill.classList.toggle("live", kind === "live");
+    t.textContent = kind === "live" ? "Picks save to this page; I can read them"
+      : kind === "error" ? "Last save failed; kept in this browser"
+      : "Picks stay in this browser; use Copy my picks";
+  }
+
+  function persist(gid){
+    var s = state[gid] || (state[gid] = {});
+    var g = document.querySelector('.opts[data-group="' + gid + '"]');
+    s.label = g ? g.dataset.label : gid;
+    if (s.choice) s.choiceLabel = labelOf(g, s.choice);
+    if (s.choices) s.choiceLabels = s.choices.map(function(c){ return labelOf(g, c); });
+    s.at = new Date().toISOString();
+    try { localStorage.setItem(LS, JSON.stringify(state)); } catch (e) {}
+    if (db) write(gid);
+    render();
+  }
+  function write(gid){
+    if (writing[gid]) { again[gid] = true; return; }
+    writing[gid] = true;
+    var body = JSON.parse(JSON.stringify(state[gid]));
+    db.doc("picks/" + gid).set(body).then(function(){ setStatus("live"); }, function(){ setStatus("error"); })
+      .then(function(){ writing[gid] = false; if (again[gid]) { again[gid] = false; write(gid); } });
+  }
+
+  groups.forEach(function(g){
+    var gid = g.dataset.group, multi = g.hasAttribute("data-multi");
+    g.addEventListener("click", function(ev){
+      var b = ev.target.closest(".opt"); if (!b || !g.contains(b)) return;
+      var s = state[gid] || (state[gid] = {});
+      if (multi) {
+        var list = (s.choices || []).slice(), i = list.indexOf(b.dataset.opt);
+        if (i >= 0) list.splice(i, 1); else list.push(b.dataset.opt);
+        s.choices = list;
+      } else {
+        s.choice = s.choice === b.dataset.opt ? null : b.dataset.opt;
+        if (!s.choice) delete s.choiceLabel;
+      }
+      persist(gid);
+    });
+  });
+
+  var timers = {};
+  document.querySelectorAll("input[data-note]").forEach(function(inp){
+    inp.addEventListener("input", function(){
+      var gid = inp.dataset.note;
+      clearTimeout(timers[gid]);
+      timers[gid] = setTimeout(function(){
+        var s = state[gid] || (state[gid] = {});
+        if ((s.note || "") === inp.value) return;
+        s.note = inp.value; persist(gid);
+      }, 700);
+    });
+  });
+
+  document.getElementById("copypicks").addEventListener("click", function(){
+    var lines = groups.map(function(g){
+      var s = state[g.dataset.group] || {};
+      var val = g.hasAttribute("data-multi")
+        ? ((s.choices || []).map(function(c){ return labelOf(g, c); }).join(", ") || "not picked")
+        : (s.choice ? labelOf(g, s.choice) : "not picked");
+      return g.dataset.label + ": " + val + (s.note ? " (" + s.note + ")" : "");
+    });
+    copy(lines.join("\n"), this);
+  });
+
+  render();
+  setStatus("local");
+
+  var c = window.claude;
+  if (c && typeof c.use === "function") {
+    c.use("db").then(function(d){
+      if (!d) { setStatus("local"); return; }
+      db = d; setStatus("live");
+      try {
+        db.collection("picks").onSnapshot(function(snap){
+          snap.docs.forEach(function(doc){ var v = doc.data(); if (v) state[doc.id] = JSON.parse(JSON.stringify(v)); });
+          try { localStorage.setItem(LS, JSON.stringify(state)); } catch (e) {}
+          render();
+        }, function(){ setStatus("error"); });
+      } catch (e) { setStatus("error"); }
+    }, function(){ setStatus("local"); });
+  }
+})();
+</script>
