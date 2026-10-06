@@ -117,6 +117,9 @@ export async function buildBinary(options: {
   commit: string;
   proof?: boolean;
   prepare?: boolean;
+  /** Link the credential-free stub harnesses into the real entry point; for proofs only. */
+  stubHarness?: boolean;
+  testPublicKey?: string;
 }) {
   if (Bun.version !== PINNED_BUN) {
     throw new Error(
@@ -256,6 +259,15 @@ export async function buildBinary(options: {
       {
         name: "owned-runtime-resources",
         setup(build) {
+          if (options.testPublicKey) {
+            build.onLoad(
+              { filter: /packages\/core\/src\/release-key\.ts$/ },
+              () => ({
+                contents: `export const RELEASE_PUBLIC_KEY=${JSON.stringify(options.testPublicKey)};`,
+                loader: "ts",
+              })
+            );
+          }
           build.onResolve({ filter: /^cawco:pi-runtime$/ }, () => ({
             path: join(ROOT, "packages/agent/src/standalone-setup.ts"),
           }));
@@ -324,13 +336,16 @@ export async function buildBinary(options: {
               resolveDir: dirname(path),
             })
           );
-          if (options.proof) {
+          if (options.proof || options.stubHarness) {
             build.onLoad(
               { filter: /packages\/agent\/src\/harnesses\/index\.ts$/ },
               async () => ({
-                contents: await Bun.file(
-                  join(ROOT, "scripts/binary/proof-harnesses.ts")
-                ).text(),
+                // Its imports are relative to scripts/binary, not to the file it replaces.
+                contents: (
+                  await Bun.file(
+                    join(ROOT, "scripts/binary/proof-harnesses.ts")
+                  ).text()
+                ).replaceAll('"../../packages/', `"${ROOT}/packages/`),
                 loader: "ts",
               })
             );

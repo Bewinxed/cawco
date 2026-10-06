@@ -5,6 +5,7 @@ export interface MachineCapability {
   installCommand: string;
   path?: string;
   reason?: string;
+  version?: string;
 }
 export interface MachineCapabilities {
   at: number;

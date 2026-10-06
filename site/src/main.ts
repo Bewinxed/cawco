@@ -1,8 +1,10 @@
 import { gsap } from 'gsap';
+import { initChannel } from './channel';
 import { all, one } from './dom';
 import { initStage } from './stage';
 
 const stage = initStage(one(document, '[data-stage]'));
+initChannel(one(document, '[data-channel]'));
 
 // Scenes move only for visitors who have not asked for reduced motion, and the
 // setting is followed live if it changes while the page is open.

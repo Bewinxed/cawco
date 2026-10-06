@@ -9,6 +9,7 @@ import {
   verifyManifest,
 } from "../../packages/core/src/release-manifest";
 import { materializeTree } from "../../packages/core/src/runtime";
+import { SESSIOND_V1 } from "../../packages/core/src/sessiond";
 import {
   programInputs,
   typecheckProgram,
@@ -37,7 +38,8 @@ if (verb === "proof-stack") {
   const dir = join(home, "test-release-signing");
   mkdirSync(dir, { recursive: true });
   try {
-    const keys = generateKeyPairSync("ed25519", {
+    const keys = generateKeyPairSync("ec", {
+      namedCurve: "prime256v1",
       privateKeyEncoding: { type: "pkcs8", format: "pem" },
       publicKeyEncoding: { type: "spki", format: "pem" },
     });
@@ -50,6 +52,9 @@ if (verb === "proof-stack") {
       commit: "proof",
       channel: "nightly",
       protocol: { min: 1, max: 1 },
+      sequence: 1,
+      schemaVersion: 1,
+      sessiondProtocol: SESSIOND_V1,
       notes: "Proof only",
       testSigned: true,
       artifacts: [],

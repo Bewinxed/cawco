@@ -32,7 +32,7 @@ const programDir = (): string => {
 };
 
 /**
- * Defined only in the published package's bundle (scripts/build-release.mjs),
+ * Defined only in the published package's bundle (scripts/build-binary.ts),
  * where this module is `cli.js` and the worker — bundled on its own — and the
  * ambient declarations sit beside it.
  */

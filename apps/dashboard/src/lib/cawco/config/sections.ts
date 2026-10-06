@@ -3,6 +3,7 @@ import {
   IconBolt,
   IconBook,
   IconCpu,
+  IconDownload,
   IconHook,
   IconRules,
   IconSubagent,
@@ -31,7 +32,8 @@ export type SectionSlug =
   | "mcp"
   | "skills"
   | "memory"
-  | "models";
+  | "models"
+  | "updates";
 
 export const SECTIONS: ConfigSection[] = [
   {
@@ -105,6 +107,14 @@ export const SECTIONS: ConfigSection[] = [
     purpose: "OpenRouter and the supervisor server",
     icon: IconCpu,
     hue: "var(--hue-orange-500)",
+  },
+  {
+    slug: "updates",
+    group: "Hub",
+    label: "Updates",
+    purpose: "The builds your machines run, and when they install them",
+    icon: IconDownload,
+    hue: "var(--hue-blue-500)",
   },
 ];
 

@@ -1,7 +1,7 @@
 /**
  * A tab built for an older wire than the hub's reloads itself.
  *
- * Every other deploy asks first (deploy-toast.ts): "nobody gets a page pulled
+ * Every other deploy asks first (deploy-toast.svelte.ts): "nobody gets a page pulled
  * out from under them mid-task" (440bdbc6). A tab whose wire is older than
  * the hub's (`WIRE_PROTOCOL`, named on the board snapshot) is past that: it
  * misreads what the hub sends. So it reads nothing more (client.svelte.ts,

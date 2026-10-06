@@ -22,11 +22,7 @@ import {
   isFailed,
   isStale,
 } from "../client.svelte";
-import {
-  buildConvergence,
-  deployInfoOf,
-  isDeployDiverged,
-} from "../convergence";
+import { buildConvergence } from "../convergence";
 import { machineFaults } from "../fleet-faults";
 import {
   catalogTitle,
@@ -490,12 +486,6 @@ function exceptionOf(machine: (typeof cawco.machines)[number]): string | null {
   }
   if (machineFaults(machine.machineId, machine.fleet).length > 0) {
     return "sync failed";
-  }
-  const deploy = deployInfoOf(
-    (machine as unknown as { deploy?: unknown }).deploy
-  );
-  if (isDeployDiverged(deploy)) {
-    return "deploy diverged";
   }
   return null;
 }

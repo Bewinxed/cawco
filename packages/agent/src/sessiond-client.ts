@@ -130,7 +130,7 @@ export const probeEndpoint = (
   });
 
 /**
- * Defined only in the published package's bundle (scripts/build-release.mjs),
+ * Defined only in the published package's bundle (scripts/build-binary.ts),
  * where this module is `cli.js` itself and sessiond is its `sessiond` verb.
  */
 declare const __CAWCO_RELEASE__: boolean | undefined;
@@ -310,6 +310,11 @@ export class SessiondClient {
 
   get epoch(): string | undefined {
     return this.#welcome?.epoch;
+  }
+
+  /** What the keeper this client attached to says it speaks. */
+  get capabilities(): readonly string[] {
+    return this.#welcome?.capabilities ?? [];
   }
 
   get procs(): SessiondProcInfo[] {

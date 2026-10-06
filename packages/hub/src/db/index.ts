@@ -1,4 +1,4 @@
-import { mkdirSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import type {
   AgentRow,
@@ -44,6 +44,7 @@ import {
   RESTART_LOST,
   resolveRates,
 } from "@cawco/core";
+import { ownIdentity } from "@cawco/core/process-identity";
 import { materializeTree, standalone } from "@cawco/core/runtime";
 import {
   and,
@@ -120,7 +121,7 @@ const END_PRIORITY: Record<SessionEndIntent, number> = {
 };
 
 /**
- * Defined only in the published package's bundle (scripts/build-release.mjs),
+ * Defined only in the published package's bundle (scripts/build-binary.ts),
  * where this module is `cli.js` and the migrations sit beside it.
  */
 declare const __CAWCO_RELEASE__: boolean | undefined;
@@ -147,6 +148,8 @@ export type PublicInstanceRow = Omit<
   | "scratchWorktree"
   | "endRetryAt"
   | "endAttempts"
+  | "owedSpawn"
+  | "owedAt"
 >;
 export type BoardInstanceRow = Omit<PublicInstanceRow, "tooling">;
 export type ContinuationRow = typeof continuations.$inferSelect;
@@ -595,6 +598,27 @@ export interface DbShape {
     /** The work item the session runs; set once, at its spawn. */
     workItemId?: string;
   }) => void;
+  /** What a machine is owed, in the order it was asked for. */
+  readonly owedSpawns: (
+    machineId: string
+  ) => { envelope: string; id: string }[];
+  /**
+   * The returning daemon's word on its machine: `liveIds` are the sessions it
+   * still carries, `resumable` the SDK sessions it could pick back up. A daemon
+   * that could not read its catalog names none, and every row it left behind
+   * keeps the benefit of the doubt.
+   */
+  /**
+   * Returns what it settled, so the caller can drop their parked questions —
+   * and, for the ones whose conversation survived and are recent enough to be
+   * worth reviving, put them back (the horizon and cap live in `server.ts`;
+   * this writes every orphan to its resting state and lets the caller choose
+   * which of them to restart). The rows come back as they were *before* the
+   * settle, so `updatedAt` on them still says when the session last moved
+   * rather than when this bookkeeping ran.
+   */
+  /** Keeps a start the machine could not be sent yet, on the row already written for it. */
+  readonly oweSpawn: (id: string, envelope: string, at: number) => void;
   /**
    * The fields a dashboard may move on a live row: "Keep" — a side quest that
    * earned its place stops being treated as scratch — and the model and
@@ -889,21 +913,6 @@ export interface DbShape {
     requestId: string,
     status: DelegateAskStatus
   ) => void;
-  /**
-   * The returning daemon's word on its machine: `liveIds` are the sessions it
-   * still carries, `resumable` the SDK sessions it could pick back up. A daemon
-   * that could not read its catalog names none, and every row it left behind
-   * keeps the benefit of the doubt.
-   */
-  /**
-   * Returns what it settled, so the caller can drop their parked questions —
-   * and, for the ones whose conversation survived and are recent enough to be
-   * worth reviving, put them back (the horizon and cap live in `server.ts`;
-   * this writes every orphan to its resting state and lets the caller choose
-   * which of them to restart). The rows come back as they were *before* the
-   * settle, so `updatedAt` on them still says when the session last moved
-   * rather than when this bookkeeping ran.
-   */
   readonly settleInstances: (
     machineId: string,
     liveIds: string[],
@@ -954,6 +963,8 @@ export interface DbShape {
   readonly takeMcpAuthorization: (
     state: string
   ) => typeof fleetMcpOauth.$inferSelect | undefined;
+  /** Takes one owed start off the books; true for exactly one caller. */
+  readonly takeOwedSpawn: (id: string) => boolean;
   readonly touchAgent: (machineId: string) => void;
   /**
    * The session moved. This is the only write anywhere that means it: every
@@ -1254,6 +1265,8 @@ const make = (path: string): DbShape => {
     endReason: _endReason,
     endIntent: _endIntent,
     endConfirmedAt: _endConfirmedAt,
+    owedSpawn: _owedSpawn,
+    owedAt: _owedAt,
     ...publicColumns
   } = getTableColumns(instances);
   const { tooling: _tooling, ...boardColumns } = publicColumns;
@@ -1267,7 +1280,18 @@ const make = (path: string): DbShape => {
         gt(instances.updatedAt, new Date(Date.now() - STALE_AFTER_MS))
       )
     );
-  migrate(db, { migrationsFolder: MIGRATIONS_DIR });
+  // A marker for the update helper: while it names a live process the hub is
+  // migrating, and the helper's wait for a healthy start does not run down.
+  const migrating = `${path}.migrating`;
+  writeFileSync(
+    migrating,
+    JSON.stringify({ ...ownIdentity(), startedAt: Date.now() })
+  );
+  try {
+    migrate(db, { migrationsFolder: MIGRATIONS_DIR });
+  } finally {
+    rmSync(migrating, { force: true });
+  }
 
   type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
   /**
@@ -2439,12 +2463,42 @@ const make = (path: string): DbShape => {
     // The daemon went away: its sessions may or may not still be alive out there.
     // `updatedAt` deliberately untouched: the hub losing the daemon socket is
     // not the session doing anything.
+    oweSpawn: (id, envelope, at) => {
+      db.update(instances)
+        .set({ owedSpawn: envelope, owedAt: at })
+        .where(eq(instances.id, id))
+        .run();
+    },
+    owedSpawns: (machineId) =>
+      db
+        .select({ id: instances.id, envelope: instances.owedSpawn })
+        .from(instances)
+        .where(
+          and(
+            eq(instances.machineId, machineId),
+            isNotNull(instances.owedSpawn)
+          )
+        )
+        .orderBy(asc(instances.owedAt), asc(instances.id))
+        .all()
+        .flatMap((row) =>
+          row.envelope ? [{ id: row.id, envelope: row.envelope }] : []
+        ),
+    takeOwedSpawn: (id) =>
+      db
+        .update(instances)
+        .set({ owedSpawn: null, owedAt: null })
+        .where(and(eq(instances.id, id), isNotNull(instances.owedSpawn)))
+        .returning({ id: instances.id })
+        .all().length > 0,
     reconcileInstances: (machineId, liveIds) => {
       db.update(instances)
         .set({ status: "unknown" })
         .where(
           and(
             eq(instances.machineId, machineId),
+            // A start owed to a machine is not a process that went away.
+            isNull(instances.owedSpawn),
             inArray(instances.status, ["running", "starting"]),
             liveIds.length > 0 ? notInArray(instances.id, liveIds) : undefined
           )
@@ -2518,6 +2572,7 @@ const make = (path: string): DbShape => {
           and(
             eq(instances.machineId, machineId),
             eq(instances.machineRemoved, false),
+            isNull(instances.owedSpawn),
             inArray(instances.status, ["running", "starting", "unknown"]),
             liveIds.length > 0 ? notInArray(instances.id, liveIds) : undefined
           )
@@ -2600,6 +2655,7 @@ const make = (path: string): DbShape => {
           and(
             eq(instances.machineId, machineId),
             eq(instances.machineRemoved, false),
+            isNull(instances.owedSpawn),
             inArray(instances.status, ["running", "starting"]),
             liveIds.length > 0 ? notInArray(instances.id, liveIds) : undefined
           )
@@ -2670,7 +2726,12 @@ const make = (path: string): DbShape => {
       const toUnknown = db
         .update(instances)
         .set({ status: "unknown" })
-        .where(inArray(instances.status, ["running", "starting"]))
+        .where(
+          and(
+            isNull(instances.owedSpawn),
+            inArray(instances.status, ["running", "starting"])
+          )
+        )
         .returning({ id: instances.id })
         .all().length;
       const toSleeping = db

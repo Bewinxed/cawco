@@ -12,15 +12,13 @@ import UIKit
 
 /// What is wrong with a machine, in a word or two (home-state.svelte.ts
 /// `exceptionOf`): it is unreachable, pi cannot sign in, its build is behind
-/// the hub's, a fleet-sync row failed on it, or its deploy clone refuses to
-/// deploy. Nil when nothing is.
+/// the hub's, or a fleet-sync row failed on it. Nil when nothing is.
 enum MachineHealth {
     static func fault(_ machine: MachineRow, hubBuild: Components.Schemas.BuildInfo?) -> String? {
         if machine.status != "online" { return "unreachable" }
         if let reason = machine.harnesses?.first(where: { $0.harness == .pi })?.authReason { return reason }
         if let commit = machine.build?.commit, let hub = hubBuild?.commit, commit != hub { return "behind hub" }
         if syncFailed(machine.fleet) { return "sync failed" }
-        if machine.deploy?.kind == .diverged { return "deploy diverged" }
         return nil
     }
 

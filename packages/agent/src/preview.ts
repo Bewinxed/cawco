@@ -30,7 +30,7 @@ let overlay: Promise<string> | undefined;
  * The script the forwarder injects into every previewed page. Two deployment
  * shapes reach this code: a source checkout, where the overlay's TypeScript
  * sits beside this file and is bundled here on first request; and the packed
- * release, where `build-release.mjs` folded this file into `cli.js` and put a
+ * release, where `build-binary.ts` folded this file into `cli.js` and put a
  * prebuilt `preview-overlay.js` next to it, because the source and its
  * dependency are not shipped. The sibling wins when it is there.
  */

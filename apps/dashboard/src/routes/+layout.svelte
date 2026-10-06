@@ -14,6 +14,7 @@
   import Shell from "#lib/cawco/Shell.svelte";
   import { tabIcon } from "#lib/cawco/tab-icon/tab-icon.svelte.js";
   import { tallestComposer } from "#lib/cawco/transcript/composer-presence.svelte.js";
+  import { startUpdateNotice } from "#lib/cawco/updates/update-notice.svelte.js";
   import { workspace } from "#lib/cawco/workspace/workspace.svelte.js";
   import { Toaster } from "#lib/components/ui/sonner/index.js";
   import { NARROW_QUERY } from "#lib/hooks/is-mobile.svelte.js";
@@ -50,6 +51,8 @@
 
   // One socket for the whole app; routes only read the state it fills in.
   onMount(ensureConnected);
+  // The one update notice, on every page.
+  onMount(startUpdateNotice);
   // iOS has no right-click; a held press is its context menu.
   onMount(enableLongPressMenus);
   // Effects flush only once the whole tree has hydrated, so every handler is

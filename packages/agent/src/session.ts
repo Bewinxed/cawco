@@ -56,7 +56,6 @@ import {
   readIngested,
   repoPath,
   resumeCursor,
-  UPDATE_CAWCO,
   withWorktreeLine,
   worstFleetState,
 } from "@cawco/core";
@@ -65,7 +64,6 @@ import { Effect } from "effect";
 import { type Boundary, boundaryFor } from "./boundary";
 import { fetchDefaultBranch } from "./clone";
 import { harnessMcpUrl } from "./delegation";
-import { DEPLOY_BRANCH } from "./deploy";
 import { expandHome, runFs } from "./fs";
 import type { Harness, HarnessContext, HarnessSession } from "./harness";
 import {
@@ -84,7 +82,6 @@ import { type PromptWriteNotice, withPromptWrites } from "./prompt-writes";
 import { acknowledgeSessionCredential } from "./session-identity";
 import { endProc, procEpoch, SessiondClient } from "./sessiond-client";
 import { installTool, probeTools } from "./tools";
-import { type UpdateOptions, updateCheckout } from "./update";
 
 /**
  * What {@link SessionSupervisor.reattach} needs of a sessiond-backed adapter, named
@@ -627,12 +624,6 @@ export class SessionSupervisor {
       startPreview(options as Parameters<typeof startPreview>[0]),
     [PREVIEW_STOP]: (options) => stopPreview(options as { instanceId: string }),
     [AGENT_BUSY]: () => this.busyNow(),
-    [UPDATE_CAWCO]: async (options) =>
-      updateCheckout({
-        ...(options as Pick<UpdateOptions, "force" | "restartAgent">),
-        branch: DEPLOY_BRANCH,
-        busy: (await this.busyNow()).busy,
-      }),
   };
 
   /** Register a machine-scoped control method, callable without an instanceId. */

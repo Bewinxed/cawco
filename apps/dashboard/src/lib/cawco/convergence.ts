@@ -1,17 +1,11 @@
 /**
  * What a machine's own frame data already says about whether it has converged
  * with the rest of the fleet — the board's answer to the Mac's 21-day silence
- * (see `.unlazy-liveness/gates/c2.md`): a build nobody can place, a sync stuck
- * on a decision nobody was asked to make, and a deploy clone that either
- * caught up or refused to. Every reader here is pure: given the frame data a
+ * (see `.unlazy-liveness/gates/c2.md`): a build nobody can place and a sync stuck
+ * on a decision nobody was asked to make. Every reader here is pure: given the frame data a
  * machine already carries, no reach into the network.
  */
-import type {
-  AgentRow,
-  BuildInfo,
-  DeployInfo,
-  FleetSyncReport,
-} from "@cawco/core";
+import type { AgentRow, BuildInfo, FleetSyncReport } from "@cawco/core";
 import { machineFaults } from "./fleet-faults";
 
 /** Whether a machine's own reported build is level with the hub's. */
@@ -56,64 +50,11 @@ export function fleetSyncAgeMs(
 }
 
 /**
- * Where a deployment clone stands against the branch it deploys from. The type
- * now comes from `@cawco/core` — leaf Y2 carried C1's `DeployTick` onto the
- * wire (flattened to `{ kind, detail?, updated?, failure? }`, which is the
- * shape this file already read), so `AgentRow.deploy` is a real field and the
- * structural read below is tolerance rather than a workaround. It stays
- * tolerant: a daemon that predates the deployment channel, or one whose watcher
- * has never ticked, sends no field at all, and every reader here must answer
- * `undefined` for it exactly as `hubBuild` does on an older hub.
- */
-export type { DeployKind } from "@cawco/core";
-
-export type MachineDeployInfo = DeployInfo;
-
-/** A `diverged` clone refuses to deploy at all — the one state that must never read as merely stale. */
-export const isDeployDiverged = (
-  deploy: MachineDeployInfo | undefined
-): boolean => deploy?.kind === "diverged";
-
-/** Whether a deploy state is worth a badge at all — `unmarked` is an ordinary dev tree, not a fact to flag. */
-export const isDeployNoteworthy = (
-  deploy: MachineDeployInfo | undefined
-): boolean =>
-  deploy !== undefined &&
-  deploy.kind !== "unmarked" &&
-  deploy.kind !== "current";
-
-/** The kinds a machine may claim; anything else is not one, and badges nothing. */
-const DEPLOY_KINDS: readonly string[] = [
-  "unmarked",
-  "unreachable",
-  "current",
-  "behind",
-  "ahead",
-  "diverged",
-];
-
-/**
- * Structural, and deliberately still so. `AgentRow.deploy` is typed now, but
- * this is the boundary where an *older or newer* machine's word arrives, and a
- * kind this build cannot render must read as nothing to report rather than as a
- * badge with no meaning. Callers may pass `machine.deploy` directly.
- */
-export function deployInfoOf(deploy: unknown): MachineDeployInfo | undefined {
-  if (!deploy || typeof deploy !== "object" || !("kind" in deploy)) {
-    return undefined;
-  }
-  if (!DEPLOY_KINDS.includes((deploy as { kind: unknown }).kind as string)) {
-    return undefined;
-  }
-  return deploy as MachineDeployInfo;
-}
-
-/**
  * Whether the board must say something about a machine beyond the Machines
  * tile's "N of M online" (JOURNEY §1 block 4, the roster as a grouped
  * reading): it is not online, its build cannot be placed level with the
- * hub's (behind, or unknown — the Mac's `commit: None`), a fleet-sync row
- * failed on it, or its deploy clone refuses to deploy. A machine with none
+ * hub's (behind, or unknown — the Mac's `commit: None`), or a fleet-sync row
+ * failed on it. A machine with none
  * of these is fine and gets no row of its own.
  */
 export function machineNeedsNotice(
@@ -123,7 +64,6 @@ export function machineNeedsNotice(
   return (
     machine.status !== "online" ||
     buildConvergence(machine.build, hubBuild) !== "current" ||
-    machineFaults(machine.machineId, machine.fleet).length > 0 ||
-    isDeployDiverged(deployInfoOf(machine.deploy))
+    machineFaults(machine.machineId, machine.fleet).length > 0
   );
 }

@@ -213,7 +213,7 @@ export default defineConfig({
       /* The commit this build was made from. The build serves it as
          `_app/version.json` and bakes it into the page, and `updated.check()`
          compares the two: that is how a tab learns it is older than the
-         dashboard now serving it (deploy-toast.ts). It must be deterministic,
+         dashboard now serving it (deploy-toast.svelte.ts). It must be deterministic,
          or two builds of one commit would each tell open tabs to reload. */
       version: {
         name: execFileSync("git", ["rev-parse", "--short", "HEAD"], {

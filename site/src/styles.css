@@ -46,6 +46,8 @@
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
 
+  --btn-radius: 12px;
+
   --gutter: clamp(16px, 4vw, 40px);
 
   /* The box Caw's ledge clips are drawn in: the same on the stage and the price cards. */
@@ -208,6 +210,14 @@ code {
   letter-spacing: -0.045em;
   line-height: 1;
   text-decoration: none;
+  gap: 0.4em;
+}
+
+/* Caw's icon is part of the mark: 1.3 times the wordmark's type, never taller than its box. */
+.wordmark-icon {
+  height: min(1.3em, 44px);
+  width: auto;
+  border-radius: calc(var(--btn-radius) - 9px);
 }
 
 .top-nav {
@@ -233,7 +243,6 @@ code {
 }
 
 .btn {
-  --btn-radius: 12px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -257,19 +266,6 @@ code {
 .btn-ink {
   background: var(--ink);
   color: var(--paper);
-}
-
-/* Caw's app icon sits inside the button, its corners set in from the button's own. */
-.btn-app {
-  --btn-inset: 9px;
-  gap: 9px;
-  padding: 0 16px 0 var(--btn-inset);
-}
-
-.app-icon {
-  width: 26px;
-  height: 26px;
-  border-radius: calc(var(--btn-radius) - var(--btn-inset));
 }
 
 /* Hero */
@@ -315,8 +311,17 @@ h1 {
   scroll-margin-top: 24px;
 }
 
-.install-label {
+/* The label and the channel switch share a line; where they cannot, the switch drops to its own, trailing. */
+.install-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0 12px;
   margin-bottom: 8px;
+}
+
+.install-label {
   font-size: 0.95rem;
   font-weight: 900;
 }
@@ -336,10 +341,8 @@ h1 {
 .cmd code {
   flex: 1;
   min-width: 0;
-  overflow-x: auto;
-  white-space: nowrap;
+  /* The whole command always shows: a line that will not fit breaks at a space. */
   font-size: clamp(0.76rem, 3.05vw, 0.95rem);
-  scrollbar-width: none;
 }
 
 .copy {
@@ -533,6 +536,70 @@ h1 {
   background: var(--vermilion);
   transform: scaleX(0);
   transform-origin: 0 50%;
+}
+
+/*
+ * The channel switch is the page's tabs on paper: the chosen tab is ink, the others are ink text.
+ * Its tabs are as tall as the label's line, so the row adds no height; the pseudo-element keeps the touch target.
+ */
+.tabs.tabs-channel {
+  position: relative;
+  grid-area: auto;
+  flex-direction: row;
+  gap: 2px;
+  margin-left: auto;
+  margin-block: -4px;
+}
+
+.tabs-channel[hidden] {
+  display: none;
+}
+
+.tabs-channel .tab {
+  flex: none;
+  flex-direction: row;
+  justify-content: center;
+  min-height: 0;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: var(--btn-radius);
+  color: var(--soft-on-paper);
+  font-size: 0.88rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.tabs-channel .tab::before {
+  content: "";
+  position: absolute;
+  inset: -7px -1px;
+}
+
+.tabs-channel .tab[aria-selected="true"] {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+/* One bar for the pair: it slides under the chosen tab. channel.ts sets its width and transform. */
+.tab-slider {
+  position: absolute;
+  bottom: 5px;
+  left: 0;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--vermilion);
+  transform-origin: 0 50%;
+  pointer-events: none;
+  transition: transform 220ms var(--ease-in-out);
+}
+
+/* The parts of the install command that the channel switch moves. */
+.cmd-tail {
+  white-space: nowrap;
+}
+
+.cmd-sh {
+  display: inline-block;
 }
 
 .panel {
@@ -1933,6 +2000,10 @@ mark {
     color: var(--paper);
   }
 
+  .tabs-channel .tab:not([aria-selected="true"]):hover {
+    color: var(--ink);
+  }
+
   .top-link:hover,
   .foot-nav a:hover {
     text-decoration: underline;
@@ -2050,10 +2121,9 @@ mark {
     left: 0;
   }
 
-  /* Where one line will not fit, the command breaks before the pipe. */
-  .cmd code {
-    overflow-x: visible;
-    white-space: normal;
+  /* The wordmark now carries the icon: the tagline must still fit beside it on one line. */
+  .foot {
+    column-gap: 16px;
   }
 }
 
@@ -2199,7 +2269,8 @@ mark {
   .copy,
   .tab,
   .autoplay,
-  .copy-icons > * {
+  .copy-icons > *,
+  .tab-slider {
     transition: none;
   }
 

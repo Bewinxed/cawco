@@ -58,11 +58,6 @@ tmp/
 release/
 *.tgz
 
-# The deployment marker cawco writes into a deploy clone. Untracked, it
-# shows in `git status --porcelain`, and the deploy guard refuses to pull on
-# ANY porcelain output — so an unignored marker makes `deploy init` block
-# every future pull on that machine.
-.cawco-deploy
 build.bak.*/
 
 # Each workspace's scratch (probes, renders, review pages).

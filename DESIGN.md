@@ -712,6 +712,15 @@ Solid ink, never coral: `ink-solid` fill and arrow, `on-ink` text, meta role, 8p
 ### Toast
 The floating-surface recipe over sonner: 12px radius, overlay shadow, body type, 8px-radius action buttons that scale on press. It enters from `--pop-rise` short of its place on its edge's side over 280ms on ease-out. The stack makes room over 200ms on ease-in-out. A toast exits toward its edge over 160ms. Under a finger it tracks 1:1 and dismisses past 45px or on a flick. The stack stays expanded, so an arrival grows nothing. On a phone toasts sit at the top under the 60px bar, full width less 12px a side, because at the bottom they would land on the composer. Toasts follow an open modal dialog into the top layer.
 
+### Channel cards
+Two radio cards side by side at every width (`channel-card-max` wide at most, `--space-3` apart, equal height); the pair shares one selection frame (1px `brand-solid` over `surface-recess`) that moves between them: the leading edge at once, the trailing edge after `--dur-ghost`, each over `--dur-fade` on ease-in-out, and with reduced motion it fades out on the old card and in on the new.
+Caw stands behind the chosen card as a still picture in a `caw-peek` box whose top is `caw-peek-rise` above the card, painted over it, and fades across when the choice changes; his head is the same height on both cards.
+The card's edge is `border-control`, padding `--space-7` above and `--space-4` elsewhere, and only the card the fleet follows carries the drawn tick and its line.
+
+### Update notice
+One toast box under one id, on every page: Caw at 48px on the leading edge top level with a 500-weight title, the changes in meta type, and `sm` buttons, the act primary on the trailing edge.
+Its state changes in place: content cross-fades inside the box, the box follows through `morph()`, and the old Caw leaves within `--dur-fade` before the new one stands.
+
 ### Alert
 A compact tinted row, never a slab: 10px radius, 10×12px padding, body type, an optional 16px glyph spanning the title and description. Variants: default (recess), destructive, warning, success and info (each its status pair). No border.
 

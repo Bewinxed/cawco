@@ -43,12 +43,10 @@
     </svg>
 
     <header class="top wrap">
-      <a class="wordmark" href="./" aria-label="Caw&amp;Co home">Caw&amp;Co</a>
+      <a class="wordmark" href="./" aria-label="Caw&amp;Co home"><img class="wordmark-icon" src="/src/assets/brand/app-icon.webp" width="84" height="84" alt="">Caw&amp;Co</a>
       <nav class="top-nav" aria-label="Site">
         <a class="top-link" href="https://github.com/Bewinxed/cawco"><i data-mark="github"></i>GitHub</a>
-        <a class="btn btn-ink btn-app" href="#install">
-          <img class="app-icon" src="/src/assets/brand/app-icon.webp" width="84" height="84" alt="">Install
-        </a>
+        <a class="btn btn-ink" href="#install">Install</a>
       </nav>
     </header>
 
@@ -65,7 +63,18 @@
             you every session and lets you answer the ones that are waiting.
           </p>
           <div class="install" id="install">
-            <p class="install-label">Install on your first machine</p>
+            <div class="install-head">
+              <p class="install-label">Install on your first machine</p>
+              <div class="tabs tabs-channel" role="tablist" aria-label="Release channel" data-channel hidden>
+                <button class="tab" role="tab" type="button" aria-selected="true" data-tab="stable">
+                  <span class="tab-name">Stable</span>
+                </button>
+                <button class="tab" role="tab" type="button" aria-selected="false" tabindex="-1" data-tab="nightly">
+                  <span class="tab-name">Nightly</span>
+                </button>
+                <span class="tab-slider" aria-hidden="true" data-slider></span>
+              </div>
+            </div>
             <div class="cmd">
               <code data-cmd>curl -fsSL https://cawco.dev/install.sh | sh</code>
               <button class="copy" type="button" data-copy>
@@ -594,7 +603,7 @@
     </main>
 
     <footer class="foot wrap">
-      <span class="wordmark">Caw&amp;Co</span>
+      <span class="wordmark"><img class="wordmark-icon" src="/src/assets/brand/app-icon.webp" width="84" height="84" alt="">Caw&amp;Co</span>
       <span class="foot-line">A little flock. A lot of work.</span>
       <nav class="foot-nav" aria-label="Links">
         <a href="https://github.com/Bewinxed/cawco"><i data-mark="github"></i>GitHub</a>

@@ -76,7 +76,7 @@ import { browser } from "$app/env";
 import { goto } from "$app/navigation";
 import type { Activity } from "./activity";
 import { activityOf, runningSubagents } from "./activity";
-import { checkDeployToast } from "./deploy-toast";
+import { checkDeployToast } from "./deploy-toast.svelte";
 import { hubFailure } from "./hub-read";
 import { newId } from "./id";
 import {
@@ -88,7 +88,6 @@ import {
 import { type PendingSelection, selectionExtras } from "./preview/selection";
 import { projectsFor } from "./projects";
 import { type ReloadHold, reloadForProtocol } from "./protocol-reload";
-import { checkRestartToast } from "./restart-toast";
 import { spawnDefaults } from "./spawnPrefs.svelte";
 import type {
   CommandRecord,
@@ -125,6 +124,7 @@ import { routedToParent } from "./transcript/present";
 import { holdsCompaction } from "./transcript/rows";
 import { topsIn } from "./tree";
 import type { DelegateAskEvent, Message } from "./types";
+import { updates } from "./updates/updates.svelte";
 import {
   onBoard,
   runIdOf,
@@ -2187,9 +2187,6 @@ function handleFrame(frame: FramePayload): void {
         )
       );
     }
-    if (frame.agents) {
-      checkRestartToast(frame.agents);
-    }
     // The hub's own record of what each session is carrying. Kept there rather
     // than learnt by watching, so it is the same on every device and survives a
     // reload — a hand-off only this tab saw is one your phone never knows about.
@@ -3600,6 +3597,8 @@ function connect(): void {
     resumePendingSends(streamState, streamHost);
     // biome-ignore lint/complexity/noVoid: fire-and-forget — the toast shows itself when the served build is newer
     void checkDeployToast();
+    // biome-ignore lint/complexity/noVoid: fire-and-forget — the settings page and the notice read the policy once it lands
+    void updates.loadPolicy();
   };
 
   bind(socket);

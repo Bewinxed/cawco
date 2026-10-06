@@ -5,14 +5,14 @@
  * The comparison is SvelteKit's own: the build bakes its version (the commit,
  * `kit.version.name` in svelte.config.js) into the page and serves the same
  * string as `_app/version.json`, and `updated.check()` fetches that file and
- * compares. It used to compare the page with the hub's commit instead, but the
- * deploy poller restarts only the services a change touches: after a
- * dashboard-only deploy the hub keeps running the older commit, so every tab,
- * even one loaded a second ago, was told to reload, and the toast (it never
- * times out) sat over whatever the board had in its bottom-right corner.
+ * compares. It used to compare the page with the hub's commit instead, but a
+ * release can replace the dashboard while the hub keeps running the older
+ * commit, so every tab, even one loaded a second ago, was told to reload, and
+ * the toast (it never times out) sat over whatever the board had in its
+ * bottom-right corner.
  *
  * It runs on every socket open. The socket is relayed through the dashboard's
- * own server (serve.js), so a dashboard deploy always drops it and the
+ * own server (serve.js), so a dashboard update always drops it and the
  * reconnect is the moment to ask. One toast per tab.
  *
  * A build that also raises the wire (`WIRE_PROTOCOL`) does not ask: a tab
@@ -22,7 +22,10 @@
 import { toast } from "svelte-sonner";
 import { updated } from "$app/state";
 
-let toasted = false;
+let toasted = $state(false);
+
+/** The reload toast is up: the update notice gives the box to it. */
+export const deployPending = (): boolean => toasted;
 
 export async function checkDeployToast(): Promise<void> {
   if (toasted || !(await updated.check())) {

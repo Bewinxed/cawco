@@ -3,7 +3,6 @@ import type {
   AgentBusyReport,
   AuthState,
   BuildInfo,
-  DeployInfo,
   Envelope,
   HarnessReport,
   HeartbeatAckPayload,
@@ -12,26 +11,35 @@ import type {
   SpawnPayload,
 } from "@cawco/core";
 import {
+  ACKNOWLEDGE_BINARY_UPDATE,
+  CANCEL_BINARY_UPDATE,
   CAWCO_ENV,
   CAWCO_HUB_PORT,
+  CONFIGURE_BINARY_UPDATES,
   CONTROL_RUN_COMMAND,
   CONTROL_SEARCH_TRANSCRIPTS,
   CONTROL_WORKSPACE_ARCHIVE,
   CONTROL_WORKSPACE_BOUNDARY,
   CONTROL_WORKSPACE_CREATE,
   CONTROL_WORKSPACE_MIGRATE,
+  UPDATE_CAWCO,
 } from "@cawco/core";
+import type { BinaryUpdateState } from "@cawco/core/binary-updates";
 import { sessiondEndpoint } from "@cawco/core/sessiond";
 import { fetchClaudeLimits } from "@cawco/core/usage/limits";
 import { mergeObserved } from "@cawco/core/usage/observed";
 import { fetchOpenCodeGoLimits } from "@cawco/core/usage/opencode-go";
 import { Data, Duration, Effect, Fiber, Schedule } from "effect";
+import {
+  BinaryUpdater,
+  latestBinaryUpdate,
+  reportBinaryUpdate,
+} from "./binary-update";
 import { buildInfo } from "./build";
 import { probeCapabilities } from "./capabilities";
 import { convertWorktrees } from "./clone";
 import { readConfig } from "./config";
 import { convergeDeniedTools } from "./denied-tools";
-import { deployRoot, latestDeploy } from "./deploy";
 import { rediscoverHub, toWsUrl } from "./discovery";
 import { harnesses } from "./harnesses";
 import type { PiHarness } from "./harnesses/pi";
@@ -45,7 +53,6 @@ import { TranscriptSearchService } from "./search";
 import { resumableSessions, SessionSupervisor } from "./session";
 import { SessiondClient } from "./sessiond-client";
 import { probeTools } from "./tools";
-import { consumeRestartMarker } from "./update";
 import { UsageScanner } from "./usage/scanner";
 import { abandonCommands, runWorkflowCommand } from "./workflow-command";
 import {
@@ -86,19 +93,14 @@ interface MachineIdentity {
  * {@link HeartbeatPayload}.
  */
 export interface RegisterPayload extends MachineIdentity {
+  /** This machine's binary update state at register, as the updater last saw it. */
+  binaryUpdate?: BinaryUpdateState;
   /**
    * The cawco this daemon is running (NEW.md §12), as it reported at register.
    */
   build?: BuildInfo;
   /** Custody is not attachment: these still need a handle before being listed live. */
   custody: SessionCustody;
-  /**
-   * Where this machine's deployment clone stood at register (contract C8), so a
-   * board that has just been handed a machine knows without waiting a beat.
-   * Whatever the poller last saw — this never asks git anything itself, so a
-   * daemon with no deployment watcher running simply omits it.
-   */
-  deploy?: DeployInfo;
   instances: string[];
   machineCapabilities: ReturnType<typeof probeCapabilities>;
   /**
@@ -107,15 +109,6 @@ export interface RegisterPayload extends MachineIdentity {
    * points its targets at them again.
    */
   previews: ReturnType<typeof servingPreviews>;
-  /**
-   * True on exactly one register: the first one this process ever sends,
-   * and only when it came up because the deploy poller's idle-gated restart
-   * (`DeployWatcher#drainPendingRestart`, update.ts) fired it — never for a
-   * manual `service restart`, a crash, or a plain machine boot. What the
-   * dashboard toasts on; see `consumeRestartMarker`, which is what makes this
-   * exactly-once rather than "every register until someone reconnects".
-   */
-  restarted?: true;
   /**
    * The sessions this machine could resume, so the rows the daemon no
    * longer carries settle as sleeping or as lost rather than all alike. Absent
@@ -214,7 +207,7 @@ let activeSupervisor: SessionSupervisor | undefined;
 
 /**
  * How many sessions this daemon is carrying mid-turn, once it knows. Before
- * the supervisor exists, unknown is held busy. The deploy poller holds a restart until
+ * the supervisor exists, unknown is held busy. The updater holds a restart until
  * idle without asking the hub a question the daemon can answer about itself.
  */
 export const currentBusy = async (): Promise<AgentBusyReport> =>
@@ -572,19 +565,8 @@ const attach = (
       readCustody(supervisor.stopSequence, supervisor.custodyInstanceIds)
     );
     const build = yield* Effect.promise(() => buildInfo());
-    // Consumed, not just read: true only the first register after THIS
-    // process came up because a deploy restarted it onto `build.commit`, and
-    // never again for the life of this connection — see `restartAgentNow` /
-    // `consumeRestartMarker` in update.ts for why a file beats a live send
-    // here (the process that wrote the marker was about to die).
-    const restarted = yield* Effect.promise(() =>
-      build.commit
-        ? consumeRestartMarker(deployRoot(), build.commit)
-        : Promise.resolve(false)
-    );
     const registerPayload = (
-      snapshot: Awaited<ReturnType<typeof readSessions>>,
-      first = false
+      snapshot: Awaited<ReturnType<typeof readSessions>>
     ): RegisterPayload => ({
       ...identity,
       sessionAddresses: supervisor.sessionAddresses,
@@ -604,10 +586,9 @@ const attach = (
           }
         : {}),
       build,
-      ...(latestDeploy() ? { deploy: latestDeploy() } : {}),
-      ...(first && restarted ? { restarted: true } : {}),
+      ...(latestBinaryUpdate() ? { binaryUpdate: latestBinaryUpdate() } : {}),
     });
-    let payload = registerPayload({ custody, catalog }, true);
+    let payload = registerPayload({ custody, catalog });
     // NO BUSY ANSWER BEFORE CUSTODY HAS SAID. From the register until the
     // sessions this connection takes custody of have each said whether their
     // turn is running (`takeCustody` below), a busy question waits: before
@@ -702,7 +683,9 @@ const attach = (
           payload: {
             at: Date.now(),
             instances: supervisor.instanceIds,
-            ...(latestDeploy() ? { deploy: latestDeploy() } : {}),
+            ...(latestBinaryUpdate()
+              ? { binaryUpdate: latestBinaryUpdate() }
+              : {}),
             harnesses: detected,
             tools,
           } satisfies HeartbeatPayload,
@@ -1066,9 +1049,8 @@ const attach = (
             machineId: identity.machineId,
             // `instances` rides every beat (not just register) so the hub can
             // reconcile session truth continuously — see HeartbeatPayload.
-            // `deploy` rides it for the same reason: it is a live fact, and
-            // `diverged` appearing between two registers must not wait for the
-            // next one. Omitted entirely until a watcher has ticked.
+            // `binaryUpdate` rides it for the same reason: it is a live fact
+            // that changes without anybody reconnecting.
             payload: {
               at: Date.now(),
               sessionAddresses: supervisor.sessionAddresses,
@@ -1078,7 +1060,9 @@ const attach = (
                 ...custodyIds,
               ]),
               ...(changedPiAuth() ? { harnesses: reportedHarnesses } : {}),
-              ...(latestDeploy() ? { deploy: latestDeploy() } : {}),
+              ...(latestBinaryUpdate()
+                ? { binaryUpdate: latestBinaryUpdate() }
+                : {}),
             } satisfies HeartbeatPayload,
           })
         ),
@@ -1216,7 +1200,7 @@ export const startDaemon = (auth?: AuthState, rediscover = false) =>
     const supervisor = yield* Effect.acquireRelease(
       Effect.sync(() => {
         const created = new SessionSupervisor();
-        // See {@link currentBusy}: the deploy poller's in-process read of it.
+        // See {@link currentBusy}: the updater's in-process read of it.
         activeSupervisor = created;
         return created;
       }),
@@ -1241,6 +1225,25 @@ export const startDaemon = (auth?: AuthState, rediscover = false) =>
     // on start (USAGE-SPEC.md §5.1), so a reconnect must not reset it.
     const scanner = yield* Effect.promise(() => UsageScanner.load());
     supervisor.registerDaemonFunction("probeCapabilities", probeCapabilities);
+
+    // Updates arrive only as signed builds from the hub: this one object owns
+    // the idle tick, the "Install now" command and the policy the hub pushes.
+    const updater = new BinaryUpdater(
+      () => supervisor.busyNow(),
+      reportBinaryUpdate
+    );
+    supervisor.registerDaemonFunction(UPDATE_CAWCO, () => updater.installNow());
+    supervisor.registerDaemonFunction(CONFIGURE_BINARY_UPDATES, () =>
+      updater.configure()
+    );
+    supervisor.registerDaemonFunction(CANCEL_BINARY_UPDATE, () =>
+      updater.cancel()
+    );
+    supervisor.registerDaemonFunction(ACKNOWLEDGE_BINARY_UPDATE, () =>
+      updater.acknowledge()
+    );
+    yield* Effect.addFinalizer(() => Effect.sync(() => updater.stop()));
+    yield* Effect.forkScoped(Effect.promise(() => updater.start()));
 
     // Transcript search index: FTS5-backed BM25 search over transcripts.
     // Created once, syncs every 30s in the background, outlives reconnects.

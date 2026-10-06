@@ -17,8 +17,8 @@
 // usage: node build.mjs [outDir]
 //   Without an argument it writes ../caw/ and the apps' copies, CawCoMascot's Resources/caw/ and
 //   the dashboard's src/lib/assets/caw/, so all three always hold the same bytes; any other .riv
-//   there is removed. Each app keeps its own copy because a deploy rebuilds a service only when
-//   its own directories change (packages/agent/src/update.ts, changedServices).
+//   there is removed. Each app keeps its own copy because each is built from its own
+//   directories.
 import { mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";

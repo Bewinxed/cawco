@@ -1421,7 +1421,6 @@ if (role === "migration-main") {
     assert.equal(await alive("refused-mode"), true);
     const agentFields = new Set<string>([
       "auth",
-      "browserAvailable",
       "build",
       "createdAt",
       "custody",
