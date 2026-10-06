@@ -6867,7 +6867,6 @@ export const createServer = (
     const fork = row.sessionId ? undefined : forkSeeds.get(row.id);
     const where = {
       machineId: row.machineId,
-      // biome-ignore lint/suspicious/noUnnecessaryConditions: forkSeeds.get can be absent for a row that never named a session
       sessionKey: row.sessionId ?? fork?.sessionKey ?? "",
       cwd: row.cwd || "",
       harness: row.harness || "claude",
@@ -11209,7 +11208,6 @@ export const createServer = (
                 const signal = frame ? peekSendSignal(frame) : undefined;
                 const quiet = !!row?.keepAliveTurn || frame?.keepAlive === true;
                 if (quiet && row) {
-                  // biome-ignore lint/suspicious/noUnnecessaryConditions: peekSendSignal returns undefined for ordinary reply frames
                   if (signal) {
                     takeSendSignal(row.id, signal);
                     if (
@@ -11571,7 +11569,6 @@ export const createServer = (
                   }
                 } else if (neutral.type === "result") {
                   const [cacheRow] = db.getInstancesByIds([message.instanceId]);
-                  // biome-ignore lint/suspicious/noUnnecessaryConditions: a session can be removed before its last result arrives
                   if (cacheRow?.harness === "claude") {
                     db.updateKeepAlive(
                       cacheRow.id,
@@ -11745,7 +11742,6 @@ export const createServer = (
                 const line = unstarted?.workItemId
                   ? workItems.spawnFailed(unstarted, reason)
                   : undefined;
-                // biome-ignore lint/suspicious/noUnnecessaryConditions: spawnFailed returns a report only for a recorded live work item
                 if (unstarted && line !== undefined) {
                   reportToParent(unstarted, `${reason}${line}`, true);
                 }
@@ -11857,7 +11853,6 @@ export const createServer = (
                 kind === "control_result" && message.requestId
                   ? rewinds.get(message.requestId)
                   : undefined;
-              // biome-ignore lint/suspicious/noUnnecessaryConditions: rewinds.get is absent for controls that do not rewind a session
               if (rewound && message.requestId) {
                 rewinds.delete(message.requestId);
                 if (!(message.payload as ControlResult).ok) {

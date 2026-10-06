@@ -283,7 +283,6 @@ async function readKeeperWithRetry(): Promise<
       return await readKeeper();
     } catch {
       if (attempt < 2) {
-        // biome-ignore lint/performance/noAwaitInLoops: at most three tries, one second apart
         await Bun.sleep(1000);
       }
     }
