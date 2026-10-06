@@ -37,6 +37,13 @@ const landLine = (base: string): string =>
   `The repository's default branch is ${base}. Land with \`git fetch origin && git rebase origin/${base} && git push origin HEAD:${base}\`. Compare against ${base} with \`git show origin/${base}:<path>\`.`;
 
 /**
+ * How a work item's workspace lands: the hub does it after `finish_item`'s
+ * checks pass (hub/src/landing.ts), so the session commits and never pushes.
+ */
+const hubLandLine = (base: string): string =>
+  `The repository's default branch is ${base}. Commit your work and do not push: when finish_item's checks pass, the hub rebases your commits onto origin/${base}, runs the checks again if ${base} moved, and pushes. Compare against ${base} with \`git show origin/${base}:<path>\`.`;
+
+/**
  * The opening of a side quest the daemon started in a fresh git worktree of
  * `cwd`, cut from `base` (none for a repository with no remote, which has
  * nowhere to land), with the line that says so right after any hand-off
@@ -64,7 +71,7 @@ export const withWorkspaceLine = (
 ): string =>
   afterMarker(
     text,
-    `You work in your own clone of ${repoRoot} (your current directory), on its own branch; its stash is its own. Paths under ${repoRoot} in this brief mean the same path in your clone. ${landLine(base)} Your shell commands run inside this workspace's boundary: they can write only this clone, /tmp (the workspace's own), ~/.cache, ~/.bun and ~/.npm; they see and signal only this workspace's processes; they cannot reach the service manager; the hub and the internet are reachable.`
+    `You work in your own clone of ${repoRoot} (your current directory), on its own branch; its stash is its own. Paths under ${repoRoot} in this brief mean the same path in your clone. ${hubLandLine(base)} Your shell commands run inside this workspace's boundary: they can write only this clone, /tmp (the workspace's own), ~/.cache, ~/.bun and ~/.npm; they see and signal only this workspace's processes; they cannot reach the service manager; the hub and the internet are reachable.`
   );
 
 /**

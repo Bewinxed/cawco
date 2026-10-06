@@ -42,6 +42,7 @@ import {
 } from "@cawco/core";
 import type { DbShape, WorkItemRow, WorkspaceRow } from "./db";
 import type { WorkItemCheck, WorkItemSubmission } from "./db/schema";
+import { land, landingQueue } from "./landing";
 
 /** How long the name a caller gives a delegate or a started session may run. */
 export const SESSION_TITLE_MAX = 48;
@@ -504,6 +505,8 @@ export const createWorkItems = ({
   };
   /** Items whose checks this hub process is running now: a resume leaves them to that run. */
   const finishing = new Set<string>();
+  /** One landing at a time per repository and branch (landing.ts). */
+  const landings = landingQueue();
   /** Creates this hub is still waiting for; register recovery leaves those to their caller. */
   const opening = new Set<string>();
   const discarding = new Map<string, Promise<void>>();
@@ -1191,6 +1194,77 @@ export const createWorkItems = ({
   };
 
   /**
+   * Lands a checked item's commits on its workspace's base branch
+   * (landing.ts). Answers the line the report and the delegate read when the
+   * item can be done; the text that hands it back to its delegate (`retry`:
+   * uncommitted work, a conflict, checks that fail after a rebase); or the line
+   * that says why it could not land (`refused`).
+   */
+  const landChecked = async (
+    workspace: WorkspaceRow,
+    checks: WorkItemCheck[]
+  ): Promise<
+    { kind: "done" | "refused"; line: string } | { kind: "retry"; text: string }
+  > => {
+    const { base } = workspace;
+    const outcome = await land<CheckOutcome[]>(base, {
+      run: (cmd, timeoutMs) =>
+        command(
+          workspace.machineId,
+          workspace.path,
+          cmd,
+          timeoutMs,
+          refOf(workspace)
+        ),
+      recheck: async () => {
+        const again = await runChecks(workspace, checks);
+        return again.some((check) => !check.passed) ? again : undefined;
+      },
+      queue: landings,
+    });
+    switch (outcome.kind) {
+      case "landed":
+        return {
+          kind: "done",
+          line: `Landed on ${base} at ${outcome.sha.slice(0, 9)}${outcome.rebased ? `, rebased onto the newer ${base} with the checks run again` : ""}.`,
+        };
+      case "nothing":
+        return {
+          kind: "done",
+          line: `Nothing to land: ${base} already holds every commit in this workspace.`,
+        };
+      case "no-remote":
+        return {
+          kind: "done",
+          line: "Not landed: this workspace's repository has no remote.",
+        };
+      case "dirty":
+        return {
+          kind: "retry",
+          text: `The checks passed, but the workspace has changes that are not committed, new files included. The checks ran on them and the hub lands only commits, so landing now could leave ${base} without them. Commit them, delete them, or add them to .gitignore, then call finish_item again.${fenced(outcome.files)}`,
+        };
+      case "conflict":
+        return {
+          kind: "retry",
+          text: `The checks passed, but your commits conflict with origin/${base} in:${fenced(outcome.files)}\nThe hub undid its rebase. Rebase onto origin/${base} yourself, resolve the conflicts, commit, and call finish_item again.`,
+        };
+      case "recheck-failed": {
+        const failing = outcome.failing.filter((check) => !check.passed);
+        const passing = outcome.failing.filter((check) => check.passed);
+        return {
+          kind: "retry",
+          text: `${base} had moved, so the hub rebased your commits onto it and ran the checks again: ${failing.length} of ${outcome.failing.length} failed. Your branch is now on top of origin/${base}. Fix the cause and call finish_item again.\n\n${[...failing, ...passing].map(checkResultLine).join("\n")}`,
+        };
+      }
+      default:
+        return {
+          kind: "refused",
+          line: `Not landed: the push to ${base} was refused.${fenced(outcome.detail)}\nThe commits are on branch ${workspace.branch} in workspace ${workspace.id}.`,
+        };
+    }
+  };
+
+  /**
    * THE run of a `finish_item`: the item's checks, in order, against the
    * submission stored on its row, to an outcome. The live call and a hub
    * start-up resume both come here. All passing, the item is done and the
@@ -1220,21 +1294,34 @@ export const createWorkItems = ({
         };
       }
       const lines = outcomes.map(checkLine).join("\n");
-      const body = `${submission.summary}\n\nChecks:\n${lines}${await changesSince(workspace, item)}${findingsBlock(submission.findings)}`;
       // The checks took their time: the item may have been stopped since.
-      const current = db.workItem(item.id) ?? item;
-      if (!LIVE.has(current.state)) {
+      const stopped = db.workItem(item.id) ?? item;
+      if (!LIVE.has(stopped.state)) {
         update(item.id, settled);
         return {
           done: false,
-          text: `The checks passed, but ${current.title} is ${current.state} now; nothing was reported.`,
+          text: `The checks passed, but ${stopped.title} is ${stopped.state} now; nothing was landed or reported.`,
         };
       }
-      const done = finish(current, { state: "done", result: body, ...settled });
-      report(row, `${body}${reportLine(done)}`, false);
+      const landing = await landChecked(workspace, checks);
+      if (landing.kind === "retry") {
+        update(item.id, settled);
+        return { done: false, text: landing.text };
+      }
+      const body = `${submission.summary}\n\nChecks:\n${lines}\n\n${landing.line}${await changesSince(workspace, item)}${findingsBlock(submission.findings)}`;
+      const current = db.workItem(item.id) ?? item;
+      const landed = landing.kind === "done";
+      const ended = finish(current, {
+        state: landed ? "done" : "failed",
+        result: body,
+        ...settled,
+      });
+      report(row, `${body}${reportLine(ended)}`, false);
       return {
-        done: true,
-        text: `All ${outcomes.length} checks passed.\n\n${lines}\n\nThe item is done. End your turn.`,
+        done: landed,
+        text: landed
+          ? `All ${outcomes.length} checks passed. ${landing.line}\n\n${lines}\n\nThe item is done. End your turn.`
+          : `All ${outcomes.length} checks passed, but the work could not land. ${landing.line}\n\nThe item has failed and your parent has the details. End your turn.`,
       };
     } catch (error) {
       update(item.id, settled);

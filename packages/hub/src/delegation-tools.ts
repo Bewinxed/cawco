@@ -667,7 +667,7 @@ export function handoffTools(deps: HandoffDeps) {
     ),
     tool(
       "finish_item",
-      "Finish your work item. The hub runs the item's acceptance checks in your worktree and returns each result. When all pass the item is done and your parent receives the results. When one fails you get its output back: fix the cause and call finish_item again. Pass `blocked` with the exact command and error text only when something outside your control stops the work; the item then fails with that reason. Anything you noticed outside your brief goes in `findings`, not in the work.",
+      "Finish your work item. Commit your work first and do not push. The hub runs the item's acceptance checks in your worktree and returns each result. When all pass, the hub rebases your commits onto the base branch (running the checks again if it moved) and pushes; the item is then done and your parent receives the results. When a check fails or your commits conflict with the base branch, you get the details back: fix the cause and call finish_item again. Pass `blocked` with the exact command and error text only when something outside your control stops the work; the item then fails with that reason. Anything you noticed outside your brief goes in `findings`, not in the work.",
       {
         summary: z.string().describe("What was done, in plain words."),
         findings: z
