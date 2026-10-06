@@ -23,6 +23,21 @@ const LONG_CALLS: Record<string, string> = {
 
 declare const __CAWCO_RELEASE__: boolean | undefined;
 
+/**
+ * Fleet administration (the `manage_*` tools) belongs to the sessions the
+ * operator started. A delegate, a work item, a workflow step or a leaf session
+ * never sees those tools listed and is refused if it names one: a session that
+ * read a poisoned page must not be one call away from a hook on every machine.
+ * The hub's REST API stays reachable on the network (PRODUCT.md's perimeter);
+ * this removes the path an agent is handed, not the wall.
+ */
+const administers = (actor: InstanceRow | undefined): boolean =>
+  !!actor &&
+  !actor.parentInstanceId &&
+  !actor.workItemId &&
+  !actor.workflowStepId &&
+  actor.canDelegate !== false;
+
 export function createDelegationMcp(options: {
   instances: () => InstanceRow[];
   instanceById: (id: string) => InstanceRow | undefined;
@@ -75,7 +90,8 @@ export function createDelegationMcp(options: {
   const describe = (
     canDelegate?: boolean,
     workflowStepId?: string,
-    workItem?: boolean
+    workItem?: boolean,
+    withAdmin = true
   ) => [
     ...tools({
       instanceId: "",
@@ -89,7 +105,7 @@ export function createDelegationMcp(options: {
         throw new Error("Discovery cannot execute tools");
       },
     }),
-    ...admin,
+    ...(withAdmin ? admin : []),
   ];
 
   // Temporary until Phase 2's per-session credentials replace this resolver.
@@ -162,6 +178,49 @@ export function createDelegationMcp(options: {
     return candidates[0];
   };
 
+  /** A `manage_*` call, run only for a session that {@link administers}. */
+  const administer = async (
+    actor: InstanceRow,
+    name: string,
+    input: Record<string, unknown>
+  ): Promise<CallToolResult> => {
+    if (!administers(actor)) {
+      throw new Error(
+        `${name} isn't available here: only sessions you started can change fleet settings, and this one is a delegate, work item or workflow step. Hand the change to the session that started it.`
+      );
+    }
+    const entry = admin.find((tool) => tool.name === name);
+    if (!entry) {
+      throw new Error(`Unknown tool ${name}`);
+    }
+    return (await entry.handler(input)) as CallToolResult;
+  };
+
+  /**
+   * The tools that act on the fleet rather than on a session: the delegate-type
+   * catalog, which anyone may read without an actor, and the `manage_*` tools,
+   * which resolve their caller first. Undefined for every other tool.
+   */
+  const fleetCall = async (
+    binding: string | null,
+    name: string,
+    args: Record<string, unknown>,
+    input: Record<string, unknown>,
+    authorization?: string
+  ): Promise<CallToolResult | undefined> => {
+    if (name === "list_delegate_types") {
+      const entry = describe().find((tool) => tool.name === name);
+      if (!entry) {
+        throw new Error(`Unknown tool ${name}`);
+      }
+      return (await entry.handler(input)) as CallToolResult;
+    }
+    if (!adminNames.has(name)) {
+      return undefined;
+    }
+    return await administer(actorOf(binding, args, authorization), name, input);
+  };
+
   const call = async (
     binding: string | null,
     name: string,
@@ -171,13 +230,9 @@ export function createDelegationMcp(options: {
     try {
       // Routing context belongs to the bridge, not to a tool's input schema.
       const { __cawco: _context, ...input } = args;
-      // Fleet-wide tools: no actor needed — they call the hub API directly.
-      if (name === "list_delegate_types" || adminNames.has(name)) {
-        const entry = describe().find((tool) => tool.name === name);
-        if (!entry) {
-          throw new Error(`Unknown tool ${name}`);
-        }
-        return (await entry.handler(input)) as CallToolResult;
+      const fleet = await fleetCall(binding, name, args, input, authorization);
+      if (fleet) {
+        return fleet;
       }
       const actor = actorOf(binding, args, authorization);
       const emitted: Envelope[] = [];
@@ -258,7 +313,8 @@ export function createDelegationMcp(options: {
       tools: describe(
         canDelegate,
         bound?.workflowStepId ?? undefined,
-        binding === null || !!bound?.parentInstanceId
+        binding === null || !!bound?.parentInstanceId,
+        binding === null || administers(bound)
       ).map(({ name, description, inputSchema, ...entry }) => ({
         name,
         description,
@@ -395,7 +451,8 @@ export function createDelegationMcp(options: {
       tools: describe(
         actor?.canDelegate ?? undefined,
         actor?.workflowStepId ?? undefined,
-        instanceId === undefined || !!actor?.parentInstanceId
+        instanceId === undefined || !!actor?.parentInstanceId,
+        instanceId === undefined || administers(actor)
       ).map(({ name, description, inputSchema, ...entry }) => ({
         name,
         description,
