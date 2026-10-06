@@ -267,7 +267,9 @@
     frame = requestAnimationFrame(step);
   }
 
+  /** Rolls to row `k`: a move of the reader's, so a pending close is off. */
   function spinTo(k: number): void {
+    settled = null;
     target = clamp(k);
     roll();
   }
@@ -359,8 +361,8 @@
       close();
       return;
     }
-    settled = () => close();
     spinTo(0);
+    settled = () => close();
   }
 
   /**
@@ -372,6 +374,12 @@
       // Folding away, the field already holds what it keeps, and takes
       // keys as usual.
       return false;
+    }
+    // Rolling back to the draft after Esc, any other key means the reader
+    // changed their mind: it stays up instead of closing where it stops.
+    // (A search changes the rows without a roll, so this is not left to spinTo.)
+    if (event.key !== "Escape") {
+      settled = null;
     }
     if (event.key === "ArrowUp") {
       spinTo(Math.round(target) + 1);
@@ -423,6 +431,7 @@
     if (closing) {
       return;
     }
+    settled = null;
     cancelAnimationFrame(frame);
     // Dragging down pulls older messages down into the field.
     stand(soft(1 + dy / row));
@@ -440,6 +449,7 @@
     if (closing) {
       return;
     }
+    settled = null;
     let delta = event.deltaY;
     if (event.deltaMode === WheelEvent.DOM_DELTA_LINE) {
       delta *= row;

@@ -478,7 +478,7 @@
         you
       />
     {/if}
-    <div class="well" {@attach openWell}>
+    <div class="well" class:lifted {@attach openWell}>
       <div
         class="words"
         bind:this={words}
@@ -741,7 +741,8 @@
       @media (prefers-reduced-motion: no-preference) {
         transition:
           border-color var(--dur-pop) var(--ease-out),
-          border-radius var(--dur-pop) var(--ease-out);
+          border-radius var(--dur-pop) var(--ease-out),
+          opacity var(--dur-panel) var(--ease-drawer);
       }
     }
     /* Drawn by the LOWER message, across the text column only, on the pixel
@@ -773,6 +774,14 @@
       background: var(--surface-raised);
     }
   }
+  /* Its words lifted into the composer, the well folds away with them (the
+     note beside "You" says where they went), on the words' own curve; an
+     empty well would stay behind as a sliver. */
+  .well {
+    @media (prefers-reduced-motion: no-preference) {
+      transition: padding-block var(--dur-panel) var(--ease-drawer);
+    }
+  }
   /* A later message: open at the top, the hairline over the part above's
      bottom edge. */
   .grouped .well {
@@ -792,6 +801,14 @@
     }
     &::after {
       opacity: 1;
+    }
+  }
+  .well.lifted {
+    padding-block: 0;
+
+    &::before,
+    &::after {
+      opacity: 0;
     }
   }
   /* Another message follows: no bottom edge or corners. */

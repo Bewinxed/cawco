@@ -1160,6 +1160,13 @@
       event.ctrlKey ||
       event.metaKey
     );
+    // The wheel still folding away (it takes no keys then): ↑ brings it
+    // straight back up once it has landed, a close caught mid-way turning back.
+    if (recall && event.key === "ArrowUp" && bare) {
+      event.preventDefault();
+      reopen = true;
+      return true;
+    }
     if (!(event.key === "ArrowUp" && bare && startsRecall())) {
       return false;
     }
@@ -1216,6 +1223,8 @@
     measured: ReturnType<typeof measureShape>;
   } | null>(null);
   let wheel = $state<ReturnType<typeof RecallWheel>>();
+  /** ↑ pressed while the wheel was folding: it comes up again once folded. */
+  let reopen = false;
   /** The wheel's row on the field's line, for a screen reader. */
   let recallActive = $state<string>();
   /** The grown shape is the composer: the pill's own surface steps aside. */
@@ -1290,9 +1299,17 @@
 
   async function recallDone(send: boolean): Promise<void> {
     const was = recall;
+    const again = reopen;
+    reopen = false;
     recall = null;
     await tick();
     const took = was?.text !== draft.text;
+    // Back to the draft and asked for again: it comes straight back up. A
+    // pick taken or sent stands; the ↑ was too late for it.
+    if (again && !took && !send) {
+      openRecall(was?.keys ?? true);
+      return;
+    }
     // Back to the field if you were typing in it, or to edit what you took;
     // a hold put away leaves the keyboard down.
     if (was?.keys || took) {
@@ -1327,6 +1344,7 @@
     void draft;
     untrack(() => {
       recall = null;
+      reopen = false;
       wheeling = false;
     });
   });
