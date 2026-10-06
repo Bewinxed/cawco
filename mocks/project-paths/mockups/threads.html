@@ -1,0 +1,294 @@
+<style>
+.mk-threads{display:block;min-width:0;container-type:inline-size;color:var(--ink);font-family:var(--f-body);font-size:12px;line-height:1.4;text-align:left}
+.mk-threads *,.mk-threads *::before,.mk-threads *::after{box-sizing:border-box}
+.mk-threads .mkf-body{gap:8px}
+.mk-threads .th-pg{min-width:0;overflow:hidden;text-overflow:ellipsis}
+
+/* layout: stacked on narrow (preview, then threads, then the line), two columns when there is room */
+.mk-threads .th-grid{display:flex;flex-direction:column;gap:10px;min-width:0}
+@container (min-width:460px){
+  .mk-threads .th-grid{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);grid-template-rows:1fr auto;align-items:start;gap:10px 12px}
+  .mk-threads .th-pv{grid-column:1;grid-row:1;align-self:stretch}
+  .mk-threads .th-panel{grid-column:2;grid-row:1 / span 2}
+  .mk-threads .th-note{grid-column:1;grid-row:2}
+}
+
+/* pins: coral = open, muted = resolved */
+.mk-threads .th-pin{flex:none;width:16px;height:16px;border-radius:50%;background:var(--coral);border:1px solid var(--coral);color:var(--raised);font-family:var(--f-mono);font-size:9.5px;font-weight:700;line-height:14px;text-align:center;box-shadow:0 0 0 1.5px var(--raised);font-variant-ligatures:none}
+.mk-threads .th-pin.th-abs{position:absolute;z-index:3}
+.mk-threads .th-pin.th-done{background:var(--recess);border-color:var(--line-strong);color:var(--muted)}
+.mk-threads .th-ck{position:absolute;right:-6px;bottom:-6px;width:11px;height:11px;overflow:visible}
+.mk-threads .th-ck circle{fill:var(--raised);stroke:var(--line-strong);stroke-width:1}
+.mk-threads .th-ck path{fill:none;stroke:var(--muted);stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round}
+.mk-threads.is-live .th-p2 .th-ck{opacity:0}
+
+/* the preview: a pricing page drawn with divs */
+.mk-threads .th-pv{display:flex;flex-direction:column;min-width:0}
+.mk-threads .th-wf{flex:1 1 auto;display:flex;flex-direction:column;gap:12px;min-width:0;padding:14px 9px 9px;background:var(--raised);border:1px solid var(--line-strong);border-radius:10px}
+.mk-threads .th-hd{position:relative;width:76%;margin:0 auto;display:flex;flex-direction:column;align-items:center;gap:4px}
+.mk-threads .th-hd i{display:block;height:5px;border-radius:2px;background:var(--ink)}
+.mk-threads .th-h1{width:100%}
+.mk-threads .th-h2{width:58%}
+.mk-threads .th-hs{width:84%;height:3px !important;margin-top:2px;background:var(--line-strong) !important}
+.mk-threads .th-hd .th-pin{top:-9px;right:-10px}
+.mk-threads .th-pls{display:flex;gap:6px;min-width:0}
+.mk-threads .th-pl{flex:1 1 0;min-width:0;display:flex;flex-direction:column;gap:4px;padding:6px;background:var(--bg);border:1px solid var(--line);border-radius:7px}
+.mk-threads .th-pl.th-hi{border-color:var(--ink)}
+.mk-threads .th-pt{display:flex;align-items:baseline;justify-content:space-between;gap:4px;min-width:0}
+.mk-threads .th-pt b{font-family:var(--f-mono);font-size:9.5px;font-weight:700;line-height:1.3;color:var(--muted)}
+.mk-threads .th-pt span{font-family:var(--f-mono);font-size:12px;font-weight:700;line-height:1.3;color:var(--ink)}
+.mk-threads .th-pf{display:block;height:2px;width:92%;border-radius:1px;background:var(--line-strong)}
+.mk-threads .th-pf.th-s{width:60%}
+.mk-threads .th-btn{position:relative;display:flex;align-items:center;justify-content:center;height:15px;margin-top:6px;border:1px solid var(--line-strong);border-radius:4px;background:transparent;outline:1.5px solid transparent;outline-offset:2px}
+.mk-threads .th-btn i{display:block;width:44%;height:2px;border-radius:1px;background:var(--muted)}
+.mk-threads .th-btn.th-fill{background:var(--ink);border-color:var(--ink)}
+.mk-threads .th-btn.th-fill i{background:var(--raised)}
+.mk-threads .th-btn .th-pin{top:-11px;right:-8px}
+.mk-threads .th-cur{position:absolute;left:30%;top:42%;z-index:4;width:13px;height:17px;overflow:visible;pointer-events:none;transform-origin:1px 1px}
+.mk-threads .th-cur path{fill:var(--ink);stroke:var(--raised);stroke-width:1.4;stroke-linejoin:round}
+
+.mk-threads .th-tgl{align-self:center;display:flex;width:52px;height:12px;padding:1px;border:1px solid var(--line);border-radius:6px;background:var(--recess)}
+.mk-threads .th-tgl i{display:block;flex:1 1 0;border-radius:5px}
+.mk-threads .th-tgl i:first-child{background:var(--raised);border:1px solid var(--line-strong)}
+.mk-threads .th-ft{display:flex;gap:10px;margin-top:auto;padding-top:9px;border-top:1px solid var(--line)}
+.mk-threads .th-ft div{flex:1 1 0;min-width:0;display:flex;flex-direction:column;gap:4px}
+.mk-threads .th-ft i{display:block;height:2px;width:70%;border-radius:1px;background:var(--line-strong)}
+.mk-threads .th-ft i+i{width:48%}
+
+/* thread list panel */
+.mk-threads .th-panel{display:flex;flex-direction:column;gap:8px;min-width:0;padding:10px;background:var(--raised);border:1px solid var(--line);border-radius:var(--r-card)}
+.mk-threads .th-t{display:flex;flex-direction:column;gap:6px;min-width:0}
+.mk-threads .th-r1{display:flex;align-items:center;gap:6px;min-height:18px}
+.mk-threads .th-av{flex:none;width:14px;height:14px;border-radius:50%;background:var(--coral-wash);border:1px solid var(--coral)}
+.mk-threads .th-r1 b{font-size:12px;font-weight:700;line-height:1.3}
+.mk-threads .th-tm{font-family:var(--f-mono);font-size:10.5px;line-height:1.3;color:var(--muted);font-variant-ligatures:none}
+.mk-threads .th-tn{margin-left:auto;width:15px;height:15px;font-size:9px;line-height:13px}
+.mk-threads .th-tx{font-size:12.5px;line-height:1.4;font-weight:500}
+.mk-threads .th-anc{display:flex;flex-wrap:wrap;column-gap:.6em;font-family:var(--f-mono);font-size:10px;line-height:1.4;color:var(--muted);font-variant-ligatures:none}
+.mk-threads .th-anc span{white-space:nowrap}
+.mk-threads .th-cr{display:flex;flex-wrap:wrap;align-items:center;gap:4px}
+.mk-threads .th-cr .mkchip,.mk-threads .th-tf .mkchip{font-size:10.5px;line-height:17px;padding:0 6px}
+
+/* the writer's reply */
+.mk-threads .th-rp{display:flex;flex-direction:column;gap:6px;min-width:0;margin-left:6px;padding-left:9px;border-left:2px solid var(--line)}
+.mk-threads .th-who{display:flex;align-items:center;gap:6px;min-height:16px;font-family:var(--f-mono);font-size:10.5px;line-height:16px;color:var(--muted);font-variant-ligatures:none}
+.mk-threads .th-who b{font-weight:600;color:var(--ink)}
+.mk-threads .th-who .mkdot{width:6px;height:6px}
+.mk-threads .th-wdot{display:none}
+.mk-threads .th-rt{display:grid;min-width:0}
+.mk-threads .th-ra,.mk-threads .th-rb{grid-area:1/1;min-width:0;font-size:12px;line-height:1.4}
+.mk-threads .th-ra code{font-size:10.5px;color:var(--ink)}
+.mk-threads .th-rb{display:none;color:var(--muted)}
+.mk-threads .th-rb code{font-size:10.5px}
+.mk-threads.is-live .th-rb{display:block}
+
+/* before / after thumbnails */
+.mk-threads .th-ths{display:flex;gap:8px;min-width:0}
+.mk-threads .th-th{flex:1 1 0;max-width:92px;min-width:0;margin:0;display:flex;flex-direction:column;gap:3px}
+.mk-threads .th-th figcaption{padding-left:1px;font-size:10px;line-height:1.3;color:var(--muted)}
+.mk-threads .th-mini{display:flex;flex-direction:column;gap:3px;height:36px;padding:4px;background:var(--bg);border:1px solid var(--line);border-radius:4px}
+.mk-threads .th-mh{display:block;flex:none;width:56%;height:2px;margin:0 auto;border-radius:1px;background:var(--ink)}
+.mk-threads .th-mr{display:flex;gap:3px;flex:1;min-height:0}
+.mk-threads .th-mc{flex:1 1 0;min-width:0;display:flex;align-items:flex-end;padding:2px;background:var(--raised);border:1px solid var(--line);border-radius:2px}
+.mk-threads .th-mb{display:block;width:100%;height:4px;border-radius:1px;background:var(--ink);border:1px solid var(--ink)}
+.mk-threads .th-mb.th-o{background:transparent;border-color:var(--muted)}
+
+/* footer of the thread, and the collapsed one */
+.mk-threads .th-tf{display:flex;align-items:center;justify-content:space-between;gap:8px;padding-top:7px;border-top:1px solid var(--line)}
+.mk-threads .th-reopen{appearance:none;margin:0;padding:0 2px;font:inherit;font-size:11px;line-height:17px;color:var(--muted);background:none;border:0;cursor:default;pointer-events:none}
+.mk-threads .th-t1{padding-top:8px;border-top:1px solid var(--line);font-size:11.5px;line-height:1.4;color:var(--muted)}
+.mk-threads .th-t1 span{font-family:var(--f-mono);font-size:10.5px}
+.mk-threads .th-note{margin:0;font-size:11px;line-height:1.4;color:var(--muted);text-wrap:pretty}
+
+/* motion, 9s loop: cursor travels to C's button and clicks, pin 2 pulses, "Sent to writer" pulses,
+   the writer works (dot + "working" cross-fade), A and C morph to outlined while "after" flashes,
+   "Resolved" pops and pin 2 eases to muted, then reset. At rest everything shows the finished state. */
+@keyframes mk-th-cur{
+  0%,6%{transform:translate(-92px,-62px) scale(1);opacity:1;animation-timing-function:cubic-bezier(.5,0,.2,1)}
+  28%{transform:translate(0,0) scale(1);opacity:1;animation-timing-function:ease-in-out}
+  30%{transform:translate(0,0) scale(.86);opacity:1}
+  33%,88%{transform:translate(0,0) scale(1);opacity:1}
+  93%{transform:translate(0,0) scale(1);opacity:0}
+  93.1%{transform:translate(-92px,-62px) scale(1);opacity:0}
+  100%{transform:translate(-92px,-62px) scale(1);opacity:1}
+}
+@keyframes mk-th-sel{
+  0%,27%{outline-color:transparent}
+  30%,88%{outline-color:var(--coral)}
+  95%,100%{outline-color:transparent}
+}
+@keyframes mk-th-pop{
+  0%,29%{transform:scale(1)}
+  31%{transform:scale(.82)}
+  36%{transform:scale(1.2)}
+  42%,100%{transform:scale(1)}
+}
+@keyframes mk-th-ping{
+  0%,30%{transform:scale(1);opacity:0}
+  31%{transform:scale(1);opacity:.8}
+  44%{transform:scale(2.4);opacity:0}
+  100%{transform:scale(2.4);opacity:0}
+}
+@keyframes mk-th-res{
+  0%,80%{background-color:var(--coral);border-color:var(--coral);color:var(--raised)}
+  88%,94%{background-color:var(--recess);border-color:var(--line-strong);color:var(--muted)}
+  99%,100%{background-color:var(--coral);border-color:var(--coral);color:var(--raised)}
+}
+@keyframes mk-th-ck{
+  0%,82%{opacity:0}
+  89%,94%{opacity:1}
+  99%,100%{opacity:0}
+}
+@keyframes mk-th-sent{
+  0%,36%{opacity:.45;transform:scale(1)}
+  40%{opacity:1;transform:scale(1.1)}
+  46%,94%{opacity:1;transform:scale(1)}
+  99%,100%{opacity:.45;transform:scale(1)}
+}
+@keyframes mk-th-who{
+  0%,45%{opacity:.45}
+  49%,94%{opacity:1}
+  99%,100%{opacity:.45}
+}
+@keyframes mk-th-wdot{
+  0%,47%{opacity:0}
+  50%,58%{opacity:1}
+  62%,100%{opacity:0}
+}
+@keyframes mk-th-ra{
+  0%,45%{opacity:.45;transform:none}
+  49%,58%{opacity:0;transform:translateY(-3px)}
+  63%,94%{opacity:1;transform:none}
+  99%,100%{opacity:.45;transform:none}
+}
+@keyframes mk-th-rb{
+  0%,47%{opacity:0;transform:translateY(3px)}
+  51%,58%{opacity:1;transform:none}
+  62%,100%{opacity:0;transform:translateY(-3px)}
+}
+@keyframes mk-th-ths{
+  0%,60%{opacity:.45}
+  66%,94%{opacity:1}
+  99%,100%{opacity:.45}
+}
+@keyframes mk-th-btn{
+  0%,62%{background-color:var(--ink);border-color:var(--ink)}
+  74%,92%{background-color:transparent;border-color:var(--line-strong)}
+  98%,100%{background-color:var(--ink);border-color:var(--ink)}
+}
+@keyframes mk-th-lbl{
+  0%,62%{background-color:var(--raised)}
+  74%,92%{background-color:var(--muted)}
+  98%,100%{background-color:var(--raised)}
+}
+@keyframes mk-th-flash{
+  0%,62%{background-color:var(--bg);border-color:var(--line)}
+  67%,71%{background-color:var(--coral-wash);border-color:var(--coral)}
+  80%,100%{background-color:var(--bg);border-color:var(--line)}
+}
+@keyframes mk-th-tf{
+  0%,74%{opacity:.45}
+  79%,94%{opacity:1}
+  99%,100%{opacity:.45}
+}
+@keyframes mk-th-res-chip{
+  0%,76%{transform:scale(1)}
+  79.5%{transform:scale(1.14)}
+  85%,100%{transform:scale(1)}
+}
+@keyframes mk-th-live{0%,100%{box-shadow:0 0 0 0 var(--ok-wash)}50%{box-shadow:0 0 0 3px var(--ok-wash)}}
+
+.mk-threads.is-live .th-cur{animation:mk-th-cur 9s linear infinite}
+.mk-threads.is-live .th-btn.th-bc{animation:mk-th-sel 9s ease-in-out infinite}
+.mk-threads.is-live .th-pin.th-p2{animation:mk-th-res 9s ease-in-out infinite}
+.mk-threads.is-live .th-pin.th-abs.th-p2{animation:mk-th-pop 9s ease-in-out infinite,mk-th-res 9s ease-in-out infinite}
+.mk-threads.is-live .th-pin.th-abs.th-p2::after{content:"";position:absolute;inset:-1px;border-radius:50%;border:1.5px solid var(--coral);opacity:0;pointer-events:none;animation:mk-th-ping 9s ease-out infinite}
+.mk-threads.is-live .th-p2 .th-ck{animation:mk-th-ck 9s ease-in-out infinite}
+.mk-threads.is-live .th-sent{animation:mk-th-sent 9s ease-in-out infinite}
+.mk-threads.is-live .th-who{animation:mk-th-who 9s ease-in-out infinite}
+.mk-threads.is-live .th-wdot{display:inline-block;opacity:0;animation:mk-th-wdot 9s ease-in-out infinite,mk-th-live 2.4s ease-in-out infinite}
+.mk-threads.is-live .th-ra{animation:mk-th-ra 9s ease-in-out infinite}
+.mk-threads.is-live .th-rb{animation:mk-th-rb 9s ease-in-out infinite}
+.mk-threads.is-live .th-ths{animation:mk-th-ths 9s ease-in-out infinite}
+.mk-threads.is-live .th-btn.th-sec{animation:mk-th-btn 9s ease-in-out infinite}
+.mk-threads.is-live .th-btn.th-sec i{animation:mk-th-lbl 9s ease-in-out infinite}
+.mk-threads.is-live .th-after .th-mini{animation:mk-th-flash 9s ease-in-out infinite}
+.mk-threads.is-live .th-tf{animation:mk-th-tf 9s ease-in-out infinite}
+.mk-threads.is-live .th-res{animation:mk-th-res-chip 9s ease-in-out infinite}
+
+@media (prefers-reduced-motion:reduce){
+  .mk-threads.is-live .th-p2 .th-ck{opacity:1}
+  .mk-threads *,.mk-threads *::before,.mk-threads *::after{animation:none !important;transition:none !important}
+  .mk-threads.is-live .th-rb,.mk-threads.is-live .th-wdot,.mk-threads.is-live .th-pin.th-abs.th-p2::after{display:none !important}
+}
+</style>
+<div class="mk mk-threads" role="img" aria-label="Comment threads work in a CawCo preview like comments on a Claude artifact: you click a button, a numbered pin drops, you send the comment to the writer session, and it changes the code, replies in the thread with what changed, and resolves it in place.">
+  <div class="mkf">
+    <div class="mkf-bar"><b>site</b><span class="th-pg">preview · /pricing</span><span class="sp"></span><span class="mkchip">2 threads</span></div>
+    <div class="mkf-body">
+      <div class="th-grid">
+
+        <div class="th-pv" aria-hidden="true">
+          <div class="th-wf">
+            <div class="th-hd">
+              <i class="th-h1"></i><i class="th-h2"></i><i class="th-hs"></i>
+              <span class="th-pin th-abs th-done">1<svg class="th-ck" viewBox="0 0 11 11" aria-hidden="true"><circle cx="5.5" cy="5.5" r="5"/><path d="M3 5.7 4.8 7.4 8 3.9"/></svg></span>
+            </div>
+            <div class="th-tgl"><i></i><i></i></div>
+            <div class="th-pls">
+              <div class="th-pl">
+                <div class="th-pt"><b>A</b><span>$9</span></div>
+                <i class="th-pf"></i><i class="th-pf th-s"></i><i class="th-pf"></i>
+                <div class="th-btn th-sec"><i></i></div>
+              </div>
+              <div class="th-pl th-hi">
+                <div class="th-pt"><b>B</b><span>$24</span></div>
+                <i class="th-pf"></i><i class="th-pf th-s"></i><i class="th-pf"></i>
+                <div class="th-btn th-fill"><i></i></div>
+              </div>
+              <div class="th-pl">
+                <div class="th-pt"><b>C</b><span>$79</span></div>
+                <i class="th-pf"></i><i class="th-pf th-s"></i><i class="th-pf"></i>
+                <div class="th-btn th-sec th-bc"><i></i>
+                  <span class="th-pin th-abs th-p2 th-done">2<svg class="th-ck" viewBox="0 0 11 11" aria-hidden="true"><circle cx="5.5" cy="5.5" r="5"/><path d="M3 5.7 4.8 7.4 8 3.9"/></svg></span>
+                  <svg class="th-cur" viewBox="0 0 14 18" aria-hidden="true"><path d="M1.5 1.2V14L4.8 11.1 7.1 16.6 9.5 15.6 7.2 10.2H11.8Z"/></svg>
+                </div>
+              </div>
+            </div>
+            <div class="th-ft"><div><i></i><i></i></div><div><i></i><i></i></div><div><i></i><i></i></div></div>
+          </div>
+        </div>
+
+        <div class="th-panel" aria-hidden="true">
+          <div class="th-t th-t2">
+            <div class="th-r1"><i class="th-av"></i><b>You</b><span class="th-tm">14:02</span><span class="th-pin th-tn th-p2 th-done">2</span></div>
+            <div class="th-tx">Make B the only primary button</div>
+            <div class="th-anc"><span>Pricing.svelte:42 ·</span><span>button.plan-cta</span></div>
+            <div class="th-cr"><span class="mkchip you th-sent">Sent to writer</span></div>
+            <div class="th-rp">
+              <div class="th-who"><b>writer</b><span class="th-tm">14:03</span><i class="mkdot live th-wdot"></i></div>
+              <div class="th-rt">
+                <div class="th-ra">Changed <code>Pricing.svelte:42</code> and <code>:58</code>. A and C now use the secondary button.</div>
+                <div class="th-rb">Working on <code>Pricing.svelte</code></div>
+              </div>
+              <div class="th-ths">
+                <figure class="th-th th-before">
+                  <div class="th-mini"><i class="th-mh"></i><div class="th-mr"><div class="th-mc"><i class="th-mb"></i></div><div class="th-mc"><i class="th-mb"></i></div><div class="th-mc"><i class="th-mb"></i></div></div></div>
+                  <figcaption>before</figcaption>
+                </figure>
+                <figure class="th-th th-after">
+                  <div class="th-mini"><i class="th-mh"></i><div class="th-mr"><div class="th-mc"><i class="th-mb th-o"></i></div><div class="th-mc"><i class="th-mb"></i></div><div class="th-mc"><i class="th-mb th-o"></i></div></div></div>
+                  <figcaption>after</figcaption>
+                </figure>
+              </div>
+            </div>
+            <div class="th-tf"><span class="mkchip ok th-res">Resolved</span><button class="th-reopen" type="button" tabindex="-1" aria-hidden="true">Reopen</button></div>
+          </div>
+          <div class="th-t1"><span>1</span> · Heading too long · resolved</div>
+        </div>
+
+        <p class="th-note">Threads stay on the page. The session replies, changes the code, and resolves; you can reopen.</p>
+      </div>
+    </div>
+  </div>
+</div>

@@ -554,7 +554,7 @@ th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute
   <a href="#time">Time <span class="n">D9–11</span></a>
   <a href="#face">Words, Caw <span class="n">D12–13</span></a>
   <a href="#procedures">Skills <span class="n">D14–15</span></a>
-  <a href="#kinds">Stages, design <span class="n">D17–19</span></a>
+  <a href="#kinds">Stages, design <span class="n">D17–20</span></a>
   <a href="#order">Roadmap</a>
   <a href="#sources">Sources</a>
   <div class="meter">
@@ -568,7 +568,7 @@ th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute
   <div class="caw"><img class="caw-l" src="caw/light-ready.webp" alt="Caw" width="104" height="104"><img class="caw-d" src="caw/dark-ready.webp" alt="" width="104" height="104"></div>
   <div>
     <h1>Projects, rethought</h1>
-    <p>Nineteen decisions. Each one shows how it would look and how it works. Pick a path per card; I read your picks back from this page.</p>
+    <p>Twenty decisions. Each one shows how it would look and how it works. Pick a path per card; I read your picks back from this page.</p>
     <div class="row">
       <span class="pill" id="savestate"><span class="dot"></span><span id="savetext">Connecting…</span></span>
       <button class="btn" id="copypicks" type="button">Copy my picks</button>
@@ -869,6 +869,35 @@ The tray chip overflows at 320px wide…</pre>
         <figure class="pane mech" style="margin:0"><span class="cap">What the app needs first</span><div class="dg" role="img" aria-label="iOS push: the hub sends a content-free push through Apple, the phone wakes the app, and the app fetches the details from the hub over the tailnet."><div class="node code"><span class="k">code</span><span class="t">Hub</span><span class="s">something needs you</span></div><div class="edge"><i class="ln"></i><span class="lb">content-free payload</span><i class="ln"></i><i class="ar"></i></div><div class="node ext"><span class="k">outside</span><span class="t">Apple push service</span><span class="s">"site needs you", nothing else</span></div><div class="edge"><i class="ln"></i><i class="ar"></i></div><div class="node you"><span class="k">you</span><span class="t">Your phone</span><span class="s">CawCo app</span></div><div class="edge"><i class="ln"></i><span class="lb">fetches details over the tailnet</span><i class="ln"></i><i class="ar"></i></div><div class="node code"><span class="k">code</span><span class="t">Hub</span><span class="s">the ask, the diff, the draft</span></div></div></figure>
         <div class="tog" style="align-self:start"><b style="font-size:13px;font-weight:500">Found in apps/apple</b><span class="fine">Home, sessions, delegate tray, new project and the assistant panel are there. Push notifications are not: no <code>UNUserNotification</code> or APNs anywhere. Telegram is what reaches you today when the app is closed.</span><span class="fine">So, in order: push from the hub (content-free, an Apple push key on the hub), then Caw's project threads, then approvals in the app. Telegram topics wait in pending.</span></div>
       </div>
+    </article>
+    <article class="ans">
+      <header><span class="did">D5</span><h3>Jev is the gate for the fleet watch</h3></header>
+      <p class="q">Jev is helpful here?</p>
+      <p class="a">Yes, it's the best use of Jev on this page. On a fresh slice of each transcript it asks three yes/no questions: stuck on the same error? looping? off-task? Each takes about half a second, so it can run often. Only a yes wakes Caw's triage, so Caw's turns go to real cases. With Jev off, a second code signal wakes triage (the same error three times, no file changed in N turns, a repeating tool call), and Caw decides with its own model. A session never judges itself.</p>
+    </article>
+    <article class="ans">
+      <header><span class="did">D14</span><h3>Write the skills with writing-for-agents</h3></header>
+      <p class="q">Use mattpocock's /writing-for-agents to write these.</p>
+      <p class="a">Agreed. It's his skill for exactly this: "Writing documents for agents: skills, AGENTS.md/CLAUDE.md, and any doc an agent reaches by a pointer." Its rules match ours:</p>
+      <ul class="a" style="margin:0;padding-left:18px">
+        <li>The description decides when a skill fires, so the trigger words go first.</li>
+        <li>Inline what every branch needs; put the rest behind pointers.</li>
+        <li>Each step gets a completion criterion you can check.</li>
+        <li>One source of truth, the target action stated instead of a ban, and no sentences that change nothing.</li>
+      </ul>
+      <p class="a">It writes grill, to-tasks and triage, the design skills (screen, restyle, drift), and the starter skills each template ships with. It's pinned like the others (D15).</p>
+    </article>
+    <article class="ans">
+      <header><span class="did">D17</span><h3>"Ask Caw for a view"</h3></header>
+      <p class="q">Optional: let agents build a view. "Let Caw create a custom view for you", using BYOA.</p>
+      <p class="a">Yes, as an optional button beside the view picker. Caw runs on your own agent, the harness and model the project already uses, so there's no extra provider.</p>
+      <ul class="a" style="margin:0;padding-left:18px">
+        <li><b>What it writes:</b> <code>views/&lt;name&gt;.json</code>, an A2UI view over CawCo's catalog, bound to data the hub computes (tasks by stage, fields, dates).</li>
+        <li><b>When it's kept:</b> it shows you a live preview and saves only when you approve.</li>
+        <li><b>What a view can't do:</b> run code or reach the network.</li>
+        <li><b>A missing component:</b> Caw says so instead of inventing one.</li>
+      </ul>
+      <p class="a">The built-in views (board, table, calendar, pipeline) stay the default.</p>
     </article>
   </div>
 </section>
@@ -1237,6 +1266,22 @@ Never post; drafts go to Needs you.
       <button class="opt" type="button" role="radio" data-opt="pollrelay"><b>Poll + optional relay</b><span>Marketing webhooks too.</span><span class="tag">Recommended</span></button>
     </div>
     <div class="foot">
+      <details class="more"><summary>Setting it up</summary><div class="in">
+        <p><b>Mostly a script, with Caw for the parts that need you.</b> Turning the relay on is one action, from Caw, from Settings, or with <code>cawco relay on</code>.</p>
+        <div class="prim"><table>
+          <thead><tr><th>Step</th><th>Who</th><th>How</th></tr></thead>
+          <tbody>
+            <tr><td>Pick the host</td><td><span class="who code">code</span></td><td>The machine that is online most; you can change it.</td></tr>
+            <tr><td>Allow Funnel on the tailnet</td><td><span class="who you">you, once</span></td><td>If the tailnet doesn't allow it yet, Tailscale prints a link to approve it, and Caw shows you that link. Cloudflare Tunnel is the alternative.</td></tr>
+            <tr><td>Open one path</td><td><span class="who code">code</span></td><td>After an approval card, the daemon runs <code>tailscale funnel --bg</code> for <code>/hooks/</code> only, pointing at the receiver.</td></tr>
+            <tr><td>Create the hook</td><td><span class="who code">code</span></td><td>An id and a secret, kept in the hub.</td></tr>
+            <tr><td>Register it at the source</td><td><span class="who code">code</span> <span class="who llm">Caw</span></td><td>Through the source's API where it has one (GitHub, Stripe). Otherwise Caw walks you through pasting the URL and secret, with copy buttons.</td></tr>
+            <tr><td>Prove it works</td><td><span class="who code">code</span></td><td>A test delivery (GitHub sends a ping). The connection then shows "last event 2 min ago".</td></tr>
+            <tr><td>Route it</td><td><span class="who llm">Caw</span></td><td>Proposes a matcher and a routine, as a file diff you approve.</td></tr>
+          </tbody></table></div>
+        <p><b>It lasts.</b> The hub stores the wanted state: which host, which hooks. Each daemon checks it on start and puts the Funnel path back if it's missing, the way fleet MCP servers are kept in sync. If the host goes offline, events fall back to polling and the connection says so.</p>
+        <p><b>People hear about it when they need it.</b> Caw's brief carries one line: "Inbound: polling GitHub every 60 s; relay off; ask me to turn it on for instant events or for services that only push." When you connect a service that only pushes (a form tool, Stripe), Caw offers the relay right then. Settings › Connections shows "Relay off · Set up". Turning it on is an admin action, so it's only in the lead's toolset and always asks you first.</p>
+      </div></details>
       <label class="note">Note <input id="note-ingress" data-note="ingress" type="text" placeholder="Anything to add"></label>
     </div>
   </article>
@@ -1518,7 +1563,7 @@ views
 <span class="c">site (design)</span>
   brief → explore → review
   → picked → build → shipped</pre>
-        <p>Views are settings, built from libraries rather than by hand: board with Pragmatic drag and drop and canvas with Svelte Flow (both already in the dashboard), table with TanStack Table, calendar with Event Calendar (MIT, Svelte 5), pipeline with a chart library. A view none of these covers is the escape hatch: an A2UI view over CawCo's catalog.</p>
+        <p>Views are settings, built from libraries rather than by hand: board with Pragmatic drag and drop and canvas with Svelte Flow (both already in the dashboard), table with TanStack Table, calendar with Event Calendar (MIT, Svelte 5), pipeline with a chart library. A view none of these covers is the escape hatch: "Ask Caw for a view" writes an A2UI view over CawCo's catalog, kept only when you approve it.</p>
       </div></details>
       <label class="note">Note <input id="note-stages" data-note="stages" type="text" placeholder="Anything to add"></label>
     </div>
@@ -1670,6 +1715,54 @@ read_choices("hero options")
       <label class="note">Note <input id="note-choices" data-note="choices" type="text" placeholder="Anything to add"></label>
     </div>
   </article>
+  <article class="dec" id="d20">
+    <header><span class="did">D20</span><h3>Comment threads on previews</h3><span class="state" data-for="threads">Not picked</span></header>
+    <p class="why">Comments on this page work well: pin a thread on any element, send it to Claude, and the answer or the change lands in the thread. A preview should work the same way, with the session that made the page in Claude's place.</p>
+    <div class="show">
+      <figure class="pane look"><span class="cap">How it would look</span>{{MK:threads}}</figure>
+      <figure class="pane mech"><span class="cap">A thread, end to end</span>
+<pre class="v"><span class="k">a thread</span>
+  anchor  file:line, selector,
+          a quote, a crop
+  page    preview, revision, size
+  kept    in the hub, per canvas;
+          survives reloads and the
+          session ending
+
+<span class="k">states</span>
+  note → sent → working
+       → answered → resolved
+  you can reopen any of them
+
+<span class="k">the session gets one turn per send</span>
+  [t_12] Pricing.svelte:42
+  "Make B the only primary button"
+  thread_read · thread_reply
+  thread_resolve
+
+<span class="k">it answers in the thread</span>
+  changed  files, before/after
+  asked    a question; stays open
+  gone     a new attempt in the
+           same workspace (D3)</pre>
+      </figure>
+    </div>
+    <div class="opts" role="radiogroup" data-group="threads" data-label="D20 Comment threads on previews">
+      <button class="opt" type="button" role="radio" data-opt="chips"><b>As today</b><span>Selections go as one message; nothing stays on the page.</span></button>
+      <button class="opt" type="button" role="radio" data-opt="threads"><b>Threads like artifact comments</b><span>Pinned, sent when you say, answered and resolved in place.</span><span class="tag">Recommended</span></button>
+      <button class="opt" type="button" role="radio" data-opt="auto"><b>Threads, sent automatically</b><span>Every comment wakes the session at once.</span><span class="tag warn">Noisy</span></button>
+    </div>
+    <div class="foot">
+      <details class="more"><summary>Details</summary><div class="in">
+        <p><b>Taken from this page's comments.</b> A thread records where it sits: the element's path, the nearest heading and a quote of the element. Writing a comment doesn't send it; you send it when you choose, one thread or several in one turn. The reply says who wrote it. The session resolves a thread after changing something, leaves it open when it asked you something, and you can reopen any thread. Comment text reaches the session as data, never as instructions, and only people who can edit the project can send.</p>
+        <p><b>Re-anchoring.</b> After an edit, a pin finds its element by file:line first (the picker already records it), then by selector, then by text. A pin that can't be placed goes to a "moved" tray instead of vanishing.</p>
+        <p><b>Polish.</b> Numbered pins, and hovering one outlines its element. A thread list beside the preview, filtered open or resolved. A live dot while the session works. Every change reply carries before/after thumbnails, which the picker's capture already makes, and the lines it changed. Keys: C to comment, Esc to cancel, J and K for next and previous thread. On the phone, press and hold to comment. Motion uses DESIGN.md's existing durations and curves.</p>
+        <p><b>One store.</b> Threads, pins (D18) and picks and dials (D19) live together per canvas. The ledger's event names follow AG-UI's activity events.</p>
+      </div></details>
+      <label class="note">Note <input id="note-threads" data-note="threads" type="text" placeholder="Anything to add"></label>
+    </div>
+  </article>
+
 
 </section>
 

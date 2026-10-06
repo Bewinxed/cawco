@@ -79,3 +79,4 @@ does with an IntersectionObserver.
 | stages | Project stages on fixed kinds: board, calendar and pipeline views |
 | canvas | Design canvas: variants from any tool, a pin to the session, a pick |
 | bridge | Choices and dials inside a preview, kept in the hub and read by the session |
+| threads | Comment threads on a preview: pin, send, the session changes code and resolves |
