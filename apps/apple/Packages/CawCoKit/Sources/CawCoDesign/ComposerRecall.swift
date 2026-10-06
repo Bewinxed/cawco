@@ -453,7 +453,7 @@ final class RecallRow: UIView {
     private let content = UIView()
     private let words = UILabel()
     private let time = UILabel()
-    private let tag = TagLabel()
+    private let queuedTag = TagLabel()
     private let soft = UIImageView()
     private let text: String
     private let marks: Set<[UInt16]>
@@ -482,9 +482,9 @@ final class RecallRow: UIView {
         }
         words.lineBreakMode = .byTruncatingTail
         if queued, self.showsMeta {
-            tag.attributedText = NSAttributedString(string: "Queued", attributes: Self.metaRole.attributes(color: Palette.statusAttnInk))
-            tag.backgroundColor = Palette.statusAttnBg
-            content.addSubview(tag)
+            queuedTag.attributedText = NSAttributedString(string: "Queued", attributes: Self.metaRole.attributes(color: Palette.statusAttnInk))
+            queuedTag.backgroundColor = Palette.statusAttnBg
+            content.addSubview(queuedTag)
         }
         isAccessibilityElement = true
         accessibilityTraits = .button
@@ -616,10 +616,10 @@ final class RecallRow: UIView {
             let timeWidth = ceil(time.sizeThatFits(CGSize(width: bounds.width, height: line)).width)
             end -= timeWidth
             time.frame = CGRect(x: end, y: top, width: timeWidth, height: line)
-            if tag.superview != nil {
-                let size = tag.intrinsicContentSize
+            if queuedTag.superview != nil {
+                let size = queuedTag.intrinsicContentSize
                 end -= size.width
-                tag.frame = CGRect(x: end, y: top + (line - size.height) / 2, width: size.width, height: size.height)
+                queuedTag.frame = CGRect(x: end, y: top + (line - size.height) / 2, width: size.width, height: size.height)
             }
             end -= Space.space3
         }

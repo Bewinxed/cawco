@@ -85,7 +85,6 @@ public struct HubAPI: Sendable {
         public func sync(_ input: Operations.PostApiFleetSync.Input) async throws -> Operations.PostApiFleetSync.Output { try await client.postApiFleetSync(input) }
         public func putMCP(_ input: Operations.PutApiFleetMcpByName.Input) async throws -> Operations.PutApiFleetMcpByName.Output { try await client.putApiFleetMcpByName(input) }
         public func deleteMCP(_ input: Operations.DeleteApiFleetMcpByName.Input) async throws -> Operations.DeleteApiFleetMcpByName.Output { try await client.deleteApiFleetMcpByName(input) }
-        public func signInMachines(_ input: Operations.GetApiFleetMcpByNameSignInMachines.Input) async throws -> Operations.GetApiFleetMcpByNameSignInMachines.Output { try await client.getApiFleetMcpByNameSignInMachines(input) }
         public func signInMCP(_ input: Operations.PostApiFleetMcpByNameSignIn.Input) async throws -> Operations.PostApiFleetMcpByNameSignIn.Output { try await client.postApiFleetMcpByNameSignIn(input) }
         public func completeOAuth(_ input: Operations.PostApiFleetMcpOauthComplete.Input) async throws -> Operations.PostApiFleetMcpOauthComplete.Output { try await client.postApiFleetMcpOauthComplete(input) }
         public func putMarketplace(_ input: Operations.PutApiFleetMarketplacesByName.Input) async throws -> Operations.PutApiFleetMarketplacesByName.Output { try await client.putApiFleetMarketplacesByName(input) }
