@@ -174,6 +174,12 @@ def ship(app):
             archived_number = plistlib.loads((archive / "Info.plist").read_bytes())["ApplicationProperties"]["CFBundleVersion"]
             if archived_number != number:
                 raise RuntimeError(f"Archive build number {archived_number} does not match requested {number}")
+            # Each build's dSYMs outlive the archive the next upload replaces:
+            # scripts/apple-diagnostics.sh symbolicates a phone's hang with them.
+            kept = HOME / "build/cawco-dsyms" / number
+            if kept.exists():
+                shutil.rmtree(kept)
+            shutil.copytree(archive / "dSYMs", kept)
         if sys.argv[1:] == ["--archive"]:
             return
         options = ROOT / "ExportOptions.plist"

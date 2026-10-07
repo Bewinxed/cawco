@@ -25,6 +25,8 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         // Pushes: the delegate is set before launch ends, so a tap that
         // launched the app and a lock-screen Approve both reach it.
         UNUserNotificationCenter.current().delegate = self
+        // Hangs, crashes and CPU exceptions MetricKit reports, to the hub.
+        DiagnosticsReporter.shared.start()
         #if DEBUG
         PushRegistry.shared.launch(environment: .sandbox)
         #else

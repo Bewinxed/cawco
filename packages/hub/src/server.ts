@@ -154,6 +154,7 @@ import { Elysia, t, ValidationError } from "elysia";
 import { websocket } from "elysia/websocket";
 import { createAdminAsks } from "./admin-asks";
 import { isAdminWrite } from "./admin-tools";
+import { appleDiagnosticsRoutes } from "./apple-diagnostics";
 import { createBinaryUpdates } from "./binary-updates";
 import { type Caw, cawRoutes, createCaw, withCawDenials } from "./caw";
 import { DB_PATH, HUB_VERSION, SPAWN_START_TIMEOUT_MS } from "./config";
@@ -8236,6 +8237,7 @@ export const createServer = (
         })
       )
       .use(pushRoutes(db, push))
+      .use(appleDiagnosticsRoutes())
       .use(projectOfferRoutes(projectOffers, YOU_ACTOR))
       .use(planRoutes(plans))
       .use(dispatchRoutes(dispatcher))
