@@ -92,12 +92,17 @@ enum RailModel {
     static func lists(hub: HubConnection, home: HomeModel, prefs: RailPrefs) -> [RailProjectList] {
         let fleet = hub.fleet
         let ordered = projects(fleet, prefs: prefs)
-        /// The session a row's work belongs to: itself, or for a delegate the
-        /// session at the top of the chain that started it.
-        func owner(_ row: InstanceRow) -> InstanceRow {
+        // What is running now, and what rests but can be picked up again.
+        let running = fleet.rows.filter(\.isLive) + fleet.runRows.filter { $0.status == .running }
+        let resting = fleet.rows.filter { $0.isListed && ($0.isResumable || $0.isStale || $0.isFailed) } + fleet.runRows.filter(\.isFailed)
+        /// The session a row's work belongs to (tree.ts `topsIn`): itself, or
+        /// for a delegate the session at the top of its chain of parents,
+        /// walked through the rows the rail lists.
+        let known = Dictionary((running + resting).map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        func top(_ row: InstanceRow) -> InstanceRow {
             var seen: Set<String> = [row.id]
             var at = row
-            while let up = at.parentInstanceId.flatMap({ fleet.byId[$0] }), !seen.contains(up.id) {
+            while let up = at.parentInstanceId.flatMap({ known[$0] }), !seen.contains(up.id) {
                 seen.insert(up.id)
                 at = up
             }
@@ -108,13 +113,10 @@ enum RailModel {
         /// delegate stands in its parent's projects, whatever machine and path
         /// it runs on itself.
         func projectsOf(_ delegate: InstanceRow) -> [String] {
-            let row = owner(delegate)
+            let row = top(delegate)
             return ProjectPlaces.projectsFor(fleet.projects, machineId: row.machineId, cwd: row.cwd, projectId: row.projectId).map(\.id)
         }
 
-        // What is running now, and what rests but can be picked up again.
-        let running = fleet.rows.filter(\.isLive) + fleet.runRows.filter { $0.status == .running }
-        let resting = fleet.rows.filter { $0.isListed && ($0.isResumable || $0.isStale || $0.isFailed) } + fleet.runRows.filter(\.isFailed)
         var live: [String: [InstanceRow]] = [:]
         var rest: [String: [InstanceRow]] = [:]
         var liveIds = Set<String>()
@@ -141,7 +143,9 @@ enum RailModel {
                 branches(older, hub: hub, home: home, prefs: prefs),
                 hub: hub
             )
-            return RailProjectList(project: project, running: liveRows.count, recent: shown, older: folded)
+            // Sidebar.svelte `runningIn`: the sessions running in it that are their own top. A delegate
+            // counts on its parent's mark; counted here too, a session and the ten it started read as eleven.
+            return RailProjectList(project: project, running: liveRows.filter { top($0).id == $0.id }.count, recent: shown, older: folded)
         }
     }
 

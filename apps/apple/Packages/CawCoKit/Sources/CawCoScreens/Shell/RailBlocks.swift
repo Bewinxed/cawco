@@ -68,7 +68,8 @@ final class ProjectBlock: UIStackView, UIContextMenuInteractionDelegate {
         name.text = text
         mark.configure(count: running)
         row.accessibilityLabel = text
-        row.accessibilityValue = running > 0 ? "\(running) running session\(running == 1 ? "" : "s")" : nil
+        // Sidebar.svelte: the name, then ", N running" while anything runs in it.
+        row.accessibilityValue = running > 0 ? "\(running) running" : nil
         row.accessibilityTraits = [.button]
         row.accessibilityHint = open ? "Folds its sessions" : "Opens its sessions"
     }
