@@ -533,20 +533,39 @@
    * or its surroundings, and the groups are not inside the bar. A column
    * whose reading has not changed is not written at all.
    */
+  /**
+   * An element's left edge in the page's layout: its offsets summed up its
+   * offset parents, each parent's border included. Transforms are not in it,
+   * so a surface sliding in (a route's page-in) is placed where it lands, not
+   * where the slide has it in the frame the column happens to be measured.
+   */
+  const layoutLeft = (node: HTMLElement): number => {
+    let left = 0;
+    for (
+      let at: HTMLElement | null = node;
+      at;
+      at = at.offsetParent as HTMLElement | null
+    ) {
+      left += at.offsetLeft + (at === node ? 0 : at.clientLeft);
+    }
+    return left;
+  };
+
   const followPanes: Attachment<HTMLElement> = (slot) => {
     const written = new WeakMap<HTMLElement, string>();
     const place = () => {
-      const area = slot.getBoundingClientRect();
+      const areaLeft = layoutLeft(slot);
+      const areaRight = areaLeft + slot.offsetWidth;
       for (const col of slot.querySelectorAll<HTMLElement>(":scope > .col")) {
-        const group = document.querySelector(
+        const group = document.querySelector<HTMLElement>(
           `[data-leaf="${col.dataset.col}"]`
         );
         if (!group) {
           continue;
         }
-        const box = group.getBoundingClientRect();
-        const x = `${box.left - area.left}px`;
-        const w = `${Math.max(0, Math.min(box.width, area.right - box.left))}px`;
+        const left = layoutLeft(group);
+        const x = `${left - areaLeft}px`;
+        const w = `${Math.max(0, Math.min(group.offsetWidth, areaRight - left))}px`;
         if (written.get(col) === `${x} ${w}`) {
           continue;
         }

@@ -89,6 +89,7 @@
     agentName,
     onlanded,
     onshown,
+    bare = false,
 
     /**
      * Whether this transcript is on screen at all. Governs how OFTEN rows are
@@ -115,6 +116,12 @@
     agentName: string;
     onlanded?: () => void;
     onshown?: (shown: boolean) => void;
+    /**
+     * An empty conversation draws nothing of its own: its composer is the
+     * whole instruction (a thread with a project's Caw, which has no `/` or
+     * `@` to tell of).
+     */
+    bare?: boolean;
   } = $props();
 
   setContext("cawco:machine", () => session.machineId);
@@ -2830,7 +2837,7 @@
   {#if (session.loading || session.cursor !== null) &&
     renderedRows.length === 0}
     <p class="empty">Loading transcript…</p>
-  {:else if renderedRows.length === 0}
+  {:else if renderedRows.length === 0 && !bare}
     <!-- Only once the read has said the conversation is empty, fading in
          where it stands. The two keys that do anything from the composer
          below. Left-aligned: this surface is a ledger. -->

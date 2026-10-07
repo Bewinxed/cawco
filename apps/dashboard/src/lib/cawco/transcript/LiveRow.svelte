@@ -24,6 +24,7 @@
   import MessageBody from "./MessageBody.svelte";
   import type { Row } from "./rows";
   import Thinking from "./Thinking.svelte";
+  import { useVoice } from "./voice";
   import Who from "./Who.svelte";
 
   type Live = Extract<Row, { kind: "live" }>;
@@ -36,6 +37,9 @@
     agentName,
     announce,
   }: { row: Live | Said; agentName: string; announce: boolean } = $props();
+
+  /** The transcript's voice: a face of its own puts the thinking beat on its speaker line. */
+  const voice = useVoice() ?? {};
 
   const ledger = useLedger();
   const phaseOf = (r: Live | Said): Phase =>
@@ -175,17 +179,31 @@
         streaming={live.kind === "live"}
       />
     </section>
+  {:else if voice.face}
+    <!-- A voice with a face of its own (a project's Caw, transcript/voice.ts)
+         is on his speaker line from the first beat of a turn: his working
+         still over what he is thinking. -->
+    <section class="turn" class:grouped={live.grouped}>
+      <Who grouped={live.grouped} live name={agentName} />
+      {@render thinking(live)}
+    </section>
   {:else}
-    <!-- Live for as long as this row is: a block that has closed keeps its
-         label until its settled row takes its place. Relabelled here, the
-         narrower label pulled the chevron after it 16px across. -->
-    <Thinking
-      {announce}
-      fades={ledger?.watched ?? false}
-      live
-      text={live.kind === "live" ? (live.thinking ?? "") : ""}
-    />
+    {@render thinking(live)}
   {/if}
+{/snippet}
+
+{#snippet thinking(
+  live: Live | Said
+)}
+  <!-- Live for as long as this row is: a block that has closed keeps its
+       label until its settled row takes its place. Relabelled here, the
+       narrower label pulled the chevron after it 16px across. -->
+  <Thinking
+    {announce}
+    fades={ledger?.watched ?? false}
+    live
+    text={live.kind === "live" ? (live.thinking ?? "") : ""}
+  />
 {/snippet}
 
 <div class="live" bind:this={box} class:tweening={tweening}>

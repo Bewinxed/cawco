@@ -30,6 +30,7 @@ export { default as IconBox } from "~icons/solar/box-bold-duotone";
 export { default as IconSubagent } from "~icons/solar/branching-paths-down-bold-duotone";
 export { default as IconFork } from "~icons/solar/branching-paths-up-bold-duotone";
 export { default as IconUsage } from "~icons/solar/chart-2-bold-duotone";
+export { default as IconChatAdd } from "~icons/solar/chat-round-add-bold-duotone";
 export { default as IconChat } from "~icons/solar/chat-square-bold-duotone";
 export { default as IconSuccess } from "~icons/solar/check-circle-bold-duotone";
 export { default as IconCheck } from "~icons/solar/check-read-bold-duotone";

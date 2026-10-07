@@ -59,9 +59,12 @@
 </span>
 
 <style>
+  /* Its box is its still's, whatever row it stands in: a flex row that
+     shrank it ran his picture into the word beside him. */
   .face {
     position: relative;
     display: inline-block;
+    flex: none;
     inline-size: var(--side);
     block-size: var(--side);
     pointer-events: none;

@@ -262,8 +262,8 @@
    * measured, not the viewport: a narrow pane on a wide screen is narrow.
    */
   let hint = $state(untrack(() => HINT_SHORT));
-  /** The perch's width: the parked cards stand clear of it on the same edge. */
-  let perchWidth = $state(0);
+  /** How far the perch stands above the pill: the parked cards stand clear of it, above. */
+  let perchHeight = $state(0);
   const fitHint = (node: HTMLTextAreaElement) => {
     const probe = document.createElement("span");
     probe.setAttribute("aria-hidden", "true");
@@ -2043,9 +2043,7 @@
 <div
   class="dock"
   data-keeps-draft
-  style:--perch-room={perch && perchWidth
-    ? `calc(${perchWidth}px + var(--space-3))`
-    : null}
+  style:--perch-rise={perch && perchHeight ? `${perchHeight}px` : null}
 >
   {#if prompts}
     <div class="prompts" {@attach reflow()}>
@@ -2224,7 +2222,7 @@
         class:wheeling={wheeling}
       >
         {#if perch}
-          <div aria-hidden="true" class="perch" bind:clientWidth={perchWidth}>
+          <div aria-hidden="true" class="perch" bind:clientHeight={perchHeight}>
             {@render perch()}
           </div>
         {/if}
@@ -2529,9 +2527,11 @@
     inset-inline-start: var(--space-3);
     pointer-events: none;
   }
-  /* A parked card stands beside it, on the same edge, not over it. */
+  /* A parked card keeps the composer's whole row (Prompt: the answer row
+     needs its width) and stands above what peeks over the pill, never over
+     it. */
   .dock:has(.perch) .prompts {
-    padding-inline-start: var(--perch-room, 0px);
+    padding-block-end: var(--perch-rise, 0px);
   }
   .cin {
     --cin-pad: var(--c-composer-inset);

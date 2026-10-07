@@ -33,6 +33,10 @@
    *   failed dot is still; the needs-you dot echoes as a working tile does,
    *   on the same beat. Idle, finished or no status: nothing.
    *
+   * - `faceAlways`: the tile keeps its face whatever it holds (a thread's
+   *   mark is Caw): no count and no chevron on it; the deck behind it and
+   *   the nesting lines say there are rows, and the mark still opens them.
+   *
    * The dot is decoration: the row says the status in its name. Nothing
    * here moves the tile, the row or the nesting lines that meet it.
    */
@@ -49,6 +53,7 @@
     fill,
     status,
     noun = "delegate",
+    faceAlways = false,
     face,
   }: {
     /** The rows under it, at every depth. */
@@ -73,6 +78,8 @@
     noun?: string;
     /** What the tile shows when it has no count. */
     face: Snippet;
+    /** The face stays on the tile with a count; the chevron never takes it. */
+    faceAlways?: boolean;
   } = $props();
 
   const dot = $derived(
@@ -104,6 +111,7 @@
   class="tree-mark"
   data-bare={fill ? undefined : ""}
   data-dot={dot}
+  data-face-always={faceAlways || undefined}
   data-has={has || undefined}
   data-open={(parent && open) || undefined}
   data-status-count={countIsStatus ? "" : undefined}
@@ -123,13 +131,13 @@
        tile is ever seen of it. -->
   <span aria-hidden="true" class="face tile">
     <span class="rest">
-      {#if has}
+      {#if has && !faceAlways}
         <span class="num"><MorphText text={shown} /></span>
       {:else}
         {@render face()}
       {/if}
     </span>
-    {#if parent}
+    {#if parent && !faceAlways}
       <span class="chev"><ChevronIcon aria-hidden="true" /></span>
     {/if}
   </span>
@@ -391,7 +399,7 @@
   .tree-mark[data-open] .chev :global(svg) {
     --swap-turn: 90deg;
   }
-  .tree-mark[data-open]:not([data-status-count]) {
+  .tree-mark[data-open]:not([data-status-count], [data-face-always]) {
     & .rest {
       --swap-away: 1;
     }
@@ -400,7 +408,7 @@
     }
   }
   @media (hover: hover) and (pointer: fine) {
-    .tree-mark[data-switch]:hover {
+    .tree-mark[data-switch]:not([data-face-always]):hover {
       & .rest {
         --swap-away: 1;
       }

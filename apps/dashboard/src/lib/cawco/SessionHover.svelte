@@ -99,6 +99,18 @@
     );
   }
 
+  /**
+   * The session whose live tail the card draws: a run's running step, the
+   * session itself, and none for a thread, whose card is its newest line
+   * (held for a tail that never comes, the card kept the last one's size).
+   */
+  const watchOf = (id: string | null): string | null => {
+    if (!id || threadIdOf(id)) {
+      return null;
+    }
+    return runIdOf(id) ? runningStep(id) : id;
+  };
+
   /** A thread's newest line, as the card's tail ends on it. */
   const newestLine = (message: ThreadMessage | undefined): string | null => {
     if (!message) {
@@ -326,7 +338,7 @@
     onpointerleave={release}
     side="right"
     style="--x: {place.x}px; --y: {place.y}px; --origin: {place.origin}px; --room: 360px"
-    watch={openId && runIdOf(openId) ? runningStep(openId) : openId}
+    watch={watchOf(openId)}
   >
     {#snippet children(
       id

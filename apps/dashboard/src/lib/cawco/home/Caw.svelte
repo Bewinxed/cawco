@@ -27,7 +27,7 @@
    * height from the top: above it all of him that shows, below it only the
    * wing tips that hang in front of the ledge.
    */
-  const LEDGE_LINE = rests.peek.ledgeLine;
+  export const LEDGE_LINE = rests.peek.ledgeLine;
 
   /**
    * The files, as the build emits them: URLs only, so a file is fetched the

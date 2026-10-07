@@ -13,7 +13,7 @@
   import * as ContextMenu from "#lib/components/ui/context-menu/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import {
-    IconChat,
+    IconChatAdd,
     IconChevronUp,
     IconExternal,
     IconPalette,
@@ -122,7 +122,7 @@
       <ContextMenu.Item
         onSelect={() => goto(`/session/${newThreadTabId(project.id)}`)}
       >
-        <IconChat />
+        <IconChatAdd />
         New thread
       </ContextMenu.Item>
     {/if}

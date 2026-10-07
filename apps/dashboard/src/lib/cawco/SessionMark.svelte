@@ -100,6 +100,7 @@
 
 <TreeMark
   {count}
+  faceAlways={caw !== null}
   fill="var(--mark-{markHue(place)})"
   {ontoggle}
   {open}

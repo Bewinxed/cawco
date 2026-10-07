@@ -42,7 +42,7 @@
     startThread,
     submitCommand,
   } from "./client.svelte";
-  import Caw from "./home/Caw.svelte";
+  import Caw, { LEDGE_LINE } from "./home/Caw.svelte";
   import CawFace from "./home/CawFace.svelte";
   import {
     listTasks,
@@ -81,7 +81,6 @@
   const projectId = $derived(
     thread?.projectId ?? newThreadProjectOf(viewId) ?? ""
   );
-  const project = $derived(cawco.project(projectId));
 
   let paneWidth = $state(0);
   const coarse = new MediaQuery("(pointer: coarse)");
@@ -370,14 +369,33 @@
     };
   });
 
-  /** Room at the transcript's foot for the composer standing over it. */
-  const composerRoom = $derived(
-    leadOn ? "var(--c-composer-panel) + var(--c-tray-row)" : "0px"
-  );
+  /** The lead-off line's height, standing where the composer would: the foot clears it. */
+  let offHeight = $state(0);
+  /** Each parked card's height, by request: the transcript's foot clears them. */
+  const parkedHeights = $state<Record<string, number>>({});
+  /**
+   * Room at the transcript's foot for what stands over it: the composer,
+   * Caw's rise above the pill (the part of his slot over the ledge line),
+   * and the cards parked above him with the stack's gaps. Nothing of the
+   * thread is ever under them; its tail moves up as a card parks.
+   */
+  const composerRoom = $derived.by(() => {
+    if (!leadOn) {
+      return view ? `${offHeight}px` : "0px";
+    }
+    const rise = seatSize * LEDGE_LINE;
+    const parked = asks.reduce(
+      (sum, ask) => sum + (parkedHeights[ask.request.requestId] ?? 0),
+      0
+    );
+    const cards =
+      asks.length > 0 ? ` + ${parked}px + var(--space-3) * ${asks.length}` : "";
+    return `var(--c-composer-panel) + var(--c-tray-row) + ${rise}px${cards}`;
+  });
   const offLine = $derived(
     view?.on && view.problem
       ? view.problem
-      : `Caw lead is off for ${project?.name ?? "this project"}. Turn it on to message him.`
+      : "Caw lead is off for this project — turn it on to message him."
   );
 </script>
 
@@ -411,7 +429,17 @@
 
 {#snippet parkedPrompts()}
   {#each asks as ask (ask.request.requestId)}
-    <div class="parked" data-flip out:settleInto={ask.request.toolUseId}>
+    <div
+      class="parked"
+      data-flip
+      bind:clientHeight={
+        () => parkedHeights[ask.request.requestId] ?? 0,
+        (height) => {
+    parkedHeights[ask.request.requestId] = height;
+  }
+      }
+      out:settleInto={ask.request.toolUseId}
+    >
       <Prompt
         onanswer={(result) => onanswer(ask, result)}
         request={ask.request}
@@ -453,6 +481,7 @@
         <div class="state">
           <Transcript
             agentName="Caw"
+            bare
             {focused}
             onshown={(drawn) => {
               shown = drawn;
@@ -471,8 +500,8 @@
     {#if view && !leadOn}
       <!-- No composer: nothing would read it. What is true, and the one
            thing that changes it. -->
-      <div class="off" in:crossIn out:crossOut>
-        <Alert role="status">
+      <div class="off" bind:clientHeight={offHeight} in:crossIn out:crossOut>
+        <Alert class="off-line" role="status">
           <AlertDescription>{offLine}</AlertDescription>
           {#if !view.on}
             <AlertAction>
@@ -543,6 +572,12 @@
     flex: 1 1 auto;
     min-height: 0;
   }
+  /* A thread has no tool rail: its rows are messages and event lines, so
+     the rail's column is the rows' own edge (app.css .tx-columns, as it is
+     on a narrow screen) and the answered question's card stands on it. */
+  .state :global(.tx-columns) {
+    --x-rail: 0px;
+  }
   .veil {
     position: absolute;
     inset: 0;
@@ -558,13 +593,28 @@
     font: var(--type-body);
     color: var(--ink-muted);
   }
-  /* The composer's slot, when there is no composer (SessionPane's
-     read-only line): a fact in the muted voice, and the way to change it. */
-  /* Where the composer stands when there is one: the pane's foot, in the
-     composer's column and at its lift (Composer.svelte .dock). */
+  /* Where the composer stands when there is one, as it stands (Composer
+     .dock and .cin): over the pane's foot, in its column and at its lift,
+     on its surface. The transcript clears it as it clears the composer. */
   .off {
+    position: absolute;
+    inset-inline: 0;
+    inset-block-end: calc(var(--space-4) + env(safe-area-inset-bottom));
+    z-index: 20;
     inline-size: var(--c-composer-w);
-    margin: 0 auto calc(var(--space-4) + env(safe-area-inset-bottom));
+    margin-inline: auto;
+  }
+  .off :global(.off-line) {
+    align-items: center;
+    border: 1px solid var(--border-control);
+    border-radius: var(--radius-lg);
+    background: var(--surface-raised);
+    box-shadow: var(--shadow-tile);
+  }
+  .off :global(.off-line [data-slot="alert-action"]) {
+    inset-block: 0;
+    display: flex;
+    align-items: center;
   }
   .seat {
     inline-size: var(--seat);
