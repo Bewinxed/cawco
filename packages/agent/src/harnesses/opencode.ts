@@ -26,7 +26,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { readdir, rename } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join, relative } from "node:path";
 import type {
   EffortLevel,
   FleetConfig,
@@ -100,10 +100,12 @@ import {
   type Todo,
 } from "@opencode-ai/sdk/v2";
 import { workspacesDir } from "../boundary";
+import { excludeFromCheckout, gitIn } from "../checkout-exclude";
 import { delegationHubUrl, harnessMcpUrl } from "../delegation";
 import {
   type OpencodeDenySettings,
   opencodeDenySettings,
+  resolvedFleetDenials,
   sessionFleetDenials,
 } from "../denied-tools";
 import type { Harness, HarnessContext, HarnessSession } from "../harness";
@@ -969,6 +971,61 @@ const syncPlanAgent = async (
     Object.keys(agent).length > 0 ? { ...rest, agent } : rest
   );
   return todosOn;
+};
+
+/** The project-scope config OpenCode merges beside a project's own `opencode.json` (`ConfigPaths.projectFiles` finds both, up to the worktree root). */
+const SESSION_CONFIG = "opencode.jsonc";
+
+/**
+ * OpenCode's `plan` agent for one session whose own delegate type turns
+ * "CawCo's to-dos" on while the fleet's choice is off (the fleet's turns it
+ * off machine-wide, `syncPlanAgent`): `agent.plan.disable` in an
+ * `opencode.jsonc` in the session's directory, which OpenCode reads as that
+ * directory's project config, kept out of git through the checkout's
+ * `info/exclude`. Written only inside the session's own workspace; a shared
+ * checkout is said in the log and left as it is.
+ */
+const disablePlanAgentFor = async (
+  spec: SpawnPayload,
+  cwd: string
+): Promise<void> => {
+  if (!spec.cawcoTodos || (await resolvedFleetDenials()).cawcoTodos) {
+    return;
+  }
+  const workspace = spec.workspace?.path;
+  const inside = workspace ? relative(workspace, cwd) : undefined;
+  if (inside === undefined || inside.startsWith("..") || isAbsolute(inside)) {
+    console.warn(
+      `[opencode] ${spec.instanceId}: its delegate type turns CawCo's to-dos on, but it runs in ${cwd}, not in a workspace of its own, so OpenCode's plan agent is left as it is there (a shared checkout is never written).`
+    );
+    return;
+  }
+  const path = join(cwd, SESSION_CONFIG);
+  if (
+    existsSync(path) &&
+    (await gitIn(cwd, ["ls-files", "--error-unmatch", SESSION_CONFIG])) !==
+      undefined
+  ) {
+    console.warn(
+      `[opencode] ${spec.instanceId}: ${path} is the project's own, so OpenCode's plan agent is left as it is there.`
+    );
+    return;
+  }
+  const stored = existsSync(path)
+    ? await readJson<Record<string, unknown>>(path)
+    : {};
+  if (!stored) {
+    console.warn(
+      `[opencode] ${spec.instanceId}: ${path} is not plain JSON cawco can merge into, so OpenCode's plan agent is left as it is there.`
+    );
+    return;
+  }
+  const agent = recordOf(stored.agent);
+  await writeJson(path, {
+    ...stored,
+    agent: { ...agent, plan: { ...recordOf(agent.plan), disable: true } },
+  });
+  await excludeFromCheckout(path);
 };
 
 const EFFORT_LEVELS: EffortLevel[] = ["low", "medium", "high", "xhigh", "max"];
@@ -5811,6 +5868,8 @@ export class OpencodeHarness implements Harness {
       identity: ServerIdentity;
     }
   ): Promise<OpencodeSession> {
+    // Before the server first reads the directory's config.
+    await disablePlanAgentFor(spec, ctx.cwd);
     const client = existing ? existing.client : await this.#ensure();
     const identity = existing?.identity ?? this.#serverOwner.active;
     if (!identity) {

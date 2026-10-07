@@ -10,9 +10,7 @@
  */
 
 import {
-  appendFile,
   chmod,
-  mkdir,
   readdir,
   realpath,
   rename,
@@ -20,14 +18,7 @@ import {
   rmdir,
   stat,
 } from "node:fs/promises";
-import {
-  basename,
-  delimiter,
-  dirname,
-  isAbsolute,
-  join,
-  relative as relativePath,
-} from "node:path";
+import { basename, delimiter, isAbsolute, join } from "node:path";
 import type {
   CliInstall,
   ConfigInspection,
@@ -54,6 +45,7 @@ import type {
   SkillFile,
 } from "@cawco/core";
 import { hookProblem, memoryDocProblem } from "@cawco/core";
+import { excludeFromCheckout } from "./checkout-exclude";
 import {
   convergeDeniedTools,
   machineDenyList,
@@ -1738,77 +1730,6 @@ const settingsPathFor = (hook: Pick<FleetHook, "scope" | "cwd">): string =>
   hook.scope && hook.scope !== "user" && hook.cwd
     ? join(hook.cwd, ".claude", "settings.json")
     : SETTINGS_PATH;
-
-/** One git query in `cwd`, its trimmed stdout; undefined when git fails (not a checkout, no git). */
-const gitIn = async (
-  cwd: string,
-  args: string[]
-): Promise<string | undefined> => {
-  const git = resolveBin("git");
-  if (!git) {
-    return;
-  }
-  try {
-    const child = Bun.spawn([git, "-C", cwd, ...args], {
-      env: toolEnv(),
-      stdout: "pipe",
-      stderr: "ignore",
-    });
-    const [out, code] = await Promise.all([
-      new Response(child.stdout).text(),
-      child.exited,
-    ]);
-    return code === 0 ? out.trim() : undefined;
-  } catch {
-    // No git to run, or it could not start: not a checkout cawco can tell.
-    return undefined;
-  }
-};
-
-/**
- * Keeps a project hook's `settings.json` out of its checkout's status: one
- * line in that checkout's `.git/info/exclude` (the common one for a linked
- * worktree), added once. Without it the file cawco wrote is untracked work,
- * and the hub's landing refuses a delegate workspace that carries any. A
- * cwd that is not a git checkout is left as it is; a tracked file is the
- * project's own and stays tracked.
- */
-const excludeFromCheckout = async (path: string): Promise<void> => {
-  const cwd = dirname(dirname(path));
-  const [top, exclude] = await Promise.all([
-    gitIn(cwd, ["rev-parse", "--show-toplevel"]),
-    gitIn(cwd, [
-      "rev-parse",
-      "--path-format=absolute",
-      "--git-path",
-      "info/exclude",
-    ]),
-  ]);
-  if (!(top && exclude)) {
-    return;
-  }
-  const inside = relativePath(
-    await realpath(top),
-    await realpath(path).catch(() => path)
-  );
-  if (!inside || inside.startsWith("..") || isAbsolute(inside)) {
-    return;
-  }
-  const line = `/${inside}`;
-  const current = await Bun.file(exclude)
-    .text()
-    .catch(() => "");
-  if (current.split("\n").some((each) => each.trim() === line)) {
-    return;
-  }
-  try {
-    await mkdir(dirname(exclude), { recursive: true });
-    const lead = current === "" || current.endsWith("\n") ? "" : "\n";
-    await appendFile(exclude, `${lead}${line}\n`);
-  } catch {
-    // The hook is registered either way; only the status noise remains.
-  }
-};
 
 /**
  * The handler as it goes into `settings.json`. A command handler carrying a
