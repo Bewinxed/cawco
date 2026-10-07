@@ -440,7 +440,8 @@ public final class HubConnection {
         // The reads and their decoding run off the main actor; only what they
         // found is adopted here, so the first frames keep drawing while the
         // fleet is read.
-        let adopt = await Self.readFleet(client)
+        // What the socket says about asks from here on is newer than the read.
+        let adopt = await Self.readFleet(client, asksFrom: needs.heardMark)
         guard adopt(self) else { return false }
         await workflows.refresh()
         return true
@@ -453,7 +454,7 @@ public final class HubConnection {
     /// the instance rows in the board's own shape, and the parked asks out of
     /// their envelopes. Nothing here touches the main actor.
     @concurrent
-    private nonisolated static func readFleet(_ client: Client) async -> Adoption<Bool> {
+    private nonisolated static func readFleet(_ client: Client, asksFrom mark: Int) async -> Adoption<Bool> {
         async let machinesRead = attempt { try await client.getApiAgents().ok.body.json }
         async let rowsRead = attempt { try await client.getApiInstances().ok.body.json }
         async let projectsRead = attempt { try await client.getApiProjects().ok.body.json }
@@ -523,7 +524,7 @@ public final class HubConnection {
             }
             if hasPending {
                 for (runId, raisedAt) in runAsks { hub.fleet.runAskRaisedAt[runId] = raisedAt }
-                hub.needs.replace(with: asks)
+                hub.needs.replace(with: asks, asOf: mark)
             }
             if let readCarried {
                 hub.fleet.continuations = readCarried

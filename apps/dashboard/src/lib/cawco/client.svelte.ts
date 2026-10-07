@@ -306,6 +306,12 @@ const listedInHistory = (info: NeutralSessionInfo): boolean =>
   info.tag !== CAWCO_SCRATCH_TAG;
 
 export interface PendingPermission {
+  /**
+   * When this device last heard the hub park it, in the order it hears
+   * things ({@link askHeard}): a read of `/api/pending` asked for before
+   * then cannot know of it, so it cannot unpark it.
+   */
+  heard: number;
   input: Record<string, unknown>;
   instanceId: string;
   /**
@@ -1929,6 +1935,28 @@ function adoptContinuations(table: ContinuationJob[]): void {
  * Registry reads: on connect and again after every reconnect. True once the
  * three reads the board waits on (machines, sessions, projects) all landed.
  */
+/**
+ * The order this device hears the hub's word on asks in: each ask parked and
+ * each ask settled takes the next number. A read of `/api/pending` notes the
+ * number it was asked for at, and what was heard after that is newer than it.
+ */
+let askHeard = 0;
+const hearAsk = (): number => {
+  askHeard += 1;
+  return askHeard;
+};
+/** The asks heard settled, by request id, with when; the oldest go past a few hundred. */
+const askSettledHeard = new Map<string, number>();
+const SETTLED_HEARD_KEPT = 512;
+const hearSettled = (requestId: string): void => {
+  askSettledHeard.delete(requestId);
+  askSettledHeard.set(requestId, hearAsk());
+  if (askSettledHeard.size > SETTLED_HEARD_KEPT) {
+    const [oldest] = askSettledHeard.keys();
+    askSettledHeard.delete(oldest);
+  }
+};
+
 async function refresh(): Promise<boolean> {
   // Registry hydration also recovers workflow transitions missed while disconnected.
   refreshWorkflows();
@@ -1939,6 +1967,8 @@ async function refresh(): Promise<boolean> {
   readProjectOffers();
   // Every project's threads, for the rail; frames keep them from here.
   readThreads();
+  // What the socket says about asks from here on is newer than the read.
+  const readFrom = askHeard;
   const [machines, rows, projects, pending, handoffs, usage, continuations] =
     await Promise.all([
       load<Machine[]>("/api/agents"),
@@ -1973,17 +2003,24 @@ async function refresh(): Promise<boolean> {
     adoptUsageLimits(usage.machines);
   }
   if (pending) {
-    // The read is the whole truth: an ask settled while this tab was away
-    // sent its `permission_settled` to nobody listening.
+    // The read is the whole truth as of when it was asked for: an ask settled
+    // while this tab was away sent its `permission_settled` to nobody
+    // listening. What the socket said since is newer than the read: an ask
+    // parked meanwhile (a restarted hub hearing its agents replay theirs)
+    // stays, and one settled meanwhile is not put back.
     const parked = new Set(pending.map((envelope) => envelope.requestId));
+    const stands = (p: PendingPermission): boolean =>
+      parked.has(p.requestId) || p.heard > readFrom;
     for (const target of Object.values(state.sessions)) {
-      if (target.pending.some((p) => !parked.has(p.requestId))) {
-        target.pending = target.pending.filter((p) => parked.has(p.requestId));
+      if (!target.pending.every(stands)) {
+        target.pending = target.pending.filter(stands);
         trackWorking(target);
       }
     }
     for (const envelope of pending) {
-      handleFrame(envelope.payload);
+      if ((askSettledHeard.get(envelope.requestId ?? "") ?? 0) <= readFrom) {
+        handleFrame(envelope.payload);
+      }
     }
   }
   if (machines && rows && projects) {
@@ -2282,7 +2319,9 @@ function handleFrame(frame: FramePayload): void {
     return;
   }
   if (frame.kind === "permission_settled") {
-    // The hub's word that the ask is over, whoever settled it: the card goes.
+    // The hub's word that the ask is over, whoever settled it: the card goes,
+    // and a read already on its way cannot bring it back.
+    hearSettled(frame.requestId);
     const target = state.sessions[frame.instanceId];
     const parked = target?.pending.find((p) => p.requestId === frame.requestId);
     if (target && parked) {
@@ -2560,9 +2599,11 @@ function handleFrame(frame: FramePayload): void {
         // stored entry follows the latest word from the hub.
         existing.routedTo = routedTo;
         existing.raisedAt = frame.raisedAt;
+        existing.heard = hearAsk();
         break;
       }
       target.pending.push({
+        heard: hearAsk(),
         requestId: frame.requestId,
         instanceId: frame.instanceId,
         toolName: frame.toolName,

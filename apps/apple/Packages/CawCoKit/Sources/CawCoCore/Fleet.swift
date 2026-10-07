@@ -495,12 +495,30 @@ public final class NeedsYouStore {
     /// The answer command each ask carries, by `instanceId:requestId`.
     public internal(set) var answers: [String: String] = [:]
     private let ledger: Ledger
+    /// The order this device hears the hub's word on asks in: each ask parked
+    /// and each ask settled takes the next number. A read of `/api/pending`
+    /// is asked for at ``heardMark``, and what was heard after it is newer.
+    @ObservationIgnored private var heard = 0
+    /// When each parked ask was last heard parked, by request id.
+    @ObservationIgnored private var parkedHeard: [String: Int] = [:]
+    /// When each ask was heard settled, by request id; the oldest go past a few hundred.
+    @ObservationIgnored private var settledHeard: [String: Int] = [:]
+    private static let settledHeardKept = 512
 
     init(ledger: Ledger) {
         self.ledger = ledger
     }
 
+    /// Where a read of `/api/pending` asked for now stands among what the socket says.
+    var heardMark: Int { heard }
+
+    private func hear() -> Int {
+        heard += 1
+        return heard
+    }
+
     func park(_ frame: AskFrame, routedTo: String?) {
+        parkedHeard[frame.requestId] = hear()
         var list = parked[frame.instanceId] ?? []
         if let at = list.firstIndex(where: { $0.requestId == frame.requestId }) {
             // A re-broadcast follows the hub's latest word on it.
@@ -514,6 +532,12 @@ public final class NeedsYouStore {
 
     /// The hub's word that an ask is over, whoever settled it, on whichever device.
     func settle(_ instanceId: String, _ requestId: String) {
+        // A read already on its way cannot bring it back.
+        settledHeard[requestId] = hear()
+        if settledHeard.count > Self.settledHeardKept {
+            settledHeard = settledHeard.filter { $0.value > heard - Self.settledHeardKept / 2 }
+        }
+        parkedHeard[requestId] = nil
         guard parked[instanceId]?.contains(where: { $0.requestId == requestId }) == true else {
             return
         }
@@ -524,10 +548,20 @@ public final class NeedsYouStore {
         answers["\(instanceId):\(requestId)"] = nil
     }
 
-    /// The hub's whole list (`/api/pending`): what it no longer holds is not parked.
-    func replace(with asks: [(AskFrame, String?)]) {
-        parked = [:]
-        for (frame, routedTo) in asks {
+    /// The hub's whole list (`/api/pending`), as of `mark`: what it no longer
+    /// holds is not parked. What the socket said since is newer than the read:
+    /// an ask parked meanwhile (a restarted hub hearing its agents replay
+    /// theirs) stays, and one settled meanwhile is not put back.
+    func replace(with asks: [(AskFrame, String?)], asOf mark: Int) {
+        var kept: [String: [ParkedAsk]] = [:]
+        for (instanceId, list) in parked {
+            let newer = list.filter { (parkedHeard[$0.requestId] ?? 0) > mark }
+            if !newer.isEmpty { kept[instanceId] = newer }
+        }
+        let keptIds = Set(kept.values.flatMap { $0.map(\.requestId) })
+        parkedHeard = parkedHeard.filter { keptIds.contains($0.key) }
+        parked = kept
+        for (frame, routedTo) in asks where (settledHeard[frame.requestId] ?? 0) <= mark {
             park(frame, routedTo: routedTo)
         }
     }

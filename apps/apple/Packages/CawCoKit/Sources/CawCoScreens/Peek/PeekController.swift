@@ -408,8 +408,9 @@ final class PeekController: ObservedViewController {
         }
         meter.configure(.init(usage: usage, compacting: facts?["sdkStatus"] as? String == "compacting", compaction: compaction))
 
-        // A permission parked by a process that has since died cannot be answered: a dead one shows none.
-        drawAsks(running ? hub.needs.parked[target.viewId] ?? [] : [], machineId: row?.machineId ?? "")
+        // What the hub holds parked, whatever the row says: the hub settles a dead process's asks
+        // (`permission_settled`), and one whose agent is restarting is still waiting on its answer.
+        drawAsks(hub.needs.parked[target.viewId] ?? [], machineId: row?.machineId ?? "")
 
         if failed {
             noteBox.isHidden = false

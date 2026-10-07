@@ -620,6 +620,13 @@ export interface DbShape {
    */
   readonly markInstanceLive: (id: string) => boolean;
   /**
+   * An attach to a process sessiond still holds is on its way: a row filed
+   * asleep, failed or unknown is `starting` until its `init` or a beat lists
+   * it. Its launch (`spawnedAt`) and `updatedAt` are untouched: the process
+   * is the same one, and it did nothing. Returns whether the row moved.
+   */
+  readonly markInstanceAttaching: (id: string) => boolean;
+  /**
    * The owner looked at these sessions and runs (a tab in front) or archived
    * them off Finished, at `at`; a null `at` clears the mark (unarchive), which
    * every reader counts as never seen. `updatedAt` stays: being looked at is not
@@ -1001,6 +1008,8 @@ export interface DbShape {
   readonly reconcileHeartbeat: (
     machineId: string,
     liveIds: string[],
+    /** The processes sessiond still holds for the machine: alive, whether attached yet or not. */
+    heldIds: string[],
     graceMs: number
   ) => { promoted: string[]; settled: (typeof instances.$inferSelect)[] };
   /**
@@ -1205,6 +1214,12 @@ export interface DbShape {
   readonly settleInstances: (
     machineId: string,
     liveIds: string[],
+    /**
+     * The processes sessiond still holds for the machine. One its daemon has
+     * not attached yet is alive, with an attach on its way: it is filed
+     * `starting`, never asleep and never lost with its conversation.
+     */
+    heldIds: string[],
     resumable?: string[],
     /**
      * When each of those conversations last changed, ms epoch by session id.
@@ -2904,10 +2919,12 @@ const make = (path: string): DbShape => {
     // no process any more — settled so it stays on the board instead of
     // ghosting, and separated at the source into the ones that can come back
     // and the ones whose transcript went with the process.
-    settleInstances: (machineId, liveIds, resumable, resumableAt) => {
+    settleInstances: (machineId, liveIds, heldIds, resumable, resumableAt) => {
+      const alive = [...new Set([...liveIds, ...heldIds])];
       if (resumable) {
         // The authoritative catalog says which Claude conversations still exist.
         // A previously failed resume is checked too, without launching it again.
+        // A process still running is not a conversation gone, catalogued or not.
         db.update(instances)
           .set({ status: "error", lastError: CLAUDE_CONVERSATION_GONE })
           .where(
@@ -2917,7 +2934,7 @@ const make = (path: string): DbShape => {
               or(eq(instances.harness, "claude"), isNull(instances.harness)),
               isNotNull(instances.sessionId),
               notInArray(instances.status, ["stopped", "discarded"]),
-              liveIds.length ? notInArray(instances.id, liveIds) : undefined,
+              alive.length ? notInArray(instances.id, alive) : undefined,
               resumable.length
                 ? notInArray(instances.sessionId, resumable)
                 : undefined
@@ -2975,7 +2992,19 @@ const make = (path: string): DbShape => {
         .all();
 
       const catalog = resumable && new Set(resumable);
+      const held = new Set(heldIds);
       const settled = orphans.map((row) => {
+        // Its process outlived the daemon that let go of it, and the attach
+        // the caller sends next is how it comes back (`restore`). A process
+        // is no nap: filed asleep, the asks its attach replays were refused
+        // at admission, and its CLI waited on a question nobody was shown.
+        if (held.has(row.id)) {
+          db.update(instances)
+            .set({ status: "starting", lastError: null })
+            .where(eq(instances.id, row.id))
+            .run();
+          return { row, resumes: true };
+        }
         const resumes =
           !catalog ||
           (row.sessionId !== null &&
@@ -3007,8 +3036,11 @@ const make = (path: string): DbShape => {
     },
     // Every 15 seconds, the machine says what it is actually carrying. This is
     // the only place `running` is minted from evidence rather than intent.
-    reconcileHeartbeat: (machineId, liveIds, graceMs) => {
+    reconcileHeartbeat: (machineId, liveIds, heldIds, graceMs) => {
       const now = new Date();
+      // Attached or still being attached, the process is there: only a row
+      // with neither has gone.
+      const alive = [...new Set([...liveIds, ...heldIds])];
       const promoted =
         liveIds.length === 0
           ? []
@@ -3041,8 +3073,8 @@ const make = (path: string): DbShape => {
               .map((row) => row.id);
 
       // The beat's silence, which is the half that was missing. A row claiming a
-      // process the machine does not list has no process; the only question left
-      // is whether the conversation outlived it.
+      // process the machine neither lists nor holds has no process; the only
+      // question left is whether the conversation outlived it.
       const gone = db
         .select()
         .from(instances)
@@ -3052,7 +3084,7 @@ const make = (path: string): DbShape => {
             eq(instances.machineRemoved, false),
             isNull(instances.owedSpawn),
             inArray(instances.status, ["running", "starting"]),
-            liveIds.length > 0 ? notInArray(instances.id, liveIds) : undefined
+            alive.length > 0 ? notInArray(instances.id, alive) : undefined
           )
         )
         .all()
@@ -3093,6 +3125,18 @@ const make = (path: string): DbShape => {
               "sleeping",
               "error",
             ])
+          )
+        )
+        .returning({ id: instances.id })
+        .all().length > 0,
+    markInstanceAttaching: (id) =>
+      db
+        .update(instances)
+        .set({ status: "starting", lastError: null })
+        .where(
+          and(
+            eq(instances.id, id),
+            inArray(instances.status, ["unknown", "sleeping", "error"])
           )
         )
         .returning({ id: instances.id })

@@ -949,6 +949,13 @@ const peekCustody = (payload: unknown): SessionCustody => {
   };
 };
 
+/**
+ * The sessions whose process sessiond holds alive on a machine, attached to
+ * its daemon or not; none when its custody could not be read.
+ */
+const heldProcesses = (custody: SessionCustody | undefined): string[] =>
+  custody?.state === "available" ? custody.instances : [];
+
 /** The same operator notice on the live stream and a later transcript read. */
 const custodyNotice = (
   row: Pick<InstanceRow, "id" | "sessionId">,
@@ -2077,14 +2084,28 @@ export const createServer = (
   const processGeneration = (
     row: ReturnType<DbShape["getInstancesByIds"]>[number]
   ): string => JSON.stringify([row.id, row.spawnedAt]);
+  /** Why an ask arriving from a machine is not this row's live process's; none when it is. */
+  const askRefusal = (
+    owner: ReturnType<DbShape["getInstancesByIds"]>[number] | undefined,
+    ask: Envelope
+  ): string | undefined => {
+    if (!owner) {
+      return "no such session";
+    }
+    if (owner.machineId !== ask.machineId) {
+      return `it belongs to ${owner.machineId}`;
+    }
+    if (!["running", "starting", "unknown"].includes(owner.status)) {
+      return `the session is ${owner.status}`;
+    }
+    if (peek(ask.payload, "processGeneration") !== processGeneration(owner)) {
+      return "an earlier launch asked it";
+    }
+    return undefined;
+  };
   const ownsPermission = (parked: Envelope): boolean => {
     const [row] = db.getInstancesByIds([parked.instanceId ?? ""]);
-    return !!(
-      row &&
-      row.machineId === parked.machineId &&
-      ["running", "starting", "unknown"].includes(row.status) &&
-      peek(parked.payload, "processGeneration") === processGeneration(row)
-    );
+    return askRefusal(row, parked) === undefined;
   };
 
   /**
@@ -5766,6 +5787,16 @@ export const createServer = (
     // Adopt the stored mode without revalidating a new launch; custody must not be skipped.
     if (reattachOnly) {
       lifecycle.restoring(row.id);
+      // A process sessiond holds is alive while its attach is on the way:
+      // filed asleep or failed, the asks its attach replays were refused at
+      // admission, and its CLI waited on a question nobody was shown.
+      if (
+        reattachOnly === true &&
+        heldProcesses(machineCustody.get(row.machineId)).includes(row.id) &&
+        db.markInstanceAttaching(row.id)
+      ) {
+        publishInstances(row.machineId);
+      }
       agent.send({
         verb: "spawn",
         machineId: row.machineId,
@@ -11767,6 +11798,7 @@ export const createServer = (
               const settled = db.settleInstances(
                 message.machineId,
                 peekInstances(message.payload),
+                heldProcesses(registrationCustody),
                 peekResumable(message.payload),
                 peekResumableAt(message.payload)
               );
@@ -12052,8 +12084,9 @@ export const createServer = (
               // The beat is the truth (contract C4). Every 15s the machine says
               // what it is carrying, and the hub's column is made to agree with
               // it: listed ids become `running`, and rows claiming a process the
-              // machine does not list settle — `sleeping` when there is a
-              // conversation to resume, `error` when there is not.
+              // machine neither lists nor holds in custody (the newest custody
+              // it reported) settle — `sleeping` when there is a conversation
+              // to resume, `error` when there is not.
               //
               // Deliberately no respawn from this path. A heartbeat is a report,
               // and answering a report by starting processes turns the fleet's
@@ -12065,6 +12098,7 @@ export const createServer = (
               const beat = db.reconcileHeartbeat(
                 message.machineId,
                 peekInstances(message.payload),
+                heldProcesses(machineCustody.get(message.machineId)),
                 HEARTBEAT_SETTLE_GRACE_MS
               );
               for (const row of beat.settled) {
@@ -12577,21 +12611,18 @@ export const createServer = (
                 const [owner] = db.getInstancesByIds([
                   message.instanceId ?? "",
                 ]);
-                if (
-                  !owner ||
-                  owner.machineId !== message.machineId ||
-                  !["running", "starting", "unknown"].includes(owner.status)
-                ) {
-                  // Replayed old-process asks after boot reconciliation are
-                  // cancelled at admission, through the same settlement path.
-                  pending.remember(message.requestId, message);
-                  pending.resolve(message.requestId, "cancelled");
-                  break;
-                }
-                if (
-                  peek(message.payload, "processGeneration") !==
-                  processGeneration(owner)
-                ) {
+                // An ask from a process this hub holds no live row for, or from
+                // an earlier launch of the row, is cancelled at admission
+                // through the same settlement path. A process sessiond kept
+                // alive across an agent restart is `starting` until its attach
+                // lands (`settleInstances`, `restore`), so its replayed asks
+                // are admitted. A refusal is said: the asking process is left
+                // waiting on it.
+                const refusal = askRefusal(owner, message);
+                if (refusal) {
+                  console.warn(
+                    `[hub] ask refused session=${message.instanceId ?? "none"} request=${message.requestId} tool=${peek(message.payload, "toolName") ?? "unknown"}: ${refusal}`
+                  );
                   pending.remember(message.requestId, message);
                   pending.resolve(message.requestId, "cancelled");
                   break;

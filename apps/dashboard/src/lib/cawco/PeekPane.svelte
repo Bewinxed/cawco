@@ -181,15 +181,11 @@
   }
 
   /**
-   * A permission parked by a process that has since died cannot be answered —
-   * the reply reaches a daemon with no such session. A dead one shows none.
+   * What the hub holds parked for this session, whatever its row says: the
+   * hub settles the asks of a process that died (`permission_settled`), and
+   * one whose agent is restarting is still waiting on its answer.
    */
-  const answerable = $derived.by((): PendingPermission[] => {
-    if (!(row && running)) {
-      return [];
-    }
-    return session?.pending ?? [];
-  });
+  const parked = $derived<PendingPermission[]>(session?.pending ?? []);
 
   // Only a live session has a window to report on, and only one that has been
   // asked has a number; asking once per peek is what makes the meter say
@@ -361,7 +357,7 @@
 
   <!-- What the session is parked on comes before what it was saying: the
        tail scrolls, and this must not be somewhere in it. -->
-  {#each answerable as request (request.requestId)}
+  {#each parked as request (request.requestId)}
     {@const question = Boolean(questionsOf(request.toolName, request.input))}
     {@const summary = question
       ? "asked a question"
