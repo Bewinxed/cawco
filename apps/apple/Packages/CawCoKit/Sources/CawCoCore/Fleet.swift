@@ -384,7 +384,7 @@ public final class FleetStore {
     /// The project that holds the folder, else its leaf without a workspace id.
     public func projectOf(_ machineId: String, _ cwd: String?) -> String {
         let folder = cwd ?? ""
-        if let project = projects.first(where: { $0.holds(machineId: machineId, folder: folder) }) {
+        if !folder.isEmpty, let project = ProjectPlaces.projectsFor(projects, machineId: machineId, cwd: folder, projectId: nil).first {
             return project.name
         }
         return (Naming.leaf(folder) ?? "").replacing(/-[0-9a-f]{8}$/, with: "")

@@ -294,7 +294,10 @@ final class ProjectViewController: ObservedViewController {
             return
         }
         // `liveIn`: started from this project, or running in one of its places, in the hub's own order.
-        let live = fleet.rows.filter { $0.isListed && ($0.projectId == project.id || project.holds(machineId: $0.machineId, folder: $0.cwd)) }
+        // Each row by the one rule every screen reads (`projectsFor`): its own project, else the project its folder belongs to.
+        let live = fleet.rows.filter { row in
+            row.isListed && ProjectPlaces.projectsFor(fleet.projects, machineId: row.machineId, cwd: row.cwd, projectId: row.projectId).contains { $0.id == project.id }
+        }
         let homePath = project.primaryPlace?.path
         let mounted = liveFollowed ? live : Array(live.prefix(liveMounted))
         // The path shows on a window 640pt wide or more (`sm:block`), where it is not the card's own.
@@ -351,7 +354,10 @@ final class ProjectViewController: ObservedViewController {
         // `storedIn`: what each machine the project has a place on recorded somewhere inside one of them.
         let machineIds = project.machinePlaces.map(\.machineId).reduce(into: [String]()) { if !$0.contains($1) { $0.append($1) } }
         let stored = machineIds.flatMap { machineId in
-            fleet.catalog(machineId).filter { project.holds(machineId: machineId, folder: $0.cwd) }.map { (machineId: machineId, info: $0) }
+            fleet.catalog(machineId).filter { info in
+                guard let cwd = info.cwd, !cwd.isEmpty else { return false }
+                return ProjectPlaces.projectsFor(fleet.projects, machineId: machineId, cwd: cwd, projectId: nil).contains { $0.id == project.id }
+            }.map { (machineId: machineId, info: $0) }
         }.sorted { $0.info.lastModified > $1.info.lastModified }
         let read = machineIds.allSatisfy { id in fleet.machines.first { $0.machineId == id }?.status != "online" || fleet.catalogs[id] != nil }
         storedSkeleton.isHidden = read

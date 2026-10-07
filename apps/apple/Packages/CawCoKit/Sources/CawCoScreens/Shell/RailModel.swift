@@ -92,12 +92,6 @@ enum RailModel {
     static func lists(hub: HubConnection, home: HomeModel, prefs: RailPrefs) -> [RailProjectList] {
         let fleet = hub.fleet
         let ordered = projects(fleet, prefs: prefs)
-        // A folder on a machine, as the lookups key it.
-        var projectsAt: [String: [String]] = [:]
-        for project in fleet.projects {
-            for place in project.machinePlaces { projectsAt["\(place.machineId)\u{0}\(place.path)", default: []].append(project.id) }
-        }
-        let ids = Set(fleet.projects.map(\.id))
         /// The session a row's work belongs to: itself, or for a delegate the
         /// session at the top of the chain that started it.
         func owner(_ row: InstanceRow) -> InstanceRow {
@@ -109,26 +103,13 @@ enum RailModel {
             }
             return at
         }
-        /// The projects a row belongs to: the one its `projectId` names, and
-        /// every project on its machine whose folder is its folder or holds
-        /// it. A delegate belongs to its parent session's projects, whatever
-        /// machine and path it runs on itself.
-        func projectsOf(_ delegate: InstanceRow) -> Set<String> {
+        /// The projects a row lists under (Sidebar.svelte `projectsOf`): those
+        /// of the session at the top of its chain (`projectsFor`), so a
+        /// delegate stands in its parent's projects, whatever machine and path
+        /// it runs on itself.
+        func projectsOf(_ delegate: InstanceRow) -> [String] {
             let row = owner(delegate)
-            var found = Set<String>()
-            if let id = row.projectId, ids.contains(id) { found.insert(id) }
-            let cwd = row.cwd
-            guard !cwd.isEmpty else { return found }
-            func claim(_ folder: Substring) {
-                for id in projectsAt["\(row.machineId)\u{0}\(folder)"] ?? [] { found.insert(id) }
-            }
-            claim(cwd[...])
-            var at = cwd.startIndex
-            while let slash = cwd[at...].firstIndex(of: "/") {
-                claim(cwd[..<slash])
-                at = cwd.index(after: slash)
-            }
-            return found
+            return ProjectPlaces.projectsFor(fleet.projects, machineId: row.machineId, cwd: row.cwd, projectId: row.projectId).map(\.id)
         }
 
         // What is running now, and what rests but can be picked up again.

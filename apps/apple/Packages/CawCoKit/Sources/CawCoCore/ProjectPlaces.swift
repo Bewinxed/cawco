@@ -48,16 +48,74 @@ extension Components.Schemas.GetApiProjects200Payload {
         }
     }
 
-    /// Whether `folder` on `machineId` is one of its machine places or inside one.
-    public func holds(machineId: String, folder: String?) -> Bool {
-        guard let folder, !folder.isEmpty else { return false }
-        return machinePlaces.contains { $0.machineId == machineId && ProjectPlaces.inside(folder, $0.path) }
-    }
 }
 
 public enum ProjectPlaces {
+    public typealias Project = Components.Schemas.GetApiProjects200Payload
+
     /// `folder` is `path` or a folder under it.
     public static func inside(_ folder: String, _ path: String) -> Bool {
         folder == path || folder.hasPrefix(path == "/" ? "/" : path + "/")
+    }
+
+    /// The projects a session belongs to (projects.ts `projectsFor`), the one
+    /// rule every screen reads: the project its `projectId` names comes first;
+    /// then every project with a place on its machine whose folder holds its
+    /// folder, deepest first. A folder that is a place of more than one
+    /// project belongs to the oldest of them.
+    public static func projectsFor(_ projects: [Project], machineId: String, cwd: String, projectId: String?) -> [Project] {
+        let owner = projectId.flatMap { id in projects.first { $0.id == id } }
+        let at = owner.map { home(of: $0, machineId: machineId, cwd: cwd) } ?? (machineId: machineId, path: trimmed(cwd))
+        // Each project once, at the deepest of its places that holds the folder.
+        var depth: [String: (project: Project, depth: Int)] = [:]
+        for (path, project) in oldest(on: at.machineId, in: projects) {
+            guard inside(at.path, path) else { continue }
+            if let owner, path == at.path || project.id == owner.id { continue }
+            if let held = depth[project.id], held.depth >= path.count { continue }
+            depth[project.id] = (project, path.count)
+        }
+        let claimed = depth.values.sorted { $0.depth > $1.depth }.map(\.project)
+        return owner.map { [$0] + claimed } ?? claimed
+    }
+
+    /// A folder as places store it: no trailing slash, the root's own kept.
+    private static func trimmed(_ cwd: String) -> String {
+        var path = Substring(cwd)
+        while path.hasSuffix("/") { path = path.dropLast() }
+        return path.isEmpty ? "/" : String(path)
+    }
+
+    private static func older(_ a: Project, _ b: Project) -> Bool {
+        a.createdAt < b.createdAt || (a.createdAt == b.createdAt && a.id < b.id)
+    }
+
+    /// Where an owned session counts from (`homeOf`): the owner's place on its
+    /// machine that holds its folder (the deepest), else the owner's primary
+    /// checkout, else its own folder.
+    private static func home(of owner: Project, machineId: String, cwd: String) -> (machineId: String, path: String) {
+        let folder = trimmed(cwd)
+        var home: (machineId: String, path: String) = owner.primaryPlace.map { (machineId: $0.machineId, path: trimmed($0.path)) } ?? (machineId: machineId, path: folder)
+        var deepest = -1
+        for place in owner.places {
+            let path = trimmed(place.path)
+            if place.machineId == machineId, inside(folder, path), path.count > deepest {
+                home = (machineId: place.machineId, path: path)
+                deepest = path.count
+            }
+        }
+        return home
+    }
+
+    /// Each folder on `machineId` that is a place, and the oldest project there (`oldestOn`).
+    private static func oldest(on machineId: String, in projects: [Project]) -> [String: Project] {
+        var oldest: [String: Project] = [:]
+        for project in projects {
+            for place in project.places where place.machineId == machineId {
+                let path = trimmed(place.path)
+                if let previous = oldest[path], !older(project, previous) { continue }
+                oldest[path] = project
+            }
+        }
+        return oldest
     }
 }

@@ -814,10 +814,13 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
         machinesChip.show(Glyph.machineServer.image, tint: Palette.hueCyan500,
                           label: picked.isEmpty ? "Select machine" : (picked.count == 1 ? picked[0].name : "\(picked.count) machines"))
         machinesChip.warn = picked.isEmpty
+        // What each chip holds, for VoiceOver: its label names the choice, its value is the choice.
+        machinesChip.accessibilityValue = picked.isEmpty ? "None" : (picked.count == 1 ? picked[0].name : "\(picked.count) machines")
 
         let listed = projectItems.first { $0.id == projectId }
         projectChip.show(Glyph.toolFiles.image, tint: Palette.hueAmber500, label: listed?.name ?? "No project")
         projectChip.empty = listed == nil
+        projectChip.accessibilityValue = listed?.name ?? "No project"
         if listed != nil, projectChip.trailing == nil {
             let clear = KitGhostButton(.closeSquare, label: "Clear project", side: 16, tint: Palette.inkSubtle)
             clear.addAction(UIAction { [weak self] _ in self?.clearProject() }, for: .primaryActionTriggered)
@@ -830,12 +833,14 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
             let named = repo.trimmingCharacters(in: .whitespaces)
             locationChip.show(BrandLogo.github.image, label: named.isEmpty ? "Clone from GitHub" : named, mono: !named.isEmpty)
             locationChip.empty = named.isEmpty
+            locationChip.accessibilityValue = named.isEmpty ? "No repository" : named
         } else {
             // The last two segments are what tells two checkouts apart.
             let parts = path.split(separator: "/")
             let short = parts.count > 2 ? "…/" + parts.suffix(2).joined(separator: "/") : path
             locationChip.show(Glyph.folderOpen.image, tint: Palette.hueAmber500, label: path.isEmpty ? "Choose folder" : short, mono: !path.isEmpty)
             locationChip.empty = path.isEmpty
+            locationChip.accessibilityValue = path.isEmpty ? "No folder" : path
         }
 
         let lifetime = LifetimePopover.options[sideQuest ? 1 : 0]
