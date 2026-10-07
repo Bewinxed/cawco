@@ -41,6 +41,9 @@ final class RowEnv {
     var editQueued: (String) -> Void = { _ in }
     /// Rendered blocks, shared by every list this transcript draws.
     let cache = BlockCache()
+    /// Each row's height as last measured, by item id: the print and the
+    /// width it was measured at (HostCell `preferredLayoutAttributesFitting`).
+    var heights: [String: (print: String, width: CGFloat, height: CGFloat)] = [:]
 
     /// What to call a model (models.svelte `modelLabel`): the catalog's name, else the id.
     func modelLabel(_ model: String) -> String { model.isEmpty ? "Default" : model }
@@ -69,12 +72,19 @@ protocol RowContent: UIView {
 }
 
 /// A collection cell holding one row view, its top margin above it.
-final class HostCell<Content: RowContent>: UICollectionViewCell {
+final class HostCell<Content: RowContent>: UICollectionViewCell, ItemCell {
     private(set) var row: Content!
     private var top: NSLayoutConstraint!
+    private weak var env: RowEnv?
+    /// The item this cell draws: its id and its print.
+    private var shown: (id: String, print: String)?
+    /// Configured since it was last measured: a height kept for this block,
+    /// at this print and this width, is its height without measuring again.
+    private var configured = false
 
     func install(env: RowEnv) {
         guard row == nil else { return }
+        self.env = env
         let view = Content(env: env)
         row = view
         view.translatesAutoresizingMaskIntoConstraints = false
@@ -92,5 +102,43 @@ final class HostCell<Content: RowContent>: UICollectionViewCell {
     func configure(_ item: Item) {
         top.constant = item.top
         row.configure(item)
+        shown = (item.id, item.print)
+        configured = true
     }
+
+    func redraw(_ item: Item) {
+        configure(item)
+        invalidateIntrinsicContentSize()
+    }
+
+    func forget() {
+        configured = false
+        if let shown { env?.heights[shown.id] = nil }
+    }
+
+    /// A settled block is measured once at a width: a cell set up for it
+    /// again (scrolled back to, reused) takes the height it was measured at.
+    /// A row that changed on its own (a picture or a diff arrived, a body
+    /// opened) is measured again, and that height is kept instead.
+    override func preferredLayoutAttributesFitting(_ attributes: UICollectionViewLayoutAttributes) -> UICollectionViewLayoutAttributes {
+        let fresh = configured
+        configured = false
+        let width = attributes.size.width
+        if fresh, let shown, let kept = env?.heights[shown.id], kept.print == shown.print, abs(kept.width - width) < 0.5 {
+            attributes.size.height = kept.height
+            return attributes
+        }
+        let fitted = super.preferredLayoutAttributesFitting(attributes)
+        if let shown { env?.heights[shown.id] = (shown.print, width, fitted.size.height) }
+        return fitted
+    }
+}
+
+/// A cell drawing one item, whatever its row kind.
+@MainActor
+protocol ItemCell: UICollectionViewCell {
+    /// Draws `item` where the cell stands; the cell sizes itself to it.
+    func redraw(_ item: Item)
+    /// Its row changed without a new item: its kept height no longer stands.
+    func forget()
 }

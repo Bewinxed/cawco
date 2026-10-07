@@ -50,6 +50,8 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     // The hub's blocks, read once per revision.
     private var revision = -1
     private var blocks: [Block] = []
+    /// Each block as last read, with the hub's value it was read from.
+    private var readBlocks: [String: (source: Components.Schemas.TranscriptBlock, block: Block)] = [:]
     private var branches: [String: Branch] = [:]
     private var queued: [Block] = []
     private var rows: [Row] = []
@@ -179,7 +181,9 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             let section = NSCollectionLayoutSection(group: .vertical(layoutSize: size, subitems: [NSCollectionLayoutItem(layoutSize: size)]))
             // The ledger's asymmetric inset: 25 at the start, 21 at the end; 18 both 900pt wide and under.
             let narrow = environment.container.contentSize.width <= 900
-            section.contentInsets = .init(top: 0, leading: narrow ? Space.space5 : Space.space7, bottom: Space.space5,
+            // The list's foot (`bottom: space5`) is the collection's inset, not
+            // a section's: the settled rows and the tail are two sections, one list.
+            section.contentInsets = .init(top: 0, leading: narrow ? Space.space5 : Space.space7, bottom: 0,
                                           trailing: narrow ? Space.space5 : Space.space6)
             return section
         }
@@ -193,6 +197,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         collection.delegate = self
         collection.keyboardDismissMode = .interactive
         collection.selfSizingInvalidation = .enabledIncludingConstraints
+        collection.contentInset.bottom = Space.space5
         collection.accessibilityLabel = "Session transcript"
         collection.translatesAutoresizingMaskIntoConstraints = false
         addSubview(collection)
@@ -214,8 +219,10 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         paneState.onReturn = { [weak self] in self?.onReturnToFleet() }
         registerForTraitChanges([UITraitUserInterfaceStyle.self, UITraitPreferredContentSizeCategory.self]) { (view: TranscriptView, _: UITraitCollection) in
             view.env.cache.clear()
+            view.env.heights = [:]
             view.settled = nil
             view.prints = [:]
+            view.listedStamp = nil
             view.dirty = true
         }
     }
@@ -485,6 +492,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         if columns != env.columns {
             env.columns = columns
             prints = [:]
+            listedStamp = nil
             dirty = true
         }
         // A first screen waiting on the view's size has it now.
@@ -514,17 +522,34 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         }
         if transcript.blockRevision != revision {
             revision = transcript.blockRevision
-            blocks = transcript.blocks.compactMap(Block.init)
+            // A block is read once: a revision reads only the blocks it brought
+            // or changed, never the whole history again (every tool call of a
+            // long session was a read of all its blocks).
+            var kept: [String: (source: Components.Schemas.TranscriptBlock, block: Block)] = [:]
+            kept.reserveCapacity(readBlocks.count + 8)
+            func read(_ sources: [Components.Schemas.TranscriptBlock]) -> [Block] {
+                sources.compactMap { source in
+                    if let held = readBlocks[source.id], held.source == source {
+                        kept[source.id] = held
+                        return held.block
+                    }
+                    guard let block = Block(source) else { return nil }
+                    kept[source.id] = (source, block)
+                    return block
+                }
+            }
+            blocks = read(transcript.blocks)
             var map: [String: Branch] = [:]
             let streams = (try? JSONEncoder().encode(transcript.tail?.streams))
                 .flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] } ?? [:]
             for page in transcript.branches {
-                let inner = page.value2.blocks.compactMap(Block.init)
+                let inner = read(page.value2.blocks)
                 let streaming = streams[page.value1.toolUseId] as? String ?? ""
                 if let branch = Branch(page, blocks: inner, streaming: streaming) { map[branch.toolUseId] = branch }
             }
             branches = map
-            queued = transcript.queued.compactMap(Block.init)
+            queued = read(transcript.queued)
+            readBlocks = kept
             // A replaced message's stand-in words go with it.
             if !replacements.isEmpty {
                 let held = Set(blocks.map(\.id) + queued.map(\.id))
@@ -660,6 +685,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         // them all for every report in a long session was most of a build.
         let sessions = (settled?.fleet.isEmpty ?? true) ? [] : (hub?.fleet.byId.keys).map(Array.init) ?? []
         for i in settled?.fleet ?? [] { out[i].print += fleetPrint(out[i], sessions: sessions) }
+        settledCount = out.count
 
         // The tail: the sends drawn ahead of it, the live row, the call in flight, the rest.
         let tool = tail?.currentTool.flatMap { glance -> (String, String)? in
@@ -710,6 +736,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         if out.isEmpty {
             out = [transcript.loading ? Item(id: "notice:loading", top: 0, kind: .notice("Loading transcript…"), print: "loading")
                 : Item(id: "notice:empty", top: 0, kind: .empty, print: "empty")]
+            settledCount = out.count
         }
         // The Markdown this build did not draw from is let go (BlockCache
         // `sweep`): turns that changed, lists that were closed, history that
@@ -754,6 +781,15 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     }
 
     private var currentTail = ""
+    /// How many of the items built lead with the settled rows; the rest are the tail.
+    private var settledCount = 0
+    /// The rows the list holds, as last given to it: its settled section and its tail's.
+    private var listed: (settled: [String], tail: [String]) = ([], [])
+    /// What the list's settled rows were built from (`settled.stamp`), once
+    /// it holds every one of them; nil while a first screen is still filling.
+    private var listedStamp: String?
+    /// This frame changed what the list draws, so it is laid out within it.
+    private var drewThisFrame = false
 
     // MARK: The frame
 
@@ -831,8 +867,12 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         }
         honourTray()
         updateDock()
-        // The rows this frame asked for are built inside it, so its cost is whole.
-        collection.layoutIfNeeded()
+        // The rows this frame asked for are built inside it, so its cost is
+        // whole. A frame that drew nothing lays nothing out.
+        if drewThisFrame {
+            drewThisFrame = false
+            collection.layoutIfNeeded()
+        }
         let took = CACurrentMediaTime() - now
         Pace.spent(took, in: env.sessionId, items: items.count, cells: collection.visibleCells.count)
     }
@@ -859,34 +899,98 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             paneState.isHidden = named == nil
             collection.isHidden = named != nil
         }
-        var next: [String: Item] = [:]
-        for item in built { next[item.id] = item }
-        let all = built.map(\.id)
-        let ids = firstScreen(of: all)
-        collection.alpha = fed == nil || rows.isEmpty ? 1 : 0
-        let old = dataSource.snapshot()
-        let previous = Set(old.itemIdentifiers)
+        // The settled rows and the tail are sections of their own: what the
+        // tail does is laid out in the tail's section, and the history above
+        // it is not solved again for a streamed word.
+        let tailStart = min(settledCount, built.count)
+        let before = listed
+        // The settled rows are the ones the list already holds, as they were
+        // built (a frame of a streamed reply): only the tail, and the rows that
+        // read the fleet, are looked at. A long session's history is not
+        // walked again for every frame of its tail.
+        let quiet = fresh && fed == nil && listedStamp != nil && listedStamp == settled?.stamp
+            && before.settled.count == tailStart
+        let section: (settled: [String], tail: [String])
         var changed: [String] = []
-        for item in built where prints[item.id] != item.print {
-            if previous.contains(item.id) { changed.append(item.id) }
+        /// The items this frame drew from that the list may not have yet.
+        let looked: [Item]
+        if quiet {
+            let tail = Array(built[tailStart...])
+            let tailIds = tail.map(\.id)
+            for id in before.tail where !tailIds.contains(id) {
+                items[id] = nil
+                prints[id] = nil
+            }
+            var touched = tail
+            for i in settled?.fleet ?? [] where i < tailStart { touched.append(built[i]) }
+            for item in touched {
+                if prints[item.id] != item.print, dataSource.indexPath(for: item.id) != nil { changed.append(item.id) }
+                items[item.id] = item
+                prints[item.id] = item.print
+            }
+            section = (before.settled, tailIds)
+            looked = touched
+        } else {
+            var next: [String: Item] = [:]
+            for item in built { next[item.id] = item }
+            let all = built.map(\.id)
+            let ids = firstScreen(of: all)
+            let tailIds = Set(all[tailStart...])
+            section = (ids.filter { !tailIds.contains($0) }, ids.filter { tailIds.contains($0) })
+            for item in built where prints[item.id] != item.print {
+                if dataSource.indexPath(for: item.id) != nil { changed.append(item.id) }
+            }
+            items = next
+            prints = Dictionary(uniqueKeysWithValues: built.map { ($0.id, $0.print) })
+            looked = built
         }
-        items = next
-        prints = Dictionary(uniqueKeysWithValues: built.map { ($0.id, $0.print) })
+        listedStamp = fed == nil ? settled?.stamp : nil
+        collection.alpha = fed == nil || rows.isEmpty ? 1 : 0
         // Rows that arrive while the reader watches are drawn arriving (Row.svelte).
+        let fresher = (quiet ? section.tail : section.settled + section.tail).filter { !known.contains($0) }
         if env.watched {
             let now = CACurrentMediaTime()
-            for (slot, id) in ids.filter({ !known.contains($0) }).enumerated() {
+            for (slot, id) in fresher.enumerated() {
                 arriving[id] = now + Double(min(slot, 3)) * Motion.durStagger
             }
         }
-        known.formUnion(all)
-        if old.itemIdentifiers == ids, changed.isEmpty { return }
+        known.formUnion(quiet ? section.tail : looked.map(\.id))
+        if section.settled == before.settled, section.tail == before.tail {
+            guard !changed.isEmpty else { return }
+            // The same rows, some drawn anew (the streamed reply, mostly): each
+            // on screen is configured where it stands and sizes itself, and the
+            // list takes no update. One off the screen is reconfigured below.
+            var unseen: [String] = []
+            for id in changed {
+                if let index = dataSource.indexPath(for: id), let item = items[id],
+                   let cell = collection.cellForItem(at: index) as? ItemCell {
+                    cell.redraw(item)
+                } else {
+                    unseen.append(id)
+                }
+            }
+            drewThisFrame = true
+            if unseen.isEmpty {
+                collection.layoutIfNeeded()
+                if following, !gliding, !collection.isDragging, !collection.isDecelerating { latest() }
+                announce(looked)
+                return
+            }
+            changed = unseen
+        }
         var snapshot = NSDiffableDataSourceSnapshot<Int, String>()
-        snapshot.appendSections([0])
-        snapshot.appendItems(ids)
+        snapshot.appendSections([0, 1])
+        snapshot.appendItems(section.settled, toSection: 0)
+        snapshot.appendItems(section.tail, toSection: 1)
         snapshot.reconfigureItems(changed)
+        listed = section
+        drewThisFrame = true
         let follow = following
-        let grew = env.watched && ids.count > old.itemIdentifiers.count && follow && !UIAccessibility.isReduceMotionEnabled
+        let grew = env.watched && section.settled.count + section.tail.count > before.settled.count + before.tail.count
+            && follow && !UIAccessibility.isReduceMotionEnabled
+        // With no row in common there is nothing to work a difference out from.
+        let disjoint = quiet ? before.settled.isEmpty && Set(before.tail).isDisjoint(with: section.tail)
+            : Set(before.settled).union(before.tail).isDisjoint(with: section.settled + section.tail)
         let from = collection.contentOffset
         // Rows shifted in front (older history) never move the reader: the
         // first row on screen keeps its place (Transcript `frontOnly`, `restore`).
@@ -923,8 +1027,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
                 animator.startAnimation()
             } else { latest() }
         }
-        // With no row in common there is nothing to work a difference out from.
-        if previous.isDisjoint(with: ids) {
+        if disjoint {
             dataSource.applySnapshotUsingReloadData(snapshot, completion: settle)
         } else {
             // Where the list stands once the rows are in is settled before any
@@ -940,7 +1043,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             dataSource.apply(snapshot, animatingDifferences: false, completion: settle)
             layout.stand = nil
         }
-        announce(built)
+        announce(looked)
     }
 
     /// The rows the list holds this frame. Once the first screen is whole that
@@ -1011,6 +1114,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         }
         let change: @MainActor () -> Void = {
             cell.configure(item)
+            cell.forget()
             cell.contentView.layoutIfNeeded()
             cell.invalidateIntrinsicContentSize()
             self.collection.layoutIfNeeded()
@@ -1028,6 +1132,8 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         if let index = dataSource.indexPath(for: id), let item = items[id],
            let cell = collection.cellForItem(at: index) as? HostCell<UserTurnView> {
             cell.configure(item)
+            cell.forget()
+            cell.invalidateIntrinsicContentSize()
         }
         dirty = true
     }
@@ -1063,6 +1169,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     private func animate(_ row: Disclosing, open: Bool, in cell: UICollectionViewCell?) {
         // Main-actor closures from a main-actor view, run on the main actor by the animator.
         nonisolated(unsafe) let (layout, done) = row.toggled(open: open)
+        (cell as? ItemCell)?.forget()
         let change: @MainActor () -> Void = {
             layout()
             cell?.contentView.layoutIfNeeded()
