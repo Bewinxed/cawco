@@ -4,14 +4,13 @@
  * list that waits for him all mean the same picture.
  */
 import { untrack } from "svelte";
-import { warmCawMark } from "../home/CawMark.svelte";
+import { cawStill } from "../home/caw-still.svelte";
 import { dur } from "../motion/curves.svelte";
 
-/** His `compacted` file, in an 18px box with 2px of canvas past it. */
+/** His `compacted` file, in an 18px box (`cawStill` gives it 2px of canvas past it). */
 export const COMPACTION_MARK = {
   status: "compacted",
   size: 18,
-  bleed: 2,
 } as const;
 
 /**
@@ -38,14 +37,16 @@ export function warmCompactionMark(): void {
     if (coming) {
       return;
     }
-    const picture = warmCawMark(
-      COMPACTION_MARK.status,
-      COMPACTION_MARK.size,
-      COMPACTION_MARK.bleed
-    );
-    if (!picture) {
+    const still = cawStill(COMPACTION_MARK.status, COMPACTION_MARK.size);
+    if (still.picture) {
       return;
     }
+    const picture = still.drawn.then(
+      () => undefined,
+      (error: unknown) => {
+        console.error(`Caw ${COMPACTION_MARK.status} did not draw`, error);
+      }
+    );
     // The hold's own bound: a transcript never hangs on the mascot. Past
     // it the list is shown and he is painted when he arrives.
     const cap = new Promise<void>((over) => {

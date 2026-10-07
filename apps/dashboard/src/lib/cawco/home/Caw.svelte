@@ -1,6 +1,7 @@
 <script lang="ts" module>
   import type { Rive } from "@rive-app/canvas";
   import riveWasm from "@rive-app/canvas/rive.wasm?url";
+  import rests from "../../../../../../assets/mascot/loops/rests.json";
 
   /** What Caw shows. Each status is its own file, assets/mascot/caw/<status>.riv. */
   export type CawStatus =
@@ -16,22 +17,35 @@
     | "compacted";
 
   /**
-   * The status files, as the build emits them: URLs only, so a file is
-   * fetched the first time its status is shown and never before. The
-   * dashboard's own copy of assets/mascot/caw/, written by
-   * assets/mascot/scripts/build.mjs, so a new Caw redeploys the dashboard.
+   * Every file Caw is drawn from: a status's, or `peek`, his ledge peek,
+   * which is not a status (assets/mascot/README.md, Contract).
+   */
+  export type CawFile = CawStatus | "peek";
+
+  /**
+   * Where the ledge runs across peek.riv's 512 still box, as a share of its
+   * height from the top: above it all of him that shows, below it only the
+   * wing tips that hang in front of the ledge.
+   */
+  const LEDGE_LINE = rests.peek.ledgeLine;
+
+  /**
+   * The files, as the build emits them: URLs only, so a file is fetched the
+   * first time it is shown and never before. The dashboard's own copy of
+   * assets/mascot/caw/, written by assets/mascot/scripts/build.mjs, so a new
+   * Caw redeploys the dashboard.
    */
   const FILES = import.meta.glob<string>("../../assets/caw/*.riv", {
     query: "?url",
     import: "default",
     eager: true,
   });
-  const fileUrl = (status: CawStatus): string =>
+  const fileUrl = (status: CawFile): string =>
     FILES[`../../assets/caw/${status}.riv`];
 
-  /** Each status file's bytes, fetched once and shared by every Caw. */
-  const bytes = new Map<CawStatus, Promise<ArrayBuffer>>();
-  function fileBytes(status: CawStatus): Promise<ArrayBuffer> {
+  /** Each file's bytes, fetched once and shared by every Caw. */
+  const bytes = new Map<CawFile, Promise<ArrayBuffer>>();
+  function fileBytes(status: CawFile): Promise<ArrayBuffer> {
     const cached = bytes.get(status);
     if (cached) {
       return cached;
@@ -102,7 +116,7 @@
   }
 
   export async function stageCaw(
-    status: CawStatus,
+    status: CawFile,
     canvas: HTMLCanvasElement,
     box: CawBox,
     dark: boolean
@@ -203,6 +217,16 @@
    *
    * `size` is the side of his still in px. His acting reaches past it, so
    * the canvases spill over the box unclipped and never take a pointer.
+   *
+   * With `ledge` he stands behind an edge: the slot is the part of his box
+   * above peek.riv's ledge line, so the line sits on the slot's bottom edge,
+   * and nothing of him draws below it. He comes in by peek.riv's own enter
+   * whatever the status, and holds its rest. Each change of `status` after
+   * that brings that status's file in the same box behind the same edge, by
+   * the same leave and enter as anywhere else.
+   *
+   * With `still` each file holds his still once it has entered: the file's
+   * `reducedMotion` is written for that Caw alone, as `stageCaw`'s rest does.
    */
   import { untrack } from "svelte";
   import {
@@ -220,8 +244,14 @@
     onentered,
     ongone,
     size = 160,
+    ledge = false,
+    still = false,
   }: {
     status: CawStatus;
+    /** He peeks over an edge at the slot's bottom, clipped below it. */
+    ledge?: boolean;
+    /** Each file holds his still once it has entered. */
+    still?: boolean;
     /**
      * Off once the place is done with him: he fades out at once and
      * `ongone` is called. The place keeps him mounted till then.
@@ -250,11 +280,13 @@
     /** Its fade, while one runs: in with no drawn enter or with less motion, or out. */
     fade?: Animation;
     id: number;
+    /** His enter has ended (at once in a file with none): `still` may hold him. */
+    landed: boolean;
     /** Fading out: whatever is asked for next comes in once he has gone. */
     leaving: boolean;
     rive?: Rive;
     shown: boolean;
-    status: CawStatus;
+    status: CawFile;
   }
   /** The Caw on screen and, while less motion fades one status across another, the one over him. */
   let layers = $state<Layer[]>([]);
@@ -265,28 +297,48 @@
   const dark = $derived(theme.resolved === "dark");
   const reducedMotion = $derived(!motionOk.current);
 
+  /**
+   * The status his peek stands for: the one he was mounted with, behind a
+   * ledge, until another is asked for.
+   */
+  let peekFor = untrack(() => (ledge ? status : undefined));
+  function fileFor(asked: CawStatus): CawFile {
+    if (asked !== peekFor) {
+      peekFor = undefined;
+    }
+    return peekFor === undefined ? asked : "peek";
+  }
+
   $effect(() => {
     const asked = status;
     const here = present;
-    untrack(() => (here ? ask(asked) : leave()));
+    untrack(() => (here ? ask(fileFor(asked)) : leave()));
   });
 
-  // Every live Caw follows the scheme and the motion setting; their state machines do the rest.
+  // Every live Caw follows the scheme and the motion setting, and `still`
+  // once he has landed; their state machines do the rest.
   $effect(() => {
-    const values = { dark, reducedMotion };
     for (const layer of layers) {
       if (layer.rive) {
-        write(layer.rive, values);
+        write(layer.rive, valuesFor(layer));
       }
     }
   });
 
-  function layerFor(incoming: CawStatus): Layer {
+  function valuesFor(layer: Layer) {
+    return {
+      dark,
+      reducedMotion: reducedMotion || (still && layer.landed),
+    };
+  }
+
+  function layerFor(incoming: CawFile): Layer {
     nextId += 1;
     return {
       id: nextId,
       status: incoming,
       asked: performance.now(),
+      landed: false,
       leaving: false,
       shown: false,
     };
@@ -298,7 +350,7 @@
    * fades out, and the new status's file comes in once he has gone; with
    * less motion the new one fades in over him.
    */
-  function ask(incoming: CawStatus) {
+  function ask(incoming: CawFile) {
     const [current] = layers;
     if (!current?.shown) {
       if (current?.status !== incoming) {
@@ -358,7 +410,7 @@
     (layer.fade?.finished ?? Promise.resolve())
       .then(() => {
         performance.measure(`caw ${layer.status} gone`);
-        layers = present ? [layerFor(status)] : [];
+        layers = present ? [layerFor(fileFor(status))] : [];
         if (!present) {
           ongone?.();
         }
@@ -427,10 +479,13 @@
                 return;
               }
               rive.resizeDrawingSurfaceToCanvas();
-              write(rive, { dark, reducedMotion });
-              rive.viewModelInstance
-                ?.trigger("entered")
-                ?.on(() => reportEntered(layer));
+              const caw = rive.viewModelInstance;
+              layer.landed = !(caw?.boolean("enters")?.value ?? false);
+              write(rive, valuesFor(layer));
+              caw?.trigger("entered")?.on(() => {
+                layer.landed = true;
+                reportEntered(layer);
+              });
               layer.rive = rive;
               show(layer, canvas);
             },
@@ -501,9 +556,11 @@
   aria-hidden="true"
   class="caw"
   style:--artboard="{(size * ARTBOARD) / BOX.side}px"
+  style:--height="{ledge ? size * LEDGE_LINE : size}px"
   style:--left="{(-size * BOX.x) / BOX.side}px"
   style:--side="{size}px"
   style:--top="{(-size * BOX.y) / BOX.side}px"
+  class:ledge
 >
   {#each layers as layer (layer.id)}
     <canvas class:shown={layer.shown} {@attach mount(layer)}></canvas>
@@ -514,9 +571,14 @@
   .caw {
     position: relative;
     width: var(--side);
-    height: var(--side);
+    height: var(--height);
     pointer-events: none;
     user-select: none;
+  }
+  /* Behind the edge: his acting still reaches past the box above and to
+     the sides, and nothing of him draws below the slot's bottom. */
+  .ledge {
+    clip-path: inset(calc(var(--artboard) * -1) calc(var(--artboard) * -1) 0);
   }
   canvas {
     position: absolute;

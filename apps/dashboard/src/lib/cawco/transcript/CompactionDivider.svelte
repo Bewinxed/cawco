@@ -88,7 +88,6 @@
     ><span class="caw"
       ><CawMark
         arrival={lead === null ? null : `${row.session}:${row.key}`}
-        bleed={COMPACTION_MARK.bleed}
         delay={lead === null ? 0 : dur("--dur-rail") + lead}
         size={COMPACTION_MARK.size}
         status={COMPACTION_MARK.status}
