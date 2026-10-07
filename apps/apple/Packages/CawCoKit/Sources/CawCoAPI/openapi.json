@@ -15599,6 +15599,9 @@
       "StreamClientMessage": {
         "anyOf": [
           {
+            "$ref": "#/components/schemas/PlanFollow"
+          },
+          {
             "$ref": "#/components/schemas/PlanResync"
           },
           {
@@ -27342,6 +27345,28 @@
         "required": [
           "commandId",
           "stage",
+          "type"
+        ]
+      },
+      "PlanFollow": {
+        "description": "Client → hub: the sessions whose plan this socket follows beside the ones\nit streams (a thread showing its lead's plan), the whole set each time.\nOne newly in the set is answered with its snapshot; deltas follow.",
+        "type": "object",
+        "properties": {
+          "instanceIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "plan.follow"
+            ]
+          }
+        },
+        "required": [
+          "instanceIds",
           "type"
         ]
       },
