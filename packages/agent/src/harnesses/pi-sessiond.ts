@@ -238,6 +238,9 @@ export class PiRemoteSession implements HarnessSession {
   resolvePermission(_requestId: string, _result: PermissionResult): void {
     /* pi has no permissions */
   }
+  withdrawPermission(_requestId: string, _message: string): void {
+    /* pi has no permissions */
+  }
   async stop(): Promise<void> {
     await this.request({ type: "stop" });
     await this.#client.stdinEnd(procIdFor("pi", this.#ctx.instanceId));

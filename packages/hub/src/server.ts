@@ -143,8 +143,10 @@ import {
   TOOL_CATALOG,
   toolSpec,
   UPDATE_CAWCO,
+  unshownAskMessage,
   validateWorkflow,
   WIRE_PROTOCOL,
+  WITHDRAW_PERMISSION,
   WORKSPACE_CREATE_TIMEOUT_MS,
 } from "@cawco/core";
 import {
@@ -1664,7 +1666,7 @@ export const createServer = (
   // Each project's Caw (caw.ts), made further down once its services are; the
   // settlement, answer and process-end paths above it reach it through this.
   let lead: Caw | undefined;
-  pending.onSettled((parked, outcome) => {
+  pending.onSettled((parked, outcome, why) => {
     if (!(parked.requestId && parked.instanceId)) {
       return;
     }
@@ -1692,6 +1694,10 @@ export const createServer = (
         instanceId: parked.instanceId,
         requestId: parked.requestId,
         outcome,
+        // An ask no screen was shown: the transcript's only word of it.
+        ...(why
+          ? { reason: why, toolName: peek(parked.payload, "toolName") }
+          : {}),
       },
     });
   });
@@ -7094,6 +7100,36 @@ export const createServer = (
     }
   };
   onPermissionAnswer(pending, answerPendingPermission);
+
+  /**
+   * An ask admission refused (`askRefusal`) is taken back from the process
+   * that asked it: denied in words saying it could not be shown and why, so
+   * its turn goes on instead of waiting on a question nobody was shown.
+   */
+  const withdrawUnshown = async (ask: Envelope, why: string): Promise<void> => {
+    const requestId = ask.requestId ?? "";
+    const { toolName, input } = ask.payload as Partial<PermissionRequestFrame>;
+    const question = questionsOf(toolName ?? "", input ?? {}) !== null;
+    const withdrawn = await callAgent(
+      ask.machineId,
+      WITHDRAW_PERMISSION,
+      [requestId, unshownAskMessage(question, why)],
+      READ_TIMEOUT_MS,
+      undefined,
+      ask.instanceId
+    );
+    let said: string;
+    if (typeof withdrawn === "string") {
+      said = withdrawn;
+    } else if (withdrawn.ok) {
+      said = "the session was told and goes on";
+    } else {
+      said = withdrawn.error ?? "the machine refused it";
+    }
+    console.log(
+      `[hub] ask withdrawn session=${ask.instanceId ?? "none"} request=${requestId}: ${said}`
+    );
+  };
 
   const relayPermissionAnswer = (
     message: Envelope<ControlPayload>,
@@ -12616,15 +12652,17 @@ export const createServer = (
                 // through the same settlement path. A process sessiond kept
                 // alive across an agent restart is `starting` until its attach
                 // lands (`settleInstances`, `restore`), so its replayed asks
-                // are admitted. A refusal is said: the asking process is left
-                // waiting on it.
+                // are admitted. A refusal is said, and the asking process is
+                // told at once: nothing may wait on an ask nobody can see.
                 const refusal = askRefusal(owner, message);
                 if (refusal) {
                   console.warn(
                     `[hub] ask refused session=${message.instanceId ?? "none"} request=${message.requestId} tool=${peek(message.payload, "toolName") ?? "unknown"}: ${refusal}`
                   );
                   pending.remember(message.requestId, message);
-                  pending.resolve(message.requestId, "cancelled");
+                  pending.resolve(message.requestId, "cancelled", refusal);
+                  // biome-ignore lint/complexity/noVoid: the withdrawal says its own outcome in the log; admission does not wait on the machine
+                  void withdrawUnshown(message, refusal);
                   break;
                 }
                 // A replayed ask (the daemon re-announces unresolved asks after

@@ -3,7 +3,7 @@
  * it, a failure it saw, and an ask it saw withdrawn. Everything else in a
  * transcript is the hub's.
  */
-import { questionsOf, type SendPayload } from "@cawco/core";
+import type { SendPayload } from "@cawco/core";
 import { newId } from "../id";
 import type { Message } from "../types";
 
@@ -47,21 +47,20 @@ export function localUserMessage(
 /**
  * The quiet line an ask leaves when it is withdrawn before it is answered
  * (the turn interrupted, the session gone): the composer it grew folds back,
- * and this says why it went.
+ * and this says why it went. `why` is the hub's, for an ask it could not show
+ * anyone: then this line is the only sign there was one.
  */
 export function withdrawnNote(
   instanceId: string,
-  request: { toolName: string; input: unknown }
+  question: boolean,
+  why?: string
 ): Message {
-  const question = questionsOf(
-    request.toolName,
-    (request.input ?? {}) as Record<string, unknown>
-  );
+  const line = question ? "Question withdrawn" : "Permission request withdrawn";
   return {
     id: newId(),
     instanceId,
     type: "ui.system_note",
-    content: question ? "Question withdrawn" : "Permission request withdrawn",
+    content: why ? `${line}: it couldn't be shown (${why})` : line,
     timestamp: new Date().toISOString(),
   };
 }

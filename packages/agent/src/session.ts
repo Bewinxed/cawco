@@ -57,6 +57,7 @@ import {
   repoPath,
   resumeCursor,
   VERIFY_SESSION_CREDENTIAL,
+  WITHDRAW_PERMISSION,
   withWorktreeLine,
   worstFleetState,
 } from "@cawco/core";
@@ -3293,6 +3294,14 @@ export class SessionSupervisor {
         args[1] as PermissionResult
       );
       this.#settleAsk(instanceId, args[0] as string);
+      return undefined;
+    }
+    if (method === WITHDRAW_PERMISSION) {
+      this.#session(instanceId).withdrawPermission(
+        args[0] as string,
+        args[1] as string
+      );
+      this.#settleAsk(instanceId, args[0] as string, "cancelled");
       return undefined;
     }
     if (method === CONTROL_SLEEP) {

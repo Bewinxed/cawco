@@ -1669,6 +1669,22 @@ class ClaudeSession implements HarnessSession {
     resolve(sdkPermissionResult(settledQuestionResult(question, result)));
   }
 
+  /**
+   * An ask the hub could not show anyone: the CLI is told no, in `message`'s
+   * words, and its turn goes on. It is withdrawn as an interrupt withdraws
+   * one, so no dismissal is recorded for its `tool_result`.
+   */
+  withdrawPermission(requestId: string, message: string): void {
+    const resolve = this.#permissions.get(requestId);
+    if (!resolve) {
+      throw new Error(`no permission request ${requestId}`);
+    }
+    this.#permissions.delete(requestId);
+    this.#openQuestions.delete(requestId);
+    console.log(`[claude] permission withdrawn: ${requestId} — ${message}`);
+    resolve({ behavior: "deny", message });
+  }
+
   async interrupt(): Promise<void> {
     // biome-ignore lint/suspicious/noEmptyBlockStatements: best effort — a stream that already ended has nothing left to interrupt
     await this.#handle.interrupt().catch(() => {});

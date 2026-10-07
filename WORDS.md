@@ -259,3 +259,7 @@ name is "Your answer to: [the question]". A question or permission the agent wit
 answered leaves one quiet line in the transcript: **"Question withdrawn"** or **"Permission request
 withdrawn"**, and the question's own card reads **withdrawn** (its state word, lowercase like
 `answered` and `dismissed`); **not asked** is kept for a question the tool refused before anyone saw it.
+An ask the hub could not show anyone (its session or launch is no longer live) is withdrawn the same
+way, and its line says why: **"Question withdrawn: it couldn't be shown (the session is sleeping)"**.
+The session itself is told **"This question couldn't be shown (the session is sleeping)."**, and its
+turn goes on.

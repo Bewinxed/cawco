@@ -3552,6 +3552,14 @@ export class OpencodeSession implements HarnessSession {
     }
   }
 
+  /**
+   * OpenCode's reply carries no words, and its rejection writes the row: a
+   * withdrawn gate is rejected as a denied one is.
+   */
+  withdrawPermission(requestId: string, message: string): void {
+    this.resolvePermission(requestId, { behavior: "deny", message });
+  }
+
   resolvePermission(requestId: string, result: PermissionResult): void {
     if (this.#resolvedGates.has(requestId)) {
       return;

@@ -24,9 +24,7 @@ export interface PendingShape {
    * leaves, by `resolve` or `forget`, whichever path settled it. Set once by
    * the server, which tells every dashboard.
    */
-  readonly onSettled: (
-    listener: (envelope: Envelope, outcome: "answered" | "cancelled") => void
-  ) => void;
+  readonly onSettled: (listener: SettledListener) => void;
   /**
    * `outlivesHub` marks a session process's own ask, which is kept across
    * this hub's restart; one the hub raised for itself is not.
@@ -36,11 +34,23 @@ export interface PendingShape {
     envelope: Envelope,
     outlivesHub?: boolean
   ) => boolean;
+  /**
+   * `why` is said with a cancellation the hub can explain: an ask it could
+   * not show anyone (`askRefusal` in server.ts).
+   */
   readonly resolve: (
     requestId: string,
-    outcome?: "answered" | "cancelled"
+    outcome?: "answered" | "cancelled",
+    why?: string
   ) => boolean;
 }
+
+/** Hears every parked ask that leaves, with why when the hub could say. */
+export type SettledListener = (
+  envelope: Envelope,
+  outcome: "answered" | "cancelled",
+  why?: string
+) => void;
 
 export class Pending extends Context.Service<Pending, PendingShape>()(
   "Pending"
@@ -107,13 +117,8 @@ const make = (kept: DbShape["parkedAsks"]): PendingShape => {
   );
   // A daemon replay must not resurrect a request that already left this ledger.
   const settledIds = new Set<string>();
-  let settled:
-    | ((envelope: Envelope, outcome: "answered" | "cancelled") => void)
-    | undefined;
-  const resolve: PendingShape["resolve"] = (
-    requestId,
-    outcome = "answered"
-  ) => {
+  let settled: SettledListener | undefined;
+  const resolve: PendingShape["resolve"] = (requestId, outcome, why) => {
     const envelope = requests.get(requestId);
     if (!envelope) {
       return false;
@@ -121,7 +126,7 @@ const make = (kept: DbShape["parkedAsks"]): PendingShape => {
     requests.delete(requestId);
     kept.drop(requestId);
     settledIds.add(requestId);
-    settled?.(envelope, outcome);
+    settled?.(envelope, outcome ?? "answered", why);
     return true;
   };
 

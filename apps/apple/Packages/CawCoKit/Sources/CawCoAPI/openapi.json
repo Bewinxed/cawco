@@ -28207,7 +28207,15 @@
           "processGeneration": {
             "type": "string"
           },
+          "reason": {
+            "description": "Why a cancelled ask went unanswered, when the hub could say: it could not\nshow it at all (an ask from a session or launch it holds no live row for).\nSuch an ask was never parked on any screen, so this frame is the only\nword a transcript gets of it.",
+            "type": "string"
+          },
           "requestId": {
+            "type": "string"
+          },
+          "toolName": {
+            "description": "The asking tool, for the line a screen writes about an ask it never held.",
             "type": "string"
           }
         },

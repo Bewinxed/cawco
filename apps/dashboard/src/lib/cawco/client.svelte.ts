@@ -67,11 +67,13 @@ import type {
   WorkItemSummary,
 } from "@cawco/core";
 import {
+  ASK_USER_QUESTION,
   CAWCO_SCRATCH_TAG,
   CONTROL_SUPPORTED_COMMANDS,
   capHolds,
   classifyCommand,
   isEffortLevel,
+  questionsOf,
   RESOLVE_PERMISSION,
   runDoing,
   WIRE_PROTOCOL,
@@ -2338,14 +2340,18 @@ function handleFrame(frame: FramePayload): void {
       target.pending = target.pending.filter(
         (p) => p.requestId !== frame.requestId
       );
-      // Withdrawn, not answered: the composer folds back, and the
-      // transcript says why the ask is gone.
-      if (frame.outcome === "cancelled") {
-        const note = withdrawnNote(frame.instanceId, parked);
-        state.withdrawnAsks[frame.requestId] = note;
-        addNote(target, note);
-      }
       trackWorking(target);
+    }
+    // Withdrawn, not answered: the composer folds back, and the transcript
+    // says why the ask is gone. One the hub could not show anyone was never
+    // parked here, and its reason is the only word of it.
+    if (target && frame.outcome === "cancelled" && (parked || frame.reason)) {
+      const question = parked
+        ? questionsOf(parked.toolName, parked.input) !== null
+        : frame.toolName === ASK_USER_QUESTION;
+      const note = withdrawnNote(frame.instanceId, question, frame.reason);
+      state.withdrawnAsks[frame.requestId] = note;
+      addNote(target, note);
     }
     return;
   }

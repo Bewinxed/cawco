@@ -131,7 +131,16 @@ export interface PermissionSettledFrame {
   kind: "permission_settled";
   outcome?: "answered" | "cancelled";
   processGeneration?: string;
+  /**
+   * Why a cancelled ask went unanswered, when the hub could say: it could not
+   * show it at all (an ask from a session or launch it holds no live row for).
+   * Such an ask was never parked on any screen, so this frame is the only
+   * word a transcript gets of it.
+   */
+  reason?: string;
   requestId: string;
+  /** The asking tool, for the line a screen writes about an ask it never held. */
+  toolName?: string;
 }
 
 export interface UsageFrame {

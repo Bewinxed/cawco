@@ -461,6 +461,9 @@ class PiSession implements HarnessSession {
   resolvePermission(_requestId: string, _result: PermissionResult): void {
     /* pi has no permissions */
   }
+  withdrawPermission(_requestId: string, _message: string): void {
+    /* pi has no permissions */
+  }
   async interrupt(): Promise<void> {
     await this.#session.abort();
   }

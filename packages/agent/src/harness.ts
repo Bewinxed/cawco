@@ -138,6 +138,13 @@ export interface HarnessSession {
   /** End the session gracefully: unblock, interrupt, let the turn settle, close. */
   // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
   stop(): Promise<void>;
+  /**
+   * Take back a parked permission nobody could be shown (WITHDRAW_PERMISSION):
+   * denied with `message`, and recorded as withdrawn, never as the reader's
+   * dismissal.
+   */
+  // biome-ignore lint/style/useConsistentMethodSignatures: method-style like resolvePermission, for the same contravariant parameter checking
+  withdrawPermission(requestId: string, message: string): void;
 }
 
 /** One harness adapter. Implemented per runtime; registered in `./harnesses`. */

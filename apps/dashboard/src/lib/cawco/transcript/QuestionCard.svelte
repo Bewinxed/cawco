@@ -4,7 +4,7 @@
     UserQuestion,
     UserQuestionResult,
   } from "@cawco/core";
-  import { questionsOf } from "@cawco/core";
+  import { QUESTION_UNSHOWN, questionsOf } from "@cawco/core";
   import { untrack } from "svelte";
   import {
     CURVE,
@@ -54,14 +54,16 @@
     !(answered || dismissed) && message.metadata?.toolStatus === "error"
   );
   /**
-   * It was asked, and taken back before it was answered (the turn
-   * interrupted while it waited): the line "Question withdrawn" says so in
-   * the transcript, and the card says the same.
+   * It was asked, and taken back before it was answered: the turn interrupted
+   * while it waited, or the hub could not show it anyone (its denial begins
+   * {@link QUESTION_UNSHOWN}). The line "Question withdrawn" says so in the
+   * transcript, and the card says the same.
    */
   const withdrawn = $derived(
     failed &&
       typeof message.metadata?.toolResult === "string" &&
-      message.metadata.toolResult.startsWith(CLI_REJECTED)
+      (message.metadata.toolResult.startsWith(CLI_REJECTED) ||
+        message.metadata.toolResult.startsWith(QUESTION_UNSHOWN))
   );
   const answers = $derived<UserAnswers>(
     result?.outcome === "answered" ? result.answers : {}
