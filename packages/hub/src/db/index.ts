@@ -335,6 +335,7 @@ export interface DbShape {
   /** Adds what a Caw turn the thread woke cost to the thread's spend. */
   /** Books what one Caw turn cost, to the thread that woke it (null: none did). */
   readonly bookCawTurn: (turn: {
+    harness: string;
     projectId: string;
     threadId: string | null;
     usd: number;
@@ -4118,12 +4119,13 @@ const make = (path: string): DbShape => {
           )
         )
         .get()?.usd ?? 0),
-    bookCawTurn: ({ projectId, threadId, usd }) => {
+    bookCawTurn: ({ harness, projectId, threadId, usd }) => {
       db.insert(cawTurns)
         .values({
           id: crypto.randomUUID(),
           projectId,
           threadId,
+          harness,
           usd,
           at: new Date(),
         })

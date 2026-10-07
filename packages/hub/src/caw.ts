@@ -1026,6 +1026,7 @@ export const createCaw = ({
       answered.delete(instanceId);
       if (spent > 0) {
         db.bookCawTurn({
+          harness: row(instanceId)?.harness ?? project.cawHarness,
           projectId: project.id,
           threadId: threadId ?? null,
           usd: spent,

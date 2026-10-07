@@ -1808,6 +1808,13 @@ export const cawTurns = sqliteTable(
     threadId: text("thread_id").references(() => projectThreads.id, {
       onDelete: "set null",
     }),
+    /**
+     * The harness whose own result said what the turn cost: Claude Code's
+     * `total_cost_usd`, OpenCode's assistant messages' `cost` (the agent's
+     * adapter sums them into the same field). Turns booked before it was
+     * recorded take their project's Caw harness then (migration 0096).
+     */
+    harness: text("harness"),
     usd: real("usd").notNull(),
     at: timestamp("at").notNull(),
   },
