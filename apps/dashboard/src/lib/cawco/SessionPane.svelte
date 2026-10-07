@@ -1055,7 +1055,7 @@
 <div class="pane" bind:clientWidth={paneWidth}>
   {#if session}
     <SideSplit
-      oncapture={(pick, png) => draft.captured(pick, png)}
+      oncapture={(pick, shot) => draft.captured(pick, shot)}
       onescape={() => draft.closeSelectionEditor()}
       onselect={(selection) => draft.attach(selection)}
       {phone}

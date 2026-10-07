@@ -582,19 +582,46 @@ function describe(el: Element): PreviewElement {
   };
 }
 
+/** A canvas side every browser draws (Chrome's area cap is this squared). */
+const CANVAS_SIDE = 16_384;
+/** Pixels in one screenshot: enough to read, small enough to send. */
+const CANVAS_AREA = 16_000_000;
+
+/**
+ * The raster scale for an element: the screen's density up to 2, brought
+ * down until the canvas fits. Past a browser's canvas limits the raster
+ * comes out empty, so a tall element is drawn smaller instead.
+ */
+function scaleFor(el: Element): number {
+  const { width, height } = el.getBoundingClientRect();
+  const w = Math.max(1, width);
+  const h = Math.max(1, height);
+  return Math.min(
+    2,
+    devicePixelRatio,
+    CANVAS_SIDE / w,
+    CANVAS_SIDE / h,
+    Math.sqrt(CANVAS_AREA / (w * h))
+  );
+}
+
 async function capture(
   el: Element
-): Promise<{ png: string | null; error?: string }> {
+): Promise<{ png: string | null; scale: number; error?: string }> {
+  const scale = scaleFor(el);
   try {
     const png = await domToPng(el, {
-      scale: Math.min(2, devicePixelRatio),
+      scale,
       filter: (node) => node !== host,
     });
-    return { png: png.replace(PNG_PREFIX, "") };
+    if (!PNG_PREFIX.test(png)) {
+      throw new Error("The element was too large to draw.");
+    }
+    return { png: png.replace(PNG_PREFIX, ""), scale };
   } catch (reason) {
     const error = reason instanceof Error ? reason.message : String(reason);
     post("cawco:error", { message: error });
-    return { png: null, error };
+    return { png: null, scale, error };
   }
 }
 
@@ -626,6 +653,15 @@ window.addEventListener(
 );
 
 let touchCaptured = false;
+
+/** Resolves after the next frame has been drawn and handed on. */
+function afterNextPaint(): Promise<void> {
+  return new Promise((resolve) =>
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => setTimeout(resolve, 0))
+    )
+  );
+}
 let pickCount = 0;
 
 /**
@@ -638,8 +674,13 @@ async function selectAt(clientX: number, clientY: number) {
     pickCount += 1;
     const id = `${Date.now().toString(36)}-${pickCount}`;
     post("cawco:selected", { id, element: describe(el) });
-    const { png, error } = await capture(el);
-    post("cawco:selected-png", error ? { id, error } : { id, png });
+    // This page shares the dashboard's thread, and the raster's first part
+    // runs without a break: it starts only once the dashboard has taken the
+    // pick and drawn the first frame of its flight, which the compositor then
+    // carries on its own.
+    await afterNextPaint();
+    const { png, scale, error } = await capture(el);
+    post("cawco:selected-png", error ? { id, error } : { id, png, scale });
   }
 }
 

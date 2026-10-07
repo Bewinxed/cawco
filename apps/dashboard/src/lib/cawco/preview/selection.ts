@@ -11,6 +11,13 @@ export interface CapturedSelection {
   element: PreviewElement;
   note: string;
   png: string | null;
+  /** The density the png was drawn at: its pixels per CSS pixel. */
+  scale: number;
+}
+
+/** An element's screenshot, as the overlay drew it. */
+export interface SelectionShot {
+  png: string;
   scale: number;
 }
 

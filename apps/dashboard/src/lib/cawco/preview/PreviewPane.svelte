@@ -24,7 +24,11 @@
   import { closeInto, depart } from "../motion/share.svelte";
   import SideSurface from "../side/SideSurface.svelte";
   import PlacePick from "./PlacePick.svelte";
-  import { type CapturedSelection, selectionShare } from "./selection";
+  import {
+    type CapturedSelection,
+    type SelectionShot,
+    selectionShare,
+  } from "./selection";
   import { applySetupPicks, isSetupPage } from "./setup-page";
   import { previewPlace, previewSourceKey } from "./source";
   import {
@@ -37,6 +41,7 @@
     previewPickPlace,
     previewPng,
     previewRpc,
+    previewScale,
     previewTitle,
     previewUrl,
   } from "./wire";
@@ -61,7 +66,7 @@
       selection: CapturedSelection
     ) => "added" | "duplicate" | "full" | undefined;
     /** A pick's screenshot arrived (null: it could not be drawn). */
-    oncapture: (pick: string, png: string | null) => void;
+    oncapture: (pick: string, shot: SelectionShot | null) => void;
     onescape: () => boolean;
   } = $props();
   let iframe = $state<HTMLIFrameElement>();
@@ -359,7 +364,7 @@
             element,
             png: null,
             note: "",
-            scale: Math.min(2, devicePixelRatio),
+            scale: 1,
           }) === "full"
         ) {
           const style = getComputedStyle(well);
@@ -386,8 +391,12 @@
         const error = previewError(message.error);
         if (error) {
           failure = frameError(error);
+          oncapture(pick, null);
+          break;
         }
-        oncapture(pick, error ? null : previewPng(message.png));
+        const png = previewPng(message.png);
+        const scale = previewScale(message.scale);
+        oncapture(pick, png && scale ? { png, scale } : null);
         break;
       }
       case "cawco:escape":

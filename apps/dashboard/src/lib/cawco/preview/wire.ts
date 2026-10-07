@@ -78,6 +78,12 @@ export function previewPickId(value: unknown): string | null {
   return typeof value === "string" && PICK_ID.test(value) ? value : null;
 }
 
+/** The raster scale a screenshot was drawn at: above 0, at most 2. */
+export function previewScale(value: unknown): number | null {
+  const scale = finite(value);
+  return scale !== null && scale > 0 && scale <= 2 ? scale : null;
+}
+
 export function previewError(value: unknown): string | null {
   return text(value, ERROR_MAX);
 }

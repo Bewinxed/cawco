@@ -13,7 +13,11 @@
 import { SvelteSet } from "svelte/reactivity";
 import type { SendExtras } from "../client.svelte";
 import { newId } from "../id";
-import type { CapturedSelection, PendingSelection } from "../preview/selection";
+import type {
+  CapturedSelection,
+  PendingSelection,
+  SelectionShot,
+} from "../preview/selection";
 import type { DraftContent } from "./draft-store";
 
 export interface PendingImage {
@@ -203,13 +207,16 @@ export class ComposerDraft {
   capturing = $derived(this.selections.some((s) => s.capturing !== null));
 
   /**
-   * A picked element's screenshot arrived (or failed, `png` null) under the
+   * A picked element's screenshot arrived (or failed, null) under the
    * overlay's pick id; the note waiting on it takes it.
    */
-  captured(pick: string, png: string | null): void {
+  captured(pick: string, shot: SelectionShot | null): void {
     const note = this.selections.find((s) => s.capturing === pick);
     if (note) {
-      note.png = png;
+      if (shot) {
+        note.png = shot.png;
+        note.scale = shot.scale;
+      }
       note.capturing = null;
     }
   }

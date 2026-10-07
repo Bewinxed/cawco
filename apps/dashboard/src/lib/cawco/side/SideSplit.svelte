@@ -33,7 +33,7 @@
   import { waiting as departing, land } from "../motion/share.svelte";
   import PlanPane, { planShows } from "../plan/PlanPane.svelte";
   import PreviewPane from "../preview/PreviewPane.svelte";
-  import type { CapturedSelection } from "../preview/selection";
+  import type { CapturedSelection, SelectionShot } from "../preview/selection";
   import SideSheet from "./SideSheet.svelte";
 
   let {
@@ -63,7 +63,7 @@
     onselect: (
       selection: CapturedSelection
     ) => "added" | "duplicate" | "full" | undefined;
-    oncapture: (pick: string, png: string | null) => void;
+    oncapture: (pick: string, shot: SelectionShot | null) => void;
     onescape: () => boolean;
     /** The surface's share of the width, in percent: 0 while closed or a sheet. */
     share?: number;
