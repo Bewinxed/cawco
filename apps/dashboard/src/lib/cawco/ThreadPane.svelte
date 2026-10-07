@@ -406,7 +406,7 @@
   });
 
   /** What the composer stands over the foot: the fade and "Jump to latest" rest on it. */
-  let foot = $state<ComposerFoot>({ stack: 0, perch: 0 });
+  let foot = $state<ComposerFoot>({ stack: 0, perch: 0, parked: 0 });
   /**
    * Scrolled away from the tail, the way back rests on the composer's stack,
    * beside Caw; the foot's fade is solid to the higher of his top and its
@@ -517,8 +517,9 @@
 <div class="pane" bind:clientWidth={paneWidth}>
   <div
     class="body"
-    style="--composer-clearance: calc({composerRoom} + var(--space-4) + var(--space-4)); {leadOn &&
-    foot.stack
+    style="--composer-clearance: calc({composerRoom} + var(--space-4) + var(--space-4)); --parked-room: {leadOn
+      ? foot.parked
+      : 0}px; {leadOn && foot.stack
       ? `--latest-inset: calc(${latestFoot} - max(calc(var(--space-8) * 3), var(--composer-clearance)))`
       : ""}"
   >

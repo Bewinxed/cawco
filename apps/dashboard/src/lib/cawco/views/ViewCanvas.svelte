@@ -88,10 +88,10 @@
    * the cards it moves must not jump meanwhile). Only the first layout is
    * drawn in place.
    */
-  let placed = $state(false);
+  let eased = $state(false);
   $effect(() => {
     if (settled) {
-      placed = true;
+      eased = true;
     }
   });
   const ESTIMATE = { width: 240, height: 64 };
@@ -201,7 +201,7 @@
 <section
   aria-label="Task graph"
   class="canvas"
-  data-settled={placed || undefined}
+  data-settled={eased || undefined}
   bind:clientHeight={canvasHeight}
   bind:clientWidth={canvasWidth}
 >

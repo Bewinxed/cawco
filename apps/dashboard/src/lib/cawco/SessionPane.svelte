@@ -112,6 +112,8 @@
   let previewShare = $state(0);
   const phone = $derived(paneWidth > 0 && paneWidth < 900);
   let side = $state<ReturnType<typeof SideSplit>>();
+  /** The parked cards' height: the transcript keeps that much room past its end. */
+  let parkedRoom = $state(0);
   /** The session's plan has something to show: its ring opens it (SideSplit). */
   const plan = $derived(cawco.planOf(viewId));
   const planProgressNow = $derived(
@@ -148,11 +150,7 @@
    * whichever machine holds the file — and every way this ends is a named
    * state.
    */
-  async function readHistory(
-    id: string,
-    running: boolean,
-    fresh = false
-  ): Promise<void> {
+  async function readHistory(id: string, fresh = false): Promise<void> {
     const outcome = await readTranscript(id, false, fresh);
     // Each outcome replaces what the last read said, and only an outcome
     // does: a read in flight leaves the pane showing what it showed.
@@ -177,11 +175,11 @@
     }
     failure = null;
     missing = false;
-    // A clean read of nothing. For a running session that is a conversation
-    // that has not started, and the stream will say so when it does; for a
-    // stored one it is the whole answer, and the skeleton would otherwise
-    // wait for turns that are never coming.
-    empty = !running && (cawco.session(id)?.messages.length ?? 0) === 0;
+    // A clean read of nothing is known to be empty, running or stored, and
+    // says so (DESIGN.md, the Claim of Nothing): a session that has not
+    // started yet shows its blank state, never a skeleton waiting for turns.
+    // Its first turn, streamed in, replaces the blank state with the rows.
+    empty = (cawco.session(id)?.messages.length ?? 0) === 0;
   }
 
   // Bring the conversation into being: a stored session reads its transcript
@@ -245,7 +243,7 @@
     }
     untrack(() => {
       // biome-ignore lint/complexity/noVoid: fire-and-forget inside untrack — readHistory reports its outcome through the store fields this effect reads
-      void readHistory(id, running);
+      void readHistory(id);
     });
   });
 
@@ -279,7 +277,7 @@
       if (leftUnread) {
         leftUnread = false;
         // biome-ignore lint/complexity/noVoid: fire-and-forget inside untrack — readHistory reports its outcome through the store fields the pane reads
-        void readHistory(viewId, isLive, true);
+        void readHistory(viewId, true);
       }
     });
   });
@@ -950,6 +948,9 @@
     onstop,
     prompts: parkedPrompts,
     leading: autopilot,
+    onfoot: (next) => {
+      parkedRoom = next.parked;
+    },
     get planRing() {
       return planProgressNow ? planRing : undefined;
     },
@@ -1058,7 +1059,9 @@
     >
       <div
         class="body"
-        style="--composer-clearance: calc({composerRoom} + var(--space-4) + var(--space-4))"
+        style="--composer-clearance: calc({composerRoom} + var(--space-4) + var(--space-4)); --parked-room: {writable
+          ? parkedRoom
+          : 0}px"
       >
         <!-- The transcript area. Movement between conversations is owned by the
            pane above this one, so nothing here animates on a switch — this is

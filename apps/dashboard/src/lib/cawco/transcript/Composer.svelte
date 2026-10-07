@@ -2,9 +2,11 @@
   /**
    * What a composer stands over the transcript's foot, in px: `stack`, the
    * panel with the tray row and the parked cards on it; `perch`, how far Caw
-   * perched on the pill rises over its top (0 with no perch).
+   * perched on the pill rises over its top (0 with no perch); `parked`, the
+   * parked cards alone (0 with none).
    */
   export interface ComposerFoot {
+    parked: number;
     perch: number;
     stack: number;
   }
@@ -269,7 +271,11 @@
   // What stands over the transcript's foot, told to the pane it is lent to
   // (its fade and its "Jump to latest" rest on it).
   $effect(() => {
-    onfoot?.({ stack: panel + lift + stack, perch: perch ? perchHeight : 0 });
+    onfoot?.({
+      stack: panel + lift + stack,
+      perch: perch ? perchHeight : 0,
+      parked: stack,
+    });
   });
   let fileInput = $state<HTMLInputElement>();
   let field = $state<HTMLTextAreaElement>();
