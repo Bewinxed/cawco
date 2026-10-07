@@ -120,6 +120,8 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
     private var writable = false
     /// Why Send cannot work now; the box wears the warning state meanwhile.
     private var block: SendBlock?
+    /// The reason whose menu the action box holds, if it holds one.
+    private var shownMenuReason: String?
     private var attachments: [ComposerAttachment] = [] {
         didSet { renderAttachments() }
     }
@@ -836,8 +838,15 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
         // Blocked: the warning pair (the design's warning variant: tint, edge
         // and ink), at full presence and pressable, because a press is how
         // the reader learns why and what fixes it.
-        actionBox.menu = block?.menu
-        actionBox.showsMenuAsPrimaryAction = block?.menu != nil
+        // Set again only when the reason changes: the pane renders on every
+        // change the hub reports, and a menu replaced while it is open closes.
+        // Keyed by the conversation too: two tabs can share a reason, never a menu.
+        let menuReason = block?.menu == nil ? nil : block.map { "\(binding?.sessionId ?? ""):\($0.reason)" }
+        if menuReason != shownMenuReason {
+            actionBox.menu = block?.menu
+            actionBox.showsMenuAsPrimaryAction = block?.menu != nil
+            shownMenuReason = menuReason
+        }
         if let block {
             actionBox.isEnabled = true
             actionBox.isUserInteractionEnabled = true
