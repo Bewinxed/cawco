@@ -370,7 +370,7 @@ private struct TailRow {
         switch block.type {
         case "tool.use", "tool.handoff":
             let described = ToolDescriptor.describe(block.toolName, input: block.toolInput, result: block.toolResult, status: block.toolStatus)
-            kind = .tool(glyph: described.glyph, tint: Self.tint(ToolDescriptor.family(block.toolName)),
+            kind = .tool(glyph: described.glyph, tint: described.ink,
                          verb: described.label, argument: described.object ?? described.detail ?? "")
         case "thinking":
             guard !block.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
@@ -393,23 +393,6 @@ private struct TailRow {
         text.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }.last { !$0.isEmpty } ?? ""
     }
 
-    /// A tool family's hue (descriptors.ts `FAMILIES`).
-    private static func tint(_ family: ToolDescriptor.Family) -> UIColor {
-        switch family {
-        case .bash, .js: Palette.toolRun
-        case .read: Palette.toolRead
-        case .edit, .notebook: Palette.toolEdit
-        case .write: Palette.toolWrite
-        case .grep, .glob, .toolsearch: Palette.toolSearch
-        case .web, .screen, .navigate: Palette.toolWeb
-        case .skill: Palette.toolSkill
-        case .message, .task: Palette.toolAgent
-        case .mcp: Palette.toolMcp
-        case .memory, .todo: Palette.toolPlan
-        case .question: Palette.toolAsk
-        case .other: Palette.mutedForeground
-        }
-    }
 }
 
 /// A row as drawn: a 16pt glyph, the verb, then the argument or the words,

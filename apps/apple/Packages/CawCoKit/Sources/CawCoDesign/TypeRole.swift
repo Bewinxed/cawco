@@ -144,8 +144,9 @@ public struct TypeRole: Sendable {
 
 extension Palette {
     /// A colour token's set from this module's catalog, resolved against the
-    /// trait collection it is drawn in.
-    static func named(_ name: String) -> UIColor {
+    /// trait collection it is drawn in. Public for tokens named in shared
+    /// data (a tool kind's ink, packages/core tool-presentation).
+    public static func named(_ name: String) -> UIColor {
         guard let color = UIColor(named: name, in: .module, compatibleWith: nil) else {
             preconditionFailure("Tokens.xcassets has no colour set \(name); run `bun run tokens`")
         }

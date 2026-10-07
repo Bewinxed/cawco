@@ -1,23 +1,12 @@
 /**
  * How the hub's blocks read on screen: an ask's one-line and expanded forms,
- * a delegate's live line, which tools draw a picture. Formatting only — every
- * block was built by the hub (`TranscriptBuilder`, @cawco/core).
+ * a delegate's live line. Formatting only — every block was built by the hub
+ * (`TranscriptBuilder`, @cawco/core). Which tools draw a picture or a
+ * preview is the tool presentation's (@cawco/core tool-presentation).
  */
 import { getToolGlance } from "@cawco/core";
 import type { SubagentState } from "#lib/utils/flow-types.js";
 import type { JsonValue, Message } from "../types";
-
-export const SHOW_IMAGE_TOOLS = new Set([
-  "mcp__cawco__show_image",
-  "cawco_show_image",
-  "show_image",
-]);
-
-export const SHOW_PREVIEW_TOOLS = new Set([
-  "mcp__cawco__show_preview",
-  "cawco_show_preview",
-  "show_preview",
-]);
 
 /**
  * Whether a parked ask was routed to its parent session rather than to the

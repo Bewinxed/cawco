@@ -1,4 +1,12 @@
 <script lang="ts">
+  import {
+    hasBody as bodyFor,
+    inputFields,
+    PROSE_FIELD,
+    pathLeaf,
+    refusalOf,
+    resultField,
+  } from "@cawco/core/tool-presentation";
   import { getContext, untrack } from "svelte";
   import { SvelteSet } from "svelte/reactivity";
   import {
@@ -20,8 +28,6 @@
   import {
     describeTool,
     getDiffInfo,
-    memoryResult,
-    pathLeaf,
     type ToolCallStatus,
     type ToolDescriptor,
   } from "#lib/components/features/tool-cards/descriptors.js";
@@ -50,7 +56,6 @@
   import type { Message } from "../types";
   import { useLedger } from "./arrivals.svelte";
   import { disclosure } from "./disclosure.svelte";
-  import { SHOW_IMAGE_TOOLS, SHOW_PREVIEW_TOOLS } from "./present";
   import TranscriptRow from "./Row.svelte";
   import Shot from "./Shot.svelte";
 
@@ -187,98 +192,15 @@
     );
   }
 
-  /* A result can be a megabyte of build log. The row shows the head of it and
-     says how much it is not showing, rather than handing the virtualizer a row
-     the height of a city block. */
-  const RESULT_CAP = 20_000;
+  /* What a body shows, and whether a call has one, are the shared rules
+     (@cawco/core tool-presentation): a result capped with its "more" count,
+     a refusal with its harness's tags off, each renderer's has-body rule. */
 
-  interface Field {
-    key: string;
-    text: string;
-  }
-
-  const asText = (value: unknown): string =>
-    typeof value === "string"
-      ? value
-      : (JSON.stringify(value, null, 2) ?? String(value));
-
-  function inputFields(raw: unknown): Field[] {
-    if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-      return [];
-    }
-    return Object.entries(raw as Record<string, unknown>).map(
-      ([key, value]) => ({
-        key,
-        text: asText(value),
-      })
-    );
-  }
-
-  function resultText(
-    raw: unknown
-  ): { text: string; more: number } | undefined {
-    if (raw === undefined || raw === null) {
-      return undefined;
-    }
-    const text = asText(raw);
-    if (!text.trim()) {
-      return undefined;
-    }
-    return text.length > RESULT_CAP
-      ? { text: text.slice(0, RESULT_CAP), more: text.length - RESULT_CAP }
-      : { text, more: 0 };
-  }
-
-  /** A failed call's reason as the sentence it is: Claude Code wraps it in
-   *  `<tool_use_error>` tags, which are markup, not words. */
-  const toolError = (
-    result: { text: string } | undefined
-  ): string | undefined =>
-    result?.text.replace(/<\/?tool_use_error>/g, "").trim() || undefined;
-
-  /* What a settled memory call has to open into: the document it wrote or
-     read, or the list it got back. A removal says everything in its sentence. */
-  function memoryHasBody(
-    input: Record<string, unknown> | undefined,
-    raw: unknown
-  ): boolean {
-    switch (input?.action) {
-      case "set":
-      case "set_doc":
-        return typeof input.content === "string";
-      case "remove_doc":
-        return true;
-      case "get":
-        return memoryResult(raw).kind === "doc";
-      case "list_docs":
-        return memoryResult(raw).kind === "docs";
-      default:
-        return false;
-    }
-  }
-
-  /** A skill's arguments are prose the agent wrote for it; absent, nothing opens. */
-  const skillArgs = (input: Record<string, unknown> | undefined) =>
-    typeof input?.args === "string" && input.args.trim()
-      ? input.args
-      : undefined;
-
-  function bodyFor(
-    kind: ToolDescriptor["expanded"],
-    failed: boolean,
-    input: Record<string, unknown> | undefined,
-    fields: Field[],
-    result: { text: string } | undefined,
-    raw: unknown
-  ): boolean {
-    if (kind === "memory") {
-      return failed ? !!result : memoryHasBody(input, raw);
-    }
-    if (kind === "skill" && !failed) {
-      return !!skillArgs(input);
-    }
-    return fields.length > 0 || !!result;
-  }
+  /** The input field a prose body sets (a skill's arguments), as written. */
+  const proseOf = (input: Record<string, unknown> | undefined): string =>
+    typeof input?.[PROSE_FIELD] === "string"
+      ? (input[PROSE_FIELD] as string)
+      : "";
 
   /* A diff fact is one string carrying two opposite meanings — `+14 −6` from an
      edit, a lone `+38` from a write. The descriptor's own `diff` tone is what
@@ -326,7 +248,7 @@
     {@const Icon = d.icon}
     {@const failed = m.metadata?.toolStatus === "error"}
     {@const fields = inputFields(m.metadata?.toolInput)}
-    {@const result = resultText(m.metadata?.toolResult)}
+    {@const result = resultField(m.metadata?.toolResult)}
     {@const toolInput = (m.metadata?.toolInput ?? undefined) as
       | Record<string, unknown>
       | undefined}
@@ -335,18 +257,15 @@
         ? getDiffInfo(toolInput, m.metadata?.toolName, m.metadata?.toolDiff)
         : []}
     {@const refusal =
-      d.expanded === "diff" && failed ? toolError(result) : undefined}
-    {@const hasBody =
-      d.expanded === "diff"
-        ? changes.length > 0 || !!refusal
-        : bodyFor(
-            d.expanded,
-            failed,
-            toolInput,
-            fields,
-            result,
-            m.metadata?.toolResult
-          )}
+      d.expanded === "diff" && failed ? refusalOf(result) : undefined}
+    {@const hasBody = bodyFor(
+      d.expanded,
+      failed,
+      toolInput,
+      m.metadata?.toolResult,
+      m.metadata?.toolName,
+      m.metadata?.toolDiff
+    )}
     {#snippet line()}
       <span class="ic rail-cell">
         {#key m.metadata?.toolStatus}
@@ -394,16 +313,14 @@
           {/each}</span
         >
       {:else if d.fact}
-        <span class="d" class:bad={d.factTone === "error"} in:factIn
-          >{d.fact}</span
-        >
+        <span class="d" in:factIn>{d.fact}</span>
       {/if}
     {/snippet}
     <!-- The call opens its own line, so a run's rail grows one call at a time. -->
     <TranscriptRow id={callId(m)}>
       {#snippet children()}
         <div class="row" class:err={failed}>
-          {#if SHOW_PREVIEW_TOOLS.has(m.metadata?.toolName ?? "")}
+          {#if d.expanded === "preview"}
             {@const input = m.metadata?.toolInput as PreviewAsk}
             {@const current = cawco.previews[m.instanceId]}
             {@const preview = sameSource(current, input) ? current : undefined}
@@ -509,9 +426,9 @@
                           <pre class="v">{result.text}</pre>
                         </div>
                       </div>
-                    {:else if d.expanded === "skill" && !failed}
+                    {:else if d.expanded === "prose" && !failed}
                       <div class="skill-args">
-                        <ToolProse source={skillArgs(toolInput) ?? ""} />
+                        <ToolProse source={proseOf(toolInput)} />
                       </div>
                     {:else}
                       <div class="fields">
@@ -542,7 +459,7 @@
           {:else}
             <div class="trow rail-line flat">{@render line()}</div>
           {/if}
-          {#if SHOW_IMAGE_TOOLS.has(m.metadata?.toolName ?? "") && machine}
+          {#if d.expanded === "image" && machine}
             {@const input = m.metadata?.toolInput as {
               path: string;
               caption?: string;
@@ -810,10 +727,6 @@
     color: var(--ink-strong);
     font-variant-numeric: tabular-nums;
     flex: 0 0 auto;
-
-    &.bad {
-      color: var(--data-bad);
-    }
   }
   .add {
     color: var(--data-ok);

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { memoryResult } from "@cawco/core/tool-presentation";
   import {
     type FleetMemoryVersion,
     memoryHistory,
@@ -20,7 +21,6 @@
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { IconChevronRight } from "#lib/icons.js";
   import DiffView from "../DiffView.svelte";
-  import { memoryResult } from "./descriptors";
   import ToolProse from "./ToolProse.svelte";
 
   let {

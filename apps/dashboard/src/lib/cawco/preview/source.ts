@@ -1,5 +1,5 @@
 import type { PreviewSource } from "@cawco/core";
-import { pathLeaf } from "#lib/components/features/tool-cards/descriptors.js";
+import { pathLeaf } from "@cawco/core/tool-presentation";
 
 /**
  * What a `show_preview` call asked for: a dev server, a folder, or a

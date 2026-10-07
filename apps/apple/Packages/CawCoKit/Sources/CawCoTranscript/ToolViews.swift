@@ -146,7 +146,7 @@ final class ToolLineView: RailRow, RowContent, Disclosing {
     /// A `show_preview` card: full presence while the session's open preview
     /// shows this call's page. Called again when the preview changes.
     func previewChanged() {
-        guard let block, PresentTools.preview.contains(block.toolName ?? "") else { return }
+        guard let block, Self.describe(block).renderer == .preview else { return }
         let input = block.toolInput
         let shown = env.hub?.previews.byInstance[env.sessionId]
         let opened = shown?.state == .open && shown.flatMap(PreviewKey.of) == PreviewKey.of(ask: input)
@@ -158,7 +158,7 @@ final class ToolLineView: RailRow, RowContent, Disclosing {
         place()
         self.block = block
         key = block.disclosureKey
-        let d = ToolDescriptor.describe(block.toolName, input: block.toolInput, result: block.toolResult, status: block.toolStatus)
+        let d = Self.describe(block)
         let failed = block.toolStatus == "error"
         let changed = status != block.toolStatus && !status.isEmpty
         status = block.toolStatus
@@ -183,6 +183,7 @@ final class ToolLineView: RailRow, RowContent, Disclosing {
         let label = TypeScale.typeLabel
         verb.attributedText = Styled.string(d.label, label, color: Palette.inkStrong, leading: TypeScale.leadingRoot)
         verb.isHidden = d.label.isEmpty
+        // ToolGroup `.arg`: the whole argument is set in the mono face, its detail a dimmer tail.
         let arg = NSMutableAttributedString()
         if let object = d.object { arg.append(Styled.string(object, label, color: Palette.inkMuted, size: TypeScale.textLabel, leading: TypeScale.leadingRoot, mono: true)) }
         if let detail = d.detail {
@@ -192,13 +193,14 @@ final class ToolLineView: RailRow, RowContent, Disclosing {
         argument.isHidden = arg.length == 0
         chip.attributedText = d.chip.map { Styled.string($0, TypeScale.typeMeta, color: Palette.inkMuted) }
         chip.isHidden = d.chip == nil
-        fact.attributedText = d.fact.map { Self.fact($0, tone: d.factTone) }
+        fact.attributedText = d.fact.map { Self.fact($0, diff: d.factDiff) }
         fact.isHidden = d.fact == nil
-        let preview = PresentTools.preview.contains(block.toolName ?? "")
+        let preview = d.renderer == .preview
         self.preview.isHidden = !preview
         line.isHidden = preview
         if preview { previewChanged() }
-        let hasBody = !preview && Self.hasBody(d, block: block)
+        let hasBody = ToolDescriptor.hasBody(d.renderer, failed: failed, input: block.toolInput, raw: block.meta["toolResult"],
+                                             toolName: block.toolName, patch: block.string("toolDiff"))
         chevron.isHidden = !hasBody
         let open = hasBody && env.isOpen(key)
         chevron.set(open: open, animated: false)
@@ -208,46 +210,28 @@ final class ToolLineView: RailRow, RowContent, Disclosing {
         line.accessibilityTraits = hasBody ? .button : .staticText
         if open { fillBody(force: true) } else { bodyPrint = "" ; opened.arrangedSubviews.forEach { $0.removeFromSuperview() } }
         reveal.set(open: open)
-        configureShots(block)
+        configureShots(block, renderer: d.renderer)
     }
 
-    private static func fact(_ text: String, tone: ToolDescriptor.Tone?) -> NSAttributedString {
+    /// The call as the shared rules read it (packages/core tool-presentation).
+    private static func describe(_ block: Block) -> ToolDescriptor {
+        ToolDescriptor.describe(block.toolName, input: block.toolInput, result: block.toolResult, status: block.toolStatus,
+                                patch: block.string("toolDiff"))
+    }
+
+    /// ToolGroup `.d`: a measurement in --ink-strong; a diff's `+` green and its `−` red.
+    private static func fact(_ text: String, diff: Bool) -> NSAttributedString {
         let out = NSMutableAttributedString()
         for token in text.split(separator: " ", omittingEmptySubsequences: false) {
             if out.length > 0 { out.append(Styled.string(" ", TypeScale.typeLabel, color: Palette.inkStrong, leading: TypeScale.leadingRoot)) }
-            var ink = tone == .error ? Palette.dataBad : Palette.inkStrong
-            if tone == .diff {
+            var ink = Palette.inkStrong
+            if diff {
                 if token.wholeMatch(of: /\+\d[\d,._]*/) != nil { ink = Palette.dataOk }
                 if token.wholeMatch(of: /[−-]\d[\d,._]*/) != nil { ink = Palette.dataBad }
             }
             out.append(Styled.string(String(token), TypeScale.typeLabel, color: ink, leading: TypeScale.leadingRoot, tabular: true))
         }
         return out
-    }
-
-    static let resultCap = 20000
-
-    private static func hasBody(_ d: ToolDescriptor, block: Block) -> Bool {
-        let failed = block.toolStatus == "error"
-        let result = block.toolResult.flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 }
-        switch d.expanded {
-        case .diff:
-            return !ToolDescriptor.changes(block.toolInput, toolName: block.toolName).isEmpty || (failed && result != nil)
-        case .memory:
-            if failed { return result != nil }
-            let input = block.toolInput
-            switch input["action"] as? String {
-            case "set", "set_doc": return input["content"] is String
-            case "remove_doc": return true
-            case "get": if case .doc = MemoryResult(block.toolResult) { return true } else { return false }
-            case "list_docs": if case .docs = MemoryResult(block.toolResult) { return true } else { return false }
-            default: return false
-            }
-        case .skill where !failed:
-            return ToolDescriptor.str(block.toolInput["args"]) != nil
-        default:
-            return !block.toolInput.isEmpty || result != nil
-        }
     }
 
     /// The disclosed body, built only once the call is open (CollapsibleLazy).
@@ -258,24 +242,26 @@ final class ToolLineView: RailRow, RowContent, Disclosing {
         guard bodyPrint != print else { return }
         bodyPrint = print
         opened.arrangedSubviews.forEach { $0.removeFromSuperview() }
-        let d = ToolDescriptor.describe(block.toolName, input: block.toolInput, result: block.toolResult, status: block.toolStatus)
+        let d = Self.describe(block)
         let failed = block.toolStatus == "error"
-        let result = Self.result(block.meta["toolResult"])
+        let result = ToolDescriptor.resultField(block.meta["toolResult"])
         let content: UIView
         var offset = env.columns.hang - Space.space3
         var margins = (top: Space.space2, bottom: Space.space3)
-        switch d.expanded {
+        switch d.renderer {
         case .diff:
+            // What the call changed, one diff per file it touched; a failed call is
+            // the diff it attempted, under the harness's reason (ToolGroup `.diffs`).
             let stack = UIStackView()
             stack.axis = .vertical
             stack.spacing = Space.space2
-            if failed, let refusal = result?.text.replacing(/<\/?tool_use_error>/, with: "").trimmingCharacters(in: .whitespacesAndNewlines), !refusal.isEmpty {
+            if failed, let refusal = ToolDescriptor.refusal(result) {
                 let label = WrapLabel(wrap: .pretty) // ToolGroup `p.refusal`
                 label.attributedText = Styled.string(refusal, TypeScale.typeLabel, color: Palette.dataBad, weight: TypeScale.weightBody,
                                                      leading: TypeScale.leadingRoot, lineBreak: .byCharWrapping)
                 stack.addArrangedSubview(hung(label, offset: Size.txDiffHeadInline + 1))
             }
-            for change in ToolDescriptor.changes(block.toolInput, toolName: block.toolName) {
+            for change in ToolDescriptor.changes(block.toolInput, toolName: block.toolName, patch: block.string("toolDiff")) {
                 let diff = DiffView(env: env)
                 diff.configure(path: change.path, old: change.old, new: change.new)
                 stack.addArrangedSubview(diff)
@@ -287,16 +273,18 @@ final class ToolLineView: RailRow, RowContent, Disclosing {
             memory.configure(block)
             content = memory
             offset = env.columns.hang
-        case .skill where !failed:
+        case .prose where !failed:
             let prose = MessageBody()
             offset = env.columns.hang
             prose.fitWidth = bodyWidth.map { $0 - offset }
-            prose.configure(ToolDescriptor.str(block.toolInput["args"]) ?? "", style: .tool)
+            prose.configure(ToolDescriptor.str(block.toolInput[ToolPresentation.proseField]) ?? "", style: .tool)
             content = prose
             margins = (Space.space1, Space.space3)
         default:
-            var fields: [(String, String)] = d.expanded == .memory ? [] : block.toolInput.keys.sorted(by: Self.inputOrder(block)).map { key in
-                (key, Self.text(block.toolInput[key] as Any))
+            // ToolGroup `.fields`: each input field in the order the call wrote
+            // it, then the result (a failed memory call: only its result).
+            var fields: [(String, String)] = d.renderer == .memory ? [] : block.toolInput.keys.sorted(by: Self.inputOrder(block)).map { key in
+                (key, ToolDescriptor.text(block.toolInput[key] as Any))
             }
             if let result { fields.append(("result", result.text)) }
             // Its values are laid out at the width they stand at from the
@@ -316,27 +304,11 @@ final class ToolLineView: RailRow, RowContent, Disclosing {
         }
     }
 
-    static func text(_ value: Any) -> String {
-        if let string = value as? String { return string }
-        if let data = try? JSONSerialization.data(withJSONObject: value, options: [.prettyPrinted, .withoutEscapingSlashes, .fragmentsAllowed]),
-           let text = String(data: data, encoding: .utf8) {
-            return text.replacingOccurrences(of: "    ", with: "  ")
-        }
-        return "\(value)"
-    }
-
-    private static func result(_ raw: Any?) -> (text: String, more: Int)? {
-        guard let raw, !(raw is NSNull) else { return nil }
-        let text = Self.text(raw)
-        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
-        return text.count > resultCap ? (String(text.prefix(resultCap)), text.count - resultCap) : (text, 0)
-    }
-
-    private func configureShots(_ block: Block) {
+    private func configureShots(_ block: Block, renderer: ToolDescriptor.Renderer) {
         shots.arrangedSubviews.forEach { $0.removeFromSuperview() }
         var urls: [URL] = []
         var views: [(ShotView, URL)] = []
-        if PresentTools.showImage.contains(block.toolName ?? ""), let machine = env.machineId,
+        if renderer == .image, let machine = env.machineId,
            let path = block.toolInput["path"] as? String {
             var parts = URLComponents()
             parts.path = "/api/agents/\(machine)/image"
@@ -365,12 +337,6 @@ final class ToolLineView: RailRow, RowContent, Disclosing {
         shots.isHidden = views.isEmpty
         body.setCustomSpacing(views.isEmpty ? 0 : Space.space2, after: reveal)
     }
-}
-
-/// Which tools draw a picture or a preview (present.ts).
-enum PresentTools {
-    static let showImage: Set<String> = ["mcp__cawco__show_image", "cawco_show_image", "show_image"]
-    static let preview: Set<String> = ["mcp__cawco__show_preview", "cawco_show_preview", "show_preview"]
 }
 
 /// A call's disclosed payload (ToolGroup `.fields`): each input field and the
@@ -575,31 +541,13 @@ final class LiveToolView: RailRow, RowContent {
         guard case let .livetool(name, glance) = item.kind else { return }
         place()
         let d = ToolDescriptor.describe(name, input: [:], result: nil, status: "pending")
-        let family = ToolDescriptor.family(name)
         cell.glyph.glyph = d.glyph
-        cell.glyph.tintColor = Self.ink(family)
+        // The kind's ink (packages/core tool-presentation).
+        cell.glyph.tintColor = d.ink
         verb.attributedText = Styled.string(d.label, TypeScale.typeLabel, color: Palette.inkStrong, leading: TypeScale.leadingRoot)
         verb.isHidden = d.label.isEmpty
         argument.attributedText = Styled.string(glance, TypeScale.typeLabel, color: Palette.inkMuted, size: TypeScale.textLabel, leading: TypeScale.leadingRoot, mono: true)
         line.refit()
         accessibilityLabel = "\(name) running, \(glance)"
-    }
-
-    /// The family's ink (descriptors.ts FAMILIES `color`).
-    static func ink(_ family: ToolDescriptor.Family) -> UIColor {
-        switch family {
-        case .bash, .js: Palette.toolRun
-        case .read: Palette.toolRead
-        case .edit, .notebook: Palette.toolEdit
-        case .write: Palette.toolWrite
-        case .grep, .glob, .toolsearch: Palette.toolSearch
-        case .web, .screen, .navigate: Palette.toolWeb
-        case .skill: Palette.toolSkill
-        case .message, .task: Palette.toolAgent
-        case .mcp: Palette.toolMcp
-        case .memory, .todo: Palette.toolPlan
-        case .question: Palette.toolAsk
-        case .other: Palette.mutedForeground
-        }
     }
 }
