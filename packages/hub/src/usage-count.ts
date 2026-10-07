@@ -1,7 +1,6 @@
-import { Database } from "bun:sqlite";
 import { existsSync, statSync } from "node:fs";
 import type { NeutralMessage } from "@cawco/core";
-import { transcriptIndexPath } from "@cawco/core/paths";
+import { listClaudeFiles } from "@cawco/core/paths";
 import type { DbShape } from "./db";
 
 /**
@@ -212,27 +211,16 @@ async function scanTranscript(
 
 /**
  * The one-time backfill: when nothing has been counted yet, read the last
- * {@link BACKFILL_DAYS} days of the Claude transcripts the agent's search
- * index already lists. The index only stores tool names, so the raw JSONL is
- * read for `Skill`'s `input.skill`. Slash-command skills are matched against
- * the fleet's skills plus every skill the `Skill` tool was seen loading.
+ * {@link BACKFILL_DAYS} days of the Claude transcripts under the Claude
+ * config dirs the agent reads (`claudeConfigDirs`), so the hub's own
+ * `HOME` decides which ones. Slash-command skills are matched against the
+ * fleet's skills plus every skill the `Skill` tool was seen loading.
  */
 export async function backfillUsage(db: DbShape): Promise<void> {
   if (!db.capabilityUsageEmpty()) {
     return;
   }
-  const indexPath = transcriptIndexPath();
-  if (!existsSync(indexPath)) {
-    console.log(
-      `[usage] backfill skipped: no transcript index at ${indexPath}`
-    );
-    return;
-  }
-  const index = new Database(indexPath, { readonly: true });
-  const paths = (
-    index.query("SELECT path FROM files").all() as { path: string }[]
-  ).map((row) => row.path);
-  index.close();
+  const paths = (await listClaudeFiles()).map((file) => file.path);
 
   const since = Date.now() - BACKFILL_DAYS * DAY_MS;
   const found = {

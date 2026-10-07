@@ -7,13 +7,12 @@
 import { existsSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
-import { transcriptIndexPath } from "@cawco/core/paths";
+import { listClaudeFiles, transcriptIndexPath } from "@cawco/core/paths";
 import { type SearchHit, TranscriptIndex } from "@cawco/jsonl-parser/fts5";
 import {
   defaultOpenCodePath,
   readOpenCodeDocs,
 } from "@cawco/jsonl-parser/opencode";
-import { listClaudeFiles } from "../usage/scan-claude";
 
 const SYNC_INTERVAL_MS = 30_000;
 const MAX_SEARCH_LIMIT = 50;

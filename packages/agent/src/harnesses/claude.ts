@@ -67,6 +67,7 @@ import {
   settledQuestionResult,
   VERIFY_SESSION_CREDENTIAL,
 } from "@cawco/core";
+import { claudeConfigDirs } from "@cawco/core/paths";
 import { sessiondEndpoint } from "@cawco/core/sessiond";
 import { observeRateLimit } from "@cawco/core/usage/observed";
 import {
@@ -113,7 +114,6 @@ import {
   sessiondBridge,
 } from "../sessiond-client";
 import { ChildActivity, type RingLine, readRing } from "../sessiond-custody";
-import { claudeConfigDirs } from "../usage/scan-claude";
 import {
   hookFailureId,
   readSessionContext,

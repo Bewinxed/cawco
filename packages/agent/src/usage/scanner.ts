@@ -7,13 +7,14 @@ import {
   refreshPricing,
   totalTokens,
 } from "@cawco/core";
+import { listClaudeFiles } from "@cawco/core/paths";
 import {
   emptyIndex,
   loadIndex,
   saveIndex,
   type UsageIndex,
 } from "./index-store";
-import { listClaudeFiles, parseClaudeRecords } from "./scan-claude";
+import { parseClaudeRecords } from "./scan-claude";
 import { openDbPath, scanOpencode } from "./scan-opencode";
 import type { ScannedRecord } from "./types";
 
