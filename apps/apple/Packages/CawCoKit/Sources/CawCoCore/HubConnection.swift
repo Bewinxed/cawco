@@ -3,6 +3,7 @@ public import Foundation
 import Observation
 import OpenAPIRuntime
 import OSLog
+import UIKit
 
 /// The one connection to the hub: its address, entered once and kept; the
 /// `/ws/dashboard` socket and its reconnects; the connect-time reads; and the
@@ -61,6 +62,12 @@ public final class HubConnection {
     @ObservationIgnored private var fleetRead: Task<Void, Never>?
     @ObservationIgnored private var live: HubSocket?
     @ObservationIgnored private var attempts = 0
+    /// The socket was closed because the app went to the background.
+    @ObservationIgnored private var suspended = false
+    /// Counts `start`s, so a replaced loop knows it was replaced.
+    @ObservationIgnored private var generation = 0
+    /// The background and foreground observers.
+    @ObservationIgnored private var lifecycle: [any NSObjectProtocol] = []
     @ObservationIgnored private var waiters: [String: CheckedContinuation<OpenAPIValueContainer?, any Error>] = [:]
     private let log = Logger(subsystem: "dev.cawco.app", category: "Hub")
 
@@ -86,9 +93,54 @@ public final class HubConnection {
         workflows = WorkflowsStore(hub: self)
         ledger.applyFrame = { [weak self] id, data in self?.sessions.apply(id, data: data) }
         ledger.rereadHistory = { [weak self] id in self?.sessions.read(id) }
+        let center = NotificationCenter.default
+        lifecycle = [
+            center.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.enteredBackground() }
+            },
+            center.addObserver(forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.willEnterForeground() }
+            },
+        ]
         if address != nil {
             start()
         }
+    }
+
+    /// The app is in the background: its socket is closed here, on purpose.
+    /// A suspended app answers no pings, so the hub drops the socket, but the
+    /// app hears nothing until it runs again: kept, that dead socket would
+    /// still read `connected` on return, and every row would show the status
+    /// it had before the app went away as if it were the hub's word now.
+    private func enteredBackground() {
+        guard address != nil, !suspended else {
+            return
+        }
+        suspended = true
+        log.info("app in the background: hub socket closed")
+        generation += 1
+        run?.cancel()
+        run = nil
+        live = nil
+        retryAt = nil
+        closed()
+    }
+
+    /// Back in front: connect at once, past any backoff. Until the hub's
+    /// first frame lands the board reads `connecting` (StatusLine's
+    /// "Connecting…", rows greyed), never the pre-background state as current;
+    /// that frame and the pending read bring it to the hub's word.
+    private func willEnterForeground() {
+        guard suspended else {
+            return
+        }
+        suspended = false
+        log.info("app in front: reconnecting to the hub")
+        attempts = 0
+        outageTimer?.cancel()
+        outageTimer = nil
+        outage = false
+        start()
     }
 
     /// Normalises what the operator typed into the hub's http address.
@@ -172,13 +224,17 @@ public final class HubConnection {
 
     private func start() {
         run?.cancel()
+        generation += 1
+        let mine = generation
         run = Task { [weak self] in
-            await self?.loop()
+            await self?.loop(mine)
         }
     }
 
     /// Backs off but never gives up: the delay is capped, not the attempts.
-    private func loop() async {
+    /// A loop that a newer `start` replaced ends without touching the state
+    /// its successor now owns.
+    private func loop(_ mine: Int) async {
         while !Task.isCancelled, let address {
             retryAt = nil
             socket = .connecting
@@ -195,6 +251,9 @@ public final class HubConnection {
                 }
             } catch {
                 log.info("hub socket closed: \(String(describing: error), privacy: .public)")
+            }
+            guard mine == generation else {
+                return
             }
             live = nil
             closed()
@@ -223,7 +282,8 @@ public final class HubConnection {
     private func closed() {
         socket = .closed
         fleetRead?.cancel()
-        if !outage, outageTimer == nil {
+        // A socket closed for the background is no outage: nothing failed.
+        if !outage, outageTimer == nil, !suspended {
             outageTimer = Task { [weak self] in
                 try? await Task.sleep(for: Self.outageGrace)
                 guard !Task.isCancelled, let self else {
