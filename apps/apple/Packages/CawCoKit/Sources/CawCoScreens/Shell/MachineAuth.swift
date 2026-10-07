@@ -37,9 +37,17 @@ final class MachineAuthStatusView: UIStackView {
         head.alignment = .leading
         title.accessibilityTraits = .header
         title.wrap = .balance
+        // The button stands at the end of the box at its own height (`mt-auto
+        // flex justify-end`): the height the dialog holds while it works is
+        // room above it, never a taller button.
+        buttonRow.alignment = .center
         buttonRow.addArrangedSubview(UIView())
+        let gap = UIView()
+        gap.setContentHuggingPriority(.defaultLow - 1, for: .vertical)
         addArrangedSubview(head)
+        addArrangedSubview(gap)
         addArrangedSubview(buttonRow)
+        setCustomSpacing(0, after: head)
     }
 
     @available(*, unavailable)
@@ -196,9 +204,7 @@ final class MachineLoginController: MachineAuthDialog, UITextFieldDelegate {
         let cancel = KitButton.make("Cancel", variant: .outline) { [weak self] in self?.dismiss(animated: true) }
         submit = KitButton.make("Log in", variant: .action) { [weak self] in self?.finish() }
         submit.isEnabled = false
-        let buttons = UIStackView(arrangedSubviews: [UIView(), cancel, submit])
-        buttons.spacing = Space.space2
-        let fields = UIStackView(arrangedSubviews: [asking, openLink, codeField, problem, buttons])
+        let fields = UIStackView(arrangedSubviews: [asking, openLink, codeField, problem, KitDialogController.footer([cancel, submit])])
         fields.axis = .vertical
         fields.spacing = Space.space4
         let stack = UIStackView(arrangedSubviews: [header, fields])
@@ -334,9 +340,7 @@ final class UnlockKeychainController: MachineAuthDialog, UITextFieldDelegate {
         let cancel = KitButton.make("Cancel", variant: .outline) { [weak self] in self?.dismiss(animated: true) }
         submit = KitButton.make("Unlock", variant: .action) { [weak self] in self?.unlock() }
         submit.isEnabled = false
-        let buttons = UIStackView(arrangedSubviews: [UIView(), cancel, submit])
-        buttons.spacing = Space.space2
-        let fields = UIStackView(arrangedSubviews: [password, problem, note, buttons])
+        let fields = UIStackView(arrangedSubviews: [password, problem, note, KitDialogController.footer([cancel, submit])])
         fields.axis = .vertical
         fields.spacing = Space.space3
         let stack = UIStackView(arrangedSubviews: [header, fields])

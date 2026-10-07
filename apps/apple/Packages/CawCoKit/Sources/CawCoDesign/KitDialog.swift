@@ -227,13 +227,16 @@ open class KitDialogController: UIViewController, UIViewControllerTransitioningD
     }
 
     /// The kit's dialog footer (`dialog-footer`): the buttons at the end in
-    /// a row from 640pt, stacked below it with the last one on top.
+    /// a row from 640pt, stacked below it with the last one on top. Every
+    /// button keeps its own height: a footer given more room than its buttons
+    /// (a dialog holding its height while it works) never stretches them.
     public static func footer(_ buttons: [UIView]) -> UIStackView {
         let wide = UIScreen.main.bounds.width >= 640
         let stack = UIStackView()
         stack.spacing = 8
         if wide {
             stack.axis = .horizontal
+            stack.alignment = .center
             stack.addArrangedSubview(UIView())
             buttons.forEach(stack.addArrangedSubview)
         } else {
