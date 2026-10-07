@@ -39,6 +39,7 @@ import type {
   StopPayload,
   SupervisorEvent,
   SupportedCommands,
+  ThreadMessage,
   ToolGlance,
   TranscriptBlock,
   TranscriptBranch,
@@ -195,6 +196,8 @@ export interface ProjectPlace {
  * are its primary place; `places` holds every place, that one first.
  */
 export interface ProjectRow {
+  /** Caw leads it (caw.ts); absent from a hub that predates the setting. */
+  caw?: boolean;
   createdAt: string;
   cwd: string;
   id: string;
@@ -674,6 +677,12 @@ const state = $state({
    * read on connect, then kept by `project_offer` frames.
    */
   projectOffers: {} as Record<string, ProjectOfferSummary>,
+  /**
+   * Thread messages heard since the page loaded, by project: written by you
+   * or Caw, or a delivery settling. Kept by `thread_message` frames; a
+   * project's threads read on open, and these fold in over them.
+   */
+  threadMessages: {} as Record<string, ThreadMessage[]>,
   /**
    * The supervisor's intervention log, newest first, capped at 200 in memory
    * (PLAN §C9). Seeded from REST and kept live by `supervisor_event` frames.
@@ -2053,6 +2062,8 @@ function supervisorStatusOf(
 
 /** Cap sourced from PLAN §C9: 200 in memory. */
 const SUPERVISOR_EVENT_CAP = 200;
+/** Thread messages one project keeps heard in memory; a thread read on open has the rest. */
+const THREAD_HEARD_LIMIT = 200;
 
 /** Files a supervisor event into the ring, newest first, capped. */
 function recordSupervisorEvent(event: SupervisorEvent): boolean {
@@ -2270,6 +2281,15 @@ function handleFrame(frame: FramePayload): void {
     if (!equal(state.workItems[frame.item.id], frame.item)) {
       state.workItems[frame.item.id] = frame.item;
     }
+    return;
+  }
+
+  if (frame.kind === "thread_message") {
+    const heard = state.threadMessages[frame.projectId] ?? [];
+    state.threadMessages[frame.projectId] = [
+      ...heard.filter((each) => each.id !== frame.message.id),
+      frame.message,
+    ].slice(-THREAD_HEARD_LIMIT);
     return;
   }
 
@@ -5769,6 +5789,9 @@ export const cawco = {
     Object.values(state.workItems)
       .filter((item) => item.parentInstanceId === parentInstanceId)
       .sort((a, b) => a.createdAt - b.createdAt),
+  /** Thread messages of a project heard live since the page loaded, oldest first. */
+  threadMessagesOf: (projectId: string): ThreadMessage[] =>
+    state.threadMessages[projectId] ?? [],
   /** The "make this a project" offer standing on a session, if one does. */
   projectOfferOf: (instanceId: string): ProjectOfferSummary | undefined =>
     state.projectOffers[instanceId],

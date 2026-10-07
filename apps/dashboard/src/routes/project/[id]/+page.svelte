@@ -35,6 +35,7 @@
   import { unpickedMode } from "#lib/cawco/permission-modes.js";
   import StoredSessionRow from "#lib/cawco/StoredSessionRow.svelte";
   import { rememberSpawn, spawnPrefs } from "#lib/cawco/spawnPrefs.svelte.js";
+  import ThreadsCard from "#lib/cawco/ThreadsCard.svelte";
   import TasksCard from "#lib/cawco/tasks/TasksCard.svelte";
   import MemoryCard from "#lib/components/features/MemoryCard.svelte";
   import { Alert, AlertDescription } from "#lib/components/ui/alert/index.js";
@@ -937,6 +938,8 @@
         <!-- Tasks: read with the page, so the card is its size from the
              first frame; the tasks themselves are a page of their own. -->
         <TasksCard projectId={project.id} tasks={data.tasks} />
+        <!-- Threads with Caw: it grows only when you open one. -->
+        <ThreadsCard projectId={project.id} />
         <!-- CLAUDE.md. The file itself reads in the docs viewer beside this,
          which is where a 360px rail cannot compete — so the rail only says
          it is there and opens the editor. One reader on screen. -->
