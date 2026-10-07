@@ -151,10 +151,11 @@ export function createBinaryUpdates(options: Options) {
     });
     return checking;
   };
-  // What each channel's newest release is, one entry per channel; null where the host has none.
+  // What each channel's newest release is, one entry per channel, served for RELEASE_TTL_MS like
+  // `current`; null where the host has none.
   const channelCache = new Map<
     BinaryUpdatePolicy["channel"],
-    ChannelRelease | null
+    { at: number; release: ChannelRelease | null }
   >();
   let channelsCheckedAt = 0;
   const discoverChannel = async (
@@ -167,15 +168,18 @@ export function createBinaryUpdates(options: Options) {
         installation?.releaseHost
       );
       channelCache.set(channel, {
-        version: manifest.version,
-        sequence: manifest.sequence,
-        notes: manifest.notes,
+        at: Date.now(),
+        release: {
+          version: manifest.version,
+          sequence: manifest.sequence,
+          notes: manifest.notes,
+        },
       });
     } catch (error) {
       if (!(error instanceof NoReleaseError)) {
         throw error;
       }
-      channelCache.set(channel, null);
+      channelCache.set(channel, { at: Date.now(), release: null });
     }
   };
   const channels = async (refresh: boolean): Promise<BinaryUpdateChannels> => {
@@ -183,17 +187,18 @@ export function createBinaryUpdates(options: Options) {
       current = undefined;
       channelCache.clear();
     }
-    const missing = (["stable", "nightly"] as const).filter(
-      (channel) => !channelCache.has(channel)
-    );
-    if (missing.length > 0) {
-      await Promise.all(missing.map(discoverChannel));
+    const stale = (["stable", "nightly"] as const).filter((channel) => {
+      const cached = channelCache.get(channel);
+      return !cached || Date.now() - cached.at >= RELEASE_TTL_MS;
+    });
+    if (stale.length > 0) {
+      await Promise.all(stale.map(discoverChannel));
       channelsCheckedAt = Date.now();
     }
     return {
       channels: {
-        stable: channelCache.get("stable") ?? null,
-        nightly: channelCache.get("nightly") ?? null,
+        stable: channelCache.get("stable")?.release ?? null,
+        nightly: channelCache.get("nightly")?.release ?? null,
       },
       checkedAt: channelsCheckedAt,
     };

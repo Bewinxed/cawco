@@ -206,7 +206,13 @@ ${
       TAG="$(curl -fsSLI -o /dev/null -w '%{url_effective}' "$REPO/releases/latest" | sed 's|.*/tag/||')" || fail "could not reach $REPO"
     else
       download "https://api.github.com/repos/$SLUG/releases?per_page=30" "$WORK/releases.json" 4194304
-      TAG="$(grep -o '"tag_name": *"nightly-[^"]*"' "$WORK/releases.json" | head -n 1 | sed 's/.*"\\(nightly-[^"]*\\)"/\\1/')"
+      # newestNightly's rule: of the published pre-releases tagged nightly-<count>-<commit>, the highest
+      # count; the listing's order decides nothing. Each release object names tag_name, draft and
+      # prerelease in that order with no brace between them, so one match never spans two releases.
+      TAG="$(tr -d '\\n' < "$WORK/releases.json" \\
+        | grep -o '"tag_name": *"nightly-[0-9][0-9]*-[0-9a-f][0-9a-f]*",[^{}]*"draft": *false,[^{}]*"prerelease": *true' \\
+        | sed 's/^"tag_name": *"\\(nightly-\\([0-9]*\\)-[0-9a-f]*\\)".*/\\2 \\1/' \\
+        | sort -n | tail -n 1 | cut -d ' ' -f 2)"
     fi
     [ -n "\${TAG:-}" ] || fail "no published $CHANNEL release was found at $REPO"
     BASE="$REPO/releases/download/$TAG"

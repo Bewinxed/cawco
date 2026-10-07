@@ -15,7 +15,7 @@ export interface LocatedRelease extends SignedRelease {
   assetBaseUrl: string;
 }
 
-interface GithubRelease {
+export interface GithubRelease {
   assets: { browser_download_url: string; name: string }[];
   draft: boolean;
   prerelease: boolean;
@@ -23,10 +23,41 @@ interface GithubRelease {
 }
 
 const NIGHTLY_VERSION = /-nightly\.(\d+)\+([0-9a-f]+)$/;
+const NIGHTLY_TAG = /^nightly-(\d+)-[0-9a-f]+$/;
 const TRAILING_SLASH = /\/$/;
 
 export const RELEASE_REPOSITORY = "Bewinxed/cawco";
 export const NIGHTLY_TAG_PREFIX = "nightly-";
+
+/** The build count a nightly tag (`nightly-<count>-<commit>`) carries, or undefined for any other tag. */
+export function nightlyTagCount(tag: string): number | undefined {
+  const count = NIGHTLY_TAG.exec(tag)?.[1];
+  return count === undefined ? undefined : Number(count);
+}
+
+/**
+ * The newest nightly in a GitHub release listing: the published pre-release
+ * whose tag carries the highest build count. GitHub does not document the
+ * listing's order, so the row's position decides nothing. The install
+ * script's shell pick mirrors this rule.
+ */
+export function newestNightly<
+  T extends Pick<GithubRelease, "draft" | "prerelease" | "tag_name">,
+>(rows: readonly T[]): T | undefined {
+  let newest: { count: number; row: T } | undefined;
+  for (const row of rows) {
+    const count = nightlyTagCount(row.tag_name);
+    if (
+      !row.draft &&
+      row.prerelease &&
+      count !== undefined &&
+      count > (newest?.count ?? -1)
+    ) {
+      newest = { count, row };
+    }
+  }
+  return newest?.row;
+}
 
 /**
  * The release tag of a build: `v<version>` for stable, and for a nightly the
@@ -81,14 +112,7 @@ export async function discoverRelease(
       throw new Error(`The release host answered ${response.status}`);
     }
     const body = (await response.json()) as GithubRelease | GithubRelease[];
-    const release = Array.isArray(body)
-      ? body.find(
-          (row) =>
-            !row.draft &&
-            row.prerelease &&
-            row.tag_name.startsWith(NIGHTLY_TAG_PREFIX)
-        )
-      : body;
+    const release = Array.isArray(body) ? newestNightly(body) : body;
     const manifest = release?.assets.find((a) => a.name === "release.json");
     const signature = release?.assets.find(
       (a) => a.name === "release.json.sig"
