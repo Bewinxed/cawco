@@ -7,6 +7,7 @@ import type {
   DelegateAskStatus,
   DelegateEventKind,
   DelegateEventPayload,
+  Envelope,
   FleetMcpConfig,
   FleetScope,
   FleetSyncReport,
@@ -1867,4 +1868,22 @@ export const threadMessages = sqliteTable(
     createdAt: timestamp("created_at").notNull(),
   },
   (table) => [index("thread_messages_thread").on(table.threadId)]
+);
+
+/**
+ * Every permission and question a session is parked on, as the hub relays it
+ * (`pending.ts`). Kept here so a hub that restarts still holds them: every
+ * screen reading `/api/pending` the moment it is back sees the asks its
+ * agents have not replayed yet, under the wait they were first raised with.
+ */
+export const parkedAsks = sqliteTable(
+  "parked_asks",
+  {
+    requestId: text("request_id").primaryKey(),
+    instanceId: text("instance_id"),
+    machineId: text("machine_id").notNull(),
+    /** The `permission_request` envelope, `raisedAt` stamped on its payload. */
+    envelope: text("envelope", { mode: "json" }).$type<Envelope>().notNull(),
+  },
+  (table) => [index("parked_asks_instance").on(table.instanceId)]
 );

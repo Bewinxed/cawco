@@ -117,7 +117,9 @@ const hub = await Effect.runPromise(
         { resumeWorkflows: false }
       );
     }),
-    Layer.mergeAll(RegistryLayer, DbLayer, PendingLayer)
+    PendingLayer.pipe(
+      Layer.provideMerge(Layer.mergeAll(RegistryLayer, DbLayer))
+    )
   )
 );
 

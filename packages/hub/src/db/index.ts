@@ -8,6 +8,7 @@ import type {
   DelegateEvent,
   DelegateEventKind,
   DelegateEventPayload,
+  Envelope,
   FleetAgent,
   FleetConfig,
   FleetHook,
@@ -96,6 +97,7 @@ import {
   mcpToolListings,
   openrouterConnection,
   type PlaceKind,
+  parkedAsks,
   plugins,
   projectOffers,
   projectPlaces,
@@ -612,6 +614,13 @@ export interface DbShape {
   readonly markAllAgentsOffline: () => void;
   readonly markCanvasSent: (id: string, at: Date) => void;
   /**
+   * An attach to a process sessiond still holds is on its way: a row filed
+   * asleep, failed or unknown is `starting` until its `init` or a beat lists
+   * it. Its launch (`spawnedAt`) and `updatedAt` are untouched: the process
+   * is the same one, and it did nothing. Returns whether the row moved.
+   */
+  readonly markInstanceAttaching: (id: string) => boolean;
+  /**
    * The daemon has spoken about one session — its `init` frame naming the SDK
    * conversation. That is first-hand word that a process exists, so a row still
    * at `starting` (or demoted while the machine was unreachable) is promoted
@@ -619,13 +628,6 @@ export interface DbShape {
    * Returns whether the row moved.
    */
   readonly markInstanceLive: (id: string) => boolean;
-  /**
-   * An attach to a process sessiond still holds is on its way: a row filed
-   * asleep, failed or unknown is `starting` until its `init` or a beat lists
-   * it. Its launch (`spawnedAt`) and `updatedAt` are untouched: the process
-   * is the same one, and it did nothing. Returns whether the row moved.
-   */
-  readonly markInstanceAttaching: (id: string) => boolean;
   /**
    * The owner looked at these sessions and runs (a tab in front) or archived
    * them off Finished, at `at`; a null `at` clears the mark (unarchive), which
@@ -774,6 +776,15 @@ export interface DbShape {
     id: string,
     machineId?: string
   ) => typeof instances.$inferSelect | undefined;
+  /**
+   * The asks the hub holds parked (`pending.ts`), kept across its restarts:
+   * read once as it boots, written as each is parked and dropped as it ends.
+   */
+  readonly parkedAsks: {
+    readonly drop: (requestId: string) => void;
+    readonly list: () => Envelope[];
+    readonly save: (requestId: string, envelope: Envelope) => void;
+  };
   readonly patchInstance: (
     id: string,
     patch: {
@@ -3129,6 +3140,29 @@ const make = (path: string): DbShape => {
         )
         .returning({ id: instances.id })
         .all().length > 0,
+    parkedAsks: {
+      drop: (requestId) => {
+        db.delete(parkedAsks).where(eq(parkedAsks.requestId, requestId)).run();
+      },
+      list: () =>
+        db
+          .select({ envelope: parkedAsks.envelope })
+          .from(parkedAsks)
+          .all()
+          .map((row) => row.envelope),
+      save: (requestId, envelope) => {
+        const row = {
+          requestId,
+          instanceId: envelope.instanceId ?? null,
+          machineId: envelope.machineId,
+          envelope,
+        };
+        db.insert(parkedAsks)
+          .values(row)
+          .onConflictDoUpdate({ target: parkedAsks.requestId, set: row })
+          .run();
+      },
+    },
     markInstanceAttaching: (id) =>
       db
         .update(instances)

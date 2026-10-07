@@ -1,9 +1,17 @@
 import type { Envelope, PermissionResult } from "@cawco/core";
 import { Context, Effect, Layer } from "effect";
+import { Db, type DbShape } from "./db";
 
 /**
  * Permission and dialog requests the agent is blocked on, keyed by SDK
  * `requestId`, so a dashboard that connects mid-prompt can still answer it.
+ *
+ * A session's own asks outlive this hub, as the process blocked on them does:
+ * they are kept in the database and read back as it boots, so the hub that
+ * comes back holds them before any agent has replayed its own, and every
+ * screen that reads `/api/pending` meanwhile still shows them. An ask the hub
+ * raised itself (a workflow's question, an admin write) is answered by a
+ * waiter in this process, and goes with it.
  */
 export interface PendingShape {
   /** A relaunch or a death answers every question its process had open. */
@@ -19,7 +27,15 @@ export interface PendingShape {
   readonly onSettled: (
     listener: (envelope: Envelope, outcome: "answered" | "cancelled") => void
   ) => void;
-  readonly remember: (requestId: string, envelope: Envelope) => boolean;
+  /**
+   * `outlivesHub` marks a session process's own ask, which is kept across
+   * this hub's restart; one the hub raised for itself is not.
+   */
+  readonly remember: (
+    requestId: string,
+    envelope: Envelope,
+    outlivesHub?: boolean
+  ) => boolean;
   readonly resolve: (
     requestId: string,
     outcome?: "answered" | "cancelled"
@@ -80,8 +96,15 @@ const raisedAtOf = (envelope: Envelope | undefined): number | undefined => {
   return typeof at === "number" ? at : undefined;
 };
 
-const make = (): PendingShape => {
-  const requests = new Map<string, Envelope>();
+const make = (kept: DbShape["parkedAsks"]): PendingShape => {
+  // What the hub held parked when it last stopped, by request id.
+  const requests = new Map<string, Envelope>(
+    kept
+      .list()
+      .flatMap((envelope) =>
+        envelope.requestId ? [[envelope.requestId, envelope] as const] : []
+      )
+  );
   // A daemon replay must not resurrect a request that already left this ledger.
   const settledIds = new Set<string>();
   let settled:
@@ -96,6 +119,7 @@ const make = (): PendingShape => {
       return false;
     }
     requests.delete(requestId);
+    kept.drop(requestId);
     settledIds.add(requestId);
     settled?.(envelope, outcome);
     return true;
@@ -109,15 +133,19 @@ const make = (): PendingShape => {
      * Parks an ask and stamps the moment the hub first saw it onto its
      * payload, before the payload is relayed or replayed from `/api/pending`.
      * A daemon replay of the same request keeps the first stamp, so the wait
-     * every device shows is the same wait.
+     * every device shows is the same wait, a replay after this hub restarted
+     * included.
      */
-    remember: (requestId, envelope) => {
+    remember: (requestId, envelope, outlivesHub = false) => {
       if (settledIds.has(requestId)) {
         return false;
       }
       const payload = envelope.payload as Record<string, unknown>;
       payload.raisedAt = raisedAtOf(requests.get(requestId)) ?? Date.now();
       requests.set(requestId, envelope);
+      if (outlivesHub) {
+        kept.save(requestId, envelope);
+      }
       return true;
     },
     get: (requestId) => requests.get(requestId),
@@ -133,4 +161,9 @@ const make = (): PendingShape => {
   };
 };
 
-export const PendingLayer = Layer.effect(Pending)(Effect.sync(make));
+export const PendingLayer = Layer.effect(Pending)(
+  Effect.gen(function* () {
+    const db = yield* Db;
+    return make(db.parkedAsks);
+  })
+);

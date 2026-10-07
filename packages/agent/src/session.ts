@@ -669,16 +669,27 @@ export class SessionSupervisor {
 
   /**
    * Every permission ask still waiting for an answer, by requestId — the frame
-   * body exactly as it was sunk. The hub parks asks in memory only, so a hub
-   * restart forgets the question while this daemon still holds the callback:
-   * the session blocks forever on an answer nobody can send. Replayed after
-   * every registration (replayOpenAsks); the hub re-parks and re-notifies only
-   * what it does not already know.
+   * body exactly as it was sunk. A hub that was away when one was asked never
+   * heard it, while this daemon holds the callback: the session would block
+   * on an answer nobody can send. Replayed after every registration
+   * (replayOpenAsks); the hub re-parks and re-notifies only what it does not
+   * already know.
    */
   readonly #openAsks = new Map<string, Parameters<FrameSink>[0]>();
+  /**
+   * The asks that ended while no hub was listening, by requestId: the hub
+   * keeps what it parked across its own restart, so an end it never heard
+   * would leave the ask on every screen. Said after the next registration.
+   */
+  readonly #unheardSettles = new Map<string, Parameters<FrameSink>[0]>();
 
-  /** Re-sinks every unresolved ask — called by the daemon after register. */
+  /** Re-sinks every unresolved ask, and every ask's end the hub missed — called by the daemon after register. */
   replayOpenAsks(): void {
+    for (const [requestId, body] of this.#unheardSettles) {
+      if (this.sink(body)) {
+        this.#unheardSettles.delete(requestId);
+      }
+    }
     for (const body of this.#openAsks.values()) {
       this.sink(body);
     }
@@ -3313,14 +3324,18 @@ export class SessionSupervisor {
     }
     this.#openAsks.delete(requestId);
     // The hub parks every ask until it hears it is over; an ask the harness
-    // settled itself would otherwise stay on every board.
-    this.sink({
-      kind: "permission_settled",
+    // settled itself would otherwise stay on every board. A hub that is away
+    // hears it once it is back (replayOpenAsks).
+    const settled = {
+      kind: "permission_settled" as const,
       instanceId,
       requestId,
       processGeneration: ask.processGeneration,
       outcome,
-    });
+    };
+    if (!this.sink(settled)) {
+      this.#unheardSettles.set(requestId, settled);
+    }
     this.#touch(instanceId);
     const left = (this.#pulseBlocked.get(instanceId) ?? 1) - 1;
     if (left === 0) {

@@ -1932,10 +1932,6 @@ function adoptContinuations(table: ContinuationJob[]): void {
 }
 
 /**
- * Registry reads: on connect and again after every reconnect. True once the
- * three reads the board waits on (machines, sessions, projects) all landed.
- */
-/**
  * The order this device hears the hub's word on asks in: each ask parked and
  * each ask settled takes the next number. A read of `/api/pending` notes the
  * number it was asked for at, and what was heard after that is newer than it.
@@ -1957,6 +1953,38 @@ const hearSettled = (requestId: string): void => {
   }
 };
 
+/**
+ * The hub's parked asks as `/api/pending` answered, read when `readFrom` was
+ * heard. The read is the whole truth as of then: an ask settled while this
+ * tab was away sent its `permission_settled` to nobody listening. What the
+ * socket said since is newer than the read: an ask parked meanwhile (a
+ * restarted hub hearing its agents replay theirs) stays, and one settled
+ * meanwhile is not put back.
+ */
+function adoptPending(
+  pending: Envelope<FramePayload>[],
+  readFrom: number
+): void {
+  const parked = new Set(pending.map((envelope) => envelope.requestId));
+  const stands = (p: PendingPermission): boolean =>
+    parked.has(p.requestId) || p.heard > readFrom;
+  for (const target of Object.values(state.sessions)) {
+    if (!target.pending.every(stands)) {
+      target.pending = target.pending.filter(stands);
+      trackWorking(target);
+    }
+  }
+  for (const envelope of pending) {
+    if ((askSettledHeard.get(envelope.requestId ?? "") ?? 0) <= readFrom) {
+      handleFrame(envelope.payload);
+    }
+  }
+}
+
+/**
+ * Registry reads: on connect and again after every reconnect. True once the
+ * three reads the board waits on (machines, sessions, projects) all landed.
+ */
 async function refresh(): Promise<boolean> {
   // Registry hydration also recovers workflow transitions missed while disconnected.
   refreshWorkflows();
@@ -2003,25 +2031,7 @@ async function refresh(): Promise<boolean> {
     adoptUsageLimits(usage.machines);
   }
   if (pending) {
-    // The read is the whole truth as of when it was asked for: an ask settled
-    // while this tab was away sent its `permission_settled` to nobody
-    // listening. What the socket said since is newer than the read: an ask
-    // parked meanwhile (a restarted hub hearing its agents replay theirs)
-    // stays, and one settled meanwhile is not put back.
-    const parked = new Set(pending.map((envelope) => envelope.requestId));
-    const stands = (p: PendingPermission): boolean =>
-      parked.has(p.requestId) || p.heard > readFrom;
-    for (const target of Object.values(state.sessions)) {
-      if (!target.pending.every(stands)) {
-        target.pending = target.pending.filter(stands);
-        trackWorking(target);
-      }
-    }
-    for (const envelope of pending) {
-      if ((askSettledHeard.get(envelope.requestId ?? "") ?? 0) <= readFrom) {
-        handleFrame(envelope.payload);
-      }
-    }
+    adoptPending(pending, readFrom);
   }
   if (machines && rows && projects) {
     state.fleetRead = true;

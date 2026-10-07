@@ -12647,7 +12647,7 @@ export const createServer = (
                 if (threadId) {
                   askPayload.threadId = threadId;
                 }
-                if (!pending.remember(message.requestId, message)) {
+                if (!pending.remember(message.requestId, message, true)) {
                   break;
                 }
                 if (alreadyParked) {

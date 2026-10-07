@@ -44,7 +44,13 @@ const main = Effect.gen(function* () {
 export const startHub = async (): Promise<void> => {
   migrateLegacyDb(DB_PATH);
   await Effect.runPromise(
-    Effect.provide(main, Layer.mergeAll(RegistryLayer, DbLayer, PendingLayer))
+    Effect.provide(
+      main,
+      // The parked asks a restarted hub still holds are read from its database.
+      PendingLayer.pipe(
+        Layer.provideMerge(Layer.mergeAll(RegistryLayer, DbLayer))
+      )
+    )
   );
 };
 
