@@ -162,12 +162,20 @@ class ProseView: UITextView, NSTextLayoutManagerDelegate {
         ProseFragment(textElement: textElement, range: textElement.elementRange)
     }
 
+    /// The rect kept clear for the float, as last given to the container.
+    /// Compared as a rect: two `UIBezierPath`s of one rect are never equal
+    /// (identity), and setting the paths on every pass relaid the whole text
+    /// and invalidated the size every pass, so a turn with a clock never
+    /// settled and every display-link frame laid it out again.
+    private var excluded: CGRect?
+
     override func layoutSubviews() {
         super.layoutSubviews()
-        let paths = floatSize == .zero ? [] : [UIBezierPath(rect: CGRect(x: bounds.width - floatSize.width, y: 0,
-                                                                          width: floatSize.width, height: floatSize.height))]
-        if textContainer.exclusionPaths != paths {
-            textContainer.exclusionPaths = paths
+        let clear = floatSize == .zero ? nil : CGRect(x: bounds.width - floatSize.width, y: 0,
+                                                      width: floatSize.width, height: floatSize.height)
+        if clear != excluded {
+            excluded = clear
+            textContainer.exclusionPaths = clear.map { [UIBezierPath(rect: $0)] } ?? []
             invalidateIntrinsicContentSize()
         }
         if let fit = fitWidth, bounds.width > 0, abs(bounds.width - fit) > 0.5 { fitWidth = nil }
