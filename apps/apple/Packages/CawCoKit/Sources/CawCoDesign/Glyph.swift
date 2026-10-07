@@ -340,7 +340,11 @@ public final class KitLabel: UILabel {
         place(NSAttributedString(string: content, attributes: attributes))
     }
 
+    /// The cached lines go before the string changes: UIKit measures inside
+    /// the setter (`textRect` from its baseline update), and lines kept from
+    /// a longer old string index past the end of the new one.
     private func place(_ string: NSAttributedString?) {
+        forget()
         placing = true
         super.attributedText = string
         placing = false
