@@ -193,6 +193,12 @@ final class MachineLoginController: MachineAuthDialog, UITextFieldDelegate {
             guard let url = self?.url else { return }
             UIApplication.shared.open(url)
         }
+        // The web's link (`px-3 py-2 rounded-[var(--radius-sm)]`, no border):
+        // 8pt above and below the label line, the fill to the edge.
+        openLink.configuration?.contentInsets.top = 8
+        openLink.configuration?.contentInsets.bottom = 8
+        openLink.configuration?.background.backgroundInsets = .zero
+        openLink.configuration?.background.cornerRadius = Radius.radiusSm
         openLink.isHidden = true
         codeField.accessibilityLabel = "Authorisation code"
         codeField.isEnabled = false

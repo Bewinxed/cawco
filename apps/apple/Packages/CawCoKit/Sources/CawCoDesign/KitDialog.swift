@@ -260,11 +260,12 @@ open class KitDialogController: UIViewController, UIViewControllerTransitioningD
 /// the drawn size stays its token, only the touch area grows. A touch on a
 /// control itself always goes to it; one in the grown margin goes to the
 /// nearest button whose area holds it, so two neighbours split the gap
-/// between them at its midpoint.
+/// between them at its midpoint. A Mac's pointer takes the drawn boxes alone.
 private final class TouchTargetCard: UIView {
     override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
         let direct = super.hitTest(point, with: event)
-        guard isUserInteractionEnabled, !isHidden, alpha > 0.01, self.point(inside: point, with: event) else { return direct }
+        guard traitCollection.userInterfaceIdiom != .mac, isUserInteractionEnabled, !isHidden, alpha > 0.01,
+              self.point(inside: point, with: event) else { return direct }
         var view = direct
         while let current = view, current !== self {
             if current is UIControl { return direct }
@@ -343,11 +344,11 @@ public final class KitPre: UITextView {
     }
 }
 
-/// The kit's ghost icon button at `icon-sm` (28pt, `--radius-sm`): no fill
+/// The kit's ghost icon button at `icon-sm` (30pt, `--c-btn-h-sm`; `--radius-sm`): no fill
 /// at rest, `--surface-hover` under a pointer, `--surface-fill` pressed, a
 /// 16pt glyph in muted ink.
 public final class KitGhostButton: UIButton {
-    public init(_ glyph: Glyph, label: String, side: Double = 28, tint: UIColor = Palette.inkMuted) {
+    public init(_ glyph: Glyph, label: String, side: Double = Size.cBtnHSm, tint: UIColor = Palette.inkMuted) {
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         var config = UIButton.Configuration.plain()
