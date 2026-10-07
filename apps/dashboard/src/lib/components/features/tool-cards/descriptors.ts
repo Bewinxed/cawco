@@ -240,6 +240,8 @@ const EDIT_TOOLS = new Set([
 const WRITE_TOOLS = new Set(["write", "create_file", "write_file"]);
 
 const MCP_NAME = /^mcp__(.+?)__(.+)$/;
+/** The fleet memory's admin tools, as Claude names them past the server and as OpenCode does. */
+const MEMORY_TOOL = /^(?:cawco_)?admin_memory_(?:read|write)$/;
 const NUMBERED_LINE = /^\s*\d+→/;
 const GREP_FOUND_COUNT = /^Found (\d+) (\w+)/i;
 const GREP_TALLY = /:(\d+)\s*$/;
@@ -318,7 +320,7 @@ export function familyId(toolName: string | undefined): FamilyId {
   if (name === "navigate") {
     return "navigate";
   }
-  if (name === "manage_memory" || name === "cawco_manage_memory") {
+  if (MEMORY_TOOL.test(name)) {
     return "memory";
   }
   if (name === "javascript_tool" || name === "repl") {
@@ -978,7 +980,7 @@ export interface MemoryDoc {
   updatedAt?: string;
 }
 
-/** What a `manage_memory` call answered with, read off the hub's JSON. */
+/** What an `admin_memory_read` or `admin_memory_write` call answered with, read off the hub's JSON. */
 export type MemoryResult =
   | {
       kind: "doc";

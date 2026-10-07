@@ -97,6 +97,7 @@ import {
   projectPlaces,
   projects,
   projectTasks,
+  projectThreads,
   pushDevices,
   queuedTaskStarts,
   queuedWorkItems,
@@ -108,6 +109,7 @@ import {
   supervisorConfig,
   supervisorEvents,
   type Tracker,
+  threadMessages,
   tools,
   usageBuckets,
   usageLimitHistory,
@@ -149,6 +151,7 @@ const MIGRATIONS_DIR = standalone
     );
 
 export type InstanceKind = (typeof instances.$inferSelect)["kind"];
+export type InstanceRole = NonNullable<(typeof instances.$inferSelect)["role"]>;
 export type PublicInstanceRow = Omit<
   typeof instances.$inferSelect,
   | "endIntent"
@@ -180,6 +183,10 @@ export type ProjectOfferRow = typeof projectOffers.$inferSelect;
 /** Where a preview's choices are kept (choices.ts). */
 export type CanvasRow = typeof canvases.$inferSelect;
 export type CanvasChoiceRow = typeof canvasChoices.$inferSelect;
+export type ThreadRow = typeof projectThreads.$inferSelect;
+export type ThreadMessageRow = typeof threadMessages.$inferSelect;
+/** A thread as its project's list shows it: with its newest message. */
+export type ThreadListRow = ThreadRow & { last: string };
 export type ContinuationRow = typeof continuations.$inferSelect;
 export type WorkflowRow = typeof workflows.$inferSelect;
 export type WorkflowRunRow = typeof workflowRuns.$inferSelect;
@@ -294,6 +301,12 @@ export interface DbShape {
     path: string;
     kind: PlaceKind;
   }) => { place: PlaceRow; added: boolean };
+  /** Adds a message to a thread, which moves it to the top of its project's list. */
+  readonly addThreadMessage: (message: {
+    threadId: string;
+    author: ThreadMessageRow["author"];
+    body: string;
+  }) => { thread: ThreadRow; message: ThreadMessageRow };
   /** A machine's last-known tool status by id; empty for one that never reported. */
   readonly agentAddressContract: (machineId: string) => boolean;
   readonly agentHarnesses: (machineId: string) => HarnessReport[] | undefined;
@@ -339,7 +352,16 @@ export interface DbShape {
     name: string;
     cwd: string;
     remote: string | null;
+    /** Made with Caw: its Caw starts on. */
+    caw?: boolean;
   }) => ProjectRow;
+  /** Files a thread with its first message. */
+  readonly createThread: (thread: {
+    id: string;
+    projectId: string;
+    title: string;
+    body: string;
+  }) => { thread: ThreadRow; message: ThreadMessageRow };
   /** Files a work item as the hub accepted it. */
   readonly createWorkItem: (item: typeof workItems.$inferInsert) => WorkItemRow;
   /** Files a workspace whose checkout its machine has just made. */
@@ -474,6 +496,8 @@ export interface DbShape {
   ) => void;
   /** The canvas a session showed last, for `read_choices` after its preview closed. */
   readonly latestCanvasOf: (instanceId: string) => CanvasRow | undefined;
+  /** Dollars a project's Caw sessions have spent, from the usage their machines report. */
+  readonly leadSpendUsd: (projectId: string) => number;
   /** Keys a send to the id its harness stores it under. */
   readonly linkSend: (uuid: string, harnessId: string) => void;
   /**
@@ -671,6 +695,8 @@ export interface DbShape {
     workflowStepId?: string;
     /** The work item the session runs; set once, at its spawn. */
     workItemId?: string;
+    /** The toolset it runs in; set once, at its first spawn. */
+    role?: InstanceRole;
   }) => void;
   /** The offers nobody has answered yet. */
   readonly openProjectOffers: () => ProjectOfferRow[];
@@ -735,6 +761,8 @@ export interface DbShape {
   readonly projectsWithoutRemote: (
     machineId: string
   ) => { projectId: string; path: string }[];
+  /** A project's threads, newest first, each with its newest message. */
+  readonly projectThreads: (projectId: string) => ThreadListRow[];
   /** The iOS app's pushes (push.ts): credentials, one row, and the devices that registered. */
   readonly push: {
     readonly credentials: () => ApnsCredentialsRow | undefined;
@@ -1052,18 +1080,18 @@ export interface DbShape {
   ) => void;
   /** Store (or replace) the OpenRouter key from a completed PKCE exchange. */
   readonly setOpenRouterConnection: (apiKey: string) => void;
-  /** The project's dispatch settings: its lead, whether it dispatches, its caps. */
+  /** The project's Caw: on or off, its harness, and its lead session (caw.ts). */
+  readonly setProjectCaw: (
+    id: string,
+    change: Partial<Pick<ProjectRow, "caw" | "cawHarness" | "leadInstanceId">>
+  ) => void;
+  /** The project's dispatch settings: whether it dispatches, its caps, its default budget and landing. */
   readonly setProjectDispatch: (
     id: string,
     change: Partial<
       Pick<
         ProjectRow,
-        | "budget"
-        | "dispatch"
-        | "lands"
-        | "leadInstanceId"
-        | "maxAttempts"
-        | "reviewLimit"
+        "budget" | "dispatch" | "lands" | "maxAttempts" | "reviewLimit"
       >
     >
   ) => void;
@@ -1132,6 +1160,9 @@ export interface DbShape {
   readonly takeOwedSpawn: (id: string) => boolean;
   /** Every row of a project's task index, in id order. */
   readonly taskIndex: (projectId: string) => TaskIndexRow[];
+  readonly thread: (id: string) => ThreadRow | undefined;
+  /** A thread's messages, oldest first. */
+  readonly threadMessages: (threadId: string) => ThreadMessageRow[];
   readonly touchAgent: (machineId: string) => void;
   /** Files or moves a canvas onto the session showing it; a hash given becomes its page's. */
   readonly touchCanvas: (canvas: {
@@ -2397,6 +2428,7 @@ const make = (path: string): DbShape => {
       workflowRunId,
       workflowStepId,
       workItemId,
+      role,
       // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: opens (or reuses) the one live row for a conversation across every optional field a spawn can carry — see the "one conversation, one live row" invariant below.
     }) => {
       const now = new Date();
@@ -2468,6 +2500,7 @@ const make = (path: string): DbShape => {
           workflowRunId,
           workflowStepId,
           workItemId,
+          role,
           // `starting`, not `running` — this row is written when a spawn is
           // *issued*, and issuing a spawn is not evidence that a process exists.
           // Writing `running` here is the original sin behind the 178-vs-42
@@ -3905,6 +3938,95 @@ const make = (path: string): DbShape => {
         db.update(projects).set(change).where(eq(projects.id, id)).run();
       }
     },
+    setProjectCaw: (id, change) => {
+      if (Object.keys(change).length > 0) {
+        db.update(projects).set(change).where(eq(projects.id, id)).run();
+      }
+    },
+    leadSpendUsd: (projectId) =>
+      db
+        .select({
+          usd: sql<number>`coalesce(sum(${usageBuckets.costUsd}), 0)`,
+        })
+        .from(usageBuckets)
+        .innerJoin(instances, eq(instances.sessionId, usageBuckets.sessionId))
+        .where(
+          and(eq(instances.projectId, projectId), eq(instances.role, "lead"))
+        )
+        .get()?.usd ?? 0,
+    projectThreads: (projectId) => {
+      const rows = db
+        .select()
+        .from(projectThreads)
+        .where(eq(projectThreads.projectId, projectId))
+        .orderBy(desc(projectThreads.updatedAt), desc(projectThreads.id))
+        .all();
+      return rows.map((row) => {
+        const last = db
+          .select({ body: threadMessages.body })
+          .from(threadMessages)
+          .where(eq(threadMessages.threadId, row.id))
+          .orderBy(desc(threadMessages.createdAt), desc(threadMessages.id))
+          .limit(1)
+          .get();
+        return { ...row, last: last?.body ?? "" };
+      });
+    },
+    thread: (id) =>
+      db.select().from(projectThreads).where(eq(projectThreads.id, id)).get(),
+    threadMessages: (threadId) =>
+      db
+        .select()
+        .from(threadMessages)
+        .where(eq(threadMessages.threadId, threadId))
+        .orderBy(asc(threadMessages.createdAt), asc(threadMessages.id))
+        .all(),
+    createThread: ({ id, projectId, title, body }) =>
+      db.transaction((tx) => {
+        const at = new Date();
+        const thread = tx
+          .insert(projectThreads)
+          .values({ id, projectId, title, createdAt: at, updatedAt: at })
+          .returning()
+          .get();
+        const message = tx
+          .insert(threadMessages)
+          .values({
+            id: crypto.randomUUID(),
+            threadId: id,
+            author: "you",
+            body,
+            createdAt: at,
+          })
+          .returning()
+          .get();
+        return { thread, message };
+      }),
+    addThreadMessage: ({ threadId, author, body }) =>
+      db.transaction((tx) => {
+        const at = new Date();
+        const message = tx
+          .insert(threadMessages)
+          .values({
+            id: crypto.randomUUID(),
+            threadId,
+            author,
+            body,
+            createdAt: at,
+          })
+          .returning()
+          .get();
+        const thread = tx
+          .update(projectThreads)
+          .set({ updatedAt: at })
+          .where(eq(projectThreads.id, threadId))
+          .returning()
+          .get();
+        if (!thread) {
+          throw new Error(`thread ${threadId} is not on this hub`);
+        }
+        return { thread, message };
+      }),
     projectAttempts: (projectId) =>
       db
         .select()
@@ -3990,9 +4112,11 @@ const make = (path: string): DbShape => {
         )
         .run();
     },
-    createProject: ({ id, machineId, name, cwd, remote }) =>
+    createProject: ({ id, machineId, name, cwd, remote, caw = false }) =>
       db.transaction((tx) => {
-        tx.insert(projects).values({ id, machineId, name, cwd, remote }).run();
+        tx.insert(projects)
+          .values({ id, machineId, name, cwd, remote, caw })
+          .run();
         tx.insert(projectPlaces)
           .values({
             id: crypto.randomUUID(),

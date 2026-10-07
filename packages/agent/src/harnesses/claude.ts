@@ -46,6 +46,7 @@ import type {
   UserQuestionResult,
 } from "@cawco/core";
 import {
+  ADMIN_WRITE_TOOL,
   ASK_USER_QUESTION,
   CLAUDE_CONVERSATION_GONE,
   CONTROL_READ_SESSION_CONTEXT,
@@ -718,7 +719,12 @@ class SessionMode {
     return (
       this.#fullSend &&
       this.#cli === "bypassPermissions" &&
-      !(matchedAskRule || INTERACTIVE_TOOLS.has(toolName))
+      !(
+        matchedAskRule ||
+        INTERACTIVE_TOOLS.has(toolName) ||
+        // A fleet-settings write is the person's to approve, Full Send or not.
+        ADMIN_WRITE_TOOL.test(toolName)
+      )
     );
   }
 }

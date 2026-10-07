@@ -104,20 +104,23 @@ export const hubActor = (reason: string): TaskActor => ({
 });
 
 /**
- * A session calling the task tools: it moves stages as a `session`, and
- * commits under its name. (`lead` is for the project's lead, Caw, once
- * there is one.)
+ * A session calling the task tools: it moves stages as a `session` and
+ * commits under its name; the project's Caw (its row's role `lead`) moves as
+ * the `lead` and commits as Caw.
  */
-export const sessionActor = (row: InstanceRow): TaskActor => ({
-  mover: "session",
-  instanceId: row.id,
-  author: {
-    name:
-      row.title?.trim() ||
-      row.derivedTitle?.trim() ||
-      `session ${row.id.slice(0, 8)}`,
-  },
-});
+export const sessionActor = (row: InstanceRow): TaskActor =>
+  row.role === "lead"
+    ? { mover: "lead", instanceId: row.id, author: { name: "Caw" } }
+    : {
+        mover: "session",
+        instanceId: row.id,
+        author: {
+          name:
+            row.title?.trim() ||
+            row.derivedTitle?.trim() ||
+            `session ${row.id.slice(0, 8)}`,
+        },
+      };
 
 /** One attempt at a task: a work item whose task it is, as a task read shows it. */
 export interface TaskAttempt {

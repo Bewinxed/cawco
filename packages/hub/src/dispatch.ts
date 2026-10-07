@@ -11,14 +11,15 @@
  *   fleet's default. Starting one moves the task to its active stage (the
  *   stage that runs it, else the first of kind `active`), as `hub`.
  * - **Who it reports to.** A work item needs a parent session. `task_start`
- *   from a session you started makes that session the parent; the project's
- *   lead (a session you started in the project) takes the reports of every
- *   attempt nobody asked for.
+ *   from a session you started (or Caw) makes that session the parent; the
+ *   project's lead, its Caw (caw.ts), takes the reports of every attempt
+ *   nobody asked for, its session started for the first one while Caw is
+ *   on. With Caw off there is no lead: such an attempt does not start.
  * - **The frontier** (tasks.ts `onFrontier`): tasks in a `todo` stage whose
  *   every `after` task is in a `done` stage, with no live attempt, whose last
  *   attempt did not fail, in rank order. A failed task waits for a person.
  * - **Dispatch** starts the frontier on its own, only for a project with
- *   dispatch on and a lead, up to `max_attempts` live attempts, and not while
+ *   dispatch and Caw on, up to `max_attempts` live attempts, and not while
  *   `review_limit` tasks or more wait in `you` stages.
  * - **Hooks.** A task entering an `active` stage with `runs: <type>`, by
  *   anyone's move but the hub's, or filed straight into one, starts an
@@ -93,6 +94,11 @@ export interface DispatchDeps {
     | "setProjectDispatch"
     | "workItemByPrUrl"
   >;
+  /**
+   * The project's lead: its Caw session, started now if Caw is on and it has
+   * none (caw.ts `lead`); undefined while Caw is off.
+   */
+  readonly lead: (projectId: string) => Promise<InstanceRow | undefined>;
   /** Whether a machine is connected now. */
   readonly online: (machineId: string) => boolean;
   /** Files and spawns a work item (work-items.ts `start`). */
@@ -139,9 +145,8 @@ export interface DispatchView {
   frontier: string[];
   /** Where an attempt lands when its task and type say nothing. */
   lands: LandsMode;
+  /** The project's Caw session, once the hub has started one. */
   leadInstanceId: string | null;
-  /** Why the lead cannot take reports now; null when it can, or there is none. */
-  leadProblem: string | null;
   /** Attempts starting or running now. */
   live: number;
   maxAttempts: number;
@@ -161,11 +166,13 @@ export interface DispatchChange {
   dispatch?: boolean;
   /** Where an attempt lands when its task and type say nothing. */
   lands?: LandsMode;
-  /** A session you started in the project; null clears it. */
-  leadInstanceId?: string | null;
   maxAttempts?: number;
   reviewLimit?: number;
 }
+
+/** What a start nobody can take the report of says to do. */
+const NO_LEAD =
+  "Turn Caw on for the project so its lead takes the report, name a session you started in the project, or start it with task_start from one.";
 
 /** How often the dispatcher looks again with no event: a safety net, not a loop. */
 const SAFETY_MS = 5 * 60_000;
@@ -403,7 +410,6 @@ const counted = (count: number, one: string, many: string): string =>
 const pauseOf = (
   project: ProjectRow,
   now: {
-    leadProblem: string | null;
     live: number;
     review: number;
     stagesProblems: string[];
@@ -412,11 +418,8 @@ const pauseOf = (
   if (!project.dispatch) {
     return "Dispatch is off: attempts start only when a session or you start them.";
   }
-  if (!project.leadInstanceId) {
-    return "The project has no lead to take the reports of the attempts the hub starts.";
-  }
-  if (now.leadProblem) {
-    return `The lead cannot take reports: ${now.leadProblem}`;
+  if (!project.caw) {
+    return "Caw is off, so the project has no lead to take the reports of the attempts the hub starts; they start only when a session or you start them.";
   }
   if (now.stagesProblems.length > 0) {
     return `stages.md does not read. ${now.stagesProblems.join(" ")}`;
@@ -430,12 +433,11 @@ const pauseOf = (
   return null;
 };
 
-/** The columns a settings change writes: only what it names; an empty lead clears it. */
+/** The columns a settings change writes: only what it names. */
 const columnsOf = ({
   budget,
   dispatch,
   lands,
-  leadInstanceId,
   maxAttempts,
   reviewLimit,
 }: DispatchChange) => ({
@@ -444,9 +446,6 @@ const columnsOf = ({
     : { budget: budget && Object.keys(budget).length > 0 ? budget : null }),
   ...(dispatch === undefined ? {} : { dispatch }),
   ...(lands === undefined ? {} : { lands }),
-  ...(leadInstanceId === undefined
-    ? {}
-    : { leadInstanceId: leadInstanceId || null }),
   ...(maxAttempts === undefined ? {} : { maxAttempts }),
   ...(reviewLimit === undefined ? {} : { reviewLimit }),
 });
@@ -468,6 +467,7 @@ const failure = (
 
 export const createDispatcher = ({
   db,
+  lead,
   online,
   start,
   tasks,
@@ -498,12 +498,12 @@ export const createDispatcher = ({
   const instance = (id: string): InstanceRow | undefined =>
     db.getInstancesByIds([id])[0] as InstanceRow | undefined;
 
-  /** The project's lead, when it can take reports now. */
-  const leadOf = (project: ProjectRow): InstanceRow | undefined => {
-    const lead = project.leadInstanceId
-      ? instance(project.leadInstanceId)
-      : undefined;
-    return lead && !parentProblem(lead, project.id) ? lead : undefined;
+  /** The project's lead, its Caw, started now when it has none; undefined while Caw is off. */
+  const leadOf = async (
+    project: ProjectRow
+  ): Promise<InstanceRow | undefined> => {
+    const row = project.caw ? await lead(project.id) : undefined;
+    return row && !parentProblem(row, project.id) ? row : undefined;
   };
 
   /**
@@ -803,52 +803,46 @@ export const createDispatcher = ({
   };
 
   /** What the dispatcher would do for a project now. */
-  const viewOf = async (
-    project: ProjectRow
-  ): Promise<{ lead: InstanceRow | undefined; view: DispatchView }> => {
-    const lead = project.leadInstanceId
-      ? instance(project.leadInstanceId)
-      : undefined;
-    const leadProblem = project.leadInstanceId
-      ? (parentProblem(lead, project.id, project.leadInstanceId) ?? null)
-      : null;
+  const viewOf = async (project: ProjectRow): Promise<DispatchView> => {
     const list = await tasks.list(project.id);
     const live = liveAttempts(project.id).length + startingIn(project.id);
     const review = list.tasks.filter((task) => task.kind === "you").length;
     const frontier = list.tasks.filter(onFrontier).map((task) => task.id);
     const paused = pauseOf(project, {
-      leadProblem,
       stagesProblems: list.stagesProblems,
       review,
       live,
     });
     return {
-      lead: leadProblem ? undefined : lead,
-      view: {
-        budget: project.budget,
-        dispatch: project.dispatch,
-        lands: project.lands,
-        leadInstanceId: project.leadInstanceId,
-        leadProblem,
-        maxAttempts: project.maxAttempts,
-        reviewLimit: project.reviewLimit,
-        live,
-        review,
-        paused,
-        frontier,
-        queued: db.queuedTaskStarts(project.id).map((each) => each.taskId),
-      },
+      budget: project.budget,
+      dispatch: project.dispatch,
+      lands: project.lands,
+      leadInstanceId: project.leadInstanceId,
+      maxAttempts: project.maxAttempts,
+      reviewLimit: project.reviewLimit,
+      live,
+      review,
+      paused,
+      frontier,
+      queued: db.queuedTaskStarts(project.id).map((each) => each.taskId),
     };
   };
 
-  /** One look at a project: starts the frontier's first tasks up to the cap, unless paused. */
+  /**
+   * One look at a project: starts the frontier's first tasks up to the cap,
+   * unless paused, reporting to its Caw (started for the first one).
+   */
   const dispatchOnce = async (projectId: string): Promise<void> => {
     const project = db.project(projectId);
-    if (!(project?.dispatch && project.leadInstanceId)) {
+    if (!(project?.dispatch && project.caw)) {
       return;
     }
-    const { lead, view } = await viewOf(project);
-    if (view.paused || !lead) {
+    const view = await viewOf(project);
+    if (view.paused || view.frontier.length === 0) {
+      return;
+    }
+    const reportsTo = await leadOf(project);
+    if (!reportsTo) {
       return;
     }
     let slots = project.maxAttempts - view.live;
@@ -858,7 +852,7 @@ export const createDispatcher = ({
       }
       try {
         // biome-ignore lint/performance/noAwaitInLoops: one start at a time keeps the cap exact and the folder's commits in order
-        const started = await startAttempt(projectId, id, lead);
+        const started = await startAttempt(projectId, id, reportsTo);
         // One queued for owned files took no slot.
         if (!started.queued) {
           slots -= 1;
@@ -879,12 +873,14 @@ export const createDispatcher = ({
    * The session a hook's attempt reports to: the one that moved the task in
    * when it can take reports, else the lead.
    */
-  const hookParent = (
+  const hookParent = async (
     project: ProjectRow,
     moverId: string | null | undefined
-  ): InstanceRow | undefined => {
+  ): Promise<InstanceRow | undefined> => {
     const mover = moverId ? instance(moverId) : undefined;
-    return mover && !parentProblem(mover, project.id) ? mover : leadOf(project);
+    return mover && !parentProblem(mover, project.id)
+      ? mover
+      : await leadOf(project);
   };
 
   /**
@@ -938,12 +934,12 @@ export const createDispatcher = ({
       );
       return;
     }
-    const parent = hookParent(project, queued.parentInstanceId);
+    const parent = await hookParent(project, queued.parentInstanceId);
     if (!parent) {
       note(
         project.id,
         task,
-        `${task.id} waited in ${queued.stage} for ${owns ? "owned files" : "a slot"}, but no session can take the attempt's report now. Set the project's lead and move it in again, or start it with task_start from a session.`
+        `${task.id} waited in ${queued.stage} for ${owns ? "owned files" : "a slot"}, but no session can take the attempt's report now. ${NO_LEAD}`
       );
       return;
     }
@@ -1003,13 +999,13 @@ export const createDispatcher = ({
       return;
     }
     const project = projectOf(projectId);
-    const parent = hookParent(project, actor.instanceId);
+    const parent = await hookParent(project, actor.instanceId);
     if (!parent) {
       const task = await tasks.get(projectId, id);
       note(
         projectId,
         task,
-        `${id} entered ${to}, which runs ${stage.hooks.runs}, but no session can take the attempt's report. Set the project's lead and move it in again, or start it with task_start from a session.`
+        `${id} entered ${to}, which runs ${stage.hooks.runs}, but no session can take the attempt's report. ${NO_LEAD}`
       );
       return;
     }
@@ -1094,24 +1090,26 @@ export const createDispatcher = ({
 
   /**
    * Who an attempt you start from the dashboard reports to: the session
-   * named, or the project's lead; refused when neither can take reports.
+   * named, or the project's Caw; refused when neither can take reports.
    */
-  const reporter = (
+  const reporter = async (
     projectId: string,
     parentInstanceId: string | undefined
-  ): InstanceRow => {
+  ): Promise<InstanceRow> => {
     const project = projectOf(projectId);
-    const id = parentInstanceId ?? project.leadInstanceId;
-    if (!id) {
-      return refuse(
-        409,
-        "The project has no lead to take this attempt's report. Set a lead, name a session you started in the project, or start it with task_start from one."
+    if (!parentInstanceId) {
+      return (
+        (await leadOf(project)) ??
+        refuse(409, `Nobody can take this attempt's report. ${NO_LEAD}`)
       );
     }
-    const parent = instance(id);
-    const unfit = parentProblem(parent, projectId, id);
+    const parent = instance(parentInstanceId);
+    const unfit = parentProblem(parent, projectId, parentInstanceId);
     if (unfit || !parent) {
-      return refuse(parent ? 409 : 404, unfit ?? `No session ${id}.`);
+      return refuse(
+        parent ? 409 : 404,
+        unfit ?? `No session ${parentInstanceId}.`
+      );
     }
     return parent;
   };
@@ -1184,8 +1182,8 @@ export const createDispatcher = ({
       return startAttempt(projectId, ref, parent, undefined, true);
     },
 
-    /** A retry you start from the dashboard: it reports to the session named, or the project's lead. */
-    retryFor(
+    /** A retry you start from the dashboard: it reports to the session named, or the project's Caw. */
+    async retryFor(
       projectId: string,
       ref: string,
       parentInstanceId: string | undefined
@@ -1193,7 +1191,7 @@ export const createDispatcher = ({
       return startAttempt(
         projectId,
         ref,
-        reporter(projectId, parentInstanceId),
+        await reporter(projectId, parentInstanceId),
         undefined,
         true
       );
@@ -1269,8 +1267,8 @@ export const createDispatcher = ({
     },
 
     /** The project's dispatch settings and what the dispatcher would do now. */
-    async view(projectId: string): Promise<DispatchView> {
-      return (await viewOf(projectOf(projectId))).view;
+    view(projectId: string): Promise<DispatchView> {
+      return viewOf(projectOf(projectId));
     },
 
     /** Changes a project's dispatch settings, then looks at it again. */
@@ -1279,17 +1277,7 @@ export const createDispatcher = ({
       change: DispatchChange
     ): Promise<DispatchView> {
       projectOf(projectId);
-      const { leadInstanceId, maxAttempts, reviewLimit } = change;
-      if (leadInstanceId) {
-        const lead = instance(leadInstanceId);
-        const unfit = parentProblem(lead, projectId, leadInstanceId);
-        if (unfit) {
-          refuse(
-            lead ? 409 : 404,
-            `That session cannot lead the project. ${unfit}`
-          );
-        }
-      }
+      const { maxAttempts, reviewLimit } = change;
       const outOfRange =
         countProblem("maxAttempts", maxAttempts, MAX_ATTEMPTS_LIMIT) ??
         countProblem("reviewLimit", reviewLimit, REVIEW_LIMIT_LIMIT);
@@ -1304,14 +1292,14 @@ export const createDispatcher = ({
       }
       db.setProjectDispatch(projectId, columnsOf(change));
       evaluate(projectId);
-      return (await viewOf(projectOf(projectId))).view;
+      return await viewOf(projectOf(projectId));
     },
 
     /**
      * An attempt you start from the dashboard: it reports to the session
-     * named, or the project's lead.
+     * named, or the project's Caw.
      */
-    startFor(
+    async startFor(
       projectId: string,
       ref: string,
       parentInstanceId: string | undefined
@@ -1319,7 +1307,7 @@ export const createDispatcher = ({
       return startAttempt(
         projectId,
         ref,
-        reporter(projectId, parentInstanceId)
+        await reporter(projectId, parentInstanceId)
       );
     },
 
@@ -1328,7 +1316,7 @@ export const createDispatcher = ({
       safety ??= setInterval(() => {
         for (const project of db.listProjects()) {
           if (
-            (project.dispatch && project.leadInstanceId) ||
+            (project.dispatch && project.caw) ||
             db.queuedTaskStarts(project.id).length > 0
           ) {
             evaluate(project.id);
@@ -1373,7 +1361,6 @@ export const dispatchRoutes = (dispatcher: Dispatcher) =>
           budget: t.Optional(t.Nullable(BUDGET)),
           dispatch: t.Optional(t.Boolean()),
           lands: t.Optional(LANDS),
-          leadInstanceId: t.Optional(t.Nullable(t.String())),
           maxAttempts: t.Optional(t.Integer()),
           reviewLimit: t.Optional(t.Integer()),
         }),

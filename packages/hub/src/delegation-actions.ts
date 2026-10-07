@@ -97,6 +97,20 @@ export async function fetchDelegateTypes(
   }
 }
 
+/**
+ * What a type the caller named adds to a started session. Denied tools come
+ * only with a named type: the default type picks what runs, but its deny
+ * list is a delegate's (browser checks in isolated chrome-devtools, not the
+ * owner's Chrome); a started session is not a delegate and keeps Claude in
+ * Chrome. And its toolset (§5.3): the type's `role:`, kept on the row.
+ */
+const namedTypeSettings = (
+  type: DelegateType | undefined
+): Pick<SpawnPayload, "denyTools" | "role"> => ({
+  denyTools: type?.denyTools,
+  ...(type?.role ? { role: type.role } : {}),
+});
+
 /** The last path segment — how the rail names a session, and how the model will. */
 const leafOf = (path: string): string =>
   path.split("/").filter(Boolean).pop() ?? path;
@@ -1191,11 +1205,7 @@ export const handoffActions = ({
         fallbackPermissionMode: callerMode(rows, instanceId),
         ...(type?.effort ? { effort: type.effort } : {}),
         ...(type?.skills?.length ? { skills: type.skills } : {}),
-        // Denied tools come only with a type the caller named. The default
-        // type picks what runs, but its deny list is a delegate's (browser
-        // checks in isolated chrome-devtools, not the owner's Chrome); a
-        // started session is not a delegate and keeps Claude in Chrome.
-        ...(typeName ? { denyTools: type?.denyTools } : {}),
+        ...(typeName ? namedTypeSettings(type) : {}),
         ...(sideQuest ? { scratch: { baseCwd: workdir } } : {}),
         // The machine answers it once the session is in place, or with why it
         // is not; the hub holds the relay until then, so a failed spawn is this

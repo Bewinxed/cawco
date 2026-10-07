@@ -265,11 +265,23 @@ export const projects = sqliteTable("projects", {
    */
   tracker: text("tracker").$type<Tracker>().notNull().default("cawco"),
   /**
-   * The project's lead (§5.3): a session you started in this project, which
-   * the attempts the dispatcher starts on its own report to. Null: no lead,
-   * and nothing is dispatched without someone asking.
+   * The project's lead (§5.3): its Caw's session, which the hub starts on the
+   * first event while `caw` is on (caw.ts). The attempts the dispatcher starts
+   * on its own report to it. Null: no session yet, or Caw is off, and nothing
+   * is dispatched without someone asking.
    */
   leadInstanceId: text("lead_instance_id"),
+  /**
+   * Whether the project has a Caw (§5.3, §5.6): a lead session woken by
+   * events only. On for projects made with Caw; off for every project from
+   * before it, and off means nothing for the project wakes a model.
+   */
+  caw: integer("caw", { mode: "boolean" }).notNull().default(false),
+  /** The harness Caw runs on: one that can deny its edit and shell tools. */
+  cawHarness: text("caw_harness")
+    .$type<import("@cawco/core").CawHarness>()
+    .notNull()
+    .default("claude"),
   /**
    * Whether the hub starts attempts at ready tasks on its own (dispatch.ts).
    * Off until you turn it on, and inert without a lead.
@@ -553,6 +565,12 @@ export const instances = sqliteTable("instances", {
    * says which; null is a session nobody delegated, and it may.
    */
   canDelegate: integer("can_delegate", { mode: "boolean" }),
+  /**
+   * The toolset the session runs in (§5.3), written once by its first spawn:
+   * `lead` for a project's Caw, a delegate type's `role` for its work item's
+   * session. Null: derived from how it started (roles.ts `roleOf`).
+   */
+  role: text("role").$type<import("@cawco/core").SessionRole>(),
   /**
    * What was last *written down* about the session — history, not liveness.
    *
@@ -1659,4 +1677,36 @@ export const canvasChoices = sqliteTable(
     updatedAt: timestamp("updated_at").notNull(),
   },
   (table) => [primaryKey({ columns: [table.canvasId, table.choice] })]
+);
+
+/** A conversation with a project's Caw (caw.ts). */
+export const projectThreads = sqliteTable(
+  "project_threads",
+  {
+    id: text("id").primaryKey(),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    /** The first message's opening words. */
+    title: text("title").notNull(),
+    createdAt: timestamp("created_at").notNull(),
+    /** When its newest message was added. */
+    updatedAt: timestamp("updated_at").notNull(),
+  },
+  (table) => [index("project_threads_project").on(table.projectId)]
+);
+
+/** One message in a thread: yours from the dashboard, or Caw's through `thread_reply`. */
+export const threadMessages = sqliteTable(
+  "thread_messages",
+  {
+    id: text("id").primaryKey(),
+    threadId: text("thread_id")
+      .notNull()
+      .references(() => projectThreads.id, { onDelete: "cascade" }),
+    author: text("author").$type<"you" | "caw">().notNull(),
+    body: text("body").notNull(),
+    createdAt: timestamp("created_at").notNull(),
+  },
+  (table) => [index("thread_messages_thread").on(table.threadId)]
 );

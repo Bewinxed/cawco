@@ -559,6 +559,9 @@ const spawnOf = (
   title,
   ...(skills?.length ? { skills } : {}),
   ...(type?.denyTools?.length ? { denyTools: type.denyTools } : {}),
+  // Its type's toolset (§5.3), kept on its row: a web-facing type's
+  // sessions never see posting or admin tools.
+  ...(type?.role ? { role: type.role } : {}),
   // Nested under its parent, and kept out of the catalogs as a side quest
   // is; the workspace, not the session, owns the checkout.
   scratch: {},

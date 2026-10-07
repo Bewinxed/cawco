@@ -1,9 +1,9 @@
 /**
  * The task tools on the `cawco` MCP server (§5.3: one server, a toolset per
  * role; new tools named group first). Every session reads its project's
- * tasks and writes to-dos; filing and changing tasks belongs to the sessions
- * the operator started (delegation-mcp's `administers`), and a delegate
- * proposes those through handoff. A session's project is its instance row's
+ * tasks and writes to-dos; filing and changing tasks belongs to the roles
+ * that have those tools (roles.ts: a session you started, and the project's
+ * Caw), and a delegate proposes them through handoff. A session's project is its instance row's
  * `projectId`; a delegate's is its parent's. `task_start` starts an attempt
  * at a task (dispatch.ts) that reports to the session calling it;
  * `task_retry` starts a fresh one in the failed attempt's workspace.
@@ -31,18 +31,9 @@ export const TASK_TOOLS: ReadonlySet<string> = new Set([
   "todo_write",
 ]);
 
-/** The tools that file, change or start tasks: a session the operator started only. */
-export const MAINLINE_TASK_TOOLS: ReadonlySet<string> = new Set([
-  "task_create",
-  "task_update",
-  "task_link",
-  "task_start",
-  "task_retry",
-]);
-
 export interface TaskToolContext {
   actor: InstanceRow;
-  /** A session the operator started, not a delegate, work item or workflow step. */
+  /** Its role files tasks (roles.ts): it may name any task's to-dos, not only its own work item's. */
   mainline: boolean;
   /** Retries a task whose last attempt failed, reporting to `parent` (dispatch.ts); without it task_retry refuses. */
   retryAttempt?: (

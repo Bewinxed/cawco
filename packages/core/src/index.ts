@@ -179,6 +179,12 @@ export interface SpawnPayload {
    */
   resume?: { sessionKey: string; fork?: boolean; atMessage?: string };
   /**
+   * The toolset the session runs in, written on its row at this first spawn
+   * and kept there: a project's Caw is `lead`, a delegate type's `role` its
+   * work item's. Absent: the hub derives it (`delegate` or `worker`).
+   */
+  role?: import("./delegate-types").SessionRole;
+  /**
    * A side quest (NEW.md §1): throwaway work. `worktree` runs the session in a
    * detached git worktree of `baseCwd` (the spawn's `cwd` when absent) so the
    * experiment cannot touch the checkout the mainline session is using.
@@ -639,6 +645,11 @@ export interface InstanceRow {
   permissionMode?: string | null;
   /** Set when the session was started from a project page. */
   projectId?: string | null;
+  /**
+   * The toolset it runs in, when its spawn named one (a project's Caw is
+   * `lead`); null: derived from how it started.
+   */
+  role?: import("./delegate-types").SessionRole | null;
   /** Hub-derived count of live delegated work items, including descendants and checks. */
   runningDelegates?: number;
   /**

@@ -150,6 +150,7 @@ import {
 import { Elysia, t, ValidationError } from "elysia";
 import { websocket } from "elysia/websocket";
 import { createBinaryUpdates } from "./binary-updates";
+import { cawRoutes, createCaw, withCawDenials } from "./caw";
 import { DB_PATH, HUB_VERSION, SPAWN_START_TIMEOUT_MS } from "./config";
 import {
   type ContinuationSource,
@@ -3002,7 +3003,9 @@ export const createServer = (
         ? identities.mint(payload.instanceId)
         : undefined;
     return {
-      ...asked,
+      // A project's Caw never has edit or shell tools: every spawn of its
+      // row — the first, and each revive, restore and relaunch — denies them.
+      ...withCawDenials(asked, row, harness),
       ...(owned?.scratchWorktree
         ? { scratchWorktree: owned.scratchWorktree }
         : {}),
@@ -4154,6 +4157,7 @@ export const createServer = (
       workflowStepId: payload.workflowStepId,
       ...peekParent(payload),
       ...(workItemId ? { workItemId } : {}),
+      ...(payload.role ? { role: payload.role } : {}),
     });
     sendSpawn(agent, machineId, {
       verb: "spawn",
@@ -7349,6 +7353,8 @@ export const createServer = (
     name: string;
     machineId: string;
     cwd: string;
+    /** Made with Caw: a new project's Caw starts on. */
+    caw?: boolean;
   }): Promise<{
     project: ProjectRow;
     place: PlaceRow;
@@ -7381,6 +7387,7 @@ export const createServer = (
       machineId: asked.machineId,
       cwd,
       remote,
+      caw: asked.caw ?? false,
     });
     // Its one place, the checkout it was made from.
     const [place] = created.places;
@@ -7399,6 +7406,7 @@ export const createServer = (
       queueMicrotask(() => {
         dispatcher.itemEnded(item);
         push.itemEnded(item);
+        caw.itemEnded(item);
       }),
     command: runOnMachine,
     inTurn: (row) => row.status === "running" && !!pulses.get(row.id)?.busy,
@@ -7623,14 +7631,27 @@ export const createServer = (
   });
   // Attempts at tasks: started by a session, a stage's `runs:` hook, or the
   // dispatcher itself for a project that dispatches (dispatch.ts).
+  // Each project's Caw: its lead session, woken by events only (caw.ts).
+  const caw = createCaw({
+    db,
+    online: (machineId) => Boolean(registry.agent(machineId)),
+    spawn: (machineId, payload) => spawnSession(machineId, payload),
+    send: (envelope) => {
+      deliverSend(envelope);
+    },
+    end: (instanceId) => endSession(instanceId, "stop"),
+    task: (projectId, id) => tasks.get(projectId, id),
+  });
   const dispatcher = createDispatcher({
     db,
     tasks,
+    lead: (projectId) => caw.lead(projectId),
     online: (machineId) => Boolean(registry.agent(machineId)),
     start: (request) => workItems.start(request),
   });
   tasks.listen(dispatcher.taskChanged);
   tasks.listen(push.taskChanged);
+  tasks.listen(caw.taskChanged);
   // "Make this a project": offered once to a plain session that outgrew
   // itself, at a turn's end or a delegate's spawn (project-offers.ts).
   const projectOffers = createProjectOffers({
@@ -7674,6 +7695,7 @@ export const createServer = (
       dispatcher.retryAttempt(projectId, ref, parent),
     projectFromSession: (actor) =>
       projectOffers.accept(actor.id, sessionActor(actor)),
+    threadTools: (actor) => caw.tools(actor),
     instances: () => withKeepAlive(db.listInstances()),
     instanceById: (id) => db.getInstancesByIds([id])[0],
     ledBy: (id, leadId) => workItems.ledBy(id, leadId),
@@ -7998,6 +8020,7 @@ export const createServer = (
       .use(pushRoutes(db, push))
       .use(projectOfferRoutes(projectOffers, YOU_ACTOR))
       .use(dispatchRoutes(dispatcher))
+      .use(cawRoutes(caw))
       .use(
         joinRoutes({
           online: (machineId) => Boolean(registry.agent(machineId)),
@@ -10586,6 +10609,9 @@ export const createServer = (
             name: t.String(),
             cwd: t.String(),
             machineId: t.String(),
+            // Made with Caw: its Caw starts on. A folder that joins a project
+            // leaves that project's setting as it is.
+            caw: t.Optional(t.Boolean()),
           }),
         },
         async ({ body }) => {

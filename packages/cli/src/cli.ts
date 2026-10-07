@@ -19,6 +19,7 @@ import {
   ServiceError,
   service,
 } from "./service";
+import { callTool, listTools, sessionOf, ToolError } from "./tools";
 
 /** Reported by `--version`; keep in sync with package.json. */
 /**
@@ -42,6 +43,11 @@ Usage
   cawco service <${SERVICE_ACTIONS.join("|")}> [service...]
                                             run cawco as per-user services
   cawco binary-install <hub|agent> ...    setup step of the install script; not run by hand
+  cawco tools [--session <id>]            list the cawco tools that session's role has
+  cawco tool <name> [json] [--session <id>]
+                                          call one, under the same role checks as MCP
+                                          (session: --session or CAWCO_INSTANCE_ID;
+                                          credential: CAWCO_SESSION_CREDENTIAL)
   cawco login [--token <token>]           give this machine a Claude Code token
   cawco logout                            forget it
 
@@ -140,6 +146,8 @@ interface Args {
   releaseHost?: string;
   /** Everything after the verb — the services `service` acts on. */
   rest: string[];
+  /** The session `tools` and `tool` act as. */
+  session?: string;
   token?: string;
   verbose: boolean;
   version: boolean;
@@ -206,6 +214,13 @@ const parseArgs = (argv: string[]): Args => {
         args.hub = argv[index];
         if (!args.hub) {
           throw new UsageError("--hub needs a URL");
+        }
+        break;
+      case "--session":
+        index += 1;
+        args.session = argv[index];
+        if (!args.session) {
+          throw new UsageError("--session needs a session id");
         }
         break;
       case "--token":
@@ -511,6 +526,27 @@ const runBinaryApply = async (args: Args): Promise<number> => {
   return 0;
 };
 
+/** `cawco tools` and `cawco tool <name> [json]`: the session's MCP tools, under its role. */
+const runTool = async (args: Args): Promise<number> => {
+  const found = await resolve(args);
+  if (!found) {
+    console.error(NO_HUB);
+    return 1;
+  }
+  const instanceId = sessionOf(args.session);
+  if (args.command === "tools") {
+    console.log(await listTools(found.httpUrl, instanceId));
+    return 0;
+  }
+  if (!args.action) {
+    throw new UsageError("tool needs a tool name, then its arguments as JSON");
+  }
+  console.log(
+    await callTool(found.httpUrl, instanceId, args.action, args.rest[0])
+  );
+  return 0;
+};
+
 const run = async (argv: string[]): Promise<number> => {
   const args = parseArgs(argv);
   if (args.help || !(args.command || args.version)) {
@@ -588,6 +624,9 @@ const run = async (argv: string[]): Promise<number> => {
       return sessiond();
     case "status":
       return status(args);
+    case "tools":
+    case "tool":
+      return runTool(args);
     case "service":
       return runService(args);
     case "login":
@@ -617,7 +656,11 @@ const code = await run(Bun.argv.slice(2)).catch((error: unknown) => {
     console.error(`cawco: ${error.message}\n\nRun \`cawco --help\`.`);
     return 2;
   }
-  if (error instanceof LoginError || error instanceof ServiceError) {
+  if (
+    error instanceof LoginError ||
+    error instanceof ServiceError ||
+    error instanceof ToolError
+  ) {
     console.error(`cawco: ${error.message}`);
     return 1;
   }

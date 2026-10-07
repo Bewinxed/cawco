@@ -21,7 +21,7 @@
     "lint": "ultracite check",
     "lint:changed": "git diff --name-only --diff-filter=ACMR HEAD | xargs -r bunx biome check",
     "lint:fix": "ultracite fix",
-    "typecheck": "bun run --filter '*' typecheck && bun run --filter '@cawco/hub' openapi:check && bunx tsc --project scripts/tsconfig.binary.json"
+    "typecheck": "bun run --filter '*' typecheck && bun run --filter '@cawco/hub' openapi:check && bun run --filter '@cawco/hub' roles:check && bunx tsc --project scripts/tsconfig.binary.json"
   },
   "overrides": {
     "@types/bun": "^1.4.2",

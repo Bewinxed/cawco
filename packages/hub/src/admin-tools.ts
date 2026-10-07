@@ -7,6 +7,7 @@
  * validation, fan-out and persistence the dashboard uses. The tools are
  * read/write over fleet config — not session-scoped, not delegation-scoped.
  */
+import { ADMIN_WRITE_TOOL, ASKS_THE_PERSON } from "@cawco/core";
 import { z } from "zod";
 import { hubHttpUrl } from "./delegation-actions";
 
@@ -84,19 +85,60 @@ const marketplaceAction = async (
   return await api("PUT", path, { source });
 };
 
+/** Whether a tool is an admin write: the person approves each call before it runs (§5.3). */
+export const isAdminWrite = (name: string): boolean =>
+  ADMIN_WRITE_TOOL.test(name);
+
+/**
+ * One group of fleet settings as two tools, named group first (§5.3):
+ * `admin_<group>_read`, which takes only its read actions, and
+ * `admin_<group>_write`, which takes the rest with the fields they need. The
+ * write is marked as needing the person (`anthropic/requiresUserInteraction`),
+ * so Claude Code asks before every call, in any permission mode; one handler
+ * serves both, through the hub's own REST routes.
+ */
+function admin<T extends z.ZodRawShape>(
+  group: string,
+  about: string,
+  reads: readonly [string, ...string[]],
+  writes: readonly [string, ...string[]],
+  input: T,
+  handler: (
+    args: { action: string } & Partial<z.infer<z.ZodObject<T>>>
+  ) => Promise<unknown>,
+  writeNote = ""
+) {
+  const read = tool(
+    `admin_${group}_read`,
+    `Read ${about} \`action\`: ${reads.map((action) => `'${action}'`).join(", ")}.`,
+    { action: z.enum(reads) },
+    // A read names only its action; every other field is the write's.
+    (args) =>
+      handler(args as { action: string } & Partial<z.infer<z.ZodObject<T>>>)
+  );
+  const write = tool(
+    `admin_${group}_write`,
+    `Change ${about} \`action\`: ${writes.map((action) => `'${action}'`).join(", ")}.${writeNote} The person approves each call before it runs; read with admin_${group}_read first.`,
+    { action: z.enum(writes), ...input },
+    (args) =>
+      handler(args as { action: string } & Partial<z.infer<z.ZodObject<T>>>)
+  );
+  return [read, { ...write, _meta: { [ASKS_THE_PERSON]: true } }];
+}
+
 /** The admin tools, separated from the handoff tools so the MCP server composes them. */
 export function adminTools() {
   return [
     // ── delegate types ───────────────────────────────────────────────────
-    tool(
-      "manage_delegate_types",
-      "Manage the fleet's delegate type presets — the named routes a `delegate` call's " +
+    ...admin(
+      "delegate_types",
+      "the fleet's delegate type presets: the named routes a `delegate` call's " +
         "`type` parameter resolves against. Each type bundles a harness, model, effort, " +
         "skills and denied tools so callers route by what the work needs, not by a model " +
-        "string. Use action 'list' to see current types, 'put' to create or update one, " +
-        "'delete' to remove one.",
+        "string.",
+      ["list"],
+      ["put", "delete"],
       {
-        action: z.enum(["list", "put", "delete"]),
         name: z
           .string()
           .optional()
@@ -184,15 +226,13 @@ export function adminTools() {
     ),
 
     // ── skills ───────────────────────────────────────────────────────────
-    tool(
-      "manage_skills",
-      "Manage the fleet's skills — the slash-command skill directories synced to every " +
-        "machine under ~/.claude/skills/. Use action 'list' to see installed skills, " +
-        "'install' to add one from a source (github:owner/repo, npm:package, URL, or " +
-        "skills:slug), 'enable'/'disable' to toggle, 'remove' to delete. Install fetches " +
-        "the source once at the hub and distributes the files to every machine.",
+    ...admin(
+      "skills",
+      "the fleet's skills: the slash-command skill directories synced to every " +
+        "machine under ~/.claude/skills/.",
+      ["list"],
+      ["install", "enable", "disable", "remove"],
       {
-        action: z.enum(["list", "install", "enable", "disable", "remove"]),
         name: z
           .string()
           .optional()
@@ -241,33 +281,21 @@ export function adminTools() {
             enabled: true,
           })
         );
-      }
+      },
+      " Install fetches the source (github:owner/repo, npm:package, a URL, or skills:slug) once at the hub and distributes the files to every machine."
     ),
 
     // ── plugins ──────────────────────────────────────────────────────────
-    tool(
-      "manage_plugins",
-      "Manage the fleet's Claude Code plugins — whole marketplace bundles synced to " +
+    ...admin(
+      "plugins",
+      "the fleet's Claude Code plugins: whole marketplace bundles synced to " +
         "every machine under ~/.claude/plugins/. A plugin is the unit to reach for when " +
         "a repo ships MANY skills, or skills that read shared files beside them " +
-        "(references/, agents/, commands/); manage_skills copies one directory and " +
-        "cannot carry those. Order matters: 'link' the marketplace first, then " +
-        "'install' a plugin from it by its `plugin@marketplace` id. Use 'list' to see " +
-        "linked marketplaces and installed plugins, 'refresh' to re-fetch one whose " +
-        "upstream moved, 'enable'/'disable' to toggle, 'remove' to uninstall, 'unlink' " +
-        "to drop a marketplace. The hub resolves the bytes once and distributes them, " +
-        "so every machine installs what every other machine installed.",
+        "(references/, agents/, commands/); a skill copies one directory and " +
+        "cannot carry those.",
+      ["list"],
+      ["link", "unlink", "install", "enable", "disable", "refresh", "remove"],
       {
-        action: z.enum([
-          "list",
-          "link",
-          "unlink",
-          "install",
-          "enable",
-          "disable",
-          "refresh",
-          "remove",
-        ]),
         id: z
           .string()
           .optional()
@@ -321,18 +349,17 @@ export function adminTools() {
         // id either way and resolves its bytes before the fan-out, so the two
         // differ only in what the caller already believes about the plugin.
         return ok(await api("PUT", path, { enabled: action !== "disable" }));
-      }
+      },
+      " Order matters: 'link' the marketplace first, then 'install' a plugin from it by its `plugin@marketplace` id; 'refresh' re-fetches one whose upstream moved. The hub resolves the bytes once and distributes them."
     ),
 
     // ── MCP servers ──────────────────────────────────────────────────────
-    tool(
-      "manage_mcp_servers",
-      "Manage the fleet's MCP servers — the servers synced to every machine's " +
-        "~/.claude.json. Use action 'list' to see current servers, 'put' to add or " +
-        "update one, 'remove' to delete. A stdio server needs a 'command' in its config; " +
-        "a remote server needs 'type' and 'url'.",
+    ...admin(
+      "mcp_servers",
+      "the fleet's MCP servers: the servers synced to every machine's ~/.claude.json.",
+      ["list"],
+      ["put", "remove"],
       {
-        action: z.enum(["list", "put", "remove"]),
         name: z
           .string()
           .optional()
@@ -377,19 +404,20 @@ export function adminTools() {
             ...(enabled === undefined ? {} : { enabled }),
           })
         );
-      }
+      },
+      " A stdio server needs a 'command' in its config; a remote server needs 'type' and 'url'."
     ),
 
     // ── rules ────────────────────────────────────────────────────────────
-    tool(
-      "manage_rules",
-      "Manage the fleet's rules — standing instructions the hub enforces on every session's " +
+    ...admin(
+      "rules",
+      "the fleet's rules: standing instructions the hub enforces on every session's " +
         "output stream. A rule watches for a phrase or regex in what sessions say (or think) " +
-        "and replies with a fixed message or an LLM evaluation. Use action 'list' to see " +
-        "current rules with stats, 'templates' for starter recipes, 'create' to add one, " +
-        "'update' to edit by id, 'remove' to delete by id.",
+        "and replies with a fixed message or an LLM evaluation. 'list' answers them with " +
+        "stats, 'templates' starter recipes.",
+      ["list", "templates"],
+      ["create", "update", "remove"],
       {
-        action: z.enum(["list", "templates", "create", "update", "remove"]),
         id: z
           .string()
           .optional()
@@ -529,15 +557,15 @@ export function adminTools() {
     ),
 
     // ── hooks ────────────────────────────────────────────────────────────
-    tool(
-      "manage_hooks",
-      "Manage the fleet's hooks — Claude Code settings.json hooks synced to every " +
+    ...admin(
+      "hooks",
+      "the fleet's hooks: Claude Code settings.json hooks synced to every " +
         "machine. A hook attaches a command, prompt or agent to a lifecycle event " +
         "(SessionStart, PreToolUse, PostToolUse, Stop, etc.) and runs unattended. " +
-        "Use action 'list' to see current hooks and available templates, 'create' to add " +
-        "one (the hub mints the id), 'update' to edit by id, 'remove' to delete by id.",
+        "'list' answers the hooks and the templates.",
+      ["list"],
+      ["create", "update", "remove"],
       {
-        action: z.enum(["list", "create", "update", "remove"]),
         id: z
           .string()
           .optional()
@@ -611,19 +639,19 @@ export function adminTools() {
         return ok(
           await api("PUT", `/api/fleet/hooks/${encodeURIComponent(id)}`, body)
         );
-      }
+      },
+      " 'create' adds one (the hub mints the id), 'update' edits by id, 'remove' deletes by id."
     ),
 
     // ── memory (fleet CLAUDE.md) ─────────────────────────────────────────
-    tool(
-      "manage_memory",
-      "Manage the fleet's user-scope CLAUDE.md — the instructions every session loads. " +
-        "Also manages linked documents under ~/.claude/memories/ (e.g. model-specific " +
-        "guidance files). Use action 'get' to read the current content, 'set' to write new " +
-        "content, 'list_docs' to see linked documents, 'set_doc' to write a document, " +
-        "'remove_doc' to delete one.",
+    ...admin(
+      "memory",
+      "the fleet's user-scope CLAUDE.md, the instructions every session loads, and " +
+        "its linked documents under ~/.claude/memories/ (e.g. model-specific guidance " +
+        "files). 'get' answers the CLAUDE.md, 'list_docs' the documents.",
+      ["get", "list_docs"],
+      ["set", "set_doc", "remove_doc"],
       {
-        action: z.enum(["get", "set", "list_docs", "set_doc", "remove_doc"]),
         content: z
           .string()
           .optional()

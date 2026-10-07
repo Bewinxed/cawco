@@ -11,6 +11,7 @@
     "dev": "bun --watch src/index.ts",
     "openapi": "bun scripts/openapi.ts",
     "openapi:check": "bun scripts/openapi.ts --check",
+    "roles:check": "bun scripts/role-budgets.ts",
     "start": "bun src/index.ts",
     "typecheck": "tsc --noEmit"
   },

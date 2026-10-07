@@ -37,21 +37,19 @@ import {
   delegateTypeProblem,
   type FrontMatterLine,
   frontMatterBlock,
+  SESSION_ROLES,
+  type SessionRole,
 } from "@cawco/core";
 import { Elysia } from "elysia";
 import type { DelegateTypesShape } from "./delegate-types";
 import { FOLDER_FILE_LIMIT, projectRoot } from "./project-folder";
 import { listOf, scalarOf } from "./task-file";
 
-/** The toolsets a type may run in (§5.3's roles). */
-export const DELEGATE_ROLES = [
-  "worker",
-  "delegate",
-  "lead",
-  "overseer",
-  "web-facing",
-] as const;
-export type DelegateRole = (typeof DELEGATE_ROLES)[number];
+/**
+ * The toolsets a type may run in (§5.3's roles): every role but `lead`, which
+ * is the project's Caw, a session the hub starts (caw.ts), never a type's.
+ */
+const TYPE_ROLES = SESSION_ROLES.filter((role) => role !== "lead");
 
 /** Where a type's work goes: §5.3's `lands`, and `none` for drafts that are not commits. */
 export const DELEGATE_LANDS = ["main", "branch", "pr", "none"] as const;
@@ -76,7 +74,6 @@ export type CatalogType = DelegateType & {
   mcp?: string[];
   /** The file it was read from, inside the project folder. */
   path?: string;
-  role?: DelegateRole;
   /** A project type that replaces a fleet type of the same name. */
   shadows?: boolean;
   source: "project" | "fleet";
@@ -182,8 +179,8 @@ const projectFieldsOf = (
   | string
   | Pick<CatalogType, "budget" | "lands" | "mcp" | "role" | "canDelegate"> => {
   const role = fields.scalar("role");
-  if (!oneOf(role, DELEGATE_ROLES)) {
-    return `role is one of ${DELEGATE_ROLES.join(", ")}, not “${role}”`;
+  if (!oneOf(role, TYPE_ROLES)) {
+    return `role is one of ${TYPE_ROLES.join(", ")}, not “${role}”`;
   }
   const lands = fields.scalar("lands");
   if (!oneOf(lands, DELEGATE_LANDS)) {
@@ -201,7 +198,7 @@ const projectFieldsOf = (
   const mcp = fields.list("mcp");
   return {
     ...(mcp?.length ? { mcp } : {}),
-    ...(role ? { role: role as DelegateRole } : {}),
+    ...(role ? { role: role as SessionRole } : {}),
     ...(budget && Object.keys(budget).length > 0 ? { budget } : {}),
     ...(lands ? { lands: lands as DelegateLands } : {}),
     ...(canDelegate ? { canDelegate: canDelegate === "true" } : {}),

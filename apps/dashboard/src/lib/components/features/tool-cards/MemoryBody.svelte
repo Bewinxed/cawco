@@ -5,7 +5,7 @@
     memoryVersion,
   } from "#lib/cawco/fleet.js";
   /**
-   * What a `manage_memory` call read or wrote, as the document it is. The
+   * What an `admin_memory_read` or `admin_memory_write` call read or wrote, as the document it is. The
    * sentence above already names the action and the path, so none of the raw
    * parameters are repeated here. A failed call never reaches this body — its
    * error is the row's result, shown by ToolGroup like any other failure.
