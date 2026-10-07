@@ -34,6 +34,12 @@ export interface AgentBusyReport {
 
 /** Reconfigure a retained harness in place; never stop or restart its session. */
 export const INSTALL_SESSION_CREDENTIAL = "installSessionCredential";
+/**
+ * A held session (one this agent attached to rather than launched) proves the
+ * credential it already carries: its cawco MCP answers the hub with it, and
+ * the hub acknowledges it. The session is not published when it cannot.
+ */
+export const VERIFY_SESSION_CREDENTIAL = "verifySessionCredential";
 export const LIVE_CREDENTIAL_ENROLLMENT_REFUSAL =
   "Live enrollment refused: this session has other dynamic MCP servers, so installing would restart them. It enrolls on its next fresh start.";
 

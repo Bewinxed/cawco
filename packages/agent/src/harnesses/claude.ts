@@ -64,6 +64,7 @@ import {
   READ_SKILL_FILES,
   resumeCursor,
   settledQuestionResult,
+  VERIFY_SESSION_CREDENTIAL,
 } from "@cawco/core";
 import { sessiondEndpoint } from "@cawco/core/sessiond";
 import { observeRateLimit } from "@cawco/core/usage/observed";
@@ -1467,6 +1468,9 @@ class ClaudeSession implements HarnessSession {
         mode === "initial"
       );
     }
+    if (method === VERIFY_SESSION_CREDENTIAL) {
+      return await this.#verifyHeldCredential();
+    }
     // Effort is the one neutral verb with no `Query` method behind it: it is a
     // flag setting, applied over user/project/local settings and never written
     // to any of them, which is exactly a session-scoped switch. `max` is only
@@ -1585,6 +1589,31 @@ class ClaudeSession implements HarnessSession {
       instanceId: this.instanceId,
       changedServers: [],
     };
+  }
+
+  /**
+   * A child this host attached to proves what its cawco slot sends: the slot
+   * is connected, and the header it was launched with is one the hub
+   * acknowledges (the ACK is authenticated by that header, so a credential
+   * the hub no longer knows is refused). A child launched before session
+   * credentials sends none, and its connected slot answers under its
+   * instance binding.
+   */
+  async #verifyHeldCredential() {
+    const servers = await this.#connectedCawcoSnapshot();
+    const cawco = servers.find((server) => server.name === MCP_SERVER_NAME);
+    const header =
+      cawco?.config?.type === "http"
+        ? cawco.config.headers?.Authorization
+        : undefined;
+    if (header === undefined) {
+      return;
+    }
+    if (!header.startsWith("Bearer ")) {
+      throw new Error("CawCo MCP carries a malformed credential header.");
+    }
+    await acknowledgeSessionCredential(header.slice("Bearer ".length));
+    console.info(`[claude] held credential verified ${this.instanceId}`);
   }
 
   resolvePermission(

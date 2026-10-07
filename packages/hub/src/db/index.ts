@@ -408,7 +408,6 @@ export interface DbShape {
     id: string,
     intent: SessionEndIntent
   ) => typeof instances.$inferSelect | undefined;
-  readonly expirePendingSessionIdentities: (machineId: string) => void;
   /** The agent reported the session dead: what killed it, kept for late readers. */
   readonly failInstance: (id: string, error: string) => void;
   /** Transcript deletion follows confirmed process exit, never precedes it. */
@@ -2121,26 +2120,6 @@ const make = (path: string): DbShape => {
           ...(row.title ? row : { ...row, title: row.derivedTitle }),
           ...(row.autopilot ? { autopilot: row.autopilot } : {}),
         })),
-    expirePendingSessionIdentities: (machineId) => {
-      db.update(sessionIdentities)
-        .set({
-          pendingHash: null,
-          error: "Agent re-registered before credential installation ACK",
-        })
-        .where(
-          and(
-            isNotNull(sessionIdentities.pendingHash),
-            inArray(
-              sessionIdentities.instanceId,
-              db
-                .select({ id: instances.id })
-                .from(instances)
-                .where(eq(instances.machineId, machineId))
-            )
-          )
-        )
-        .run();
-    },
     sessionIdentity: (instanceId) =>
       db
         .select()

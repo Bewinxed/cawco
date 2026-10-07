@@ -2999,13 +2999,12 @@ export const createServer = (
     const row = knownRow ?? stored;
     const workspace = row ? workItems.workspaceOf(row) : undefined;
     const harness = payload.harness ?? row?.harness ?? "claude";
-    // Custody restores retain the process's live token; the hub deliberately
-    // keeps only its hash. Fresh/revive/relaunch processes still need delivery.
-    const acknowledgedRestore =
-      payload.reattachOnly &&
-      db.sessionIdentity(payload.instanceId)?.credentialHash;
+    // A credential is minted for a process about to be launched, and for no
+    // other: minting replaces the hash the hub accepts, so a mint for a
+    // reattach (which launches nothing) cut off the process already holding
+    // the old one. A reattached process proves its own credential.
     const sessionCredential =
-      !acknowledgedRestore && (harness === "claude" || harness === "pi")
+      !payload.reattachOnly && (harness === "claude" || harness === "pi")
         ? identities.mint(payload.instanceId)
         : undefined;
     return {
@@ -8211,10 +8210,13 @@ export const createServer = (
           });
         }
       )
+      // An installation's failure never comes here: it would be authenticated
+      // by the credential that failed. It is the spawn's failure, on the
+      // machine's socket.
       .post(
         "/api/session-identities/ack",
-        { ...hidden, body: t.Object({ error: t.Optional(t.String()) }) },
-        ({ request, body, status }) => {
+        { ...hidden, body: t.Object({}) },
+        ({ request, status }) => {
           const authorization = request.headers.get("authorization");
           const identity = identities.resolve(authorization);
           if (!identity) {
@@ -8222,14 +8224,6 @@ export const createServer = (
               401,
               "A valid delivered session credential is required for installation ACK"
             );
-          }
-          if (body.error !== undefined) {
-            db.sessionIdentityError(
-              identity.instanceId,
-              body.error,
-              body.error === LIVE_CREDENTIAL_ENROLLMENT_REFUSAL
-            );
-            return { ok: false };
           }
           return identities.acknowledge(authorization)
             ? { ok: true }
@@ -11082,8 +11076,6 @@ export const createServer = (
               } else {
                 addressProtocolMachines.delete(message.machineId);
               }
-              // A pending hash without its agent's ACK is not a backed live install.
-              db.expirePendingSessionIdentities(message.machineId);
               for (const [id, held] of heldSessions) {
                 if (held.machineId === message.machineId) {
                   heldSessions.delete(id);

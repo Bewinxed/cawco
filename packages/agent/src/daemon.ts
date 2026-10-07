@@ -423,7 +423,6 @@ export const custodyRow = (
   instanceId: string;
   cwd: string;
   sessionId: string | null;
-  sessionCredential?: string;
   processGeneration?: string;
   keepAliveTurn?: string;
   permissionMode?: SpawnPayload["permissionMode"];
@@ -434,9 +433,6 @@ export const custodyRow = (
   processGeneration: payload.processGeneration,
   ...(payload.permissionMode ? { permissionMode: payload.permissionMode } : {}),
   ...(payload.keepAliveTurn ? { keepAliveTurn: payload.keepAliveTurn } : {}),
-  ...(payload.sessionCredential
-    ? { sessionCredential: payload.sessionCredential }
-    : {}),
 });
 
 /**
@@ -740,7 +736,7 @@ const attach = (
 
     supervisor.sink = (frame) => {
       if (socket.readyState !== WebSocket.OPEN) {
-        return;
+        return false;
       }
       // Usage and workflow-run transitions originate at the hub, never at a
       // daemon; machine-scoped control replies do travel through this sink,
@@ -750,7 +746,7 @@ const attach = (
         frame.kind === "workflow" ||
         frame.kind === "fleet_mcp"
       ) {
-        return;
+        return false;
       }
       send(socket, {
         verb: "frames",
@@ -759,6 +755,7 @@ const attach = (
         requestId: "requestId" in frame ? frame.requestId : undefined,
         payload: frame,
       });
+      return true;
     };
     // A hub that restarted while a session sat on a permission ask has
     // forgotten the question; the callback is still parked here. Replay every
@@ -776,6 +773,7 @@ const attach = (
     // socket preserves that order, so the hub still reads the register first.
     supervisor.replayOpenAsks();
     supervisor.replaySessionAddresses();
+    supervisor.replaySpawnFailures();
     /**
      * CUSTODY OFF THE REGISTER ACK (design §7, step 4).
      *

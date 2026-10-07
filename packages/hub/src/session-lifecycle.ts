@@ -193,10 +193,14 @@ export const createSessionLifecycle = (ports: {
       }
       issued.delete(row.id);
       delivering.delete(row.id);
+      // A row the machine has a spawn or attach in flight for (`pending`) is
+      // the machine's to finish: a restore sent into that window raced the
+      // spawn it was reading.
       if (attached.has(row.id)) {
         attaching.delete(row.id);
       } else if (
         held.has(row.id) &&
+        !pending.has(row.id) &&
         !unavailable.has(row.id) &&
         !preservedUnattached.has(row.id)
       ) {

@@ -14,6 +14,7 @@ import {
   CONTROL_SUPPORTED_MODELS,
   INSTALL_SESSION_CREDENTIAL,
   MESSAGES_READ,
+  VERIFY_SESSION_CREDENTIAL,
 } from "@cawco/core";
 import {
   type AgentSession,
@@ -338,6 +339,16 @@ class PiSession implements HarnessSession {
         harness: "pi",
         instanceId: this.#ctx.instanceId,
       };
+    }
+    // The host outlived the agent that started it and still holds the
+    // credential its tools send. The ACK is authenticated by it, so one the
+    // hub no longer knows is refused. A host started before session
+    // credentials holds none, and its tools answer under its instance binding.
+    if (method === VERIFY_SESSION_CREDENTIAL) {
+      if (this.#credential.value) {
+        await acknowledgeSessionCredential(this.#credential.value);
+      }
+      return undefined;
     }
     switch (method) {
       case CONTROL_INTERRUPT:

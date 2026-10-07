@@ -56,6 +56,7 @@ import {
   readIngested,
   repoPath,
   resumeCursor,
+  VERIFY_SESSION_CREDENTIAL,
   withWorktreeLine,
   worstFleetState,
 } from "@cawco/core";
@@ -85,7 +86,6 @@ import { startPreview, stopPreview, stopPreviews } from "./preview";
 import { parseProcId, SESSION_PROC_KINDS } from "./proc-id";
 import { type PromptWriteNotice, withPromptWrites } from "./prompt-writes";
 import { fenced } from "./restart";
-import { acknowledgeSessionCredential } from "./session-identity";
 import { endProc, procEpoch, SessiondClient } from "./sessiond-client";
 import { installTool, probeTools } from "./tools";
 
@@ -138,7 +138,6 @@ interface Claimed {
     instanceId: string;
     cwd: string;
     sessionId?: string | null;
-    sessionCredential?: string;
     processGeneration?: string;
     keepAliveTurn?: string;
     permissionMode?: SpawnPayload["permissionMode"];
@@ -179,7 +178,14 @@ export interface SessiondAwareContext extends HarnessContext {
 export type FrameSink = (
   frame: Exclude<FramePayload, { kind: "instances" | "instances_delta" }> &
     Partial<FrameProvenance> & { processGeneration?: string }
-) => void;
+) => boolean;
+
+/**
+ * A Claude or pi session whose CawCo MCP credential did not install (a
+ * process this agent launched) or verify (one it attached to). The session
+ * has been stopped; this is its spawn's failure, with the reason.
+ */
+class SessionCredentialRefused extends Error {}
 
 const warn = (message: string): void => {
   Effect.runFork(Effect.logWarning(message));
@@ -556,6 +562,8 @@ export class SessionSupervisor {
   >();
   readonly #addressCancelled = new Set<string>();
   readonly #failures = new Map<string, string>();
+  /** Spawn failures the sink could not send, until a connection takes them. */
+  readonly #unsentFailures = new Map<string, Parameters<FrameSink>[0]>();
   /** Reattaches in flight, by instance id: see {@link reattach}. */
   readonly #adopting = new Map<string, Promise<void>>();
   /** Outlives its session: a discard can arrive after the query already ended. */
@@ -643,13 +651,12 @@ export class SessionSupervisor {
   }
 
   /**
-   * Re-pointed at each hub connection. Frames produced while the hub is away are
-   * dropped; the hub replays what a session is still blocked on by calling
-   * `control reinitialize` after it reconnects.
+   * Re-pointed at each hub connection; says whether the frame went out. Frames
+   * produced while the hub is away are dropped; the hub replays what a session
+   * is still blocked on by calling `control reinitialize` after it reconnects,
+   * and a spawn's failure is replayed from here ({@link replaySpawnFailures}).
    */
-  sink: FrameSink = () => {
-    // replaced once the daemon has a hub connection to sink into
-  };
+  sink: FrameSink = () => false;
   /** Puts an arbitrary envelope on the daemon's hub socket (hand-offs). */
   emit: (envelope: Envelope) => void = () => {
     // replaced once the daemon has a hub connection to emit onto
@@ -1452,23 +1459,45 @@ export class SessionSupervisor {
     }
   }
 
-  async #installCredential(
+  /**
+   * THE CREDENTIAL GATE. A Claude or pi session is published only once its
+   * CawCo MCP answers the hub under its own credential and the hub has
+   * acknowledged it: a process this agent launched installs the credential
+   * the hub minted for this spawn (`launched`), and one it attached to proves
+   * the one it already holds. Nothing has been sent to the session yet, so a
+   * session that cannot is stopped before its first turn, and the throw is
+   * its spawn's failure with the reason.
+   */
+  async #admit(
     session: HarnessSession,
-    instanceId: string,
-    credential: string,
-    mode?: "initial"
+    kind: HarnessKind,
+    launched: { credential: string | undefined } | undefined
   ): Promise<void> {
+    if (kind !== "claude" && kind !== "pi") {
+      return;
+    }
     try {
-      await session.control(INSTALL_SESSION_CREDENTIAL, [credential, mode]);
+      if (!launched) {
+        await session.control(VERIFY_SESSION_CREDENTIAL, []);
+      } else if (launched.credential) {
+        await session.control(INSTALL_SESSION_CREDENTIAL, [
+          launched.credential,
+          "initial",
+        ]);
+      } else {
+        throw new Error("The hub sent this spawn no session credential.");
+      }
     } catch (problem) {
       const message =
         problem instanceof Error ? problem.message : String(problem);
-      warn(`session ${instanceId} credential installation waits: ${message}`);
-      await acknowledgeSessionCredential(credential, message).catch((error) => {
-        warn(
-          `session ${instanceId} credential failure could not be recorded: ${String(error)}`
-        );
-      });
+      // biome-ignore lint/suspicious/noEmptyBlockStatements: best effort — the refusal below is the outcome either way
+      await session.stop().catch(() => {});
+      throw new SessionCredentialRefused(
+        launched
+          ? `The session's CawCo MCP credential could not be installed, so it was stopped before its first turn: ${message}`
+          : `The session's CawCo MCP credential could not be verified after the agent attached to it, so it was stopped: ${message}`,
+        { cause: problem }
+      );
     }
   }
 
@@ -1576,7 +1605,6 @@ export class SessionSupervisor {
               instanceId,
               cwd: workdir,
               sessionId: payload.resume.sessionKey,
-              sessionCredential: payload.sessionCredential,
               processGeneration: payload.processGeneration,
               keepAliveTurn: payload.keepAliveTurn,
               permissionMode: payload.permissionMode,
@@ -1657,6 +1685,7 @@ export class SessionSupervisor {
         this.#resumable.delete(instanceId);
       }
       this.#failures.delete(instanceId);
+      this.#unsentFailures.delete(instanceId);
       const session = payload.reattachOnly
         ? await adapter.reattach?.(payload, ctx)
         : await adapter.spawn(payload, ctx);
@@ -1669,6 +1698,14 @@ export class SessionSupervisor {
       }
       holder.session = session;
       await this.#applyStoredPermissionMode(session, payload.permissionMode);
+      // A reattach attaches to a process that already holds its credential.
+      await this.#admit(
+        session,
+        adapter.kind,
+        payload.reattachOnly
+          ? undefined
+          : { credential: payload.sessionCredential }
+      );
       this.#sessions.set(instanceId, session);
       session.attached?.();
       if (payload.reattachOnly) {
@@ -1676,14 +1713,6 @@ export class SessionSupervisor {
         void this.#dateActivity(instanceId, adapter, session, workdir);
       } else {
         this.#activeAt.set(instanceId, Date.now());
-      }
-      if (payload.sessionCredential) {
-        await this.#installCredential(
-          session,
-          instanceId,
-          payload.sessionCredential,
-          payload.reattachOnly ? undefined : "initial"
-        );
       }
       // What reached this session while it slept is its first work awake.
       const crossed = this.#asleep.get(instanceId) ?? [];
@@ -1748,7 +1777,12 @@ export class SessionSupervisor {
         }
         return;
       }
-      if (payload.reattachOnly) {
+      // A probe that found nothing to attach says nothing; a held process that
+      // could not prove its credential was stopped, and that is its failure.
+      if (
+        payload.reattachOnly &&
+        !(error instanceof SessionCredentialRefused)
+      ) {
         return;
       }
       const message = error instanceof Error ? error.message : String(error);
@@ -2099,9 +2133,8 @@ export class SessionSupervisor {
           elsewhere.push(row);
           continue;
         }
-        const carried = this.#sessions.get(row.instanceId);
-        if (carried) {
-          this.#installAdoptedCredential(row, carried);
+        // Admitted when this daemon spawned or attached to it.
+        if (this.#sessions.has(row.instanceId)) {
           adopted.push(row.instanceId);
           continue;
         }
@@ -2150,11 +2183,21 @@ export class SessionSupervisor {
           adopted.push(entry.row.instanceId);
         } catch (problem) {
           failed.add(entry.row.instanceId);
-          this.#sessionRecoveryFailed(
-            entry.row.instanceId,
-            problem,
-            entry.row.processGeneration
-          );
+          // A child that could not prove its credential was stopped: an end,
+          // not a recovery the hub retries.
+          if (problem instanceof SessionCredentialRefused) {
+            this.#fail(
+              entry.row.instanceId,
+              problem,
+              entry.row.processGeneration
+            );
+          } else {
+            this.#sessionRecoveryFailed(
+              entry.row.instanceId,
+              problem,
+              entry.row.processGeneration
+            );
+          }
           entry.settle();
         }
       }
@@ -2172,7 +2215,6 @@ export class SessionSupervisor {
       );
       signal?.throwIfAborted();
       if (this.#sessions.has(row.instanceId)) {
-        this.#installAdoptedCredential(row, this.#session(row.instanceId));
         adopted.push(row.instanceId);
       } else {
         adopted.push(
@@ -2252,7 +2294,7 @@ export class SessionSupervisor {
       holder,
       row.processGeneration,
       undefined,
-      row.sessionCredential,
+      undefined,
       true
     );
     const session = await claude.adopt(row.instanceId, ctx, {
@@ -2264,10 +2306,10 @@ export class SessionSupervisor {
     });
     holder.session = session;
     await this.#applyStoredPermissionMode(session, row.permissionMode);
+    await this.#admit(session, claude.kind, undefined);
     this.#sessions.set(row.instanceId, session);
     // biome-ignore lint/complexity/noVoid: the catalog read dates a rest already under way; nothing waits on it
     void this.#dateActivity(row.instanceId, claude, session, row.cwd);
-    this.#installAdoptedCredential(row, session);
     session.attached?.();
     this.#adopting.delete(row.instanceId);
     settle();
@@ -2300,20 +2342,6 @@ export class SessionSupervisor {
       failed
     );
     return { attached, failed };
-  }
-
-  #installAdoptedCredential(
-    row: Claimed["row"],
-    session: HarnessSession
-  ): void {
-    if (row.sessionCredential) {
-      // biome-ignore lint/complexity/noVoid: the handle is installed; waiting for its idle boundary must not block adoption of siblings.
-      void this.#installCredential(
-        session,
-        row.instanceId,
-        row.sessionCredential
-      );
-    }
   }
 
   /** The harness session a side quest turned out to be writing, from its init frame. */
@@ -2366,13 +2394,33 @@ export class SessionSupervisor {
   #fail(instanceId: string, error: unknown, processGeneration?: string): void {
     const message = error instanceof Error ? error.message : String(error);
     this.#failures.set(instanceId, message);
-    this.sink({
-      kind: "error",
+    const frame = {
+      kind: "error" as const,
       instanceId,
       processGeneration,
-      verb: "spawn",
+      verb: "spawn" as const,
       message,
-    });
+    };
+    // The hub fails the row and its work item on this frame alone. One that
+    // could not go out now goes out on the next connection.
+    if (this.sink(frame)) {
+      this.#unsentFailures.delete(instanceId);
+    } else {
+      this.#unsentFailures.set(instanceId, frame);
+    }
+  }
+
+  /**
+   * The spawn failures no hub has heard, said on a new connection right after
+   * its register. The hub ignores one whose process generation it has since
+   * replaced.
+   */
+  replaySpawnFailures(): void {
+    for (const [instanceId, frame] of this.#unsentFailures) {
+      if (this.sink(frame)) {
+        this.#unsentFailures.delete(instanceId);
+      }
+    }
   }
 
   /**
