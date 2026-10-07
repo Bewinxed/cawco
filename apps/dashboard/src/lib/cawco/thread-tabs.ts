@@ -63,3 +63,14 @@ export function threadRowOf(
  */
 export const underThread = (row: InstanceRow): InstanceRow =>
   row.threadId ? { ...row, parentInstanceId: threadTabId(row.threadId) } : row;
+
+/**
+ * Sessions as every list of them shows them — the rail, Home's tabs and
+ * Recent, the jump palette, a machine's count: a project's Caw is its
+ * threads, so his lead session is never a row of its own, and a session his
+ * work started hangs under the thread it works for. The client's
+ * `runningRows` and `listedRows` add the threads themselves; a list that
+ * filters sessions first passes what it kept through here.
+ */
+export const inLists = (rows: InstanceRow[]): InstanceRow[] =>
+  rows.filter((row) => row.role !== "lead").map(underThread);

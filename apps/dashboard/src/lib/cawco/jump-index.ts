@@ -39,6 +39,8 @@ export interface JumpIndex {
 }
 
 export interface JumpIndexInput {
+  /** Sessions never listed (a project's lead): their stored transcripts are left out. */
+  hidden: ReadonlySet<string>;
   instances: readonly InstanceRow[];
   onlineMachines: ReadonlyArray<{
     machineId: string;
@@ -46,7 +48,13 @@ export interface JumpIndexInput {
     os: string;
   }>;
   projects: ReadonlyArray<{ id: string; name: string; cwd: string }>;
-  running: ReadonlyArray<{ id: string; cwd: string; activityLabel: string }>;
+  /** Running sessions and threads as lists show them; `label` names a thread. */
+  running: ReadonlyArray<{
+    id: string;
+    cwd: string;
+    activityLabel: string;
+    label?: string;
+  }>;
   stored: ReadonlyArray<{
     machineId: string;
     hostname: string;
@@ -118,7 +126,7 @@ export function buildJumpIndex(input: JumpIndexInput): JumpIndex {
     groups[2].rows.push({
       id: `live:${instance.id}`,
       kind: "live",
-      label: leaf(instance.cwd) || instance.id,
+      label: instance.label ?? (leaf(instance.cwd) || instance.id),
       detail: `${instance.cwd || "—"} · ${instance.activityLabel}`,
       href: conversationHref(instance.id, index),
       hay: "",
@@ -128,7 +136,9 @@ export function buildJumpIndex(input: JumpIndexInput): JumpIndex {
   }
   const destinations = new Set(groups[2].rows.map((row) => row.href));
   for (const machine of input.stored) {
-    for (const [i, info] of machine.catalog.entries()) {
+    for (const [i, info] of machine.catalog
+      .filter((each) => !input.hidden.has(each.sessionId))
+      .entries()) {
       const title = catalogTitle(info, index, machine.machineId);
       sessionTitles.set(info.sessionId, title);
       const href = conversationHref(info.sessionId, index, {

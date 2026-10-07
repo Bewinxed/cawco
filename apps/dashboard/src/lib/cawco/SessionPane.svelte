@@ -62,6 +62,7 @@
   import PreviewSheet from "./preview/PreviewSheet.svelte";
   import { keepsDrafts } from "./protocol-reload";
   import { clip, type SuggestCandidate, suggestions } from "./suggest.svelte";
+  import { inLists } from "./thread-tabs";
   import Composer, { type Mention } from "./transcript/Composer.svelte";
   import { ComposerDraft } from "./transcript/composer-draft.svelte";
   import {
@@ -674,9 +675,13 @@
 
   const instanceRow = $derived(cawco.instanceIndex.byId.get(viewId));
 
-  /** What `@` can name: the other conversations in the strip, and the machines. */
+  /**
+   * What `@` can name: the other conversations, as lists show them (a
+   * project's lead is its threads, which a session cannot be handed to), and
+   * the machines.
+   */
   const mentions = $derived<Mention[]>([
-    ...cawco.instances
+    ...inLists(cawco.instances)
       .filter((row) => row.id !== viewId)
       .slice(0, 40)
       .map((row) => ({

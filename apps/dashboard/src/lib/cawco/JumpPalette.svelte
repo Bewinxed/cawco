@@ -47,6 +47,7 @@
     stripFragment,
   } from "./jump-search.svelte";
   import { conversationHref } from "./links";
+  import { isThreadTab } from "./thread-tabs";
 
   let {
     open = $bindable(false),
@@ -59,11 +60,14 @@
       instances: cawco.instances,
       projects: cawco.projects,
       onlineMachines: cawco.onlineMachines,
-      running: cawco.runningInstances.map((instance) => ({
-        id: instance.id,
-        cwd: instance.cwd,
-        activityLabel: ACTIVITY_LABEL[cawco.activityOf(instance.id)],
+      // Sessions as every list shows them: a project's Caw is his threads.
+      running: cawco.runningRows.map((row) => ({
+        id: row.id,
+        cwd: row.cwd,
+        activityLabel: ACTIVITY_LABEL[cawco.activityOf(row.id)],
+        ...(isThreadTab(row.id) ? { label: row.title ?? "Thread" } : {}),
       })),
+      hidden: cawco.leadSessions,
       stored: cawco.machines.map((machine) => ({
         machineId: machine.machineId,
         hostname: machine.hostname,

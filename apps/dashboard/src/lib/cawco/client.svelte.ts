@@ -137,7 +137,7 @@ import {
   refreshTasks,
   TASK_LEDGER_TOOLS,
 } from "./tasks.svelte";
-import { isThreadTab, threadIdOf, threadRowOf } from "./thread-tabs";
+import { inLists, isThreadTab, threadIdOf, threadRowOf } from "./thread-tabs";
 import { warmCompactionMark } from "./transcript/compaction-mark";
 import { errorMessage, localUserMessage } from "./transcript/local";
 import { routedToParent } from "./transcript/present";
@@ -637,6 +637,27 @@ const instanceIndex = $derived(
   indexInstances([...instances, ...runRows, ...threadRows])
 );
 const runningInstances = $derived(instances.filter(isLive));
+/**
+ * What a list shows running: sessions (a lead is its threads, thread-tabs.ts
+ * `inLists`) and the threads Caw works on or waits on you in.
+ */
+const runningRows = $derived([
+  ...inLists(runningInstances),
+  ...threadRows.filter((row) => row.status === "running"),
+]);
+/** What a list shows of every listed session: as `runningRows`, with every thread. */
+const listedRows = $derived([
+  ...inLists(instances.filter(isListed)),
+  ...threadRows,
+]);
+/** The sessions of every lead the hub knows: a list leaves their transcripts out too. */
+const leadSessions = $derived<ReadonlySet<string>>(
+  new Set(
+    instances.flatMap((row) =>
+      row.role === "lead" && row.sessionId ? [row.sessionId] : []
+    )
+  )
+);
 const staleInstances = $derived(instances.filter(isStale));
 const listedInstances = $derived(instances.filter(isListed));
 
@@ -6043,6 +6064,18 @@ export const cawco = {
   },
   get runningInstances() {
     return runningInstances;
+  },
+  /** Running sessions as lists show them: leads as their threads (thread-tabs.ts `inLists`). */
+  get runningRows() {
+    return runningRows;
+  },
+  /** Listed sessions as lists show them: leads as their threads. */
+  get listedRows() {
+    return listedRows;
+  },
+  /** Sessions that are a project's lead: never listed, nor their stored transcripts. */
+  get leadSessions() {
+    return leadSessions;
   },
   /** Sessions the hub lost track of — shown apart, never as live work. */
   get staleInstances(): InstanceRow[] {

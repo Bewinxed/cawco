@@ -32,11 +32,15 @@
 
   let { item, stale }: { item: NeedsItem; stale: boolean } = $props();
 
-  const href = $derived(
-    item.kind === "ask"
-      ? conversationHref(item.instanceId, cawco.instanceIndex)
-      : item.href
-  );
+  const href = $derived.by(() => {
+    if (item.kind !== "ask") {
+      return item.href;
+    }
+    // A project's Caw asked in a thread: the card opens the thread.
+    return item.thread
+      ? `/session/${item.thread}`
+      : conversationHref(item.instanceId, cawco.instanceIndex);
+  });
   const waited = $derived.by(() => {
     if (item.kind === "cap") {
       return `resets ${resetLabel(new Date(item.cap.resetsAt).toISOString(), clock.now)}`;
@@ -101,7 +105,8 @@
   <div class="head">
     <span class="title">{item.title}</span>
     <span class="num wait">{waited}</span>
-    {#if item.kind === "ask"}
+    <!-- A thread is opened, not peeked: it is the conversation itself. -->
+    {#if item.kind === "ask" && !item.thread}
       {@const ask = item}
       <!-- Glance → peek → dive: read what led here before answering. -->
       <Tip label="Peek">

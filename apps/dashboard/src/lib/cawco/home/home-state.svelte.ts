@@ -36,6 +36,7 @@ import { heldOrder } from "../motion/held-order.svelte";
 import { permissionSummary } from "../permission-summary";
 import { projectsFor } from "../projects";
 import { rail } from "../rail.svelte";
+import { threadTabId } from "../thread-tabs";
 import { hasParent, rooted, topsIn, tree } from "../tree";
 import { runHref } from "../workflow-runs";
 import { workflowState } from "../workflow-state.svelte";
@@ -188,6 +189,7 @@ export function span(ms: number): string {
 export interface AskItem {
   /** What it asks, in plain words. */
   ask: string;
+  /** The session that asked; it is answered there. */
   instanceId: string;
   isQuestion: boolean;
   key: string;
@@ -198,6 +200,11 @@ export interface AskItem {
   /** When the hub parked it, ms epoch. */
   raisedAt: number | undefined;
   request: BlockedRequest["request"];
+  /**
+   * Where it opens: the thread a project's Caw asked in (thread-tabs.ts), so
+   * his lead session is never a card's place; null opens the session.
+   */
+  thread: string | null;
   title: string;
 }
 
@@ -628,12 +635,18 @@ class Home {
     const asks: NeedsItem[] = cawco.blocked.map((item) => {
       const row = cawco.instanceIndex.byId.get(item.instanceId);
       const questions = questionsOf(item.request.toolName, item.request.input);
+      // A project's Caw asks in a thread: the card is the thread's.
+      const thread =
+        row?.role === "lead" && item.request.threadId
+          ? cawco.threadOf(threadTabId(item.request.threadId))
+          : undefined;
       return {
         kind: "ask",
         key: `${item.instanceId}:${item.request.requestId}`,
         instanceId: item.instanceId,
+        thread: thread ? threadTabId(thread.id) : null,
         machineId: item.machineId,
-        title: row ? instanceTitle(row) : item.hostname,
+        title: thread?.title ?? (row ? instanceTitle(row) : item.hostname),
         place: row ? placeOfRow(row) : placeOf(item.machineId, item.cwd),
         isQuestion: Boolean(questions),
         ask: questions
@@ -686,7 +699,7 @@ class Home {
    * of them, its steps its delegates.
    */
   readonly working = $derived.by(() => {
-    const rows = [...cawco.runningInstances, ...cawco.runRows].filter(
+    const rows = [...cawco.runningRows, ...cawco.runRows].filter(
       (row) => cawco.activityOf(row.id) === "working"
     );
     // Ordered by when each joined Working this stint, newest first: a key
@@ -724,7 +737,7 @@ class Home {
     }
     return heldOrder(
       "home:finished",
-      [...cawco.listedInstances, ...cawco.runRows]
+      [...cawco.listedRows, ...cawco.runRows]
         .filter(endedUnseen)
         // The latest to end first. A failure says so on its own row (its
         // mark, its line, the tab's numeral), not by jumping the queue. Two
@@ -764,7 +777,7 @@ class Home {
    */
   get empty(): boolean {
     return (
-      cawco.listedInstances.length === 0 &&
+      cawco.listedRows.length === 0 &&
       cawco.machines.every((machine) => !cawco.hasStored(machine.machineId))
     );
   }
@@ -810,7 +823,12 @@ class Home {
         continue;
       }
       for (const info of cawco.catalogOf(machineId)) {
-        if (running.has(info.sessionId)) {
+        // A listed session's transcript is its row; a lead's is its
+        // project's threads, never a stored session of its own.
+        if (
+          running.has(info.sessionId) ||
+          cawco.leadSessions.has(info.sessionId)
+        ) {
           continue;
         }
         const where = projectOf(machineId, info.cwd);
@@ -890,7 +908,7 @@ class Home {
       ...this.finishedListed.map((row) => row.id),
       ...cawco.blocked.map((item) => item.instanceId),
     ]);
-    const rows = cawco.listedInstances.filter((row) => !shown.has(row.id));
+    const rows = cawco.listedRows.filter((row) => !shown.has(row.id));
     const known = (id: string) => cawco.instanceIndex.byId.has(id);
     // What the Delegates switch means in every home list (WorkTabs
     // `rowsOf`): off, a delegate is held only under a parent the list holds
@@ -931,7 +949,8 @@ class Home {
    * list's count and its cap are of these.
    */
   readonly #recentLive = $derived.by<RecentItem[]>(() => {
-    const topOf = topsIn(cawco.instanceIndex.byId);
+    // Tops as the lists have them: a delegate of Caw's work is under its thread.
+    const topOf = topsIn(new Map(cawco.listedRows.map((row) => [row.id, row])));
     const tops = new Set(this.#recentRows.map(topOf));
     return [...tops]
       .map(
@@ -969,7 +988,7 @@ class Home {
     if (ask?.kind === "ask") {
       return ask.instanceId;
     }
-    const [latest] = [...cawco.runningInstances]
+    const [latest] = [...cawco.runningRows]
       .filter(listed)
       .sort((a, b) => lastAt(b) - lastAt(a));
     return latest?.id ?? null;
