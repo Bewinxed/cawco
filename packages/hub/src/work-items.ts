@@ -569,6 +569,16 @@ const spawnOf = (
   title,
   ...(skills?.length ? { skills } : {}),
   ...(type?.denyTools?.length ? { denyTools: type.denyTools } : {}),
+  // Kept on the row, so the type's word reads the same for every session.
+  ...(type
+    ? {
+        delegateType: {
+          name: type.name,
+          ...(parent.projectId ? { projectId: parent.projectId } : {}),
+        },
+      }
+    : {}),
+  ...(type?.cawcoTodos ? { cawcoTodos: true } : {}),
   // Its type's toolset (§5.3), kept on its row: a web-facing type's
   // sessions never see posting or admin tools.
   ...(type?.role ? { role: type.role } : {}),

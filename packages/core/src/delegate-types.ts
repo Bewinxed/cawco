@@ -17,6 +17,13 @@ export interface DelegateType {
    * coordinator by default. An explicit `can_delegate` on the call still wins.
    */
   canDelegate?: boolean;
+  /**
+   * "CawCo's to-dos" for this type's sessions, whatever the fleet says
+   * (§5.2, "changeable later in Settings and per delegate type"). Denied
+   * lists only union, so a type can turn the choice on, never off: absent or
+   * false leaves it to the fleet. A project type file says `cawco_todos: true`.
+   */
+  cawcoTodos?: boolean;
   denyTools?: string[];
   /** What the calling model reads to decide whether this is the right type. */
   description: string;
@@ -75,6 +82,15 @@ export const delegateTypeProblem = (
  * `plan_enter`/`plan_exit`): the session's spec, written through CawCo
  * (`plan.ts`), replaces it. pi has neither.
  */
+/**
+ * What a session is denied for "CawCo's to-dos", in Claude Code's names (the
+ * OpenCode adapter reads each as its own tool): the harness's own list and
+ * its built-in plan mode. Added at spawn to every session the choice is on
+ * for, so no stored list has to carry the names.
+ */
+export const cawcoTodosDenied = (on: boolean): readonly string[] =>
+  on ? NATIVE_TOOLS.todos.claude : [];
+
 export const NATIVE_TOOLS = {
   subagents: { claude: ["Task", "Agent"], opencode: ["task"], pi: [] },
   todos: {

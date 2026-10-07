@@ -123,7 +123,18 @@ export interface SpawnPayload {
    * on a session nobody delegated (a mainline session may always delegate).
    */
   canDelegate?: boolean;
+  /**
+   * "CawCo's to-dos" for this session whatever the fleet says: its delegate
+   * type's `cawcoTodos`. The agent adds {@link cawcoTodosDenied} when this or
+   * the fleet's choice is on.
+   */
+  cawcoTodos?: boolean;
   cwd: string;
+  /**
+   * The delegate type it was started as: its name, and the project whose
+   * catalog it came from (none: the fleet's). The hub keeps both on the row.
+   */
+  delegateType?: { name: string; projectId?: string };
   /**
    * Tools this session may never call, beyond whatever the harness already
    * denies. Set by a resolved {@link DelegateType}'s own `denyTools`; the
@@ -614,6 +625,10 @@ export interface InstanceRow {
    */
   canDelegate?: boolean | null;
   cwd: string;
+  /** The delegate type its spawn named; null: none. */
+  delegateType?: string | null;
+  /** The project whose catalog that type came from; null: the fleet's. */
+  delegateTypeProject?: string | null;
   /**
    * The name the session's first user message gave it, derived once by the hub.
    * A listing already answers {@link title} with this when nothing named the

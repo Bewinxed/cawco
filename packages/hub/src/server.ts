@@ -3249,6 +3249,7 @@ export const createServer = (
         ...(row.kind === "scratch" ? { scratch: {} } : {}),
         ...(row.model ? { model: row.model } : {}),
         ...(isEffortLevel(row.effort) ? { effort: row.effort } : {}),
+        ...typeSettingsOf(row),
       },
       row.permissionMode
     );
@@ -4233,6 +4234,7 @@ export const createServer = (
       ...peekParent(payload),
       ...(workItemId ? { workItemId } : {}),
       ...(payload.role ? { role: payload.role } : {}),
+      ...(payload.delegateType ? { delegateType: payload.delegateType } : {}),
     });
     sendSpawn(agent, machineId, {
       verb: "spawn",
@@ -5649,6 +5651,7 @@ export const createServer = (
       // from the payload, and a restore that dropped this would hand a leaf
       // delegate the `delegate` tool back.
       ...(row.canDelegate === false ? { canDelegate: false } : {}),
+      ...typeSettingsOf(row),
     };
     // Adopt the stored mode without revalidating a new launch; custody must not be skipped.
     if (reattachOnly) {
@@ -7391,6 +7394,32 @@ export const createServer = (
   // A project's own types (`delegates/*.md` in its folder) shadow the fleet's.
   const projectTypes = makeProjectDelegateTypes(delegateTypes);
   /**
+   * What the delegate type on a row adds to a session brought back (a wake,
+   * a restore): the same denials and "CawCo's to-dos" its first spawn had,
+   * read from the type as it stands now.
+   */
+  function typeSettingsOf(
+    row: Pick<InstanceRow, "delegateType" | "delegateTypeProject">
+  ): Pick<SpawnPayload, "cawcoTodos" | "delegateType" | "denyTools"> {
+    if (!row.delegateType) {
+      return {};
+    }
+    const type = projectTypes.resolveTypeFor(
+      row.delegateTypeProject,
+      row.delegateType
+    );
+    return {
+      delegateType: {
+        name: row.delegateType,
+        ...(row.delegateTypeProject
+          ? { projectId: row.delegateTypeProject }
+          : {}),
+      },
+      ...(type?.denyTools?.length ? { denyTools: type.denyTools } : {}),
+      ...(type?.cawcoTodos ? { cawcoTodos: true } : {}),
+    };
+  }
+  /**
    * THE way the hub runs a command on a machine: in `cwd`, killed after
    * `timeoutMs` (the machine's default when not given), answering its
    * complete stdout and stderr (past 8 MiB it fails). A workflow's `w.exec` and a work item's
@@ -7816,8 +7845,8 @@ export const createServer = (
       }
       return response.result;
     },
-    typeDenies: (projectId, type) =>
-      projectTypes.resolveTypeFor(projectId, type)?.denyTools ?? [],
+    typeTodos: (projectId, type) =>
+      projectTypes.resolveTypeFor(projectId, type)?.cawcoTodos === true,
     publish: (instanceId, message) =>
       streams.planToFollowers(instanceId, message),
   });
@@ -8165,8 +8194,14 @@ export const createServer = (
       )
       .use(
         fleetChoicesRoutes({
-          read: () => db.getSupervisorConfig()?.deniedTools ?? null,
-          write: (deniedTools) => db.putSupervisorConfig({ deniedTools }),
+          read: () => {
+            const config = db.getSupervisorConfig();
+            return {
+              deniedTools: config?.deniedTools ?? null,
+              cawcoTodos: config?.cawcoTodos ?? false,
+            };
+          },
+          write: (choices) => db.putSupervisorConfig(choices),
           synced: () => fanOutFleet(),
         })
       )

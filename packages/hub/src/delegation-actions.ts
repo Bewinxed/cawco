@@ -105,9 +105,18 @@ export async function fetchDelegateTypes(
  * Chrome. And its toolset (§5.3): the type's `role:`, kept on the row.
  */
 const namedTypeSettings = (
-  type: DelegateType | undefined
-): Pick<SpawnPayload, "denyTools" | "role"> => ({
+  type: DelegateType | undefined,
+  projectId: string | undefined
+): Pick<
+  SpawnPayload,
+  "cawcoTodos" | "delegateType" | "denyTools" | "role"
+> => ({
   denyTools: type?.denyTools,
+  // Kept on the row, so the type's word reads the same for every session.
+  ...(type
+    ? { delegateType: { name: type.name, ...(projectId ? { projectId } : {}) } }
+    : {}),
+  ...(type?.cawcoTodos ? { cawcoTodos: true } : {}),
   ...(type?.role ? { role: type.role } : {}),
 });
 
@@ -1215,7 +1224,7 @@ export const handoffActions = ({
         fallbackPermissionMode: callerMode(rows, instanceId),
         ...(type?.effort ? { effort: type.effort } : {}),
         ...(type?.skills?.length ? { skills: type.skills } : {}),
-        ...(typeName ? namedTypeSettings(type) : {}),
+        ...(typeName ? namedTypeSettings(type, projectId) : {}),
         ...(sideQuest ? { scratch: { baseCwd: workdir } } : {}),
         // The machine answers it once the session is in place, or with why it
         // is not; the hub holds the relay until then, so a failed spawn is this

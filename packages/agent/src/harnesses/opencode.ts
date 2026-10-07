@@ -104,7 +104,7 @@ import { delegationHubUrl, harnessMcpUrl } from "../delegation";
 import {
   type OpencodeDenySettings,
   opencodeDenySettings,
-  resolvedDenyList,
+  sessionFleetDenials,
 } from "../denied-tools";
 import type { Harness, HarnessContext, HarnessSession } from "../harness";
 import { HarnessRecoveryRefused, SessionAddressRefused } from "../harness";
@@ -936,6 +936,39 @@ const syncOpencodeMcp = async (
 
   await writeOpencodeConfig("fleet sync", { ...stored, mcp });
   return names;
+};
+
+const recordOf = (value: unknown): Record<string, unknown> =>
+  value !== null && typeof value === "object" && !Array.isArray(value)
+    ? { ...(value as Record<string, unknown>) }
+    : {};
+
+/**
+ * OpenCode's `plan` primary agent under the fleet's "CawCo's to-dos" choice:
+ * on, `agent.plan.disable` (OpenCode deletes a disabled agent from its list
+ * when it loads its config); off, taken back only when CawCo set it. Answers
+ * whether CawCo holds the setting now, for the sidecar.
+ */
+const syncPlanAgent = async (
+  todosOn: boolean,
+  ours: boolean
+): Promise<boolean> => {
+  const stored =
+    (await readJson<Record<string, unknown>>(OPENCODE_CONFIG)) ?? {};
+  const { plan: storedPlan, ...others } = recordOf(stored.agent);
+  const { disable, ...planRest } = recordOf(storedPlan);
+  if (todosOn ? disable === true : !(ours && disable === true)) {
+    return todosOn && ours;
+  }
+  const plan = todosOn ? { ...planRest, disable: true } : planRest;
+  const agent =
+    Object.keys(plan).length > 0 ? { ...others, plan } : { ...others };
+  const { agent: _agent, ...rest } = stored;
+  await writeOpencodeConfig(
+    "fleet sync",
+    Object.keys(agent).length > 0 ? { ...rest, agent } : rest
+  );
+  return todosOn;
 };
 
 const EFFORT_LEVELS: EffortLevel[] = ["low", "medium", "high", "xhigh", "max"];
@@ -5789,7 +5822,7 @@ export class OpencodeHarness implements Harness {
     // The fleet's baseline, the delegate type's and the spawn's own denials —
     // the three layers the claude adapter unions too — as OpenCode denies them.
     const denied = opencodeDenySettings([
-      ...(await resolvedDenyList()),
+      ...(await sessionFleetDenials(spec.cawcoTodos)),
       ...(spec.denyTools ?? []),
     ]);
     // cbd4c3a0 required the correct hub and caller identity, not readiness of
@@ -6401,7 +6434,14 @@ export class OpencodeHarness implements Harness {
     if (sidecar.memory !== undefined) {
       await syncMemory(OPENCODE_MEMORY, null, sidecar.memory, report);
     }
-    await writeJson(OPENCODE_SIDECAR, { mcp });
+    const planAgentDisabled = await syncPlanAgent(
+      config.cawcoTodos === true,
+      sidecar.planAgentDisabled === true
+    );
+    await writeJson(OPENCODE_SIDECAR, {
+      mcp,
+      ...(planAgentDisabled ? { planAgentDisabled: true } : {}),
+    });
 
     // Poke the config watcher: syncFleet just wrote opencode.json, so the disk
     // hash will have changed. An immediate tick avoids the up-to-2s polling

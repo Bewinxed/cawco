@@ -179,6 +179,12 @@ export function adminTools() {
           .describe(
             "Whether delegates of this type may themselves delegate. Default false."
           ),
+        cawcoTodos: z
+          .boolean()
+          .optional()
+          .describe(
+            "True: its sessions use CawCo's to-dos and spec, never their harness's own list or plan mode."
+          ),
       },
       async ({
         action,
@@ -190,6 +196,7 @@ export function adminTools() {
         skills,
         denyTools,
         canDelegate,
+        cawcoTodos,
       }) => {
         if (action === "list") {
           return ok(await api("GET", "/api/delegate-types"));
@@ -220,6 +227,7 @@ export function adminTools() {
             ...(skills?.length ? { skills } : {}),
             ...(denyTools?.length ? { denyTools } : {}),
             ...(canDelegate === undefined ? {} : { canDelegate }),
+            ...(cawcoTodos ? { cawcoTodos } : {}),
           })
         );
       }

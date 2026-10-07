@@ -81,7 +81,7 @@ import {
   delegationMcp,
   MCP_SERVER_NAME,
 } from "../delegation";
-import { resolvedDenyList } from "../denied-tools";
+import { sessionFleetDenials } from "../denied-tools";
 import {
   fleetStatus,
   inspectConfig,
@@ -843,7 +843,7 @@ class ClaudeSession implements HarnessSession {
     persistSession: boolean | undefined,
     skills?: string[],
     denyTools?: string[],
-    /** Fleet-wide denied tools, resolved once by `spawn()` via {@link resolvedDenyList}. */
+    /** What the fleet denies this session, resolved once by `spawn()` via {@link sessionFleetDenials}. */
     fleetDenyList: readonly string[] = [],
     /**
      * The sessiond connection this session's CLI child lives under. Not
@@ -933,8 +933,9 @@ class ClaudeSession implements HarnessSession {
         // Fleet baseline (from supervisor_config.denied_tools, cached in the
         // sidecar) + delegate-type denials + any the caller itself carried.
         // All three layers union: every layer can only add, never remove
-        // another layer's entries. Resolved once through `resolvedDenyList()`
-        // so this path and `convergeDeniedTools` read the same value.
+        // another layer's entries. Resolved once through `sessionFleetDenials()`
+        // so this path and `convergeDeniedTools` read the same value; it adds
+        // the to-do and plan-mode set when "CawCo's to-dos" is on for it.
         disallowedTools: [
           ...new Set([
             ...((options as { disallowedTools?: string[] } | undefined)
@@ -2066,7 +2067,7 @@ export class ClaudeHarness implements Harness {
     ) {
       throw new Error(CLAUDE_CONVERSATION_GONE);
     }
-    const fleetDenyList = await resolvedDenyList();
+    const fleetDenyList = await sessionFleetDenials(spec.cawcoTodos);
     return new ClaudeSession(
       ctx.instanceId,
       ctx,

@@ -583,6 +583,14 @@ export const instances = sqliteTable("instances", {
    */
   role: text("role").$type<import("@cawco/core").SessionRole>(),
   /**
+   * The delegate type its spawn named (a fleet type, or its project's), so
+   * what the type says — "CawCo's to-dos" — reads the same for every session
+   * however it started. Null: none.
+   */
+  delegateType: text("delegate_type"),
+  /** The project whose catalog `delegateType` came from; null: the fleet's. */
+  delegateTypeProject: text("delegate_type_project"),
+  /**
    * What was last *written down* about the session — history, not liveness.
    *
    * Read this column raw and you are reading a fact that was true at the moment
@@ -1523,6 +1531,14 @@ export const supervisorConfig = sqliteTable("supervisor_config", {
    * when the operator has removed all denials).
    */
   deniedTools: text("denied_tools", { mode: "json" }).$type<string[]>(),
+  /**
+   * The fleet's "CawCo's to-dos" choice (§5.2): every session is denied its
+   * harness's own list and plan mode, added at spawn (`cawcoTodosDenied`),
+   * never stored in `denied_tools`.
+   */
+  cawcoTodos: integer("cawco_todos", { mode: "boolean" })
+    .notNull()
+    .default(false),
   updatedAt: timestamp("updated_at")
     .notNull()
     .$defaultFn(() => new Date()),

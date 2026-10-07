@@ -53,6 +53,8 @@ export interface FleetSidecar {
   /** MCP server names this harness wrote; only these are ever taken back. */
   mcp?: string[];
   memory?: string;
+  /** OpenCode: CawCo set `agent.plan.disable` for "CawCo's to-dos", so only CawCo takes it back. */
+  planAgentDisabled?: true;
   skills: Record<string, string>;
 }
 
@@ -61,6 +63,7 @@ export const readSidecar = async (path: string): Promise<FleetSidecar> => {
   return {
     skills: stored?.skills ?? {},
     ...(stored?.memory ? { memory: stored.memory } : {}),
+    ...(stored?.planAgentDisabled ? { planAgentDisabled: true as const } : {}),
     mcp: stored?.mcp ?? [],
   };
 };

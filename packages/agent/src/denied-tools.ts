@@ -5,16 +5,25 @@
  * (`~/.claude/cawco-fleet.json`) caches the last-synced value so a machine
  * that loses its hub still has a policy.
  *
- * Two consumers read the resolved list:
- *  1. The spawn path in `claude.ts`, which passes it as `disallowedTools`.
- *  2. `convergeDeniedTools`, which writes it into `~/.claude/settings.json`
- *     so the user's own `claude` sees the same denials.
+ * The fleet's "CawCo's to-dos" choice rides beside it (`FleetConfig.cawcoTodos`,
+ * cached in the same sidecar) and is never names in the list: while it is
+ * on, {@link cawcoTodosDenied} is added.
  *
- * Both call {@link resolvedDenyList} — the single source — so they cannot
+ * Two consumers read the resolved denials:
+ *  1. The spawn paths (`claude.ts`, `opencode.ts`), through
+ *     {@link sessionFleetDenials}: the baseline, plus the to-do and plan-mode
+ *     set when the fleet's choice or the session's own (its delegate type's)
+ *     is on.
+ *  2. `convergeDeniedTools`, which writes the machine's share (the baseline,
+ *     plus the set while the fleet's choice is on) into
+ *     `~/.claude/settings.json` so the user's own `claude` sees the same
+ *     denials — at daemon start, and again on every fleet sync.
+ *
+ * Both read {@link resolvedFleetDenials} — the single source — so they cannot
  * drift from each other.
  */
 import { rename } from "node:fs/promises";
-import { opencodeToolsFor } from "@cawco/core";
+import { cawcoTodosDenied, opencodeToolsFor } from "@cawco/core";
 import { expandHome } from "./fs";
 
 /** Every `claude` this user starts reads it, daemon-spawned or not. */
@@ -45,62 +54,101 @@ const asRecord = (value: unknown): Record<string, unknown> | undefined =>
     ? (value as Record<string, unknown>)
     : undefined;
 
+/** The fleet's denials as this machine last heard them. */
+export interface FleetDenials {
+  /** The fleet's "CawCo's to-dos" choice. */
+  cawcoTodos: boolean;
+  /** The baseline. */
+  deniedTools: readonly string[];
+}
+
 /**
- * The single source of truth for the fleet's denied-tools list. Both the
- * spawn path and the settings-convergence path call this, so they read the
- * same value and cannot drift.
+ * The single source of truth for the fleet's denials. Both the spawn path
+ * and the settings-convergence path call this, so they read the same value
+ * and cannot drift.
  *
- * Resolution order:
+ * Resolution order, for the list:
  *  1. The sidecar's `deniedTools` — present after at least one fleet sync.
  *  2. The compiled default — identical to what the migration seeds.
+ * The choice is the sidecar's `cawcoTodos`; off until a sync says otherwise.
  *
- * The return value is never empty when the sidecar has no `deniedTools` key:
- * that case falls back to the compiled default, which carries all four names.
+ * The list is never empty when the sidecar has no `deniedTools` key: that
+ * case falls back to the compiled default, which carries all four names.
  * An empty list is only possible when the operator has explicitly cleared the
  * fleet baseline in the hub — which is an intentional policy choice.
  */
-export const resolvedDenyList = async (): Promise<readonly string[]> => {
+export const resolvedFleetDenials = async (): Promise<FleetDenials> => {
   try {
     const file = Bun.file(SIDECAR);
     if (await file.exists()) {
-      const sidecar: unknown = await file.json();
-      if (
-        typeof sidecar === "object" &&
-        sidecar !== null &&
-        "deniedTools" in sidecar &&
-        Array.isArray((sidecar as { deniedTools: unknown }).deniedTools)
-      ) {
-        return (sidecar as { deniedTools: string[] }).deniedTools;
-      }
+      const sidecar = asRecord(await file.json()) ?? {};
+      return {
+        deniedTools: Array.isArray(sidecar.deniedTools)
+          ? (sidecar.deniedTools as string[])
+          : COMPILED_DEFAULT,
+        cawcoTodos: sidecar.cawcoTodos === true,
+      };
     }
   } catch {
     // Unreadable sidecar: fall back to compiled default.
   }
-  return COMPILED_DEFAULT;
+  return { deniedTools: COMPILED_DEFAULT, cawcoTodos: false };
+};
+
+/** What the machine's own `claude` is denied: the baseline, and the to-do and plan-mode set while the fleet's choice is on. */
+export const machineDenyList = ({
+  deniedTools,
+  cawcoTodos,
+}: FleetDenials): string[] => [
+  ...new Set([...deniedTools, ...cawcoTodosDenied(cawcoTodos)]),
+];
+
+/**
+ * What the fleet denies a session being spawned: the baseline, and the to-do
+ * and plan-mode set when the fleet's choice or the session's own (`cawcoTodos`
+ * on its spawn, from its delegate type) is on. The spawn's own `denyTools`
+ * union on top, in each adapter.
+ */
+export const sessionFleetDenials = async (
+  cawcoTodos: boolean | undefined
+): Promise<string[]> => {
+  const fleet = await resolvedFleetDenials();
+  return [
+    ...new Set([
+      ...fleet.deniedTools,
+      ...cawcoTodosDenied(fleet.cawcoTodos || cawcoTodos === true),
+    ]),
+  ];
 };
 
 /**
- * The settings with every `deny` name they did not already carry, and whether
- * that added anything — `changed: false` is a caller with nothing to write.
- * Every other key, and every rule already in the list, comes back out exactly
- * as it went in; only a `deny` that is not a list at all is replaced, because
- * nothing else can be appended to.
+ * The settings with every `deny` name they did not already carry, and without
+ * the `dropped` names the fleet no longer denies (what cawco wrote there
+ * before), and whether that changed anything — `changed: false` is a caller
+ * with nothing to write. Every other key, and every other rule, comes back
+ * out exactly as it went in; only a `deny` that is not a list at all is
+ * replaced, because nothing else can be appended to.
  */
 export function withDeniedTools(
   settings: unknown,
-  deny: readonly string[]
+  deny: readonly string[],
+  dropped: readonly string[] = []
 ): { changed: boolean; next: Record<string, unknown> } {
   const next = { ...(asRecord(settings) ?? {}) };
   const permissions = { ...(asRecord(next.permissions) ?? {}) };
   const current = Array.isArray(permissions.deny)
     ? (permissions.deny as unknown[])
     : [];
-  const missing = deny.filter((tool) => !current.includes(tool));
-  if (missing.length === 0) {
+  const gone = new Set(dropped.filter((tool) => !deny.includes(tool)));
+  const kept = current.filter(
+    (tool) => !(typeof tool === "string" && gone.has(tool))
+  );
+  const missing = deny.filter((tool) => !kept.includes(tool));
+  if (missing.length === 0 && kept.length === current.length) {
     return { changed: false, next };
   }
 
-  permissions.deny = [...current, ...missing];
+  permissions.deny = [...kept, ...missing];
   next.permissions = permissions;
   return { changed: true, next };
 }
@@ -111,15 +159,19 @@ export type DenyConvergence =
   | { state: "failed"; detail: string };
 
 /**
- * Converges `~/.claude/settings.json` with the fleet's denied-tools list,
- * resolved through {@link resolvedDenyList}. Writes only when the file does
- * not already carry every name. Nothing is written over a file that cannot
+ * Converges `~/.claude/settings.json` with the machine's share of the fleet's
+ * denials ({@link machineDenyList}), taking out `dropped`: the names cawco
+ * wrote for the fleet before and the fleet no longer denies (a fleet sync
+ * knows them; daemon start passes none). Writes only when that changes the
+ * file. Nothing is written over a file that cannot
  * be parsed: the rest of it is the user's own, and a rewrite from an empty
  * root would take their settings with it.
  */
-export const convergeDeniedTools = async (): Promise<DenyConvergence> => {
+export const convergeDeniedTools = async (
+  dropped: readonly string[] = []
+): Promise<DenyConvergence> => {
   try {
-    const deny = await resolvedDenyList();
+    const deny = machineDenyList(await resolvedFleetDenials());
 
     const file = Bun.file(SETTINGS);
     let settings: unknown = {};
@@ -134,7 +186,7 @@ export const convergeDeniedTools = async (): Promise<DenyConvergence> => {
       }
     }
 
-    const { changed, next } = withDeniedTools(settings, deny);
+    const { changed, next } = withDeniedTools(settings, deny, dropped);
     if (!changed) {
       return { state: "unchanged" };
     }

@@ -12,13 +12,19 @@
  */
 import { Database } from "bun:sqlite";
 import type { DelegateType } from "@cawco/core";
-import { DEFAULT_DELEGATE_TYPES, delegateTypeProblem } from "@cawco/core";
+import {
+  DEFAULT_DELEGATE_TYPES,
+  delegateTypeProblem,
+  NATIVE_TOOLS,
+} from "@cawco/core";
 import { Elysia, t } from "elysia";
 import { DB_PATH } from "./config";
 
 interface DelegateTypeRow {
   /** sqlite has no boolean: 1, 0, or NULL (the column arrived after the table). */
   can_delegate: number | null;
+  /** 1 when the type turns "CawCo's to-dos" on; 0 or NULL leaves it to the fleet. */
+  cawco_todos: number | null;
   deny_tools: string | null;
   description: string;
   effort: string | null;
@@ -37,6 +43,7 @@ const rowToType = (row: DelegateTypeRow): DelegateType => ({
   ...(row.skills ? { skills: JSON.parse(row.skills) } : {}),
   ...(row.deny_tools ? { denyTools: JSON.parse(row.deny_tools) } : {}),
   ...(row.can_delegate === null ? {} : { canDelegate: row.can_delegate === 1 }),
+  ...(row.cawco_todos === 1 ? { cawcoTodos: true } : {}),
 });
 
 export interface DelegateTypesShape {
@@ -88,33 +95,40 @@ export const makeDelegateTypes = (
     )
   `);
 
-  // "CawCo's to-dos" grew to deny the built-in plan mode too (NATIVE_TOOLS):
-  // a type that denied the four ledger tools denies EnterPlanMode and
-  // ExitPlanMode as well, once, so it still reads as the choice it made.
+  if (!columns.includes("cawco_todos")) {
+    sqlite.run("ALTER TABLE delegate_types ADD COLUMN cawco_todos INTEGER");
+  }
+  // "CawCo's to-dos" is a type's own flag now, not names in its deny list: a
+  // type that denied the four ledger tools had it on. Once, the names become
+  // the flag; the agent adds the whole set at spawn while it is on.
   if (
     sqlite
       .query("SELECT 1 FROM delegate_types_meta WHERE key = ?")
-      .get("plan_mode_denied") === null
+      .get("cawco_todos_flag") === null
   ) {
-    const ledger = ["TaskCreate", "TaskUpdate", "TaskList", "TaskGet"];
     const rows = sqlite
       .query(
         "SELECT name, deny_tools FROM delegate_types WHERE deny_tools IS NOT NULL"
       )
       .all() as { name: string; deny_tools: string }[];
+    const named = new Set<string>(NATIVE_TOOLS.todos.claude);
     for (const row of rows) {
       const deny = JSON.parse(row.deny_tools) as string[];
-      if (ledger.every((name) => deny.includes(name))) {
-        const grown = [...new Set([...deny, "EnterPlanMode", "ExitPlanMode"])];
-        sqlite.run("UPDATE delegate_types SET deny_tools = ? WHERE name = ?", [
-          JSON.stringify(grown),
-          row.name,
-        ]);
+      if (
+        ["TaskCreate", "TaskUpdate", "TaskList", "TaskGet"].every((name) =>
+          deny.includes(name)
+        )
+      ) {
+        const rest = deny.filter((name) => !named.has(name));
+        sqlite.run(
+          "UPDATE delegate_types SET cawco_todos = 1, deny_tools = ? WHERE name = ?",
+          [rest.length > 0 ? JSON.stringify(rest) : null, row.name]
+        );
       }
     }
     sqlite.run(
       "INSERT OR IGNORE INTO delegate_types_meta (key, value) VALUES (?, ?)",
-      ["plan_mode_denied", new Date().toISOString()]
+      ["cawco_todos_flag", new Date().toISOString()]
     );
   }
 
@@ -145,8 +159,8 @@ export const makeDelegateTypes = (
       draft.canDelegate === undefined ? null : Number(draft.canDelegate);
     sqlite
       .query(
-        `INSERT INTO delegate_types (name, description, harness, model, effort, skills, deny_tools, can_delegate, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO delegate_types (name, description, harness, model, effort, skills, deny_tools, can_delegate, cawco_todos, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(name) DO UPDATE SET
            description = excluded.description,
            harness = excluded.harness,
@@ -154,7 +168,8 @@ export const makeDelegateTypes = (
            effort = excluded.effort,
            skills = excluded.skills,
            deny_tools = excluded.deny_tools,
-           can_delegate = excluded.can_delegate`
+           can_delegate = excluded.can_delegate,
+           cawco_todos = excluded.cawco_todos`
       )
       .run(
         draft.name,
@@ -165,6 +180,7 @@ export const makeDelegateTypes = (
         draft.skills ? JSON.stringify(draft.skills) : null,
         draft.denyTools ? JSON.stringify(draft.denyTools) : null,
         canDelegate,
+        draft.cawcoTodos ? 1 : null,
         Date.now()
       );
     return draft;
@@ -219,6 +235,7 @@ export const delegateTypesRoutes = (store: DelegateTypesShape) =>
           skills: t.Optional(t.Array(t.String())),
           denyTools: t.Optional(t.Array(t.String())),
           canDelegate: t.Optional(t.Boolean()),
+          cawcoTodos: t.Optional(t.Boolean()),
         }),
       },
       ({ params, body, status }) => {

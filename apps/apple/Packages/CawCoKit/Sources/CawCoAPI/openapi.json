@@ -163,6 +163,9 @@
                   },
                   "canDelegate": {
                     "type": "boolean"
+                  },
+                  "cawcoTodos": {
+                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -13210,6 +13213,18 @@
                   "string"
                 ]
               },
+              "delegateType": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "delegateTypeProject": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
               "lastError": {
                 "type": [
                   "null",
@@ -13254,6 +13269,8 @@
               "canDelegate",
               "createdAt",
               "cwd",
+              "delegateType",
+              "delegateTypeProject",
               "derivedTitle",
               "harness",
               "id",
@@ -13453,6 +13470,18 @@
                     "string"
                   ]
                 },
+                "delegateType": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "delegateTypeProject": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
                 "lastError": {
                   "type": [
                     "null",
@@ -13500,6 +13529,8 @@
                 "canDelegate",
                 "createdAt",
                 "cwd",
+                "delegateType",
+                "delegateTypeProject",
                 "derivedTitle",
                 "harness",
                 "id",
@@ -16074,8 +16105,27 @@
             "description": "Whether this session may spawn sessions of its own (`delegate` and\n`start_session`). Set by the `delegate` tool's `can_delegate` param; a\ndelegate that is not granted it is a leaf: claude and pi never give it the\nspawning tools, and the hub refuses any spawn naming it as parent. Absent\non a session nobody delegated (a mainline session may always delegate).",
             "type": "boolean"
           },
+          "cawcoTodos": {
+            "description": "\"CawCo's to-dos\" for this session whatever the fleet says: its delegate\ntype's `cawcoTodos`. The agent adds {@link cawcoTodosDenied} when this or\nthe fleet's choice is on.",
+            "type": "boolean"
+          },
           "cwd": {
             "type": "string"
+          },
+          "delegateType": {
+            "description": "The delegate type it was started as: its name, and the project whose\ncatalog it came from (none: the fleet's). The hub keeps both on the row.",
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "projectId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name"
+            ]
           },
           "denyTools": {
             "description": "Tools this session may never call, beyond whatever the harness already\ndenies. Set by a resolved {@link DelegateType}'s own `denyTools`; the\nclaude adapter merges it into the `disallowedTools` it already assembles.",
@@ -16939,6 +16989,10 @@
             "description": "Whether a delegate of this type may itself delegate (or start sessions)\nwhen the `delegate` call did not say. `false` (and absent) means a leaf —\nthe same default a bare `delegate` call gets; `true` makes the type a\ncoordinator by default. An explicit `can_delegate` on the call still wins.",
             "type": "boolean"
           },
+          "cawcoTodos": {
+            "description": "\"CawCo's to-dos\" for this type's sessions, whatever the fleet says\n(§5.2, \"changeable later in Settings and per delegate type\"). Denied\nlists only union, so a type can turn the choice on, never off: absent or\nfalse leaves it to the fleet. A project type file says `cawco_todos: true`.",
+            "type": "boolean"
+          },
           "denyTools": {
             "type": "array",
             "items": {
@@ -17125,14 +17179,14 @@
             "type": "boolean"
           },
           "deniedTools": {
-            "description": "The baseline as stored, every choice and every other denial in it.",
+            "description": "The baseline as stored, the delegates choice and every other denial in it.",
             "type": "array",
             "items": {
               "type": "string"
             }
           },
           "todos": {
-            "description": "Use CawCo's to-dos instead of each harness's own list.",
+            "description": "Use CawCo's to-dos instead of each harness's own list and plan mode.",
             "type": "boolean"
           },
           "tools": {
@@ -27134,6 +27188,20 @@
           },
           "cwd": {
             "type": "string"
+          },
+          "delegateType": {
+            "description": "The delegate type its spawn named; null: none.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "delegateTypeProject": {
+            "description": "The project whose catalog that type came from; null: the fleet's.",
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "derivedTitle": {
             "description": "The name the session's first user message gave it, derived once by the hub.\nA listing already answers {@link title} with this when nothing named the\nrow, so a reader never watches the label change as the transcript arrives.",

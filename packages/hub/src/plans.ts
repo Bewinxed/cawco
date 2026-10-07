@@ -4,9 +4,8 @@
  * the task's to-dos, the same for a plain session, a delegate and an attempt.
  *
  * Where the steps come from is the PRD's on/off rule and nothing else: a
- * session whose harness's native to-do tools are denied ("CawCo's to-dos":
- * the fleet's denied-tools baseline, plus the delegate type its work item
- * named) keeps CawCo's list, written whole through `todo_write`'s session
+ * session "CawCo's to-dos" is on for (the fleet's choice, or the delegate
+ * type on its row) keeps CawCo's list, written whole through `todo_write`'s session
  * scope and stored here; any other session's steps are its harness's own
  * list (harness-plans.ts), read when it changes and stored nowhere. pi has
  * no list to deny, so its sessions keep CawCo's. The spec is CawCo's on
@@ -18,18 +17,16 @@
  * revision. One queue per session orders every read and send, so a snapshot
  * and the deltas after it never cross.
  */
-import {
-  type InstanceRow,
-  NATIVE_TOOLS,
-  type PlanDelta,
-  type PlanSnapshot,
-  type PlanStep,
-  type SessionPlan,
+import type {
+  InstanceRow,
+  PlanDelta,
+  PlanSnapshot,
+  PlanStep,
+  SessionPlan,
 } from "@cawco/core";
 import { Elysia, t } from "elysia";
 import { createPatch } from "rfc6902";
 import type { DbShape } from "./db";
-import { readChoices } from "./fleet-choices";
 import { type HarnessPlanDeps, harnessSteps } from "./harness-plans";
 import { FolderRefusal, refused } from "./project-folder";
 import type { TaskEvent, Tasks } from "./tasks";
@@ -54,7 +51,8 @@ export interface PlansDeps extends HarnessPlanDeps {
   publish: (instanceId: string, message: PlanSnapshot | PlanDelta) => void;
   tasks: Pick<Tasks, "get">;
   /** The tools a delegate type denies, by the name a work item asked for, in its project. */
-  typeDenies: (projectId: string | null, type: string) => readonly string[];
+  /** Whether the delegate type by that name, in that project, turns "CawCo's to-dos" on. */
+  typeTodos: (projectId: string | null, type: string) => boolean;
 }
 
 interface Held {
@@ -96,22 +94,15 @@ export const createPlans = (deps: PlansDeps) => {
   };
 
   /**
-   * Whether the session keeps CawCo's list: every one of its harness's native
-   * to-do tools denied to it. pi has none to deny.
+   * Whether the session keeps CawCo's list: "CawCo's to-dos" is on for it,
+   * the fleet's choice or its delegate type's — the same read the agent
+   * makes at spawn. pi has no list of its own.
    */
-  const keepsCawcoList = (row: InstanceRow): boolean => {
-    if ((row.harness ?? "claude") === "pi") {
-      return true;
-    }
-    const item = row.workItemId ? db.workItem(row.workItemId) : undefined;
-    const denied = new Set([
-      ...readChoices(db.getSupervisorConfig()?.deniedTools ?? null).deniedTools,
-      ...(item?.type ? deps.typeDenies(item.projectId, item.type) : []),
-    ]);
-    // The baseline and a type's list are written in Claude Code's names; the
-    // OpenCode adapter reads each as its own tool.
-    return NATIVE_TOOLS.todos.claude.every((name) => denied.has(name));
-  };
+  const keepsCawcoList = (row: InstanceRow): boolean =>
+    (row.harness ?? "claude") === "pi" ||
+    (db.getSupervisorConfig()?.cawcoTodos ?? false) ||
+    (!!row.delegateType &&
+      deps.typeTodos(row.delegateTypeProject ?? null, row.delegateType));
 
   /** The plan as it stands now, read from wherever each part lives. */
   const compute = async (row: InstanceRow): Promise<SessionPlan> => {

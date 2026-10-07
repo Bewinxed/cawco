@@ -473,6 +473,7 @@ export interface DbShape {
         model: string | null;
         apiKey: string | null;
         deniedTools: string[] | null;
+        cawcoTodos: boolean;
         updatedAt: Date;
       }
     | undefined;
@@ -708,6 +709,8 @@ export interface DbShape {
     workItemId?: string;
     /** The toolset it runs in; set once, at its first spawn. */
     role?: InstanceRole;
+    /** The delegate type it was started as, and where it came from; set at its first spawn. */
+    delegateType?: { name: string; projectId?: string };
   }) => void;
   /** The offers nobody has answered yet. */
   readonly openProjectOffers: () => ProjectOfferRow[];
@@ -889,6 +892,7 @@ export interface DbShape {
     model?: string | null;
     apiKey?: string | null;
     deniedTools?: string[] | null;
+    cawcoTodos?: boolean;
   }) => void;
   /** Files or refreshes rows of a project's task index, each by its file's path. */
   readonly putTaskIndex: (rows: TaskIndexRow[]) => void;
@@ -2480,6 +2484,7 @@ const make = (path: string): DbShape => {
       workflowStepId,
       workItemId,
       role,
+      delegateType,
       // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: opens (or reuses) the one live row for a conversation across every optional field a spawn can carry — see the "one conversation, one live row" invariant below.
     }) => {
       const now = new Date();
@@ -2552,6 +2557,8 @@ const make = (path: string): DbShape => {
           workflowStepId,
           workItemId,
           role,
+          delegateType: delegateType?.name,
+          delegateTypeProject: delegateType?.projectId,
           // `starting`, not `running` — this row is written when a spawn is
           // *issued*, and issuing a spawn is not evidence that a process exists.
           // Writing `running` here is the original sin behind the 178-vs-42
@@ -3288,13 +3295,19 @@ const make = (path: string): DbShape => {
         // The fleet's denied-tools list, from the supervisor_config single row.
         // Absent (undefined) when no row exists yet, which is what has a daemon
         // fall back to compiled constants — the same list the migration seeds.
-        deniedTools: (() => {
+        ...(() => {
           const row = db
-            .select({ deniedTools: supervisorConfig.deniedTools })
+            .select({
+              deniedTools: supervisorConfig.deniedTools,
+              cawcoTodos: supervisorConfig.cawcoTodos,
+            })
             .from(supervisorConfig)
             .where(eq(supervisorConfig.id, SUPERVISOR_CONFIG_ID))
             .get();
-          return row?.deniedTools ?? undefined;
+          return {
+            deniedTools: row?.deniedTools ?? undefined,
+            cawcoTodos: row?.cawcoTodos ?? false,
+          };
         })(),
       };
     },
@@ -5144,6 +5157,7 @@ const make = (path: string): DbShape => {
             model: row.model,
             apiKey: row.apiKey,
             deniedTools: row.deniedTools,
+            cawcoTodos: row.cawcoTodos,
             updatedAt: row.updatedAt,
           }
         : undefined;
@@ -5171,6 +5185,7 @@ const make = (path: string): DbShape => {
           config.deniedTools === undefined
             ? (stored?.deniedTools ?? null)
             : config.deniedTools,
+        cawcoTodos: config.cawcoTodos ?? stored?.cawcoTodos ?? false,
         updatedAt: new Date(),
       };
       db.insert(supervisorConfig)
@@ -5183,6 +5198,7 @@ const make = (path: string): DbShape => {
             model: values.model,
             apiKey: values.apiKey,
             deniedTools: values.deniedTools,
+            cawcoTodos: values.cawcoTodos,
             updatedAt: values.updatedAt,
           },
         })

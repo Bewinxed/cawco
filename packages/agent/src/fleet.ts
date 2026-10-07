@@ -54,6 +54,11 @@ import type {
   SkillFile,
 } from "@cawco/core";
 import { hookProblem, memoryDocProblem } from "@cawco/core";
+import {
+  convergeDeniedTools,
+  machineDenyList,
+  resolvedFleetDenials,
+} from "./denied-tools";
 import { expandHome } from "./fs";
 import { readMcpRuntime } from "./mcp-status";
 import { promptWrite } from "./prompt-writes";
@@ -153,10 +158,12 @@ interface ManagedMarketplace {
 }
 
 interface Sidecar {
+  /** The fleet's "CawCo's to-dos" choice, synced from `supervisor_config.cawco_todos`. */
+  cawcoTodos?: boolean;
   /**
    * The fleet's denied-tools list, synced from `supervisor_config.denied_tools`.
    * Absent from a sidecar written before this field existed, which is what has
-   * {@link resolvedDenyList} fall back to compiled constants.
+   * {@link resolvedFleetDenials} fall back to compiled constants.
    */
   deniedTools?: string[];
   /**
@@ -291,8 +298,9 @@ const readSidecar = async (): Promise<Sidecar> => {
     memoryDocs: stored?.memoryDocs ?? {},
     ...(stored?.memoryHook ? { memoryHook: stored.memoryHook } : {}),
     // A sidecar written before denied-tools syncing names none, which is what
-    // has resolvedDenyList fall back to the compiled constants.
+    // has resolvedFleetDenials fall back to the compiled constants.
     ...(stored?.deniedTools ? { deniedTools: stored.deniedTools } : {}),
+    ...(stored?.cawcoTodos ? { cawcoTodos: true } : {}),
     // A sidecar written before hooks existed manages none, which is the truth.
     hooks: stored?.hooks ?? {},
   };
@@ -2097,19 +2105,30 @@ const converge = async (config: FleetConfig): Promise<FleetSyncReport> => {
   // fleet that keeps none, and the machine gives back whatever cawco
   // registered before this daemon knew what that field meant.
   const hooks = await syncHooks(config.hooks ?? [], managed.hooks, hookStates);
+  // What the machine's own `claude` was denied for the fleet before this sync.
+  const deniedBefore = machineDenyList(await resolvedFleetDenials());
   await writeJson(SIDECAR, {
     mcp,
     ...installed,
     skills,
     // A hub that sends `deniedTools` has the column; one that does not predates
     // the migration, and the sidecar keeps whatever it already had (or nothing,
-    // which is what has resolvedDenyList fall back to compiled constants).
+    // which is what has resolvedFleetDenials fall back to compiled constants).
     ...deniedToolsForSidecar(config.deniedTools, managed.deniedTools),
+    // A hub that predates the flag sends none: the choice is off.
+    ...(config.cawcoTodos ? { cawcoTodos: true } : {}),
     ...(memory ? { memory } : {}),
     memoryDocs,
     ...(memoryHook ? { memoryHook } : {}),
     hooks,
   } satisfies Sidecar);
+  // The machine's own `claude` follows the fleet at once, not at the next
+  // daemon start: what the fleet no longer denies comes out of
+  // `permissions.deny`, what it now denies goes in.
+  const settings = await convergeDeniedTools(deniedBefore);
+  if (settings.state === "failed") {
+    console.warn(`[fleet] ~/.claude/settings.json: ${settings.detail}`);
+  }
 
   // What this machine now holds, so the next config can leave those bytes out.
   // Read from what was just written rather than from the desired set: a row

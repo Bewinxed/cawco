@@ -481,6 +481,13 @@ export interface FleetMemory {
 /** The whole desired state — what the hub sends a machine to converge on. */
 export interface FleetConfig {
   /**
+   * The fleet's "CawCo's to-dos" choice (§5.2). On, every session is denied
+   * its harness's own list and plan mode ({@link cawcoTodosDenied}), the
+   * machine's own `claude` too, and OpenCode's `plan` agent is disabled.
+   * Absent from a hub that predates it: off.
+   */
+  cawcoTodos?: boolean;
+  /**
    * Fleet-wide tool denials. Absent from a hub that predates them, which is
    * what has a daemon fall back to the compiled constants — the same four names
    * the migration seeds, so the two paths produce the same list.

@@ -1,21 +1,25 @@
 /**
- * The fleet's two onboarding choices (Projects spec §5.2, §5.6), both kept on
- * the fleet's denied-tools baseline (`supervisor_config.denied_tools`):
+ * The fleet's two onboarding choices (Projects spec §5.2, §5.6):
  *
  * - **delegates**: use CawCo's delegates instead of each harness's own
- *   subagents — deny Claude Code's `Task`/`Agent`, OpenCode's `task`.
- * - **todos**: use CawCo's to-dos instead of each harness's own list — deny
- *   Claude Code's `TaskCreate`/`TaskUpdate`/`TaskList`/`TaskGet`, OpenCode's
+ *   subagents — kept on the denied-tools baseline
+ *   (`supervisor_config.denied_tools`): Claude Code's `Task`/`Agent`,
+ *   OpenCode's `task`.
+ * - **todos**: use CawCo's to-dos instead of each harness's own list — its
+ *   own flag (`supervisor_config.cawco_todos`), never names in the baseline.
+ *   On, every session is denied at spawn Claude Code's
+ *   `TaskCreate`/`TaskUpdate`/`TaskList`/`TaskGet`, OpenCode's
  *   `todowrite`/`todoread`, and each one's built-in plan mode (Claude Code's
- *   `EnterPlanMode`/`ExitPlanMode`, OpenCode's `plan_enter`/`plan_exit`),
- *   which the session's spec replaces. pi has neither, so neither choice
- *   changes it.
+ *   `EnterPlanMode`/`ExitPlanMode`, OpenCode's `plan_enter`/`plan_exit`,
+ *   and its `plan` agent), which the session's spec replaces; a delegate
+ *   type can turn it on for its own sessions (`cawcoTodos`). pi has neither,
+ *   so neither choice changes it.
  *
- * The baseline is written in Claude Code's names, the list every daemon
- * already writes into `~/.claude/settings.json` (Claude Code refuses a rule
- * whose tool name is lowercase); the OpenCode adapter reads each name as its
- * OpenCode tool (`opencodeToolsFor`). The answer spells out what each harness
- * is denied for each choice.
+ * Names are Claude Code's, the list every daemon already writes into
+ * `~/.claude/settings.json` (Claude Code refuses a rule whose tool name is
+ * lowercase); the OpenCode adapter reads each name as its OpenCode tool
+ * (`opencodeToolsFor`). The answer spells out what each harness is denied
+ * for each choice.
  */
 import { NATIVE_TOOLS } from "@cawco/core";
 import { Elysia, t } from "elysia";
@@ -32,36 +36,29 @@ export const DEFAULT_DENIED_TOOLS: readonly string[] = [
   "Agent",
 ];
 
-export type FleetChoice = keyof typeof NATIVE_TOOLS;
-
 /** What `GET /api/fleet/choices` answers. */
 export interface FleetChoices {
   /** Use delegates instead of each harness's subagents. */
   delegates: boolean;
-  /** The baseline as stored, every choice and every other denial in it. */
+  /** The baseline as stored, the delegates choice and every other denial in it. */
   deniedTools: string[];
-  /** Use CawCo's to-dos instead of each harness's own list. */
+  /** Use CawCo's to-dos instead of each harness's own list and plan mode. */
   todos: boolean;
   /** What each choice denies, per harness. */
   tools: Record<"delegates" | "todos", Record<string, readonly string[]>>;
 }
 
-const KEYS: Record<"delegates" | "todos", FleetChoice> = {
-  delegates: "subagents",
-  todos: "todos",
-};
+/** What the fleet's choices are stored as. */
+export interface StoredChoices {
+  /** "CawCo's to-dos". */
+  cawcoTodos: boolean;
+  /** The baseline; null before anyone set it. */
+  deniedTools: string[] | null;
+}
 
-/** Whether the baseline carries every one of a choice's Claude names. */
-const isOn = (list: readonly string[], choice: FleetChoice): boolean =>
-  NATIVE_TOOLS[choice].claude.every((name) => list.includes(name));
-
-/** The baseline with a choice turned on or off; every other name stays where it was. */
-export const withChoice = (
-  list: readonly string[],
-  choice: FleetChoice,
-  on: boolean
-): string[] => {
-  const names = NATIVE_TOOLS[choice];
+/** The baseline with "delegates" turned on or off; every other name stays where it was. */
+const withDelegates = (list: readonly string[], on: boolean): string[] => {
+  const names = NATIVE_TOOLS.subagents;
   if (on) {
     return [...list, ...names.claude.filter((name) => !list.includes(name))];
   }
@@ -69,27 +66,30 @@ export const withChoice = (
   return list.filter((name) => !off.has(name));
 };
 
-export const readChoices = (stored: readonly string[] | null): FleetChoices => {
-  const list = [...(stored ?? DEFAULT_DENIED_TOOLS)];
+export const readChoices = ({
+  deniedTools,
+  cawcoTodos,
+}: StoredChoices): FleetChoices => {
+  const list = [...(deniedTools ?? DEFAULT_DENIED_TOOLS)];
   return {
-    delegates: isOn(list, KEYS.delegates),
-    todos: isOn(list, KEYS.todos),
+    delegates: NATIVE_TOOLS.subagents.claude.every((name) =>
+      list.includes(name)
+    ),
+    todos: cawcoTodos,
     deniedTools: list,
-    tools: {
-      delegates: NATIVE_TOOLS[KEYS.delegates],
-      todos: NATIVE_TOOLS[KEYS.todos],
-    },
+    tools: { delegates: NATIVE_TOOLS.subagents, todos: NATIVE_TOOLS.todos },
   };
 };
 
 /**
  * `GET /api/fleet/choices` and `PUT /api/fleet/choices`. A PUT names the
- * choices it changes; the new baseline is stored and every machine is sent
- * it (`synced`), so the next session on each starts under it.
+ * choices it changes; they are stored and every machine is sent them
+ * (`synced`), so the next session on each starts under them and each
+ * machine's own harness config follows at once.
  */
 export const fleetChoicesRoutes = (deps: {
-  read: () => string[] | null;
-  write: (deniedTools: string[]) => void;
+  read: () => StoredChoices;
+  write: (choices: { deniedTools?: string[]; cawcoTodos?: boolean }) => void;
   synced: () => void;
 }) =>
   new Elysia()
@@ -103,15 +103,19 @@ export const fleetChoicesRoutes = (deps: {
         }),
       },
       ({ body }) => {
-        let list: string[] = [...(deps.read() ?? DEFAULT_DENIED_TOOLS)];
-        for (const key of ["delegates", "todos"] as const) {
-          const on = body[key];
-          if (on !== undefined) {
-            list = withChoice(list, KEYS[key], on);
-          }
-        }
-        deps.write(list);
+        const stored = deps.read();
+        deps.write({
+          ...(body.delegates === undefined
+            ? {}
+            : {
+                deniedTools: withDelegates(
+                  stored.deniedTools ?? DEFAULT_DENIED_TOOLS,
+                  body.delegates
+                ),
+              }),
+          ...(body.todos === undefined ? {} : { cawcoTodos: body.todos }),
+        });
         deps.synced();
-        return readChoices(list);
+        return readChoices(deps.read());
       }
     );
