@@ -55,5 +55,9 @@ His design and proportions never change; image work only cleans, upscales or add
   crouches… This hold lasts until 00:01.083."
 - **Pick the length from the acting** on H3's grid (124, 141, 158, 175 … 362 frames), with about a second of end
   hold; not a fixed six seconds.
+- **Repair a span, keep the take.** When one part of a picked take fails (a jump past the safe line, an opening that
+  doesn't start on its status still), regenerate only that span on Backlot as a first-and-last-frame shot between the
+  good drawings either side, and splice it into the take with the film's cut, trim and extend. Reshoot the whole take
+  only when no span repair holds (owner: "backlot allows u to cut trim and extend and reshoot any part").
 - **Who does what:** prompts are written by Fable and stored as JSON; an Opus session shoots them with the Backlot
   MCP, and the owner picks from a phone review page of clips before anything is traced.
