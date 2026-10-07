@@ -1226,6 +1226,12 @@
     transition: --hl-show var(--dur-control) var(--ease-out);
   }
 
+  /* Less motion: a selection that moves cross-fades instead of gliding,
+     the old place out and the new one in, over --dur-fade. */
+  :where(.kit-highlight) :is(.kit-pill, .kit-pill-trail.kit-fade).kit-swap {
+    transition: --hl-show var(--dur-fade) var(--ease-out);
+  }
+
   /* ---- The transcript's columns. Every row kind lays out on these four
      edges, measured from the row's own inline start: the rail, the glyph
      cell 11px past it, the 16px cell, and the text column 7px past the

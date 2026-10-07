@@ -329,21 +329,57 @@ export function highlight(options: HighlightOptions) {
         ((row === ghostRow && same(box, ghostBox)) ||
           row.hasAttribute("data-ghosted"));
       if (fromGhost && pillBox) {
-        // Hover becomes selection: the old selection fades where it was.
-        trail.classList.remove("kit-fade");
-        place(trail, pillBox);
-        show(trail, true);
-        requestAnimationFrame(() => {
-          trail.classList.add("kit-fade");
-          show(trail, false);
-        });
+        fadeTrail(pillBox);
       }
-      const move = glide && !fromGhost && pillBox !== null && row !== pillRow;
+      movePill(box, glide && !fromGhost && pillBox !== null && row !== pillRow);
+      pillBox = box;
+      pillRow = row;
+    };
+    /** Hover becomes selection: the old selection fades where it was. */
+    const fadeTrail = (from: Box) => {
+      trail.classList.remove("kit-fade", "kit-swap");
+      place(trail, from);
+      show(trail, true);
+      requestAnimationFrame(() => {
+        // With less motion the fade is the whole move: --dur-fade (`swap`).
+        trail.classList.add("kit-fade");
+        trail.classList.toggle("kit-swap", reduced.matches);
+        show(trail, false);
+      });
+    };
+    /**
+     * The pill to its box: gliding when it moves to another row, or, with
+     * less motion, cross-fading there (`swap`); landing at once otherwise.
+     */
+    const movePill = (box: Box, move: boolean) => {
+      if (move && pillBox && reduced.matches) {
+        swap(pillBox, box);
+        return;
+      }
+      pill.classList.remove("kit-swap");
       setGlide(pill, move);
       place(pill, box);
       show(pill, true);
-      pillBox = box;
-      pillRow = row;
+    };
+    const reduced = matchMedia("(prefers-reduced-motion: reduce)");
+    /** A selection that moves under less motion: a cross-fade, never a glide. */
+    const swap = (from: Box, to: Box) => {
+      // Both land at once, transitions off: the trail where the selection
+      // was, the pill hidden where it is going.
+      trail.classList.remove("kit-fade", "kit-swap");
+      place(trail, from);
+      show(trail, true);
+      pill.classList.remove("kit-swap");
+      setGlide(pill, false);
+      place(pill, to);
+      show(pill, false);
+      // Then the fades, from the frame those were drawn in.
+      requestAnimationFrame(() => {
+        trail.classList.add("kit-fade", "kit-swap");
+        pill.classList.add("kit-swap");
+        show(trail, false);
+        show(pill, true);
+      });
     };
     const syncPill = (glide: boolean) => {
       if (!skipped) {

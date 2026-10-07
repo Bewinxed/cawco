@@ -1,11 +1,13 @@
 <script lang="ts">
   /**
    * New project's template cards (design §5): radio cards on the channel-card
-   * recipe, as many to a row as fit, one selection frame for the set that
-   * travels to the picked card (the leading edge at once, the trailing edge
-   * after --dur-ghost, each over --dur-fade on ease-in-out; with less motion
-   * it fades across), and Caw's ledge peek standing on the card that fits
-   * the prompt, the ledge line on its top edge, "Fits your prompt" on it.
+   * recipe (DESIGN.md, Channel cards: one selection frame for the set, 1px
+   * `brand-solid` over `surface-recess`), as many to a row as fit. The
+   * frame is the house highlight's selection pill (components/ui/highlight,
+   * the new-session dialog's list), drawn in that recipe: it glides to the
+   * picked card with the house timing and the cards share its hover ghost.
+   * Caw's ledge peek stands on the card that fits the prompt, the ledge line
+   * on its top edge, "Fits your prompt" on it.
    *
    * The page decides when the peek is there (one live Caw at a time: the
    * page's 80px Caw goes before he peeks); once there, he moves to whichever
@@ -13,6 +15,7 @@
    */
   import { RadioGroup } from "bits-ui";
   import { appear } from "#lib/cawco/motion/curves.svelte.js";
+  import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import Caw, { LEDGE_LINE } from "../home/Caw.svelte";
   import type { TemplateCard, TemplateName } from "./new-project";
 
@@ -51,13 +54,11 @@
     width: number;
   }
 
-  let gridBox = $state({ width: 0, height: 0 });
   let boxes = $state<Partial<Record<TemplateName, Box>>>({});
 
   /** Each card's box in the grid's own coordinates, read whenever the grid's size changes. */
   function measure(node: HTMLElement) {
     const read = () => {
-      gridBox = { width: node.clientWidth, height: node.clientHeight };
       const next: Partial<Record<TemplateName, Box>> = {};
       for (const card of node.querySelectorAll<HTMLElement>(
         "[data-template]"
@@ -76,38 +77,6 @@
     observer.observe(node);
     return () => observer.disconnect();
   }
-
-  const frame = $derived(selected ? boxes[selected] : undefined);
-  /**
-   * Which edges lead: the frame's edge on the side it travels to moves at
-   * once, the one it leaves behind after --dur-ghost.
-   */
-  let travel = $state("");
-  let before: Box | undefined;
-  $effect.pre(() => {
-    const now = frame;
-    const was = before;
-    before = now;
-    if (!(now && was)) {
-      travel = "";
-      return;
-    }
-    const lead = "0ms";
-    const trail = "var(--dur-ghost)";
-    const right = now.left > was.left;
-    const down = now.top > was.top;
-    const delays = {
-      left: right ? trail : lead,
-      right: right ? lead : trail,
-      top: down ? trail : lead,
-      bottom: down ? lead : trail,
-    };
-    travel = (["left", "right", "top", "bottom"] as const)
-      .map(
-        (edge) => `${edge} var(--dur-fade) var(--ease-in-out) ${delays[edge]}`
-      )
-      .join(", ");
-  });
 
   /** Where the peek stands: centred on the fitting card, the ledge line on its top edge. */
   const rise = $derived(peekSize * LEDGE_LINE);
@@ -154,20 +123,12 @@
     }}
     value={selected ?? ""}
     {@attach measure}
+    {@attach highlight({
+      rows: ".tcard",
+      selected: '.tcard[data-state="checked"]',
+      axis: "xy",
+    })}
   >
-    {#if frame}
-      <span
-        aria-hidden="true"
-        class="frame"
-        style:bottom="{gridBox.height - frame.top - frame.height}px"
-        style:left="{frame.left}px"
-        style:right="{gridBox.width - frame.left - frame.width}px"
-        style:top="{frame.top}px"
-        style:transition={travel || null}
-        transition:appear
-      ></span>
-    {/if}
-
     {#each cards as card (card.template)}
       <RadioGroup.Item
         class="tcard"
@@ -251,11 +212,6 @@
   .templates :global(.tcard:active) {
     background: var(--surface-fill);
   }
-  @media (hover: hover) {
-    .templates :global(.tcard:hover) {
-      background: var(--surface-hover);
-    }
-  }
   .templates :global(.tcard:focus-visible) {
     outline: var(--focus-ring-width) solid var(--focus-ring);
     outline-offset: -2px;
@@ -295,19 +251,14 @@
     font: var(--type-label);
     color: var(--brand-ink);
   }
-  /* The one frame for the set: drawn under the cards' text, it is what moves. */
-  .frame {
-    position: absolute;
-    z-index: 1;
+  /* The selection: the house pill (app.css .kit-pill) in the channel-card
+     recipe (DESIGN.md, Channel cards): 1px brand-solid over surface-recess,
+     at the card's own radius, which the pill takes from the card. */
+  .templates :global(.kit-pill),
+  .templates :global(.kit-pill-trail) {
+    box-sizing: border-box;
     border: 1px solid var(--brand-solid);
-    border-radius: var(--radius-md);
     background: var(--surface-recess);
-    pointer-events: none;
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .frame {
-      transition: none !important;
-    }
   }
   /* Caw stands on the fitting card, painted over the grid. */
   .peek {
