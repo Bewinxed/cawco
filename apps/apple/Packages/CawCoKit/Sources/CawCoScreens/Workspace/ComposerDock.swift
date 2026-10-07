@@ -27,6 +27,14 @@ final class ComposerDock {
     private(set) var inset: CGFloat = 0
     var onInset: (CGFloat) -> Void = { _ in }
 
+    /// How much of the host's width, from its leading edge, the active
+    /// conversation's transcript holds (composer-dock.svelte.ts
+    /// `transcriptShare`): 1, unless a side preview has the rest. The
+    /// composer stands over the transcript, never over the preview beside it.
+    var transcriptShare: CGFloat = 1 {
+        didSet { if abs(transcriptShare - oldValue) > 0.001 { host.setNeedsLayout() } }
+    }
+
     /// A swipe is carrying the conversation.
     var held: Bool {
         get { composer.held }
@@ -122,13 +130,18 @@ final class ComposerDock {
         // Composer.svelte `.composer`: past the 900pt line it is
         // `min(720px, 100% - 50px)` wide, centred in its group, a `space4` off
         // the foot; at or under it, edge to edge less `space3`, a `space2` off.
-        let room = host.bounds.inset(by: host.safeAreaInsets).width
+        // The group, here, is the transcript's share of it (PaneLeaf.svelte
+        // `.dock` at `transcriptShare` of the width).
+        let whole = host.bounds.inset(by: host.safeAreaInsets).width
+        let besides = whole * (1 - min(1, max(0, transcriptShare)))
+        let room = whole - besides
         if (host.window?.bounds.width ?? host.bounds.width) > 900, room > 0 {
             let side = max(Space.space3, (room - min(720, room - 50)) / 2)
             lead = side
             trail = -side
             foot = -Space.space4
         }
+        trail -= besides
         if #available(iOS 27.1, macCatalyst 27.1, *) {
             let safe = host.bounds.inset(by: host.safeAreaInsets)
             let keyboardTop = host.keyboardLayoutGuide.layoutFrame.minY

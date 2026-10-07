@@ -22,6 +22,8 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     private var sendButton: UIButton!
     private var selectButton: UIButton!
     private var closeButton: UIButton!
+    /// The header: on a phone, the drawer's handle (SessionViewController drags it).
+    private(set) var dragArea: UIView!
     private let well = UIView()
     private let cover = UIView()
     private let failure = KitAlert(tone: .destructive)
@@ -67,6 +69,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         head.spacing = Space.space1
         head.alignment = .center
         head.translatesAutoresizingMaskIntoConstraints = false
+        dragArea = head
         for button in [sendButton!, selectButton!, reload, closeButton!] {
             button.setContentHuggingPriority(.required, for: .horizontal)
             button.setContentCompressionResistancePriority(.required, for: .horizontal)

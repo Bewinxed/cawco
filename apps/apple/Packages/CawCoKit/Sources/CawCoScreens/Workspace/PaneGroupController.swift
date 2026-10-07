@@ -236,6 +236,7 @@ final class PaneGroupController: UIViewController, UIDropInteractionDelegate {
             }
         }
         dock.bind(panes.binding(for: to), direction: animated ? direction : 0, landing: landing)
+        shareChanged()
         scheduleBackground()
     }
 
@@ -279,8 +280,17 @@ final class PaneGroupController: UIViewController, UIDropInteractionDelegate {
         }
         singleFingerLists(controller.view)
         controller.didMove(toParent: self)
-        (controller as? SessionViewController)?.composerInset = dock.inset
+        if let session = controller as? SessionViewController {
+            session.composerInset = dock.inset
+            session.onTranscriptShare = { [weak self] in self?.shareChanged() }
+        }
         layoutPanes()
+    }
+
+    /// The composer stands over the active conversation's transcript, not
+    /// over a side preview beside it.
+    private func shareChanged() {
+        dock.transcriptShare = shownId.flatMap { panes.session($0)?.transcriptShare } ?? 1
     }
 
     private func unmount(_ id: String) {

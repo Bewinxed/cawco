@@ -12,7 +12,7 @@ import UniformTypeIdentifiers
 /// permission and question cards) and its group draws one composer over the
 /// active tab. The group says how far up the pane that composer stands
 /// (`composerInset`), and the transcript keeps its last line clear of it.
-final class SessionViewController: ObservedViewController, PHPickerViewControllerDelegate, UIDocumentPickerDelegate, UISheetPresentationControllerDelegate {
+final class SessionViewController: ObservedViewController, PHPickerViewControllerDelegate, UIDocumentPickerDelegate {
     let sessionId: String
     private let hub: HubConnection
     private let transcript: SessionTranscript
@@ -35,7 +35,11 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
     /// How far up from the pane's foot the group's composer (and the cards
     /// standing on it) reaches; the transcript's last line clears it.
     var composerInset: CGFloat = 0 {
-        didSet { if abs(composerInset - oldValue) > 0.5 { clearComposer() } }
+        didSet {
+            guard abs(composerInset - oldValue) > 0.5 else { return }
+            clearComposer()
+            placeDrawer()
+        }
     }
 
     init(hub: HubConnection, id: String) {
@@ -183,8 +187,8 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
     }
 
     /// The preview as the hub says it: open, beside the transcript on a
-    /// regular width (the web's split) or in a sheet on a compact one (its
-    /// phone sheet); closed, gone.
+    /// regular width (the web's split) or in a drawer above the composer on a
+    /// compact one (its phone sheet); closed, gone.
     private func syncPreview() {
         let frame = hub.previews.byInstance[sessionId]
         let key = frame?.state == .open ? frame.flatMap(PreviewKey.of) : nil
@@ -199,16 +203,92 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
         }
         let controller = preview ?? makePreview()
         let side = traitCollection.horizontalSizeClass == .regular
-        if side, controller.parent !== self {
-            if controller.presentingViewController != nil { controller.dismiss(animated: false) }
-            embed(controller)
-        } else if !side, controller.parent === self {
+        if controller.parent === self, drawer != !side {
             unembed(controller)
-            presentSheet(controller)
-        } else if !side, controller.presentingViewController == nil, view.window != nil {
-            presentSheet(controller)
+        }
+        if controller.parent !== self {
+            embed(controller, drawer: !side)
         }
         controller.show()
+    }
+
+    /// The preview stands as the phone's drawer (over the transcript, above
+    /// the composer) rather than beside the transcript.
+    private var drawer = false
+    /// The drawer is at the full height above the composer, not its middle.
+    private var drawerFull = false
+    private var drawerHeight: NSLayoutConstraint?
+    private var drawerFloor: NSLayoutConstraint?
+
+    /// The room above the composer the drawer may take.
+    private var drawerRoom: CGFloat {
+        max(0, view.bounds.height - view.safeAreaInsets.top - composerInset - Space.space2)
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        placeDrawer()
+        // The group's composer stands over this share of the pane: all of it,
+        // unless the preview stands beside the transcript.
+        var share: CGFloat = 1
+        if !drawer, let preview, preview.parent === self, view.bounds.width > 0 {
+            share = min(1, max(0, (preview.view.frame.minX - Space.space2) / view.bounds.width))
+        }
+        if abs(share - transcriptShare) > 0.001 {
+            transcriptShare = share
+            onTranscriptShare()
+        }
+    }
+
+    /// How much of the pane's width, from its leading edge, the transcript
+    /// holds (SessionPane.svelte's `transcriptShare`).
+    private(set) var transcriptShare: CGFloat = 1
+    var onTranscriptShare: () -> Void = {}
+
+    /// The drawer follows the composer (it grows with a draft, rises with
+    /// the keyboard) and the pane's height, at its middle or full height.
+    private func placeDrawer() {
+        guard drawer, let drawerHeight, let drawerFloor, !dragging else { return }
+        let height = drawerRoom * (drawerFull ? 1 : 0.6)
+        guard abs(drawerFloor.constant + composerInset) > 0.5 || abs(drawerHeight.constant - height) > 0.5 else { return }
+        drawerFloor.constant = -composerInset
+        drawerHeight.constant = height
+        view.layoutIfNeeded()
+    }
+
+    private var dragging = false
+    private var dragFrom: CGFloat = 0
+
+    /// The drawer's header follows the finger; let go, it snaps to the middle
+    /// or the full height, and below the middle by a quarter (or a flick
+    /// down) the preview closes, as Close does.
+    @objc private func dragDrawer(_ pan: UIPanGestureRecognizer) {
+        guard let drawerHeight else { return }
+        let room = drawerRoom
+        let followed = min(room, max(0, dragFrom - pan.translation(in: view).y))
+        switch pan.state {
+        case .began:
+            dragging = true
+            dragFrom = drawerHeight.constant
+        case .changed:
+            drawerHeight.constant = followed
+        case .ended, .cancelled:
+            dragging = false
+            let velocity = pan.velocity(in: view).y
+            // Where the finger let go, not the last height drawn: a quick
+            // drag may end before a single change was delivered.
+            let height = followed
+            let middle = room * 0.6
+            if velocity > 900 || height < middle * 0.75 {
+                preview?.close()
+                return
+            }
+            drawerFull = velocity < -500 || height > (middle + room) / 2
+            drawerHeight.constant = room * (drawerFull ? 1 : 0.6)
+            Motion.easeOut.animator(Motion.durPanel) { self.view.layoutIfNeeded() }.startAnimation()
+        default:
+            break
+        }
     }
 
     private func makePreview() -> PreviewController {
@@ -222,11 +302,37 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
     }
 
     /// The web's wide layout: the preview beside the transcript, its share of
-    /// the pane's width, never under its 320pt floor.
-    private func embed(_ controller: PreviewController) {
+    /// the pane's width, never under its 320pt floor. On a compact width the
+    /// phone's drawer (PreviewSheet): over the transcript, its floor the top
+    /// of the composer, so a picked element goes to a composer still there
+    /// to write and send in; 60% of the room above the composer, or all of it.
+    private func embed(_ controller: PreviewController, drawer: Bool) {
         addChild(controller)
         controller.view.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(controller.view)
+        controller.view.layer.cornerRadius = Radius.radiusLg
+        controller.view.layer.cornerCurve = .continuous
+        controller.view.boxShadow = Shadow.shadowDrawer
+        self.drawer = drawer
+        if drawer {
+            drawerFull = false
+            let height = controller.view.heightAnchor.constraint(equalToConstant: drawerRoom * 0.6)
+            let floor = controller.view.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -composerInset)
+            drawerHeight = height
+            drawerFloor = floor
+            NSLayoutConstraint.activate([
+                controller.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+                controller.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+                height, floor,
+            ])
+            controller.dragArea.addGestureRecognizer(UIPanGestureRecognizer(target: self, action: #selector(dragDrawer)))
+            controller.didMove(toParent: self)
+            if !UIAccessibility.isReduceMotionEnabled {
+                controller.view.transform = CGAffineTransform(translationX: 0, y: drawerRoom * 0.6)
+                Motion.easeOut.animator(Motion.durPanel) { controller.view.transform = .identity }.startAnimation()
+            }
+            return
+        }
         transcriptTrailing.isActive = false
         let share = controller.view.widthAnchor.constraint(equalTo: view.widthAnchor, multiplier: 0.45)
         share.priority = .defaultHigh
@@ -239,9 +345,6 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
             controller.view.widthAnchor.constraint(greaterThanOrEqualToConstant: 320),
             transcriptTrailing,
         ])
-        controller.view.layer.cornerRadius = Radius.radiusLg
-        controller.view.layer.cornerCurve = .continuous
-        controller.view.boxShadow = Shadow.shadowDrawer
         controller.didMove(toParent: self)
     }
 
@@ -249,54 +352,33 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
         controller.willMove(toParent: nil)
         controller.view.removeFromSuperview()
         controller.removeFromParent()
-        transcriptTrailing.isActive = false
-        transcriptTrailing = transcriptHost.view.trailingAnchor.constraint(equalTo: view.trailingAnchor)
-        transcriptTrailing.isActive = true
-    }
-
-    /// The phone's sheet: a middle detent at 60% of the screen and the full
-    /// one, the transcript usable behind it at the middle (the web's sheet is
-    /// not modal). A swipe down closes the preview, as Close does.
-    private func presentSheet(_ controller: PreviewController) {
-        guard view.window != nil, presentedViewController == nil else { return }
-        controller.modalPresentationStyle = .pageSheet
-        if let sheet = controller.sheetPresentationController {
-            let middle = UISheetPresentationController.Detent.Identifier("preview.middle")
-            sheet.detents = [.custom(identifier: middle) { $0.maximumDetentValue * 0.6 }, .large()]
-            sheet.selectedDetentIdentifier = middle
-            sheet.largestUndimmedDetentIdentifier = middle
-            sheet.prefersGrabberVisible = true
-            sheet.prefersScrollingExpandsWhenScrolledToEdge = false
-            sheet.delegate = self
+        drawerHeight = nil
+        drawerFloor = nil
+        if !drawer {
+            transcriptTrailing.isActive = false
+            transcriptTrailing = transcriptHost.view.trailingAnchor.constraint(equalTo: view.trailingAnchor)
+            transcriptTrailing.isActive = true
         }
-        present(controller, animated: true)
+        view.setNeedsLayout()
     }
 
-    /// Back to its middle detent (client.svelte.ts `revealPreview`).
+    /// Back to its middle height (client.svelte.ts `revealPreview`).
     private func reveal(_ controller: PreviewController) {
-        guard let sheet = controller.sheetPresentationController, controller.presentingViewController != nil else { return }
-        sheet.animateChanges { sheet.selectedDetentIdentifier = sheet.detents.first?.identifier }
+        guard drawer, controller.parent === self, let drawerHeight else { return }
+        drawerFull = false
+        drawerHeight.constant = drawerRoom * 0.6
+        Motion.easeOut.animator(Motion.durPanel) { self.view.layoutIfNeeded() }.startAnimation()
     }
 
     private func removePreview() {
         guard let controller = preview else { return }
         preview = nil
-        if controller.parent === self {
-            unembed(controller)
-        } else if controller.presentingViewController != nil {
-            controller.dismiss(animated: true)
-        }
+        if controller.parent === self { unembed(controller) }
     }
 
     override func traitCollectionDidChange(_ previous: UITraitCollection?) {
         super.traitCollectionDidChange(previous)
         if previous?.horizontalSizeClass != traitCollection.horizontalSizeClass { syncPreview() }
-    }
-
-    /// A swipe down took the sheet away: that closes the preview, as Close does.
-    func presentationControllerDidDismiss(_ presentation: UIPresentationController) {
-        guard let controller = presentation.presentedViewController as? PreviewController else { return }
-        controller.close()
     }
 
     /// The parked asks as the composer's cards, in arrival order: a card that
