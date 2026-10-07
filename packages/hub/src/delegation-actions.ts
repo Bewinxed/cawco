@@ -39,7 +39,7 @@ import type {
   WorkItemSubmission,
 } from "./db/schema";
 import { type KeepAliveRow, promptCacheExpiresAt } from "./keep-alive";
-import { resolveSpawnType } from "./work-items";
+import { neverStarted, resolveSpawnType } from "./work-items";
 
 const WS_SCHEME = /^ws/;
 const WS_PATH_SUFFIX = /\/ws$/;
@@ -1109,6 +1109,16 @@ export const handoffActions = ({
     message: string,
     urgent = false
   ): Promise<string> {
+    // A session that never started has no process and no conversation to
+    // wake, so it is in no roster: the caller hears why, not "no match".
+    const stillborn = instanceById(needleOf(target));
+    if (stillborn && neverStarted(stillborn)) {
+      throw new Error(
+        `${leafOf(stillborn.cwd)}#${stillborn.id.slice(0, 8)} never started, so nothing can read a message${
+          stillborn.lastError ? `: ${stillborn.lastError}` : "."
+        }`
+      );
+    }
     const { peers, asleep, own } = await roster(instanceId);
     const peer = urgent
       ? resolveDelegate(peers, target, instanceId, ledBy)

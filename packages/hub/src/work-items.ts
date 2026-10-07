@@ -111,6 +111,16 @@ const LIVE: ReadonlySet<WorkItemRow["state"]> = new Set([
   "running",
 ]);
 
+/**
+ * A session with no process and no conversation a revive could resume: it
+ * never started, so nothing will ever read a message sent to it.
+ */
+export const neverStarted = (row: InstanceRow): boolean =>
+  !row.sessionId &&
+  (row.status === "error" ||
+    row.status === "stopped" ||
+    row.status === "sleeping");
+
 /** Whether an item in `state` is live work: starting or running. */
 export const isLive = (state: WorkItemRow["state"]): boolean => LIVE.has(state);
 
@@ -2906,14 +2916,25 @@ export const createWorkItems = ({
     },
 
     /**
-     * A send {@link refusal} let through reached finished work: the item runs
-     * again, in the same session, and ends again the usual way — on a turn
-     * nothing answers — with a new report to its parent.
+     * A send {@link refusal} let through reached finished work and a live
+     * process has read it: the item runs again, in the same session, and ends
+     * again the usual way — on a turn nothing answers — with a new report to
+     * its parent. Called on the read, never on the send: a send nothing takes
+     * up (a revive that failed, a session that never started) leaves the item
+     * as it ended, with its reason.
      */
-    reopen(instanceId: string): void {
+    reopen(instanceId: string, sentAt: Date): void {
       const [row] = db.getInstancesByIds([instanceId]);
       const item = row ? itemOf(row) : undefined;
-      if (item && !LIVE.has(item.state)) {
+      // Only a send made to finished work reopens it: one accepted while the
+      // item was live and read after it ended was never addressed to a
+      // finished item.
+      if (
+        item &&
+        !LIVE.has(item.state) &&
+        item.endedAt !== null &&
+        item.endedAt.getTime() <= sentAt.getTime()
+      ) {
         update(item.id, {
           state: "running",
           result: null,

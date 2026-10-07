@@ -260,6 +260,7 @@ import { UsageCounter } from "./usage-count";
 import {
   createWorkItems,
   LEAF_DELEGATE_REFUSAL,
+  neverStarted,
   SESSION_TITLE_DESCRIPTION,
   titleProblem,
   WAIT_ITEM_LIMIT,
@@ -1925,6 +1926,13 @@ export const createServer = (
     if (row?.lastError === CLAUDE_CONVERSATION_GONE) {
       return CLAUDE_CONVERSATION_GONE;
     }
+    // No process, and no conversation a revive could resume: nothing will
+    // ever take the send up, so it fails now with why, and nothing reopens.
+    if (row && neverStarted(row)) {
+      return `This session never started, so nothing can read this message${
+        row.lastError ? `: ${row.lastError}` : "."
+      }`;
+    }
     return row ? workItems.refusal(row, origin) : "This session is gone.";
   };
   /**
@@ -2298,6 +2306,8 @@ export const createServer = (
     if (isKeepAlive(row.body)) {
       return changeSend(row, { state: "read" });
     }
+    // A live process took it up: finished work it was sent to runs again.
+    workItems.reopen(row.instanceId, row.acceptedAt);
     if (answering) {
       const waiting = unanswered.get(row.instanceId) ?? new Map();
       waiting.set(row.uuid, anchors.get(row.instanceId));
@@ -2312,6 +2322,49 @@ export const createServer = (
     const anchor = anchorFor(row.instanceId, row.uuid);
     unanswered.get(row.instanceId)?.delete(row.uuid);
     changeSend(row, { state: "failed", reason, anchor: anchor ?? null });
+    if (row.state === "pending") {
+      tellSender(row, reason);
+    }
+  };
+
+  /**
+   * Another session's message that no process ever took up (a revive that
+   * failed, a send the machine refused): that session hears why, the way it
+   * hears a report. A screen reads the record itself; CawCo's own notices
+   * tell nobody.
+   */
+  const tellSender = (row: SentMessageRow, reason: string): void => {
+    const { origin } = row.body as SentMessage;
+    const sender = origin.kind === "peer" ? origin.fromSession : undefined;
+    if (!sender || sender === row.instanceId) {
+      return;
+    }
+    const [from, to] = [
+      db.getInstancesByIds([sender])[0],
+      db.getInstancesByIds([row.instanceId])[0],
+    ];
+    if (!(from && to)) {
+      return;
+    }
+    deliverSend({
+      verb: "send",
+      machineId: from.machineId,
+      instanceId: from.id,
+      payload: {
+        instanceId: from.id,
+        message: {
+          type: "user",
+          uuid: crypto.randomUUID(),
+          message: {
+            role: "user",
+            content: `[CawCo] Your message to ${leaf(to.cwd)}#${to.id.slice(0, 8)} was not delivered: ${reason}`,
+          },
+          parent_tool_use_id: null,
+          origin: { kind: "system", name: "undelivered" },
+          shouldQuery: false,
+        },
+      },
+    });
   };
 
   /**
@@ -3357,8 +3410,10 @@ export const createServer = (
    * tab, device and late joiner draws the same row under the same id.
    *
    * Finished work is reached by the reader or its parent only: their send
-   * reopens the item and wakes the same session; anyone else's fails with
-   * the item's state ({@link inputRefusal}), and nothing wakes.
+   * wakes the same session, and the item reopens when that process reads it
+   * ({@link readSend}); anyone else's fails with the item's state
+   * ({@link inputRefusal}), and nothing wakes. A send nothing takes up fails
+   * with why, and its sender hears it ({@link failSend}).
    *
    * A uuid the hub already has a record for is the same send again (a tab
    * trying once more after its socket dropped): the machine is not handed it
@@ -3422,7 +3477,6 @@ export const createServer = (
       if (keepAlive) {
         db.updateKeepAlive(instanceId, { keepAliveTurn: message.uuid });
       } else {
-        workItems.reopen(instanceId);
         wakeForSend(agent, envelope.machineId, instanceId);
       }
       agent.send(envelope);
