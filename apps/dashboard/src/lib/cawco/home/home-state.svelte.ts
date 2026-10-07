@@ -12,7 +12,7 @@
  * - Recent: everything else that can be opened — every session none of the
  *   groups above shows, and the transcripts stored on the machines.
  */
-import type { NeutralSessionInfo, WorkflowRun } from "@cawco/core";
+import type { NeutralSessionInfo, ProjectCap, WorkflowRun } from "@cawco/core";
 import { archiveRefusal, machineLabel, questionsOf } from "@cawco/core";
 import {
   type BlockedRequest,
@@ -211,7 +211,18 @@ export interface RunItem {
   title: string;
 }
 
-export type NeedsItem = AskItem | RunItem;
+/** A project past its spend cap: once, until its period ends or the cap is raised. */
+export interface CapItem {
+  cap: ProjectCap;
+  href: string;
+  key: string;
+  kind: "cap";
+  place: string;
+  raisedAt: undefined;
+  title: string;
+}
+
+export type NeedsItem = AskItem | RunItem | CapItem;
 
 export interface RecentItem {
   at: number;
@@ -645,8 +656,23 @@ class Home {
         href: runHref(run.id),
         raisedAt: cawco.runAskRaisedAt(run.id),
       }));
+    const caps: NeedsItem[] = cawco.capped.flatMap((project) =>
+      project.cap
+        ? [
+            {
+              kind: "cap" as const,
+              key: `cap:${project.id}`,
+              cap: project.cap,
+              title: project.name,
+              place: "Budget reached",
+              href: `/usage?project=${encodeURIComponent(project.id)}`,
+              raisedAt: undefined,
+            },
+          ]
+        : []
+    );
     // Longest wait first; an ask the hub has not stamped sorts last.
-    return [...asks, ...runs].sort(
+    return [...asks, ...runs, ...caps].sort(
       (a, b) =>
         (a.raisedAt ?? Number.POSITIVE_INFINITY) -
         (b.raisedAt ?? Number.POSITIVE_INFINITY)

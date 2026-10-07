@@ -16,10 +16,15 @@
  * - `done` for two breaths after a task lands in a done stage;
  * - `idle` when nothing is due (no task to do, under way or waiting);
  * - else `ready`.
+ *
+ * Past the project's spend cap the head's line says so whenever Caw has
+ * nothing more pressing to say ("Budget reached · resets in 4h"), and his
+ * panel says it too (project-caps.ts in the hub).
  */
 import {
   type CawHarness,
   type CawView,
+  type ProjectCap,
   type ProjectSpend,
   questionsOf,
 } from "@cawco/core";
@@ -33,6 +38,7 @@ import {
 import type { CawStatus } from "../home/Caw.svelte";
 import { dur } from "../motion/curves.svelte";
 import type { TaskSummary } from "../project-tasks";
+import { resetLabel } from "../usage";
 
 /** What each harness Caw runs on is called. */
 export const CAW_HARNESS_LABEL: Record<CawHarness, string> = {
@@ -249,8 +255,32 @@ export class CawLead {
     return due ? "ready" : "idle";
   });
 
+  /** The project's spend cap while it holds the project back. */
+  readonly cap = $derived.by((): ProjectCap | null =>
+    cawco.capHolding(this.#projectId())
+  );
+
+  /** The cap's line: reached, and when the next period starts it clear. */
+  readonly capLine = $derived.by((): string | null =>
+    this.cap
+      ? `Budget reached · resets ${resetLabel(new Date(this.cap.resetsAt).toISOString(), cawco.now)}`
+      : null
+  );
+
   /** What Caw says on the head's line; null gives the line back to the place. */
   readonly words = $derived.by((): CawWords | null => {
+    const pressing =
+      this.status === "reconnecting" ||
+      this.status === "loading" ||
+      this.status === "needs-you" ||
+      this.status === "working";
+    if (this.capLine && !pressing) {
+      return { kind: "say", text: this.capLine };
+    }
+    return this.#said;
+  });
+
+  readonly #said = $derived.by((): CawWords | null => {
     switch (this.status) {
       case "reconnecting":
         return { kind: "say", text: "Reconnecting" };
@@ -297,11 +327,11 @@ export class CawLead {
       case "sleeping":
         return "Asleep · nothing wakes a model";
       case "working":
-        return `Awake · ${this.words?.text ?? "working"}`;
+        return `Awake · ${this.#said?.text ?? "working"}`;
       case "needs-you":
         return "Awake · waiting on you";
       case "trying":
-        return `Awake · ${this.words?.text}`;
+        return `Awake · ${this.#said?.text}`;
       case "done":
         return `Awake · ${this.landed} landed`;
       case "loading":

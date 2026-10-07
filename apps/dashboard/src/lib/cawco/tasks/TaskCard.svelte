@@ -20,7 +20,12 @@
   } from "#lib/cawco/project-tasks.js";
   import TaskRing from "#lib/cawco/TaskRing.svelte";
   import { Badge } from "#lib/components/ui/badge/index.js";
-  import { IconError, IconLock, IconWarningTriangle } from "#lib/icons.js";
+  import {
+    IconError,
+    IconLock,
+    IconNeedsYou,
+    IconWarningTriangle,
+  } from "#lib/icons.js";
   import { dragTask } from "./board-dnd.svelte.js";
 
   let {
@@ -107,7 +112,8 @@
           <span>{task.type ?? "attempt"} working</span>
         {/if}
       {:else if task.kind === "you"}
-        <span aria-hidden="true" class="dot attn"></span>
+        <!-- The design's ◆: the house's needs-you glyph, still. -->
+        <IconNeedsYou aria-hidden="true" class="attn" />
         <span>waiting on you</span>
       {:else if date}
         <span class="when num">{date}</span>
@@ -230,8 +236,11 @@
       animation: pulse var(--breath) var(--ease-in-out) infinite;
     }
   }
-  .dot.attn {
-    background: var(--status-attn-glyph);
+  .live-foot :global(.attn) {
+    flex: none;
+    inline-size: var(--icon-sm);
+    block-size: var(--icon-sm);
+    color: var(--status-attn-glyph);
   }
   .when {
     font-family: var(--font-mono);

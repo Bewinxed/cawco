@@ -13,9 +13,7 @@
   const extra = $derived(
     data && Array.isArray(fields)
       ? (fields as string[])
-          .map((path) =>
-            fieldText(data as unknown as Record<string, unknown>, path)
-          )
+          .map((path) => fieldText(data, path))
           .filter(Boolean)
       : []
   );

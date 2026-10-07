@@ -255,6 +255,15 @@ export interface ThreadUpsertFrame {
   thread: ThreadSummary;
 }
 
+export interface ProjectCapFrame {
+  /** Its project's cap as it stands now; null once it has none. */
+  cap: import("./threads").ProjectCap | null;
+  instanceId?: undefined;
+  /** Hub-originated: a project's spend against its cap moved, or the cap did. */
+  kind: "project.cap";
+  projectId: string;
+}
+
 export interface TasksChangedFrame {
   instanceId?: undefined;
   /**

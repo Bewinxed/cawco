@@ -4,13 +4,15 @@
  * ViewA2ui around its surface, so a component drawn by svelte-a2ui reaches
  * the same tasks, cards and sheet as the board.
  */
-import type { ViewData } from "@cawco/core";
+import type { ViewData, ViewTask } from "@cawco/core";
 import { getContext, setContext } from "svelte";
-import type {
-  Stage,
-  StageKind,
-  TaskSummary,
+import {
+  type Stage,
+  type StageKind,
+  stageLabel,
+  type TaskSummary,
 } from "#lib/cawco/project-tasks.js";
+import { dateTimeText } from "#lib/cawco/usage.js";
 
 export interface ViewContext {
   readonly data: ViewData;
@@ -37,8 +39,23 @@ export const taskOf = (
     ? (context.tasks.find((task) => task.id === id) ?? null)
     : null;
 
-/** A value at a path inside a task ("dates.updatedAt", "labels"), as words. */
-export function fieldText(task: Record<string, unknown>, path: string): string {
+/**
+ * A value at a path inside a task ("dates.updatedAt", "fields.post_at",
+ * "stage", "labels"), as words: a date in the app's own form ("17 Oct
+ * 08:49") whether the view names it under `dates.` or as the file's field
+ * that carries it, and a stage by its name.
+ */
+export function fieldText(task: ViewTask, path: string): string {
+  const [head, name] = path.split(".", 2);
+  if (path === "stage") {
+    return stageLabel(task.stage);
+  }
+  if ((head === "dates" || head === "fields") && name !== undefined) {
+    const at = task.dates[name];
+    if (at !== undefined) {
+      return dateTimeText(at);
+    }
+  }
   let value: unknown = task;
   for (const part of path.split(".")) {
     value =
@@ -51,15 +68,6 @@ export function fieldText(task: Record<string, unknown>, path: string): string {
   }
   if (Array.isArray(value)) {
     return value.join(", ");
-  }
-  if (typeof value === "number" && path.startsWith("dates.")) {
-    return new Date(value).toLocaleString(undefined, {
-      weekday: "short",
-      day: "numeric",
-      month: "short",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
   }
   return typeof value === "object" ? JSON.stringify(value) : String(value);
 }

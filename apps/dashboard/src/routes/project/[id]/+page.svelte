@@ -513,6 +513,8 @@
 
   // --- Ask Caw for a view -------------------------------------------------------
 
+  let stagesOpen = $state(false);
+  let stagesAnchor = $state<HTMLElement | null>(null);
   let askOpen = $state(false);
   let askAnchor = $state<HTMLElement | null>(null);
   function ask(anchor: HTMLElement) {
@@ -626,10 +628,7 @@
   });
   /** Something stands after the tabs: the hairline marks where it starts. */
   const trailing = $derived(
-    needsYou.length > 0 ||
-      stages?.source === "template" ||
-      (list !== null && !empty) ||
-      leadOn
+    needsYou.length > 0 || (list !== null && !empty) || leadOn
   );
   /** Caw stands over the empty board while the lead is on; elsewhere he sits in the head. */
   const standing = $derived(empty && leadOn && !current.startsWith("view:"));
@@ -669,28 +668,30 @@
     {#if view && bound}
       <div class="view-pane">
         {#if view.draft}
+          <!-- The tab already says `draft`; the bar says what it is and
+               offers the two answers, kept together on one row. -->
           <div class="draft-bar" out:crossOut>
-            <Badge variant="secondary">draft</Badge>
             <span class="draft-line"
               >Caw drafted the {viewLabel(view.name)} view</span
             >
-            <span class="grow"></span>
-            <Button
-              label="Keep"
-              onclick={() => keep(view.name)}
-              pending={keeping === view.name}
-              pendingLabel="Keeping…"
-              size="sm"
-              variant="outline"
-            />
-            <Button
-              label="Discard"
-              onclick={() => discard(view.name)}
-              pending={discarding === view.name}
-              pendingLabel="Discarding…"
-              size="sm"
-              variant="ghost"
-            />
+            <div class="draft-acts">
+              <Button
+                label="Keep"
+                onclick={() => keep(view.name)}
+                pending={keeping === view.name}
+                pendingLabel="Keeping…"
+                size="sm"
+                variant="outline"
+              />
+              <Button
+                label="Discard"
+                onclick={() => discard(view.name)}
+                pending={discarding === view.name}
+                pendingLabel="Discarding…"
+                size="sm"
+                variant="ghost"
+              />
+            </div>
           </div>
         {/if}
         <ViewA2ui
@@ -818,6 +819,12 @@
         choose("board");
         adding = true;
       }}
+      onstages={stages?.source === "template"
+        ? (anchor) => {
+            stagesAnchor = anchor;
+            stagesOpen = true;
+          }
+        : null}
       {project}
       seated={!standing}
     />
@@ -890,11 +897,6 @@
             <span class="num">{needsYou.length}</span>
           </button>
         {/if}
-        {#if stages?.source === "template"}
-          <span class="wide"
-            ><StagesControl onapplied={applied} {projectId} /></span
-          >
-        {/if}
         {#if list && !empty}
           <Button
             class="wide pressable"
@@ -927,7 +929,7 @@
 
     <div
       aria-busy={cawco.hub === "unreachable" || awaiting || reading}
-      class="pane"
+      class={["pane", current !== "board" && !reading && "kit-edge-fade-block"]}
       data-view={reading ? "board" : current}
     >
       {#if reading}
@@ -982,6 +984,13 @@
       />
     </Popover.Content>
   </Popover.Root>
+
+  <StagesControl
+    anchor={stagesAnchor}
+    onapplied={applied}
+    {projectId}
+    bind:open={stagesOpen}
+  />
 
   {#if stages}
     <TaskSheet
@@ -1042,19 +1051,20 @@
     align-items: center;
     gap: var(--space-2);
   }
-  /* Needs you, as the needs-you tile is: a real button, chosen in the
-     needs-you tint, never coral (that is where you act). */
+  /* Needs you, as the needs-you tile is: a real button in the needs-you
+     tint, never coral (that is where you act). Chosen, the filter is on:
+     its edge takes the attention glyph's ink. */
   .needs {
     display: inline-flex;
     align-items: center;
     gap: var(--space-2);
     block-size: var(--c-btn-h-sm);
     padding-inline: var(--space-3);
-    border: 1px solid var(--border-control);
+    border: 1px solid transparent;
     border-radius: var(--radius-md);
-    background: var(--surface-raised);
+    background: var(--status-attn-bg);
     font: var(--type-label);
-    color: var(--ink-strong);
+    color: var(--status-attn-ink);
     transition:
       background-color var(--dur-control) var(--ease-out),
       color var(--dur-control) var(--ease-out),
@@ -1066,21 +1076,10 @@
     color: var(--status-attn-glyph);
   }
   .needs .num {
-    color: var(--ink-muted);
-  }
-  @media (hover: hover) and (pointer: fine) {
-    .needs:hover {
-      background: var(--surface-hover);
-    }
+    color: var(--status-attn-ink);
   }
   .needs[aria-pressed="true"] {
-    border-color: transparent;
-    background: var(--status-attn-bg);
-    color: var(--status-attn-ink);
-  }
-  .needs[aria-pressed="true"] :global(svg),
-  .needs[aria-pressed="true"] .num {
-    color: var(--status-attn-ink);
+    border-color: var(--status-attn-glyph);
   }
   .pane {
     display: flex;
@@ -1149,11 +1148,15 @@
     box-shadow: inset 0 0 0 1px var(--border-hairline);
   }
   .draft-line {
+    flex: 1 1 14rem;
+    min-inline-size: 0;
     font: var(--type-label);
     color: var(--ink-strong);
   }
-  .grow {
-    flex: 1 1 auto;
+  .draft-acts {
+    display: flex;
+    flex: none;
+    gap: var(--space-2);
   }
   .state {
     max-inline-size: 72ch;

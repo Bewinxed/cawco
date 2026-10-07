@@ -142,9 +142,11 @@
   .column[data-kind="you"] .name {
     color: var(--brand-ink);
   }
+  /* A stage's kind is a word of stages.md, set as code. */
   .kind {
     flex: none;
-    font: var(--type-meta);
+    font: var(--type-code);
+    font-variant-ligatures: none;
     color: var(--ink-subtle);
     white-space: nowrap;
   }

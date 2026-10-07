@@ -20,6 +20,7 @@ import type {
   HarnessReport,
   HookEvent,
   HookHandler,
+  OnCap,
   OpenCodeGoLimits,
   PlanStep,
   Rule,
@@ -109,6 +110,7 @@ import {
   sessionIdentities,
   sessionPlans,
   skills,
+  spendSettings,
   supervisorConfig,
   supervisorEvents,
   type Tracker,
@@ -801,6 +803,8 @@ export interface DbShape {
     }[];
     todayUsd: number;
   };
+  /** Dollars every session of the project has cost since `since` (ms epoch). */
+  readonly projectSpentSince: (projectId: string, since: number) => number;
   /**
    * Projects whose remote is not known yet, each with a checkout on
    * `machineId` to read it from.
@@ -1135,6 +1139,11 @@ export interface DbShape {
   ) => void;
   /** Store (or replace) the OpenRouter key from a completed PKCE exchange. */
   readonly setOpenRouterConnection: (apiKey: string) => void;
+  /** The project's spend cap and what reaching it does (project-caps.ts). */
+  readonly setProjectCap: (
+    id: string,
+    change: Pick<ProjectRow, "capUsd" | "capPeriod" | "onCap">
+  ) => void;
   /** The project's Caw: on or off, its harness, and its lead session (caw.ts). */
   readonly setProjectCaw: (
     id: string,
@@ -1159,6 +1168,8 @@ export interface DbShape {
   readonly setProjectRemote: (id: string, remote: string) => void;
   /** Where the project's tasks live; tasks.ts refuses a tracker not built yet. */
   readonly setProjectTracker: (id: string, tracker: Tracker) => void;
+  /** What reaching a cap does where a project sets nothing. */
+  readonly setSpendOnCap: (onCap: OnCap) => void;
   /** Turn composer suggestions on or off. Only meaningful while connected. */
   readonly setSuggestWhileTyping: (enabled: boolean) => void;
   /** Closes it. An ask this hub never recorded is nothing to close. */
@@ -1188,6 +1199,8 @@ export interface DbShape {
    * to wake from.
    */
   readonly sleepInstance: (id: string) => boolean;
+  /** What reaching a cap does where a project sets nothing; its default before any is set. */
+  readonly spendOnCap: () => OnCap;
   readonly stageSessionIdentity: (instanceId: string, hash: string) => void;
   /**
    * The one-time reclassification a taxonomy change needs when the column is
@@ -4048,6 +4061,35 @@ const make = (path: string): DbShape => {
         db.update(projects).set(set).where(eq(projects.id, id)).run();
       }
     },
+    setProjectCap: (id, change) => {
+      db.update(projects).set(change).where(eq(projects.id, id)).run();
+    },
+    setSpendOnCap: (onCap) => {
+      db.insert(spendSettings)
+        .values({ id: "spend", onCap })
+        .onConflictDoUpdate({ target: spendSettings.id, set: { onCap } })
+        .run();
+    },
+    spendOnCap: () =>
+      db
+        .select({ onCap: spendSettings.onCap })
+        .from(spendSettings)
+        .where(eq(spendSettings.id, "spend"))
+        .get()?.onCap ?? "both",
+    projectSpentSince: (projectId, since) =>
+      db
+        .select({
+          usd: sql<number>`coalesce(sum(${usageBuckets.costUsd}), 0)`,
+        })
+        .from(usageBuckets)
+        .innerJoin(instances, eq(instances.sessionId, usageBuckets.sessionId))
+        .where(
+          and(
+            eq(instances.projectId, projectId),
+            sql`${usageBuckets.start} >= ${since}`
+          )
+        )
+        .get()?.usd ?? 0,
     addThreadSpend: (threadId, usd) => {
       db.update(projectThreads)
         .set({ spendUsd: sql`${projectThreads.spendUsd} + ${usd}` })

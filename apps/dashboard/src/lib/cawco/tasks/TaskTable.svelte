@@ -1,12 +1,13 @@
 <script lang="ts">
   /**
-   * The table view: the same tasks as a ledger — title, stage, labels, to-dos
-   * and when the file last changed — in stage order, then the board's own
-   * order inside a stage. The rows and columns are TanStack Table's (PRD
+   * The table view: the same tasks as a ledger — id, title, stage, labels,
+   * to-dos and when the file last changed — in stage order, then the board's
+   * own order inside a stage. Labels and To-dos stand only while some task
+   * has one: a column of blanks says nothing. The rows and columns are TanStack Table's (PRD
    * §5.2); the markup is the ledger's. The header is the ledger's band; a
    * row is the task's link, and opens its drawer in place. Under 640px each
-   * row becomes the board's two-line card: the title, then stage · to-dos ·
-   * age.
+   * row becomes the board's two-line card: the title, then id · stage ·
+   * to-dos · age.
    */
   import { createTable, tableFeatures } from "@tanstack/svelte-table";
   import {
@@ -50,8 +51,15 @@
   );
 
   const features = tableFeatures({});
+  const labelled = $derived(tasks.some((task) => task.labels.length > 0));
+  const planned = $derived(tasks.some((task) => task.todos.total > 0));
   /** The ledger's columns, by id; each cell is drawn below by its id. */
-  const columns = [
+  const columns = $derived([
+    {
+      id: "id",
+      header: "Id",
+      accessorFn: (task: TaskSummary) => task.id,
+    },
     {
       id: "title",
       header: "Task",
@@ -62,25 +70,35 @@
       header: "Stage",
       accessorFn: (task: TaskSummary) => task.stage,
     },
-    {
-      id: "labels",
-      header: "Labels",
-      accessorFn: (task: TaskSummary) => task.labels,
-    },
-    {
-      id: "todos",
-      header: "To-dos",
-      accessorFn: (task: TaskSummary) => task.todos,
-    },
+    ...(labelled
+      ? [
+          {
+            id: "labels",
+            header: "Labels",
+            accessorFn: (task: TaskSummary) => task.labels,
+          },
+        ]
+      : []),
+    ...(planned
+      ? [
+          {
+            id: "todos",
+            header: "To-dos",
+            accessorFn: (task: TaskSummary) => task.todos,
+          },
+        ]
+      : []),
     {
       id: "age",
       header: "Updated",
       accessorFn: (task: TaskSummary) => task.updatedAt,
     },
-  ];
+  ]);
   const table = createTable({
     features,
-    columns,
+    get columns() {
+      return columns;
+    },
     getRowId: (task: TaskSummary) => task.id,
     get data() {
       return rows;
@@ -131,13 +149,14 @@
         <Table.Row class="row" data-task={task.id}>
           {#each row.getAllCells() as cell (cell.id)}
             <Table.Cell class="col-{cell.column.id}">
-              {#if cell.column.id === "title"}
+              {#if cell.column.id === "id"}
+                <span class="id">{task.id}</span>
+              {:else if cell.column.id === "title"}
                 <a
                   class="title focus-inset"
                   href={hrefOf(task.id)}
                   onclick={(event) => open(event, task.id)}
                 >
-                  <span class="id">{task.id}</span>
                   <span class="name">{task.title}</span>
                 </a>
               {:else if cell.column.id === "stage"}
@@ -222,6 +241,9 @@
   .ledger :global(tr.row:last-child td) {
     border-block-end: 0;
   }
+  .ledger :global(.col-id) {
+    inline-size: 6.5rem;
+  }
   .ledger :global(.col-stage) {
     inline-size: 12rem;
   }
@@ -253,10 +275,7 @@
     content: "";
   }
   .id {
-    flex: none;
-    min-inline-size: 6ch;
-    font: var(--type-meta);
-    font-family: var(--font-mono);
+    font: var(--type-code);
     font-variant-ligatures: none;
     color: var(--ink-subtle);
   }
@@ -284,7 +303,10 @@
   .stage-name {
     font: var(--type-label);
   }
+  /* A stage's kind is a word of stages.md, set as code. */
   .kind {
+    font: var(--type-code);
+    font-variant-ligatures: none;
     color: var(--ink-subtle);
   }
   .stage[data-kind="you"] .kind {
@@ -328,7 +350,9 @@
       padding: 0;
       border: 0;
     }
+    /* The title on its own line first; id, stage, to-dos and age under it. */
     .ledger :global(tr.row td.col-title) {
+      grid-row: 1;
       grid-column: 1 / -1;
     }
     .ledger :global(tr.row td.col-labels) {

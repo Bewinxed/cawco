@@ -71,7 +71,6 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-3);
-    max-inline-size: 56rem;
   }
   .rows {
     display: flex;
@@ -104,8 +103,10 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+  /* A stage's kind is a word of stages.md, set as code. */
   .kind {
-    font: var(--type-meta);
+    font: var(--type-code);
+    font-variant-ligatures: none;
     color: var(--ink-subtle);
   }
   .track {

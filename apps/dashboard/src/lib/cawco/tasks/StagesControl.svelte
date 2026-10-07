@@ -6,6 +6,9 @@
    * commit, and the board takes its columns from it from then on. Tasks in a
    * stage the new set lacks keep their stage and stand in "Other stages"
    * until they are moved.
+   *
+   * It is asked for from the project head's ⋯ (Pick stages…), and opens
+   * from the control that asked (`anchor`).
    */
   import {
     applyTemplate,
@@ -15,22 +18,24 @@
     type StagesView,
     stageLabel,
   } from "#lib/cawco/project-tasks.js";
-  import { Button } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Popover from "#lib/components/ui/popover/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
-  import { IconLayers } from "#lib/icons.js";
 
   let {
     projectId,
     onapplied,
+    anchor,
+    open = $bindable(false),
   }: {
     projectId: string;
     onapplied: (stages: StagesView, stranded: string[]) => void;
+    /** What it opens from. */
+    anchor: HTMLElement | null;
+    open?: boolean;
   } = $props();
 
-  let open = $state(false);
   let templates = $state<StagesTemplateView[] | null>(null);
   let problem = $state<string | null>(null);
   let applying = $state<StagesTemplate | null>(null);
@@ -72,17 +77,12 @@
 </script>
 
 <Popover.Root bind:open>
-  <Popover.Trigger>
-    {#snippet child({
-      props,
-    })}
-      <Button {...props} class="pressable" variant="outline">
-        <IconLayers />
-        Pick stages
-      </Button>
-    {/snippet}
-  </Popover.Trigger>
-  <Popover.Content align="end" class="w-80 gap-[var(--space-2)]">
+  <Popover.Content
+    align="end"
+    class="w-80 gap-[var(--space-2)]"
+    customAnchor={anchor}
+    side="bottom"
+  >
     <div class="intro">
       <p class="lead">This project has no stages of its own yet</p>
       <p class="line">

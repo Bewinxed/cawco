@@ -95,7 +95,7 @@
   <NewTaskForm {oncreate} stage={newIn ?? ""} bind:open={adding} />
 {/snippet}
 
-<div class="board">
+<div class="board kit-edge-fade">
   {#each stages as stage (stage.name)}
     {@render column(
       stage.name,

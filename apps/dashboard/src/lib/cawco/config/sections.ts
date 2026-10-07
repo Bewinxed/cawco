@@ -3,6 +3,7 @@ import {
   IconBolt,
   IconBook,
   IconCpu,
+  IconDollar,
   IconDownload,
   IconHook,
   IconPhone,
@@ -35,6 +36,7 @@ export type SectionSlug =
   | "memory"
   | "models"
   | "phone"
+  | "spend"
   | "updates";
 
 export const SECTIONS: ConfigSection[] = [
@@ -109,6 +111,14 @@ export const SECTIONS: ConfigSection[] = [
     purpose: "OpenRouter and the supervisor server",
     icon: IconCpu,
     hue: "var(--hue-orange-500)",
+  },
+  {
+    slug: "spend",
+    group: "Hub",
+    label: "Spend",
+    purpose: "What a project's budget does once it is reached",
+    icon: IconDollar,
+    hue: "var(--hue-amber-500)",
   },
   {
     slug: "phone",

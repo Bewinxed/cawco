@@ -6,7 +6,9 @@
    * Deny and Approve as equal recessed peers (DESIGN.md, The Peer Rule): same
    * fill, size and type, told apart by glyph only. A question is answered in
    * its session, so it gets one Answer that opens it. "Always allow" never
-   * appears here.
+   * appears here. A project past its spend cap says what it spent against
+   * what, what that holds back, and when it resets; its button opens the
+   * project's spend.
    *
    * Nothing is optimistic: an answer is the same `permission.answer` command
    * the session's own card sends, and the card leaves when the hub has taken
@@ -23,6 +25,7 @@
     submitCommand,
   } from "../client.svelte";
   import { conversationHref } from "../links";
+  import { resetLabel, usd } from "../usage";
   import { choices } from "./choices.svelte";
   import { clock, type NeedsItem, span } from "./home-state.svelte";
   import { openPeek } from "./peek.svelte";
@@ -34,11 +37,20 @@
       ? conversationHref(item.instanceId, cawco.instanceIndex)
       : item.href
   );
-  const waited = $derived(
-    item.raisedAt === undefined
+  const waited = $derived.by(() => {
+    if (item.kind === "cap") {
+      return `resets ${resetLabel(new Date(item.cap.resetsAt).toISOString(), clock.now)}`;
+    }
+    return item.raisedAt === undefined
       ? "waiting"
-      : `waiting ${span(clock.now - item.raisedAt)}`
-  );
+      : `waiting ${span(clock.now - item.raisedAt)}`;
+  });
+  /** What a cap holds back, as the card's line says it. */
+  const HOLDS = {
+    pause: "No attempt starts",
+    quiet: "Caw is not woken",
+    both: "No attempt starts and Caw is not woken",
+  } as const;
   /** A permission answered on the card, under the `answer` choice. */
   const answerable = $derived(
     item.kind === "ask" && !item.isQuestion && choices.answer === "a"
@@ -112,9 +124,19 @@
   </div>
   <span class="place">{item.place}</span>
   <p class="ask">
-    {item.kind === "run" ? "Waiting on your answer" : item.ask}
+    {#if item.kind === "cap"}
+      {usd(item.cap.spentUsd)}
+      of {usd(item.cap.usd)} this {item.cap.period}.
+      {HOLDS[item.cap.onCap]}.
+    {:else}
+      {item.kind === "run" ? "Waiting on your answer" : item.ask}
+    {/if}
   </p>
-  {#if item.kind === "run"}
+  {#if item.kind === "cap"}
+    <div class="actions">
+      <Button {href} size="sm" variant="secondary">See spend</Button>
+    </div>
+  {:else if item.kind === "run"}
     <div class="actions">
       <Button {href} size="sm" variant="secondary">Open</Button>
     </div>

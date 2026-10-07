@@ -1,6 +1,7 @@
 import type {
   AuthState,
   BuildInfo,
+  CapPeriod,
   ClaudeLimits,
   ContinuationJob,
   DelegateAskStatus,
@@ -14,6 +15,7 @@ import type {
   HookHandler,
   LandsMode,
   NeutralUserMessage,
+  OnCap,
   OpenCodeGoLimits,
   RuleAction,
   RuleMatchKind,
@@ -313,6 +315,19 @@ export const projects = sqliteTable("projects", {
    * `overBudget`). Null: no default.
    */
   budget: text("budget", { mode: "json" }).$type<WorkBudget>(),
+  /**
+   * What the project may spend in a period (`cap_period`), in dollars: every
+   * session of it, its Caw and its attempts (project-caps.ts). Null: no cap,
+   * and no limit.
+   */
+  capUsd: real("cap_usd"),
+  /** The span the cap counts over, in the hub's zone; set with `cap_usd`. */
+  capPeriod: text("cap_period").$type<CapPeriod>(),
+  /**
+   * What reaching the cap does, the project's own; null inherits the fleet's
+   * (`spend_settings`).
+   */
+  onCap: text("on_cap").$type<OnCap>(),
   createdAt: timestamp("created_at")
     .notNull()
     .$defaultFn(() => new Date()),
@@ -1548,6 +1563,18 @@ export const supervisorConfig = sqliteTable("supervisor_config", {
   updatedAt: timestamp("updated_at")
     .notNull()
     .$defaultFn(() => new Date()),
+});
+
+/**
+ * The fleet's spend settings — one row, keyed `'spend'`, following the
+ * {@link supervisorConfig} single-row precedent: what reaching a project's
+ * spend cap does where the project sets nothing (project-caps.ts). No row
+ * reads as its defaults.
+ */
+export const spendSettings = sqliteTable("spend_settings", {
+  /** Always `'spend'`. */
+  id: text("id").primaryKey(),
+  onCap: text("on_cap").$type<OnCap>().notNull().default("both"),
 });
 
 /**

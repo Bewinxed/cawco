@@ -105,6 +105,44 @@ export interface ThreadRead {
 }
 
 /**
+ * What reaching a project's spend cap does (Projects spec §5.3): `pause`
+ * starts no new attempts at its tasks, `quiet` books what would wake its Caw
+ * without a turn, `both` does both. The fleet has a default (Configure,
+ * Spend); a project may set its own.
+ */
+export type OnCap = "pause" | "quiet" | "both";
+
+/** The span a project's cap counts over, in the hub's own zone. */
+export type CapPeriod = "day" | "month";
+
+/**
+ * A project's spend cap as it stands now: what the period has spent
+ * against it, and what reaching it does. Spend is every session of the
+ * project's (its Caw and its attempts) since the period began.
+ */
+export interface ProjectCap {
+  /** `onCap` is the fleet default, not the project's own. */
+  inherited: boolean;
+  /** What reaching it does: the project's own, else the fleet's. */
+  onCap: OnCap;
+  period: CapPeriod;
+  /** Spent at or past the cap. Read with `resetsAt`: past it, the cap is not reached. */
+  reached: boolean;
+  /** When the next period begins, ms epoch; the cap counts from zero then. */
+  resetsAt: number;
+  spentUsd: number;
+  /** When this period began, ms epoch. */
+  startsAt: number;
+  usd: number;
+}
+
+/** The cap holds back what it says now: reached, and its period still running. */
+export const capHolds = (
+  cap: ProjectCap | null | undefined,
+  now: number
+): boolean => cap?.reached === true && now < cap.resetsAt;
+
+/**
  * What a project has spent, as `GET /api/projects/:id/spend` answers it: the
  * usage its sessions' machines reported, in dollars, read now. Days and
  * months are the hub's own (its zone, as every "today" CawCo shows).
@@ -126,8 +164,12 @@ export interface ProjectSpend {
   }[];
   /** What an attempt may spend where its task says nothing; null: no limit. */
   budget: { minutes?: number; turns?: number; usd?: number } | null;
+  /** The project's spend cap; null: it has none, and no limit. */
+  cap: ProjectCap | null;
   /** The project's Caw (lead) sessions alone. */
   caw: { monthUsd: number; todayUsd: number };
+  /** What reaching a cap does when the project sets nothing: the fleet's default. */
+  fleetOnCap: OnCap;
   /** The first of this month, ms epoch. */
   monthStart: number;
   monthUsd: number;

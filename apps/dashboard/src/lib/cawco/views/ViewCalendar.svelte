@@ -179,15 +179,31 @@
     font: var(--type-meta);
     color: var(--ink-muted);
   }
-  /* A chip: 24px, the title in the label role. */
+  /* A chip: as tall as the library makes its slot (a task is a half-hour
+     event, one slot), the time and title in the label role on one line,
+     the title cut short with an ellipsis where the slot is narrow. */
   .view-calendar :global(.ec-event.chip) {
-    min-block-size: 24px;
     padding: 0 var(--space-2);
     align-items: center;
+    overflow: hidden;
     border-radius: var(--radius-xs);
     font: var(--type-label);
+    line-height: 1;
     cursor: pointer;
     box-shadow: none;
+  }
+  .view-calendar :global(.ec-time-grid .ec-event.chip .ec-event-body) {
+    flex-direction: row;
+    align-items: center;
+    min-inline-size: 0;
+  }
+  .view-calendar :global(.ec-event.chip .ec-event-time) {
+    margin: 0;
+  }
+  .view-calendar :global(.ec-event.chip .ec-event-title) {
+    min-inline-size: 0;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .view-calendar :global(.ec-event.chip-set) {
     background: var(--surface-raised);

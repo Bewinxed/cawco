@@ -43,6 +43,13 @@
     lead.holds || (lead.status === "working" && !cawLoop.on)
   );
 
+  /**
+   * The panel was opened by the pointer (a press or a rest). Closing it
+   * gives focus back to Caw without the focus ring: a ring is for a reader
+   * on the keyboard, and one left on him at rest reads as a state he is in.
+   */
+  let byPointer = false;
+
   function close() {
     clearTimeout(timer);
     open = false;
@@ -54,6 +61,7 @@
     }
     clearTimeout(timer);
     timer = setTimeout(() => {
+      byPointer = true;
       open = true;
     }, 350);
   }
@@ -63,12 +71,14 @@
       timer = setTimeout(close, 250);
     }
   }
-  function press() {
+  function press(event: MouseEvent) {
     clearTimeout(timer);
     if (open && pinned) {
       close();
       return;
     }
+    // A click from Enter or Space has no pointer behind it (detail 0).
+    byPointer = event.detail > 0;
     open = true;
     pinned = true;
   }
@@ -123,6 +133,12 @@
       class="caw-pop"
       collisionPadding={12}
       customAnchor={anchor}
+      onCloseAutoFocus={(event) => {
+        if (byPointer) {
+          event.preventDefault();
+          anchor?.focus({ focusVisible: false } as FocusOptions);
+        }
+      }}
       onfocusin={() => {
         clearTimeout(timer);
         pinned = true;
@@ -147,7 +163,7 @@
       onpointerenter={() => clearTimeout(timer)}
       onpointerleave={leave}
       side="bottom"
-      sideOffset={6}
+      sideOffset={4}
       trapFocus={pinned}
     >
       <CawPanel {lead} {projectId} {projectName} />

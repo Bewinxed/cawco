@@ -26,10 +26,12 @@ import type {
   ModelInfo,
   NeutralSessionInfo,
   NeutralStatus,
+  OnCap,
   OpenCodeGoLimits,
   PermissionMode,
   PermissionResult,
   PermissionUpdate,
+  ProjectCap,
   ProjectOfferSummary,
   ProjectSpend,
   ProjectView,
@@ -67,6 +69,7 @@ import type {
 import {
   CAWCO_SCRATCH_TAG,
   CONTROL_SUPPORTED_COMMANDS,
+  capHolds,
   classifyCommand,
   isEffortLevel,
   RESOLVE_PERMISSION,
@@ -209,6 +212,8 @@ export interface ProjectPlace {
  * are its primary place; `places` holds every place, that one first.
  */
 export interface ProjectRow {
+  /** Its spend cap as it stands, kept by `project.cap` frames; null: none. */
+  cap?: ProjectCap | null;
   createdAt: string;
   cwd: string;
   id: string;
@@ -217,6 +222,17 @@ export interface ProjectRow {
   places: ProjectPlace[];
   /** The repository its checkouts are of, `host/owner/repo`; null when unknown. */
   remote: string | null;
+}
+
+/**
+ * The minute, for what turns on a clock: a cap stops holding when its period
+ * ends, with nothing said by the hub (project-caps.ts reads it the same way).
+ */
+const minute = $state({ now: Date.now() });
+if (browser) {
+  setInterval(() => {
+    minute.now = Date.now();
+  }, 30_000);
 }
 
 /** Only a session the hub can still reach is live; the rest is history. */
@@ -2353,6 +2369,14 @@ function handleFrame(frame: FramePayload): void {
 
   if (frame.kind === "thread.message") {
     adoptThreadMessage(frame.threadId, frame.message);
+    return;
+  }
+
+  if (frame.kind === "project.cap") {
+    const project = state.projects.find((row) => row.id === frame.projectId);
+    if (project) {
+      project.cap = frame.cap;
+    }
     return;
   }
 
@@ -4771,6 +4795,27 @@ export const projectSpend = (projectId: string): Promise<ProjectSpend> =>
   askHub(`${projectPath(projectId)}/spend`);
 
 /** Sets what an attempt at the project's tasks may spend; null clears it. */
+/**
+ * Sets the project's spend cap — dollars a day or a month, or none — and what
+ * reaching it does, its own or (null) the fleet's.
+ */
+export const setProjectCap = (
+  projectId: string,
+  change: {
+    onCap: OnCap | null;
+    period: "day" | "month" | null;
+    usd: number | null;
+  }
+): Promise<{ cap: ProjectCap | null }> =>
+  askHub(`${projectPath(projectId)}/cap`, json("PUT", change));
+
+/** What reaching a project's cap does where the project sets nothing. */
+export const spendSettings = (): Promise<{ onCap: OnCap }> =>
+  askHub("/api/spend-settings");
+
+export const setSpendSettings = (onCap: OnCap): Promise<{ onCap: OnCap }> =>
+  askHub("/api/spend-settings", json("PUT", { onCap }));
+
 export const setProjectBudget = (
   projectId: string,
   budget: ProjectSpend["budget"]
@@ -6049,6 +6094,22 @@ export const cawco = {
     state.projects.filter((project) => placedOn(project, machineId)),
   project: (id: string): ProjectRow | null =>
     state.projects.find((project) => project.id === id) ?? null,
+  /** The project's spend cap while it holds the project back now; null otherwise. */
+  capHolding: (id: string): ProjectCap | null => {
+    const cap =
+      state.projects.find((project) => project.id === id)?.cap ?? null;
+    return capHolds(cap, minute.now) ? cap : null;
+  },
+  /** The projects whose spend cap holds them back now. */
+  get capped(): ProjectRow[] {
+    return state.projects.filter((project) =>
+      capHolds(project.cap, minute.now)
+    );
+  },
+  /** The minute, for what reads a clock (ages, resets). */
+  get now(): number {
+    return minute.now;
+  },
   /** A project's threads with its Caw, newest first, live. */
   threadsOf,
   /** A thread's messages, oldest first, once {@link readThread} read it; null before. */

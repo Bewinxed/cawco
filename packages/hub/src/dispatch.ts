@@ -101,6 +101,12 @@ export interface DispatchDeps {
   readonly lead: (projectId: string) => Promise<InstanceRow | undefined>;
   /** Whether a machine is connected now. */
   readonly online: (machineId: string) => boolean;
+  /**
+   * Why the project's attempts are held back by its spend cap now, or
+   * nothing (project-caps.ts `pauses`): the dispatcher then starts none, as
+   * for a paused project.
+   */
+  readonly pauses: (projectId: string) => string | undefined;
   /** Files and spawns a work item (work-items.ts `start`). */
   readonly start: (request: WorkItemRequest) => Promise<WorkItemStart>;
   readonly tasks: Tasks;
@@ -469,6 +475,7 @@ export const createDispatcher = ({
   db,
   lead,
   online,
+  pauses,
   start,
   tasks,
   typeLands,
@@ -838,7 +845,7 @@ export const createDispatcher = ({
       return;
     }
     const view = await viewOf(project);
-    if (view.paused || view.frontier.length === 0) {
+    if (view.paused || view.frontier.length === 0 || pauses(projectId)) {
       return;
     }
     const reportsTo = await leadOf(project);

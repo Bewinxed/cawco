@@ -42,10 +42,13 @@
 
 <div class="caw-panel">
   <p class="head">Caw · lead of {projectName}</p>
-  <div class="row">
+  <div class="row status">
     <CawFace size={18} status={on ? lead.status : "sleeping"} />
     <span class="sentence">{lead.sentence}</span>
   </div>
+  {#if lead.capLine}
+    <p class="capped">{lead.capLine}</p>
+  {/if}
   <!-- biome-ignore lint/a11y/noLabelWithoutControl: the Switch component renders a native button the label names; Biome can't see through the component boundary -->
   <label class="row switch">
     <!-- The hub's answer is the switch's state: a flip asks it, and a
@@ -144,9 +147,9 @@
   .caw-panel {
     display: flex;
     flex-direction: column;
-    gap: var(--space-3);
+    gap: var(--space-2);
     inline-size: min(22rem, calc(100vw - 2 * var(--space-5)));
-    padding: var(--space-4);
+    padding: var(--space-3) var(--space-4) var(--space-4);
     font: var(--type-label);
     color: var(--ink-strong);
   }
@@ -160,6 +163,11 @@
     align-items: center;
     gap: var(--space-2);
     min-block-size: var(--c-btn-h-sm);
+  }
+  /* The status line and the switch are read, not worked: a line's height. */
+  .row.status,
+  .row.switch {
+    min-block-size: auto;
   }
   .switch {
     cursor: pointer;
@@ -185,6 +193,11 @@
   }
   .actions {
     justify-content: flex-start;
+  }
+  /* Past the cap: said in the needs-you ink, a fact about him, not an error. */
+  .capped {
+    font: var(--type-meta);
+    color: var(--status-attn-ink);
   }
   .refused {
     font: var(--type-meta);

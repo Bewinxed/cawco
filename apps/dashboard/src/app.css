@@ -21,8 +21,9 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* The edge fades of a scrolling tab track (TabsList), registered so the
-   scroll-driven animation can interpolate them as lengths. */
+/* The edge fades of a scroller (.kit-edge-fade: the tab track, the board,
+   a view's pane), registered so the scroll-driven animation can
+   interpolate them as lengths. */
 @property --fade-start {
   syntax: "<length>";
   inherits: false;
@@ -416,6 +417,51 @@
   /* The one skeleton (ui/skeleton): a --surface-fill block standing at the
      size of what it waits for. One band of the raised surface crosses it
      every 1.2s, transform only; without motion it sits still. */
+  /* A scroller whose content runs past an edge fades that edge out — only
+     that edge, only while there is more to scroll to. The fade lengths ride
+     the scroller's own scroll: at the start nothing is behind, so the
+     leading edge is sharp; at the end nothing is ahead. A scroller that
+     does not overflow has no scroll timeline, so neither edge fades.
+     `-block` is the same down the page. The tabs track, the board and a
+     view's pane share it. */
+  .kit-edge-fade {
+    mask-image: linear-gradient(
+      to right,
+      transparent,
+      #000 var(--fade-start),
+      #000 calc(100% - var(--fade-end)),
+      transparent
+    );
+    animation: kit-edge-fade linear both;
+    animation-timeline: scroll(self inline);
+  }
+  .kit-edge-fade-block {
+    mask-image: linear-gradient(
+      to bottom,
+      transparent,
+      #000 var(--fade-start),
+      #000 calc(100% - var(--fade-end)),
+      transparent
+    );
+    animation: kit-edge-fade linear both;
+    animation-timeline: scroll(self block);
+  }
+  @keyframes kit-edge-fade {
+    0% {
+      --fade-start: 0px;
+      --fade-end: 40px;
+    }
+    6%,
+    94% {
+      --fade-start: 40px;
+      --fade-end: 40px;
+    }
+    100% {
+      --fade-start: 40px;
+      --fade-end: 0px;
+    }
+  }
+
   .kit-skeleton {
     position: relative;
     overflow: hidden;

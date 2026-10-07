@@ -329,7 +329,11 @@
 </script>
 
 <div
-  class={cn("ff-tabs-list", scrollable && "scrollable", className)}
+  class={cn(
+    "ff-tabs-list",
+    scrollable && "scrollable kit-edge-fade",
+    className
+  )}
   data-direction={direction}
   data-leap={leap ? "" : undefined}
   data-ride={ride ? "" : undefined}
@@ -396,33 +400,28 @@
 
     /* A scrolling track hugs its items and gives way — never grows —
        when the row it sits in is narrower than they are. */
-    /* Where tabs run past an edge, that edge fades them out — and only that
-       edge, only while there is more to scroll to. The fade lengths ride
-       the track's own scroll: at the start there is nothing behind, so the
-       leading edge is sharp; at the end, nothing ahead. A track that does
-       not overflow has no scroll timeline, the animation never applies,
-       and neither edge fades. */
+    /* Where tabs run past an edge, that edge fades them out (app.css
+       .kit-edge-fade, on the track). */
     &.scrollable {
       flex: 0 1 auto;
       min-inline-size: 0;
       max-inline-size: 100%;
       overflow-x: auto;
       overflow-y: hidden;
-      mask-image: linear-gradient(
-        to right,
-        transparent,
-        #000 var(--fade-start),
-        #000 calc(100% - var(--fade-end)),
-        transparent
-      );
-      animation: track-edge-fade linear both;
-      animation-timeline: scroll(self inline);
       scrollbar-width: none;
 
       &::-webkit-scrollbar {
         display: none;
       }
     }
+  }
+  /* A segmented track that scrolls keeps every label whole and scrolls past
+     the edge (its fades say there is more); folder tabs shrink toward an
+     ellipsis the way a browser's tabs do, so they keep the item's shrink. */
+  :global([data-variant="segmented"])
+    .ff-tabs-list.scrollable
+    > :global(.ff-tab) {
+    flex-shrink: 0;
   }
   :global([data-size="compact"]) .ff-tabs-list {
     --pad: 2px;
@@ -537,20 +536,5 @@
   }
   :global([data-variant="folder"]) .ring {
     border-radius: calc(var(--radius) + 2px) calc(var(--radius) + 2px) 0 0;
-  }
-  @keyframes track-edge-fade {
-    0% {
-      --fade-start: 0px;
-      --fade-end: 40px;
-    }
-    6%,
-    94% {
-      --fade-start: 40px;
-      --fade-end: 40px;
-    }
-    100% {
-      --fade-start: 40px;
-      --fade-end: 0px;
-    }
   }
 </style>

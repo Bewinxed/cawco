@@ -434,6 +434,11 @@ export interface WorkItemDeps {
    */
   readonly itemEnded?: (item: WorkItemRow) => void;
   /** Tells every dashboard an item moved: its parent's delegate tray follows it. */
+  /**
+   * Why an attempt at one of the project's tasks may not start now: its spend
+   * cap holds (project-caps.ts `pauses`); nothing when it may.
+   */
+  readonly pauses: (projectId: string) => string | undefined;
   readonly publish: (item: WorkItemSummary) => void;
   /** Hands a report to the parent of the item's session. */
   readonly report: (
@@ -975,6 +980,7 @@ export const createWorkItems = ({
   db,
   end,
   itemEnded,
+  pauses,
   publish,
   report,
   inTurn,
@@ -1885,6 +1891,11 @@ export const createWorkItems = ({
     const problem = requestProblem(request);
     if (problem) {
       throw new WorkItemRefusal(400, problem);
+    }
+    // An attempt spends the project's money: none starts past its cap.
+    const capped = request.task ? pauses(request.task.projectId) : undefined;
+    if (capped) {
+      throw new WorkItemRefusal(409, capped);
     }
     const projectId = request.task?.projectId ?? parent.projectId;
     if (request.outputs && !projectId) {

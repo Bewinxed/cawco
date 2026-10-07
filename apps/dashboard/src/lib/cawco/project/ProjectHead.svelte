@@ -6,8 +6,9 @@
    * places` when it has more, which lists them — and Caw's words take its
    * place only while he has something to say: what his session is doing,
    * his question as a link to its thread, a task that landed. Then New
-   * session, Side quest, and `⋯` holding Spend and Forget (and, under
-   * 640px, New task and Ask Caw for a view).
+   * session, Side quest, and `⋯` holding Pick stages (while the code
+   * stages stand in), Spend and Forget (and, under 640px, New task and Ask
+   * Caw for a view).
    *
    * With the board empty and the lead on, Caw stands over the empty board
    * instead (picks.md), and his slot here closes.
@@ -49,6 +50,7 @@
     seated,
     onnewtask,
     onask,
+    onstages,
   }: {
     project: ProjectRow;
     machine: Machine | null;
@@ -58,6 +60,8 @@
     onnewtask: () => void;
     /** Ask Caw for a view, from the menu; null while the lead is off. */
     onask: ((anchor: HTMLElement) => void) | null;
+    /** Pick the project's stages, from the menu; null once it has its own. */
+    onstages: ((anchor: HTMLElement) => void) | null;
   } = $props();
 
   const narrow = new MediaQuery("(max-width: 639px)");
@@ -297,6 +301,16 @@
             >
           {/if}
           <DropdownMenu.Separator />
+        {/if}
+        {#if onstages}
+          <DropdownMenu.Item
+            onSelect={() => {
+              if (more) {
+                onstages?.(more);
+              }
+            }}
+            >Pick stages…</DropdownMenu.Item
+          >
         {/if}
         <DropdownMenu.Item
           onSelect={() =>

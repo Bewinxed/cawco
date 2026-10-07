@@ -216,6 +216,7 @@ import {
   DECISION_PAGE,
   previewChoicesRoutes,
 } from "./preview-choices";
+import { createCaps } from "./project-caps";
 import {
   makeProjectDelegateTypes,
   projectDelegateTypesRoutes,
@@ -7527,8 +7528,15 @@ export const createServer = (
     return { project: created, place, placeAdded: false, joined: false };
   };
 
+  // Each project's spend cap: what holds its attempts and its Caw back (project-caps.ts).
+  const caps = createCaps({
+    db,
+    publish: (payload) =>
+      registry.broadcast({ verb: "frames", machineId: "hub", payload }),
+  });
   const workItems = createWorkItems({
     db,
+    pauses: (projectId) => caps.pauses(projectId),
     end: async (instanceId) => {
       endSession(instanceId, "stop");
       await waitForEnd(instanceId);
@@ -7785,6 +7793,7 @@ export const createServer = (
   // Each project's Caw: its lead session, woken by events only (caw.ts).
   const caw = createCaw({
     asks: () => pending.list(),
+    caps,
     db,
     online: (machineId) => Boolean(registry.agent(machineId)),
     // Thread rows and messages reach every dashboard on the ledger, as sessions do.
@@ -7804,6 +7813,7 @@ export const createServer = (
     tasks,
     lead: (projectId) => caw.lead(projectId),
     online: (machineId) => Boolean(registry.agent(machineId)),
+    pauses: (projectId) => caps.pauses(projectId),
     start: (request) => workItems.start(request),
   });
   tasks.listen(dispatcher.taskChanged);
@@ -8262,6 +8272,7 @@ export const createServer = (
       .use(planRoutes(plans))
       .use(dispatchRoutes(dispatcher))
       .use(cawRoutes(caw))
+      .use(caps.routes())
       .use(viewRoutes(views))
       .use(
         joinRoutes({
@@ -10837,7 +10848,9 @@ export const createServer = (
       // native app's client types a project by this route's own schema
       // (`GetApiProjects200Payload`), which a named row would rename.
       .get("/api/projects", () =>
-        db.listProjects().map((project) => ({ ...project }))
+        db
+          .listProjects()
+          .map((project) => ({ ...project, cap: caps.capOf(project) }))
       )
       // One repository is one project: a folder whose remote a project
       // already has joins it as a checkout place (`placeAdded`), and the
@@ -11780,6 +11793,8 @@ export const createServer = (
                 // is restarted on this build. Its limits still are.
                 if (buckets.every((bucket) => bucket.spanMs === BUCKET_MS)) {
                   db.putUsageBuckets(message.machineId, buckets);
+                  // Spend moved: every capped project's state with it.
+                  caps.recheck();
                 } else {
                   console.warn(
                     `[hub] usage buckets from ${message.machineId} refused: its daemon reports hour buckets; restart it on this build`

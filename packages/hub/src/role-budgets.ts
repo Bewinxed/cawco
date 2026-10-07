@@ -83,6 +83,7 @@ export const measureRoles = (): RoleSize[] => {
     cawTools: (actor) =>
       createCaw({
         asks: () => [],
+        caps: {} as never,
         db: {} as never,
         end: () => undefined,
         online: () => false,

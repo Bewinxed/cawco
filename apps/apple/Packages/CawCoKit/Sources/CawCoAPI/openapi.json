@@ -5099,6 +5099,172 @@
         }
       }
     },
+    "/api/spend-settings": {
+      "get": {
+        "operationId": "getApiSpendSettings",
+        "responses": {
+          "200": {
+            "description": "getApiSpendSettings 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiSpendSettings200"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "onCap": {
+                    "type": "string",
+                    "enum": [
+                      "pause",
+                      "quiet",
+                      "both"
+                    ]
+                  }
+                },
+                "required": [
+                  "onCap"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "putApiSpendSettings",
+        "responses": {
+          "200": {
+            "description": "putApiSpendSettings 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/putApiSpendSettings200"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "putApiSpendSettings 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/cap": {
+      "put": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "usd": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "period": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "enum": [
+                      "day",
+                      "month"
+                    ]
+                  },
+                  "onCap": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "enum": [
+                      "pause",
+                      "quiet",
+                      "both"
+                    ]
+                  }
+                },
+                "required": [
+                  "usd",
+                  "period",
+                  "onCap"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "putApiProjectsByIdCap",
+        "responses": {
+          "200": {
+            "description": "putApiProjectsByIdCap 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/putApiProjectsByIdCap200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "putApiProjectsByIdCap 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "putApiProjectsByIdCap 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "putApiProjectsByIdCap 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects/{id}/views": {
       "get": {
         "parameters": [
@@ -12054,6 +12220,36 @@
           "$ref": "#/components/schemas/ThreadSummary"
         }
       },
+      "getApiSpendSettings200": {
+        "type": "object",
+        "properties": {
+          "onCap": {
+            "$ref": "#/components/schemas/OnCap"
+          }
+        },
+        "required": [
+          "onCap"
+        ]
+      },
+      "putApiSpendSettings200": {
+        "type": "object",
+        "properties": {
+          "onCap": {
+            "$ref": "#/components/schemas/OnCap"
+          }
+        },
+        "required": [
+          "onCap"
+        ]
+      },
+      "putApiProjectsByIdCap200": {
+        "type": "object",
+        "properties": {
+          "cap": {
+            "$ref": "#/components/schemas/ProjectCap"
+          }
+        }
+      },
       "getApiProjectsByIdViews200": {
         "type": "array",
         "items": {
@@ -14728,6 +14924,9 @@
         "items": {
           "type": "object",
           "properties": {
+            "cap": {
+              "$ref": "#/components/schemas/ProjectCap"
+            },
             "machineId": {
               "type": "string"
             },
@@ -14793,6 +14992,27 @@
             "budget": {
               "$ref": "#/components/schemas/WorkBudget"
             },
+            "capUsd": {
+              "type": [
+                "null",
+                "number"
+              ]
+            },
+            "capPeriod": {
+              "enum": [
+                "day",
+                "month"
+              ],
+              "type": "string"
+            },
+            "onCap": {
+              "enum": [
+                "both",
+                "pause",
+                "quiet"
+              ],
+              "type": "string"
+            },
             "places": {
               "type": "array",
               "items": {
@@ -14830,6 +15050,7 @@
             }
           },
           "required": [
+            "capUsd",
             "caw",
             "cawHarness",
             "cawModel",
@@ -14953,6 +15174,27 @@
           "budget": {
             "$ref": "#/components/schemas/WorkBudget"
           },
+          "capUsd": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "capPeriod": {
+            "enum": [
+              "day",
+              "month"
+            ],
+            "type": "string"
+          },
+          "onCap": {
+            "enum": [
+              "both",
+              "pause",
+              "quiet"
+            ],
+            "type": "string"
+          },
           "places": {
             "type": "array",
             "items": {
@@ -14990,6 +15232,7 @@
           }
         },
         "required": [
+          "capUsd",
           "caw",
           "cawHarness",
           "cawModel",
@@ -15125,6 +15368,27 @@
           "budget": {
             "$ref": "#/components/schemas/WorkBudget"
           },
+          "capUsd": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "capPeriod": {
+            "enum": [
+              "day",
+              "month"
+            ],
+            "type": "string"
+          },
+          "onCap": {
+            "enum": [
+              "both",
+              "pause",
+              "quiet"
+            ],
+            "type": "string"
+          },
           "places": {
             "type": "array",
             "items": {
@@ -15162,6 +15426,7 @@
           }
         },
         "required": [
+          "capUsd",
           "caw",
           "cawHarness",
           "cawModel",
@@ -16060,6 +16325,9 @@
             "$ref": "#/components/schemas/TasksChangedFrame"
           },
           {
+            "$ref": "#/components/schemas/ProjectCapFrame"
+          },
+          {
             "$ref": "#/components/schemas/DelegateEventFrame"
           },
           {
@@ -16100,6 +16368,7 @@
             "thread.upsert": "#/components/schemas/ThreadUpsertFrame",
             "thread.message": "#/components/schemas/ThreadMessageFrame",
             "tasks.changed": "#/components/schemas/TasksChangedFrame",
+            "project.cap": "#/components/schemas/ProjectCapFrame",
             "delegate_event": "#/components/schemas/DelegateEventFrame",
             "supervisor_event": "#/components/schemas/SupervisorEventFrame",
             "supervisor_status": "#/components/schemas/SupervisorStatusFrame",
@@ -18660,6 +18929,10 @@
               }
             }
           },
+          "cap": {
+            "description": "The project's spend cap; null: it has none, and no limit.",
+            "$ref": "#/components/schemas/ProjectCap"
+          },
           "caw": {
             "description": "The project's Caw (lead) sessions alone.",
             "type": "object",
@@ -18675,6 +18948,10 @@
               "monthUsd",
               "todayUsd"
             ]
+          },
+          "fleetOnCap": {
+            "$ref": "#/components/schemas/OnCap",
+            "description": "What reaching a cap does when the project sets nothing: the fleet's default."
           },
           "monthStart": {
             "description": "The first of this month, ms epoch.",
@@ -18726,12 +19003,75 @@
         "required": [
           "attempts",
           "caw",
+          "fleetOnCap",
           "monthStart",
           "monthUsd",
           "threads",
           "todayStart",
           "todayUsd"
         ]
+      },
+      "ProjectCap": {
+        "description": "A project's spend cap as it stands now: what the period has spent\nagainst it, and what reaching it does. Spend is every session of the\nproject's (its Caw and its attempts) since the period began.",
+        "type": "object",
+        "properties": {
+          "inherited": {
+            "description": "`onCap` is the fleet default, not the project's own.",
+            "type": "boolean"
+          },
+          "onCap": {
+            "$ref": "#/components/schemas/OnCap",
+            "description": "What reaching it does: the project's own, else the fleet's."
+          },
+          "period": {
+            "$ref": "#/components/schemas/CapPeriod"
+          },
+          "reached": {
+            "description": "Spent at or past the cap. Read with `resetsAt`: past it, the cap is not reached.",
+            "type": "boolean"
+          },
+          "resetsAt": {
+            "description": "When the next period begins, ms epoch; the cap counts from zero then.",
+            "type": "number"
+          },
+          "spentUsd": {
+            "type": "number"
+          },
+          "startsAt": {
+            "description": "When this period began, ms epoch.",
+            "type": "number"
+          },
+          "usd": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "inherited",
+          "onCap",
+          "period",
+          "reached",
+          "resetsAt",
+          "spentUsd",
+          "startsAt",
+          "usd"
+        ]
+      },
+      "OnCap": {
+        "description": "What reaching a project's spend cap does (Projects spec §5.3): `pause`\nstarts no new attempts at its tasks, `quiet` books what would wake its Caw\nwithout a turn, `both` does both. The fleet has a default (Configure,\nSpend); a project may set its own.",
+        "enum": [
+          "both",
+          "pause",
+          "quiet"
+        ],
+        "type": "string"
+      },
+      "CapPeriod": {
+        "description": "The span a project's cap counts over, in the hub's own zone.",
+        "enum": [
+          "day",
+          "month"
+        ],
+        "type": "string"
       },
       "ThreadSummary": {
         "description": "A thread as the project's list and the `thread.upsert` frame carry it.",
@@ -28233,6 +28573,29 @@
             "type": "string",
             "enum": [
               "tasks.changed"
+            ]
+          },
+          "projectId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "projectId"
+        ]
+      },
+      "ProjectCapFrame": {
+        "type": "object",
+        "properties": {
+          "cap": {
+            "description": "Its project's cap as it stands now; null once it has none.",
+            "$ref": "#/components/schemas/ProjectCap"
+          },
+          "kind": {
+            "description": "Hub-originated: a project's spend against its cap moved, or the cap did.",
+            "type": "string",
+            "enum": [
+              "project.cap"
             ]
           },
           "projectId": {

@@ -179,6 +179,10 @@ const DATE_TIME = new Intl.DateTimeFormat(undefined, {
   hourCycle: "h23",
 });
 
+/** A moment as the app writes one with its date: "17 Oct 08:49". */
+export const dateTimeText = (at: number): string =>
+  DATE_TIME.format(at).replace(",", "");
+
 /**
  * A reset: "in 4h 38m" under a day away, "Thu 09:00" inside the next seven
  * days, and "17 Oct 08:49" past them, where a weekday alone would name the

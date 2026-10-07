@@ -904,6 +904,7 @@ export type FramePayload =
   | import("./frames").ThreadUpsertFrame
   | import("./frames").ThreadMessageFrame
   | import("./frames").TasksChangedFrame
+  | import("./frames").ProjectCapFrame
   | import("./frames").DelegateEventFrame
   | import("./frames").SupervisorEventFrame
   | import("./frames").SupervisorStatusFrame

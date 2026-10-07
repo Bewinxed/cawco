@@ -23,8 +23,7 @@
           id: column.field,
           header:
             typeof column.label === "string" ? column.label : column.field,
-          accessorFn: (task: ViewTask) =>
-            fieldText(task as unknown as Record<string, unknown>, column.field),
+          accessorFn: (task: ViewTask) => fieldText(task, column.field),
         }))
       : []
   );

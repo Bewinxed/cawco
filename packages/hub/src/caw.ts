@@ -66,6 +66,7 @@ import type {
   ThreadRow,
   WorkItemRow,
 } from "./db";
+import type { Caps } from "./project-caps";
 import type { TaskEvent, TaskView } from "./tasks";
 import type { Views } from "./views";
 
@@ -208,6 +209,8 @@ const briefOf = (projectName: string): string =>
 export interface CawDeps {
   /** The asks parked on the hub now (pending.ts). */
   readonly asks: () => Envelope[];
+  /** The project's spend cap and the fleet's default for it (project-caps.ts). */
+  readonly caps: Pick<Caps, "capOf" | "quiets">;
   readonly db: Pick<
     DbShape,
     | "addThreadMessage"
@@ -221,6 +224,7 @@ export interface CawDeps {
     | "projectSpend"
     | "projectThreads"
     | "setProjectCaw"
+    | "spendOnCap"
     | "thread"
     | "threadMessages"
     | "threadMessage"
@@ -245,6 +249,7 @@ export interface CawDeps {
 
 export const createCaw = ({
   asks,
+  caps,
   db,
   end,
   online,
@@ -527,6 +532,12 @@ export const createCaw = ({
     const threadId = event.note
       ? noteIn(projectId, event.threadId, event.note, false)
       : event.threadId;
+    // Past its spend cap the project's Caw is not woken: what happened is in
+    // its thread (your words are already there), and nothing costs a turn.
+    if (caps.quiets(projectId)) {
+      settle(threadId);
+      return false;
+    }
     const text =
       event.note && threadId
         ? `${event.text}\n\n(Noted in thread ${threadId}; answer there with thread_reply when the person should hear of it.)`
@@ -712,6 +723,8 @@ export const createCaw = ({
         monthUsd: spent.monthUsd,
         caw: spent.caw,
         budget: project.budget ?? null,
+        cap: caps.capOf(project),
+        fleetOnCap: db.spendOnCap(),
         threads: spent.threads,
         attempts: [...byTask.values()].sort((a, b) => b.lastAt - a.lastAt),
       };
