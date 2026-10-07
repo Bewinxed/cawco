@@ -49,7 +49,8 @@ export interface JumpIndexInput {
     hostname: string;
     os: string;
   }>;
-  projects: ReadonlyArray<{ id: string; name: string; cwd: string }>;
+  /** Each project, `folder` its primary checkout's path (what its row's detail reads). */
+  projects: ReadonlyArray<{ id: string; name: string; folder: string }>;
   /** Running sessions as lists show them (a project's lead is its threads), by name. */
   running: ReadonlyArray<{
     id: string;
@@ -123,7 +124,7 @@ export function buildJumpIndex(input: JumpIndexInput): JumpIndex {
       id: `project:${project.id}`,
       kind: "project",
       label: project.name,
-      detail: project.cwd,
+      detail: project.folder,
       href: `/project/${project.id}`,
       hay: "",
       labelLower: "",

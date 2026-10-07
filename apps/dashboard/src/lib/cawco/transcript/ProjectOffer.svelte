@@ -10,7 +10,9 @@
   import { toast } from "svelte-sonner";
   import { Button } from "#lib/components/ui/button/index.js";
   import { IconFolder } from "#lib/icons.js";
+  import { goto } from "$app/navigation";
   import { answerProjectOffer } from "../client.svelte";
+  import { threadHref } from "../thread-tabs";
 
   let { offer }: { offer: ProjectOfferSummary } = $props();
 
@@ -22,10 +24,14 @@
     refused = "";
     try {
       const accepted = await answerProjectOffer(offer.instanceId, which);
-      if (accepted) {
+      if (accepted?.setupThread) {
+        // A new project: Caw sets it up in its Setup thread, with the
+        // session's plan already on its board.
+        await goto(threadHref(accepted.setupThread.id));
+      } else if (accepted) {
         const filed = accepted.tasks.length;
         toast.success(
-          `${accepted.joined ? "Joined" : "Made"} ${accepted.project.name}${
+          `Joined ${accepted.project.name}${
             filed
               ? `, with ${filed} proposed ${filed === 1 ? "task" : "tasks"} from the plan`
               : ""

@@ -33,6 +33,12 @@ export interface ThreadSummary {
   /** When its newest message was added, ms epoch. */
   lastAt: number;
   projectId: string;
+  /**
+   * The project's Setup thread: the one New project opens with your prompt,
+   * where Caw shows the setup page and lists what he wrote. Its replies that
+   * name files offer "Open the board".
+   */
+  setup: boolean;
   status: ThreadStatus;
   title: string;
 }
@@ -74,10 +80,14 @@ export interface YourThreadMessage extends ThreadMessageBase {
   question?: ThreadQuestion;
 }
 
-/** Caw's, through `thread_reply`; `tasks` names the tasks it is about (`tsk-12`). */
+/**
+ * Caw's, through `thread_reply`; `tasks` names the tasks it is about
+ * (`tsk-12`), `files` the project folder's files it wrote (`stages.md`).
+ */
 export interface CawThreadMessage extends ThreadMessageBase {
   author: "caw";
   body: string;
+  files?: string[];
   tasks?: string[];
 }
 

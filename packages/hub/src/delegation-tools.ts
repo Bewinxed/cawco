@@ -1007,8 +1007,9 @@ export function handoffTools(deps: HandoffDeps) {
         "with an index.html. The operator gets the page inline beside your transcript and can click any element " +
         "to send you exact file:line feedback with notes — use that to edit precisely what they pointed at. " +
         "A decision page (the decision-page skill) goes in your project's folder: pass `page` (its name) with `dir` " +
-        "(the folder holding its built, self-contained index.html) to publish it to decisions/<page>/index.html and show it, " +
-        "or `page` alone to show the one already there. Publishing the same page again keeps the person's picks for every choice id it still has.",
+        "(your work folder holding its page.html) and the hub builds it into decisions/<page>/index.html and shows it; " +
+        "`page` alone builds the page.html in the project folder's decisions/<page>/, or shows the page already published there. " +
+        "Publishing the same page again keeps the person's picks for every choice id it still has.",
       {
         port: z.number().int().min(1).max(65_535).optional(),
         dir: z.string().startsWith("/").optional(),

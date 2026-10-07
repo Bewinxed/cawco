@@ -19,13 +19,28 @@ const contains = (root: string, path: string): boolean =>
 const older = (a: ProjectRow, b: ProjectRow): boolean =>
   a.createdAt < b.createdAt || (a.createdAt === b.createdAt && a.id < b.id);
 
+/** The project's primary checkout; undefined while it has none (only its folder on the hub). */
+export const checkoutOf = (project: ProjectRow): ProjectPlace | undefined =>
+  project.places.find((place) => place.id === project.primaryPlaceId);
+
+/**
+ * The folder a project is known by (its hue, its rail row): its primary
+ * checkout's path, else its folder on the hub's (`projects/<id>`).
+ */
+export const folderOf = (project: ProjectRow): string =>
+  checkoutOf(project)?.path ?? `projects/${project.id}`;
+
 /**
  * Where an owned row counts from: the owner's place on the row's machine that
- * holds the row's folder (the deepest), else the owner's primary place.
+ * holds the row's folder (the deepest), else the owner's primary checkout,
+ * else the row's own folder.
  */
 function homeOf(owner: ProjectRow, row: Location): Spot {
   const cwd = folder(row.cwd);
-  let home: Spot = { machineId: owner.machineId, path: folder(owner.cwd) };
+  const primary = checkoutOf(owner);
+  let home: Spot = primary
+    ? { machineId: primary.machineId, path: folder(primary.path) }
+    : { machineId: row.machineId, path: cwd };
   let depth = -1;
   for (const place of owner.places) {
     const path = folder(place.path);
@@ -100,9 +115,10 @@ export function checkoutOn(
   project: ProjectRow,
   machineId: string
 ): ProjectPlace | undefined {
-  return project.places.find(
+  const checkouts = project.places.filter(
     (place) => place.machineId === machineId && place.kind === "checkout"
   );
+  return checkouts.find((place) => place.isPrimary) ?? checkouts[0];
 }
 
 /** Whether a session on `machineId` can be one of the project's: it has a place there. */

@@ -249,13 +249,14 @@ export const agents = sqliteTable("agents", {
  * are its primary place, the one it was made from, and every client that
  * reads a project as one folder on one machine reads that one.
  */
+/**
+ * A project (§5.1 of the Projects spec): its name and settings. Where its
+ * files are is its places (`project_places`): its folder on the hub from the
+ * moment it is made, and the checkouts it gains, one of them primary.
+ */
 export const projects = sqliteTable("projects", {
   id: text("id").primaryKey(),
-  machineId: text("machine_id")
-    .notNull()
-    .references(() => agents.machineId),
   name: text("name").notNull(),
-  cwd: text("cwd").notNull(),
   /**
    * The checkout's `origin`, normalised to `host/owner/repo` (projects.ts
    * `normaliseRemote`): how a checkout of the same repository on another
@@ -435,7 +436,10 @@ export const projectTasks = sqliteTable(
 
 /**
  * What a place is: a checkout on a machine, a delegate's workspace (kept
- * while the workspace is active), or the project's folder on the hub.
+ * while the workspace is active), or the project's folder on the hub (its
+ * `machineId` is `"hub"` (db `HUB_PLACE_MACHINE`) and its path `projects/<id>`, relative
+ * to the hub's data folder; every project has one from the moment it is
+ * made).
  */
 export type PlaceKind = "checkout" | "workspace" | "hub";
 
@@ -451,6 +455,14 @@ export const projectPlaces = sqliteTable(
     machineId: text("machine_id").notNull(),
     path: text("path").notNull(),
     kind: text("kind").$type<PlaceKind>().notNull(),
+    /**
+     * The project's primary checkout: where it is worked on first, and what a
+     * client names it by. Exactly one checkout per project once it has any,
+     * set when its first checkout is added; never a workspace or the hub's.
+     */
+    isPrimary: integer("is_primary", { mode: "boolean" })
+      .notNull()
+      .default(false),
     createdAt: timestamp("created_at")
       .notNull()
       .$defaultFn(() => new Date()),
@@ -1566,6 +1578,12 @@ export const supervisorConfig = sqliteTable("supervisor_config", {
   cawcoTodos: integer("cawco_todos", { mode: "boolean" })
     .notNull()
     .default(false),
+  /**
+   * When the fleet's two choices (delegates, CawCo's to-dos) were last set
+   * through `PUT /api/fleet/choices`; null while nobody has set them, which
+   * is when a new project's setup page asks for them.
+   */
+  choicesSetAt: timestamp("choices_set_at"),
   updatedAt: timestamp("updated_at")
     .notNull()
     .$defaultFn(() => new Date()),
@@ -1785,6 +1803,8 @@ export const projectThreads = sqliteTable(
       .references(() => projects.id, { onDelete: "cascade" }),
     /** The first message's opening words. */
     title: text("title").notNull(),
+    /** The project's Setup thread, opened when New project made it (caw.ts `setup`). */
+    setup: integer("setup", { mode: "boolean" }).notNull().default(false),
     createdAt: timestamp("created_at").notNull(),
     /** When its newest message was added. */
     updatedAt: timestamp("updated_at").notNull(),
@@ -1839,6 +1859,8 @@ export const threadMessages = sqliteTable(
     noteTitle: text("note_title"),
     /** The tasks Caw's message is about (`tsk-12`). */
     tasks: text("tasks", { mode: "json" }).$type<string[]>(),
+    /** The project folder's files Caw's message says he wrote (`stages.md`). */
+    files: text("files", { mode: "json" }).$type<string[]>(),
     /** Your answer's question and answer, from the lead's AskUserQuestion. */
     question: text("question", { mode: "json" }).$type<ThreadQuestion>(),
     answer: text("answer", { mode: "json" }).$type<ThreadAnswer>(),

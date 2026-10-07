@@ -4,6 +4,7 @@
   import { cawco } from "#lib/cawco/client.svelte.js";
   import { loadDelegateTypes, message } from "#lib/cawco/delegate-types.js";
   import { dur, ease, motionOk } from "#lib/cawco/motion/curves.svelte.js";
+  import { checkoutOf } from "#lib/cawco/projects.js";
   import { runHref } from "#lib/cawco/workflow-runs.js";
   import { launchWorkflow } from "#lib/cawco/workflows.js";
   import DirectoryPicker from "#lib/components/features/DirectoryPicker.svelte";
@@ -89,8 +90,9 @@
     const project = defaults?.defaultProject
       ? cawco.project(defaults.defaultProject)
       : null;
-    machineId = defaults?.defaultMachine ?? project?.machineId ?? "";
-    workspace = project?.cwd ?? "";
+    const primary = project ? checkoutOf(project) : undefined;
+    machineId = defaults?.defaultMachine ?? primary?.machineId ?? "";
+    workspace = primary?.path ?? "";
     supervisor =
       defaults?.defaultSupervisor &&
       "delegateType" in defaults.defaultSupervisor
@@ -186,14 +188,17 @@
             >Project<select
               onchange={(event) => {
                 const project = cawco.project(event.currentTarget.value);
-                if (project) {
-                  ({ machineId, cwd: workspace } = project);
+                const primary = project ? checkoutOf(project) : undefined;
+                if (primary) {
+                  ({ machineId, path: workspace } = primary);
                 }
               }}
               value=""
             >
               <option value="">Choose a project or enter a directory</option>
-              {#each cawco.projects as project (project.id)}
+              {#each cawco.projects.filter((each) =>
+                checkoutOf(each)
+              ) as project (project.id)}
                 <option value={project.id}>{project.name}</option>
               {/each}
             </select></label

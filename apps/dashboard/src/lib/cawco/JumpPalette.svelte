@@ -50,6 +50,7 @@
     stripFragment,
   } from "./jump-search.svelte";
   import { conversationHref } from "./links";
+  import { checkoutOf } from "./projects";
   import { isThreadTab } from "./thread-tabs";
 
   let {
@@ -61,7 +62,11 @@
   const index = $derived.by(() =>
     buildJumpIndex({
       instances: cawco.instances,
-      projects: cawco.projects,
+      projects: cawco.projects.map((project) => ({
+        id: project.id,
+        name: project.name,
+        folder: checkoutOf(project)?.path ?? "On the hub",
+      })),
       onlineMachines: cawco.onlineMachines,
       // Sessions as every list shows them: a project's Caw is his threads,
       // listed on their own, every one, by title and under his face.

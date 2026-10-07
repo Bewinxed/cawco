@@ -96,10 +96,12 @@ export type StagesReading =
 
 export const TEMPLATES = [
   "code",
+  "launch",
+  "seo",
+  "brand",
+  "design",
   "social",
   "outreach",
-  "seo",
-  "design",
 ] as const;
 export type StagesTemplate = (typeof TEMPLATES)[number];
 
@@ -530,6 +532,45 @@ moves
 views
   board      by stage
   table      by rank`,
+    },
+    launch: {
+      about:
+        "Stages for a launch campaign: a piece is planned, made by the writer,\nreviewed by you, scheduled for launch day, sent live by an approved action,\nand measured a week on.",
+      block: `plan       todo
+make       active    runs: writer
+review     you
+scheduled  waiting   until: launch_at
+live       done      by: action   after: 1w
+measured   done
+dropped    dropped
+moves
+  * → *                you
+  plan → make          lead, session
+  make → review        lead, session
+  review → make        lead
+  scheduled → live     action
+  live → measured      routine
+  * → dropped          lead
+views
+  board      by stage
+  calendar   by launch_at`,
+    },
+    brand: {
+      about:
+        "Stages for a brand kit: a source (a voice doc, a site) is read for its\nvoice, colours and type, you review what was drawn out, and it lands in\nthe kit.",
+      block: `source     todo
+extract    active    runs: brand
+review     you
+kit        done
+dropped    dropped
+moves
+  * → *                you
+  source → extract     lead, session
+  extract → review     lead, session
+  review → extract     lead
+  * → dropped          lead
+views
+  board      by stage`,
     },
     social: {
       about:

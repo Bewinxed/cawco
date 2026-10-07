@@ -28,6 +28,8 @@
   import { handOver, land } from "#lib/cawco/motion/share.svelte.js";
   import OsMark from "#lib/cawco/OsMark.svelte";
   import { unpickedMode } from "#lib/cawco/permission-modes.js";
+  import { checkoutOf } from "#lib/cawco/projects.js";
+  import { newSession } from "#lib/cawco/spawn/new-session.svelte.js";
   import { rememberSpawn, spawnPrefs } from "#lib/cawco/spawnPrefs.svelte.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as AlertDialog from "#lib/components/ui/alert-dialog/index.js";
@@ -75,10 +77,17 @@
   const message = (error: unknown) =>
     error instanceof Error ? error.message : String(error);
 
+  /** Its primary checkout; none while its one place is its folder on the hub. */
+  const primary = $derived(checkoutOf(project));
   /** Where the project lives: its machine and folder (WORDS.md: place). */
-  const place = $derived(
-    machine ? `${machineLabel(machine.hostname)} · ${project.cwd}` : project.cwd
-  );
+  const place = $derived.by(() => {
+    if (!primary) {
+      return "Its folder on the hub";
+    }
+    return machine
+      ? `${machineLabel(machine.hostname)} · ${primary.path}`
+      : primary.path;
+  });
   const words = $derived(lead.words);
 
   /**
@@ -101,6 +110,9 @@
   }
 
   async function startSession(scratch: boolean) {
+    if (!primary) {
+      return;
+    }
     const remembered = spawnPrefs.permissionMode;
     const mod = spawnPrefs.model;
     // This start has no pickers of its own — it runs on what the new-session
@@ -112,8 +124,8 @@
     let instanceId: string;
     try {
       instanceId = await spawnSession({
-        machineId: project.machineId,
-        cwd: project.cwd,
+        machineId: primary.machineId,
+        cwd: primary.path,
         projectId: project.id,
         permissionMode: perm,
         harness: spawnPrefs.harness,
@@ -194,9 +206,13 @@
                     )}
                     <li>
                       <span class="host"
-                        >{host
-                          ? machineLabel(host.hostname)
-                          : "A machine not joined"}</span
+                        >{#if each.kind === "hub"}
+                          The hub
+                        {:else if host}
+                          {machineLabel(host.hostname)}
+                        {:else}
+                          A machine not joined
+                        {/if}</span
                       >
                       <span class="path" title={each.path}
                         ><bdi>{each.path}</bdi></span
@@ -212,64 +228,74 @@
     </div>
   </div>
   <div class="acts">
-    <Popover.Root bind:open={spawnOpen}>
-      <Popover.Trigger>
-        {#snippet child({
-          props,
-        })}
-          <Button {...props} class="pressable">New session</Button>
-        {/snippet}
-      </Popover.Trigger>
-      <Popover.Content align="end" class="w-80 p-0">
-        <form
-          class="flex flex-col gap-3 p-4"
-          onsubmit={(e) => {
-            e.preventDefault();
-            startSession(false);
-          }}
-        >
-          <!-- biome-ignore lint/a11y/noLabelWithoutControl: the <Input> component renders a native input as its only child; Biome can't see through the component boundary -->
-          <label class="flex flex-col gap-1 text-meta text-muted-foreground">
-            First prompt (optional)
-            <Input
-              autocomplete="off"
-              class="text-label"
-              placeholder="What should this session do?"
-              spellcheck="false"
-              bind:value={spawnPrompt}
-            />
-          </label>
-          <div class="flex items-center justify-end gap-2">
-            <Button
-              data-share="session:new"
-              data-share-ttl="8000"
-              onclick={() => startSession(false)}
-              size="sm"
-              type="button"
-              variant="ghost"
-            >
-              Start empty
-            </Button>
-            <Button
-              data-share="session:new"
-              data-share-ttl="8000"
-              size="sm"
-              type="submit"
-              >Start</Button
-            >
-          </div>
-        </form>
-      </Popover.Content>
-    </Popover.Root>
-    <Button
-      class="pressable"
-      data-share="session:new"
-      data-share-ttl="8000"
-      onclick={() => startSession(true)}
-      variant="outline"
-    >
-      Side quest
-    </Button>
+    {#if !primary}
+      <!-- No checkout yet: a session needs a machine and folder, which the
+           New Session dialog asks for. -->
+      <Button
+        class="pressable"
+        onclick={() => newSession({ projectId: project.id })}
+        >New session</Button
+      >
+    {:else}
+      <Popover.Root bind:open={spawnOpen}>
+        <Popover.Trigger>
+          {#snippet child({
+            props,
+          })}
+            <Button {...props} class="pressable">New session</Button>
+          {/snippet}
+        </Popover.Trigger>
+        <Popover.Content align="end" class="w-80 p-0">
+          <form
+            class="flex flex-col gap-3 p-4"
+            onsubmit={(e) => {
+              e.preventDefault();
+              startSession(false);
+            }}
+          >
+            <!-- biome-ignore lint/a11y/noLabelWithoutControl: the <Input> component renders a native input as its only child; Biome can't see through the component boundary -->
+            <label class="flex flex-col gap-1 text-meta text-muted-foreground">
+              First prompt (optional)
+              <Input
+                autocomplete="off"
+                class="text-label"
+                placeholder="What should this session do?"
+                spellcheck="false"
+                bind:value={spawnPrompt}
+              />
+            </label>
+            <div class="flex items-center justify-end gap-2">
+              <Button
+                data-share="session:new"
+                data-share-ttl="8000"
+                onclick={() => startSession(false)}
+                size="sm"
+                type="button"
+                variant="ghost"
+              >
+                Start empty
+              </Button>
+              <Button
+                data-share="session:new"
+                data-share-ttl="8000"
+                size="sm"
+                type="submit"
+                >Start</Button
+              >
+            </div>
+          </form>
+        </Popover.Content>
+      </Popover.Root>
+      <Button
+        class="pressable"
+        data-share="session:new"
+        data-share-ttl="8000"
+        onclick={() => startSession(true)}
+        variant="outline"
+      >
+        Side quest
+      </Button>
+    {/if}
     <DropdownMenu.Root>
       <DropdownMenu.Trigger>
         {#snippet child({

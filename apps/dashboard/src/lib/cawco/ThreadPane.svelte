@@ -48,6 +48,7 @@
   import CawFace from "./home/CawFace.svelte";
   import { planProgress, planShows } from "./plan/PlanPane.svelte";
   import PlanRing from "./plan/PlanRing.svelte";
+  import FolderFiles from "./project/FolderFiles.svelte";
   import {
     listTasks,
     movesFrom,
@@ -130,11 +131,15 @@
       timestamp: new Date(message.createdAt).toISOString(),
     };
     if (message.author === "caw") {
+      const metadata = {
+        ...(message.tasks?.length ? { tasks: message.tasks } : {}),
+        ...(message.files?.length ? { files: message.files } : {}),
+      };
       return {
         ...base,
         type: "assistant",
         content: message.body,
-        metadata: message.tasks?.length ? { tasks: message.tasks } : undefined,
+        metadata: Object.keys(metadata).length ? metadata : undefined,
       };
     }
     if (message.author === "event") {
@@ -310,7 +315,19 @@
   const taskHref = (id: string) =>
     `/project/${encodeURIComponent(projectId)}?task=${encodeURIComponent(id)}`;
 
-  setVoice({ face, tasks: taskCards });
+  setVoice({ face, tasks: taskCards, files: folderFiles });
+
+  /**
+   * The Setup thread's newest reply that names files is where setup ends:
+   * "Open the board" stands under it, to the project's landing page.
+   */
+  const boardAfter = $derived(
+    thread?.setup
+      ? (messages ?? []).findLast(
+          (message) => message.author === "caw" && message.files?.length
+        )?.id
+      : undefined
+  );
 
   // --- the composer -------------------------------------------------------------
 
@@ -472,6 +489,24 @@
   </ul>
 {/snippet}
 
+{#snippet folderFiles(
+  files: string[],
+  messageId: string
+)}
+  <FolderFiles {files} {projectId} />
+  {#if messageId === boardAfter}
+    <div class="board-link">
+      <Button
+        class="pressable"
+        href="/project/{encodeURIComponent(projectId)}"
+        label="Open the board"
+        size="sm"
+        variant="outline"
+      />
+    </div>
+  {/if}
+{/snippet}
+
 {#snippet parkedPrompts()}
   <!-- One ask at a time: each in full took most of a phone. The next one
        stands up when this one settles into its row. -->
@@ -531,6 +566,7 @@
       onselect={(selection) => draft.attach(selection)}
       {phone}
       planOf={lead}
+      previewOf={lead}
       {viewId}
       {visible}
       bind:this={side}
@@ -701,5 +737,8 @@
   .parked {
     display: flex;
     flex-direction: column;
+  }
+  .board-link {
+    margin-block-start: var(--space-3);
   }
 </style>

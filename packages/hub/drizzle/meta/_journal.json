@@ -680,6 +680,20 @@
       "when": 1791375812586,
       "tag": "0096_caw_turn_harness",
       "breakpoints": true
+    },
+    {
+      "idx": 97,
+      "version": "6",
+      "when": 1791388607436,
+      "tag": "0097_projects_places",
+      "breakpoints": true
+    },
+    {
+      "idx": 98,
+      "version": "6",
+      "when": 1791388993869,
+      "tag": "0098_setup_thread",
+      "breakpoints": true
     }
   ]
 }

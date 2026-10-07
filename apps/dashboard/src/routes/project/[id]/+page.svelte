@@ -55,6 +55,7 @@
     type TaskSummary,
     type TaskView,
   } from "#lib/cawco/project-tasks.js";
+  import { checkoutOf } from "#lib/cawco/projects.js";
   import NewTaskForm from "#lib/cawco/tasks/NewTaskForm.svelte";
   import StagesControl from "#lib/cawco/tasks/StagesControl.svelte";
   import TaskBoard from "#lib/cawco/tasks/TaskBoard.svelte";
@@ -96,10 +97,13 @@
   const project = $derived(
     (data.project && cawco.project(data.project.id)) ?? data.project
   );
-  const machine = $derived(
-    cawco.machines.find((row) => row.machineId === project?.machineId) ??
-      data.machine
-  );
+  const machine = $derived.by(() => {
+    const primary = project ? checkoutOf(project) : undefined;
+    return primary
+      ? (cawco.machines.find((row) => row.machineId === primary.machineId) ??
+          data.machine)
+      : null;
+  });
   const projectId = $derived(data.project?.id ?? "");
 
   /** A refused read, as a sentence with its status for support. */

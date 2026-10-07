@@ -39,6 +39,7 @@
   let {
     viewId,
     planOf,
+    previewOf,
     visible,
     phone,
     onselect,
@@ -50,6 +51,11 @@
     viewId: string;
     /** The session whose plan shows here; null when the conversation has none. */
     planOf: string | null;
+    /**
+     * The session whose preview shows here, when it is not the conversation
+     * itself: a thread shows its project's lead's (his setup page).
+     */
+    previewOf?: string | null;
     visible: boolean;
     /** Under 900px: the surface is a sheet, not a split. */
     phone: boolean;
@@ -73,7 +79,8 @@
 
   // --- what the surface holds --------------------------------------------------
 
-  const previewOpen = $derived(cawco.previews[viewId]?.state === "open");
+  const previewId = $derived(previewOf ?? viewId);
+  const previewOpen = $derived(cawco.previews[previewId]?.state === "open");
   const plan = $derived(planOf ? cawco.planOf(planOf) : undefined);
   const hasPlan = $derived(planShows(plan));
   /** The reader asked for the plan (its ring) and has not closed it. */
@@ -237,9 +244,10 @@
     />
   {:else if previewOpen}
     <PreviewPane
-      instanceId={viewId}
+      instanceId={previewId}
       {onescape}
       {onselect}
+      sheet={phone}
       switcher={planOpen ? switcher : undefined}
       bind:this={previewPane}
     />
@@ -298,7 +306,7 @@
   {#if sheetMounted && phone && visible}
     <SideSheet
       content={root}
-      instanceId={viewId}
+      instanceId={previewId}
       onkeyescape={(event) => previewPane?.parentEscape(event)}
       {open}
     >

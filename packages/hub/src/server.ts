@@ -1,3 +1,4 @@
+import { mkdir, writeFile } from "node:fs/promises";
 import { posix } from "node:path";
 import { generateCodeChallenge, generateCodeVerifier } from "@cawco/auth";
 import type {
@@ -58,6 +59,7 @@ import type {
   SpawnPayload,
   SupervisorEvent,
   SupervisorStatusSignal,
+  ThreadSummary,
   ToolState,
   ToolStatus,
   TranscriptWhere,
@@ -182,7 +184,8 @@ import type {
   ProjectRow,
   SentMessageRow,
 } from "./db";
-import { hashHookMaterial } from "./db";
+import { checkoutOf, hashHookMaterial } from "./db";
+import { buildDecisionPage, type PageSources } from "./decision-page";
 import { delegateTypesRoutes, makeDelegateTypes } from "./delegate-types";
 import { hubHttpUrl } from "./delegation-actions";
 import { createDelegationMcp } from "./delegation-mcp";
@@ -226,7 +229,10 @@ import {
 } from "./project-delegate-types";
 import {
   FolderRefusal,
+  listFolder,
+  PROJECTS_DIR,
   projectFolderRoutes,
+  projectRoot,
   readFolderFile,
   trashProjectFolder,
   writeFolderFile,
@@ -246,6 +252,7 @@ import { RuleEngine } from "./rules";
 import { createSessionIdentities } from "./session-identity";
 import { createSessionLifecycle } from "./session-lifecycle";
 import { hashFiles, resolveSkill } from "./skills";
+import { type StagesTemplate, TEMPLATES, templateText } from "./stages";
 import { createStreamHub } from "./stream";
 import { suggest } from "./suggest";
 import { SupervisorEngine } from "./supervisor";
@@ -3732,6 +3739,12 @@ export const createServer = (
   ) => {
     const frame = previewFrame(instanceId, state, source, revision);
     streams.sequence(instanceId, frame);
+    // A project's decision page is read in that project's threads, which
+    // follow no session's stream (its Caw's setup page): the board carries
+    // every open preview, so every dashboard hears it there too.
+    if ("project" in source) {
+      publishInstances("");
+    }
     return frame;
   };
 
@@ -3854,68 +3867,108 @@ export const createServer = (
 
   /**
    * A decision page to show (Projects spec §5.8): `decisions/<page>/` in the
-   * session's project folder. With `dir`, the session's own built page,
-   * `<dir>/index.html` on its machine, is committed there first, by the
-   * session; a revision is another commit at the same place, so the canvas
-   * and its picks stay.
+   * session's project folder. The hub builds it (decision-page.ts) from a
+   * `page.html`: with `dir`, the one in the session's work folder on its
+   * machine; else the one in `decisions/<page>/` (Caw's, who has no shell),
+   * else the page already published there is shown as it is. The built
+   * `index.html` is committed by the session; a revision is another commit at
+   * the same place, so the canvas and its picks stay.
    */
   interface PageRefusal {
-    code: 400 | 404 | 409 | 413 | 503 | 504;
+    code: 400 | 404 | 409 | 413 | 422 | 503 | 504;
     refused: string;
   }
 
-  /** Whether the project's folder already holds the page. */
-  const pageInFolder = async (
+  /** A file of the project folder's, or undefined when it is not there. */
+  const folderText = async (
     projectId: string,
     path: string
-  ): Promise<PageRefusal | undefined> => {
+  ): Promise<string | undefined> => {
     try {
-      await readFolderFile(projectId, path);
-      return undefined;
+      return (await readFolderFile(projectId, path)).content;
     } catch (error) {
-      if (!(error instanceof FolderRefusal)) {
-        throw error;
+      if (error instanceof FolderRefusal && error.status === 404) {
+        return undefined;
       }
-      return error.status === 404
-        ? {
-            code: 404,
-            refused: `${path} is not in the project's folder yet; pass dir to publish it.`,
-          }
-        : { code: 409, refused: error.message };
+      throw error;
     }
   };
 
-  /** Reads `<dir>/index.html` off the session's machine and commits it at `path`, by the session. */
-  const copyPageIn = async (
-    row: InstanceRow,
-    projectId: string,
-    path: string,
-    dir: string
-  ): Promise<PageRefusal | undefined> => {
-    const agent = registry.agent(row.machineId);
+  /** Where page.html and what it names are read: the session's machine, or the project folder. */
+  type PageOrigin =
+    | { dir: string; machineId: string }
+    | { projectId: string; folder: string };
+
+  /** page.html in the project folder's `decisions/<page>/`, and what it names there; undefined when it has none. */
+  const folderPageSources = async (origin: {
+    projectId: string;
+    folder: string;
+  }): Promise<{ source: string; sources: PageSources } | undefined> => {
+    const source = await folderText(
+      origin.projectId,
+      `${origin.folder}/page.html`
+    );
+    return source === undefined
+      ? undefined
+      : {
+          source,
+          sources: {
+            mockup: (id) =>
+              folderText(
+                origin.projectId,
+                `${origin.folder}/mockups/${id}.html`
+              ),
+            // The folder takes text only: its pages show the kit's stills.
+            image: () => Promise.resolve(undefined),
+          },
+        };
+  };
+
+  /** Reads page.html and what it names from `origin`; a refusal when page.html is not there. */
+  const pageSources = async (
+    origin: PageOrigin
+  ): Promise<
+    { source: string; sources: PageSources } | PageRefusal | undefined
+  > => {
+    if ("projectId" in origin) {
+      return await folderPageSources(origin);
+    }
+    const agent = registry.agent(origin.machineId);
     if (!agent) {
       return { code: 503, refused: "Machine is not connected" };
     }
-    const file = posix.join(dir, "index.html");
-    const read = await callFs(row.machineId, agent, { op: "read", path: file });
-    if (read === "timeout") {
+    const readText = async (path: string) => {
+      const read = await callFs(origin.machineId, agent, { op: "read", path });
+      if (read === "timeout") {
+        throw new Error("Machine did not answer");
+      }
+      return read.ok ? (read.result as string) : undefined;
+    };
+    const file = posix.join(origin.dir, "page.html");
+    const source = await readText(file).catch(() => null);
+    if (source === null) {
       return { code: 504, refused: "Machine did not answer" };
     }
-    if (!read.ok) {
-      return { code: 404, refused: read.error ?? `${file} could not be read.` };
+    if (source === undefined) {
+      return {
+        code: 404,
+        refused: `${file} is not there; write the page as page.html in that folder, from the skill's kit/page.html.`,
+      };
     }
-    try {
-      await writeFolderFile(projectId, path, read.result as string, {
-        author: { name: row.title || leaf(row.cwd) },
-        message: `decisions: ${path.split("/")[1]}`,
-      });
-      return undefined;
-    } catch (error) {
-      if (!(error instanceof FolderRefusal)) {
-        throw error;
-      }
-      return { code: error.status === 413 ? 413 : 400, refused: error.message };
-    }
+    return {
+      source,
+      sources: {
+        mockup: (id) =>
+          readText(posix.join(origin.dir, "mockups", `${id}.html`)),
+        image: async (path) => {
+          const read = await readMachineImage(
+            origin.machineId,
+            posix.join(origin.dir, path)
+          );
+          return typeof read === "string" ? undefined : read;
+        },
+      },
+    };
   };
 
   const publishDecisionPage = async (
@@ -3930,12 +3983,51 @@ export const createServer = (
           "This session belongs to no project, so it has no folder for decision pages.",
       };
     }
-    const path = `decisions/${page}/index.html`;
-    const refusal =
+    const folder = `decisions/${page}`;
+    const path = `${folder}/index.html`;
+    const read = await pageSources(
       dir === undefined
-        ? await pageInFolder(row.projectId, path)
-        : await copyPageIn(row, row.projectId, path, dir);
+        ? { projectId: row.projectId, folder }
+        : { dir, machineId: row.machineId }
+    );
+    if (read === undefined) {
+      return (await folderText(row.projectId, path)) === undefined
+        ? {
+            code: 404,
+            refused: `${folder}/ has no page.html or published page yet; pass dir with your work folder, or write ${folder}/page.html into the project's folder.`,
+          }
+        : { project: row.projectId, page };
+    }
+    if ("refused" in read) {
+      return read;
+    }
+    const refusal = await commitPage(row, row.projectId, path, read);
     return refusal ?? { project: row.projectId, page };
+  };
+
+  /** Builds page.html and commits it at `path`, by the session; the refusal when it cannot be. */
+  const commitPage = async (
+    row: InstanceRow,
+    projectId: string,
+    path: string,
+    read: { source: string; sources: PageSources }
+  ): Promise<PageRefusal | undefined> => {
+    const built = await buildDecisionPage(read.source, read.sources);
+    if ("problem" in built) {
+      return { code: 422, refused: built.problem };
+    }
+    try {
+      await writeFolderFile(projectId, path, built.html, {
+        author: { name: row.title || leaf(row.cwd) },
+        message: `decisions: ${path.split("/")[1]}`,
+      });
+      return undefined;
+    } catch (error) {
+      if (!(error instanceof FolderRefusal)) {
+        throw error;
+      }
+      return { code: error.status === 413 ? 413 : 400, refused: error.message };
+    }
   };
 
   /**
@@ -7480,36 +7572,132 @@ export const createServer = (
     }
   };
 
+  /** The machines connected now, in the order the hub keeps them. */
+  const onlineMachines = (): string[] =>
+    db
+      .listAgents()
+      .map((agent) => agent.machineId)
+      .filter((machineId) => registry.agent(machineId));
+
+  /**
+   * The hub's own machine shows itself by reading a token the hub wrote into
+   * its data folder: an agent that reads it back shares the hub's disk, so
+   * the projects' folders on the hub are its folders too. Asked once per
+   * connection (a register forgets the answer).
+   */
+  const hubToken = crypto.randomUUID();
+  const hubTokenPath = posix.join(PROJECTS_DIR, ".hub-machine");
+  let hubTokenWritten: Promise<void> | undefined;
+  const sharesHubDisk = new Map<string, Promise<boolean>>();
+  const onHubMachine = (machineId: string): Promise<boolean> => {
+    const known = sharesHubDisk.get(machineId);
+    if (known) {
+      return known;
+    }
+    const asked = (async () => {
+      hubTokenWritten ??= mkdir(PROJECTS_DIR, { recursive: true }).then(() =>
+        writeFile(hubTokenPath, hubToken)
+      );
+      await hubTokenWritten;
+      const agent = registry.agent(machineId);
+      const read = agent
+        ? await callFs(machineId, agent, { op: "read", path: hubTokenPath })
+        : "timeout";
+      if (read === "timeout") {
+        // No answer is no answer: the next start asks again.
+        sharesHubDisk.delete(machineId);
+        return false;
+      }
+      return read.ok && read.result === hubToken;
+    })();
+    sharesHubDisk.set(machineId, asked);
+    return asked;
+  };
+
+  /**
+   * Where a project's Caw starts before any checkout of it is online (D2):
+   * its folder on the hub, on the hub's machine, when that machine runs an
+   * agent; else `~/.cawco/caw/<projectId>`, made on the first machine that is
+   * online. Undefined while no machine is.
+   */
+  const leadHome = async (
+    projectId: string
+  ): Promise<{ machineId: string; cwd: string } | undefined> => {
+    const machines = onlineMachines();
+    const shares = await Promise.all(machines.map(onHubMachine));
+    const hubMachine = machines.find((_, index) => shares[index]);
+    if (hubMachine) {
+      // Made and committed on first use, as every read of it does.
+      await listFolder(projectId);
+      return { machineId: hubMachine, cwd: projectRoot(projectId) };
+    }
+    const [machineId] = machines;
+    if (!machineId) {
+      return undefined;
+    }
+    // The machine's home, so the session's row names a real path; the spawn
+    // makes the folder (the agent's `#workdir`).
+    const home = await runOnMachine(
+      machineId,
+      "/",
+      'printf %s "$HOME"',
+      15_000
+    );
+    const path = home.stdout.trim();
+    if (home.exitCode !== 0 || !path.startsWith("/")) {
+      throw new Error(
+        `${machineId} did not say where its home folder is, so Caw has no folder there: ${home.stderr.trim() || `exit ${home.exitCode}`}`
+      );
+    }
+    return { machineId, cwd: posix.join(path, ".cawco", "caw", projectId) };
+  };
+
   /**
    * One repository is one project: a folder whose remote a project already
    * has joins it as a checkout place (`placeAdded`), and the answer is that
-   * project, not a second one. Else a new project, its one place the folder.
-   * The dashboard's "New project" and "Make project" both come here.
+   * project, not a second one. Else a new project, its places its folder on
+   * the hub and the checkout it was made from, its primary. With no checkout
+   * (New project: its place is picked once it is set up) its one place is
+   * its folder on the hub. A new project's `template` is written as its
+   * stages.md; made with Caw and given `setup`, it opens its Setup thread and
+   * Caw is woken to set it up (caw.ts `setup`). The dashboard's "New
+   * project" and "Make project" and an accepted project offer all come here.
    */
   const createOrJoinProject = async (asked: {
     name: string;
-    machineId: string;
-    cwd: string;
+    checkout?: { machineId: string; cwd: string };
     /** Made with Caw: a new project's Caw starts on. */
     caw?: boolean;
+    template?: StagesTemplate;
+    /** What the Setup thread opens with: your prompt, or a note of where the project came from. */
+    setup?: {
+      note?: { body?: string; title: string };
+      prompt?: string;
+      promptId?: string;
+    };
   }): Promise<{
     project: ProjectRow;
     place: PlaceRow;
     placeAdded: boolean;
     joined: boolean;
+    setupThread?: ThreadSummary;
   }> => {
-    const cwd = placePath(asked.cwd);
-    const remote = await readRemote(runOnMachine, asked.machineId, cwd);
+    const checkout = asked.checkout && {
+      machineId: asked.checkout.machineId,
+      path: placePath(asked.checkout.cwd),
+    };
+    const remote = checkout
+      ? await readRemote(runOnMachine, checkout.machineId, checkout.path)
+      : null;
     const known = remote ? db.projectByRemote(remote) : undefined;
-    if (known) {
+    if (known && checkout) {
       const { place, added } = db.addPlace({
         projectId: known.id,
-        machineId: asked.machineId,
-        path: cwd,
+        ...checkout,
         kind: "checkout",
       });
       if (added) {
-        placesChanged(asked.machineId, known.id);
+        placesChanged(checkout.machineId, known.id);
       }
       return {
         project: db.project(known.id) ?? known,
@@ -7521,15 +7709,55 @@ export const createServer = (
     const created = db.createProject({
       id: crypto.randomUUID(),
       name: asked.name,
-      machineId: asked.machineId,
-      cwd,
+      ...(checkout ? { checkout } : {}),
       remote,
       caw: asked.caw ?? false,
     });
-    // Its one place, the checkout it was made from.
-    const [place] = created.places;
-    return { project: created, place, placeAdded: false, joined: false };
+    // The place it was made from: its checkout, else its folder on the hub.
+    const place =
+      checkoutOf(created) ??
+      created.places.find((each) => each.kind === "hub") ??
+      created.places[0];
+    const setupThread = await startProject(created, asked);
+    return {
+      project: created,
+      place,
+      placeAdded: false,
+      joined: false,
+      ...(setupThread ? { setupThread } : {}),
+    };
   };
+
+  /** A new project's template as its stages.md, and its Setup thread when it is made with Caw. */
+  const startProject = async (
+    created: ProjectRow,
+    asked: Parameters<typeof createOrJoinProject>[0]
+  ): Promise<ThreadSummary | undefined> => {
+    if (asked.template) {
+      await writeFolderFile(
+        created.id,
+        "stages.md",
+        templateText(asked.template),
+        { message: `stages: the ${asked.template} template` }
+      );
+      tasks.touched(created.id);
+    }
+    return created.caw && asked.setup
+      ? caw.setup(created.id, {
+          ...asked.setup,
+          template: asked.template ?? null,
+        })
+      : undefined;
+  };
+
+  /**
+   * A project as the API answers it: its places, and its primary checkout's
+   * id (`primaryPlaceId`, null while it has none).
+   */
+  const projectOut = (project: ProjectRow) => ({
+    ...project,
+    primaryPlaceId: checkoutOf(project)?.id ?? null,
+  });
 
   // Each project's spend cap: what holds its attempts and its Caw back (project-caps.ts).
   const caps = createCaps({
@@ -7798,7 +8026,13 @@ export const createServer = (
     asks: () => pending.list(),
     caps,
     db,
-    online: (machineId) => Boolean(registry.agent(machineId)),
+    online: (machineId) =>
+      machineId === undefined
+        ? onlineMachines().length > 0
+        : Boolean(registry.agent(machineId)),
+    leadHome,
+    folderChanged: (projectId) => tasks.touched(projectId),
+    fleetChoicesSet: () => Boolean(db.getSupervisorConfig()?.choicesSetAt),
     // Thread rows and messages reach every dashboard on the ledger, as sessions do.
     publish: (payload) =>
       registry.broadcast({ verb: "frames", machineId: "hub", payload }),
@@ -7838,6 +8072,7 @@ export const createServer = (
     run: runOnMachine,
     online: (machineId) => Boolean(registry.agent(machineId)),
     createProject: createOrJoinProject,
+    setup: (projectId, note) => caw.setup(projectId, { note, template: null }),
     moved: (machineIds) => {
       for (const machineId of machineIds) {
         publishInstances(machineId);
@@ -8291,6 +8526,7 @@ export const createServer = (
             return {
               deniedTools: config?.deniedTools ?? null,
               cawcoTodos: config?.cawcoTodos ?? false,
+              choicesSetAt: config?.choicesSetAt ?? null,
             };
           },
           write: (choices) => db.putSupervisorConfig(choices),
@@ -8873,7 +9109,7 @@ export const createServer = (
         // The frame that carries the machine list: every dashboard drops the
         // machine and its sessions without a reload.
         publishInstances(params.machineId);
-        return { sessions: gone.instanceIds.length, projects: gone.projects };
+        return { sessions: gone.instanceIds.length };
       })
       // A session with no transcript — one that never started, or whose
       // transcript is gone from its machine — and no process has nothing a
@@ -10898,30 +11134,65 @@ export const createServer = (
       // native app's client types a project by this route's own schema
       // (`GetApiProjects200Payload`), which a named row would rename.
       .get("/api/projects", () =>
-        db
-          .listProjects()
-          .map((project) => ({ ...project, cap: caps.capOf(project) }))
+        db.listProjects().map((project) => ({
+          ...projectOut(project),
+          cap: caps.capOf(project),
+        }))
       )
       // One repository is one project: a folder whose remote a project
       // already has joins it as a checkout place (`placeAdded`), and the
       // answer is that project, not a second one. `place` is the folder asked
-      // about; `machineId`/`cwd` stay the project's primary place.
+      // about. With no folder (New project: its checkout is picked once it is
+      // set up) its one place is its folder on the hub. `template` writes its
+      // stages.md; made with Caw, it opens its Setup thread with `prompt` as
+      // its first message (`promptId`, the dashboard's id for it) and wakes
+      // Caw to set it up.
       .post(
         "/api/projects",
         {
           body: t.Object({
-            name: t.String(),
-            cwd: t.String(),
-            machineId: t.String(),
+            name: t.String({ minLength: 1, maxLength: 200 }),
+            machineId: t.Optional(t.String({ minLength: 1 })),
+            cwd: t.Optional(t.String({ minLength: 1 })),
             // Made with Caw: its Caw starts on. A folder that joins a project
             // leaves that project's setting as it is.
             caw: t.Optional(t.Boolean()),
+            template: t.Optional(
+              t.Union(TEMPLATES.map((name) => t.Literal(name)))
+            ),
+            prompt: t.Optional(t.String({ maxLength: 20_000 })),
+            promptId: t.Optional(t.String({ minLength: 1, maxLength: 200 })),
           }),
         },
-        async ({ body }) => {
-          const { project, place, placeAdded } =
-            await createOrJoinProject(body);
-          return { ...project, place, placeAdded };
+        async ({ body, status }) => {
+          if ((body.machineId === undefined) !== (body.cwd === undefined)) {
+            return status(
+              400,
+              "A checkout is a machine and a folder: send both machineId and cwd, or neither."
+            );
+          }
+          const made = await createOrJoinProject({
+            name: body.name,
+            ...(body.machineId && body.cwd
+              ? { checkout: { machineId: body.machineId, cwd: body.cwd } }
+              : {}),
+            ...(body.caw === undefined ? {} : { caw: body.caw }),
+            ...(body.template ? { template: body.template } : {}),
+            ...(body.prompt?.trim()
+              ? {
+                  setup: {
+                    prompt: body.prompt,
+                    ...(body.promptId ? { promptId: body.promptId } : {}),
+                  },
+                }
+              : {}),
+          });
+          return {
+            ...projectOut(made.project),
+            place: made.place,
+            placeAdded: made.placeAdded,
+            ...(made.setupThread ? { setupThread: made.setupThread } : {}),
+          };
         }
       )
       .delete("/api/projects/:id", async ({ params }) => {
@@ -10976,7 +11247,7 @@ export const createServer = (
             await learnRemote(project.id, body.machineId, path);
           }
           return {
-            ...(db.project(project.id) ?? project),
+            ...projectOut(db.project(project.id) ?? project),
             place,
             placeAdded: added,
           };
@@ -10996,7 +11267,9 @@ export const createServer = (
         if (removed === "primary") {
           return status(
             409,
-            "This is the project's primary place. Forget the project to remove it."
+            leaving?.kind === "hub"
+              ? "This is the project's folder on the hub; it goes when the project does. Forget the project to remove it."
+              : "This is the project's primary checkout. Forget the project to remove it."
           );
         }
         return { ok: true };
@@ -11359,6 +11632,7 @@ export const createServer = (
                 }
               }
               registry.registerAgent(message.machineId, ws, ws.remoteAddress);
+              sharesHubDisk.delete(message.machineId);
               workItems.discardUnfiled(message.machineId);
               // Checks a stopped hub left running on this machine run again
               // the moment it can run commands — waiting on nothing else the

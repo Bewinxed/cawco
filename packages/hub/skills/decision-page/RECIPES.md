@@ -33,7 +33,7 @@ Put a figure between the why and the options; two side by side for "look" and "h
 </div>
 ```
 
-`{{MK:<id>}}` is `mockups/<id>.html`, inlined by the build ([CONTRACT.md](CONTRACT.md)).
+`{{MK:<id>}}` is `mockups/<id>.html`, inlined when the hub builds the page ([CONTRACT.md](CONTRACT.md)).
 
 ## Dials
 

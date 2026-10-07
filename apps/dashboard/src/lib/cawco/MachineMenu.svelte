@@ -61,18 +61,13 @@
     const sessions = cawco.instances.filter(
       (row) => row.machineId === machineId
     ).length;
-    // A project with a checkout (or its hub folder) elsewhere moves there
-    // and stays; only one that lives nowhere else goes.
-    const projects = cawco.projects.filter(
-      (row) =>
-        row.machineId === machineId &&
-        !row.places.some(
-          (place) => place.machineId !== machineId && place.kind !== "workspace"
-        )
+    // Every project keeps its folder on the hub: only its places here go.
+    const projects = cawco.projects.filter((row) =>
+      row.places.some((place) => place.machineId === machineId)
     ).length;
     await confirm({
       title: `Remove ${machineLabel(hostname)}?`,
-      body: `Its ${count(sessions, "session")} and ${count(projects, "project")} are removed from the fleet. Its spend history stays. If its agent starts again, it rejoins the fleet.`,
+      body: `Its ${count(sessions, "session")} are removed from the fleet${projects ? `, and ${count(projects, "project")} ${projects === 1 ? "loses its folders" : "lose their folders"} on it; the projects stay` : ""}. Its spend history stays. If its agent starts again, it rejoins the fleet.`,
       confirmLabel: "Remove machine",
       destructive: true,
       pendingLabel: "Removing…",

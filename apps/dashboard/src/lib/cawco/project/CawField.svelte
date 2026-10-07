@@ -9,7 +9,7 @@
    * Composer is not, since it needs a session to bind to.
    */
   import { appear } from "#lib/cawco/motion/curves.svelte.js";
-  import { departBox } from "#lib/cawco/motion/share.svelte.js";
+  import { departBox, land } from "#lib/cawco/motion/share.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Textarea } from "#lib/components/ui/textarea/index.js";
   import { IconSend } from "#lib/icons.js";
@@ -20,6 +20,9 @@
     onsend,
     autofocus = false,
     flies = false,
+    text = $bindable(""),
+    action,
+    lands,
   }: {
     /** What the field is for, read out. */
     label: string;
@@ -36,11 +39,19 @@
      * goes to `onsend` to send them as. The field stays; its text flies.
      */
     flies?: boolean;
+    /** The words in the field, for a place that puts words there (New project's starter chips). */
+    text?: string;
+    /**
+     * The send as a labelled primary (New project's `Start`), pending under
+     * its own words; else the composer's icon send.
+     */
+    action?: { label: string; pendingLabel: string };
+    /** Words that fly in land on the field under this key (motion/share). */
+    lands?: string;
   } = $props();
 
   let form = $state<HTMLFormElement | null>(null);
 
-  let text = $state("");
   let sending = $state(false);
   let refused = $state<string | null>(null);
 
@@ -76,33 +87,49 @@
   bind:this={form}
 >
   <div class="shell">
-    <!-- svelte-ignore a11y_autofocus -->
-    <Textarea
-      aria-label={label}
-      {autofocus}
-      class="field"
-      onkeydown={(event) => {
-        if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
-          event.preventDefault();
-          send();
-        }
-      }}
-      {placeholder}
-      rows={1}
-      bind:value={text}
-    />
-    <Button
-      aria-label="Send"
-      class="send pressable"
-      disabled={!text.trim()}
-      icon={IconSend}
-      pending={sending}
-      size="icon"
-      type="submit"
-    />
+    <div class="landing" {@attach land(() => lands, { uniform: true })}>
+      <!-- svelte-ignore a11y_autofocus -->
+      <Textarea
+        aria-label={label}
+        {autofocus}
+        class="field"
+        onkeydown={(event) => {
+          if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
+            event.preventDefault();
+            send();
+          }
+        }}
+        {placeholder}
+        rows={1}
+        bind:value={text}
+      />
+    </div>
+    {#if action}
+      <Button
+        class="start pressable"
+        disabled={!text.trim()}
+        failed={refused !== null}
+        label={action.label}
+        pending={sending}
+        pendingLabel={action.pendingLabel}
+        type="submit"
+      />
+    {:else}
+      <Button
+        aria-label="Send"
+        class="send pressable"
+        disabled={!text.trim()}
+        icon={IconSend}
+        pending={sending}
+        size="icon"
+        type="submit"
+      />
+    {/if}
   </div>
   {#if refused}
-    <p class="refused" role="alert" in:appear>{refused}</p>
+    <p class="refused" role="alert" class:beside={action} in:appear>
+      {refused}
+    </p>
   {/if}
 </form>
 
@@ -118,10 +145,20 @@
     align-items: flex-end;
     gap: var(--space-2);
   }
+  .landing {
+    display: flex;
+    flex: 1 1 auto;
+    min-inline-size: 0;
+  }
   .shell :global(.field) {
     flex: 1 1 auto;
     min-block-size: var(--c-composer-field);
     max-block-size: 10rem;
+  }
+  /* A labelled send stands as tall as the field's one line. */
+  .shell :global(.start) {
+    flex: none;
+    block-size: var(--c-composer-field);
   }
   /* The composer's send (Composer .stop): the field's height square, its
      16px plane. */
@@ -140,5 +177,11 @@
   .refused {
     font: var(--type-meta);
     color: var(--error-11);
+  }
+  /* Beside the labelled send, under its trailing edge. */
+  .refused.beside {
+    align-self: flex-end;
+    max-inline-size: 100%;
+    text-align: end;
   }
 </style>

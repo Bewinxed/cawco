@@ -2,6 +2,7 @@ import { error } from "@sveltejs/kit";
 import type { Machine, ProjectRow } from "#lib/cawco/client.svelte.js";
 import { type HubFailure, readHub } from "#lib/cawco/hub-read.js";
 import type { StagesView, TaskList } from "#lib/cawco/project-tasks.js";
+import { checkoutOf } from "#lib/cawco/projects.js";
 import type { PageLoad } from "./$types";
 
 /** The error page's line for a read the page cannot stand without. */
@@ -35,8 +36,9 @@ export const load: PageLoad = async ({ fetch, params, url }) => {
     return refused("the machines", machines);
   }
   const project = projects.value.find((row) => row.id === params.id) ?? null;
-  const machine = project
-    ? (machines.value.find((row) => row.machineId === project.machineId) ??
+  const primary = project ? checkoutOf(project) : undefined;
+  const machine = primary
+    ? (machines.value.find((row) => row.machineId === primary.machineId) ??
       null)
     : null;
   return {

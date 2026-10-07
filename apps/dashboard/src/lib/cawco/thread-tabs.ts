@@ -9,6 +9,8 @@
  * whose first message will make it, as `thread:new:<project id>`.
  */
 import type { InstanceRow, ThreadSummary } from "@cawco/core";
+import type { ProjectRow } from "./client.svelte";
+import { checkoutOf } from "./projects";
 
 const PREFIX = "thread:";
 const NEW = "thread:new:";
@@ -37,17 +39,19 @@ export const threadHref = (threadId: string): string =>
 
 /**
  * A thread as a session row, under its project: running while Caw works on
- * it or waits on you in it, at rest otherwise. It is its project's (the
- * project's machine and folder); its age is its newest message's.
+ * it or waits on you in it, at rest otherwise. It sits at the project's
+ * primary checkout, else its folder on the hub; its age is its newest
+ * message's.
  */
 export function threadRowOf(
   thread: ThreadSummary,
-  place: { cwd: string; machineId: string }
+  project: ProjectRow
 ): InstanceRow {
+  const place = checkoutOf(project) ?? project.places[0];
   return {
     id: threadTabId(thread.id),
-    machineId: place.machineId,
-    cwd: place.cwd,
+    machineId: place?.machineId ?? "hub",
+    cwd: place?.path ?? `projects/${project.id}`,
     projectId: thread.projectId,
     sessionId: null,
     status: thread.status === "ready" ? "sleeping" : "running",

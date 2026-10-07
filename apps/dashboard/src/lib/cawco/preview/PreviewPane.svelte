@@ -23,7 +23,9 @@
   import { appear, dur } from "../motion/curves.svelte";
   import { closeInto, depart } from "../motion/share.svelte";
   import SideSurface from "../side/SideSurface.svelte";
+  import PlacePick from "./PlacePick.svelte";
   import { type CapturedSelection, selectionShare } from "./selection";
+  import { applySetupPicks, isSetupPage } from "./setup-page";
   import { previewPlace, previewSourceKey } from "./source";
   import {
     type PreviewRpc,
@@ -31,6 +33,7 @@
     previewElement,
     previewError,
     previewMessageText,
+    previewPickPlace,
     previewPng,
     previewRpc,
     previewTitle,
@@ -42,8 +45,14 @@
     onselect,
     onescape,
     switcher,
+    sheet = false,
   }: {
     instanceId: string;
+    /**
+     * Drawn in the phone's sheet over the conversation (SideSheet): a sent
+     * setup page puts the sheet away, so Caw's reply under it is read.
+     */
+    sheet?: boolean;
     /** The Plan | Preview switch, when the conversation has a plan beside it (SideSplit). */
     switcher?: Snippet;
     onselect: (
@@ -113,6 +122,8 @@
       captured = false;
       // A page's choices are what its own bridge reads; a page without one shows no send.
       choices = null;
+      // A pick the old page asked for has no page left to answer.
+      picking = null;
     }
   });
   function post(message: object) {
@@ -149,9 +160,40 @@
   async function send(text?: string) {
     sending = true;
     try {
+      // A setup page's fleet choices and place are applied first (setup-page.ts).
+      await applySetupPicks(source, choices);
       heard(await sendPreviewChoices(instanceId, text));
     } finally {
       sending = false;
+    }
+    // The setup page is done once sent: on a phone its sheet stands over the
+    // thread, where Caw answers with the files and "Open the board".
+    if (sheet && isSetupPage(source)) {
+      await close();
+    }
+  }
+  /** A page's `cawco.pickPlace()` waiting on the person: the request it answers, and the page it came from. */
+  let picking = $state<{ id: number | string; pageHash: string } | null>(null);
+  async function pickedPlace(place: { machineId: string; path: string }) {
+    const asked = picking;
+    if (!asked) {
+      return;
+    }
+    heard(
+      await changePreviewChoice(instanceId, {
+        choice: "place",
+        pageHash: asked.pageHash,
+        value: place,
+      })
+    );
+    picking = null;
+    post({ jsonrpc: "2.0", id: asked.id, result: place });
+  }
+  function cancelPick() {
+    const asked = picking;
+    picking = null;
+    if (asked) {
+      post({ jsonrpc: "2.0", id: asked.id, result: null });
     }
   }
   async function answer(rpc: PreviewRpc) {
@@ -202,6 +244,19 @@
           }
           await send(text);
           reply({});
+          break;
+        }
+        case "cawco/pick-place": {
+          const asked = previewPickPlace(rpc.params);
+          if (!asked || rpc.id === undefined) {
+            refuse(-32_602, "pickPlace names the page it is asked from.");
+            break;
+          }
+          // A second ask replaces one still open: the page asked again.
+          if (picking) {
+            cancelPick();
+          }
+          picking = { id: rpc.id, pageHash: asked.pageHash };
           break;
         }
         default:
@@ -527,6 +582,9 @@
       class="kit-skeleton block h-[11px] w-[42%] rounded-[var(--radius-xs)]"
     ></span>
   </div>
+  {#if picking}
+    <PlacePick oncancel={cancelPick} onpick={pickedPlace} />
+  {/if}
   {#if failure}
     <div class="error" role="alert" transition:appear>
       <p>{failure.message}</p>

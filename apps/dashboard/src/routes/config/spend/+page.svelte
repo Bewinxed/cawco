@@ -75,8 +75,8 @@
 >
   <div class="group">
     <p class="note">
-      Each project sets what it may spend in a day or a month on its Usage
-      page, and follows this unless it chooses otherwise.
+      Each project sets what it may spend in a day or a month on its Usage page,
+      and follows this unless it chooses otherwise.
     </p>
     <Field
       hint={means}

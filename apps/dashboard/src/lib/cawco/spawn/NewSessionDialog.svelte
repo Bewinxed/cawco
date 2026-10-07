@@ -47,8 +47,8 @@
   import Stars from "~icons/solar/stars-bold-duotone";
   import {
     cawco,
-    createProject,
     machineFs,
+    projectAtFolder,
     spawnSession,
   } from "../client.svelte";
   import {
@@ -71,7 +71,7 @@
     fullSendCopy,
     permissionModesFor,
   } from "../permission-modes";
-  import { checkoutOn, placedOn } from "../projects";
+  import { checkoutOf, checkoutOn, placedOn } from "../projects";
   import { rememberSpawn, spawnPrefs } from "../spawnPrefs.svelte";
   import LifetimeChip from "./LifetimeChip.svelte";
   import LocationChip from "./LocationChip.svelte";
@@ -519,15 +519,16 @@
         ? cawco.project(prefill.projectId)
         : undefined;
       projectId = seeded?.id;
+      const primary = seeded ? checkoutOf(seeded) : undefined;
       const first =
         continueFrom?.machineId ||
         prefill?.machineId ||
-        seeded?.machineId ||
+        primary?.machineId ||
         cawco.onlineMachines[0]?.machineId ||
         "";
       machineIds = first ? [first] : [];
       machinesTouched = false;
-      cwd = continueFrom?.cwd || prefill?.cwd || seeded?.cwd || "";
+      cwd = continueFrom?.cwd || prefill?.cwd || primary?.path || "";
       ({ harness, permissionMode } = spawnPrefs);
       fullSendCarried = permissionMode === "fullSend";
       summarizerHarness = spawnPrefs.harness;
@@ -753,7 +754,7 @@
     popover = null;
   }
   async function createFromChip(draft: { name: string; path: string }) {
-    const created = await createProject({
+    const created = await projectAtFolder({
       machineId,
       cwd: draft.path,
       name: draft.name,

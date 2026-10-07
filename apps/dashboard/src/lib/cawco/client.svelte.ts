@@ -201,6 +201,9 @@ export type { InstanceRow } from "@cawco/core";
 export interface ProjectPlace {
   createdAt: string;
   id: string;
+  /** The project's primary checkout: exactly one once it has any. */
+  isPrimary: boolean;
+  /** A `hub` place is the project's folder on the hub (machine `hub`, path `projects/<id>`). */
   kind: "checkout" | "workspace" | "hub";
   machineId: string;
   path: string;
@@ -208,18 +211,21 @@ export interface ProjectPlace {
 }
 
 /**
- * A project the hub knows about (`GET /api/projects`). `machineId` and `cwd`
- * are its primary place; `places` holds every place, that one first.
+ * A project the hub knows about (`GET /api/projects`). `places` holds every
+ * place, its primary checkout first, then its folder on the hub; read the
+ * primary with `checkoutOf` (projects.ts).
  */
 export interface ProjectRow {
   /** Its spend cap as it stands, kept by `project.cap` frames; null: none. */
   cap?: ProjectCap | null;
+  /** Made with Caw: its Caw is on. */
+  caw: boolean;
   createdAt: string;
-  cwd: string;
   id: string;
-  machineId: string;
   name: string;
   places: ProjectPlace[];
+  /** Its primary checkout's id; null while it has none (a New project before its place is picked). */
+  primaryPlaceId: string | null;
   /** The repository its checkouts are of, `host/owner/repo`; null when unknown. */
   remote: string | null;
 }
@@ -4623,11 +4629,45 @@ export async function machineFs<T>(
 }
 
 /**
- * Names a machine + directory so it can be opened as a project home. A
- * checkout of a repository a project already has joins that project as a
- * place instead (`placeAdded`); `place` is the folder asked about.
+ * New project (`POST /api/projects`), made with Caw: its one place is its
+ * folder on the hub until setup picks its checkout. `template` is written as
+ * its stages.md; `prompt` opens its Setup thread (as the message `promptId`)
+ * and wakes Caw to set it up. The hub's refusal is its own words.
  */
 export async function createProject(project: {
+  name: string;
+  template?: string;
+  prompt: string;
+  promptId: string;
+}): Promise<ProjectRow & { place: ProjectPlace; setupThread?: ThreadSummary }> {
+  const response = await fetch("/api/projects", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...project, caw: true }),
+  });
+  if (!response.ok) {
+    throw new Error(
+      (await response.text()) ||
+        `The hub answered ${response.status}, so the project was not made. Try again.`
+    );
+  }
+  const created = (await response.json()) as ProjectRow & {
+    place: ProjectPlace;
+    setupThread?: ThreadSummary;
+  };
+  if (created.setupThread) {
+    adoptThread(created.setupThread);
+  }
+  await refresh();
+  return created;
+}
+
+/**
+ * A project from a folder on a machine (New Session's project chip): that
+ * checkout its primary. A checkout of a repository a project already has
+ * joins that project as a place instead; `place` is the folder asked about.
+ */
+export async function projectAtFolder(project: {
   name: string;
   cwd: string;
   machineId: string;
@@ -4639,7 +4679,8 @@ export async function createProject(project: {
   });
   if (!response.ok) {
     throw new Error(
-      `Could not save this project — the hub answered ${response.status}. Try again.`
+      (await response.text()) ||
+        `The hub answered ${response.status}, so the project was not saved. Try again.`
     );
   }
   const created = (await response.json()) as ProjectRow & {
@@ -4648,6 +4689,46 @@ export async function createProject(project: {
   };
   await refresh();
   return created;
+}
+
+/** A checkout of the project, by machine and folder (`POST /api/projects/:id/places`); the first is its primary. */
+export async function addProjectPlace(
+  projectId: string,
+  checkout: { machineId: string; path: string }
+): Promise<void> {
+  const response = await fetch(
+    `/api/projects/${encodeURIComponent(projectId)}/places`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(checkout),
+    }
+  );
+  if (!response.ok) {
+    throw new Error(
+      (await response.text()) ||
+        `The hub answered ${response.status}, so the place was not added.`
+    );
+  }
+  await refresh();
+}
+
+/** Sets the fleet's two choices (`PUT /api/fleet/choices`): delegates instead of subagents, CawCo's to-dos. */
+export async function setFleetChoices(choices: {
+  delegates?: boolean;
+  todos?: boolean;
+}): Promise<void> {
+  const response = await fetch("/api/fleet/choices", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(choices),
+  });
+  if (!response.ok) {
+    throw new Error(
+      (await response.text()) ||
+        `The hub answered ${response.status}, so the fleet's choices were not set.`
+    );
+  }
 }
 
 /**
@@ -4682,6 +4763,8 @@ export interface ProjectOfferAccepted {
   joined: boolean;
   project: { id: string; name: string };
   sessions: string[];
+  /** A new project's Setup thread, where its Caw sets it up; none when the folder joined one. */
+  setupThread?: ThreadSummary;
   tasks: { id: string; title: string }[];
   unfiled: { title: string; why: string }[];
 }
@@ -4710,6 +4793,9 @@ export async function answerProjectOffer(
     return null;
   }
   const accepted = (await response.json()) as ProjectOfferAccepted;
+  if (accepted.setupThread) {
+    adoptThread(accepted.setupThread);
+  }
   await refresh();
   return accepted;
 }

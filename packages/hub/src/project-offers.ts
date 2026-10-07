@@ -25,6 +25,7 @@ import type {
   InstanceRow,
   ProjectOfferReason,
   ProjectOfferSummary,
+  ThreadSummary,
 } from "@cawco/core";
 import { Elysia, t } from "elysia";
 import { z } from "zod";
@@ -61,6 +62,8 @@ export interface AcceptResult {
   project: { id: string; name: string };
   /** The sessions moved into it: this one, then its delegates. */
   sessions: string[];
+  /** A new project's Setup thread, where its Caw sets it up; none when the folder joined one. */
+  setupThread?: ThreadSummary;
   /** Plan items filed as proposed tasks, and the ones the project refused. */
   tasks: { id: string; title: string }[];
   unfiled: { title: string; why: string }[];
@@ -69,11 +72,11 @@ export interface AcceptResult {
 type InstanceShape = ReturnType<DbShape["listInstances"]>[number];
 
 export interface ProjectOffersDeps {
-  /** Makes the project, or joins the one that has the folder's remote (server.ts, POST /api/projects). */
+  /** Makes the project with Caw, or joins the one that has the folder's remote (server.ts, POST /api/projects). */
   createProject: (asked: {
     name: string;
-    machineId: string;
-    cwd: string;
+    checkout: { machineId: string; cwd: string };
+    caw: true;
   }) => Promise<{ project: ProjectRow; placeAdded: boolean; joined: boolean }>;
   db: DbShape;
   /** Sessions moved into a project: their machines' rails are published again. */
@@ -87,6 +90,11 @@ export interface ProjectOffersDeps {
     cmd: string,
     timeoutMs?: number
   ) => Promise<CommandResult>;
+  /** Opens a new project's Setup thread with a note and wakes its Caw to set it up (caw.ts `setup`). */
+  setup: (
+    projectId: string,
+    note: { body?: string; title: string }
+  ) => ThreadSummary;
   tasks: Tasks;
 }
 
@@ -185,6 +193,44 @@ export const createProjectOffers = (deps: ProjectOffersDeps) => {
   const planOf = async (row: InstanceShape): Promise<PlanItem[]> => {
     const ledger = await readLedger(row);
     return ledger.length > 0 ? ledger : (todos.get(row.id) ?? []);
+  };
+
+  /** Files a plan's items as proposed tasks, in plan order; the ones the project refused, with why. */
+  const filePlan = async (
+    projectId: string,
+    plan: PlanItem[],
+    actor: TaskActor
+  ): Promise<{
+    filed: AcceptResult["tasks"];
+    unfiled: AcceptResult["unfiled"];
+  }> => {
+    const filed: AcceptResult["tasks"] = [];
+    const unfiled: AcceptResult["unfiled"] = [];
+    for (const item of plan) {
+      const title = titleOf(item.subject);
+      if (!title) {
+        continue;
+      }
+      try {
+        // biome-ignore lint/performance/noAwaitInLoops: task numbers are handed out in plan order
+        const task = await deps.tasks.create(
+          projectId,
+          {
+            title,
+            labels: [PROPOSED_LABEL],
+            ...(item.description ? { description: item.description } : {}),
+          },
+          actor
+        );
+        filed.push({ id: task.id, title: task.title });
+      } catch (error) {
+        unfiled.push({
+          title,
+          why: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+    return { filed, unfiled };
   };
 
   const offer = (
@@ -402,8 +448,8 @@ export const createProjectOffers = (deps: ProjectOffersDeps) => {
       }
       const { project, joined } = await deps.createProject({
         name: leaf(placePath(row.cwd)),
-        machineId: row.machineId,
-        cwd: row.cwd,
+        checkout: { machineId: row.machineId, cwd: row.cwd },
+        caw: true,
       });
       const moving = [row, ...descendants(row.id, db.listInstances())];
       db.setInstancesProject(
@@ -414,40 +460,28 @@ export const createProjectOffers = (deps: ProjectOffersDeps) => {
       db.answerProjectOffer(row.id, "accepted", project.id);
       deps.publish(row, null);
 
-      const plan = await planOf(row);
-      const filed: AcceptResult["tasks"] = [];
-      const unfiled: AcceptResult["unfiled"] = [];
-      for (const item of plan) {
-        const title = titleOf(item.subject);
-        if (!title) {
-          continue;
-        }
-        try {
-          // biome-ignore lint/performance/noAwaitInLoops: task numbers are handed out in plan order
-          const task = await deps.tasks.create(
-            project.id,
-            {
-              title,
-              labels: [PROPOSED_LABEL],
-              ...(item.description ? { description: item.description } : {}),
-            },
-            actor
-          );
-          filed.push({ id: task.id, title: task.title });
-        } catch (error) {
-          unfiled.push({
-            title,
-            why: error instanceof Error ? error.message : String(error),
-          });
-        }
-      }
+      const { filed, unfiled } = await filePlan(
+        project.id,
+        await planOf(row),
+        actor
+      );
       todos.delete(row.id);
+      // A new project is set up with Caw once its plan is on the board.
+      const setupThread = joined
+        ? undefined
+        : deps.setup(project.id, {
+            title: `Project · made from ${row.title || leaf(row.cwd)}`,
+            body: filed.length
+              ? `Its plan is on the board as ${plural(filed.length, "proposed task", "proposed tasks")}: ${filed.map((task) => task.id).join(", ")}.`
+              : "",
+          });
       return {
         joined,
         project: { id: project.id, name: project.name },
         sessions: moving.map((r) => r.id),
         tasks: filed,
         unfiled,
+        ...(setupThread ? { setupThread } : {}),
       };
     },
   };

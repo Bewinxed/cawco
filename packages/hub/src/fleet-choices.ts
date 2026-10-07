@@ -42,6 +42,8 @@ export interface FleetChoices {
   delegates: boolean;
   /** The baseline as stored, the delegates choice and every other denial in it. */
   deniedTools: string[];
+  /** When someone last set the choices here (ms epoch); null while nobody has, so a new project's setup asks. */
+  setAt: number | null;
   /** Use CawCo's to-dos instead of each harness's own list and plan mode. */
   todos: boolean;
   /** What each choice denies, per harness. */
@@ -52,6 +54,8 @@ export interface FleetChoices {
 export interface StoredChoices {
   /** "CawCo's to-dos". */
   cawcoTodos: boolean;
+  /** When a PUT last set them; null while nobody has. */
+  choicesSetAt: Date | null;
   /** The baseline; null before anyone set it. */
   deniedTools: string[] | null;
 }
@@ -69,6 +73,7 @@ const withDelegates = (list: readonly string[], on: boolean): string[] => {
 export const readChoices = ({
   deniedTools,
   cawcoTodos,
+  choicesSetAt,
 }: StoredChoices): FleetChoices => {
   const list = [...(deniedTools ?? DEFAULT_DENIED_TOOLS)];
   return {
@@ -76,6 +81,7 @@ export const readChoices = ({
       list.includes(name)
     ),
     todos: cawcoTodos,
+    setAt: choicesSetAt?.getTime() ?? null,
     deniedTools: list,
     tools: { delegates: NATIVE_TOOLS.subagents, todos: NATIVE_TOOLS.todos },
   };
@@ -89,7 +95,11 @@ export const readChoices = ({
  */
 export const fleetChoicesRoutes = (deps: {
   read: () => StoredChoices;
-  write: (choices: { deniedTools?: string[]; cawcoTodos?: boolean }) => void;
+  write: (choices: {
+    deniedTools?: string[];
+    cawcoTodos?: boolean;
+    choicesSetAt: Date;
+  }) => void;
   synced: () => void;
 }) =>
   new Elysia()
@@ -114,6 +124,7 @@ export const fleetChoicesRoutes = (deps: {
                 ),
               }),
           ...(body.todos === undefined ? {} : { cawcoTodos: body.todos }),
+          choicesSetAt: new Date(),
         });
         deps.synced();
         return readChoices(deps.read());

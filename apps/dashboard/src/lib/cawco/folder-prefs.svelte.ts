@@ -7,6 +7,7 @@
 
 import type { ProjectRow } from "./client.svelte";
 import { identityHue } from "./identity";
+import { checkoutOf } from "./projects";
 import { readJson, writeJson } from "./storage";
 
 export interface FolderPref {
@@ -64,7 +65,7 @@ export const folderPrefs = {
         continue;
       }
       const [owner] = projects
-        .filter((project) => project.cwd === cwd)
+        .filter((project) => checkoutOf(project)?.path === cwd)
         .sort(
           (a, b) =>
             a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id)

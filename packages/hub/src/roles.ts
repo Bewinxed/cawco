@@ -14,7 +14,7 @@
  *   of its project's tasks and its own task's to-dos; changes to tasks and
  *   fleet settings go to its parent through handoff.
  * - **lead**: a project's Caw. Board tools only: tasks and to-dos, threads,
- *   drafting views,
+ *   drafting views, its project's folder on the hub, decision pages,
  *   delegating and steering the project's work, the person's phone. It has
  *   no edit or shell tools in its harness either (caw.ts).
  * - **overseer**: fleet-watch triage: read the fleet, stop or interrupt, tell
@@ -52,8 +52,18 @@ const TASK_WRITE = [
   "task_retry",
 ] as const;
 
-/** Caw's own: a project's conversations with it, and the views it drafts (caw.ts). */
-export const CAW_TOOLS = ["thread_read", "thread_reply", "view_draft"] as const;
+/**
+ * Caw's own: a project's conversations with it, the views it drafts, and its
+ * folder on the hub (caw.ts).
+ */
+export const CAW_TOOLS = [
+  "thread_read",
+  "thread_reply",
+  "view_draft",
+  "folder_list",
+  "folder_read",
+  "folder_write",
+] as const;
 
 /** The session tools a delegate keeps from the worker's set. */
 const DELEGATE_SESSION = [
@@ -103,6 +113,9 @@ const TOOLS: Record<Exclude<SessionRole, "worker">, ReadonlySet<string>> = {
     "stop_delegate",
     "interrupt_delegate",
     "answer_delegate",
+    // Decision pages: setup's, and any choice Caw puts to the person.
+    "show_preview",
+    "read_choices",
   ]),
   overseer: new Set([
     ...CORE,

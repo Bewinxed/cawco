@@ -67,6 +67,17 @@ import type {
   WorkItemRow,
 } from "./db";
 import type { Caps } from "./project-caps";
+import { readProjectTypes } from "./project-delegate-types";
+import {
+  FOLDER_FILE_LIMIT,
+  FolderRefusal,
+  folderPath,
+  listFolder,
+  readFolderFile,
+  writeFolderFile,
+} from "./project-folder";
+import { setupEvent } from "./setup";
+import { readStages, type StagesTemplate } from "./stages";
 import type { TaskEvent, TaskView } from "./tasks";
 import type { Views } from "./views";
 
@@ -149,6 +160,7 @@ const messageOf = (row: ThreadMessageRow): ThreadMessage => {
         author: "caw",
         body: row.body,
         ...(row.tasks?.length ? { tasks: row.tasks } : {}),
+        ...(row.files?.length ? { files: row.files } : {}),
       };
     default:
       return {
@@ -165,6 +177,43 @@ const messageOf = (row: ThreadMessageRow): ThreadMessage => {
 const TITLE_MAX = 60;
 const FIRST_LINE = /\r?\n/;
 const TASK_ID = /^tsk-\d{1,9}$/;
+
+/** The most files one reply names. */
+const FILES_MAX = 40;
+const STAGES_FILE = "stages.md";
+
+/** A folder call, its refusal as the sentence Caw reads. */
+const folderCall = async <T>(call: () => T | Promise<T>): Promise<T> => {
+  try {
+    return await call();
+  } catch (error) {
+    if (error instanceof FolderRefusal) {
+      throw new Error(error.message, { cause: error });
+    }
+    throw error;
+  }
+};
+
+/** The files a reply names, each a file the project's folder has; refused naming one it has not. */
+const folderFiles = async (
+  projectId: string,
+  files: string[]
+): Promise<string[]> => {
+  const paths = [...new Set(files.map((file) => folderPath(file)))];
+  const listed = await folderCall(() => listFolder(projectId, "", true));
+  const there = new Set(
+    listed.entries
+      .filter((entry) => entry.kind === "file")
+      .map((entry) => entry.path)
+  );
+  const missing = paths.filter((path) => !there.has(path));
+  if (missing.length > 0) {
+    throw new Error(
+      `${missing.join(", ")} ${missing.length > 1 ? "are" : "is"} not in the project's folder; name the files you wrote with folder_write.`
+    );
+  }
+  return paths;
+};
 
 const titleFrom = (body: string): string => {
   const line = body.trim().split(FIRST_LINE)[0]?.trim() ?? "";
@@ -200,7 +249,7 @@ const refuse = (code: 400 | 403 | 404 | 409, message: string): never => {
 const briefOf = (projectName: string): string =>
   [
     `You are Caw, the lead of the project “${projectName}” in CawCo.`,
-    "You have the project's board (task_read, task_create, task_update, task_link, task_start, task_retry, todo_write), its threads (thread_read, thread_reply), its views (view_draft), delegate with the tools that steer the project's work (handoff, answer_delegate, stop_delegate, interrupt_delegate, set_item_checks), and send_to_user. You have no edit or shell tools: work that changes files becomes a task or a delegate.",
+    "You have the project's board (task_read, task_create, task_update, task_link, task_start, task_retry, todo_write), its threads (thread_read, thread_reply), its views (view_draft), its folder on the hub (folder_list, folder_read, folder_write: stages.md, delegates/, AGENTS.md, decisions/), decision pages (show_preview with a page, read_choices), delegate with the tools that steer the project's work (handoff, answer_delegate, stop_delegate, interrupt_delegate, set_item_checks), and send_to_user. You have no edit or shell tools: work that changes the project's code becomes a task or a delegate.",
     "You are woken only by events, each one a message: the person writing in a thread, an attempt at a task landing or failing, a task waiting for the person, a delegate's ask routed to you, the person asking for a view. Handle the event, then end your turn. Nothing wakes you on a timer.",
     "When the person writes in a thread, answer in that thread with thread_reply; the person does not see what you say outside it. Name the tasks a reply is about in its `tasks`. Code coordinates, models judge, the person decides: permissions, merges, configuration and public actions are theirs, so ask in the thread (AskUserQuestion lands there).",
     "A view-request event is the person asking for a view of the project's tasks: answer it with view_draft, then say in that thread what you drafted; the person keeps or discards it.",
@@ -233,8 +282,20 @@ export interface CawDeps {
   >;
   /** Ends a session (the lead, when Caw is turned off or moves harness). */
   readonly end: (instanceId: string) => void;
-  /** Whether a machine is connected now. */
-  readonly online: (machineId: string) => boolean;
+  /** Whether the fleet's two choices were ever set (the setup page asks for them until they are). */
+  readonly fleetChoicesSet: () => boolean;
+  /** The project's folder changed under its tasks (stages.md, a task file). */
+  readonly folderChanged: (projectId: string) => void;
+  /**
+   * Where Caw starts while no checkout of the project is online: its folder
+   * on the hub when the hub's machine runs an agent, else a folder of his own
+   * on another machine that is online; undefined while no machine is.
+   */
+  readonly leadHome: (
+    projectId: string
+  ) => Promise<{ machineId: string; cwd: string } | undefined>;
+  /** Whether a machine is connected now; without one, whether any is. */
+  readonly online: (machineId?: string) => boolean;
   /** Tells every open dashboard a thread changed (the ledger's broadcast). */
   readonly publish: (frame: ThreadUpsertFrame | ThreadMessageFrame) => void;
   /** Delivers one message to a session through the hub's one send path. */
@@ -252,6 +313,9 @@ export const createCaw = ({
   caps,
   db,
   end,
+  fleetChoicesSet,
+  folderChanged,
+  leadHome,
   online,
   publish,
   send,
@@ -309,6 +373,7 @@ export const createCaw = ({
     projectId: thread.projectId,
     title: thread.title,
     lastAt: thread.updatedAt.getTime(),
+    setup: thread.setup,
     status: statusOf(thread.id),
   });
 
@@ -407,27 +472,35 @@ export const createCaw = ({
       : undefined;
   };
 
-  /** Where Caw starts: a checkout on a machine that is online, the primary place first. */
-  const placeFor = (project: ReturnType<typeof projectOf>) => {
+  /** A checkout of the project on a machine that is online, the primary first. */
+  const checkoutFor = (project: ReturnType<typeof projectOf>) => {
     const checkouts = project.places.filter(
       (place) => place.kind === "checkout" && online(place.machineId)
     );
-    return (
-      checkouts.find(
-        (place) =>
-          place.machineId === project.machineId && place.path === project.cwd
-      ) ?? checkouts[0]
-    );
+    return checkouts.find((place) => place.isPrimary) ?? checkouts[0];
+  };
+
+  /**
+   * Where Caw starts: a checkout that is online; before the project has one
+   * online, its folder on the hub or a folder of his own ({@link leadHome}).
+   */
+  const placeFor = async (
+    project: ReturnType<typeof projectOf>
+  ): Promise<{ machineId: string; cwd: string } | undefined> => {
+    const checkout = checkoutFor(project);
+    return checkout
+      ? { machineId: checkout.machineId, cwd: checkout.path }
+      : await leadHome(project.id);
   };
 
   /** Why Caw could not start for the project now, or null. */
   const problemOf = (project: ReturnType<typeof projectOf>): string | null => {
-    if (!project.caw || standing(project)) {
+    if (!project.caw || standing(project) || checkoutFor(project)) {
       return null;
     }
-    return placeFor(project)
+    return online()
       ? null
-      : `No checkout of ${project.name} is on a machine that is online, so Caw cannot start. Bring one of its machines online.`;
+      : "No machine is online, so Caw cannot start. Bring a machine online.";
   };
 
   const message = (target: InstanceRow, content: string): void =>
@@ -457,13 +530,17 @@ export const createCaw = ({
     event: string
   ): Promise<InstanceRow> => {
     const place =
-      placeFor(project) ??
-      refuse(409, problemOf(project) ?? "Caw cannot start.");
+      (await placeFor(project)) ??
+      refuse(
+        409,
+        problemOf(project) ??
+          "No machine is online, so Caw cannot start. Bring a machine online."
+      );
     const instanceId = crypto.randomUUID();
     cawDenied(project.cawHarness);
     await spawn(place.machineId, {
       instanceId,
-      cwd: place.path,
+      cwd: place.cwd,
       harness: project.cawHarness,
       ...(project.cawModel ? { model: project.cawModel } : {}),
       projectId: project.id,
@@ -843,6 +920,63 @@ export const createCaw = ({
     },
 
     /**
+     * A project made with Caw (New project, an accepted offer): its Setup
+     * thread, opened with your prompt (`promptId`, the id the dashboard sent
+     * it as, so your words fly into their row) or a note of where it came
+     * from, and Caw woken once to set the project up (setup.ts). A Caw that
+     * cannot start is noted in the thread: the project stands either way.
+     */
+    setup(
+      projectId: string,
+      ask: {
+        /** The note a project without a prompt opens with (an offer's). */
+        note?: { body?: string; title: string };
+        prompt?: string;
+        promptId?: string;
+        template: StagesTemplate | null;
+      }
+    ): ThreadSummary {
+      const project = projectOf(projectId);
+      const prompt = ask.prompt?.trim();
+      unsaid(ask.promptId);
+      const made = db.createThread({
+        id: crypto.randomUUID(),
+        projectId,
+        title: "Setup",
+        setup: true,
+        first: prompt
+          ? {
+              author: "you",
+              body: prompt,
+              ...(ask.promptId ? { id: ask.promptId } : {}),
+            }
+          : {
+              author: "event",
+              body: ask.note?.body?.trim() ?? "",
+              noteTitle: ask.note?.title ?? `Project · ${project.name} made`,
+            },
+      });
+      said(made.thread, made.message, false);
+      const threadId = made.thread.id;
+      wake(projectId, {
+        threadId,
+        text: setupEvent({
+          askFleet: !fleetChoicesSet(),
+          from: prompt ? "prompt" : "offer",
+          projectName: project.name,
+          template: ask.template,
+          threadId,
+        }),
+      }).catch((error: unknown) => {
+        noteIn(projectId, threadId, {
+          title: "Caw · could not start",
+          body: error instanceof Error ? error.message : String(error),
+        });
+      });
+      return summaryOf(made.thread);
+    },
+
+    /**
      * A task changed: one that entered a stage of kind `you` by anyone but
      * Caw or you wakes Caw (a needs-you item), noted in the thread that
      * named the task.
@@ -1084,18 +1218,96 @@ export const createCaw = ({
               .array(z.string().regex(TASK_ID))
               .optional()
               .describe("Tasks the reply is about (tsk-12): shown as cards."),
+            files: z
+              .array(z.string().min(1))
+              .max(FILES_MAX)
+              .optional()
+              .describe(
+                "Files of the project's folder you wrote (stages.md, delegates/writer.md): shown as chips the person opens."
+              ),
           },
-          ({ thread, body, tasks }) => {
+          async ({ thread, body, tasks, files }) => {
             const projectId = mine();
             threadIn(projectId, thread);
+            const named = files?.length
+              ? await folderFiles(projectId, files)
+              : [];
             const added = db.addThreadMessage({
               threadId: thread,
               author: "caw",
               body,
               ...(tasks?.length ? { tasks: [...new Set(tasks)] } : {}),
+              ...(named.length ? { files: named } : {}),
             });
             said(added.thread, added.message);
-            return Promise.resolve(ok({ ok: true, message: added.message.id }));
+            return ok({ ok: true, message: added.message.id });
+          }
+        ),
+        tool(
+          "folder_list",
+          "List your project's folder on the hub: its stages.md, delegates/, AGENTS.md, decisions/ and task files. `path` lists one folder inside it; `recursive` everything under it.",
+          {
+            path: z.string().optional(),
+            recursive: z.boolean().optional(),
+          },
+          async ({ path, recursive }) =>
+            ok(
+              await folderCall(() => listFolder(mine(), path ?? "", recursive))
+            )
+        ),
+        tool(
+          "folder_read",
+          "Read one text file of your project's folder on the hub, whole.",
+          { path: z.string().min(1) },
+          async ({ path }) =>
+            ok(await folderCall(() => readFolderFile(mine(), path)))
+        ),
+        tool(
+          "folder_write",
+          "Write one text file of your project's folder on the hub, committed by Caw: stages.md (refused with its problems unless it reads cleanly), delegates/<type>.md (a delegate type; its problems come back), AGENTS.md, decisions/<page>/page.html. Its folders are made as needed.",
+          {
+            path: z.string().min(1),
+            content: z.string().max(FOLDER_FILE_LIMIT),
+            message: z
+              .string()
+              .max(200)
+              .optional()
+              .describe("The commit message; Add/Update <path> when left out."),
+          },
+          async ({ path, content, message: commitMessage }) => {
+            const projectId = mine();
+            const rel = await folderCall(() => folderPath(path));
+            if (rel === STAGES_FILE) {
+              const reading = readStages(content);
+              if (!reading.ok) {
+                throw new Error(
+                  `stages.md was not written: ${reading.problems.join(" ")}`
+                );
+              }
+            }
+            const written = await folderCall(() =>
+              writeFolderFile(projectId, rel, content, {
+                author: { name: "Caw" },
+                ...(commitMessage ? { message: commitMessage } : {}),
+              })
+            );
+            folderChanged(projectId);
+            const problems = rel.startsWith("delegates/")
+              ? readProjectTypes(projectId).problems.filter(
+                  (problem) => problem.path === rel
+                )
+              : [];
+            return ok({
+              ok: true,
+              path: rel,
+              sha: written.sha,
+              ...(problems.length
+                ? {
+                    problems: problems.map((problem) => problem.problem),
+                    note: `${rel} was written but does not make a delegate type yet; fix it and write it again.`,
+                  }
+                : {}),
+            });
           }
         ),
         tool(

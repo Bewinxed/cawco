@@ -120,7 +120,9 @@ function box(
 /**
  * The MCP Apps methods the choices bridge answers (spec 2026-01-26): the
  * handshake, a health check, `tools/call` (read_choices only), a change
- * (`ui/update-model-context`) and a send (`ui/message`).
+ * (`ui/update-model-context`) and a send (`ui/message`); and CawCo's own
+ * `cawco/pick-place` (`cawco.pickPlace`), which asks the person for a
+ * machine and folder with the pane's own pickers.
  */
 const RPC_METHODS = new Set([
   "ui/initialize",
@@ -129,7 +131,16 @@ const RPC_METHODS = new Set([
   "tools/call",
   "ui/update-model-context",
   "ui/message",
+  "cawco/pick-place",
 ]);
+
+/** The page hash a `cawco/pick-place` request names, so its pick is kept like a `set`; null when its shape is wrong. */
+export function previewPickPlace(
+  params: Record<string, unknown>
+): { pageHash: string } | null {
+  const pageHash = previewPageHash(params.pageHash);
+  return pageHash ? { pageHash } : null;
+}
 const RPC_ID_MAX = 100;
 
 export interface PreviewRpc {

@@ -300,7 +300,8 @@ export interface DbShape {
   ) => void;
   /**
    * Files a place of a project. One already there for that project, machine
-   * and folder is answered as it is, with `added` false.
+   * and folder is answered as it is, with `added` false. A project's first
+   * checkout becomes its primary.
    */
   readonly addPlace: (place: {
     projectId: string;
@@ -314,7 +315,7 @@ export interface DbShape {
       Partial<
         Pick<
           ThreadMessageRow,
-          "id" | "noteTitle" | "tasks" | "question" | "answer"
+          "id" | "noteTitle" | "tasks" | "files" | "question" | "answer"
         >
       >
   ) => { thread: ThreadRow; message: ThreadMessageRow };
@@ -369,12 +370,14 @@ export interface DbShape {
   readonly continuationRow: (id: string) => ContinuationRow | undefined;
   /** Every continuation job, oldest first. */
   readonly continuationRows: () => ContinuationRow[];
-  /** A project and its first place, a checkout at `machineId`/`cwd`. */
+  /**
+   * A project, with its folder on the hub as its first place, and the
+   * checkout it was made from (`checkout`), its primary, when it has one.
+   */
   readonly createProject: (project: {
     id: string;
-    machineId: string;
     name: string;
-    cwd: string;
+    checkout?: { machineId: string; path: string };
     remote: string | null;
     /** Made with Caw: its Caw starts on. */
     caw?: boolean;
@@ -384,6 +387,8 @@ export interface DbShape {
     id: string;
     projectId: string;
     title: string;
+    /** The project's Setup thread (caw.ts `setup`). */
+    setup?: boolean;
     first: Pick<ThreadMessageRow, "author" | "body"> &
       Partial<Pick<ThreadMessageRow, "id" | "noteTitle">>;
   }) => { thread: ThreadRow; message: ThreadMessageRow };
@@ -403,13 +408,12 @@ export interface DbShape {
    * Forgets a machine's entry, its places and its current limit reading;
    * hidden session ownership remains until its stored delete decisions are
    * confirmed by that machine. Spend and limit history stay, because they
-   * happened. A project whose primary place was there moves to its next
-   * checkout (or hub folder); one with no such place left goes. Answers how
-   * many sessions and projects went, for the confirm's receipt.
+   * happened. A project whose primary checkout was there moves it to its
+   * next checkout, or has none yet; every project keeps its folder on the
+   * hub, so none goes. Answers which sessions went, for the confirm's receipt.
    */
   readonly deleteMachine: (machineId: string) => {
     instanceIds: string[];
-    projects: number;
   };
   readonly deleteMarketplace: (name: string) => void;
   readonly deleteMcpOauth: (name: string) => void;
@@ -489,6 +493,7 @@ export interface DbShape {
         apiKey: string | null;
         deniedTools: string[] | null;
         cawcoTodos: boolean;
+        choicesSetAt: Date | null;
         updatedAt: Date;
       }
     | undefined;
@@ -920,6 +925,8 @@ export interface DbShape {
     apiKey?: string | null;
     deniedTools?: string[] | null;
     cawcoTodos?: boolean;
+    /** When the fleet's choices were set through `PUT /api/fleet/choices`. */
+    choicesSetAt?: Date | null;
   }) => void;
   /** Files or refreshes rows of a project's task index, each by its file's path. */
   readonly putTaskIndex: (rows: TaskIndexRow[]) => void;
@@ -1067,8 +1074,8 @@ export interface DbShape {
     latencyMs?: number;
   }) => SupervisorEvent;
   /**
-   * Removes one of a project's places. The primary place (the project's
-   * `machineId`/`cwd`) is never removed here: forgetting the project is.
+   * Removes one of a project's places. Its primary checkout and its hub
+   * folder are never removed here: forgetting the project is.
    */
   readonly removePlace: (
     projectId: string,
@@ -1523,12 +1530,28 @@ const hookOf = (row: {
   ...(row.projectId ? { projectId: row.projectId } : {}),
 });
 
-/** Whether `place` is the project's primary: the folder its own row names. */
-const isPrimary = (
-  project: { machineId: string; cwd: string },
-  place: { machineId: string; path: string }
-): boolean =>
-  place.machineId === project.machineId && place.path === project.cwd;
+/** A hub place's machine: the hub itself, which is no machine of the fleet. */
+export const HUB_PLACE_MACHINE = "hub";
+
+/** Where a place stands in its project's list: the primary checkout, other checkouts, the hub's folder, workspaces. */
+const placeRank = (place: PlaceRow): number => {
+  if (place.isPrimary) {
+    return 0;
+  }
+  return { checkout: 1, hub: 2, workspace: 3 }[place.kind];
+};
+
+/**
+ * A project's primary checkout: where it is worked on, and the machine and
+ * folder a client names it by. Undefined before it has a checkout (made on
+ * the hub, its place still to be picked): "no checkout yet".
+ */
+export const checkoutOf = (project: ProjectRow): PlaceRow | undefined =>
+  project.places.find((place) => place.isPrimary);
+
+/** The project's folder on the hub, the place every project has from the start. */
+export const hubPlacePath = (projectId: string): string =>
+  `projects/${projectId}`;
 
 /** Each project with its places: the primary first, then oldest first. */
 const withPlaces = (
@@ -1548,7 +1571,7 @@ const withPlaces = (
     ...project,
     places: (byProject.get(project.id) ?? []).sort(
       (a, b) =>
-        Number(isPrimary(project, b)) - Number(isPrimary(project, a)) ||
+        placeRank(a) - placeRank(b) ||
         a.createdAt.getTime() - b.createdAt.getTime() ||
         a.id.localeCompare(b.id)
     ),
@@ -4334,12 +4357,19 @@ const make = (path: string): DbShape => {
         .all(),
     threadMessage: (id) =>
       db.select().from(threadMessages).where(eq(threadMessages.id, id)).get(),
-    createThread: ({ id, projectId, title, first }) =>
+    createThread: ({ id, projectId, title, setup, first }) =>
       db.transaction((tx) => {
         const at = new Date();
         const thread = tx
           .insert(projectThreads)
-          .values({ id, projectId, title, createdAt: at, updatedAt: at })
+          .values({
+            id,
+            projectId,
+            title,
+            setup: setup ?? false,
+            createdAt: at,
+            updatedAt: at,
+          })
           .returning()
           .get();
         const message = tx
@@ -4463,20 +4493,30 @@ const make = (path: string): DbShape => {
         )
         .run();
     },
-    createProject: ({ id, machineId, name, cwd, remote, caw = false }) =>
+    createProject: ({ id, name, checkout, remote, caw = false }) =>
       db.transaction((tx) => {
-        tx.insert(projects)
-          .values({ id, machineId, name, cwd, remote, caw })
-          .run();
+        tx.insert(projects).values({ id, name, remote, caw }).run();
         tx.insert(projectPlaces)
           .values({
             id: crypto.randomUUID(),
             projectId: id,
-            machineId,
-            path: cwd,
-            kind: "checkout",
+            machineId: HUB_PLACE_MACHINE,
+            path: hubPlacePath(id),
+            kind: "hub",
           })
           .run();
+        if (checkout) {
+          tx.insert(projectPlaces)
+            .values({
+              id: crypto.randomUUID(),
+              projectId: id,
+              machineId: checkout.machineId,
+              path: checkout.path,
+              kind: "checkout",
+              isPrimary: true,
+            })
+            .run();
+        }
         const created = projectOf(tx, id);
         if (!created) {
           throw new Error(`project ${id} was not filed`);
@@ -4484,12 +4524,27 @@ const make = (path: string): DbShape => {
         return created;
       }),
     addPlace: (place) => {
-      const added = db
-        .insert(projectPlaces)
-        .values({ id: crypto.randomUUID(), ...place })
-        .onConflictDoNothing()
-        .returning()
-        .get();
+      const added = db.transaction((tx) => {
+        // The first checkout a project gains is its primary.
+        const primary =
+          place.kind === "checkout" &&
+          !tx
+            .select({ id: projectPlaces.id })
+            .from(projectPlaces)
+            .where(
+              and(
+                eq(projectPlaces.projectId, place.projectId),
+                eq(projectPlaces.isPrimary, true)
+              )
+            )
+            .get();
+        return tx
+          .insert(projectPlaces)
+          .values({ id: crypto.randomUUID(), ...place, isPrimary: primary })
+          .onConflictDoNothing()
+          .returning()
+          .get();
+      });
       if (added) {
         return { place: added, added: true };
       }
@@ -4512,11 +4567,6 @@ const make = (path: string): DbShape => {
       return { place: standing, added: false };
     },
     removePlace: (projectId, placeId) => {
-      const project = db
-        .select()
-        .from(projects)
-        .where(eq(projects.id, projectId))
-        .get();
       const place = db
         .select()
         .from(projectPlaces)
@@ -4527,10 +4577,10 @@ const make = (path: string): DbShape => {
           )
         )
         .get();
-      if (!(project && place)) {
+      if (!place) {
         return "missing";
       }
-      if (isPrimary(project, place)) {
+      if (place.isPrimary || place.kind === "hub") {
         return "primary";
       }
       db.delete(projectPlaces).where(eq(projectPlaces.id, placeId)).run();
@@ -4560,65 +4610,47 @@ const make = (path: string): DbShape => {
           .set({ machineRemoved: true })
           .where(eq(instances.machineId, machineId))
           .run();
+        // A project whose primary checkout was on the machine moves it to
+        // its next checkout, the oldest; with none left it has no checkout
+        // yet, and its folder on the hub stays where every project's is.
+        const orphaned = tx
+          .select({ projectId: projectPlaces.projectId })
+          .from(projectPlaces)
+          .where(
+            and(
+              eq(projectPlaces.machineId, machineId),
+              eq(projectPlaces.isPrimary, true)
+            )
+          )
+          .all();
         tx.delete(projectPlaces)
           .where(eq(projectPlaces.machineId, machineId))
           .run();
-        // A project whose primary place was on the machine moves to its next
-        // checkout, or its hub folder; a workspace is a delegate's clone, not
-        // somewhere a project lives. With neither left, the project goes.
-        const gone: string[] = [];
-        const homeless = tx
-          .select()
-          .from(projects)
-          .where(eq(projects.machineId, machineId))
-          .all();
-        for (const project of homeless) {
+        for (const { projectId } of orphaned) {
           const [next] = tx
             .select()
             .from(projectPlaces)
             .where(
               and(
-                eq(projectPlaces.projectId, project.id),
-                ne(projectPlaces.kind, "workspace")
+                eq(projectPlaces.projectId, projectId),
+                eq(projectPlaces.kind, "checkout")
               )
             )
-            .orderBy(
-              sql`case ${projectPlaces.kind} when 'checkout' then 0 else 1 end`,
-              asc(projectPlaces.createdAt)
-            )
+            .orderBy(asc(projectPlaces.createdAt), asc(projectPlaces.id))
             .limit(1)
             .all();
           if (next) {
-            tx.update(projects)
-              .set({ machineId: next.machineId, cwd: next.path })
-              .where(eq(projects.id, project.id))
+            tx.update(projectPlaces)
+              .set({ isPrimary: true })
+              .where(eq(projectPlaces.id, next.id))
               .run();
-          } else {
-            gone.push(project.id);
           }
-        }
-        if (gone.length > 0) {
-          // The sessions started from them outlive them, unattached.
-          tx.update(instances)
-            .set({ projectId: null })
-            .where(inArray(instances.projectId, gone))
-            .run();
-          tx.delete(projectPlaces)
-            .where(inArray(projectPlaces.projectId, gone))
-            .run();
-          tx.delete(projectTasks)
-            .where(inArray(projectTasks.projectId, gone))
-            .run();
-          tx.delete(queuedTaskStarts)
-            .where(inArray(queuedTaskStarts.projectId, gone))
-            .run();
-          tx.delete(projects).where(inArray(projects.id, gone)).run();
         }
         tx.delete(usageLimits)
           .where(eq(usageLimits.machineId, machineId))
           .run();
         tx.delete(agents).where(eq(agents.machineId, machineId)).run();
-        return { instanceIds: ids, projects: gone.length };
+        return { instanceIds: ids };
       }),
     deleteProject: (id) => {
       db.transaction((tx) => {
@@ -5308,6 +5340,7 @@ const make = (path: string): DbShape => {
             apiKey: row.apiKey,
             deniedTools: row.deniedTools,
             cawcoTodos: row.cawcoTodos,
+            choicesSetAt: row.choicesSetAt,
             updatedAt: row.updatedAt,
           }
         : undefined;
@@ -5336,6 +5369,10 @@ const make = (path: string): DbShape => {
             ? (stored?.deniedTools ?? null)
             : config.deniedTools,
         cawcoTodos: config.cawcoTodos ?? stored?.cawcoTodos ?? false,
+        choicesSetAt:
+          config.choicesSetAt === undefined
+            ? (stored?.choicesSetAt ?? null)
+            : config.choicesSetAt,
         updatedAt: new Date(),
       };
       db.insert(supervisorConfig)
@@ -5349,6 +5386,7 @@ const make = (path: string): DbShape => {
             apiKey: values.apiKey,
             deniedTools: values.deniedTools,
             cawcoTodos: values.cawcoTodos,
+            choicesSetAt: values.choicesSetAt,
             updatedAt: values.updatedAt,
           },
         })

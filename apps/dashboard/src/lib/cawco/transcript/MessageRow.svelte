@@ -684,6 +684,10 @@
       <!-- The tasks the turn is about, under it (a project's Caw). -->
       {@render voice.tasks(message.metadata.tasks)}
     {/if}
+    {#if voice?.files && message.metadata?.files?.length}
+      <!-- The files of the project's folder the turn wrote (a project's Caw). -->
+      {@render voice.files(message.metadata.files, message.id)}
+    {/if}
   </section>
 {:else if kind === "thinking"}
   {#if message.content.trim()}

@@ -7373,6 +7373,11 @@
           "422": {
             "description": "postApiInstancesByIdPreview 422",
             "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
               "application/problem+json": {
                 "schema": {
                   "$ref": "#/components/schemas/ValidationErrorResponse"
@@ -11414,22 +11419,45 @@
                 "type": "object",
                 "properties": {
                   "name": {
-                    "type": "string"
-                  },
-                  "cwd": {
+                    "minLength": 1,
+                    "maxLength": 200,
                     "type": "string"
                   },
                   "machineId": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "cwd": {
+                    "minLength": 1,
                     "type": "string"
                   },
                   "caw": {
                     "type": "boolean"
+                  },
+                  "template": {
+                    "type": "string",
+                    "enum": [
+                      "code",
+                      "launch",
+                      "seo",
+                      "brand",
+                      "design",
+                      "social",
+                      "outreach"
+                    ]
+                  },
+                  "prompt": {
+                    "maxLength": 20000,
+                    "type": "string"
+                  },
+                  "promptId": {
+                    "minLength": 1,
+                    "maxLength": 200,
+                    "type": "string"
                   }
                 },
                 "required": [
-                  "name",
-                  "cwd",
-                  "machineId"
+                  "name"
                 ]
               }
             }
@@ -11443,6 +11471,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/postApiProjects200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiProjects 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -13247,13 +13285,9 @@
         "properties": {
           "sessions": {
             "type": "number"
-          },
-          "projects": {
-            "type": "number"
           }
         },
         "required": [
-          "projects",
           "sessions"
         ]
       },
@@ -13340,9 +13374,6 @@
                 "type": "string",
                 "format": "date-time"
               },
-              "cwd": {
-                "type": "string"
-              },
               "kind": {
                 "enum": [
                   "mainline",
@@ -13396,6 +13427,9 @@
                   "null",
                   "string"
                 ]
+              },
+              "cwd": {
+                "type": "string"
               },
               "titleSource": {
                 "enum": [
@@ -13607,9 +13641,6 @@
                   "type": "string",
                   "format": "date-time"
                 },
-                "cwd": {
-                  "type": "string"
-                },
                 "kind": {
                   "enum": [
                     "mainline",
@@ -13663,6 +13694,9 @@
                     "null",
                     "string"
                   ]
+                },
+                "cwd": {
+                  "type": "string"
                 },
                 "titleSource": {
                   "enum": [
@@ -14927,20 +14961,16 @@
             "cap": {
               "$ref": "#/components/schemas/ProjectCap"
             },
-            "machineId": {
-              "type": "string"
+            "primaryPlaceId": {
+              "type": [
+                "null",
+                "string"
+              ]
             },
             "name": {
               "type": "string"
             },
             "id": {
-              "type": "string"
-            },
-            "createdAt": {
-              "type": "string",
-              "format": "date-time"
-            },
-            "cwd": {
               "type": "string"
             },
             "remote": {
@@ -15013,6 +15043,10 @@
               ],
               "type": "string"
             },
+            "createdAt": {
+              "type": "string",
+              "format": "date-time"
+            },
             "places": {
               "type": "array",
               "items": {
@@ -15036,11 +15070,15 @@
                   },
                   "projectId": {
                     "type": "string"
+                  },
+                  "isPrimary": {
+                    "type": "boolean"
                   }
                 },
                 "required": [
                   "createdAt",
                   "id",
+                  "isPrimary",
                   "kind",
                   "machineId",
                   "path",
@@ -15055,16 +15093,15 @@
             "cawHarness",
             "cawModel",
             "createdAt",
-            "cwd",
             "dispatch",
             "id",
             "lands",
             "leadCostSeen",
             "leadInstanceId",
-            "machineId",
             "maxAttempts",
             "name",
             "places",
+            "primaryPlaceId",
             "remote",
             "reviewLimit",
             "tracker"
@@ -15074,6 +15111,9 @@
       "postApiProjects200": {
         "type": "object",
         "properties": {
+          "setupThread": {
+            "$ref": "#/components/schemas/ThreadSummary"
+          },
           "place": {
             "type": "object",
             "properties": {
@@ -15095,11 +15135,15 @@
               },
               "projectId": {
                 "type": "string"
+              },
+              "isPrimary": {
+                "type": "boolean"
               }
             },
             "required": [
               "createdAt",
               "id",
+              "isPrimary",
               "kind",
               "machineId",
               "path",
@@ -15109,20 +15153,16 @@
           "placeAdded": {
             "type": "boolean"
           },
-          "machineId": {
-            "type": "string"
+          "primaryPlaceId": {
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "name": {
             "type": "string"
           },
           "id": {
-            "type": "string"
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "cwd": {
             "type": "string"
           },
           "remote": {
@@ -15195,6 +15235,10 @@
             ],
             "type": "string"
           },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
           "places": {
             "type": "array",
             "items": {
@@ -15218,11 +15262,15 @@
                 },
                 "projectId": {
                   "type": "string"
+                },
+                "isPrimary": {
+                  "type": "boolean"
                 }
               },
               "required": [
                 "createdAt",
                 "id",
+                "isPrimary",
                 "kind",
                 "machineId",
                 "path",
@@ -15237,18 +15285,17 @@
           "cawHarness",
           "cawModel",
           "createdAt",
-          "cwd",
           "dispatch",
           "id",
           "lands",
           "leadCostSeen",
           "leadInstanceId",
-          "machineId",
           "maxAttempts",
           "name",
           "place",
           "placeAdded",
           "places",
+          "primaryPlaceId",
           "remote",
           "reviewLimit",
           "tracker"
@@ -15289,11 +15336,15 @@
               },
               "projectId": {
                 "type": "string"
+              },
+              "isPrimary": {
+                "type": "boolean"
               }
             },
             "required": [
               "createdAt",
               "id",
+              "isPrimary",
               "kind",
               "machineId",
               "path",
@@ -15303,20 +15354,16 @@
           "placeAdded": {
             "type": "boolean"
           },
-          "machineId": {
-            "type": "string"
+          "primaryPlaceId": {
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "name": {
             "type": "string"
           },
           "id": {
-            "type": "string"
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "cwd": {
             "type": "string"
           },
           "remote": {
@@ -15389,6 +15436,10 @@
             ],
             "type": "string"
           },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
           "places": {
             "type": "array",
             "items": {
@@ -15412,11 +15463,15 @@
                 },
                 "projectId": {
                   "type": "string"
+                },
+                "isPrimary": {
+                  "type": "boolean"
                 }
               },
               "required": [
                 "createdAt",
                 "id",
+                "isPrimary",
                 "kind",
                 "machineId",
                 "path",
@@ -15431,18 +15486,17 @@
           "cawHarness",
           "cawModel",
           "createdAt",
-          "cwd",
           "dispatch",
           "id",
           "lands",
           "leadCostSeen",
           "leadInstanceId",
-          "machineId",
           "maxAttempts",
           "name",
           "place",
           "placeAdded",
           "places",
+          "primaryPlaceId",
           "remote",
           "reviewLimit",
           "tracker"
@@ -15471,12 +15525,12 @@
           "id": {
             "type": "string"
           },
+          "branch": {
+            "type": "string"
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time"
-          },
-          "branch": {
-            "type": "string"
           },
           "repoRoot": {
             "type": "string"
@@ -17483,6 +17537,13 @@
               "type": "string"
             }
           },
+          "setAt": {
+            "description": "When someone last set the choices here (ms epoch); null while nobody has, so a new project's setup asks.",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
           "todos": {
             "description": "Use CawCo's to-dos instead of each harness's own list and plan mode.",
             "type": "boolean"
@@ -17507,6 +17568,7 @@
         "required": [
           "delegates",
           "deniedTools",
+          "setAt",
           "todos",
           "tools"
         ]
@@ -18226,8 +18288,10 @@
           "template": {
             "description": "The template the stages are, word for word, if any.",
             "enum": [
+              "brand",
               "code",
               "design",
+              "launch",
               "outreach",
               "seo",
               "social"
@@ -18396,8 +18460,10 @@
       },
       "StagesTemplate": {
         "enum": [
+          "brand",
           "code",
           "design",
+          "launch",
           "outreach",
           "seo",
           "social"
@@ -18543,6 +18609,10 @@
               "type": "string"
             }
           },
+          "setupThread": {
+            "$ref": "#/components/schemas/ThreadSummary",
+            "description": "A new project's Setup thread, where its Caw sets it up; none when the folder joined one."
+          },
           "tasks": {
             "description": "Plan items filed as proposed tasks, and the ones the project refused.",
             "type": "array",
@@ -18588,6 +18658,49 @@
           "tasks",
           "unfiled"
         ]
+      },
+      "ThreadSummary": {
+        "description": "A thread as the project's list and the `thread.upsert` frame carry it.",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "lastAt": {
+            "description": "When its newest message was added, ms epoch.",
+            "type": "number"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "setup": {
+            "description": "The project's Setup thread: the one New project opens with your prompt,\nwhere Caw shows the setup page and lists what he wrote. Its replies that\nname files offer \"Open the board\".",
+            "type": "boolean"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ThreadStatus"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "lastAt",
+          "projectId",
+          "setup",
+          "status",
+          "title"
+        ]
+      },
+      "ThreadStatus": {
+        "description": "Where a thread stands, derived on every read and never stored: `working`\nwhile the lead session is busy on a turn that thread woke, `needs-you`\nwhile a question the lead asked in it is parked, else `ready`.",
+        "enum": [
+          "needs-you",
+          "ready",
+          "working"
+        ],
+        "type": "string"
       },
       "SessionPlan": {
         "description": "What `GET /api/instances/:id/plan` answers, and what the live frames keep\na client's copy equal to.",
@@ -19113,44 +19226,6 @@
         ],
         "type": "string"
       },
-      "ThreadSummary": {
-        "description": "A thread as the project's list and the `thread.upsert` frame carry it.",
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "lastAt": {
-            "description": "When its newest message was added, ms epoch.",
-            "type": "number"
-          },
-          "projectId": {
-            "type": "string"
-          },
-          "status": {
-            "$ref": "#/components/schemas/ThreadStatus"
-          },
-          "title": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "lastAt",
-          "projectId",
-          "status",
-          "title"
-        ]
-      },
-      "ThreadStatus": {
-        "description": "Where a thread stands, derived on every read and never stored: `working`\nwhile the lead session is busy on a turn that thread woke, `needs-you`\nwhile a question the lead asked in it is parked, else `ready`.",
-        "enum": [
-          "needs-you",
-          "ready",
-          "working"
-        ],
-        "type": "string"
-      },
       "ThreadSaid": {
         "description": "Your message as the hub took it: the thread (new or moved) and the message.",
         "type": "object",
@@ -19319,7 +19394,7 @@
         ]
       },
       "CawThreadMessage": {
-        "description": "Caw's, through `thread_reply`; `tasks` names the tasks it is about (`tsk-12`).",
+        "description": "Caw's, through `thread_reply`; `tasks` names the tasks it is about\n(`tsk-12`), `files` the project folder's files it wrote (`stages.md`).",
         "type": "object",
         "properties": {
           "author": {
@@ -19330,6 +19405,12 @@
           },
           "body": {
             "type": "string"
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
           "tasks": {
             "type": "array",
@@ -25437,12 +25518,12 @@
             "description": "What the reader calls it. Unique across the fleet.",
             "type": "string"
           },
-          "cwd": {
-            "description": "The checkout to write into. The hub fills this in as it sends a sync —\na daemon never resolves a project id, and a machine only ever receives\nthe project rows that live on it.",
-            "type": "string"
-          },
           "projectId": {
             "description": "The hub `projects` row this is bound to. Required unless `user`.",
+            "type": "string"
+          },
+          "cwd": {
+            "description": "The checkout to write into. The hub fills this in as it sends a sync —\na daemon never resolves a project id, and a machine only ever receives\nthe project rows that live on it.",
             "type": "string"
           },
           "enabled": {
@@ -25534,7 +25615,7 @@
         ]
       },
       "PlaceKind": {
-        "description": "What a place is: a checkout on a machine, a delegate's workspace (kept\nwhile the workspace is active), or the project's folder on the hub.",
+        "description": "What a place is: a checkout on a machine, a delegate's workspace (kept\nwhile the workspace is active), or the project's folder on the hub (its\n`machineId` is `\"hub\"` (db `HUB_PLACE_MACHINE`) and its path `projects/<id>`, relative\nto the hub's data folder; every project has one from the moment it is\nmade).",
         "enum": [
           "checkout",
           "hub",

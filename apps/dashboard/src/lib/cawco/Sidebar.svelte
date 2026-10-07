@@ -63,7 +63,6 @@
   import { echoBeat } from "./motion/echo.svelte";
   import { heldOrder, holdWhileInside } from "./motion/held-order.svelte";
   import { reflow } from "./motion/rows.svelte";
-  import NewProjectPopover from "./NewProjectPopover.svelte";
   import OlderRows, { olderOut } from "./OlderRows.svelte";
   import {
     DELEGATE_WINDOW,
@@ -75,7 +74,7 @@
   } from "./older";
   import { openTrees } from "./open-trees.svelte";
   import ProjectMark from "./ProjectMark.svelte";
-  import { projectsFor } from "./projects";
+  import { folderOf, projectsFor } from "./projects";
   import { type RailSort, rail } from "./rail.svelte";
   import SessionHover from "./SessionHover.svelte";
   import SessionRow, { ROW_PILL } from "./SessionRow.svelte";
@@ -1001,7 +1000,22 @@
                 </DropdownMenu.Group>
               </DropdownMenu.Content>
             </DropdownMenu.Root>
-            <NewProjectPopover />
+            <Tip label="New project">
+              {#snippet children(
+                tip
+              )}
+                <Button
+                  {...tip}
+                  aria-label="New project"
+                  class="-mr-1"
+                  href="/project/new"
+                  size="icon-sm"
+                  variant="ghost"
+                >
+                  <IconPlus />
+                </Button>
+              {/snippet}
+            </Tip>
           </div>
         </Sidebar.GroupLabel>
         {#if orderedProjects.length === 0}
@@ -1033,15 +1047,10 @@
                 data-slot="sidebar-menu-item"
               >
                 <FolderMenu
-                  cwd={project.cwd}
+                  cwd={folderOf(project)}
                   name={project.name}
                   oncollapseothers={() => collapseOthers(project.id)}
-                  onnew={() =>
-                    newSession({
-                      projectId: project.id,
-                      machineId: project.machineId,
-                      cwd: project.cwd,
-                    })}
+                  onnew={() => newSession({ projectId: project.id })}
                   {project}
                 >
                   <Sidebar.MenuButton
@@ -1054,7 +1063,7 @@
                          switch, so the mark only draws the morph. -->
                     <ProjectMark
                       count={runningCount}
-                      hue={markHue(project.cwd)}
+                      hue={markHue(folderOf(project))}
                       open={expanded}
                     />
                     <span class="min-w-0 flex-1 truncate"
@@ -1109,12 +1118,7 @@
                         <Sidebar.MenuSubButton
                           class="{SUB_ROW} text-muted-foreground"
                           data-branch-item
-                          onclick={() =>
-                            newSession({
-                              projectId: project.id,
-                              machineId: project.machineId,
-                              cwd: project.cwd,
-                            })}
+                          onclick={() => newSession({ projectId: project.id })}
                         >
                           <span class="{SLOT} row-lead"
                             ><IconPlus class="size-3" /></span

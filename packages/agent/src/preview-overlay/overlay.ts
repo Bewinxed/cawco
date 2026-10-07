@@ -337,8 +337,20 @@ declare global {
       /** Sends the picks to the session as one message, with `text` added when given. */
       send: (text?: string) => Promise<void>;
       on: (event: "picks", listener: (picks: Picks) => void) => () => void;
+      /**
+       * Asks the person for a machine and a folder on it, with CawCo's own
+       * machine list and folder browser; the pick is stored under `place`
+       * like a `set`, and answered, or null when they cancel.
+       */
+      pickPlace: () => Promise<PlacePick | null>;
     };
   }
+}
+
+/** A machine and a folder on it, as `cawco.pickPlace` answers. */
+interface PlacePick {
+  machineId: string;
+  path: string;
 }
 
 Object.defineProperty(window, "cawco", {
@@ -364,6 +376,12 @@ Object.defineProperty(window, "cawco", {
         connect().catch(shownByPane);
       }
       return () => listeners.delete(listener);
+    },
+    pickPlace: async () => {
+      await connect();
+      return (await request("cawco/pick-place", {
+        pageHash,
+      })) as PlacePick | null;
     },
   }),
 });

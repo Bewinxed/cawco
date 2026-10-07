@@ -10,7 +10,7 @@ A mockup is a small animated picture of one option, placed in a card with `{{MK:
 2. one root `<div class="mk mk-<id>">…</div>`;
 3. optionally one `<script>` with a single IIFE that finds its root with `document.querySelector(".mk-<id>")`, returns when it is missing, and declares no globals.
 
-Prefix every inner class with a two-letter prefix of the mockup's own (`ld-row`, `ld-card`): the page styles `dp-*` and its own names globally. No external resources: no fonts, scripts or URLs. Images are Caw stills, always as a light/dark pair: `<img class="caw-l" src="caw/light-ready.webp" alt="" width="24" height="24"><img class="caw-d" src="caw/dark-ready.webp" alt="" width="24" height="24">`, with `ready`, `working`, `needs-you`, `done`, `trying` or `idle`; or images in the work folder, which the build inlines.
+Prefix every inner class with a two-letter prefix of the mockup's own (`ld-row`, `ld-card`): the page styles `dp-*` and its own names globally. No external resources: no fonts, scripts or URLs. Images are Caw stills, always as a light/dark pair: `<img class="caw-l" src="caw/light-ready.webp" alt="" width="24" height="24"><img class="caw-d" src="caw/dark-ready.webp" alt="" width="24" height="24">`, with `ready`, `working`, `needs-you`, `done`, `trying` or `idle`; or images in the work folder, which the hub inlines when it builds the page.
 
 ## Design
 
