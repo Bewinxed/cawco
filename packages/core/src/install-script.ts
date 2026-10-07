@@ -205,14 +205,26 @@ ${
     if [ "$CHANNEL" = stable ]; then
       TAG="$(curl -fsSLI -o /dev/null -w '%{url_effective}' "$REPO/releases/latest" | sed 's|.*/tag/||')" || fail "could not reach $REPO"
     else
-      download "https://api.github.com/repos/$SLUG/releases?per_page=30" "$WORK/releases.json" 4194304
-      # newestNightly's rule: of the published pre-releases tagged nightly-<count>-<commit>, the highest
-      # count; the listing's order decides nothing. Each release object names tag_name, draft and
-      # prerelease in that order with no brace between them, so one match never spans two releases.
-      TAG="$(tr -d '\\n' < "$WORK/releases.json" \\
-        | grep -o '"tag_name": *"nightly-[0-9][0-9]*-[0-9a-f][0-9a-f]*",[^{}]*"draft": *false,[^{}]*"prerelease": *true' \\
-        | sed 's/^"tag_name": *"\\(nightly-\\([0-9]*\\)-[0-9a-f]*\\)".*/\\2 \\1/' \\
-        | sort -n | tail -n 1 | cut -d ' ' -f 2)"
+      # newestNightly's rule: the nightly-<count>-<commit> tags, highest count first, and the first whose
+      # release is published and a pre-release. Release-by-tag serves published releases only, so a draft
+      # answers 404 and the next tag is tried. In a release, draft and prerelease follow its author object
+      # with no brace between them.
+      download "https://api.github.com/repos/$SLUG/git/matching-refs/tags/nightly-" "$WORK/tags.json" 1048576
+      TAG=""
+      for CANDIDATE in $(grep -o '"ref": *"refs/tags/nightly-[0-9][0-9]*-[0-9a-f][0-9a-f]*"' "$WORK/tags.json" \\
+        | sed 's|.*"refs/tags/\\(nightly-\\([0-9]*\\)-[0-9a-f]*\\)"|\\2 \\1|' | sort -rn | cut -d ' ' -f 2); do
+        STATUS="$(curl -sSL --retry 3 --connect-timeout 15 --max-filesize 4194304 -o "$WORK/release-tag.json" -w '%{http_code}' "https://api.github.com/repos/$SLUG/releases/tags/$CANDIDATE")" \\
+          || fail "could not download the $CANDIDATE release"
+        case "$STATUS" in
+          200) ;;
+          404) continue ;;
+          *) fail "could not download the $CANDIDATE release (HTTP $STATUS)" ;;
+        esac
+        if tr -d '\\n' < "$WORK/release-tag.json" | grep -q '"draft": *false,[^{}]*"prerelease": *true'; then
+          TAG="$CANDIDATE"
+          break
+        fi
+      done
     fi
     [ -n "\${TAG:-}" ] || fail "no published $CHANNEL release was found at $REPO"
     BASE="$REPO/releases/download/$TAG"

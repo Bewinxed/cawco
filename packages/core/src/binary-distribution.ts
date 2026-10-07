@@ -15,7 +15,7 @@ export interface LocatedRelease extends SignedRelease {
   assetBaseUrl: string;
 }
 
-export interface GithubRelease {
+interface GithubRelease {
   assets: { browser_download_url: string; name: string }[];
   draft: boolean;
   prerelease: boolean;
@@ -29,34 +29,59 @@ const TRAILING_SLASH = /\/$/;
 export const RELEASE_REPOSITORY = "Bewinxed/cawco";
 export const NIGHTLY_TAG_PREFIX = "nightly-";
 
+const GITHUB_API = `https://api.github.com/repos/${RELEASE_REPOSITORY}`;
+
 /** The build count a nightly tag (`nightly-<count>-<commit>`) carries, or undefined for any other tag. */
-export function nightlyTagCount(tag: string): number | undefined {
+function nightlyTagCount(tag: string): number | undefined {
   const count = NIGHTLY_TAG.exec(tag)?.[1];
   return count === undefined ? undefined : Number(count);
 }
 
+/** A GitHub API answer, or undefined where it says 404. */
+async function githubJson<T>(url: string): Promise<T | undefined> {
+  const response = await fetch(url, {
+    headers: { accept: "application/vnd.github+json" },
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (response.status === 404) {
+    return undefined;
+  }
+  if (!response.ok) {
+    throw new Error(`The release host answered ${response.status}`);
+  }
+  return (await response.json()) as T;
+}
+
 /**
- * The newest nightly in a GitHub release listing: the published pre-release
- * whose tag carries the highest build count. GitHub does not document the
- * listing's order, so the row's position decides nothing. The install
- * script's shell pick mirrors this rule.
+ * The newest nightly: of the repository's `nightly-<count>-<commit>` tags,
+ * highest count first, the first whose release is published and a
+ * pre-release. The tag listing is complete and unpaged, and its size grows
+ * with the tags alone, not with release notes; release-by-tag serves
+ * published releases only, so a draft answers 404 and the next tag is tried.
+ * The install script's shell pick mirrors this rule.
  */
-export function newestNightly<
-  T extends Pick<GithubRelease, "draft" | "prerelease" | "tag_name">,
->(rows: readonly T[]): T | undefined {
-  let newest: { count: number; row: T } | undefined;
-  for (const row of rows) {
-    const count = nightlyTagCount(row.tag_name);
-    if (
-      !row.draft &&
-      row.prerelease &&
-      count !== undefined &&
-      count > (newest?.count ?? -1)
-    ) {
-      newest = { count, row };
+async function newestNightly(): Promise<GithubRelease | undefined> {
+  const refs =
+    (await githubJson<{ ref: string }[]>(
+      `${GITHUB_API}/git/matching-refs/tags/${NIGHTLY_TAG_PREFIX}`
+    )) ?? [];
+  const tags = refs
+    .map(({ ref }) => ref.slice("refs/tags/".length))
+    .flatMap((tag) => {
+      const count = nightlyTagCount(tag);
+      return count === undefined ? [] : [{ tag, count }];
+    })
+    .sort((a, b) => b.count - a.count);
+  for (const { tag } of tags) {
+    // biome-ignore lint/performance/noAwaitInLoops: highest count first; the first published pre-release ends the search
+    const release = await githubJson<GithubRelease>(
+      `${GITHUB_API}/releases/tags/${tag}`
+    );
+    if (release && !release.draft && release.prerelease) {
+      return release;
     }
   }
-  return newest?.row;
+  return undefined;
 }
 
 /**
@@ -97,26 +122,15 @@ export async function discoverRelease(
     manifestUrl = `${base}/release.json`;
     signatureUrl = `${base}/release.json.sig`;
   } else {
-    const api = `https://api.github.com/repos/${RELEASE_REPOSITORY}/releases`;
-    const response = await fetch(
-      channel === "stable" ? `${api}/latest` : `${api}?per_page=30`,
-      {
-        headers: { accept: "application/vnd.github+json" },
-        signal: AbortSignal.timeout(15_000),
-      }
-    );
-    if (response.status === 404) {
+    const release =
+      channel === "stable"
+        ? await githubJson<GithubRelease>(`${GITHUB_API}/releases/latest`)
+        : await newestNightly();
+    if (!release) {
       throw new NoReleaseError(`No published ${channel} release`);
     }
-    if (!response.ok) {
-      throw new Error(`The release host answered ${response.status}`);
-    }
-    const body = (await response.json()) as GithubRelease | GithubRelease[];
-    const release = Array.isArray(body) ? newestNightly(body) : body;
-    const manifest = release?.assets.find((a) => a.name === "release.json");
-    const signature = release?.assets.find(
-      (a) => a.name === "release.json.sig"
-    );
+    const manifest = release.assets.find((a) => a.name === "release.json");
+    const signature = release.assets.find((a) => a.name === "release.json.sig");
     if (!(manifest && signature)) {
       throw new NoReleaseError(
         `No published ${channel} release with a signed manifest`
