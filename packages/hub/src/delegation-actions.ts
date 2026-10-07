@@ -38,6 +38,7 @@ import type {
   WorkItemCheck,
   WorkItemSubmission,
 } from "./db/schema";
+import type { DelegateListInclude, DelegateNode } from "./delegation-tree";
 import { type KeepAliveRow, promptCacheExpiresAt } from "./keep-alive";
 import { neverStarted, resolveSpawnType } from "./work-items";
 
@@ -433,7 +434,7 @@ function resolve(peers: Peer[], target: string): Peer {
 
 /**
  * The tools a leaf delegate (`canDelegate === false`) never gets: everything
- * that spawns or steers a spawn. One set for the claude and pi toolsets (the
+ * that spawns, steers a spawn or reads its spawns. One set for the claude and pi toolsets (the
  * opencode plugin refuses at call time instead, having no per-session
  * toolset). Fixed for the session's life, so the prompt cache is unaffected.
  */
@@ -447,6 +448,7 @@ export const SPAWNING_TOOLS: ReadonlySet<string> = new Set([
   "start_session",
   "continue_session",
   "delegate",
+  "delegate_list",
   "stop_delegate",
   "interrupt_delegate",
   "answer_delegate",
@@ -463,6 +465,10 @@ export interface HandoffDeps {
   readonly canDelegate?: boolean;
   /** What it is working on, so the receiver knows who is calling. */
   readonly cwd: string;
+  /** This session's own delegation tree, read by the hub (delegation-tree.ts). */
+  readonly delegateList?: (
+    include: DelegateListInclude
+  ) => Promise<DelegateNode[]>;
   /**
    * The fleet's delegate types, fetched once via {@link fetchDelegateTypes}
    * before this session's tools were built. Used for descriptions only;
@@ -568,6 +574,10 @@ export interface HandoffActions {
       budget?: WorkBudget;
     }
   ): Promise<DelegateResult>;
+  /** This session's delegation tree: its delegates, theirs nested. */
+  readonly delegateList: (
+    include: DelegateListInclude
+  ) => Promise<{ delegates: DelegateNode[] }>;
   /**
    * Finishes this session's work item: the hub runs its checks, or fails it
    * as blocked. Answers what the hub says of the results.
@@ -856,7 +866,16 @@ export const handoffActions = ({
   authorization,
   projectId,
   ledBy,
+  delegateList,
 }: HandoffDeps): HandoffActions => ({
+  async delegateList(include) {
+    if (!delegateList) {
+      throw new Error(
+        "delegate_list is read by the hub, which is not wired here."
+      );
+    }
+    return { delegates: await delegateList(include) };
+  },
   async continueSession(input) {
     let source = instanceId;
     const { rows, hosts } = await fetchInstances();

@@ -701,6 +701,31 @@ export function handoffTools(deps: HandoffDeps) {
       }
     ),
     tool(
+      "delegate_list",
+      "Your delegation tree: each delegate you started, theirs nested, with its work item's state, last activity, cache warmth, queued messages, what it waits on, and plan progress. Read it before handing off to a delegate or calling one stuck.",
+      {
+        include: z
+          .enum(["live", "all"])
+          .optional()
+          .describe(
+            "live (default): items not ended, or ended in the last hour. all: every item."
+          ),
+      },
+      async ({ include }) => {
+        const tree = await actions.delegateList(include ?? "live");
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify(tree) }],
+          structuredContent: tree,
+        };
+      },
+      {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      }
+    ),
+    tool(
       "wait_item",
       "Declare a bounded wait on a command you started, then end your turn. The hub keeps your item running without quiet-turn reminders, tells your parent what you are waiting for, and wakes you when the wait ends. Call again to replace the wait. finish_item, closing, stopping or interrupting the item cancels the wait.",
       {

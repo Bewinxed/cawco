@@ -116,6 +116,7 @@ import {
   MESSAGES_HELD,
   MESSAGES_READ,
   MESSAGES_STORED,
+  machineLabel,
   memoryDocProblem,
   PREVIEW_START,
   PREVIEW_STOP,
@@ -185,6 +186,7 @@ import { hashHookMaterial } from "./db";
 import { delegateTypesRoutes, makeDelegateTypes } from "./delegate-types";
 import { hubHttpUrl } from "./delegation-actions";
 import { createDelegationMcp } from "./delegation-mcp";
+import { createDelegationTree } from "./delegation-tree";
 import { createDispatcher, dispatchRoutes } from "./dispatch";
 import { fleetChoicesRoutes } from "./fleet-choices";
 import { FleetMcp } from "./fleet-mcp";
@@ -197,6 +199,7 @@ import {
   keepAliveResult,
   keepAliveState,
   keepAliveUsage,
+  promptCacheExpiresAt,
 } from "./keep-alive";
 import { probe } from "./llm";
 import { MeaningJudge } from "./meaning";
@@ -7882,6 +7885,63 @@ export const createServer = (
       streams.planToFollowers(instanceId, message),
   });
   tasks.listen(plans.taskChanged);
+  /**
+   * What `handoff`'s cold check reads of a session (`/api/followup-state`):
+   * its recorded turns, whether one is under way, and when the last ended.
+   */
+  const followupState = (row: KeepAliveRow) => {
+    const turns = db.recordedTurns(row.id);
+    const activityBound =
+      turns.unbounded ||
+      (row.harness === "claude" && !!row.sessionId && !turns.hasTurns);
+    // Activity writes are throttled; the closing pulse can land within that window.
+    const lastTurnAt = activityBound
+      ? new Date(
+          Math.max(
+            row.updatedAt.getTime() + ACTIVITY_TOUCH_MS,
+            Date.parse(turns.lastTurnAt ?? "") || 0
+          )
+        ).toISOString()
+      : turns.lastTurnAt;
+    return {
+      midTurn: !!pulses.get(row.id)?.busy,
+      hasTurns: turns.hasTurns,
+      recordedTurnAt: turns.lastTurnAt,
+      lastTurnAt,
+      activityBound,
+    };
+  };
+  // `delegate_list`: a session's own delegation tree (§5.2).
+  const delegationTree = createDelegationTree({
+    db,
+    machineName: (machineId) =>
+      machineLabel(
+        db.listAgents().find((agent) => agent.machineId === machineId)
+          ?.hostname ?? machineId
+      ),
+    activity: (row) => {
+      const state = followupState(row);
+      // The same test the cold check makes: warm mid-turn, unmeasured, or unexpired.
+      const expires = promptCacheExpiresAt(row, state.lastTurnAt);
+      return {
+        cacheWarm: state.midTurn || expires === null || expires > Date.now(),
+        lastActivityAt: new Date(
+          Math.max(
+            row.updatedAt.getTime(),
+            row.lastRequestAt?.getTime() ?? 0,
+            Date.parse(state.recordedTurnAt ?? "") || 0
+          )
+        ),
+      };
+    },
+    plan: async (instanceId) => {
+      const { steps } = await plans.read(instanceId);
+      return {
+        done: steps.filter((step) => step.status === "completed").length,
+        total: steps.length,
+      };
+    },
+  });
   if (resumeWorkflows) {
     // The dispatcher's safety net: a slow look at every dispatching project.
     dispatcher.watch();
@@ -7900,6 +7960,7 @@ export const createServer = (
     projectFromSession: (actor) =>
       projectOffers.accept(actor.id, sessionActor(actor)),
     writePlan: (actor, written) => plans.write(actor, written),
+    delegationTree: (actor, include) => delegationTree.read(actor, include),
     cawTools: (actor) => caw.tools(actor),
     askPerson: (actor, name, input) => adminAsks.ask(actor, name, input),
     instances: () => withKeepAlive(db.listInstances()),
@@ -8981,29 +9042,18 @@ export const createServer = (
             instanceId = db.workItemsIn(workspaces[0].id)[0]?.instanceId;
           }
           const [row] = instanceId ? db.getInstancesByIds([instanceId]) : [];
-          const turns = row
-            ? db.recordedTurns(row.id)
-            : { hasTurns: false, lastTurnAt: null, unbounded: false };
-          const activityBound =
-            !!row &&
-            (turns.unbounded ||
-              (row.harness === "claude" && !!row.sessionId && !turns.hasTurns));
-          // Activity writes are throttled; the closing pulse can land within that window.
-          const lastTurnAt = activityBound
-            ? new Date(
-                Math.max(
-                  row.updatedAt.getTime() + ACTIVITY_TOUCH_MS,
-                  Date.parse(turns.lastTurnAt ?? "") || 0
-                )
-              ).toISOString()
-            : turns.lastTurnAt;
-          return {
-            row: row ?? null,
-            midTurn: !!(row && pulses.get(row.id)?.busy),
-            hasTurns: turns.hasTurns,
-            lastTurnAt,
-            activityBound,
-          };
+          if (!row) {
+            return {
+              row: null,
+              midTurn: false,
+              hasTurns: false,
+              lastTurnAt: null,
+              activityBound: false,
+            };
+          }
+          const { midTurn, hasTurns, lastTurnAt, activityBound } =
+            followupState(row);
+          return { row, midTurn, hasTurns, lastTurnAt, activityBound };
         }
       )
       .post(

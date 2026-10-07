@@ -11,6 +11,7 @@ import {
 import { adminTools, isAdminWrite } from "./admin-tools";
 import type { Caw } from "./caw";
 import { handoffInstructions, handoffTools } from "./delegation-tools";
+import type { DelegateListInclude, DelegateNode } from "./delegation-tree";
 import type { AttemptStart } from "./dispatch";
 import {
   type AcceptResult,
@@ -114,6 +115,11 @@ export function createDelegationMcp(options: {
   projectFromSession?: (actor: InstanceRow) => Promise<AcceptResult>;
   /** `todo_write`'s session scope: the caller's own steps and spec (plans.ts). */
   writePlan?: TaskToolContext["writePlan"];
+  /** `delegate_list`: the calling session's own delegation tree (delegation-tree.ts). */
+  delegationTree?: (
+    actor: InstanceRow,
+    include: DelegateListInclude
+  ) => Promise<DelegateNode[]>;
   /** Caw's own tools (threads, views), for a project's lead (caw.ts). */
   cawTools?: (actor: InstanceRow | undefined) => CawTool[];
   /**
@@ -515,6 +521,7 @@ export function createDelegationMcp(options: {
     authorization?: string
   ): Promise<CallToolResult> => {
     const emitted: Envelope[] = [];
+    const tree = options.delegationTree;
     const entry = tools({
       instanceId: actor.id,
       instanceById: options.instanceById,
@@ -528,6 +535,7 @@ export function createDelegationMcp(options: {
       workflowStepId: actor.workflowStepId ?? undefined,
       workflowRunId: actor.workflowRunId ?? undefined,
       projectId: actor.projectId ?? undefined,
+      delegateList: tree ? (include) => tree(actor, include) : undefined,
       emit: (envelope) => emitted.push(envelope),
     }).find((tool) => tool.name === name);
     if (!entry) {

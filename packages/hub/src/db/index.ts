@@ -1418,6 +1418,8 @@ export interface DbShape {
   readonly workItemByPrUrl: (url: string) => WorkItemRow | undefined;
   /** A workspace's items, newest first. */
   readonly workItemsIn: (workspaceId: string) => WorkItemRow[];
+  /** Every work item any of these sessions delegated, newest first (delegation-tree.ts). */
+  readonly workItemsOfParents: (parentInstanceIds: string[]) => WorkItemRow[];
   /** Unfiled creates to discard when this machine next registers. */
   readonly workspaceCreatesOn: (
     machineId: string
@@ -4795,6 +4797,15 @@ const make = (path: string): DbShape => {
           )
         )
         .all(),
+    workItemsOfParents: (parentInstanceIds) =>
+      parentInstanceIds.length === 0
+        ? []
+        : db
+            .select()
+            .from(workItems)
+            .where(inArray(workItems.parentInstanceId, parentInstanceIds))
+            .orderBy(desc(workItems.createdAt))
+            .all(),
     trayItemsOf: (parentInstanceId, endedSince) =>
       db
         .select()
