@@ -342,12 +342,12 @@ class PiSession implements HarnessSession {
     }
     // The host outlived the agent that started it and still holds the
     // credential its tools send. The ACK is authenticated by it, so one the
-    // hub no longer knows is refused. A host started before session
-    // credentials holds none, and its tools answer under its instance binding.
+    // hub no longer knows is refused, as is a host that holds none.
     if (method === VERIFY_SESSION_CREDENTIAL) {
-      if (this.#credential.value) {
-        await acknowledgeSessionCredential(this.#credential.value);
+      if (!this.#credential.value) {
+        throw new Error("This pi host holds no CawCo session credential.");
       }
+      await acknowledgeSessionCredential(this.#credential.value);
       return undefined;
     }
     switch (method) {

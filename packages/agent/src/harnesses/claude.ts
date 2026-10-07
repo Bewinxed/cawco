@@ -1595,9 +1595,8 @@ class ClaudeSession implements HarnessSession {
    * A child this host attached to proves what its cawco slot sends: the slot
    * is connected, and the header it was launched with is one the hub
    * acknowledges (the ACK is authenticated by that header, so a credential
-   * the hub no longer knows is refused). A child launched before session
-   * credentials sends none, and its connected slot answers under its
-   * instance binding.
+   * the hub no longer knows is refused). A child launched with no credential
+   * has no way to call CawCo tools: the hub takes no call without one.
    */
   async #verifyHeldCredential() {
     const servers = await this.#connectedCawcoSnapshot();
@@ -1606,11 +1605,10 @@ class ClaudeSession implements HarnessSession {
       cawco?.config?.type === "http"
         ? cawco.config.headers?.Authorization
         : undefined;
-    if (header === undefined) {
-      return;
-    }
-    if (!header.startsWith("Bearer ")) {
-      throw new Error("CawCo MCP carries a malformed credential header.");
+    if (!header?.startsWith("Bearer ")) {
+      throw new Error(
+        "This Claude process was launched without a CawCo session credential."
+      );
     }
     await acknowledgeSessionCredential(header.slice("Bearer ".length));
     console.info(`[claude] held credential verified ${this.instanceId}`);

@@ -7,9 +7,10 @@
  * two ways in. An admin write waits, as it does over MCP, until the person
  * approves it (it then runs) or denies it (the refusal is printed).
  *
- * The session is `--session <id>`, else `CAWCO_INSTANCE_ID`; its credential,
- * when it has one, is `CAWCO_SESSION_CREDENTIAL`, sent as the MCP server's
- * own `Authorization: Bearer` header is.
+ * The session is `--session <id>`, else `CAWCO_INSTANCE_ID`. A call acts as
+ * that session only with its credential, `CAWCO_SESSION_CREDENTIAL`, sent as
+ * the MCP server's own `Authorization: Bearer` header is: the hub takes no
+ * call on a session's name alone.
  */
 
 /** Where the CLI reads the session it acts as, and that session's credential. */
@@ -20,9 +21,14 @@ export const TOOL_ENV = {
 
 export class ToolError extends Error {}
 
-const headers = (): Record<string, string> => {
-  const credential = process.env[TOOL_ENV.credential];
-  return credential ? { Authorization: `Bearer ${credential}` } : {};
+const credentialHeader = (): Record<string, string> => {
+  const credential = process.env[TOOL_ENV.credential]?.trim();
+  if (!credential) {
+    throw new ToolError(
+      `a tool call acts as a session only with its credential: set ${TOOL_ENV.credential}`
+    );
+  }
+  return { Authorization: `Bearer ${credential}` };
 };
 
 /** The session the CLI acts as. */
@@ -42,8 +48,7 @@ export const listTools = async (
   instanceId: string
 ): Promise<string> => {
   const response = await fetch(
-    `${hub}/api/delegation/tools?instanceId=${encodeURIComponent(instanceId)}`,
-    { headers: headers() }
+    `${hub}/api/delegation/tools?instanceId=${encodeURIComponent(instanceId)}`
   );
   if (!response.ok) {
     throw new ToolError(`${response.status}: ${await response.text()}`);
@@ -81,7 +86,7 @@ export const callTool = async (
     `${hub}/api/delegation/call/${encodeURIComponent(instanceId)}`,
     {
       method: "POST",
-      headers: { "content-type": "application/json", ...headers() },
+      headers: { "content-type": "application/json", ...credentialHeader() },
       body: JSON.stringify({ name, arguments: args }),
       // An admin write waits for the person to approve it; Bun's fetch would
       // otherwise drop a response silent for five minutes.

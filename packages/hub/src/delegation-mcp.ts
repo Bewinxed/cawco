@@ -177,74 +177,60 @@ export function createDelegationMcp(options: {
     return all.filter((tool) => allows(role, tool.name));
   };
 
-  // Temporary until Phase 2's per-session credentials replace this resolver.
-  // PRODUCT.md trusts the network perimeter; here malformed/unknown identities
-  // are refused, but deliberate same-UID impersonation is not yet prevented.
+  /**
+   * The credential OpenCode's plugin stamps into a call: OpenCode sends one
+   * static MCP header for every session of a directory, so a session's own
+   * credential rides in the call (`__cawco.credential`), written over
+   * whatever the model put there (agent `buildHandoffPluginSource`).
+   */
+  const stampedCredential = (
+    args: Record<string, unknown>
+  ): string | undefined => {
+    const context = args.__cawco;
+    if (context === undefined) {
+      return undefined;
+    }
+    const credential =
+      typeof context === "object" && context !== null && !Array.isArray(context)
+        ? (context as { credential?: unknown }).credential
+        : undefined;
+    if (typeof credential !== "string" || !credential) {
+      throw new Error("__cawco carries no session credential");
+    }
+    return credential;
+  };
+
+  /**
+   * The calling session, from its own credential and nothing else: the
+   * `Authorization` header (Claude, pi, the CLI) or OpenCode's stamped one.
+   * One of them, never both. Its row decides its role, so naming another
+   * session anywhere in a call changes nothing.
+   */
   const actorOf = (
     binding: string | null,
     args: Record<string, unknown>,
     authorization?: string
   ) => {
-    if (authorization !== undefined) {
-      const actor = options.credentialActor(authorization);
-      if (!actor) {
-        throw new Error("Invalid session credential");
-      }
-      if (binding !== null && actor.id !== binding) {
-        throw new Error(
-          "Session credential does not belong to the named instanceId"
-        );
-      }
-      return actor;
+    const stamped = stampedCredential(args);
+    if (authorization !== undefined && stamped !== undefined) {
+      throw new Error("A call carries one session credential, not two.");
     }
-    return legacyActorOf(binding, args);
-  };
-
-  const legacyActorOf = (
-    binding: string | null,
-    args: Record<string, unknown>
-  ) => {
-    const rows = options.instances();
-    if (binding !== null) {
-      if (typeof binding !== "string" || !binding.trim()) {
-        throw new Error("CawCo instanceId must be a non-empty string");
-      }
-      const actor = rows.find((row) => row.id === binding);
-      if (!actor) {
-        throw new Error(
-          "This MCP connection's session is no longer registered"
-        );
-      }
-      return actor;
+    const presented =
+      authorization ??
+      (stamped === undefined ? undefined : `Bearer ${stamped}`);
+    if (presented === undefined) {
+      throw new Error("This call carries no CawCo session credential.");
     }
-    const context = args.__cawco;
-    if (
-      typeof context !== "object" ||
-      context === null ||
-      Array.isArray(context) ||
-      !("sessionId" in context && "directory" in context) ||
-      typeof context.sessionId !== "string" ||
-      !context.sessionId.trim() ||
-      typeof context.directory !== "string" ||
-      !context.directory.trim()
-    ) {
+    const actor = options.credentialActor(presented);
+    if (!actor) {
+      throw new Error("Invalid session credential");
+    }
+    if (binding !== null && actor.id !== binding) {
       throw new Error(
-        "CawCo requires __cawco with non-empty sessionId and directory strings"
+        "Session credential does not belong to the named instanceId"
       );
     }
-    const candidates = rows.filter(
-      (row) =>
-        row.harness === "opencode" &&
-        row.sessionId === context.sessionId &&
-        row.cwd === context.directory &&
-        ["running", "starting"].includes(row.status)
-    );
-    if (candidates.length !== 1) {
-      throw new Error(
-        "CawCo requires one registered session matching the harness-injected context"
-      );
-    }
-    return candidates[0];
+    return actor;
   };
 
   /**
@@ -581,6 +567,12 @@ export function createDelegationMcp(options: {
     return undefined;
   };
 
+  /**
+   * Whose connection this is: the credential's session. A connection with no
+   * credential names no session: it is OpenCode's shared discovery, which
+   * lists the superset, and each of its calls carries its own credential.
+   * An instanceId with no credential to back it is refused.
+   */
   const requestBinding = (request: Request): string | null | Response => {
     const authorization = request.headers.get("authorization");
     const actor = options.credentialActor(authorization);
@@ -592,13 +584,19 @@ export function createDelegationMcp(options: {
     if (invalid) {
       return invalid;
     }
+    if (bindings[0] !== undefined && !actor) {
+      return new Response(
+        "A session's CawCo connection needs its session credential",
+        { status: 401 }
+      );
+    }
     if (actor && bindings[0] !== undefined && bindings[0] !== actor.id) {
       return new Response(
         "Session credential does not belong to the named instanceId",
         { status: 403 }
       );
     }
-    return actor?.id ?? bindings[0] ?? null;
+    return actor?.id ?? null;
   };
 
   const handle = async (

@@ -67,10 +67,12 @@ import {
   CONTROL_SUPPORTED_MODELS,
   EFFORT_READ,
   IMAGE_GENERATION_TIMEOUT_MS,
+  INSTALL_SESSION_CREDENTIAL,
   MESSAGES_READ,
   MESSAGES_STORED,
   mcpFleetState,
   PROVIDER_RETRY,
+  VERIFY_SESSION_CREDENTIAL,
 } from "@cawco/core";
 import type { RestartHold } from "@cawco/core/binary-updates";
 // The protocol subpath, never the `@cawco/core` barrel: `sessiond.ts` reaches
@@ -108,6 +110,7 @@ import { HarnessRecoveryRefused, SessionAddressRefused } from "../harness";
 import { isMachineAgent } from "../machine-agent";
 import { OPENCODE_SERVER_PROC_ID, parseProcId } from "../proc-id";
 import { fenced, holdRestart, withRestartHold } from "../restart";
+import { acknowledgeSessionCredential } from "../session-identity";
 import { ensureSessiond, SessiondClient } from "../sessiond-client";
 import { resolveBin } from "../tools";
 import {
@@ -119,6 +122,11 @@ import {
 } from "./fleet-common";
 import { managedMcpMismatches } from "./managed-mcp";
 import { OpencodeActivity } from "./opencode-activity";
+import {
+  opencodeCredentialFile,
+  readOpencodeCredentials,
+  storeOpencodeCredential,
+} from "./opencode-credentials";
 import { OpencodeServerOwner, type ServerIdentity } from "./opencode-server";
 
 interface RecoveryRound {
@@ -620,13 +628,20 @@ const announceOpencodeServer = async (
 };
 
 /**
- * Supplies MCP caller identity, the workflow-only tool enabled by each
- * session's tool mask, and — in a delegation workspace's clone — the `bash`
- * that runs every command through the workspace's executor, inside its
- * boundary. A plugin tool named like a built-in takes its place
- * (opencode.ai/docs/plugins: "If a plugin tool uses the same name as a
- * built-in tool, the plugin tool takes precedence"); arguments are never
- * rewritten in `tool.execute.before`, which has not reliably taken effect.
+ * Supplies each `cawco_*` call its session's credential, the workflow-only
+ * tool enabled by each session's tool mask, and — in a delegation
+ * workspace's clone — the `bash` that runs every command through the
+ * workspace's executor, inside its boundary. A plugin tool named like a
+ * built-in takes its place (opencode.ai/docs/plugins: "If a plugin tool uses
+ * the same name as a built-in tool, the plugin tool takes precedence").
+ *
+ * The credential is added to the call's arguments object in place, never by
+ * replacing it: OpenCode hands `tool.execute.before` the very `args` object
+ * the MCP call then sends (`trigger(…, { args })`, then `execute(args, …)`,
+ * packages/opencode/src/session/tools.ts), so a replacement is lost
+ * (anomalyco/opencode#31680) and a property set on it is not. It comes from
+ * {@link opencodeCredentialFile} by OpenCode's own session id, never from
+ * anything the model wrote: the model's own `__cawco` is overwritten.
  * The plugin is set up once per directory, which is the workspace's clone
  * for every session a work item runs there.
  */
@@ -636,6 +651,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { tool } from "@opencode-ai/plugin";
 const cawcoBase = ${JSON.stringify(harnessMcpUrl(""))};
 const cawcoWorkspaces = ${JSON.stringify(workspacesDir())};
+const cawcoCredentials = ${JSON.stringify(opencodeCredentialFile())};
 const boundaryOf = (directory) => {
   let ids = [];
   try { ids = readdirSync(cawcoWorkspaces); } catch { return undefined; }
@@ -726,7 +742,13 @@ return ({
   },
   "tool.execute.before": async (input, output) => {
     if (input.tool.startsWith("cawco_")) {
-      output.args.__cawco = { sessionId: input.sessionID, directory };
+      let held = {};
+      try { held = JSON.parse(readFileSync(cawcoCredentials, "utf8")); } catch {}
+      const credential = held[input.sessionID];
+      if (typeof credential !== "string" || !credential) {
+        throw new Error("This OpenCode session holds no CawCo session credential, so it cannot call CawCo tools.");
+      }
+      output.args.__cawco = { credential };
     }
   },
 });
@@ -765,6 +787,18 @@ const QUESTION_TOOL = "question";
  */
 const toolNameOf = (tool: string): string =>
   tool === QUESTION_TOOL ? ASK_USER_QUESTION : tool;
+
+/**
+ * A tool call's input as the fleet sees it. The session credential the
+ * plugin stamps into a CawCo call (`__cawco`) is the session's secret, never
+ * the transcript's, whenever OpenCode's part happens to carry it.
+ */
+const toolInputOf = (
+  input: Record<string, unknown>
+): Record<string, unknown> => {
+  const { __cawco: _secret, ...rest } = input;
+  return rest;
+};
 
 /** opencode's question shape, which says `multiple` where the fleet says `multiSelect`. */
 const questionsOf = (raw: unknown): UserQuestion[] | null => {
@@ -1384,6 +1418,8 @@ export class OpencodeSession implements HarnessSession {
   readonly #isConfigGateHeld: (urgent?: boolean) => boolean;
   readonly #readActivity: () => Promise<boolean>;
   readonly #prepareDispatch: () => Promise<void>;
+  /** The OpenCode session ids this agent runs, so a credential store keeps only theirs. */
+  readonly #liveSessions: () => ReadonlySet<string>;
   readonly #workflowStepId?: string;
   readonly #canDelegate?: boolean;
   /** Tools denied to this session (fleet, type and spawn), switched off on every prompt. */
@@ -1402,6 +1438,8 @@ export class OpencodeSession implements HarnessSession {
     isConfigGateHeld: (urgent?: boolean) => boolean,
     readActivity: () => Promise<boolean>,
     prepareDispatch: () => Promise<void>,
+    cawcoConnected: Promise<void>,
+    liveSessions: () => ReadonlySet<string>,
     effort?: EffortLevel,
     workflowStepId?: string,
     canDelegate?: boolean,
@@ -1420,7 +1458,26 @@ export class OpencodeSession implements HarnessSession {
     this.#onRelease = onRelease;
     this.#isConfigGateHeld = isConfigGateHeld;
     this.#readActivity = readActivity;
-    this.#prepareDispatch = prepareDispatch;
+    // No prompt or command reaches the server before its CawCo tools do: a
+    // directory whose cawco slot did not connect fails the session with why,
+    // and every send it was handed fails with it. Awaited here, at dispatch,
+    // never at publication (bb65de38: publishing must not wait on unrelated
+    // cold MCP servers, and the status read warms every one of them).
+    const admitted = cawcoConnected.catch((error: unknown) => {
+      const reason = new Error(
+        `The session's CawCo MCP did not connect, so it takes no work: ${error instanceof Error ? error.message : String(error)}`,
+        { cause: error }
+      );
+      this.#ctx.failed(reason);
+      throw reason;
+    });
+    // Its rejection is a send's, at dispatch; unawaited it is not unhandled.
+    admitted.catch(() => undefined);
+    this.#prepareDispatch = async () => {
+      await admitted;
+      await prepareDispatch();
+    };
+    this.#liveSessions = liveSessions;
     this.#workflowStepId = workflowStepId;
     this.#canDelegate = canDelegate;
     this.#deniedTools = deniedTools;
@@ -1944,7 +2001,7 @@ export class OpencodeSession implements HarnessSession {
                   type: "tool_use",
                   id: part.callID,
                   name: toolNameOf(part.tool),
-                  input: part.state.input,
+                  input: toolInputOf(part.state.input),
                 },
               ],
             },
@@ -2253,7 +2310,7 @@ export class OpencodeSession implements HarnessSession {
                   type: "tool_use",
                   id: part.callID,
                   name: part.tool,
-                  input: part.state.input,
+                  input: toolInputOf(part.state.input),
                 },
               ],
             },
@@ -3260,6 +3317,12 @@ export class OpencodeSession implements HarnessSession {
     ) {
       throw new Error(`${method} blocked: config reload in progress`);
     }
+    if (method === INSTALL_SESSION_CREDENTIAL) {
+      return await this.#installCredential(args[0]);
+    }
+    if (method === VERIFY_SESSION_CREDENTIAL) {
+      return await this.#verifyCredential();
+    }
     switch (method) {
       case CONTROL_INTERRUPT:
         await this.interrupt();
@@ -3506,6 +3569,50 @@ export class OpencodeSession implements HarnessSession {
         // biome-ignore lint/suspicious/noEmptyBlockStatements: a request that never reached the server is not the session's failure; nothing further to report here
         .catch(() => {})
     );
+  }
+
+  /**
+   * The credential its plugin stamps into each CawCo call, recorded by
+   * OpenCode session id and acknowledged with itself: a session this agent
+   * launched installs the one the hub minted for this spawn.
+   */
+  async #installCredential(credential: unknown) {
+    if (typeof credential !== "string" || !credential) {
+      throw new Error("Session credential is missing.");
+    }
+    await storeOpencodeCredential(
+      this.#opencodeSessionId(),
+      credential,
+      this.#liveSessions()
+    );
+    await acknowledgeSessionCredential(credential);
+    return {
+      installed: true,
+      harness: "opencode",
+      instanceId: this.instanceId,
+    };
+  }
+
+  /**
+   * A session an earlier agent launched still holds its credential in the
+   * store the plugin reads; the hub acknowledging it is the proof.
+   */
+  async #verifyCredential(): Promise<void> {
+    const credential = (await readOpencodeCredentials())[
+      this.#opencodeSessionId()
+    ];
+    if (!credential) {
+      throw new Error("This OpenCode session holds no session credential.");
+    }
+    await acknowledgeSessionCredential(credential);
+    console.info(`[opencode] held credential verified ${this.instanceId}`);
+  }
+
+  #opencodeSessionId(): string {
+    if (!this.sessionId) {
+      throw new Error("This OpenCode session has no session id.");
+    }
+    return this.sessionId;
   }
 
   async interrupt(): Promise<void> {
@@ -5655,17 +5762,24 @@ export class OpencodeHarness implements Harness {
         );
       }
     }
-    // biome-ignore lint/complexity/noVoid: connection health must never delay publishing a session
-    void client.mcp
+    // Connection health never delays publishing a session (bb65de38): the
+    // read warms every MCP server the directory has. The session's first
+    // dispatch waits on the cawco slot alone ({@link OpencodeSession}).
+    const cawcoConnected = client.mcp
       .status({ directory: ctx.cwd }, { signal: AbortSignal.timeout(65_000) })
       .then((status) => {
         console.info(
           `[opencode] ${ctx.cwd}: MCP status ${JSON.stringify(status.data ?? status.error)}`
         );
-      })
-      .catch((error: unknown) =>
-        console.warn(`[opencode] ${ctx.cwd}: MCP status unavailable: ${error}`)
-      );
+        const cawco = status.data?.cawco;
+        if (cawco?.status !== "connected") {
+          throw new Error(
+            `CawCo MCP is not connected (${cawco ? `${cawco.status}${"error" in cawco ? `: ${cawco.error}` : ""}` : errorText(status.error)}).`
+          );
+        }
+      });
+    // A spawn that fails before its session exists leaves nobody to await it.
+    cawcoConnected.catch(() => undefined);
     let sessionId: string;
 
     if (existing) {
@@ -5799,6 +5913,13 @@ export class OpencodeHarness implements Harness {
           this.#sessionOwners.get(ctx.instanceId)
         ),
       () => this.#prepareDispatch(session),
+      cawcoConnected,
+      () =>
+        new Set(
+          [...this.#sessions.values(), session].flatMap((held) =>
+            held.sessionId ? [held.sessionId] : []
+          )
+        ),
       spec.effort,
       spec.workflowStepId,
       spec.canDelegate,
@@ -6475,7 +6596,7 @@ export function toTranscript(
           type: "tool_use",
           id: part.callID,
           name: toolNameOf(part.tool),
-          input: part.state.input,
+          input: toolInputOf(part.state.input),
         });
       }
     }

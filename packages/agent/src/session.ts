@@ -1460,22 +1460,18 @@ export class SessionSupervisor {
   }
 
   /**
-   * THE CREDENTIAL GATE. A Claude or pi session is published only once its
-   * CawCo MCP answers the hub under its own credential and the hub has
-   * acknowledged it: a process this agent launched installs the credential
-   * the hub minted for this spawn (`launched`), and one it attached to proves
-   * the one it already holds. Nothing has been sent to the session yet, so a
-   * session that cannot is stopped before its first turn, and the throw is
-   * its spawn's failure with the reason.
+   * THE CREDENTIAL GATE, for every harness. A session is published only once
+   * the hub has acknowledged its own credential, the one its CawCo tools
+   * send: a process this agent launched installs the credential the hub
+   * minted for this spawn (`launched`), and one it attached to proves the one
+   * it already holds. Nothing has been sent to the session yet, so a session
+   * that cannot is stopped before its first turn, and the throw is its
+   * spawn's failure with the reason.
    */
   async #admit(
     session: HarnessSession,
-    kind: HarnessKind,
     launched: { credential: string | undefined } | undefined
   ): Promise<void> {
-    if (kind !== "claude" && kind !== "pi") {
-      return;
-    }
     try {
       if (!launched) {
         await session.control(VERIFY_SESSION_CREDENTIAL, []);
@@ -1701,7 +1697,6 @@ export class SessionSupervisor {
       // A reattach attaches to a process that already holds its credential.
       await this.#admit(
         session,
-        adapter.kind,
         payload.reattachOnly
           ? undefined
           : { credential: payload.sessionCredential }
@@ -2306,7 +2301,7 @@ export class SessionSupervisor {
     });
     holder.session = session;
     await this.#applyStoredPermissionMode(session, row.permissionMode);
-    await this.#admit(session, claude.kind, undefined);
+    await this.#admit(session, undefined);
     this.#sessions.set(row.instanceId, session);
     // biome-ignore lint/complexity/noVoid: the catalog read dates a rest already under way; nothing waits on it
     void this.#dateActivity(row.instanceId, claude, session, row.cwd);

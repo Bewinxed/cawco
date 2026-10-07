@@ -3068,10 +3068,9 @@ export const createServer = (
     // other: minting replaces the hash the hub accepts, so a mint for a
     // reattach (which launches nothing) cut off the process already holding
     // the old one. A reattached process proves its own credential.
-    const sessionCredential =
-      !payload.reattachOnly && (harness === "claude" || harness === "pi")
-        ? identities.mint(payload.instanceId)
-        : undefined;
+    const sessionCredential = payload.reattachOnly
+      ? undefined
+      : identities.mint(payload.instanceId);
     return {
       // A project's Caw never has edit or shell tools: every spawn of its
       // row — the first, and each revive, restore and relaunch — denies them.
@@ -7993,10 +7992,8 @@ export const createServer = (
   const installSessionIdentity = async (instanceId: string) => {
     try {
       const [row] = db.getInstancesByIds([instanceId]);
-      if (!(row && (row.harness === "claude" || row.harness === "pi"))) {
-        throw new Error(
-          "Phase 2(a) installs known Claude and pi sessions only"
-        );
+      if (!row) {
+        throw new Error("No such session");
       }
       if (healthySessionIdentity(instanceId)) {
         return { instanceId, installed: true, changedServers: [] };
@@ -8325,26 +8322,22 @@ export const createServer = (
         "/api/delegation/call/:instanceId",
         { ...hidden, body: t.Any() },
         ({ params, body, request, server, status }) => {
+          // The caller is its credential's session; the path only says which
+          // one it claims to be, and must agree.
           const authorization = request.headers.get("authorization");
           const identity = identities.resolve(authorization);
-          if (authorization !== null && !identity) {
-            return status(401, "Invalid session credential");
+          if (!identity) {
+            return status(
+              401,
+              authorization === null
+                ? "A CawCo tool call needs its session credential"
+                : "Invalid session credential"
+            );
           }
-          if (identity && identity.instanceId !== params.instanceId) {
+          if (identity.instanceId !== params.instanceId) {
             return status(
               403,
               "Session credential does not belong to the named instanceId"
-            );
-          }
-          if (
-            !(
-              params.instanceId.trim() &&
-              db.getInstancesByIds([params.instanceId])[0]
-            )
-          ) {
-            return status(
-              400,
-              "delegation call needs a known non-empty instanceId"
             );
           }
           if (
