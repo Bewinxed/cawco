@@ -254,7 +254,7 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
     /// The drawer follows the composer (it grows with a draft, rises with
     /// the keyboard) and the pane's height, at its middle or full height.
     private func placeDrawer() {
-        guard drawer, let drawerHeight, let drawerFloor, !dragging else { return }
+        guard drawer, let drawerHeight, let drawerFloor, !dragging, !drawerLeaving else { return }
         let height = drawerRoom * (drawerFull ? 1 : 0.6)
         guard abs(drawerFloor.constant + composerInset) > 0.5 || abs(drawerHeight.constant - height) > 0.5 else { return }
         drawerFloor.constant = -composerInset
@@ -264,37 +264,107 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
 
     private var dragging = false
     private var dragFrom: CGFloat = 0
+    /// The drawer settling on a height, which a new drag catches where it is.
+    private var drawerSettle: UIViewPropertyAnimator?
 
-    /// The drawer's header follows the finger; let go, it snaps to the middle
-    /// or the full height, and below the middle by a quarter (or a flick
-    /// down) the preview closes, as Close does.
+    /// The drawer's grabber and header follow the finger 1:1 between its
+    /// heights. Let go, where the finger was headed decides (its release
+    /// projected on: UIScrollView's normal deceleration): projected past 30%
+    /// under the middle height the preview closes, as Close does; otherwise
+    /// it settles on the nearer of the middle and the full height, on the
+    /// settle spring at the finger's speed.
     @objc private func dragDrawer(_ pan: UIPanGestureRecognizer) {
-        guard let drawerHeight else { return }
+        guard let drawerHeight, let preview, !drawerLeaving else { return }
         let room = drawerRoom
         let followed = min(room, max(0, dragFrom - pan.translation(in: view).y))
         switch pan.state {
         case .began:
             dragging = true
+            // Caught mid-settle: the drawer stays where it is drawn.
+            if let drawerSettle, drawerSettle.state == .active {
+                drawerSettle.stopAnimation(true)
+                drawerHeight.constant = preview.view.frame.height
+            }
+            drawerSettle = nil
             dragFrom = drawerHeight.constant
         case .changed:
             drawerHeight.constant = followed
         case .ended, .cancelled:
             dragging = false
-            let velocity = pan.velocity(in: view).y
+            // Toward the drawer's top is a taller drawer.
+            let speed = -pan.velocity(in: view).y
             // Where the finger let go, not the last height drawn: a quick
             // drag may end before a single change was delivered.
             let height = followed
             let middle = room * 0.6
-            if velocity > 900 || height < middle * 0.75 {
-                preview?.close()
+            let rate = UIScrollView.DecelerationRate.normal.rawValue
+            let projected = height + speed / 1000 * rate / (1 - rate)
+            if pan.state == .ended, projected < middle * 0.7 {
+                dismissDrawer(speed: speed)
                 return
             }
-            drawerFull = velocity < -500 || height > (middle + room) / 2
-            drawerHeight.constant = room * (drawerFull ? 1 : 0.6)
-            Motion.easeOut.animator(Motion.durPanel) { self.view.layoutIfNeeded() }.startAnimation()
+            drawerFull = projected > (middle + room) / 2
+            settleDrawer(from: height, speed: speed)
         default:
             break
         }
+    }
+
+    /// The drawer swiped away is leaving while the hub closes its preview.
+    private var drawerLeaving = false
+
+    /// Swiped away: the drawer leaves downward past the screen's foot on the
+    /// settle spring at the finger's speed, and the hub closes the preview as
+    /// Close does. Should the hub keep it open, the drawer comes back to its
+    /// middle height, with the hub's reason over the page.
+    private func dismissDrawer(speed: CGFloat) {
+        guard let preview, let drawerHeight else { return }
+        drawerLeaving = true
+        let away = drawerHeight.constant + composerInset
+        // Downward is negative speed (taller is positive).
+        let spring = UISpringTimingParameters(duration: Motion.durSettle, bounce: 0,
+                                              initialVelocity: CGVector(dx: 0, dy: away > 0.5 ? max(0, -speed) / away : 0))
+        let animator = UIViewPropertyAnimator(duration: Motion.durSettle, timingParameters: spring)
+        animator.addAnimations { preview.view.transform = CGAffineTransform(translationX: 0, y: away) }
+        animator.startAnimation()
+        drawerSettle = animator
+        preview.close { [weak self, weak preview] in
+            guard let self, let preview, preview === self.preview, preview.parent === self else { return }
+            drawerLeaving = false
+            drawerFull = false
+            settleDrawer(from: self.drawerHeight?.constant ?? 0, speed: 0)
+        }
+    }
+
+    /// A tap on the grabber moves the drawer to its other height (SideSheet.svelte `cycleSnap`).
+    @objc private func cycleDrawer() {
+        guard let drawerHeight, !dragging, !drawerLeaving else { return }
+        drawerFull.toggle()
+        settleDrawer(from: drawerHeight.constant, speed: 0)
+    }
+
+    /// To the height `drawerFull` names, on the settle spring, leaving at
+    /// `speed` (points a second, taller positive).
+    private func settleDrawer(from height: CGFloat, speed: CGFloat) {
+        guard let drawerHeight else { return }
+        // A settle under way is caught where it is drawn, and this one goes on from there.
+        if let running = drawerSettle, running.state == .active { running.stopAnimation(true) }
+        let target = drawerRoom * (drawerFull ? 1 : 0.6)
+        drawerHeight.constant = target
+        let distance = target - height
+        let spring = UISpringTimingParameters(duration: Motion.durSettle, bounce: 0,
+                                              initialVelocity: CGVector(dx: 0, dy: abs(distance) > 0.5 ? speed / distance : 0))
+        let animator = UIViewPropertyAnimator(duration: Motion.durSettle, timingParameters: spring)
+        animator.isInterruptible = true
+        // A drawer that was leaving comes back from where it is drawn.
+        let drawn = preview?.view
+        animator.addAnimations {
+            drawn?.transform = .identity
+            self.view.layoutIfNeeded()
+        }
+        animator.startAnimation()
+        drawerSettle = animator
+        preview?.grabArea.accessibilityValue = drawerFull ? "Full height" : "Half height"
     }
 
     private func makePreview() -> PreviewController {
@@ -320,6 +390,7 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
         controller.view.layer.cornerCurve = .continuous
         controller.view.boxShadow = Shadow.shadowDrawer
         self.drawer = drawer
+        controller.standsAsDrawer(drawer)
         if drawer {
             drawerFull = false
             let height = controller.view.heightAnchor.constraint(equalToConstant: drawerRoom * 0.6)
@@ -331,7 +402,13 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
                 controller.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
                 height, floor,
             ])
-            controller.dragArea.addGestureRecognizer(UIPanGestureRecognizer(target: self, action: #selector(dragDrawer)))
+            for handle in [controller.dragArea!, controller.grabArea] as [UIView] {
+                let pan = UIPanGestureRecognizer(target: self, action: #selector(dragDrawer))
+                pan.maximumNumberOfTouches = 1
+                handle.addGestureRecognizer(pan)
+            }
+            controller.grabArea.addTarget(self, action: #selector(cycleDrawer), for: .primaryActionTriggered)
+            controller.grabArea.accessibilityValue = "Half height"
             controller.didMove(toParent: self)
             if !UIAccessibility.isReduceMotionEnabled {
                 controller.view.transform = CGAffineTransform(translationX: 0, y: drawerRoom * 0.6)
@@ -358,6 +435,15 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
         controller.willMove(toParent: nil)
         controller.view.removeFromSuperview()
         controller.removeFromParent()
+        // The drawer's handles go with it: an embed beside the transcript has none.
+        for handle in [controller.dragArea!, controller.grabArea] as [UIView] {
+            handle.gestureRecognizers?.filter { $0 is UIPanGestureRecognizer }.forEach(handle.removeGestureRecognizer)
+        }
+        controller.grabArea.removeTarget(self, action: #selector(cycleDrawer), for: .primaryActionTriggered)
+        drawerSettle?.stopAnimation(true)
+        drawerSettle = nil
+        drawerLeaving = false
+        controller.view.transform = .identity
         drawerHeight = nil
         drawerFloor = nil
         if !drawer {
@@ -370,10 +456,9 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
 
     /// Back to its middle height (client.svelte.ts `revealPreview`).
     private func reveal(_ controller: PreviewController) {
-        guard drawer, controller.parent === self, let drawerHeight else { return }
+        guard drawer, controller.parent === self, drawerHeight != nil, !dragging, !drawerLeaving else { return }
         drawerFull = false
-        drawerHeight.constant = drawerRoom * 0.6
-        Motion.easeOut.animator(Motion.durPanel) { self.view.layoutIfNeeded() }.startAnimation()
+        settleDrawer(from: controller.view.frame.height, speed: 0)
     }
 
     private func removePreview() {

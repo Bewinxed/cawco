@@ -291,19 +291,26 @@ public final class KitLabel: UILabel {
     override public var lineBreakMode: NSLineBreakMode {
         get { super.lineBreakMode }
         set {
-            // UIKit may restate the mode from a string's paragraph as the
-            // string is set; only a caller's own choice counts.
-            if !placing { cutsTail = newValue == .byTruncatingTail }
             super.lineBreakMode = newValue
             forget()
+            // UIKit may restate the mode from a string's paragraph as the
+            // string is set; only a caller's own choice counts, and it goes
+            // into the label's own string: a string's paragraph decides how
+            // a label cuts it, whatever the label's own mode says.
+            guard !placing, newValue != chosenBreak else { return }
+            chosenBreak = newValue
+            render()
         }
     }
 
     private var content = ""
     /// Whether the label holds a string the caller attributed itself.
     private var given = false
+    /// Where text that does not fit is cut, as the caller asked: its tail
+    /// (cut here, by WebKit's rule), its head or its middle (cut by UIKit).
+    private var chosenBreak: NSLineBreakMode = .byTruncatingTail
     /// Whether text that does not fit ends in an ellipsis at its tail.
-    private var cutsTail = true
+    private var cutsTail: Bool { chosenBreak == .byTruncatingTail }
     private var placing = false
     private var paragraph: WrapParagraph?
     /// The string last drawn or measured in place of the label's own, and
@@ -338,6 +345,10 @@ public final class KitLabel: UILabel {
                 .featureSettings: [[UIFontDescriptor.FeatureKey.type: kNumberSpacingType, UIFontDescriptor.FeatureKey.selector: kMonospacedNumbersSelector]],
             ])
             attributes[.font] = UIFont(descriptor: descriptor, size: font.pointSize)
+        }
+        if let style = (attributes[.paragraphStyle] as? NSParagraphStyle)?.mutableCopy() as? NSMutableParagraphStyle {
+            style.lineBreakMode = chosenBreak
+            attributes[.paragraphStyle] = style
         }
         place(NSAttributedString(string: content, attributes: attributes))
     }

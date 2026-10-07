@@ -137,12 +137,14 @@ public final class HouseSheetController: UIViewController, UIViewControllerTrans
                 card.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: inset),
                 card.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor, constant: -inset),
                 card.heightAnchor.constraint(lessThanOrEqualTo: view.heightAnchor, multiplier: cap ?? (style == .card ? 0.8 : 0.88), constant: -inset * 2),
-                // The grabber's `mt-4`, under the content box's `p-4` on the drawer.
-                handle.topAnchor.constraint(equalTo: card.topAnchor, constant: style == .card ? 16 + 16 - inset : 16),
+                // The grabber's `mt-4`, under the content box's `p-4` on the
+                // drawer, and inside the edge sheet's 1pt border on it.
+                handle.topAnchor.constraint(equalTo: card.topAnchor, constant: style == .card ? 16 + 16 - inset : 1 + 16),
                 handle.centerXAnchor.constraint(equalTo: card.centerXAnchor),
                 handle.widthAnchor.constraint(equalToConstant: 100),
                 handle.heightAnchor.constraint(equalToConstant: 6),
-                column.topAnchor.constraint(equalTo: handle.bottomAnchor, constant: style == .card ? 0 : Space.space2),
+                // The content starts at the grabber's foot (vaul's column holds no gap).
+                column.topAnchor.constraint(equalTo: handle.bottomAnchor),
             ])
         }
         self.pad = pad
@@ -162,13 +164,15 @@ public final class HouseSheetController: UIViewController, UIViewControllerTrans
     private var inset = 0.0
 
     /// The content's foot clears the home indicator as well as its padding
-    /// (`pb-[calc(1rem+env(safe-area-inset-bottom))]`), unless the keyboard
-    /// already holds the card above it.
+    /// (`pb-[calc(1rem+env(safe-area-inset-bottom))]` on the content box,
+    /// which the card stands `inset` inside), unless the keyboard already
+    /// holds the card above it. At the safe area alone, the content ends
+    /// where the home indicator's band begins.
     override public func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         let keyboard = view.keyboardLayoutGuide.layoutFrame.height > view.safeAreaInsets.bottom + 1
-        let clear = keyboard ? 0 : max(0, view.safeAreaInsets.bottom - inset)
-        let foot = -(footAtSafeArea ? clear : pad + clear)
+        let safe = keyboard ? 0 : view.safeAreaInsets.bottom
+        let foot = -(footAtSafeArea ? max(0, safe - inset) : pad + safe)
         if footPad != nil, footPad.constant != foot {
             footPad.constant = foot
         }

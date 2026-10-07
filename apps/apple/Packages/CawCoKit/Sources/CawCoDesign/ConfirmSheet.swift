@@ -21,8 +21,8 @@ public extension KitButton {
 
     /// The kit's destructive button (button.svelte `destructive`): the
     /// error edge and ink on no fill.
-    static func destructive(_ title: String, stretch: Bool = false, action: @escaping () -> Void) -> UIButton {
-        let button = make(title, variant: .outline, height: .lg, stretch: stretch, action: action)
+    static func destructive(_ title: String, action: @escaping () -> Void) -> UIButton {
+        let button = make(title, variant: .outline, height: .lg, action: action)
         var config = button.configuration
         config?.attributedTitle = AttributedString(title, attributes: AttributeContainer(TypeScale.typeButton.attributes(color: Palette.error11, tracking: -0.01)))
         config?.background.strokeColor = Palette.error9
@@ -37,10 +37,12 @@ public extension KitButton {
     }
 }
 
-/// The house confirm (cawco/ConfirmDialog.svelte, a phone's layout) in the
-/// house sheet: the title in the title role and its body muted, centred; the
-/// confirming button above Cancel, each full width. Confirming pends with
-/// its own label; a refusal stays the sheet's, said under the body.
+/// The house confirm (cawco/ConfirmDialog.svelte) in the house sheet: the
+/// title in the title role and its body muted. On a phone they are centred
+/// over the confirming button and Cancel under it, each full width; from
+/// 640pt they read from the leading edge over Cancel and the confirming
+/// button in a row at the end. Confirming pends with its own label; a
+/// refusal stays the sheet's, said under the body.
 @MainActor
 public final class ConfirmSheetController: UIViewController {
     private let titleText: String
@@ -77,39 +79,48 @@ public final class ConfirmSheetController: UIViewController {
 
     override public func viewDidLoad() {
         super.viewDidLoad()
+        confirm = destructive
+            ? KitButton.destructive(confirmLabel) { [weak self] in self?.accept() }
+            : KitButton.make(confirmLabel, variant: .action, height: .lg) { [weak self] in self?.accept() }
+        cancel = KitButton.make("Cancel", variant: .outline, height: .lg) { [weak self] in self?.dismiss(animated: true) }
+        // The kit's footer sets the form: stacked full width on a phone, the
+        // confirming button on top; a row at the end from 640pt
+        // (alert-dialog-footer `flex-col-reverse`, `sm:flex-row sm:justify-end`).
+        // Its buttons go in reading order.
+        let footer = KitDialogController.footer([cancel, confirm])
+        let wide = footer.axis == .horizontal
+        let alignment: NSTextAlignment = wide ? .natural : .center
         let heading = KitLabel(TypeScale.typeTitle.with(weight: .medium), ink: Palette.inkStrong, lines: 0)
         heading.text = titleText
-        heading.textAlignment = .center
+        heading.textAlignment = alignment
         heading.accessibilityTraits = .header
         let description = KitLabel(TypeScale.typeLabel.with(weight: .regular), ink: Palette.inkMuted, lines: 0)
         description.text = body
-        description.textAlignment = .center
-        // `text-balance` below `md` (alert-dialog-description.svelte): the sheet is the phone's layout.
-        description.wrap = .balance
+        description.textAlignment = alignment
+        // `text-balance` below `md`, `text-pretty` from it (alert-dialog-description.svelte).
+        description.wrap = wide ? .pretty : .balance
         failure.isHidden = true
-        failure.textAlignment = .center
+        failure.textAlignment = alignment
         // `p.failure` (cawco/ConfirmDialog.svelte).
         failure.wrap = .pretty
-        confirm = destructive
-            ? KitButton.destructive(confirmLabel, stretch: true) { [weak self] in self?.accept() }
-            : KitButton.make(confirmLabel, variant: .action, height: .lg, stretch: true) { [weak self] in self?.accept() }
-        cancel = KitButton.make("Cancel", variant: .outline, height: .lg, stretch: true) { [weak self] in self?.dismiss(animated: true) }
+        // alert-dialog-header: `gap-1.5`.
         let header = UIStackView(arrangedSubviews: [heading, description, failure])
         header.axis = .vertical
         header.spacing = 6
-        let footer = UIStackView(arrangedSubviews: [confirm, cancel])
-        footer.axis = .vertical
-        footer.spacing = Space.space2
+        // `.kit-dialog-body`: `gap-6` between the header and the footer.
         let column = UIStackView(arrangedSubviews: [header, footer])
         column.axis = .vertical
-        column.spacing = Space.space4
+        column.spacing = 24
         column.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(column)
+        // `.kit-dialog-body` is padded `space-5` all round: the house sheet
+        // already holds its content 8pt inside the card at the sides and foot.
+        let side = Space.space5 - 8
         NSLayoutConstraint.activate([
-            column.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            column.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            column.topAnchor.constraint(equalTo: view.topAnchor, constant: Space.space3),
-            column.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            column.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: side),
+            column.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -side),
+            column.topAnchor.constraint(equalTo: view.topAnchor, constant: Space.space5),
+            column.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -side),
         ])
     }
 

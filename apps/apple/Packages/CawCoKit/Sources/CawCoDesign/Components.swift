@@ -104,7 +104,8 @@ public enum KitButton {
         stretch: Bool = false,
         action: @escaping () -> Void
     ) -> UIButton {
-        let button = UIButton(configuration: configuration(title, glyph: glyph, glyphTint: glyphTint, variant: variant, height: height), primaryAction: UIAction { _ in action() })
+        // A finger reaches it from 44pt about it (button.svelte's `touch-hit`).
+        let button = ReachButton(configuration: configuration(title, glyph: glyph, glyphTint: glyphTint, variant: variant, height: height), primaryAction: UIAction { _ in action() })
         button.houseStyle()
         button.translatesAutoresizingMaskIntoConstraints = false
         button.heightAnchor.constraint(greaterThanOrEqualToConstant: height.points).isActive = true

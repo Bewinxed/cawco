@@ -440,4 +440,9 @@ private final class UsageFoot: UIControl {
     override var isHighlighted: Bool {
         didSet { label.ink = isHighlighted ? Palette.meterCalm : Palette.inkStrong }
     }
+
+    /// A finger reaches the 37pt row from 44pt about it.
+    override func point(inside point: CGPoint, with _: UIEvent?) -> Bool {
+        TouchReach.contains(self, point)
+    }
 }

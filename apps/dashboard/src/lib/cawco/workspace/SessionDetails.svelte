@@ -965,25 +965,24 @@
     }
   }
   @media (max-width: 640px) {
-    .footer {
-      padding-bottom: max(var(--space-4), env(safe-area-inset-bottom));
-    }
-    .ns-btn,
-    .settings :global(.ns-chip-btn) {
+    /* The sheet that holds the card clears the home indicator itself
+       (PaneTabs.svelte `.session-details-sheet`). The footer's button takes
+       the row, 44px tall under a finger: `.footer` makes it outrank the
+       kit's `.ns-theme .ns-btn.xs` (0,3,0). */
+    .footer .ns-btn {
+      flex: 1;
       height: 44px;
     }
     /* A phone's row is ~350px: the three chips fit it whole, the model's
        name included, with the chips' sides and gaps drawn in. */
     .settings :global(.ns-chip-btn) {
+      height: 44px;
       padding-inline: 6px;
     }
     /* A bordered chip already reads as tappable; its chevron is the room
        the model's name needs. */
     .settings :global(.ns-chip-btn > svg.chevron) {
       display: none;
-    }
-    .ns-btn {
-      flex: 1;
     }
   }
 </style>

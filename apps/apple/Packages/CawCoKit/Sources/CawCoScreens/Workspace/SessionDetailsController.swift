@@ -91,6 +91,7 @@ public final class SessionDetailsController: ObservedViewController {
     // MARK: Views
 
     private let phone: Bool
+    private let touch: Bool
     /// The web's `h2` restates the title's size, weight and leading one by one and sets no
     /// letter-spacing (SessionDetails.svelte:696-702), so this title is untracked.
     private let titleWrap = KitLabel(TypeScale.typeTitle.with(weight: .medium, leading: TypeScale.leadingBody), ink: Palette.inkStrong, tracking: 0, lines: 3)
@@ -101,7 +102,7 @@ public final class SessionDetailsController: ObservedViewController {
     private let hostDot = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
     private let host = MorphLabel(TypeScale.typeMeta.with(leading: TypeScale.leadingBody), ink: Palette.inkMuted)
     private let cwdDot = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
-    private let cwdButton = UIControl()
+    private let cwdButton = ReachControl()
     private let cwdLabel = MorphLabel(TypeScale.typeLabel.with(weight: .regular, leading: TypeScale.leadingBody, family: FontFamily.fontMono), ink: Palette.inkMuted)
     private let configuration = UIStackView()
     private let modelChip: NsChip
@@ -118,7 +119,7 @@ public final class SessionDetailsController: ObservedViewController {
     private let limitLabel = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
     private let limitBar = LimitBar(height: 4)
     private let limitFigure = KitLabel(TypeScale.typeMeta, ink: Palette.inkStrong)
-    private let mcpButton = UIControl()
+    private let mcpButton = ReachControl()
     private let mcpFigure = MorphLabel(TypeScale.typeMeta)
     private let costFigure = MorphLabel(TypeScale.typeMeta)
     private var continueButton: NsButton!
@@ -131,10 +132,14 @@ public final class SessionDetailsController: ObservedViewController {
         titleText = title
         self.link = link
         doneFor = sessionId
-        // A phone's row is narrow: the three chips are 44pt tall, 6pt in, without chevrons.
+        // Under a finger (iPhone and iPad) the chips and the footer's button
+        // are 44pt tall, the HIG's least touch target; a phone's row is also
+        // narrow, so its chips sit 6pt in, without chevrons.
         phone = UIDevice.current.userInterfaceIdiom == .phone
-        modelChip = NsChip(height: phone ? 44 : 28, inset: phone ? 6 : 8, gap: 4, chevron: !phone)
-        chips = ToolChipsView(height: phone ? 44 : 28, inset: phone ? 6 : 8, chevrons: !phone)
+        touch = UIDevice.current.userInterfaceIdiom != .mac
+        let chipHeight = touch ? Size.cBtnHLg : 28
+        modelChip = NsChip(height: chipHeight, inset: phone ? 6 : 8, gap: 4, chevron: !phone)
+        chips = ToolChipsView(height: chipHeight, inset: phone ? 6 : 8, chevrons: !phone)
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -462,7 +467,7 @@ public final class SessionDetailsController: ObservedViewController {
         statsBox.backgroundColor = Palette.surfaceRecess
 
         // The footer: the modal's action row.
-        continueButton = NsButton("Continue in new session…", primary: true, size: .xs, height: phone ? 44 : nil) { [weak self] in
+        continueButton = NsButton("Continue in new session…", primary: true, size: .xs, height: touch ? Size.cBtnHLg : nil) { [weak self] in
             guard let self else { return }
             let id = sessionId
             onClose()

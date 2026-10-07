@@ -21,9 +21,15 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     private let pathLabel = KitLabel(TypeScale.typeCode.with(points: TypeScale.typeMeta.points), ink: Palette.inkMuted)
     private var sendButton: UIButton!
     private var selectButton: UIButton!
+    private var reloadButton: UIButton!
     private var closeButton: UIButton!
-    /// The header: on a phone, the drawer's handle (SessionViewController drags it).
+    /// The header: on a phone, a handle of the drawer (SessionViewController drags it).
     private(set) var dragArea: UIView!
+    /// The drawer's grabber and its 44pt hit area (SideSheet.svelte `.preview-grab`):
+    /// the drawer's other handle, which a tap moves between its heights.
+    let grabArea = GrabArea()
+    private let grabber = UIView()
+    private var headTop: NSLayoutConstraint!
     private let well = UIView()
     private let cover = UIView()
     private let failure = KitAlert(tone: .destructive)
@@ -49,18 +55,41 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         view.backgroundColor = Palette.surfaceRaised
 
         // The header: `height: 44px`, the identity then the actions, `gap-1`.
+        // The identity gives way to the actions: its title is one line cut at
+        // its tail, its path one line cut in its middle, and both stop 8pt
+        // short of the first action.
+        titleLabel.lineBreakMode = .byTruncatingTail
         pathLabel.lineBreakMode = .byTruncatingMiddle
         let identity = UIStackView(arrangedSubviews: [titleLabel, pathLabel])
         identity.axis = .vertical
         identity.isLayoutMarginsRelativeArrangement = true
         identity.directionalLayoutMargins.leading = Space.space1
+        identity.directionalLayoutMargins.trailing = 8 - Space.space1
+        for part in [identity, titleLabel, pathLabel] as [UIView] {
+            part.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+            part.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        }
         sendButton = KitButton.make("Send picks", glyph: Glyph.send, variant: .ghost, height: .sm) { [weak self] in self?.sendPicks(nil) }
         selectButton = KitButton.make("Select", glyph: .toolScreen, variant: .ghost, height: .sm) { [weak self] in
             guard let self else { return }
             select(!selecting)
         }
+        // Selecting shows on Select as `surface-fill`, as the web's `aria-pressed`
+        // header button does (SideSurface.svelte), over the kit's resting paint.
+        let restingSelect = selectButton.configurationUpdateHandler
+        selectButton.configurationUpdateHandler = { button in
+            restingSelect?(button)
+            if button.isSelected { button.configuration?.background.backgroundColor = Palette.surfaceFill }
+        }
         let reload = KitButton.make("", glyph: .refresh, variant: .ghost, height: .sm) { [weak self] in self?.reload() }
         reload.accessibilityLabel = "Reload"
+        // While selecting, what would leave the page waits at half ink (PreviewPane.svelte `.selecting .other`).
+        let restingReload = reload.configurationUpdateHandler
+        reload.configurationUpdateHandler = { [weak self] button in
+            restingReload?(button)
+            if self?.selecting == true { button.alpha = 0.5 }
+        }
+        reloadButton = reload
         closeButton = KitButton.make("", glyph: .close, variant: .ghost, height: .sm) { [weak self] in self?.close() }
         closeButton.accessibilityLabel = "Close"
         sendButton.isHidden = true
@@ -103,10 +132,36 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         cover.addSubview(line)
         failure.isHidden = true
         for part in [web!, cover, failure] as [UIView] { well.addSubview(part) }
+
+        // The grabber, `space-1` from the top, centred, 100×6 in the control
+        // edge; its hit area is 44pt tall about it (vaul's handle hit area),
+        // over the header, which yields to the header's actions.
+        grabArea.yields = [sendButton, selectButton, reload, closeButton]
+        grabber.translatesAutoresizingMaskIntoConstraints = false
+        grabber.backgroundColor = Palette.borderControl
+        grabber.layer.cornerRadius = 3
+        grabber.isUserInteractionEnabled = false
+        grabArea.translatesAutoresizingMaskIntoConstraints = false
+        grabArea.addSubview(grabber)
+        grabArea.isAccessibilityElement = true
+        grabArea.accessibilityLabel = "Drawer height"
+        grabArea.accessibilityHint = "Moves the preview between its heights."
+        grabArea.accessibilityTraits = .button
+        grabArea.isHidden = true
         view.addSubview(head)
         view.addSubview(well)
+        view.addSubview(grabArea)
+        headTop = head.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor)
         NSLayoutConstraint.activate([
-            head.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
+            grabArea.topAnchor.constraint(equalTo: view.topAnchor),
+            grabArea.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            grabArea.widthAnchor.constraint(equalToConstant: 100 + 44),
+            grabArea.heightAnchor.constraint(equalToConstant: 44),
+            grabber.topAnchor.constraint(equalTo: grabArea.topAnchor, constant: Space.space1),
+            grabber.centerXAnchor.constraint(equalTo: grabArea.centerXAnchor),
+            grabber.widthAnchor.constraint(equalToConstant: 100),
+            grabber.heightAnchor.constraint(equalToConstant: 6),
+            headTop,
             head.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: Space.space2),
             head.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -Space.space2),
             head.heightAnchor.constraint(equalToConstant: 44),
@@ -134,15 +189,25 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         show()
     }
 
+    /// As the phone's drawer it wears the grabber, and its header stands
+    /// `space-3` under the drawer's top (SideSheet.svelte `.sheet`); beside
+    /// the transcript it has neither.
+    func standsAsDrawer(_ drawer: Bool) {
+        loadViewIfNeeded()
+        grabArea.isHidden = !drawer
+        headTop.constant = drawer ? Space.space3 : 0
+    }
+
     /// The preview as the hub says it now: a new revision (another page, or
-    /// the same rebuilt) loads afresh.
+    /// the same rebuilt) loads afresh, named by its source until the page
+    /// says its own title and path. The same revision keeps what the page said.
     func show() {
         guard isViewLoaded, let frame = hub.previews.byInstance[instanceId], frame.state == .open,
               let origin = hub.previewOrigin(frame) else { return }
-        titleLabel.text = frame.source?.value3.map { _ in "Decision page" } ?? "Preview"
-        if pathLabel.text?.isEmpty ?? true { pathLabel.text = Self.place(frame) }
         guard frame.revision != revision else { return }
         revision = frame.revision
+        titleLabel.text = frame.source?.value3.map { _ in "Decision page" } ?? "Preview"
+        pathLabel.text = Self.place(frame)
         self.origin = origin
         connected = false
         choices = nil
@@ -212,7 +277,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     private func select(_ on: Bool) {
         selecting = on
         selectButton.isSelected = on
-        selectButton.configuration?.background.backgroundColor = on ? Palette.surfaceFill : .clear
+        reloadButton.setNeedsUpdateConfiguration()
         paintWell()
         deliver(["type": "cawco:mode", "mode": on ? "select" : "off"])
     }
@@ -333,8 +398,10 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
 
     // MARK: Closing
 
-    /// Close: the hub closes the preview, and the session's screen takes it away.
-    func close() {
+    /// Close: the hub closes the preview, and the session's screen takes it
+    /// away. `refused` hears when the hub keeps it open (the reason is said
+    /// over the page), so a drawer swiped away can come back.
+    func close(refused: @escaping () -> Void = {}) {
         guard !closing else { return }
         closing = true
         closeButton.isEnabled = false
@@ -344,6 +411,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
                 try await hub.closePreview(instanceId)
             } catch {
                 failed(error.localizedDescription)
+                refused()
             }
             closing = false
             closeButton.isEnabled = true
@@ -440,6 +508,31 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
       };
     })();
     """
+}
+
+/// The grabber's hit area: 44pt about the grabber, except where one of the
+/// header's actions stands, which keeps its own touches. A tap on it, or
+/// VoiceOver's activate, is its primary action (a plain control sends none).
+final class GrabArea: UIControl {
+    var yields: [UIView] = []
+
+    override func endTracking(_ touch: UITouch?, with event: UIEvent?) {
+        super.endTracking(touch, with: event)
+        guard let touch, bounds.contains(touch.location(in: self)) else { return }
+        sendActions(for: .primaryActionTriggered)
+    }
+
+    override func accessibilityActivate() -> Bool {
+        sendActions(for: .primaryActionTriggered)
+        return true
+    }
+
+    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+        guard super.point(inside: point, with: event) else { return false }
+        return !yields.contains { action in
+            action.window != nil && !action.isHidden && action.bounds.contains(action.convert(point, from: self))
+        }
+    }
 }
 
 /// Holds the preview weakly: a content controller retains its handlers.
