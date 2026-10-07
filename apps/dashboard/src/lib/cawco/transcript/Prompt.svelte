@@ -413,8 +413,7 @@
               type="button"
               class:sel={isSelected(q.question, opt.label)}
             >
-              <span class="kc" class:dim={!live}>{i + 1}</span
-              ><span>{opt.label}</span>
+              <span class="kc">{i + 1}</span><span>{opt.label}</span>
             </button>
           {/each}
           <!-- The reader's own answer, written on the field's line. -->
@@ -428,8 +427,7 @@
               type="button"
               class:sel={otherPicked(q) || otherAt === qi}
             >
-              <span class="kc" class:dim={!live}>{own + 1}</span
-              ><span>Other</span>
+              <span class="kc">{own + 1}</span><span>Other</span>
             </button>
           {/if}
         </div>
@@ -539,27 +537,21 @@
   {/if}
 </section>
 
-<!-- The composer's field, while a question stands in it: the reader's own
-     answer to the question it was opened for, on the field's own line
-     (Composer places it there; the draft keeps the field meanwhile). -->
-{#if questions}
-  {@const at = otherAt}
+<!-- The composer's field, once a question's "Other" is chosen: the reader's
+     own answer to that question, on the field's own line (Composer places
+     it there; the draft keeps the field meanwhile). "Other" is its one way
+     in. -->
+{#if questions && otherAt !== null}
+  {@const q = questions[otherAt]}
   <input
-    aria-label={at === null
-      ? "Your own answer"
-      : `Your own answer to: ${questions[at]?.question ?? ""}`}
+    aria-label={`Your answer to: ${q?.question ?? ""}`}
     class="other"
     disabled={!answerable}
-    onfocus={() => {
-      if (otherAt === null) {
-        openOther(current);
-      }
-    }}
     oninput={(event) => writeOther(event.currentTarget.value)}
     onkeydown={otherKey}
-    placeholder="Or write your own answer"
+    placeholder="Your answer…"
     type="text"
-    value={at === null ? "" : (others[questions[at]?.question ?? ""] ?? "")}
+    value={others[q?.question ?? ""] ?? ""}
     bind:this={otherField}
     class:shown={shown}
   >
@@ -571,6 +563,7 @@
      long ask scrolls between the two. As tall as the room over the pill
      allows (`--ask-max`, the composer's). */
   .hitl {
+    container: ask / inline-size;
     display: flex;
     flex-direction: column;
     max-block-size: var(--ask-max, none);
@@ -613,17 +606,19 @@
   h2 {
     font-size: var(--text-label);
     font-weight: var(--weight-strong);
+    color: var(--ink-strong);
     display: flex;
     align-items: center;
     gap: var(--space-2);
     margin-block-end: var(--space-2);
   }
-  /* What asks, in the attention hue: a person is holding this up. */
+  /* What asks, in the title's ink, at the title row's icon size: both of
+     the duotone's layers read. */
   .glyph {
     display: inline-grid;
     place-items: center;
     flex: none;
-    color: var(--status-attn-ink);
+    color: inherit;
 
     & :global(svg) {
       inline-size: var(--icon-md);
@@ -802,6 +797,18 @@
     flex-wrap: wrap;
     margin-block: 2px var(--space-2);
   }
+  /* A narrow card (a phone) sets its chips two to a row on one grid, so no
+     chip drops onto a row of its own at whatever width it wrapped; an odd
+     last chip ("Other") takes its row's whole width. */
+  @container ask (width < 32rem) {
+    .qopts {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .qopts button:last-child:nth-child(odd) {
+      grid-column: 1 / -1;
+    }
+  }
   .qopts button {
     min-block-size: 30px;
     padding-block: var(--space-2);
@@ -838,13 +845,6 @@
   .qopts button.sel .kc {
     background: var(--chip-chosen-bg);
     color: var(--chip-chosen-ink);
-  }
-  /* A digit that answers nothing must not look like a digit that does: keycaps
-     go quiet on every question the keys are not currently pointed at. A picked
-     option keeps its bright keycap either way — there it is a record of which
-     digit was pressed, not an offer to press it. */
-  .qopts button:not(.sel) .kc.dim {
-    opacity: 0.45;
   }
   /* biome-ignore lint/style/noDescendingSpecificity: cascade order is load-bearing — .kc's own base rules must lose to .qopts button.sel .kc above them. */
   .kc {

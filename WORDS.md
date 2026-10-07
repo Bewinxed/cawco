@@ -250,3 +250,10 @@ the agent"` and a placeholder, with no persistent visible label. This matches th
 convention (a chat box needs no visual label) and the doctrine's own allowance ("Send — acceptable in
 a messaging context"). It is the one form field exempted from the persistent-label rule, recorded so a
 reviewer does not "fix" it into clutter.
+
+**The composer as a question (recorded):** while a parked question stands in the composer, choosing its
+"Other" chip turns the field's line into that question's own answer, under the same exemption: its
+placeholder is **"Your answer…"** (short enough for the narrowest phone's field), and its accessible
+name is "Your answer to: [the question]". A question or permission the agent withdraws before it is
+answered leaves one quiet line in the transcript: **"Question withdrawn"** or **"Permission request
+withdrawn"**.
