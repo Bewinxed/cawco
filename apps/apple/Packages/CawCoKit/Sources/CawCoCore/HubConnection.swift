@@ -39,9 +39,18 @@ public final class HubConnection {
     public private(set) var retryAt: Date?
     private var outage = false
 
+    /// Connected means the socket is open and the board was read again on it:
+    /// a socket that just opened still holds the board as it was before the
+    /// app went away (an ask answered meanwhile, a session that finished), and
+    /// that is never shown as the hub's word. Until the read lands the board
+    /// reads `connecting`.
     public var state: State {
-        socket == .connected ? .connected : (outage ? .unreachable : .connecting)
+        socket == .connected && synced ? .connected : (outage ? .unreachable : .connecting)
     }
+
+    /// This connection's first full read (machines, sessions, projects and the
+    /// asks) has landed.
+    private var synced = false
 
     /// The hub answered in a shape this app cannot read: it is older (or
     /// newer) than the app. Set by the connect-time read, cleared on the next
@@ -294,6 +303,7 @@ public final class HubConnection {
 
     private func closed() {
         socket = .closed
+        synced = false
         fleetRead?.cancel()
         // A socket closed for the background is no outage: nothing failed.
         if !outage, outageTimer == nil, !suspended {
@@ -519,11 +529,14 @@ public final class HubConnection {
                 hub.cannotRead(unreadable)
                 return false
             }
-            if readMachines == nil || readRows == nil || readProjects == nil {
-                hub.log.error("fleet read incomplete: machines \(readMachines != nil) rows \(readRows != nil) projects \(readProjects != nil)")
+            // The asks are the read's point on a reconnect: one answered while
+            // this device was away is still on the board until they land.
+            if readMachines == nil || readRows == nil || readProjects == nil || !hasPending {
+                hub.log.error("fleet read incomplete: machines \(readMachines != nil) rows \(readRows != nil) projects \(readProjects != nil) pending \(hasPending)")
                 return false
             }
             hub.fleet.fleetRead = true
+            if hub.socket == .connected { hub.synced = true }
             return true
         }
     }
