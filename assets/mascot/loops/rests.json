@@ -11,5 +11,10 @@
     "loop": "compacted",
     "drawing": 0,
     "inks": ["cream"]
+  },
+  "peek": {
+    "clip": "peer-over",
+    "drawing": 9,
+    "ledgeLine": 0.5684
   }
 }

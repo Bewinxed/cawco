@@ -1,4 +1,4 @@
-// Proves each of Caw's per-status Rive files (assets/mascot/caw/<status>.riv) on Rive's official
+// Proves each of Caw's Rive files (assets/mascot/caw/<status>.riv and peek.riv) on Rive's official
 // runtime (@rive-app/canvas-advanced, WASM) in headless Chromium: its `Caw` view model drives its
 // state machine, his enter plays once and fires `entered` on his still, `dark` puts the cream rim
 // on, its variants take turns without repeating one, every drawing stays on screen two frames or
@@ -18,7 +18,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright-core";
-import { enterOf, fileName, STATUS } from "./scene.mjs";
+import { enterOf, FILES, fileName, RESTS } from "./scene.mjs";
 
 const ADVANCE_S = 0.5;
 const SIZE = 512;
@@ -45,12 +45,11 @@ for (let i = 0; i < argv.length; i += 1) {
 const here = (p) => fileURLToPath(new URL(p, import.meta.url));
 const dir = args.dir ?? here("../caw");
 const takes = JSON.parse(readFileSync(here("../loops/takes.json"), "utf8"));
-/** The statuses that rest on one drawing and have no loops (loops/rests.json). */
-const rests = JSON.parse(readFileSync(here("../loops/rests.json"), "utf8"));
 /** What a resting file's one picture is called among the expected pictures. */
 const REST = "rest";
+/** A file's loops: none for one that rests on one drawing (loops/rests.json), the peek included. */
 const loopsOf = (status) =>
-  (rests[status] ? [] : takes[status]).map(({ loop: name }) => {
+  (RESTS[status] ? [] : takes[status]).map(({ loop: name }) => {
     const timing = JSON.parse(
       readFileSync(here(`../loops/${name}/timing.json`), "utf8")
     );
@@ -411,7 +410,7 @@ const totals = {
   there: 0,
 };
 const failures = [];
-for (const status of STATUS) {
+for (const status of FILES) {
   const name = fileName(status);
   const fail = (m) => failures.push(`${name}.riv: ${m}`);
   const before = failures.length;
@@ -512,9 +511,12 @@ for (const status of STATUS) {
     totals.plain += 1;
     totals.there += failures.length === beforeArrival ? 1 : 0;
   }
-  const arrival = enter
-    ? `${enter} ${Math.round((enterFrames / FPS) * 1000)} ms`
-    : "no drawn enter";
+  const ledge = RESTS[status]?.ledgeLine;
+  const arrival =
+    (enter
+      ? `${enter} ${Math.round((enterFrames / FPS) * 1000)} ms`
+      : "no drawn enter") +
+    (ledge ? `, ledge line at ${(ledge * 100).toFixed(2)}% of the box` : "");
 
   // Scheme and reduced motion: each step shows a slot of one of the loops in the scheme `dark`
   // selects; under reduced motion, the first loop's first slot.
@@ -642,8 +644,8 @@ console.log(`reducedMotion holds still: ${totals.held}/${totals.files}`);
 console.log(`drawn enters play and land: ${totals.enter}/${totals.drawn}`);
 console.log(`no drawn enter, simply there: ${totals.there}/${totals.plain}`);
 console.log(`files proven: ${totals.ok}/${totals.files}`);
-if (failures.length === 0 && totals.ok === STATUS.length) {
-  console.log("Caw view model drives the state machine in every status file");
+if (failures.length === 0 && totals.ok === FILES.length) {
+  console.log("Caw view model drives the state machine in every file");
 } else {
   process.exitCode = 1;
 }

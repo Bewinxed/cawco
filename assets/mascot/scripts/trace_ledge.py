@@ -4,7 +4,7 @@
 # ///
 """Traces a ledge clip into assets/mascot/clips/<clip>/ (body-NN.svg + timing.json, the loops'
 format): Caw coming up from behind a ledge and peering over it, for a page that puts its own
-ledge under him. No app plays these and no status file holds them.
+ledge under him. No status file holds them; peer-over is the enter of peek.riv (scene.mjs).
 
 The take is shot with the ledge as a flat blue block (#2F6BFF), an ink he does not carry, from
 the line to the bottom and side edges. The block is keyed out to paper, so the drawings hold only

@@ -11,7 +11,8 @@
 // A status may also carry its enter, the clip that brings him from an empty page to his still
 // (assets/mascot/clips/<status>-enter, listed in clips/takes.json), drawn like a loop. A status
 // with no drawn enter is simply there, and the apps fade it in. There is no drawn way out: the
-// apps fade him away (README, Contract).
+// apps fade him away (README, Contract). The peek (PEEK, not a status) is built the same way: a
+// rest whose enter is the ledge clip peer-over.
 // A drawing's first shape is its black silhouette, which also carries the cream rim as a stroke
 // drawn under the fill; the colour scheme keys that stroke's colour.
 //
@@ -46,22 +47,51 @@ export const STATUS = [
   // His head with a folded note in his beak, beside "Compacted" in a transcript: a rest.
   "compacted",
 ];
-/** Each status's file name: assets/mascot/caw/<name>.riv. */
+/**
+ * Caw's ledge peek, a file that is not a status: in a Caw thread he peeks over the composer's
+ * top-leading corner. His enter is the traced ledge clip `peer-over` and he rests on its last
+ * drawing. Apps put its ledge line (rests.json `ledgeLine`) on the edge he peeks over.
+ */
+export const PEEK = "peek";
+/** Every file build.mjs writes: one per status, then the peek. */
+export const FILES = [...STATUS, PEEK];
+/** Each file's name: assets/mascot/caw/<name>.riv. */
 export const fileName = (status) => status.replace("_", "-");
 
 /**
- * The statuses that rest: one drawing, held, with no loop. loops/rests.json names each one's
+ * The files that rest: one drawing, held, with no loop. loops/rests.json names each one's
  * drawing among the traced loops (`ready` is ready-attention's first drawing, `sleeping` the
- * nod in idle-nod-off, eyes closed), or the drawing trace_still.py traced from its still picture
- * (`compacted`, which was never a loop).
+ * nod in idle-nod-off, eyes closed), the drawing trace_still.py traced from its still picture
+ * (`compacted`, which was never a loop), or a clip's drawing (`peek`, peer-over's landing).
  */
 export const RESTS = JSON.parse(readFileSync(`${LOOPS}rests.json`, "utf8"));
+/** A rest's drawing on disk: in its loop's folder, or in its clip's. */
+const restSvg = (rest) =>
+  `${rest.clip ? `${CLIPS}${rest.clip}` : `${LOOPS}${rest.loop}`}/body-${pad(rest.drawing)}.svg`;
+{
+  // The peek rests on its clip's landing, and the ledge line apps read is the one the clip was
+  // traced with (trace_ledge.py's probe.ledgeLine).
+  const peek = RESTS[PEEK];
+  const timing = JSON.parse(
+    readFileSync(`${CLIPS}${peek.clip}/timing.json`, "utf8")
+  );
+  if (timing.drawings.at(-1).drawing !== peek.drawing) {
+    throw new Error(
+      `rests.json peek rests on drawing ${peek.drawing}; ${peek.clip} lands on ${timing.drawings.at(-1).drawing}`
+    );
+  }
+  if (timing.probe.ledgeLine !== peek.ledgeLine) {
+    throw new Error(
+      `rests.json peek ledgeLine ${peek.ledgeLine}; ${peek.clip} was traced with ${timing.probe.ledgeLine}`
+    );
+  }
+}
 
 /** Each waiting status's variant loops, in order: the first one's first drawing is its still. */
 export const VARIANTS = (() => {
   const takes = JSON.parse(readFileSync(`${LOOPS}takes.json`, "utf8"));
   const out = {};
-  for (const status of STATUS) {
+  for (const status of FILES) {
     if (RESTS[status]) {
       out[status] = [];
       continue;
@@ -76,8 +106,11 @@ export const VARIANTS = (() => {
 
 /** The enters that have been shot and passed their gates (clips/takes.json, by trace_clip.py). */
 const SHOT = JSON.parse(readFileSync(`${CLIPS}takes.json`, "utf8"));
-/** A status's drawn enter, `<status>-enter`, or null where none was shot. */
+/** A file's drawn enter: the peek's ledge clip, a status's `<status>-enter`, or null where none was shot. */
 export function enterOf(status) {
+  if (status === PEEK) {
+    return RESTS[PEEK].clip;
+  }
   const clip = `${fileName(status)}-enter`;
   return clip in SHOT ? clip : null;
 }
@@ -317,9 +350,7 @@ export function statusScene(status) {
   const rest = RESTS[status];
   if (rest) {
     groups.push({ id: REST, x: 0, y: 0, parent: "caw", opacity: 0 });
-    add(
-      drawing(REST, `${LOOPS}${rest.loop}/body-${pad(rest.drawing)}.svg`, look)
-    );
+    add(drawing(REST, restSvg(rest), look));
   }
   const clip = enterOf(status);
   const enter = clip

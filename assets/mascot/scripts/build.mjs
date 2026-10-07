@@ -27,7 +27,7 @@ import {
   parseColor,
   writeRiv,
 } from "rive-mcp-server/dist/rivWriter.js";
-import { enterOf, fileName, STATUS, statusScene } from "./scene.mjs";
+import { enterOf, FILES, fileName, statusScene } from "./scene.mjs";
 
 const outDirs = process.argv[2]
   ? [process.argv[2]]
@@ -376,14 +376,14 @@ function completeTransition(object, at) {
 
 for (const dir of outDirs) {
   mkdirSync(dir, { recursive: true });
-  const keep = new Set(STATUS.map((s) => `${fileName(s)}.riv`));
+  const keep = new Set(FILES.map((s) => `${fileName(s)}.riv`));
   for (const f of readdirSync(dir)) {
     if (f.endsWith(".riv") && !keep.has(f)) {
       rmSync(join(dir, f));
     }
   }
 }
-for (const status of STATUS) {
+for (const status of FILES) {
   const { bytes, objects, inputs, warnings } = build(status);
   for (const dir of outDirs) {
     writeFileSync(join(dir, `${fileName(status)}.riv`), bytes);
@@ -395,4 +395,4 @@ for (const status of STATUS) {
     console.log(`  warning: ${w}`);
   }
 }
-console.log(`wrote ${STATUS.length} files to ${outDirs.join(" and ")}`);
+console.log(`wrote ${FILES.length} files to ${outDirs.join(" and ")}`);

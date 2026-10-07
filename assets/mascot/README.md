@@ -46,6 +46,14 @@ that is all they do with him.
   cannot show its content yet.
 - His **still** is the drawing his enter lands on and Reduce Motion holds: a rest's drawing, or
   the first drawing of a waiting status's first loop.
+- `assets/mascot/caw/peek.riv` is Caw's **ledge peek**, a file that is not a status: in a Caw
+  thread he peeks over the composer's top-leading corner (the owner's pick, the `peer-over`
+  ledge clip). He comes up from behind the ledge by that clip, his drawn enter (`enters` on), and
+  rests on its last drawing, which Reduce Motion holds. The ledge itself is not in the file:
+  below its line only the wing tips that hang in front of it are drawn. The line sits at 56.84%
+  of the 512 box's height from its top (`ledgeLine` under `peek` in `loops/rests.json`, the
+  clip's `probe.ledgeLine`); an app places that line on the edge Caw peeks over, so the box
+  stands 0.5684 of its height above the edge and the rest of him hides behind it.
 - Artboard: `Caw`, 592 × 592, in every file. Caw's stills sit in the 512 × 512 box at (43, 40);
   the room around it is for his acting. Apps size that box, not the artboard, to the space they
   give Caw, and let the rest draw past it unclipped (`CawView` does).
@@ -145,9 +153,10 @@ them (the editor cannot import `.riv` files). From `assets/mascot/scripts` (`bun
   those landings 0.5% small.
 - `uv run trace_ledge.py <clip> <take>` traces a ledge clip into `assets/mascot/clips/<clip>/`:
   Caw coming up from behind a ledge and peering over it, for a page that puts its own ledge
-  under him (the landing page; `site/scripts/import-caw.mjs` copies a clip folder). No app
-  plays these, no status file holds them and `clips/takes.json` does not list them; each
-  folder's `timing.json` names its take. Today: `climb-peer` (40 frames) and `peer-over` (22).
+  under him (the landing page; `site/scripts/import-caw.mjs` copies a clip folder; the apps,
+  through `peek.riv`). `peer-over` is `peek.riv`'s enter, named under `peek` in
+  `loops/rests.json`; no status file holds a ledge clip and `clips/takes.json` does not list
+  them; each folder's `timing.json` names its take. Today: `climb-peer` (40 frames) and `peer-over` (22).
   The take is shot with the ledge as a flat blue block, an ink he does not carry, which the
   tracer keys out to paper, so the drawings hold only Caw: above the line everything of him
   that shows, below it only the wing tips that hang in front of the ledge. The take's frame is
@@ -157,8 +166,8 @@ them (the editor cannot import `.riv` files). From `assets/mascot/scripts` (`bun
 - `uv run trace_still.py <status>` traces a resting status's picture
   (`stills/light-<status>.png`) into `loops/<status>/body-00.svg`, for a status that was never
   a loop (`compacted`). Same tracer, the status's own inks, at the takes' 1.6 px a unit.
-- `node build.mjs` writes `caw/<status>.riv` from `scene.mjs` and the traced drawings in
-  `assets/mascot/loops/`, and the same bytes to each app's copies:
+- `node build.mjs` writes `caw/<status>.riv` and `caw/peek.riv` from `scene.mjs` and the traced
+  drawings in `assets/mascot/loops/` and `assets/mascot/clips/`, and the same bytes to each app's copies:
   `apps/apple/Packages/CawCoKit/Sources/CawCoMascot/Resources/caw/`, which `CawView` loads, and
   `apps/dashboard/src/lib/assets/caw/`, which the dashboard's `Caw.svelte` loads. Each app keeps
   its own copy because each app is built from its own directories. It removes any other `.riv` in those
@@ -182,8 +191,8 @@ them (the editor cannot import `.riv` files). From `assets/mascot/scripts` (`bun
   - every drawing stays on screen two frames or more (on twos), read back from the file;
   - load plus instancing (parse, artboard, state machine, bind, first frame) must take 100 ms or
     less, the median of five steady runs;
-  - a resting file (`ready`, `sleeping`, `compacted`) must show its one drawing, in the scheme `dark`
-    selects, and nothing else, with motion on or reduced;
+  - a resting file (`ready`, `sleeping`, `compacted`, `peek`) must show its one drawing, in the
+    scheme `dark` selects, and nothing else, with motion on or reduced;
   - `enters` reads on exactly in the files with a drawn enter;
   - on a fresh state machine, a file with a drawn enter shows the enter's drawings in order,
     each two frames or more, and lands on his still with `entered`, after as long as the enter
@@ -191,10 +200,10 @@ them (the editor cannot import `.riv` files). From `assets/mascot/scripts` (`bun
     and never fires `entered`.
 
   The runtime's clocks and entropy are pinned so the random turns repeat across two runs. It
-  prints one line per file, the totals (`loops animate: 7/7`, `stills rest: 3/3`,
-  `reducedMotion holds still: 10/10`, `drawn enters play and land: 4/4`, `no drawn enter, simply
-  there: 6/6`, `files proven: 10/10`) and, on success, `Caw view model drives the state machine
-  in every status file`.
+  prints one line per file (the peek's names its ledge line), the totals (`loops animate: 7/7`,
+  `stills rest: 4/4`, `reducedMotion holds still: 11/11`, `drawn enters play and land: 5/5`,
+  `no drawn enter, simply there: 6/6`, `files proven: 11/11`) and, on success, `Caw view model
+  drives the state machine in every file`.
 
 ## What the files hold today
 
