@@ -1,17 +1,21 @@
 #!/usr/bin/env bash
 # The Apple app's MetricKit diagnostics the hub keeps (hangs, crashes, CPU
-# exceptions): list them, or fetch one and symbolicate it on the Mac with
-# xcsym and that build's dSYMs (kept by testflight.py in ~/build/cawco-dsyms).
+# exceptions): list them, or fetch one and symbolicate its call stacks on the
+# Mac with atos and that build's dSYMs (kept by testflight.py in
+# ~/build/cawco-dsyms/<build>).
 #
 #   apple-diagnostics.sh                list every diagnostic, newest first
 #   apple-diagnostics.sh --kind hang    list the hangs
-#   apple-diagnostics.sh <id>           the call stack, symbolicated
+#   apple-diagnostics.sh <id>           its call stacks, symbolicated
+#
+# A frame of the app's own binary is symbolicated: its load address is its
+# address less its offset into the binary's text segment, and the dSYM is the
+# one whose UUID is the frame's. Other binaries' frames show as name + offset.
 #
 # The hub: $CAWCO_HUB, else the one this machine's cawco joined.
 set -euo pipefail
 HUB=${CAWCO_HUB:-http://127.0.0.1:3456}
 SSH=(ssh -F "$HOME/.ssh/config" -o BatchMode=yes mac)
-XCSYM='~/.claude/plugins/cache/axiom-marketplace/axiom/27.1.2/bin/xcsym'
 
 case ${1:-} in
   '' | --kind)
@@ -28,9 +32,38 @@ esac
 
 id=$1
 record=$(curl -fsS "$HUB/api/diagnostics/apple/$id")
-build=$(printf '%s' "$record" | bun -e 'console.log((await Bun.stdin.json()).build)')
-# The diagnostic as MetricKit wrote it: what xcsym reads.
-printf '%s' "$record" | bun -e 'console.log(JSON.stringify((await Bun.stdin.json()).diagnostic))' \
-  | "${SSH[@]}" "mkdir -p ~/build/cawco-diagnostics && cat > ~/build/cawco-diagnostics/$id.json"
-echo "diagnostic $id, build $build"
-"${SSH[@]}" "$XCSYM crash --from-metrickit --human --format full --dsym-paths ~/build/cawco-dsyms/$build ~/build/cawco-diagnostics/$id.json"
+# One line per frame: depth, binary, uuid, address, offset, samples; a thread starts with "thread".
+frames=$(printf '%s' "$record" | bun -e '
+  const record = await Bun.stdin.json();
+  const tree = record.diagnostic?.callStackTree ?? {};
+  console.log(`build ${record.build}`);
+  for (const [i, stack] of (tree.callStacks ?? []).entries()) {
+    console.log(`thread ${i}${stack.threadAttributed ? " (attributed)" : ""}`);
+    const walk = (frame, depth) => {
+      console.log([depth, frame.binaryName ?? "?", frame.binaryUUID ?? "?", frame.address ?? 0,
+        frame.offsetIntoBinaryTextSegment ?? 0, frame.sampleCount ?? 1].join(" "));
+      for (const child of frame.subFrames ?? []) walk(child, depth + 1);
+    };
+    for (const root of stack.callStackRootFrames ?? []) walk(root, 0);
+  }')
+echo "diagnostic $id"
+# The Mac's side reads the frames on its stdin.
+read -r -d '' symbolicate <<'MAC' || true
+read -r _ build
+dsyms=~/build/cawco-dsyms/$build
+while read -r depth name uuid address offset samples; do
+  if [ "$depth" = thread ]; then echo "$depth $name ${uuid:-}"; continue; fi
+  pad=$(printf "%*s" $((depth * 2)) "")
+  symbol=""
+  for dwarf in "$dsyms"/*.dSYM/Contents/Resources/DWARF/*; do
+    [ -f "$dwarf" ] || continue
+    if dwarfdump --uuid "$dwarf" 2>/dev/null | grep -qi "$uuid"; then
+      symbol=$(atos -arch arm64 -o "$dwarf" -l "$(printf '0x%x' $((address - offset)))" "$(printf '0x%x' "$address")" 2>/dev/null)
+      break
+    fi
+  done
+  echo "${pad}${symbol:-$name +$offset} ×$samples"
+done
+MAC
+# Without its startup files: the Mac's .bashrc reads stdin (a keychain unlock).
+printf '%s\n' "$frames" | "${SSH[@]}" "bash --noprofile --norc -c $(printf '%q' "$symbolicate")"
