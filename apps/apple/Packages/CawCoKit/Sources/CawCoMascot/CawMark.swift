@@ -35,11 +35,14 @@ public final class CawMark: UIView {
         accessibilityElementsHidden = true
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (mark: CawMark, _: UITraitCollection) in
             guard let rest = mark.rest else { return }
-            CawContract.write(to: rest.caw, dark: mark.dark, reducedMotion: true)
+            CawContract.write(to: rest.caw, dark: mark.dark, reducedMotion: true, pixel: mark.pixel)
             mark.draw(rest)
         }
         registerForTraitChanges([UITraitDisplayScale.self]) { (mark: CawMark, _: UITraitCollection) in
-            for layer in [mark.rest, mark.clip].compactMap(\.self) { layer.view.rive?.fit = mark.fit }
+            for layer in [mark.rest, mark.clip].compactMap(\.self) {
+                layer.view.rive?.fit = mark.fit
+                layer.caw.setValue(of: CawContract.pixel, to: mark.pixel)
+            }
             mark.setNeedsLayout()
             if let rest = mark.rest { mark.draw(rest) }
         }
@@ -61,6 +64,8 @@ public final class CawMark: UIView {
     }
 
     private var dark: Bool { traitCollection.userInterfaceStyle == .dark }
+    /// One device pixel in his 512 box's units, at `side` on this screen: his dark rim's width.
+    private var pixel: Float { CawContract.pixel(side: side, scale: traitCollection.displayScale) }
 
     /// Device pixels to a unit of the file's artboard: `side` to its 512 box.
     private var fit: Fit {
@@ -84,7 +89,7 @@ public final class CawMark: UIView {
             guard let self else { return }
             defer { loading = nil }
             do {
-                let layer = try await CawLayer.load(status, dark: dark, reducedMotion: true, fit: fit)
+                let layer = try await CawLayer.load(status, dark: dark, reducedMotion: true, pixel: pixel, fit: fit)
                 guard !Task.isCancelled else { return }
                 layer.view.isHidden = arriving != nil || clip != nil
                 insertSubview(layer.view, at: 0)
@@ -124,7 +129,7 @@ public final class CawMark: UIView {
             try? await Task.sleep(for: .seconds(delay))
             guard let self, !Task.isCancelled else { return }
             do {
-                let layer = try await CawLayer.load(status, dark: dark, reducedMotion: false, fit: fit)
+                let layer = try await CawLayer.load(status, dark: dark, reducedMotion: false, pixel: pixel, fit: fit)
                 guard !Task.isCancelled else { return }
                 layer.hearEntered { [weak self] in self?.land() }
                 addSubview(layer.view)

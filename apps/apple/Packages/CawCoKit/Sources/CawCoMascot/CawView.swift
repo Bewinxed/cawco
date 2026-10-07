@@ -118,7 +118,7 @@ public final class CawView: UIView {
         clipsToBounds = false
         isAccessibilityElement = false
         accessibilityElementsHidden = true
-        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (view: CawView, _: UITraitCollection) in
+        registerForTraitChanges([UITraitUserInterfaceStyle.self, UITraitDisplayScale.self]) { (view: CawView, _: UITraitCollection) in
             view.apply()
         }
         NotificationCenter.default.addObserver(self, selector: #selector(apply), name: UIAccessibility.reduceMotionStatusDidChangeNotification, object: nil)
@@ -159,6 +159,11 @@ public final class CawView: UIView {
 
     private var dark: Bool { traitCollection.userInterfaceStyle == .dark }
     private var reducedMotion: Bool { UIAccessibility.isReduceMotionEnabled }
+    /// The side his still box is drawn at: the largest centred square, or with `ledge` the width.
+    private var boxSide: Double { ledge ? bounds.width : min(bounds.width, bounds.height) }
+    private var pixel: Float { CawContract.pixel(side: boxSide, scale: traitCollection.displayScale) }
+    /// `pixel` as last written to the Caw on screen.
+    private var written: Float?
 
     /// The file for `status` now: the peek while it holds, else the status's own.
     private var wanted: CawFile {
@@ -251,7 +256,7 @@ public final class CawView: UIView {
             }
             let incoming: CawLayer
             do {
-                incoming = try await CawLayer.load(file, dark: dark, reducedMotion: reducedMotion)
+                incoming = try await CawLayer.load(file, dark: dark, reducedMotion: reducedMotion, pixel: pixel)
             } catch {
                 CawContract.log.error("Caw \(file.name, privacy: .public) did not load: \(String(describing: error), privacy: .public)")
                 loading = nil
@@ -283,6 +288,9 @@ public final class CawView: UIView {
         clip(incoming)
         addSubview(incoming.holder)
         shown = incoming
+        // Loaded at the size the view had then (none, before its first layout): laid out below,
+        // he is given the rim's pixel at the size he stands at.
+        written = nil
         setNeedsLayout()
         layoutIfNeeded()
         CawContract.log.info("Caw \(incoming.file.name, privacy: .public) starts \((ContinuousClock.now - asked).milliseconds, format: .fixed(precision: 1)) ms after it was asked for")
@@ -358,11 +366,12 @@ public final class CawView: UIView {
         }
     }
 
-    /// Writes the interface style and the motion setting into the live Caw; its state machine
-    /// follows.
+    /// Writes the interface style, the motion setting and the rim's device pixel into the live
+    /// Caw; its state machine follows.
     @objc private func apply() {
         if let shown {
-            CawContract.write(to: shown.caw, dark: dark, reducedMotion: reducedMotion)
+            written = pixel
+            CawContract.write(to: shown.caw, dark: dark, reducedMotion: reducedMotion, pixel: pixel)
         }
     }
 
@@ -374,7 +383,9 @@ public final class CawView: UIView {
     /// at its bottom.
     override public func layoutSubviews() {
         super.layoutSubviews()
-        let side = ledge ? bounds.width : min(bounds.width, bounds.height)
+        let side = boxSide
+        // His size is known now, or changed: the rim's device pixel follows it.
+        if shown != nil, written != pixel { apply() }
         let scale = side / CawGeometry.stillBox.width
         let boxTop = ledge ? bounds.minY : bounds.midY - side / 2
         let frame = CGRect(
@@ -601,18 +612,18 @@ final class CawLayer {
         hearing?.cancel()
     }
 
-    static func load(_ status: CawStatus, dark: Bool, reducedMotion: Bool, fit: Fit? = nil) async throws -> CawLayer {
-        try await load(.status(status), dark: dark, reducedMotion: reducedMotion, fit: fit)
+    static func load(_ status: CawStatus, dark: Bool, reducedMotion: Bool, pixel: Float, fit: Fit? = nil) async throws -> CawLayer {
+        try await load(.status(status), dark: dark, reducedMotion: reducedMotion, pixel: pixel, fit: fit)
     }
 
     /// `fit` is how the artboard stands in the view: contained by default; a mark gives its own.
-    static func load(_ source: CawFile, dark: Bool, reducedMotion: Bool, fit: Fit? = nil) async throws -> CawLayer {
+    static func load(_ source: CawFile, dark: Bool, reducedMotion: Bool, pixel: Float, fit: Fit? = nil) async throws -> CawLayer {
         let file = try await CawFiles.file(for: source)
         let artboard = try await file.createArtboard(CawContract.artboard)
         let stateMachine = try await artboard.createStateMachine(CawContract.stateMachine)
         // Retained in the layer and bound explicitly: the view writes to this instance for its lifetime.
         let caw = try await file.createViewModelInstance(.viewModelDefault(from: .name(CawContract.viewModel)))
-        CawContract.write(to: caw, dark: dark, reducedMotion: reducedMotion)
+        CawContract.write(to: caw, dark: dark, reducedMotion: reducedMotion, pixel: pixel)
         try await stateMachine.bindViewModelInstances(main: caw)
         let rive = try await Rive(file: file, artboard: artboard, stateMachine: stateMachine)
         if let fit { rive.fit = fit }
@@ -657,11 +668,20 @@ enum CawContract {
     /// Read, never written: on in a file that carries a drawn enter.
     static let enters = BoolProperty(path: "enters")
     static let entered = TriggerProperty(path: "entered")
+    /// One device pixel in the 512 still box's units: his dark rim is this wide, or the kit's
+    /// where that is wider. 0 (unset) is the kit's rim.
+    static let pixel = NumberProperty(path: "pixel")
     static let log = Logger(subsystem: "dev.cawco.app", category: "Caw")
 
-    static func write(to caw: ViewModelInstance, dark: Bool, reducedMotion: Bool) {
+    /// `pixel` for his still box drawn `side` points across on a screen of `scale`.
+    static func pixel(side: Double, scale: Double) -> Float {
+        side > 0 && scale > 0 ? Float(CawGeometry.stillBox.width / (side * scale)) : 0
+    }
+
+    static func write(to caw: ViewModelInstance, dark: Bool, reducedMotion: Bool, pixel: Float) {
         caw.setValue(of: self.dark, to: dark)
         caw.setValue(of: self.reducedMotion, to: reducedMotion)
+        caw.setValue(of: self.pixel, to: pixel)
     }
 }
 
