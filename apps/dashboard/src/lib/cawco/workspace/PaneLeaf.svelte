@@ -91,6 +91,12 @@
     activeIndex < 0 ? Number.NaN : leaf.tabs.indexOf(paneId) - activeIndex;
   /** Whether the reader's keyboard belongs to this group. */
   const isFocusedLeaf = $derived(workspace.focusedLeafId === leaf.id);
+  /**
+   * The focus rail marks which group the keyboard is in, so it shows only
+   * when there is another group to tell it from. With one group (a phone's
+   * deck, an unsplit desk) it would be a line down the edge saying nothing.
+   */
+  const railShown = $derived(isFocusedLeaf && workspace.leaves.length > 1);
 
   /* ── Slots ─────────────────────────────────────────────────────────
      The showing tab first, then every other open tab in the background,
@@ -320,7 +326,7 @@
   data-leaf={leaf.id}
   onfocusincapture={() => workspace.focus(leaf.id)}
   onpointerdowncapture={() => workspace.focus(leaf.id)}
-  class:leaf-focused={isFocusedLeaf}
+  class:rail-shown={railShown}
 >
   <!-- The focus mark is graphite, never the accent: the one loud colour in
        this product means a session is asking for something, and "you are
@@ -421,6 +427,7 @@
         {landing}
         leading={bound.leading}
         mentions={bound.mentions}
+        onfoot={bound.onfoot}
         oninterruptsend={bound.oninterruptsend}
         onmenu={bound.onmenu}
         onstop={bound.onstop}
@@ -471,7 +478,7 @@
     z-index: 2;
     pointer-events: none;
   }
-  .leaf-focused .rail {
+  .rail-shown .rail {
     opacity: 0.5;
   }
   @media (prefers-reduced-motion: no-preference) {

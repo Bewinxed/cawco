@@ -167,6 +167,18 @@
   let shown = $state<string[]>(
     untrack(() => rows.map((row) => row.key).slice(-SLOTS))
   );
+  /**
+   * The tail's height in rows: as many as it holds, up to six, so a delegate
+   * that has done one thing is one row, not one row under five empty ones;
+   * three while its skeleton stands in for the transcript on its way.
+   */
+  const slots = $derived.by(() => {
+    if (shown.length > 0) {
+      return Math.min(SLOTS, shown.length);
+    }
+    return loading ? 3 : 0;
+  });
+
   /** The last data each key had, for a row drawn on its way out. */
   const last = new Map<string, Row>(
     untrack(() => rows.map((row) => [row.key, row]))
@@ -271,7 +283,12 @@
   }
 </script>
 
-<div class="tail" style:--row="{ROW}px">
+<div
+  class="tail"
+  style:--row="{ROW}px"
+  style:--slots={slots}
+  class:full={shown.length >= SLOTS}
+>
   {#if shown.length}
     <div
       class="column"
@@ -323,18 +340,21 @@
 </div>
 
 <style>
-  /* Six rows high, the top 24px dissolving: a row leaving at the top fades out
-     through the mask as the stack lifts. */
+  /* As high as its rows, six at most, the top 24px dissolving once it is
+     full: a row leaving at the top fades out through the mask as the stack
+     lifts. */
   /* The stack stands on the tail's foot and spills over its top, in the flow,
      so the widest row is the tail's width (the panel sizes to it). */
   .tail {
     display: flex;
     flex-direction: column;
     justify-content: flex-end;
-    block-size: calc(var(--row) * 6);
+    block-size: calc(var(--row) * var(--slots));
     overflow: hidden;
     margin-inline: calc(var(--space-2) * -1);
     color: var(--ink-strong);
+  }
+  .tail.full {
     mask-image: linear-gradient(to bottom, transparent, #000 24px);
   }
   .column {

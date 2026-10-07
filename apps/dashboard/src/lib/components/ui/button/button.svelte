@@ -70,7 +70,10 @@
        * change both. Without it, the children are drawn as given.
        */
       label?: string;
-      /** The icon in the slot at rest. */
+      /**
+       * The icon in the slot at rest. Given without `label`, it is an
+       * icon-only button: the slot alone, named by its `aria-label`.
+       */
       icon?: Component<SVGAttributes<SVGSVGElement>>;
       /**
        * The work this button started is running. The icon slot spins, the
@@ -116,7 +119,9 @@
 </script>
 
 {#snippet content()}
-  {#if label === undefined}
+  <!-- Its own slot when it is given an icon or a label (an icon-only
+       button passes `icon` and its `aria-label`); its children otherwise. -->
+  {#if label === undefined && icon === undefined}
     {@render children?.()}
   {:else}
     <PendingContent {failed} {icon} {label} {pending} {pendingLabel} />

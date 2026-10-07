@@ -4,8 +4,10 @@
    * - `after`: solid, an arrow into the task that waits; muted once what it
    *   waited for has landed;
    * - `parent`: the nesting line's own ink and width (app.css .kit-nest);
-   * - `related`: dotted;
+   * - `related`: dotted, round dots in the muted ink, so it reads in dark;
    * - `found_in`: dashed and muted.
+   * The side relations leave and meet a card on the cross axis (task-graph
+   * `handlesOf`), apart from the arrows and the trunk.
    * Tokens only; the arrow is the canvas's one marker (ViewCanvas).
    */
   import { BaseEdge, type EdgeProps, getSmoothStepPath } from "@xyflow/svelte";
@@ -40,7 +42,7 @@
     after: "stroke: var(--ink-muted); stroke-width: 1.5px",
     parent: "stroke: var(--nest-ink); stroke-width: var(--nest-line, 1px)",
     related:
-      "stroke: var(--ink-subtle); stroke-width: 1.5px; stroke-dasharray: 0 5; stroke-linecap: round",
+      "stroke: var(--ink-muted); stroke-width: 2px; stroke-dasharray: 0 6; stroke-linecap: round",
     found_in:
       "stroke: var(--ink-subtle); stroke-width: 1px; stroke-dasharray: 6 4",
   };

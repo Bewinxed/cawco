@@ -260,9 +260,10 @@
       padding-inline: var(--space-5);
     }
   }
+  /* The page's width, to its gutter: as the project page stands, no cap
+     of its own leaving a wider margin on the right than any other page. */
   .col {
     margin: 0;
-    max-width: 1100px;
     display: flex;
     flex-direction: column;
     gap: var(--space-group);

@@ -4,13 +4,15 @@
    * draw — `after`, `parent`, `related`, `found_in` — on Svelte Flow, set up
    * as the workflow editor's canvas is (its fit, zoom, theme and tools).
    *
-   * Only tasks that meet an edge are on it. dagre lays it out left to right
-   * along `after` (task-graph.ts) from the cards' measured sizes; nothing is
-   * placed by hand and nothing drags. A change to the tasks (`tasks.changed`
-   * reaches the page, which reads them again) lays it out again: the cards
-   * ease to their new places over --dur-panel on --ease-in-out, a new one
-   * fades in where it lands, and the view refits when the count changes.
-   * The first layout is drawn in place. A card opens its sheet.
+   * Only tasks that meet an edge are on it. dagre lays it out along `after`
+   * (task-graph.ts) from the cards' measured sizes, left to right; top to
+   * bottom only when across would set the cards under the readable floor
+   * and downward holds them larger. Nothing is placed by hand and nothing
+   * drags. A change to the tasks (`tasks.changed` reaches the page, which
+   * reads them again) lays it out again: the cards ease to their new places
+   * over --dur-panel on --ease-in-out, a new one fades in where it lands, and
+   * the view refits when the count changes. The fit keeps the cards'
+   * smallest text at 11px or more (TaskCanvasFit). A card opens its sheet.
    */
   import {
     Background,
@@ -24,14 +26,21 @@
   import "#lib/components/features/workflows/workflows.css";
   import { onMount, untrack } from "svelte";
   import type { StageKind, TaskSummary } from "#lib/cawco/project-tasks.js";
-  import FlowAutoFit from "#lib/components/features/flow/FlowAutoFit.svelte";
   import FlowZoomTracker from "#lib/components/features/flow/FlowZoomTracker.svelte";
   import { FIT, ZOOM } from "#lib/components/features/flow/fit.js";
   import WorkflowCanvasTools from "#lib/components/features/workflows/WorkflowCanvasTools.svelte";
   import { theme } from "#lib/theme.svelte.js";
+  import { numberOf } from "../motion/curves.svelte";
+  import TaskCanvasFit from "./canvas/TaskCanvasFit.svelte";
   import TaskEdgeLine from "./canvas/TaskEdgeLine.svelte";
   import TaskNode from "./canvas/TaskNode.svelte";
-  import { layoutTasks, taskEdges } from "./task-graph";
+  import {
+    extentOf,
+    type Flow,
+    handlesOf,
+    layoutTasks,
+    taskEdges,
+  } from "./task-graph";
 
   let {
     tasks,
@@ -69,24 +78,68 @@
    * width and a two-line card's height.
    */
   let sizes = $state.raw<Record<string, { width: number; height: number }>>({});
-  /** Every card on the canvas has been measured and placed: moves ease from here on. */
+  /** Every card on the canvas is measured and placed where its size puts it. */
   const settled = $derived(
     graphTasks.length > 0 && graphTasks.every((task) => sizes[task.id])
   );
+  /**
+   * The canvas has settled once: from then on every move eases, a card
+   * arriving included (it unsettles the canvas until it is measured, and
+   * the cards it moves must not jump meanwhile). Only the first layout is
+   * drawn in place.
+   */
+  let placed = $state(false);
+  $effect(() => {
+    if (settled) {
+      placed = true;
+    }
+  });
   const ESTIMATE = { width: 240, height: 64 };
+  /** The canvas's own size: which way the graph runs is the one it holds larger. */
+  let canvasWidth = $state(0);
+  let canvasHeight = $state(0);
+  /** The least zoom at which a card's smallest text (--text-meta) is 11px. */
+  let floor = $state(1);
+  let fitter = $state<ReturnType<typeof TaskCanvasFit>>();
 
   onMount(() => {
+    const rem = Number.parseFloat(
+      getComputedStyle(document.documentElement).fontSize
+    );
+    floor = Math.min(1, 11 / (numberOf("--text-meta") * rem));
     mounted = true;
   });
+
+  /** How large the canvas holds a placement whole: the fit's own sum. */
+  function wholeZoom(extent: { width: number; height: number }): number {
+    if (!(canvasWidth && canvasHeight && extent.width && extent.height)) {
+      return 0;
+    }
+    const room = 1 + FIT.padding;
+    return Math.min(
+      FIT.maxZoom,
+      canvasWidth / (extent.width * room),
+      canvasHeight / (extent.height * room)
+    );
+  }
 
   // The cards and edges, laid out from the tasks and their measured sizes.
   $effect(() => {
     const measured = sizes;
-    const placed = layoutTasks(
-      graphTasks.map((task) => task.id),
-      graphEdges,
-      (id) => measured[id] ?? ESTIMATE
-    );
+    const ids = graphTasks.map((task) => task.id);
+    const sizeOf = (id: string) => measured[id] ?? ESTIMATE;
+    const across = layoutTasks(ids, graphEdges, sizeOf, "LR");
+    const down = layoutTasks(ids, graphEdges, sizeOf, "TB");
+    // Left to right, the graph's way; downward only when across would set
+    // the cards under the readable floor and downward holds them larger (a
+    // phone's tall canvas). A graph that fits across never turns, so a card
+    // arriving never flips the whole map.
+    const acrossZoom = wholeZoom(extentOf(across, sizeOf));
+    const flow: Flow =
+      acrossZoom < floor && wholeZoom(extentOf(down, sizeOf)) > acrossZoom
+        ? "TB"
+        : "LR";
+    const placed = flow === "TB" ? down : across;
     const before = new Map(untrack(() => nodes).map((node) => [node.id, node]));
     nodes = graphTasks.map((task) => ({
       id: task.id,
@@ -99,7 +152,7 @@
       draggable: false,
       connectable: false,
       selectable: false,
-      data: { task, href: hrefOf(task.id), kindOf, onopen },
+      data: { task, href: hrefOf(task.id), kindOf, onopen, flow },
     }));
     const kinds = new Map(tasks.map((task) => [task.id, task.kind]));
     edges = graphEdges.map((edge) => ({
@@ -107,6 +160,7 @@
       type: "task",
       source: edge.source,
       target: edge.target,
+      ...handlesOf(edge.kind),
       selectable: false,
       focusable: false,
       data: {
@@ -147,7 +201,9 @@
 <section
   aria-label="Task graph"
   class="canvas"
-  data-settled={settled || undefined}
+  data-settled={placed || undefined}
+  bind:clientHeight={canvasHeight}
+  bind:clientWidth={canvasWidth}
 >
   <!-- The arrow every `after` edge ends in, filled from the tokens. -->
   <svg aria-hidden="true" class="defs">
@@ -171,8 +227,6 @@
       deleteKey={null}
       {edgeTypes}
       elementsSelectable={false}
-      fitView
-      fitViewOptions={FIT}
       {...ZOOM}
       nodesConnectable={false}
       nodesDraggable={false}
@@ -188,7 +242,13 @@
       bind:nodes
     >
       <Background gap={16} size={1} variant={BackgroundVariant.Dots} />
-      <FlowAutoFit {held} nodeCount={graphTasks.length} />
+      <TaskCanvasFit
+        {floor}
+        {held}
+        nodeCount={graphTasks.length}
+        ready={settled}
+        bind:this={fitter}
+      />
       <FlowZoomTracker
         onZoomChange={(value) => {
           zoom = value;
@@ -196,6 +256,7 @@
       />
       <Panel position="bottom-center"
         ><WorkflowCanvasTools
+          fit={() => fitter?.frame(true)}
           onfit={() => {
             held = false;
           }}

@@ -220,7 +220,12 @@
     background: var(--status-attn-bg);
     color: var(--status-attn-ink);
   }
+  /* In the phone's list a chip is inset on both sides of its day: the
+     library sizes an event at its day's full width, so its width gives way
+     to the margins rather than pushing the far one past the card's edge. */
   .view-calendar :global(.ec-list .ec-event.chip) {
+    box-sizing: border-box;
+    inline-size: auto;
     min-block-size: var(--c-btn-h-lg);
     margin-inline: var(--space-2);
     border-radius: var(--radius-xs);

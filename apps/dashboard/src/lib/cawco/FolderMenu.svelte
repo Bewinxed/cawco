@@ -13,12 +13,12 @@
   import * as ContextMenu from "#lib/components/ui/context-menu/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import {
+    IconAddSquare,
     IconChatAdd,
-    IconChevronUp,
+    IconCollapseOthers,
     IconExternal,
     IconPalette,
     IconPin,
-    IconPlus,
     IconTrash,
   } from "#lib/icons.js";
   import { goto } from "$app/navigation";
@@ -115,7 +115,7 @@
 
   <ContextMenu.Content>
     <ContextMenu.Item onSelect={onnew}>
-      <IconPlus />
+      <IconAddSquare />
       New session here
     </ContextMenu.Item>
     {#if project && leadOn}
@@ -202,7 +202,7 @@
 
     {#if oncollapseothers}
       <ContextMenu.Item onSelect={oncollapseothers}>
-        <IconChevronUp />
+        <IconCollapseOthers />
         Collapse other folders
       </ContextMenu.Item>
     {/if}

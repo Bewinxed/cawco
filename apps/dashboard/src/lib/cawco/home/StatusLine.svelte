@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { TextMorph } from "torph/svelte";
   /**
    * The home's first line: is the hub there. Live and read is the quiet
    * default, and says nothing: the line is not drawn and takes no room. The
@@ -9,7 +10,7 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import { IconWarningTriangle } from "#lib/icons.js";
   import { cawco, reconnectNow } from "../client.svelte";
-  import { crossIn, crossOut } from "../motion/curves.svelte";
+  import { crossIn, crossOut, morphMs } from "../motion/curves.svelte";
   import { home } from "./home-state.svelte";
 
   /** The retry countdown is a clock, not a frame: a quarter second is never seen stuck. */
@@ -28,12 +29,14 @@
   );
 </script>
 
-<!-- The hub's states cross-fade in place: the line that leaves is pinned
-     where it stood (crossOut) while the one that arrives fades in. The last
-     one, live and read, has no line: the whole block leaves the same way. -->
+<!-- Down and on the way are two lines of their own, cross-faded in place;
+     on the way, "Connecting…" turns into "Connected · reading the fleet…"
+     as one line whose words morph (TextMorph), never two sentences printed
+     over each other mid-fade. Live and read has no line: the whole block
+     leaves the same way. -->
 {#if home.status !== "connected"}
   <div class="status" role="status" out:crossOut>
-    {#key home.status}
+    {#key home.status === "unreachable"}
       <div class="line" in:crossIn out:crossOut>
         {#if home.status === "unreachable"}
           <span class="down">
@@ -53,10 +56,14 @@
             size="xs"
             variant="outline"
           />
-        {:else if home.status === "connecting"}
-          <span>Connecting…</span>
         {:else}
-          <span>Connected · reading the fleet…</span>
+          <TextMorph
+            as="span"
+            duration={morphMs()}
+            text={home.status === "connecting"
+              ? "Connecting…"
+              : "Connected · reading the fleet…"}
+          />
         {/if}
       </div>
     {/key}

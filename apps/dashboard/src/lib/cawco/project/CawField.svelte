@@ -120,8 +120,16 @@
   }
   .shell :global(.field) {
     flex: 1 1 auto;
-    min-block-size: var(--c-btn-h);
+    min-block-size: var(--c-composer-field);
     max-block-size: 10rem;
+  }
+  /* The composer's send (Composer .stop): the field's height square, its
+     16px plane. */
+  .shell :global(.send) {
+    --btn-icon: 16px;
+    flex: none;
+    inline-size: var(--c-composer-field);
+    block-size: var(--c-composer-field);
   }
   /* A phone never zooms into the field (PRODUCT.md, Phone fields). */
   @media (pointer: coarse), (max-width: 639px) {

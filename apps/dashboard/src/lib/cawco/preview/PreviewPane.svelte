@@ -22,6 +22,7 @@
   } from "../client.svelte";
   import { appear, dur } from "../motion/curves.svelte";
   import { closeInto, depart } from "../motion/share.svelte";
+  import SideSurface from "../side/SideSurface.svelte";
   import { type CapturedSelection, selectionShare } from "./selection";
   import { previewPlace, previewSourceKey } from "./source";
   import {
@@ -428,249 +429,144 @@
 
 <svelte:window onkeydown={parentEscape} onmessage={receive} />
 
-<section
-  aria-label="Preview"
-  class="preview-pane"
-  bind:this={section}
-  class:selecting
->
-  <header>
-    {#if switcher}
-      {@render switcher()}
-    {/if}
-    <div class="identity">
-      <span class="title">{title}</span
-      ><span class="path"
-        >{displayPath || (source ? previewPlace(source) : "")}</span
-      >
-    </div>
-    {#if unsent || sending}
-      <button
-        aria-busy={sending || undefined}
-        aria-disabled={sending || undefined}
-        class="touch-hit"
-        onclick={whileIdle(
-          () => sending,
-          () => send().catch((error: Error) => toast.error(error.message))
-        )}
-        title="Send picks"
-        type="button"
-        transition:appear
-      >
-        <PendingContent icon={IconSend} pending={sending} />
-        <span class="select-label">Send picks</span>
-      </button>
-    {/if}
+{#snippet controls()}
+  {#if unsent || sending}
     <button
-      aria-pressed={selecting}
+      aria-busy={sending || undefined}
+      aria-disabled={sending || undefined}
       class="touch-hit"
-      disabled={!connected}
-      onclick={() => select(!selecting)}
-      title="Select"
+      onclick={whileIdle(
+        () => sending,
+        () => send().catch((error: Error) => toast.error(error.message))
+      )}
+      title="Send picks"
       type="button"
+      transition:appear
     >
-      <IconCursor /><span class="select-label">Select</span>
+      <PendingContent icon={IconSend} pending={sending} />
+      <span class="select-label">Send picks</span>
     </button>
-    <button
-      aria-label="Reload"
-      class="other touch-hit"
-      onclick={() => {
-        reload += 1;
+  {/if}
+  <button
+    aria-pressed={selecting}
+    class="touch-hit"
+    disabled={!connected}
+    onclick={() => select(!selecting)}
+    title="Select"
+    type="button"
+  >
+    <IconCursor /><span class="select-label">Select</span>
+  </button>
+  <button
+    aria-label="Reload"
+    class="other touch-hit"
+    onclick={() => {
+      reload += 1;
+    }}
+    title="Reload"
+    type="button"
+  >
+    <IconRefresh />
+  </button>
+  <a
+    aria-label="Open in new tab"
+    class="other touch-hit"
+    href={url}
+    rel="noopener noreferrer"
+    target="_blank"
+    title="Open in new tab"
+    ><IconExternalLink /></a
+  >
+{/snippet}
+
+<!-- The card beside the conversation (SideSurface): the switch, the
+     page's name and place (never "Preview" again under the switch that says
+     it), the preview's own controls, Close; the page in the well. -->
+<SideSurface
+  actions={controls}
+  class={selecting ? "preview-pane selecting" : "preview-pane"}
+  closeFailed={failure?.again === "close"}
+  {closing}
+  label="Preview"
+  onclose={close}
+  subtitle={displayPath || (source ? previewPlace(source) : "")}
+  {switcher}
+  title={switcher && title === "Preview" ? undefined : title}
+  bind:section
+  bind:well
+>
+  {#each frames as key (key)}
+    {@const current = key === frameKey}
+    <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: load starts the overlay handshake. -->
+    <iframe
+      allow="clipboard-write"
+      inert={!current}
+      onerror={() => arrived(key)}
+      onload={() => {
+        arrived(key);
+        if (key === frameKey) {
+          announce();
+        }
       }}
-      title="Reload"
-      type="button"
-    >
-      <IconRefresh />
-    </button>
-    <a
-      aria-label="Open in new tab"
-      class="other touch-hit"
-      href={url}
-      rel="noopener noreferrer"
-      target="_blank"
-      title="Open in new tab"
-      ><IconExternalLink /></a
-    >
-    <button
-      aria-busy={closing || undefined}
-      aria-disabled={closing || undefined}
-      aria-label="Close"
-      class="other close touch-hit"
-      onclick={whileIdle(() => closing, close)}
-      title="Close"
-      type="button"
-    >
-      <PendingContent
-        failed={failure?.again === "close"}
-        icon={IconClose}
-        pending={closing}
-      />
-    </button>
-  </header>
-  <div class="well" bind:this={well}>
-    {#each frames as key (key)}
-      {@const current = key === frameKey}
-      <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: load starts the overlay handshake. -->
-      <iframe
-        allow="clipboard-write"
-        inert={!current}
-        onerror={() => arrived(key)}
-        onload={() => {
-          arrived(key);
-          if (key === frameKey) {
-            announce();
-          }
-        }}
-        src={url}
-        title="Preview"
-        class:ready={!current || loaded}
-        {@attach (node) => {
-          if (key === frameKey) {
-            iframe = node;
-          }
-        }}
-      ></iframe>
-    {/each}
-    <div
-      aria-hidden="true"
-      class="cover"
-      class:ready={loaded || standing !== null}
-    >
-      <span
-        class="kit-skeleton block h-[11px] w-[42%] rounded-[var(--radius-xs)]"
-      ></span>
-    </div>
-    {#if failure}
-      <div class="error" role="alert" transition:appear>
-        <p>{failure.message}</p>
-        {#if failure.again === "reload"}
-          <Button
-            label="Try again"
-            onclick={retry}
-            pending={retrying}
-            pendingLabel="Reloading…"
-            size="sm"
-            variant="outline"
-          />
-        {:else}
-          <Button
-            label="Try again"
-            onclick={close}
-            pending={closing}
-            pendingLabel="Closing…"
-            size="sm"
-            variant="outline"
-          />
-        {/if}
-      </div>
-    {/if}
+      src={url}
+      title="Preview"
+      class:ready={!current || loaded}
+      {@attach (node) => {
+        if (key === frameKey) {
+          iframe = node;
+        }
+      }}
+    ></iframe>
+  {/each}
+  <div
+    aria-hidden="true"
+    class="cover"
+    class:ready={loaded || standing !== null}
+  >
+    <span
+      class="kit-skeleton block h-[11px] w-[42%] rounded-[var(--radius-xs)]"
+    ></span>
   </div>
-</section>
+  {#if failure}
+    <div class="error" role="alert" transition:appear>
+      <p>{failure.message}</p>
+      {#if failure.again === "reload"}
+        <Button
+          label="Try again"
+          onclick={retry}
+          pending={retrying}
+          pendingLabel="Reloading…"
+          size="sm"
+          variant="outline"
+        />
+      {:else}
+        <Button
+          label="Try again"
+          onclick={close}
+          pending={closing}
+          pendingLabel="Closing…"
+          size="sm"
+          variant="outline"
+        />
+      {/if}
+    </div>
+  {/if}
+</SideSurface>
 
 <style>
-  .preview-pane {
-    container-type: inline-size;
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-    min-height: 0;
-    height: 100%;
-    padding: 0 var(--space-2) var(--space-2);
-    background: var(--surface-raised);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-drawer);
-  }
-  header {
-    --hit-gap-x: var(--space-1);
-    display: flex;
-    align-items: center;
-    gap: var(--space-1);
-    height: 44px;
-    flex-shrink: 0;
-  }
-  .identity {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    padding-left: var(--space-1);
-  }
-  .title,
-  .path {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .title {
-    color: var(--ink-strong);
-    font-size: var(--text-label);
-    font-weight: var(--weight-strong);
-  }
-  .path {
-    color: var(--ink-muted);
-    font: var(--text-meta) var(--font-mono);
-  }
-  button,
-  a {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: var(--space-1);
-    min-width: 30px;
-    height: 30px;
-    padding: 0 var(--space-2);
-    border: 0;
-    border-radius: var(--radius-sm);
-    color: var(--ink-muted);
-    background: transparent;
-    cursor: pointer;
-    text-decoration: none;
-    font: inherit;
-    font-size: var(--text-label);
-    font-weight: var(--weight-strong);
-    transition:
-      background-color var(--dur-control) var(--ease-out),
-      color var(--dur-control) var(--ease-out),
-      transform var(--dur-control) var(--ease-out),
-      opacity var(--dur-control) var(--ease-in-out);
-  }
-  .close {
-    --btn-icon: 16px;
-  }
-  button :global(svg),
-  a :global(svg) {
-    width: 16px;
-    height: 16px;
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    button:active,
-    a:active {
-      transform: scale(var(--press-scale));
-    }
-  }
-  button[aria-pressed="true"] {
-    background: var(--surface-fill);
-    color: var(--ink-strong);
-  }
-  button:disabled,
-  .selecting .other {
+  /* The header's controls are the card's (SideSurface); while selecting,
+     the ones that would leave the page wait. */
+  :global(.preview-pane.selecting .other) {
     opacity: 0.5;
   }
-  .well {
-    position: relative;
-    flex: 1;
-    min-height: 0;
-    overflow: hidden;
-    border: 1px solid var(--border-hairline);
-    border-radius: var(--radius-sm);
-    background: var(--surface-recess);
-    /* Selecting turns the well's own border the accent, 2px, inside its
+  /* The well is the card's (SideSurface). Selecting turns the well's own border the accent, 2px, inside its
        box: never a second ring round it. */
+  :global(.preview-pane .side-well) {
     outline: var(--focus-ring-width) solid transparent;
     outline-offset: var(--focus-ring-inset);
     transition: outline-color var(--dur-control) var(--ease-in-out);
   }
-  .selecting .well {
+  :global(.preview-pane.selecting .side-well) {
     outline-color: var(--accent);
     cursor: crosshair;
   }
@@ -732,12 +628,6 @@
   @container (max-width: 469px) {
     .select-label {
       display: none;
-    }
-  }
-  @media (hover: hover) {
-    button:hover,
-    a:hover {
-      background: var(--surface-hover);
     }
   }
 </style>

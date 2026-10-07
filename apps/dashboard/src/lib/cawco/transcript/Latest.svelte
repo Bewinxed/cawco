@@ -22,11 +22,13 @@
 </button>
 
 <style>
+  /* The small button's height: where it rests is measured from it. */
   .latest {
     display: inline-flex;
     align-items: center;
     gap: var(--space-2);
-    padding-block: var(--space-2);
+    block-size: var(--c-btn-h-sm);
+    padding-block: 0;
     padding-inline: var(--space-3);
     border: 1px solid var(--border-hairline);
     border-radius: var(--radius-md);

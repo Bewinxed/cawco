@@ -8,15 +8,18 @@
     class: className,
     children,
     ghostRows,
+    scrollClass,
     ...restProps
   }: WithElementRef<HTMLTableAttributes> & {
     /** The rows that are targets: one hover ghost glides between them. */
     ghostRows?: string;
+    /** The sideways scroller's own class (a table wider than its place scrolls). */
+    scrollClass?: string;
   } = $props();
 </script>
 
 <div
-  class="relative w-full overflow-x-auto"
+  class={cn("relative w-full overflow-x-auto", scrollClass)}
   data-slot="table-container"
   {@attach ghostRows ? highlight({ rows: ghostRows }) : undefined}
 >

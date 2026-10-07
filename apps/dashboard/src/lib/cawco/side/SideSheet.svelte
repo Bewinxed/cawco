@@ -302,8 +302,7 @@
   :global(.preview-sheet [data-vaul-handle-hitarea]) {
     height: 44px;
   }
-  :global(.preview-sheet .sheet > .preview-pane),
-  :global(.preview-sheet .sheet > .plan-pane) {
+  :global(.preview-sheet .sheet > .side-card) {
     flex: 1;
     height: auto;
     box-shadow: none;

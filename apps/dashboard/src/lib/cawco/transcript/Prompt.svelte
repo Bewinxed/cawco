@@ -28,9 +28,9 @@
   import { onMount, untrack } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import {
-    IconArrowUp,
     IconCheck,
     IconClose,
+    IconNeedsYou,
     IconShield,
     IconTick,
   } from "#lib/icons.js";
@@ -298,8 +298,8 @@
 >
   {#if questions}
     <h2>
-      <span class="pill attn"><IconArrowUp />needs you</span>Question from the
-      agent
+      <span class="pill attn"><IconNeedsYou />needs you</span>Question from
+      {asker}
     </h2>
     {#each questions as q, qi (q.question)}
       <p class="lede">{q.question}</p>
@@ -345,7 +345,7 @@
     {@render wait()}
   {:else}
     <h2>
-      <span class="pill attn"><IconArrowUp />needs you</span>Permission —
+      <span class="pill attn"><IconNeedsYou />needs you</span>Permission —
       {request.toolName}
     </h2>
     <p class="lede">{summary}</p>

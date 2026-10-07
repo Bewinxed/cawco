@@ -21,6 +21,7 @@
  * nothing more pressing to say ("Budget reached · resets in 4h"), and his
  * panel says it too (project-caps.ts in the hub).
  */
+
 import {
   type CawHarness,
   type CawView,
@@ -28,6 +29,7 @@ import {
   type ProjectSpend,
   questionsOf,
 } from "@cawco/core";
+import { browser } from "$app/env";
 import {
   type BlockedRequest,
   cawco,
@@ -118,6 +120,18 @@ export class CawLead {
     this.#projectId = projectId;
     this.#tasks = tasks;
     this.#reading = reading;
+    // The wait is the seat's, from the moment it stands: a page still
+    // connecting has not begun his read, and the seat must not stand empty
+    // past the grace while it does (design §2, Loading). A server render
+    // has no wait to stand in for.
+    if (!browser) {
+      return;
+    }
+    setTimeout(() => {
+      if (this.view === null && this.refused === null) {
+        this.waited = true;
+      }
+    }, dur("--dur-wait-grace"));
   }
 
   /** Reads his view; the page calls it on arrival and after a reconnect. */
@@ -126,7 +140,8 @@ export class CawLead {
     // Another project's Caw is not this one's: his view goes, and a Caw
     // already on screen holds `loading` until this project's is read.
     if (this.#viewFor !== id) {
-      this.waited = this.view !== null || this.#reading();
+      // A wait already past its grace (the page still connecting) stands.
+      this.waited = this.waited || this.view !== null || this.#reading();
       this.view = null;
       this.spend = null;
     }

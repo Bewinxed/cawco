@@ -50,7 +50,7 @@
   import { keepsDrafts } from "./protocol-reload";
   import SideSplit from "./side/SideSplit.svelte";
   import { clip, type SuggestCandidate, suggestions } from "./suggest.svelte";
-  import { inLists } from "./thread-tabs";
+  import { inLists, threadIdOf } from "./thread-tabs";
   import Composer, { type Mention } from "./transcript/Composer.svelte";
   import { ComposerDraft } from "./transcript/composer-draft.svelte";
   import {
@@ -58,6 +58,7 @@
     loadDraft,
     saveDraft,
   } from "./transcript/draft-store";
+  import FootFade from "./transcript/FootFade.svelte";
   import ProjectOffer from "./transcript/ProjectOffer.svelte";
   import Prompt from "./transcript/Prompt.svelte";
   import { parkedAsks } from "./transcript/present";
@@ -573,8 +574,8 @@
 
   /**
    * What `@` can name: the other conversations, as lists show them (a
-   * project's lead is its threads, which a session cannot be handed to), and
-   * the machines.
+   * project's lead is never one: his threads are, by title under his face),
+   * and the machines.
    */
   const mentions = $derived<Mention[]>([
     ...inLists(cawco.instances)
@@ -585,6 +586,14 @@
         label: delegateHandle(row),
         detail: row.title?.trim() || row.cwd,
       })),
+    ...cawco.threadRows.map((row) => ({
+      handle: `thread#${(threadIdOf(row.id) ?? row.id).slice(0, 8)}`,
+      label: row.title?.trim() || "Thread",
+      detail:
+        cawco.projects.find((project) => project.id === row.projectId)?.name ??
+        "",
+      thread: row.id,
+    })),
     ...cawco.machines.map((machine) => ({
       handle: machine.hostname || machine.machineId,
       label: machine.hostname || machine.machineId,
@@ -1087,8 +1096,14 @@
               />
             </div>
           {/if}
+          <!-- The skeleton stands in for rows still on their way and goes the
+               moment they are drawn: its rows are not where the real ones fall, so
+               fading it over them reads as a second, stale transcript. -->
+          {#if writable && browser}
+            <FootFade />
+          {/if}
           {#if veiled}
-            <div class="veil" in:crossIn out:crossOut>
+            <div class="veil" in:crossIn>
               <TranscriptSkeleton />
             </div>
           {/if}

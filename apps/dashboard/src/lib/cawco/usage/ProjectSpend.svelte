@@ -237,7 +237,7 @@
         label="Budget"
         tone={capTone}
         unit={cap ? `this ${cap.period} · ${share}%` : undefined}
-        value={cap ? `${usd(cap.spentUsd)} / ${usd(cap.usd)}` : "No budget"}
+        value={cap ? `${usd(cap.spentUsd)} / ${usd(cap.usd)}` : "None"}
       >
         {#snippet action()}
           {#if onCapLine}
@@ -248,12 +248,21 @@
               {#snippet child({
                 props,
               })}
-                <Button {...props} size="sm" variant="outline"
-                  >Set budget</Button
+                <!-- The tile says Budget; the button only what it does, named
+                     whole for a reader that hears it on its own. -->
+                <Button
+                  {...props}
+                  aria-label={cap ? "Change budget" : "Set budget"}
+                  size="sm"
+                  variant="outline"
+                  >{cap ? "Change" : "Set"}</Button
                 >
               {/snippet}
             </Popover.Trigger>
-            <Popover.Content align="start" class="w-80">
+            <Popover.Content
+              align="start"
+              class="w-80 max-w-[calc(100vw-2*var(--space-5))]"
+            >
               <form
                 class="budget"
                 onsubmit={(event) => {
@@ -315,7 +324,7 @@
                 <div class="form-acts">
                   {#if cap}
                     <Button
-                      label="Remove budget"
+                      label="Remove"
                       onclick={() => saveCap(true)}
                       size="sm"
                       type="button"
@@ -323,7 +332,7 @@
                     />
                   {/if}
                   <Button
-                    label="Save budget"
+                    label="Save"
                     pending={capSaving}
                     pendingLabel="Saving…"
                     size="sm"

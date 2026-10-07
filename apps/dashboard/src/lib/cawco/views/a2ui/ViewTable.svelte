@@ -54,7 +54,7 @@
 </script>
 
 <div class="ledger">
-  <Table.Root ghostRows="tbody tr">
+  <Table.Root ghostRows="tbody tr" scrollClass="kit-edge-fade">
     <Table.Header>
       {#each table.getHeaderGroups() as group (group.id)}
         <Table.Row class="band border-0">
@@ -100,11 +100,18 @@
   .ledger :global(tr.band) {
     background: var(--surface-band);
   }
-  /* A column keeps its words on one line; a table wider than its place
-     scrolls sideways in its container (Table.Root), never clips. */
+  /* The task's title wraps, so the ledger fits a phone; every other column
+     keeps its words on one line. A table still wider than its place scrolls
+     sideways in its container (Table.Root), its far edge fading while there
+     is more to see (.kit-edge-fade). */
   .ledger :global(th),
   .ledger :global(td) {
     white-space: nowrap;
+  }
+  .ledger :global(tr.row td:first-child) {
+    white-space: normal;
+    min-inline-size: 9rem;
+    padding-block: var(--space-2);
   }
   .ledger :global(tr.band th) {
     block-size: var(--c-toolbar-ctl);
@@ -118,7 +125,7 @@
     block-size: var(--c-btn-h-lg);
     padding-inline: var(--space-3);
     border-block-end: 1px solid var(--border-hairline);
-    font: var(--type-meta);
+    font: var(--type-label);
     color: var(--ink-muted);
   }
   .ledger :global(tr.row) {

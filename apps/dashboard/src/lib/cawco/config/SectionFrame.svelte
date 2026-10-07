@@ -146,7 +146,9 @@
     min-width: 0;
     min-height: 0;
     overflow-y: auto;
-    padding: 7px 21px;
+    /* The pages' gutter, on a phone as at a desk (Usage stands on the same
+       one): the card never runs to the screen's edge. */
+    padding: var(--space-2) var(--space-5);
     background: var(--surface-recess);
   }
   .body {
@@ -209,10 +211,5 @@
     flex-wrap: wrap;
     align-items: center;
     gap: 8px;
-  }
-  @media (max-width: 900px) {
-    .ground {
-      padding: 7px;
-    }
   }
 </style>

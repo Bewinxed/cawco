@@ -62,7 +62,9 @@
   import TaskCard from "./tasks/TaskCard.svelte";
   import TaskSheet from "./tasks/TaskSheet.svelte";
   import { newThreadProjectOf, threadIdOf, threadTabId } from "./thread-tabs";
+  import type { ComposerFoot } from "./transcript/Composer.svelte";
   import { ComposerDraft } from "./transcript/composer-draft.svelte";
+  import FootFade from "./transcript/FootFade.svelte";
   import Prompt from "./transcript/Prompt.svelte";
   import { settleInto } from "./transcript/settle";
   import Transcript from "./transcript/Transcript.svelte";
@@ -382,6 +384,9 @@
     onstop,
     prompts: parkedPrompts,
     perch,
+    onfoot: (next) => {
+      foot = next;
+    },
     get planRing() {
       return planProgressNow ? planRing : undefined;
     },
@@ -400,6 +405,19 @@
     };
   });
 
+  /** What the composer stands over the foot: the fade and "Jump to latest" rest on it. */
+  let foot = $state<ComposerFoot>({ stack: 0, perch: 0 });
+  /**
+   * Scrolled away from the tail, the way back rests on the composer's stack,
+   * beside Caw; the foot's fade is solid to the higher of his top and its
+   * own, so it stands over rows already gone, never over words being read.
+   */
+  const latestFoot = $derived(
+    `calc(var(--space-4) + ${foot.stack}px + var(--space-2))`
+  );
+  const fadeSolid = $derived(
+    `max(calc(var(--space-4) + ${foot.stack + foot.perch}px), calc(${latestFoot} + var(--c-btn-h-sm)))`
+  );
   /** The lead-off line's height, standing where the composer would: the foot clears it. */
   let offHeight = $state(0);
   /**
@@ -499,7 +517,10 @@
 <div class="pane" bind:clientWidth={paneWidth}>
   <div
     class="body"
-    style="--composer-clearance: calc({composerRoom} + var(--space-4) + var(--space-4))"
+    style="--composer-clearance: calc({composerRoom} + var(--space-4) + var(--space-4)); {leadOn &&
+    foot.stack
+      ? `--latest-inset: calc(${latestFoot} - max(calc(var(--space-8) * 3), var(--composer-clearance)))`
+      : ""}"
   >
     <SideSplit
       onescape={() => draft.closeSelectionEditor()}
@@ -530,8 +551,14 @@
             />
           </div>
         {/if}
+        <!-- The skeleton stands in for rows still on their way and goes the
+             moment they are drawn: its rows are not where the real ones fall, so
+             fading it over them reads as a second, stale transcript. -->
+        {#if leadOn}
+          <FootFade solid={foot.stack ? fadeSolid : undefined} />
+        {/if}
         {#if veiled}
-          <div class="veil" in:crossIn out:crossOut>
+          <div class="veil" in:crossIn>
             <TranscriptSkeleton />
           </div>
         {/if}

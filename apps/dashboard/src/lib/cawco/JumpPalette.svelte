@@ -35,6 +35,7 @@
   import { goto } from "$app/navigation";
   import { ACTIVITY_LABEL } from "./activity";
   import { cawco } from "./client.svelte";
+  import CawFace from "./home/CawFace.svelte";
   import JumpMatch from "./JumpMatch.svelte";
   import { buildJumpIndex, filterJumpIndex, type JumpKind } from "./jump-index";
   import {
@@ -60,12 +61,22 @@
       instances: cawco.instances,
       projects: cawco.projects,
       onlineMachines: cawco.onlineMachines,
-      // Sessions as every list shows them: a project's Caw is his threads.
-      running: cawco.runningRows.map((row) => ({
+      // Sessions as every list shows them: a project's Caw is his threads,
+      // listed on their own, every one, by title and under his face.
+      running: cawco.runningRows
+        .filter((row) => !isThreadTab(row.id))
+        .map((row) => ({
+          id: row.id,
+          cwd: row.cwd,
+          activityLabel: ACTIVITY_LABEL[cawco.activityOf(row.id)],
+        })),
+      threads: cawco.threadRows.map((row) => ({
         id: row.id,
-        cwd: row.cwd,
+        title: row.title ?? "Thread",
+        project:
+          cawco.projects.find((project) => project.id === row.projectId)
+            ?.name ?? "",
         activityLabel: ACTIVITY_LABEL[cawco.activityOf(row.id)],
-        ...(isThreadTab(row.id) ? { label: row.title ?? "Thread" } : {}),
       })),
       hidden: cawco.leadSessions,
       stored: cawco.machines.map((machine) => ({
@@ -87,6 +98,8 @@
   /** A row's kind decides its mark. Drawn icons, one stroke weight, never glyphs. */
   const MARK = {
     project: IconFolder,
+    // A thread's mark is Caw's face (CawFace), drawn in the row.
+    thread: null,
     machine: IconMonitor,
     live: IconCpu,
     stored: IconChat,
@@ -295,7 +308,18 @@
             {@const EntryMark = MARK[entry.kind]}
             <div data-flip>
               <Command.Item onSelect={() => jump(entry.href)} value={entry.id}>
-                <EntryMark class="jump-mark" height={16} width={16} />
+                {#if entry.kind === "thread"}
+                  <span class="jump-mark">
+                    <CawFace
+                      size={16}
+                      status={(entry.conversation &&
+                        cawco.threadOf(entry.conversation)?.status) ||
+                        "ready"}
+                    />
+                  </span>
+                {:else if EntryMark}
+                  <EntryMark class="jump-mark" height={16} width={16} />
+                {/if}
                 <JumpMatch
                   class="jump-name"
                   ranges={entry.labelRanges}

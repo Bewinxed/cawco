@@ -75,17 +75,18 @@
    * project's canvas. Live: the client's copy follows the hub's snapshots and
    * deltas (plan.ts), and rows that arrive or move reflow in place.
    *
-   * The surface's header is the preview's recipe: what it is, then its one
-   * control, Close. With a preview beside it the header leads with the
-   * switch between the two (SideSurface).
+   * The card is the preview's own (SideSurface): one header, "Plan" and
+   * how far it has got, or the switch and the count while a preview is
+   * beside it; the rows in the same recess well, scrolling under an edge
+   * fade, their left edge the header's.
    */
   import type { Snippet } from "svelte";
-  import PendingContent from "#lib/components/ui/button/pending-content.svelte";
-  import { IconClose } from "#lib/icons.js";
+  import { IconTick } from "#lib/icons.js";
   import { cawco } from "../client.svelte";
   import { branch, nestFrom } from "../motion/branch.svelte";
   import { unfold } from "../motion/fold.svelte";
   import { reflow } from "../motion/rows.svelte";
+  import SideSurface from "../side/SideSurface.svelte";
   import MessageBody from "../transcript/MessageBody.svelte";
 
   let {
@@ -133,11 +134,7 @@
 )}
   <span class="plan-mark" data-status={status}>
     {#if status === "completed"}
-      {#key status}
-        <svg aria-hidden="true" class="tick" viewBox="0 0 24 24">
-          <path d="M5 12.5l4.5 4.5L19 7.5" pathLength="1" />
-        </svg>
-      {/key}
+      <IconTick class="tick" />
     {:else}
       <span class="dot" class:live={status === "in_progress"}></span>
     {/if}
@@ -168,28 +165,17 @@
   </ul>
 {/snippet}
 
-<section aria-label="Plan" class="plan-pane">
-  <header>
-    {#if switcher}
-      {@render switcher()}
-    {:else}
-      <span class="title">Plan</span>
-    {/if}
-    {#if progress.total > 0}
-      <span class="count num">{progress.done}/{progress.total}</span>
-    {/if}
-    <span class="grow"></span>
-    <button
-      aria-label="Close"
-      class="close touch-hit"
-      onclick={onclose}
-      title="Close"
-      type="button"
-    >
-      <PendingContent icon={IconClose} pending={false} />
-    </button>
-  </header>
-  <div class="body">
+<SideSurface
+  class="plan-pane"
+  label="Plan"
+  {onclose}
+  subtitle={progress.total > 0
+    ? `${progress.done}/${progress.total} done`
+    : undefined}
+  {switcher}
+  title={switcher ? undefined : "Plan"}
+>
+  <div class="body kit-edge-fade-block">
     {#if steps.length > 0}
       {@render tree(steps, false)}
     {/if}
@@ -234,63 +220,12 @@
       </section>
     {/if}
   </div>
-</section>
+</SideSurface>
 
 <style>
-  /* The preview's surface (PreviewPane): a raised card with its header. */
-  .plan-pane {
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-    min-height: 0;
-    height: 100%;
-    padding: 0 var(--space-2) var(--space-2);
-    background: var(--surface-raised);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-drawer);
-  }
-  header {
-    --hit-gap-x: var(--space-1);
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    height: 44px;
-    flex-shrink: 0;
-    padding-inline-start: var(--space-1);
-  }
-  .title {
-    color: var(--ink-strong);
-    font-size: var(--text-label);
-    font-weight: var(--weight-strong);
-  }
-  .count {
-    color: var(--ink-muted);
-    font-size: var(--text-meta);
-  }
-  .grow {
-    flex: 1;
-  }
-  .close {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 30px;
-    height: 30px;
-    border: 0;
-    border-radius: var(--radius-sm);
-    background: transparent;
-    color: var(--ink-muted);
-    cursor: pointer;
-    transition: background-color var(--dur-control) var(--ease-out);
-  }
-  .close :global(svg) {
-    width: 16px;
-    height: 16px;
-  }
-  @media (hover: hover) and (pointer: fine) {
-    .close:hover {
-      background: var(--surface-hover);
-    }
+  /* The rows' inset in the well: the header's title stands on it too. */
+  :global(.plan-pane) {
+    --side-inset: var(--space-3);
   }
   .body {
     flex: 1;
@@ -298,7 +233,7 @@
     overflow-y: auto;
     /* In the phone's sheet, its end also clears the part of the sheet the
        middle snap leaves below the composer (SideSheet). */
-    padding: var(--space-1) var(--space-2)
+    padding: var(--space-3) var(--side-inset)
       calc(var(--space-4) + var(--sheet-hidden, 0px));
     display: flex;
     flex-direction: column;
@@ -342,26 +277,25 @@
     inline-size: var(--icon-md);
     block-size: 1lh;
   }
-  /* Done: the house tick (Tick.svelte's stroke), drawn along its stroke. */
-  .tick {
+  /* Done: the house tick (Tick.svelte, its 1.5 stroke), drawn along its
+     stroke as it lands. */
+  .plan-mark :global(.tick) {
     inline-size: var(--icon-md);
     block-size: var(--icon-md);
-    fill: none;
-    stroke: var(--status-done-glyph);
-    stroke-width: 1.8;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-    stroke-dasharray: 1;
-    stroke-dashoffset: 0;
+    color: var(--status-done-glyph);
   }
   @media (prefers-reduced-motion: no-preference) {
-    .tick path {
+    .plan-mark :global(.tick path) {
+      stroke-dasharray: 20;
       animation: plan-tick var(--dur-toggle) var(--ease-out) both;
     }
   }
   @keyframes plan-tick {
     from {
-      stroke-dashoffset: 1;
+      stroke-dashoffset: 20;
+    }
+    to {
+      stroke-dashoffset: 0;
     }
   }
   /* To come: an open ring; under way: the live dot, breathing. */
@@ -399,10 +333,13 @@
     font: var(--type-code);
     color: var(--ink-subtle);
   }
+  /* The spec, a card on the well: raised inside a hairline, as a card
+     stands on the recess in both schemes. */
   .spec {
     padding: var(--space-2) var(--space-3);
     border-radius: var(--radius-md);
-    background: var(--surface-recess);
+    background: var(--surface-raised);
+    box-shadow: inset 0 0 0 1px var(--border-hairline);
   }
   /* Folded: its first lines, fading where it is cut. */
   .spec.lead {

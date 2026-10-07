@@ -3122,11 +3122,22 @@
   /* The catch-up and the way back to the tail. A zero-height strip stuck to
      the foot of the scrollport, above the composer column; what shows hangs
      up out of it, so its coming and going never changes the scroll height. */
+  /* Where it rests is the pane's to say (`--latest-inset`): a thread keeps
+     the room Caw's rise takes above its composer, empty but for him at its
+     leading corner, and the pill stands there, over nothing a reader is
+     reading. Elsewhere it stands at the top of the composer's clearance.
+     A sticky child's inset is measured inside the scroller's padding box,
+     so an inset is net of the foot's padding (the clearance). */
   .dock {
     position: sticky;
-    inset-block-end: calc(
-      max(calc(var(--space-8) * 3), var(--composer-clearance, 0px)) -
-      var(--space-4)
+    /* Over the pane's foot fade (FootFade), which only the rows pass under. */
+    z-index: 2;
+    inset-block-end: var(
+      --latest-inset,
+      calc(
+        max(calc(var(--space-8) * 3), var(--composer-clearance, 0px)) -
+        var(--space-4)
+      )
     );
     block-size: 0;
     display: flex;

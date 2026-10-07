@@ -317,10 +317,14 @@
             goto(`/usage?project=${encodeURIComponent(project.id)}`)}
           >Spend</DropdownMenu.Item
         >
+        <!-- The one destructive row, as every menu draws one: the house's
+             destructive item, set apart at the end. -->
+        <DropdownMenu.Separator />
         <DropdownMenu.Item
           onSelect={() => {
             forgetOpen = true;
           }}
+          variant="destructive"
           >Forget project…</DropdownMenu.Item
         >
       </DropdownMenu.Content>

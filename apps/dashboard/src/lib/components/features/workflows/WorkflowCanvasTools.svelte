@@ -2,7 +2,7 @@
   import { useSvelteFlow } from "@xyflow/svelte";
   import { dur, easeInOut, motionOk } from "#lib/cawco/motion/curves.svelte.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
-  import { IconMaximize, IconPlus, IconReset } from "#lib/icons.js";
+  import { IconMaximize, IconMinus, IconPlus, IconReset } from "#lib/icons.js";
 
   let {
     zoom,
@@ -10,6 +10,7 @@
     onpan,
     onzoom,
     onfit,
+    fit: framer,
     undo,
     redo,
     canUndo,
@@ -26,6 +27,8 @@
     onzoom: () => void;
     /** The person asked for the fit: the view is a fit again. */
     onfit: () => void;
+    /** The canvas's own way to frame its graph; without it, Svelte Flow's fit. */
+    fit?: () => void;
     /** Undo and redo, for a canvas that is edited; without them there are none. */
     undo?: () => void;
     redo?: () => void;
@@ -40,6 +43,10 @@
   });
   const fit = () => {
     onfit();
+    if (framer) {
+      framer();
+      return;
+    }
     fitView({ padding: 0.2, ...glide() });
   };
   const zoomBy = (step: typeof zoomIn) => {
@@ -79,7 +86,7 @@
         onclick={() => zoomBy(zoomOut)}
         type="button"
       >
-        −
+        <IconMinus class="size-4" />
       </button>
     {/snippet}
   </Tip><span>{Math.round(zoom * 100)}%</span

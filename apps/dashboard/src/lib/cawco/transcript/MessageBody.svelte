@@ -105,13 +105,24 @@
       margin-block-start: var(--space-5);
     }
 
-    & :global(code) {
+    /* Inline code is a chip on the code surface (DESIGN.md: code-bg),
+       edged with a hairline so it reads on the recess a transcript sits on
+       as well as on a raised card. It is one box on the line: a token that
+       fits moves to the next line whole (`ev-3121` never splits at its
+       hyphen), and only one longer than a whole line wraps inside it. */
+    & :global(:not(pre) > code) {
+      display: inline-block;
+      max-inline-size: 100%;
+      vertical-align: baseline;
       font-family: var(--font-mono);
       font-size: var(--text-label);
-      background: var(--surface-recess);
-      padding-block: 1px;
+      line-height: var(--leading-ui);
+      background: var(--code-bg);
+      box-shadow: inset 0 0 0 1px var(--border-hairline);
+      padding-block: 0;
       padding-inline: 4px;
       border-radius: var(--radius-xs);
+      overflow-wrap: anywhere;
     }
     /* A fence renders through OutputBlock, which paints its own well inside a
        `.not-prose` wrapper; the direct-child selector is the fallback for any

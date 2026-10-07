@@ -5,6 +5,8 @@ export { default as IconClose } from "#lib/components/icons/Close.svelte";
 export { default as IconMinus } from "#lib/components/icons/Minus.svelte";
 export { default as IconPlus } from "#lib/components/icons/Plus.svelte";
 export { default as IconTick } from "#lib/components/icons/Tick.svelte";
+// Menu rows among duotone glyphs: a new session, and folding the others away.
+export { default as IconAddSquare } from "~icons/solar/add-square-bold-duotone";
 export { default as IconAlignLeft } from "~icons/solar/align-left-bold-duotone";
 /*
  * Glyphs, not marks: the chevrons and arrows stay in Solar's linear cut, as
@@ -30,7 +32,8 @@ export { default as IconBox } from "~icons/solar/box-bold-duotone";
 export { default as IconSubagent } from "~icons/solar/branching-paths-down-bold-duotone";
 export { default as IconFork } from "~icons/solar/branching-paths-up-bold-duotone";
 export { default as IconUsage } from "~icons/solar/chart-2-bold-duotone";
-export { default as IconChatAdd } from "~icons/solar/chat-round-add-bold-duotone";
+// A new thread: the house chat glyph (chat-square, IconChat) with its add mark.
+export { default as IconChatAdd } from "~icons/solar/chat-square-add-bold-duotone";
 export { default as IconChat } from "~icons/solar/chat-square-bold-duotone";
 export { default as IconSuccess } from "~icons/solar/check-circle-bold-duotone";
 export { default as IconCheck } from "~icons/solar/check-read-bold-duotone";
@@ -150,6 +153,7 @@ export { default as IconToolGeneric } from "~icons/solar/sledgehammer-bold-duoto
 export { default as IconPhone } from "~icons/solar/smartphone-bold-duotone";
 export { default as IconSort } from "~icons/solar/sort-bold-duotone";
 export { default as IconUnfold } from "~icons/solar/sort-vertical-bold-duotone";
+export { default as IconCollapseOthers } from "~icons/solar/square-double-alt-arrow-up-bold-duotone";
 export { default as IconExternal } from "~icons/solar/square-top-down-bold-duotone";
 export { default as IconExternalLink } from "~icons/solar/square-top-up-bold-duotone";
 export { default as IconStop } from "~icons/solar/stop-bold-duotone";

@@ -1,10 +1,22 @@
 <script lang="ts" module>
-  /** Something `@` can name: another session, or a machine. */
+  /**
+   * What a composer stands over the transcript's foot, in px: `stack`, the
+   * panel with the tray row and the parked cards on it; `perch`, how far Caw
+   * perched on the pill rises over its top (0 with no perch).
+   */
+  export interface ComposerFoot {
+    perch: number;
+    stack: number;
+  }
+
+  /** Something `@` can name: another session, a thread with Caw, or a machine. */
   export interface Mention {
     detail?: string;
     /** What gets inserted, without the `@`. */
     handle: string;
     label: string;
+    /** A thread's tab id: its row leads with Caw's face. */
+    thread?: string;
   }
 </script>
 
@@ -67,6 +79,7 @@
   import { cleanDetail } from "../command-detail";
   import { felt } from "../feel.svelte";
   import { mcpSignInIntent, signInToMcp } from "../fleet";
+  import CawFace from "../home/CawFace.svelte";
   import { newId } from "../id";
   import SelectionChip from "../preview/SelectionChip.svelte";
   import SelectionPopover from "../preview/SelectionPopover.svelte";
@@ -121,6 +134,7 @@
     leading,
     perch,
     planRing,
+    onfoot,
     placeholder,
     suggest,
     delegatesOf,
@@ -189,6 +203,8 @@
      * (PlanRing), at the tray row's trailing end; none while it has no plan.
      */
     planRing?: Snippet;
+    /** What it stands over the transcript's foot, told to the pane it is lent to. */
+    onfoot?: (foot: ComposerFoot) => void;
     /** The field's hint, for a surface whose agent takes no `/` or `@`. */
     placeholder?: string;
     /**
@@ -249,6 +265,11 @@
     if (paneVisible) {
       return stand(presence, panel + lift + stack);
     }
+  });
+  // What stands over the transcript's foot, told to the pane it is lent to
+  // (its fade and its "Jump to latest" rest on it).
+  $effect(() => {
+    onfoot?.({ stack: panel + lift + stack, perch: perch ? perchHeight : 0 });
   });
   let fileInput = $state<HTMLInputElement>();
   let field = $state<HTMLTextAreaElement>();
@@ -403,6 +424,8 @@
     label: string;
     /** The plugin or MCP server it came from, shown as a quiet origin tag. */
     source?: string;
+    /** A thread's tab id (`@`): the row leads with Caw's face. */
+    thread?: string;
   }
 
   /** One titled section of the menu. */
@@ -922,10 +945,16 @@
             insert: `@${mention.handle}`,
             label: mention.label,
             detail: mention.detail,
+            thread: mention.thread,
           }));
     return (
       rows
-        .filter((row) => !needle || row.id.toLowerCase().includes(needle))
+        .filter(
+          (row) =>
+            !needle ||
+            row.id.toLowerCase().includes(needle) ||
+            row.label.toLowerCase().includes(needle)
+        )
         // Grouped and scrollable, so the cap only guards a pathological list; a
         // real session's commands all fit inside it and read under their source.
         .slice(0, 100)
@@ -2032,7 +2061,6 @@
   };
 </script>
 
-<div class="fade" transition:fade></div>
 <!-- The dock is one column from the top of the pane down to the composer's
      resting place: the parked prompts fill it and the panel stands at its
      foot. Parked prompts stand in their own column on top of the composer,
@@ -2278,6 +2306,15 @@
                         onSelect={() => choose(entry)}
                         value={entry.id}
                       >
+                        {#if entry.thread}
+                          <span aria-hidden="true" class="e-face">
+                            <CawFace
+                              size={16}
+                              status={cawco.threadOf(entry.thread)?.status ??
+                                "ready"}
+                            />
+                          </span>
+                        {/if}
                         <span class="e-label">{entry.label}</span>
                         {#if entry.detail}
                           <span class="e-detail">{entry.detail}</span>
@@ -2436,20 +2473,6 @@
 </div>
 
 <style>
-  .fade {
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    height: 96px;
-    pointer-events: none;
-    z-index: 19;
-    background: linear-gradient(
-      to top,
-      var(--surface-recess) 22%,
-      oklch(from var(--surface-recess) l c h / 0)
-    );
-  }
   .dock {
     position: absolute;
     inset: 0 0 calc(var(--space-4) + env(safe-area-inset-bottom));
@@ -2832,6 +2855,12 @@
     }
   }
 
+  .e-face {
+    flex: none;
+    display: grid;
+    place-items: center;
+    inline-size: var(--icon-md);
+  }
   .e-label {
     font-family: var(--font-mono);
     font-weight: var(--weight-strong);

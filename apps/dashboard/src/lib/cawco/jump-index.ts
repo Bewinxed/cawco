@@ -1,10 +1,12 @@
 import type { InstanceRow, NeutralSessionInfo } from "@cawco/core";
 import { catalogTitle, conversationHref, indexInstances } from "./links";
 
-/** Which of the four groups a row belongs to — decides its icon and its cap. */
-export type JumpKind = "project" | "machine" | "live" | "stored";
+/** Which of the groups a row belongs to — decides its mark and its cap. */
+export type JumpKind = "project" | "thread" | "machine" | "live" | "stored";
 
 export interface JumpRow {
+  /** A thread's row: its tab id, for its face's status. */
+  conversation?: string;
   detail: string;
   detailLower: string;
   hay: string;
@@ -48,25 +50,38 @@ export interface JumpIndexInput {
     os: string;
   }>;
   projects: ReadonlyArray<{ id: string; name: string; cwd: string }>;
-  /** Running sessions and threads as lists show them; `label` names a thread. */
+  /** Running sessions as lists show them (a project's lead is its threads). */
   running: ReadonlyArray<{
     id: string;
     cwd: string;
     activityLabel: string;
-    label?: string;
   }>;
   stored: ReadonlyArray<{
     machineId: string;
     hostname: string;
     catalog: NeutralSessionInfo[];
   }>;
+  /** Every thread with a project's Caw, by its title; `id` is its tab's. */
+  threads: ReadonlyArray<{
+    id: string;
+    title: string;
+    project: string;
+    activityLabel: string;
+  }>;
 }
 
 const RECENT_PER_MACHINE = 8;
-const GROUPS = ["Projects", "Machines", "Running sessions", "Recent sessions"];
-const KINDS: JumpKind[] = ["project", "machine", "live", "stored"];
+const GROUPS = [
+  "Projects",
+  "Threads",
+  "Machines",
+  "Running sessions",
+  "Recent sessions",
+];
+const KINDS: JumpKind[] = ["project", "thread", "machine", "live", "stored"];
 const CAPS: Record<string, number> = {
   Projects: 8,
+  Threads: 8,
   Machines: 8,
   "Running sessions": 10,
   "Recent sessions": 16,
@@ -96,10 +111,11 @@ export function buildJumpIndex(input: JumpIndexInput): JumpIndex {
     kind: KINDS[i],
     rows: [] as JumpRow[],
   }));
+  const [projects, threads, machines, running, stored] = groups;
   const recentStored: JumpRow[] = [];
   const sessionTitles = new Map<string, string>();
   for (const project of input.projects) {
-    groups[0].rows.push({
+    projects.rows.push({
       id: `project:${project.id}`,
       kind: "project",
       label: project.name,
@@ -110,8 +126,21 @@ export function buildJumpIndex(input: JumpIndexInput): JumpIndex {
       detailLower: "",
     });
   }
+  for (const thread of input.threads) {
+    threads.rows.push({
+      id: `thread:${thread.id}`,
+      kind: "thread",
+      conversation: thread.id,
+      label: thread.title,
+      detail: `${thread.project} · ${thread.activityLabel}`,
+      href: conversationHref(thread.id, index),
+      hay: "",
+      labelLower: "",
+      detailLower: "",
+    });
+  }
   for (const machine of input.onlineMachines) {
-    groups[1].rows.push({
+    machines.rows.push({
       id: `machine:${machine.machineId}`,
       kind: "machine",
       label: machine.hostname,
@@ -123,10 +152,10 @@ export function buildJumpIndex(input: JumpIndexInput): JumpIndex {
     });
   }
   for (const instance of input.running) {
-    groups[2].rows.push({
+    running.rows.push({
       id: `live:${instance.id}`,
       kind: "live",
-      label: instance.label ?? (leaf(instance.cwd) || instance.id),
+      label: leaf(instance.cwd) || instance.id,
       detail: `${instance.cwd || "—"} · ${instance.activityLabel}`,
       href: conversationHref(instance.id, index),
       hay: "",
@@ -134,7 +163,7 @@ export function buildJumpIndex(input: JumpIndexInput): JumpIndex {
       detailLower: "",
     });
   }
-  const destinations = new Set(groups[2].rows.map((row) => row.href));
+  const destinations = new Set(running.rows.map((row) => row.href));
   for (const machine of input.stored) {
     for (const [i, info] of machine.catalog
       .filter((each) => !input.hidden.has(each.sessionId))
@@ -159,7 +188,7 @@ export function buildJumpIndex(input: JumpIndexInput): JumpIndex {
         labelLower: "",
         detailLower: "",
       };
-      groups[3].rows.push(row);
+      stored.rows.push(row);
       if (i < RECENT_PER_MACHINE) {
         recentStored.push(row);
       }
@@ -176,10 +205,11 @@ export function buildJumpIndex(input: JumpIndexInput): JumpIndex {
     sessionTitles,
     groups: groups.filter((group) => group.rows.length > 0),
     recent: [
-      ...groups
-        .slice(0, 3)
-        .map((g) => ({ name: g.name, rows: preview(g.rows) })),
-      { name: GROUPS[3], rows: preview(recentStored) },
+      ...[projects, threads, machines, running].map((g) => ({
+        name: g.name,
+        rows: preview(g.rows),
+      })),
+      { name: stored.name, rows: preview(recentStored) },
     ].filter((group) => group.rows.length > 0),
   };
 }

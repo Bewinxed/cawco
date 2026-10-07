@@ -14,7 +14,7 @@ import type { Snippet } from "svelte";
 import { SvelteMap } from "svelte/reactivity";
 import type { SendExtras } from "../client.svelte";
 import type { SuggestCandidate } from "../suggest.svelte";
-import type { Mention } from "../transcript/Composer.svelte";
+import type { ComposerFoot, Mention } from "../transcript/Composer.svelte";
 import type { ComposerDraft } from "../transcript/composer-draft.svelte";
 
 /** Everything the composer takes from the conversation it is writing to. */
@@ -29,6 +29,8 @@ export interface ComposerBinding {
   /** What stands before the field in the pill; a project's Caw has nothing there. */
   leading?: Snippet;
   readonly mentions: Mention[];
+  /** What the composer stands over the transcript's foot (Composer `ComposerFoot`). */
+  readonly onfoot?: (foot: ComposerFoot) => void;
   oninterruptsend: (text: string, extras: SendExtras, id: string) => void;
   onmenu: () => void;
   onstop: () => void;

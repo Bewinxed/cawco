@@ -18,6 +18,7 @@
    */
   import { untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
+  import { SvelteSet } from "svelte/reactivity";
   import { TextMorph } from "torph/svelte";
   import cawcoIcon from "#lib/assets/brand/cawco-icon.png";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -133,6 +134,19 @@
   const activeSession = $derived(
     path.startsWith("/session") ? workspace.activeSessionId : null
   );
+
+  /**
+   * The conversations the project tree draws right now, kept by each row
+   * as it mounts and leaves. The open one is marked once: by its row here
+   * when there is one, else by the home's Working or Finished above.
+   */
+  const treeRows = new SvelteSet<string>();
+  const inTree =
+    (id: string): Attachment =>
+    () => {
+      treeRows.add(id);
+      return () => treeRows.delete(id);
+    };
 
   /** The rail itself: its session rows open the session card (SessionHover). */
   let railEl = $state<HTMLElement>();
@@ -745,6 +759,7 @@
     data-session-row={row.id}
     data-sidebar="menu-sub-item"
     data-slot="sidebar-menu-sub-item"
+    {@attach inTree(row.id)}
   >
     <!-- The one session row (SessionRow), on one line; its mark says how
          many delegates it has and opens them. -->
@@ -929,7 +944,7 @@
         </Sidebar.MenuItem>
       </Sidebar.Menu>
     </Sidebar.Group>
-    <Home variant="rail" />
+    <Home markedElsewhere={(id) => treeRows.has(id)} variant="rail" />
 
     <!-- The groups built from the fleet come in together, once every read
          they need is in (`stage` 3): Projects straight under the home, then

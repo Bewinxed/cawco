@@ -298,7 +298,7 @@
        button would otherwise open ringed, as if the keyboard had put it
        there. Tab walks in from the top. -->
   <Sheet.Content
-    class="task-sheet gap-0 p-0 data-[side=right]:w-full data-[side=right]:sm:max-w-md"
+    class="task-sheet gap-0 p-0 data-[side=right]:w-full max-sm:data-[side=right]:border-l-0 data-[side=right]:sm:max-w-md"
     onOpenAutoFocus={(event) => {
       event.preventDefault();
       sheet?.focus({ preventScroll: true });

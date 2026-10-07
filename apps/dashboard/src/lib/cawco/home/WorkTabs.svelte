@@ -105,8 +105,15 @@
     stale,
     waiting,
     onstart,
+    markedElsewhere,
     relaying = $bindable(false),
   }: {
+    /**
+     * The open conversation's row is marked elsewhere on screen (the rail's
+     * project tree draws it): the selection is one row, so this list leaves
+     * it unmarked.
+     */
+    markedElsewhere?: (id: string) => boolean;
     /**
      * A change of the rows is in flight (`relay`): the list's heights are
      * driven here, frame by frame. The boxes around the list (this section,
@@ -627,7 +634,7 @@
   <!-- A context line is the parent of delegates listed here, not one of
        the tab's own: its state and name, quietly, and nothing else. -->
   <SessionRow
-    active={current === row.id}
+    active={current === row.id && !markedElsewhere?.(row.id)}
     {context}
     done={tab === "finished"}
     fold={views[tab].foldOf(row.id)}
