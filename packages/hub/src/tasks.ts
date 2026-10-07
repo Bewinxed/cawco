@@ -171,7 +171,12 @@ export type TaskEvent =
       projectId: string;
       stage: string;
     }
-  | { kind: "changed"; projectId: string };
+  | {
+      /** The one task that changed, when one did (its to-dos ticked); absent: any of them. */
+      id?: string;
+      kind: "changed";
+      projectId: string;
+    };
 
 /** What the service needs of the hub's database. */
 export interface TaskStore {
@@ -1463,7 +1468,9 @@ export const createTasks = (store: TaskStore) => {
       changes: TodoChanges,
       actor: TaskActor
     ): Promise<TaskView> {
-      return change(projectId, ref, actor, (doc) => applyTodos(doc, changes));
+      return change(projectId, ref, actor, (doc) =>
+        applyTodos(doc, changes)
+      ).then((task) => told({ kind: "changed", projectId, id: task.id }, task));
     },
 
     /** The project's stages, moves, views and hooks, or what keeps stages.md from reading. */

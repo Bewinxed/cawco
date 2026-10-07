@@ -207,6 +207,7 @@ import {
   onPermissionAnswer,
   onWorkflowAnswer,
 } from "./pending";
+import { createPlans, planRoutes } from "./plans";
 import { resolveMarketplacePlugins } from "./plugins";
 import { previewFrame, previewTargets } from "./preview";
 import {
@@ -7086,6 +7087,8 @@ export const createServer = (
    * past them.
    */
   const streams = createStreamHub({
+    // A follower's plan whole (plans.ts), built below with the tasks it reads.
+    planSnapshot: (instanceId, send) => plans.snapshotTo(instanceId, send),
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: validates ownership and settles the send once against the harness's atomic withdrawal receipt, including concurrent recalls
     withdrawSend: async (machineId, instanceId, sendId) => {
       const row = db.sendRecord(sendId);
@@ -7790,6 +7793,35 @@ export const createServer = (
       }),
   });
   delegateSpawned.add(projectOffers.delegateSpawned);
+  // Every session's plan (§5.2): its steps, its spec, an attempt's to-dos,
+  // live to the session's followers (plans.ts).
+  const plans = createPlans({
+    db,
+    tasks,
+    run: runOnMachine,
+    online: (machineId) => Boolean(registry.agent(machineId)),
+    control: async (machineId, method, args, harness) => {
+      const response = await callAgent(
+        machineId,
+        method,
+        args,
+        READ_TIMEOUT_MS,
+        harness
+      );
+      if (typeof response === "string") {
+        throw new Error(`The plan could not be read: machine ${response}.`);
+      }
+      if (response.error) {
+        throw new Error(String(response.error));
+      }
+      return response.result;
+    },
+    typeDenies: (projectId, type) =>
+      projectTypes.resolveTypeFor(projectId, type)?.denyTools ?? [],
+    publish: (instanceId, message) =>
+      streams.planToFollowers(instanceId, message),
+  });
+  tasks.listen(plans.taskChanged);
   if (resumeWorkflows) {
     // The dispatcher's safety net: a slow look at every dispatching project.
     dispatcher.watch();
@@ -7807,6 +7839,7 @@ export const createServer = (
       dispatcher.retryAttempt(projectId, ref, parent),
     projectFromSession: (actor) =>
       projectOffers.accept(actor.id, sessionActor(actor)),
+    writePlan: (actor, written) => plans.write(actor, written),
     cawTools: (actor) => caw.tools(actor),
     askPerson: (actor, name, input) => adminAsks.ask(actor, name, input),
     instances: () => withKeepAlive(db.listInstances()),
@@ -8169,6 +8202,7 @@ export const createServer = (
       )
       .use(pushRoutes(db, push))
       .use(projectOfferRoutes(projectOffers, YOU_ACTOR))
+      .use(planRoutes(plans))
       .use(dispatchRoutes(dispatcher))
       .use(cawRoutes(caw))
       .use(viewRoutes(views))
@@ -12491,6 +12525,10 @@ export const createServer = (
                   (message.payload as FramePayload & { kind: "frame" }).message
                 );
                 projectOffers.observe(
+                  message.instanceId,
+                  (message.payload as FramePayload & { kind: "frame" }).message
+                );
+                plans.observe(
                   message.instanceId,
                   (message.payload as FramePayload & { kind: "frame" }).message
                 );

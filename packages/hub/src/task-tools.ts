@@ -7,8 +7,18 @@
  * `projectId`; a delegate's is its parent's. `task_start` starts an attempt
  * at a task (dispatch.ts) that reports to the session calling it;
  * `task_retry` starts a fresh one in the failed attempt's workspace.
+ * `todo_write` also writes the calling session's own plan (plans.ts): its
+ * steps and its spec, with or without a project or task.
  */
-import { type InstanceRow, LANDS_MODES, type LandsMode } from "@cawco/core";
+import {
+  type InstanceRow,
+  LANDS_MODES,
+  type LandsMode,
+  PLAN_STEP_PRIORITIES,
+  PLAN_STEP_STATUSES,
+  type PlanStep,
+  type SessionPlan,
+} from "@cawco/core";
 import { z } from "zod";
 import { tool } from "./admin-tools";
 import type { AttemptStart } from "./dispatch";
@@ -50,6 +60,11 @@ export interface TaskToolContext {
   tasks: Tasks;
   /** The task the session's work item is an attempt at, if it has one. */
   workItemTask: string | null;
+  /** Replaces the calling session's steps or spec (plans.ts `write`); without it the session scope refuses. */
+  writePlan?: (
+    row: InstanceRow,
+    written: { steps?: PlanStep[]; spec?: string }
+  ) => Promise<SessionPlan>;
 }
 
 const ok = (data: unknown) => ({
@@ -114,6 +129,55 @@ const landsParameter = () =>
       "Where an attempt's work goes once its checks pass: main (onto the default branch), branch (cawco/<task> on origin), pr (that branch and a pull request), or none (nothing pushed; its outputs are the deliverable). Left out, the project's default."
     );
 const lines = (what: string) => z.array(z.string()).optional().describe(what);
+
+/** A step as `todo_write` takes it: ACP's entry, its id and depth optional. */
+const stepParameter = () =>
+  z.object({
+    content: z.string().trim().min(1).describe("One line."),
+    status: z.enum(PLAN_STEP_STATUSES),
+    depth: z
+      .number()
+      .int()
+      .min(0)
+      .optional()
+      .describe(
+        "Nesting: 0 (default) top level, one more than the step it is part of."
+      ),
+    id: z
+      .string()
+      .trim()
+      .min(1)
+      .optional()
+      .describe("Your id for it; left out, its position (2, 2.1)."),
+    priority: z.enum(PLAN_STEP_PRIORITIES).optional(),
+  });
+
+/**
+ * Steps as written, nested by depth: each one at most one deeper than the
+ * one before, and each without an id given its position (`2`, `2.1`).
+ */
+const stepsOf = (
+  written: z.infer<ReturnType<typeof stepParameter>>[]
+): PlanStep[] => {
+  const counts: number[] = [];
+  return written.map((step, index) => {
+    const depth = step.depth ?? 0;
+    if (depth > counts.length) {
+      throw new Error(
+        `Step ${index + 1} (“${step.content}”) is at depth ${depth}, deeper than one past the step before it.`
+      );
+    }
+    counts.length = depth + 1;
+    counts[depth] = (counts[depth] ?? 0) + 1;
+    return {
+      id: step.id ?? counts.join("."),
+      content: step.content,
+      status: step.status,
+      depth,
+      ...(step.priority ? { priority: step.priority } : {}),
+    };
+  });
+};
 
 /** What a work item may spend before the hub stops it: `delegate`'s and the task tools' one shape. */
 export const budgetParameter = () =>
@@ -349,8 +413,16 @@ export function taskTools(context: TaskToolContext | undefined) {
     ),
     tool(
       "todo_write",
-      "Tick, untick, add or reword to-dos on your work item's task; a session the operator started names any task of its project. Name a to-do by its id (td-3) or position (2.1). All changes land together; returns the task's to-dos.",
+      "Two scopes. Your own plan, on any session: `steps` replaces your step list whole (each pending, in_progress or completed; `depth` nests), `spec` replaces your spec (markdown: what you are building and how); returns your plan. A task's to-dos: tick, untick, add or reword them on your work item's task (a session the operator started names any task of its project), naming a to-do by its id (td-3) or position (2.1); all land together; returns the task's to-dos.",
       {
+        steps: z
+          .array(stepParameter())
+          .optional()
+          .describe("Your plan's steps, the whole list, in order."),
+        spec: z
+          .string()
+          .optional()
+          .describe("Your spec, the whole document, markdown."),
         task: z
           .string()
           .optional()
@@ -373,7 +445,26 @@ export function taskTools(context: TaskToolContext | undefined) {
           .optional()
           .describe("New words for a to-do."),
       },
-      async ({ task, ...changes }) => {
+      async ({ task, steps, spec, ...changes }) => {
+        if (steps !== undefined || spec !== undefined) {
+          if (
+            task !== undefined ||
+            Object.values(changes).some((value) => value !== undefined)
+          ) {
+            throw new Error(
+              "Write your own plan (steps, spec) and a task's to-dos in separate calls."
+            );
+          }
+          if (!context?.writePlan) {
+            throw new Error("Discovery cannot execute tools");
+          }
+          return ok(
+            await context.writePlan(context.actor, {
+              ...(steps ? { steps: stepsOf(steps) } : {}),
+              ...(spec === undefined ? {} : { spec }),
+            })
+          );
+        }
         const { projectId, tasks, actor } = scope();
         const done = await tasks.todos(
           projectId,

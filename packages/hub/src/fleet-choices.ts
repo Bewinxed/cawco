@@ -6,7 +6,10 @@
  *   subagents — deny Claude Code's `Task`/`Agent`, OpenCode's `task`.
  * - **todos**: use CawCo's to-dos instead of each harness's own list — deny
  *   Claude Code's `TaskCreate`/`TaskUpdate`/`TaskList`/`TaskGet`, OpenCode's
- *   `todowrite`/`todoread`. pi has neither, so neither choice changes it.
+ *   `todowrite`/`todoread`, and each one's built-in plan mode (Claude Code's
+ *   `EnterPlanMode`/`ExitPlanMode`, OpenCode's `plan_enter`/`plan_exit`),
+ *   which the session's spec replaces. pi has neither, so neither choice
+ *   changes it.
  *
  * The baseline is written in Claude Code's names, the list every daemon
  * already writes into `~/.claude/settings.json` (Claude Code refuses a rule

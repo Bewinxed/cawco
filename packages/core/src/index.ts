@@ -30,6 +30,8 @@ export * from "./injected";
 // Adding a machine: the join routes' shapes and the install script's step
 // prefix, which `cawco binary-install agent` prints and the hub reads back off SSH output.
 export * from "./join";
+// A session's plan: its steps, its spec, its task's to-dos, and their live frames.
+export * from "./plan";
 // How an `AskUserQuestion` answer is shaped, wherever it is answered from —
 // the dashboard, a parent session's `answer_delegate`, the Telegram bridge.
 // Shared because the tool's schema is unforgiving: the answers go back inside

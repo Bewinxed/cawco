@@ -30,6 +30,7 @@ import { Elysia, t } from "elysia";
 import { z } from "zod";
 import { tool } from "./admin-tools";
 import type { DbShape, ProjectOfferRow, ProjectRow } from "./db";
+import { readClaudeLedger } from "./harness-plans";
 import { FolderRefusal, refused } from "./project-folder";
 import { normaliseRemote, placePath } from "./projects";
 import type { TaskActor, Tasks } from "./tasks";
@@ -41,12 +42,8 @@ const DAY_MS = 86_400_000;
 export const PROPOSED_LABEL = "proposed";
 /** Task titles are one line of at most 200 characters (tasks.ts). */
 const TITLE_MAX = 200;
-/** A git or ledger read is local; past this the machine is not going to answer it. */
+/** A git read is local; past this the machine is not going to answer it. */
 const READ_MS = 10_000;
-/** Record separator between ledger files in one command's output. */
-const SEPARATOR = "\u001e";
-/** A harness session id is a plain token; anything else is not put in a shell line. */
-const SESSION_ID = /^[A-Za-z0-9._-]{1,128}$/;
 /** The tools that write Claude Code's task ledger: a turn using one moved the plan. */
 const LEDGER_TOOLS = new Set(["TaskCreate", "TaskUpdate"]);
 /** TodoWrite (Claude Code) and todowrite (OpenCode) carry the whole list in their input. */
@@ -110,29 +107,6 @@ const leaf = (path: string): string =>
 const titleOf = (subject: string): string => {
   const line = subject.replace(/\s+/g, " ").trim();
   return line.length > TITLE_MAX ? `${line.slice(0, TITLE_MAX - 1)}…` : line;
-};
-
-/** One Claude Code ledger file, if it is one, and still open. */
-const ledgerItem = (text: string): PlanItem | null => {
-  try {
-    const raw = JSON.parse(text) as {
-      subject?: unknown;
-      description?: unknown;
-      status?: unknown;
-    };
-    if (typeof raw.subject !== "string" || raw.status === "completed") {
-      return null;
-    }
-    return {
-      subject: raw.subject,
-      ...(typeof raw.description === "string" && raw.description.trim()
-        ? { description: raw.description }
-        : {}),
-    };
-  } catch {
-    // A half-written file is not a reason to lose the plan.
-    return null;
-  }
 };
 
 export const createProjectOffers = (deps: ProjectOffersDeps) => {
@@ -199,44 +173,13 @@ export const createProjectOffers = (deps: ProjectOffersDeps) => {
   };
 
   /** Claude Code's ledger for the session, open items only, in id order. */
-  const readLedger = async (row: InstanceShape): Promise<PlanItem[]> => {
-    if (
-      (row.harness ?? "claude") !== "claude" ||
-      !row.sessionId ||
-      !SESSION_ID.test(row.sessionId) ||
-      !deps.online(row.machineId)
-    ) {
-      return [];
-    }
-    const dir = `"$HOME/.claude/tasks/${row.sessionId}"`;
-    // Each file as its number on a line, its JSON, then a record separator.
-    const cmd = `[ -d ${dir} ] || exit 0; for f in ${dir}/*.json; do [ -f "$f" ] && { basename "$f" .json; cat "$f"; printf '\\n\\036\\n'; }; done; exit 0`;
-    try {
-      const result = await deps.run(row.machineId, "/", cmd, READ_MS);
-      if (result.exitCode !== 0) {
-        return [];
-      }
-      return result.stdout
-        .split(SEPARATOR)
-        .map((chunk) => {
-          const text = chunk.trim();
-          const newline = text.indexOf("\n");
-          return newline < 0
-            ? null
-            : {
-                order: Number(text.slice(0, newline)),
-                item: ledgerItem(text.slice(newline + 1)),
-              };
-        })
-        .filter(
-          (entry): entry is { order: number; item: PlanItem } => !!entry?.item
-        )
-        .sort((a, b) => (a.order || 0) - (b.order || 0))
-        .map((entry) => entry.item);
-    } catch {
-      return [];
-    }
-  };
+  const readLedger = async (row: InstanceShape): Promise<PlanItem[]> =>
+    (await readClaudeLedger(deps, row))
+      .filter((task) => task.status !== "completed")
+      .map(({ subject, description }) => ({
+        subject,
+        ...(description ? { description } : {}),
+      }));
 
   /** The session's open plan: its ledger, else the TodoWrite list it last wrote. */
   const planOf = async (row: InstanceShape): Promise<PlanItem[]> => {

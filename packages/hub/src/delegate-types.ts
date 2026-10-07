@@ -88,6 +88,36 @@ export const makeDelegateTypes = (
     )
   `);
 
+  // "CawCo's to-dos" grew to deny the built-in plan mode too (NATIVE_TOOLS):
+  // a type that denied the four ledger tools denies EnterPlanMode and
+  // ExitPlanMode as well, once, so it still reads as the choice it made.
+  if (
+    sqlite
+      .query("SELECT 1 FROM delegate_types_meta WHERE key = ?")
+      .get("plan_mode_denied") === null
+  ) {
+    const ledger = ["TaskCreate", "TaskUpdate", "TaskList", "TaskGet"];
+    const rows = sqlite
+      .query(
+        "SELECT name, deny_tools FROM delegate_types WHERE deny_tools IS NOT NULL"
+      )
+      .all() as { name: string; deny_tools: string }[];
+    for (const row of rows) {
+      const deny = JSON.parse(row.deny_tools) as string[];
+      if (ledger.every((name) => deny.includes(name))) {
+        const grown = [...new Set([...deny, "EnterPlanMode", "ExitPlanMode"])];
+        sqlite.run("UPDATE delegate_types SET deny_tools = ? WHERE name = ?", [
+          JSON.stringify(grown),
+          row.name,
+        ]);
+      }
+    }
+    sqlite.run(
+      "INSERT OR IGNORE INTO delegate_types_meta (key, value) VALUES (?, ?)",
+      ["plan_mode_denied", new Date().toISOString()]
+    );
+  }
+
   // `.as(Class)` maps rows onto instances of a given class — there is no such
   // class here, only the `DelegateTypeRow` shape, so `.all()`'s own plain
   // objects (bun:sqlite's default) are cast, not remapped through `.as()`.

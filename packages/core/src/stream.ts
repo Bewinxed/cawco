@@ -154,8 +154,13 @@ export type StreamServerMessage =
   | StreamBacklog
   | StreamReset
   | StreamDelta
-  | CommandAck;
-export type StreamClientMessage = StreamSubscribe | CommandEnvelope;
+  | CommandAck
+  | import("./plan").PlanSnapshot
+  | import("./plan").PlanDelta;
+export type StreamClientMessage =
+  | StreamSubscribe
+  | CommandEnvelope
+  | import("./plan").PlanResync;
 
 // ---------------------------------------------------------------------------
 // The ingest ledger (sessiond design §7): joining sessiond's per-child line

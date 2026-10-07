@@ -62,6 +62,7 @@ import {
   frontMatterBlock,
   LANDS_MODES,
   type LandsMode,
+  type TaskTodo,
 } from "@cawco/core";
 import type { WorkBudget } from "./db/schema";
 
@@ -113,21 +114,7 @@ export interface TaskFields {
 }
 
 /** One to-do, flat in file order. */
-export interface Todo {
-  /** Nesting: 0 for a top-level to-do. */
-  depth: number;
-  done: boolean;
-  /** Its marker, `td-3`; null on a to-do written without one. */
-  id: string | null;
-  /** Its position: `2` the second top-level to-do, `2.1` that one's first child. */
-  path: string;
-  /** The task it was promoted to (`tsk-152`), when its line ends in `→ #152`. */
-  promoted: string | null;
-  /** Offered by an attempt whose plan left it open (`(proposed)` before its words), not agreed yet. */
-  proposed: boolean;
-  /** The words after the box and marker, without the promoted link. */
-  text: string;
-}
+export type Todo = TaskTodo;
 
 /** A section of the body other than the two a task file owns. */
 export interface TaskSection {

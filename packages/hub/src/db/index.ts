@@ -21,6 +21,7 @@ import type {
   HookEvent,
   HookHandler,
   OpenCodeGoLimits,
+  PlanStep,
   Rule,
   RuleState,
   RuleStats,
@@ -106,6 +107,7 @@ import {
   rules,
   sentMessages,
   sessionIdentities,
+  sessionPlans,
   skills,
   supervisorConfig,
   supervisorEvents,
@@ -181,6 +183,7 @@ export type ApnsCredentialsRow = typeof apnsCredentials.$inferSelect;
 /** A device the iOS app registered for pushes. */
 export type PushDeviceRow = typeof pushDevices.$inferSelect;
 export type ProjectOfferRow = typeof projectOffers.$inferSelect;
+export type SessionPlanRow = typeof sessionPlans.$inferSelect;
 /** Where a preview's choices are kept (choices.ts). */
 export type CanvasRow = typeof canvases.$inferSelect;
 export type CanvasChoiceRow = typeof canvasChoices.$inferSelect;
@@ -865,6 +868,10 @@ export interface DbShape {
   }) => void;
   /** Upsert by id. The caller mints the id; this never invents one. */
   readonly putRule: (rule: Rule) => Rule;
+  /** Replaces a session's spec whole, its steps kept. */
+  readonly putSessionSpec: (instanceId: string, spec: string) => void;
+  /** Replaces a session's own steps whole, its spec kept. */
+  readonly putSessionSteps: (instanceId: string, steps: PlanStep[]) => void;
   /** Upsert of a resolve's outcome: the files it read, or the sentence it failed with. */
   readonly putSkill: (skill: {
     name: string;
@@ -1088,6 +1095,8 @@ export interface DbShape {
   readonly sessionOwnership: (
     machineId?: string
   ) => (typeof instances.$inferSelect)[];
+  /** What a session last wrote of its own plan through `todo_write` (plans.ts). */
+  readonly sessionPlan: (instanceId: string) => SessionPlanRow | undefined;
   /** A machine's own account of what it came to, from the sync it just answered. */
   readonly setAgentFleet: (machineId: string, report: FleetSyncReport) => void;
   /** What each harness on the machine can do, as its daemon's report beat said. */
@@ -3939,6 +3948,32 @@ const make = (path: string): DbShape => {
         .get(),
     openProjectOffers: () =>
       db.select().from(projectOffers).where(isNull(projectOffers.answer)).all(),
+    sessionPlan: (instanceId) =>
+      db
+        .select()
+        .from(sessionPlans)
+        .where(eq(sessionPlans.instanceId, instanceId))
+        .get(),
+    putSessionSteps: (instanceId, steps) => {
+      const updatedAt = new Date();
+      db.insert(sessionPlans)
+        .values({ instanceId, steps, updatedAt })
+        .onConflictDoUpdate({
+          target: sessionPlans.instanceId,
+          set: { steps, updatedAt },
+        })
+        .run();
+    },
+    putSessionSpec: (instanceId, spec) => {
+      const updatedAt = new Date();
+      db.insert(sessionPlans)
+        .values({ instanceId, steps: [], spec, specAt: updatedAt, updatedAt })
+        .onConflictDoUpdate({
+          target: sessionPlans.instanceId,
+          set: { spec, specAt: updatedAt, updatedAt },
+        })
+        .run();
+    },
     offerProject: ({ instanceId, reason, line }) =>
       db
         .insert(projectOffers)

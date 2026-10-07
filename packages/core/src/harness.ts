@@ -450,6 +450,8 @@ export interface NeutralTask {
   description?: string;
   id: string;
   owner?: string;
+  /** opencode's todos carry one; Claude Code's ledger does not. */
+  priority?: "high" | "medium" | "low";
   status: "pending" | "in_progress" | "completed";
   subject: string;
 }

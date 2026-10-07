@@ -20,7 +20,7 @@ import {
 } from "./project-offers";
 import { admitToolCall } from "./restart-holds";
 import { allows, CAW_TOOLS, refusal, roleOf } from "./roles";
-import { TASK_TOOLS, taskTools } from "./task-tools";
+import { TASK_TOOLS, type TaskToolContext, taskTools } from "./task-tools";
 import type { Tasks } from "./tasks";
 
 type ToolFactory = typeof handoffTools;
@@ -112,6 +112,8 @@ export function createDelegationMcp(options: {
   ) => Promise<AttemptStart>;
   /** Makes the calling session a project, for `project_from_session` (project-offers.ts). */
   projectFromSession?: (actor: InstanceRow) => Promise<AcceptResult>;
+  /** `todo_write`'s session scope: the caller's own steps and spec (plans.ts). */
+  writePlan?: TaskToolContext["writePlan"];
   /** Caw's own tools (threads, views), for a project's lead (caw.ts). */
   cawTools?: (actor: InstanceRow | undefined) => CawTool[];
   /**
@@ -327,6 +329,7 @@ export function createDelegationMcp(options: {
         startAttempt: options.startAttempt,
         retryAttempt: options.retryAttempt,
         tasks: options.tasks,
+        writePlan: options.writePlan,
         workItemTask: actor.workItemId
           ? (options.workItemTask?.(actor.workItemId) ?? null)
           : null,

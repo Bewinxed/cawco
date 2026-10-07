@@ -6323,6 +6323,11 @@ export class OpencodeHarness implements Harness {
               todo.status === "in_progress" || todo.status === "completed"
                 ? todo.status
                 : "pending",
+            ...(todo.priority === "high" ||
+            todo.priority === "medium" ||
+            todo.priority === "low"
+              ? { priority: todo.priority }
+              : {}),
             blocks: [],
             blockedBy: [],
           }));

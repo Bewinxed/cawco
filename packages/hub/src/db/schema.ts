@@ -1669,6 +1669,24 @@ export const projectOffers = sqliteTable("project_offers", {
 });
 
 /**
+ * A session's own plan (Projects spec §5.2, `plan.ts`), as it last wrote it
+ * through `todo_write`'s session scope: its steps (CawCo's list, read only
+ * while its native to-do tools are denied) and its spec. Each is replaced
+ * whole on a write; a harness's own list is read from the harness, never
+ * stored here.
+ */
+export const sessionPlans = sqliteTable("session_plans", {
+  instanceId: text("instance_id").primaryKey(),
+  steps: text("steps", { mode: "json" })
+    .$type<import("@cawco/core").PlanStep[]>()
+    .notNull(),
+  /** The session's spec, markdown; null until it writes one. */
+  spec: text("spec"),
+  specAt: timestamp("spec_at"),
+  updatedAt: timestamp("updated_at").notNull(),
+});
+
+/**
  * A canvas (Projects spec §5.7): where a preview's choices are kept. Its id is
  * the preview's place, not the page's hash — `decisions:<project>/<page>` for
  * a decision page in a project's hub folder, `dir:<machine>:<path>` or

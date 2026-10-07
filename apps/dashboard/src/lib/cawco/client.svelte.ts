@@ -36,6 +36,7 @@ import type {
   SendPayload,
   SendRecord,
   SessionEffort,
+  SessionPlan,
   SessionPulse,
   SessionStreamFrame,
   SessionTooling,
@@ -96,6 +97,7 @@ import {
   transcriptUrl,
 } from "./links";
 import { unpickedMode } from "./permission-modes";
+import { type HeldPlan, handlePlanMessage } from "./plan";
 import { type PendingSelection, selectionExtras } from "./preview/selection";
 import type { PreviewAsk } from "./preview/source";
 import { send as askHub, json } from "./project-tasks";
@@ -697,6 +699,11 @@ const state = $state({
    * read on connect, then kept by `project_offer` frames.
    */
   projectOffers: {} as Record<string, ProjectOfferSummary>,
+  /**
+   * Each followed session's plan (plan.ts): its steps, its spec, an
+   * attempt's to-dos, as the hub's `plan.snapshot` and `plan.delta` keep it.
+   */
+  plans: {} as Record<string, HeldPlan>,
   /**
    * The supervisor's intervention log, newest first, capped at 200 in memory
    * (PLAN §C9). Seeded from REST and kept live by `supervisor_event` frames.
@@ -3756,6 +3763,13 @@ function bind(socket: WebSocket): void {
       sweepOnTraffic();
       return;
     }
+    if (
+      handlePlanMessage(state.plans, message, (instanceId) =>
+        streamHost.sendToHub({ type: "plan.resync", instanceId })
+      )
+    ) {
+      return;
+    }
     const envelope = message as Envelope<FramePayload>;
     if (envelope.verb !== "frames") {
       return;
@@ -4494,6 +4508,23 @@ export async function createProject(project: {
   };
   await refresh();
   return created;
+}
+
+/**
+ * A session's plan, read now (`GET /api/instances/:id/plan`); its followers
+ * hear the same plan live through {@link cawco.planOf}.
+ */
+export async function planOf(instanceId: string): Promise<SessionPlan> {
+  const response = await fetch(
+    `/api/instances/${encodeURIComponent(instanceId)}/plan`
+  );
+  if (!response.ok) {
+    throw new Error(
+      (await response.text()) ||
+        `The hub answered ${response.status}, so the plan is not known.`
+    );
+  }
+  return (await response.json()) as SessionPlan;
 }
 
 /** The standing "make this a project" offers, as the hub holds them now. */
@@ -5976,6 +6007,9 @@ export const cawco = {
     Object.values(state.workItems)
       .filter((item) => item.parentInstanceId === parentInstanceId)
       .sort((a, b) => a.createdAt - b.createdAt),
+  /** A followed session's plan, live: its steps, its spec, an attempt's to-dos. */
+  planOf: (instanceId: string): SessionPlan | undefined =>
+    state.plans[instanceId]?.plan,
   /** The "make this a project" offer standing on a session, if one does. */
   projectOfferOf: (instanceId: string): ProjectOfferSummary | undefined =>
     state.projectOffers[instanceId],

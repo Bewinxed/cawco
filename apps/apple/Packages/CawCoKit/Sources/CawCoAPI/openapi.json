@@ -3590,6 +3590,123 @@
         }
       }
     },
+    "/api/instances/{id}/plan": {
+      "get": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiInstancesByIdPlan",
+        "responses": {
+          "200": {
+            "description": "getApiInstancesByIdPlan 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionPlan"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "getApiInstancesByIdPlan 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "getApiInstancesByIdPlan 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "getApiInstancesByIdPlan 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "getApiInstancesByIdPlan 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "getApiInstancesByIdPlan 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "getApiInstancesByIdPlan 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiInstancesByIdPlan 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "getApiInstancesByIdPlan 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "getApiInstancesByIdPlan 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects/{id}/dispatch": {
       "get": {
         "parameters": [
@@ -15142,6 +15259,12 @@
         "description": "Everything the stream protocol can put on the dashboard socket.",
         "anyOf": [
           {
+            "$ref": "#/components/schemas/PlanSnapshot"
+          },
+          {
+            "$ref": "#/components/schemas/PlanDelta"
+          },
+          {
             "$ref": "#/components/schemas/StreamBacklog"
           },
           {
@@ -15157,6 +15280,9 @@
       },
       "StreamClientMessage": {
         "anyOf": [
+          {
+            "$ref": "#/components/schemas/PlanResync"
+          },
           {
             "$ref": "#/components/schemas/StreamSubscribe"
           },
@@ -16744,6 +16870,15 @@
           "owner": {
             "type": "string"
           },
+          "priority": {
+            "description": "opencode's todos carry one; Claude Code's ledger does not.",
+            "enum": [
+              "high",
+              "low",
+              "medium"
+            ],
+            "type": "string"
+          },
           "status": {
             "enum": [
               "completed",
@@ -17550,7 +17685,7 @@
           "todos": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/Todo"
+              "$ref": "#/components/schemas/TaskTodo"
             }
           },
           "type": {
@@ -17641,8 +17776,8 @@
           }
         }
       },
-      "Todo": {
-        "description": "One to-do, flat in file order.",
+      "TaskTodo": {
+        "description": "One to-do of a task file (`## To-dos`), as a task read parses it.",
         "type": "object",
         "properties": {
           "depth": {
@@ -18085,6 +18220,104 @@
           "tasks",
           "unfiled"
         ]
+      },
+      "SessionPlan": {
+        "description": "What `GET /api/instances/:id/plan` answers, and what the live frames keep\na client's copy equal to.",
+        "type": "object",
+        "properties": {
+          "source": {
+            "description": "Where the steps come from: CawCo's own list (`todo_write`'s session\nscope), when the session's native to-do tools are denied (\"CawCo's\nto-dos\" on, and always on pi, which has none); else the harness's own\nlist (Claude Code's task ledger, OpenCode's todos).",
+            "enum": [
+              "cawco",
+              "harness"
+            ],
+            "type": "string"
+          },
+          "spec": {
+            "$ref": "#/components/schemas/PlanSpec",
+            "description": "The session's spec, once it has written one."
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlanStep"
+            }
+          },
+          "taskId": {
+            "description": "On a task attempt: the task.",
+            "type": "string"
+          },
+          "todos": {
+            "description": "On a task attempt: the task's to-dos, nested and ticked as its file has them.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TaskTodo"
+            }
+          }
+        },
+        "required": [
+          "source",
+          "steps"
+        ]
+      },
+      "PlanSpec": {
+        "description": "The session's spec, as it last wrote it.",
+        "type": "object",
+        "properties": {
+          "at": {
+            "description": "When it was written, ISO 8601.",
+            "type": "string"
+          },
+          "markdown": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "at",
+          "markdown"
+        ]
+      },
+      "PlanStep": {
+        "description": "One step of a session's plan: an ACP plan entry, with an id and a nesting depth.",
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "depth": {
+            "description": "Nesting by indent: 0 for a top-level step, one more than its parent's for a sub-step.",
+            "type": "number"
+          },
+          "id": {
+            "description": "Stable within one list: the writer's, the ledger's file number, or the step's place.",
+            "type": "string"
+          },
+          "priority": {
+            "enum": [
+              "high",
+              "low",
+              "medium"
+            ],
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/PlanStepStatus"
+          }
+        },
+        "required": [
+          "content",
+          "depth",
+          "id",
+          "status"
+        ]
+      },
+      "PlanStepStatus": {
+        "enum": [
+          "completed",
+          "in_progress",
+          "pending"
+        ],
+        "type": "string"
       },
       "DispatchView": {
         "description": "A project's dispatch: its settings, and what the dispatcher would do now.",
@@ -25193,6 +25426,158 @@
           "reasoning"
         ]
       },
+      "PlanSnapshot": {
+        "description": "Hub → a session's followers: the whole plan (AG-UI STATE_SNAPSHOT).",
+        "type": "object",
+        "properties": {
+          "instanceId": {
+            "type": "string"
+          },
+          "rev": {
+            "type": "number"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "plan.snapshot"
+            ]
+          },
+          "source": {
+            "description": "Where the steps come from: CawCo's own list (`todo_write`'s session\nscope), when the session's native to-do tools are denied (\"CawCo's\nto-dos\" on, and always on pi, which has none); else the harness's own\nlist (Claude Code's task ledger, OpenCode's todos).",
+            "enum": [
+              "cawco",
+              "harness"
+            ],
+            "type": "string"
+          },
+          "spec": {
+            "$ref": "#/components/schemas/PlanSpec",
+            "description": "The session's spec, once it has written one."
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlanStep"
+            }
+          },
+          "taskId": {
+            "description": "On a task attempt: the task.",
+            "type": "string"
+          },
+          "todos": {
+            "description": "On a task attempt: the task's to-dos, nested and ticked as its file has them.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TaskTodo"
+            }
+          }
+        },
+        "required": [
+          "instanceId",
+          "rev",
+          "source",
+          "steps",
+          "type"
+        ]
+      },
+      "PlanDelta": {
+        "description": "Hub → a session's followers: the change from `rev - 1` to `rev` (AG-UI STATE_DELTA).",
+        "type": "object",
+        "properties": {
+          "instanceId": {
+            "type": "string"
+          },
+          "patch": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/JsonPatchOperation"
+            }
+          },
+          "rev": {
+            "type": "number"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "plan.delta"
+            ]
+          }
+        },
+        "required": [
+          "instanceId",
+          "patch",
+          "rev",
+          "type"
+        ]
+      },
+      "JsonPatchOperation": {
+        "description": "One RFC 6902 operation (https://www.rfc-editor.org/rfc/rfc6902).",
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "op": {
+                "enum": [
+                  "add",
+                  "replace",
+                  "test"
+                ],
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              },
+              "value": {}
+            },
+            "required": [
+              "op",
+              "path",
+              "value"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "op": {
+                "type": "string",
+                "enum": [
+                  "remove"
+                ]
+              },
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "op",
+              "path"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "op": {
+                "enum": [
+                  "copy",
+                  "move"
+                ],
+                "type": "string"
+              },
+              "from": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "from",
+              "op",
+              "path"
+            ]
+          }
+        ]
+      },
       "StreamBacklog": {
         "description": "Hub → client when the requested gap is inside its ring: events contiguous\nascending from `afterSeq + 1`. The client applies them in order, then\nfollows live deltas.",
         "type": "object",
@@ -26491,6 +26876,25 @@
         "required": [
           "commandId",
           "stage",
+          "type"
+        ]
+      },
+      "PlanResync": {
+        "description": "Client → hub: \"my copy has a gap; send the plan whole\".",
+        "type": "object",
+        "properties": {
+          "instanceId": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "plan.resync"
+            ]
+          }
+        },
+        "required": [
+          "instanceId",
           "type"
         ]
       },

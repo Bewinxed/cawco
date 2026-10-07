@@ -161,6 +161,8 @@ const OPENCODE_PERMISSIONS: ReadonlySet<string> = new Set([
   "grep",
   "list",
   "lsp",
+  "plan_enter",
+  "plan_exit",
   "read",
   "skill",
   "task",

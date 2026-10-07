@@ -631,6 +631,13 @@
       "when": 1791360270316,
       "tag": "0089_caw_model_thread_spend",
       "breakpoints": true
+    },
+    {
+      "idx": 90,
+      "version": "6",
+      "when": 1791362727433,
+      "tag": "0090_session_plans",
+      "breakpoints": true
     }
   ]
 }

@@ -14,7 +14,10 @@
  * WHAT IT IS NOT: this does not re-plumb ingestion. Frames arrive exactly as
  * they always did; {@link StreamHubShape.sequence} wraps the per-frame relay
  * and nothing upstream of it changes. It is the only way a session's frames
- * reach a dashboard; everything else a dashboard hears is broadcast.
+ * reach a dashboard; everything else a dashboard hears is broadcast. A
+ * session's plan (plans.ts) rides beside it to the same followers, ordered
+ * by its own revision: a snapshot when a socket subscribes or asks
+ * (`plan.resync`), then deltas.
  */
 
 import {
@@ -31,6 +34,8 @@ import {
   type FramePayload,
   type FrameProvenance,
   type IngestMark,
+  type PlanDelta,
+  type PlanSnapshot,
   RESOLVE_PERMISSION,
   // biome-ignore lint/style/noExportedImports: `export … from` here trips noBarrelFile instead; re-exporting the import is the lesser of the two diagnostics for this one re-exported constant.
   RING_SIZE,
@@ -100,6 +105,14 @@ export type ControlResultFrame = Extract<
 export interface StreamPorts {
   /** Whether a daemon for this machine is connected right now. */
   readonly isMachineConnected: (machineId: string) => boolean;
+  /**
+   * The session's plan whole, handed to `send` for one socket that just
+   * subscribed or asked (plans.ts `snapshotTo`).
+   */
+  readonly planSnapshot: (
+    sessionId: string,
+    send: (message: PlanSnapshot) => void
+  ) => void;
   /** The dashboard `control` relay, verbatim — false when the relay refused it. */
   readonly relayControl: (
     envelope: Envelope<ControlPayload>,
@@ -154,6 +167,11 @@ export interface StreamHubShape {
   readonly ingestedFor: (
     instanceIds: readonly string[]
   ) => Record<string, IngestMark>;
+  /** A session's plan frame, to every socket following it. */
+  readonly planToFollowers: (
+    sessionId: string,
+    message: PlanSnapshot | PlanDelta
+  ) => void;
   /**
    * Stamps a relayed frame with the session's next `seq`, files it in the ring
    * and fans it out to that session's followers. Called for EVERY relayed
@@ -354,6 +372,9 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
     const perSession = followers.get(sessionId) ?? new Set<string>();
     perSession.add(socket.id);
     followers.set(sessionId, perSession);
+
+    // Its plan whole, after it is a follower: every delta after comes in turn.
+    ports.planSnapshot(sessionId, (plan) => deliver(socket, plan));
 
     const ring = ringOf(sessionId);
     // A fresh join asks for nothing: history comes through the existing read
@@ -585,26 +606,45 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
     return true;
   };
 
+  const subscribeMessage = (
+    socket: HubSocket,
+    raw: Record<string, unknown>
+  ): void => {
+    if (!nonEmpty(raw.sessionId)) {
+      console.warn("[hub] dropped stream.subscribe with no session", raw);
+      return;
+    }
+    subscribe(socket, {
+      type: "stream.subscribe",
+      sessionId: raw.sessionId,
+      // A malformed resume is NOT a fresh join: `undefined` would silently
+      // start the client from now and lose whatever it thought it had, so it
+      // is passed through as-is and answered with a reset.
+      ...(raw.afterSeq === undefined
+        ? {}
+        : { afterSeq: raw.afterSeq as number }),
+    });
+  };
+
+  /** A client found a gap in a session's plan: the plan whole, to it alone. */
+  const resyncPlan = (socket: HubSocket, instanceId: unknown): void => {
+    if (nonEmpty(instanceId)) {
+      ports.planSnapshot(instanceId, (plan) => deliver(socket, plan));
+    }
+  };
+
   const handleClientMessage = (socket: HubSocket, raw: unknown): boolean => {
     if (!isRecord(raw) || typeof raw.type !== "string") {
       return false;
     }
 
     if (raw.type === "stream.subscribe") {
-      if (!nonEmpty(raw.sessionId)) {
-        console.warn("[hub] dropped stream.subscribe with no session", raw);
-        return true;
-      }
-      subscribe(socket, {
-        type: "stream.subscribe",
-        sessionId: raw.sessionId,
-        // A malformed resume is NOT a fresh join: `undefined` would silently
-        // start the client from now and lose whatever it thought it had, so it
-        // is passed through as-is and answered with a reset.
-        ...(raw.afterSeq === undefined
-          ? {}
-          : { afterSeq: raw.afterSeq as number }),
-      });
+      subscribeMessage(socket, raw);
+      return true;
+    }
+
+    if (raw.type === "plan.resync") {
+      resyncPlan(socket, raw.instanceId);
       return true;
     }
 
@@ -686,6 +726,14 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
     settleCommand,
     dropSocket,
     head: (sessionId) => rings.get(sessionId)?.head ?? 0,
+    planToFollowers: (sessionId, message) => {
+      for (const socketId of followers.get(sessionId) ?? []) {
+        const follower = sockets.get(socketId);
+        if (follower) {
+          deliver(follower.socket, message);
+        }
+      }
+    },
     followerCount: (sessionId) => followers.get(sessionId)?.size ?? 0,
     sweepStale,
     stop: () => clearInterval(sweep),

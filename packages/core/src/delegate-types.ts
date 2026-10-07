@@ -70,13 +70,23 @@ export const delegateTypeProblem = (
  * Each harness's own tools for the two things the fleet's onboarding choices
  * turn off (Projects spec §5.2, §5.6): native subagents ("delegates instead
  * of subagents") and the native to-do list ("CawCo's to-dos instead of each
- * harness's own list"). pi has neither.
+ * harness's own list"). "CawCo's to-dos" also denies each harness's built-in
+ * plan mode (Claude Code's `EnterPlanMode`/`ExitPlanMode`, OpenCode's
+ * `plan_enter`/`plan_exit`): the session's spec, written through CawCo
+ * (`plan.ts`), replaces it. pi has neither.
  */
 export const NATIVE_TOOLS = {
   subagents: { claude: ["Task", "Agent"], opencode: ["task"], pi: [] },
   todos: {
-    claude: ["TaskCreate", "TaskUpdate", "TaskList", "TaskGet"],
-    opencode: ["todowrite", "todoread"],
+    claude: [
+      "TaskCreate",
+      "TaskUpdate",
+      "TaskList",
+      "TaskGet",
+      "EnterPlanMode",
+      "ExitPlanMode",
+    ],
+    opencode: ["todowrite", "todoread", "plan_enter", "plan_exit"],
     pi: [],
   },
 } as const satisfies Record<string, Record<HarnessKind, readonly string[]>>;
@@ -126,6 +136,8 @@ const OPENCODE_EQUIVALENTS: Record<string, readonly string[]> = {
   TaskList: ["todoread"],
   TaskGet: ["todoread"],
   TodoWrite: ["todowrite"],
+  EnterPlanMode: ["plan_enter"],
+  ExitPlanMode: ["plan_exit"],
   Bash: ["bash"],
   Edit: ["edit"],
   Write: ["write"],
