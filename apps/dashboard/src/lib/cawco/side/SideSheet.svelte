@@ -65,8 +65,8 @@
   let snapPoints = $state<(number | string)[]>([0.6, 1]);
   /**
    * How much of the sheet stands below the composer at its snap, clipped by
-   * the host: a scrolling surface pads its end by it (`--sheet-hidden`), so
-   * its last rows scroll into view at the middle snap too.
+   * the host: the card is that much shorter (`--sheet-hidden`), so its foot
+   * and its well's edge stand above the composer at the middle snap.
    */
   const hidden = $derived.by(() => {
     if (snap === null || snap === 1) {
@@ -142,11 +142,16 @@
       const offset = Number.parseFloat(
         getComputedStyle(node).getPropertyValue("--space-4")
       );
+      // The composer's top is whatever stands highest on it: the tray row,
+      // the suggestions on it, the plan's ring, Caw perched on the pill.
       const composerTop = column
         ? Math.min(
             column.getBoundingClientRect().top,
-            column.querySelector(".suggest")?.getBoundingClientRect().top ??
-              Number.POSITIVE_INFINITY
+            ...[
+              ...(column.parentElement?.querySelectorAll(
+                ".suggest, .progress-slot, .perch"
+              ) ?? []),
+            ].map((part) => part.getBoundingClientRect().top)
           )
         : box.bottom - offset;
       bottom = innerHeight - composerTop;
@@ -302,9 +307,12 @@
   :global(.preview-sheet [data-vaul-handle-hitarea]) {
     height: 44px;
   }
+  /* The card is as tall as what the snap shows (`--sheet-hidden` stands
+     below the composer), so its well keeps its foot and radius above it. */
   :global(.preview-sheet .sheet > .side-card) {
     flex: 1;
     height: auto;
+    max-block-size: calc(100% - var(--sheet-hidden, 0px));
     box-shadow: none;
   }
 </style>

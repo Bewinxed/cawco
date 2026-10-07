@@ -2321,7 +2321,9 @@
                             />
                           </span>
                         {/if}
-                        <span class="e-label">{entry.label}</span>
+                        <span class="e-label" class:name={token?.sigil === "@"}
+                          >{entry.label}</span
+                        >
                         {#if entry.detail}
                           <span class="e-detail">{entry.detail}</span>
                         {/if}
@@ -2866,6 +2868,15 @@
     display: grid;
     place-items: center;
     inline-size: var(--icon-md);
+  }
+  /* A command in the code face; a name (`@`: a thread, a session, a
+     machine) in the body's. */
+  .e-label.name {
+    font-family: inherit;
+    min-inline-size: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 0 1 auto;
   }
   .e-label {
     font-family: var(--font-mono);

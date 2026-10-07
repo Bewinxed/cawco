@@ -101,6 +101,8 @@ public enum Palette {
     /// A table's header band, one step under the field.
     public static let surfaceBand = Palette.named("surface-band")
     public static let surfaceRecessDeep = Palette.named("surface-recess-deep")
+    /// A content well inside a raised card (the plan's and the preview's beside a conversation): the recess by day; at night the deep recess, which the raised card's own lightness would otherwise all but meet.
+    public static let surfaceWell = Palette.named("surface-well")
     /// The bar folder tabs stand on, a step below recess-deep.
     public static let surfaceShelf = Palette.named("surface-shelf")
     public static let surfaceLift = Palette.named("surface-lift")
@@ -126,6 +128,8 @@ public enum Palette {
     /// Borders: graded, never flattened to one value.
     public static let border = Palette.named("border")
     public static let borderHairline = Palette.named("border-hairline")
+    /// The edge of a well (surface-well): the hairline by day; at night the control edge, the hairline being all but invisible on the deep recess.
+    public static let borderWell = Palette.named("border-well")
     public static let borderControl = Palette.named("border-control")
     public static let input = Palette.named("input")
     /// Inks. Subtle is the weakest mix that holds 4.5:1 on fill, hover and raised.

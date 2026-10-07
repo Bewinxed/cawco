@@ -5,8 +5,6 @@ export { default as IconClose } from "#lib/components/icons/Close.svelte";
 export { default as IconMinus } from "#lib/components/icons/Minus.svelte";
 export { default as IconPlus } from "#lib/components/icons/Plus.svelte";
 export { default as IconTick } from "#lib/components/icons/Tick.svelte";
-// Menu rows among duotone glyphs: a new session, and folding the others away.
-export { default as IconAddSquare } from "~icons/solar/add-square-bold-duotone";
 export { default as IconAlignLeft } from "~icons/solar/align-left-bold-duotone";
 /*
  * Glyphs, not marks: the chevrons and arrows stay in Solar's linear cut, as
@@ -32,8 +30,6 @@ export { default as IconBox } from "~icons/solar/box-bold-duotone";
 export { default as IconSubagent } from "~icons/solar/branching-paths-down-bold-duotone";
 export { default as IconFork } from "~icons/solar/branching-paths-up-bold-duotone";
 export { default as IconUsage } from "~icons/solar/chart-2-bold-duotone";
-// A new thread: the house chat glyph (chat-square, IconChat) with its add mark.
-export { default as IconChatAdd } from "~icons/solar/chat-square-add-bold-duotone";
 export { default as IconChat } from "~icons/solar/chat-square-bold-duotone";
 export { default as IconSuccess } from "~icons/solar/check-circle-bold-duotone";
 export { default as IconCheck } from "~icons/solar/check-read-bold-duotone";
@@ -58,6 +54,9 @@ export {
 } from "~icons/solar/cursor-bold-duotone";
 export { default as IconAlert } from "~icons/solar/danger-circle-bold-duotone";
 export { default as IconWarningTriangle } from "~icons/solar/danger-triangle-bold-duotone";
+// A new thread: a conversation of two. Its full-weight marks are as large as
+// a menu's other glyphs' (an add mark inside a tile read smaller beside them).
+export { default as IconChatAdd } from "~icons/solar/dialog-2-bold-duotone";
 export {
   default as IconFileMarkdown,
   default as IconToolRead,
@@ -171,4 +170,6 @@ export {
 export { default as IconSoundOff } from "~icons/solar/volume-cross-bold-duotone";
 export { default as IconSound } from "~icons/solar/volume-loud-bold-duotone";
 export { default as IconColumns } from "~icons/solar/widget-2-bold-duotone";
+// Menu rows among duotone glyphs: a new session, and folding the others away.
+export { default as IconSessionAdd } from "~icons/solar/widget-add-bold-duotone";
 export { default as IconWindow } from "~icons/solar/window-frame-bold-duotone";

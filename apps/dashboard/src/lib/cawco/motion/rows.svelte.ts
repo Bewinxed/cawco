@@ -372,7 +372,9 @@ export function tableReflow(options: {
  *   the space;
  * - `data-flip="pop"` (a chip, a badge, a count): it scales in from
  *   --pop-scale as it fades, and out the same way reversed, while its
- *   neighbours slide aside or together;
+ *   neighbours slide aside or together; arriving where they are still
+ *   making its room, it pops once they have made it, so it is never drawn
+ *   over a neighbour sliding out of its place;
  * - `data-flip="box"` (a card whose edge is drawn): a row too, and when what
  *   is inside it grows or shrinks, its edge travels to the new size; with
  *   "pop" as well (`data-flip="pop box"`, a count's pill) it pops in and out
@@ -773,8 +775,17 @@ function unseen(view: number, place: Placed, dy: number): boolean {
   return off(top) && off(top + dy);
 }
 
-/** `height`: its laid-out height, how far its uncovering travels. */
-function arrival(element: HTMLElement, still: boolean, height: number) {
+/**
+ * `height`: its laid-out height, how far its uncovering travels. `room`:
+ * when, after the batch starts, the last of what moves in it has arrived
+ * (0 with nothing moving): a pop waits for its room.
+ */
+function arrival(
+  element: HTMLElement,
+  still: boolean,
+  height: number,
+  room: () => number
+) {
   // It brings its own entrance (a delegate chip whose mark flew in, or one
   // that was simply there when the page loaded); its neighbours still slide.
   if (element.dataset.flipEnter === "own") {
@@ -783,15 +794,19 @@ function arrival(element: HTMLElement, still: boolean, height: number) {
   if (still) {
     heldToTravel(element.animate([{ opacity: 0 }, { opacity: 1 }], entrance()));
   } else if (pops(element)) {
-    heldToTravel(
+    const pop = heldToTravel(
       element.animate(
         [
           { opacity: 0, transform: `scale(${popScale()})` },
           { opacity: 1, transform: "none" },
         ],
-        entrance()
+        { ...entrance(), fill: "backwards" }
       )
     );
+    // Asked after the batch's moves, so it runs after they have their pace.
+    atTravel(() => {
+      pop.effect?.updateTiming({ delay: room() });
+    });
   } else {
     // Uncovered on the curve the rows after it slide down on, from the frame
     // they start on, so its bottom edge is their top edge all the way.
@@ -1159,6 +1174,22 @@ class Reflow {
     plan.slides.forEach((slide, i) => {
       this.#slide(slide.element, slide.x, slide.y, own[i]);
     });
+    // What moves in this batch, for when its room is made (`arrival`).
+    const moving: Animation[] = [];
+    const slid = plan.slides.map((slide) => this.#moves.get(slide.element));
+    const room = (): number => {
+      let last = 0;
+      for (const animation of [
+        ...moving,
+        ...slid.flatMap((move) => (move?.animation ? [move.animation] : [])),
+      ]) {
+        const end = animation.effect?.getComputedTiming().endTime;
+        if (typeof end === "number") {
+          last = Math.max(last, end);
+        }
+      }
+      return last;
+    };
     plan.edges.forEach((edge, i) => {
       const { carry } = edge;
       let animation: Animation;
@@ -1175,20 +1206,19 @@ class Reflow {
         clip = !shrinks[i]?.paints;
       }
       edgeSizes.set(animation, { from: edge.from, to: edge.to, clip });
+      moving.push(animation);
       this.#keep(this.#edges, edge.element, animation);
     });
     plan.spans.forEach((span, i) => {
-      this.#keep(
-        this.#spans,
-        span.element,
-        heldToTravel(
-          spanOf(span.element, span.from, span.to, spans[i]),
-          Math.abs(span.to - span.from)
-        )
+      const animation = heldToTravel(
+        spanOf(span.element, span.from, span.to, spans[i]),
+        Math.abs(span.to - span.from)
       );
+      moving.push(animation);
+      this.#keep(this.#spans, span.element, animation);
     });
     for (const [element, height] of arrivals) {
-      arrival(element, still, height);
+      arrival(element, still, height, room);
     }
     for (const [element, was, at] of departures) {
       departure(this.#node, element, was, at, still);

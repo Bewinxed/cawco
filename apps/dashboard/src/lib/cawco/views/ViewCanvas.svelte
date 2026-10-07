@@ -101,6 +101,8 @@
   /** The least zoom at which a card's smallest text (--text-meta) is 11px. */
   let floor = $state(1);
   let fitter = $state<ReturnType<typeof TaskCanvasFit>>();
+  /** Which way the graph runs, as last laid out (the fit starts it from its start). */
+  let direction = $state<Flow>("LR");
 
   onMount(() => {
     const rem = Number.parseFloat(
@@ -140,6 +142,7 @@
         ? "TB"
         : "LR";
     const placed = flow === "TB" ? down : across;
+    direction = flow;
     const before = new Map(untrack(() => nodes).map((node) => [node.id, node]));
     nodes = graphTasks.map((task) => ({
       id: task.id,
@@ -243,6 +246,7 @@
     >
       <Background gap={16} size={1} variant={BackgroundVariant.Dots} />
       <TaskCanvasFit
+        {direction}
         {floor}
         {held}
         nodeCount={graphTasks.length}

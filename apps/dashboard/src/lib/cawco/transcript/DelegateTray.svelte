@@ -62,9 +62,12 @@
   /** How long a new delegate's card has to come on screen before its chip simply appears. */
   const SETTLE = 1500;
   /**
-   * A chip's floor (it shrinks to it, its title ellipsised) and the gap after
-   * it, for the overflow count; the "+N" chip and its gap. What does not fit
-   * at the floor goes into "+N", so the row never passes the composer's edge.
+   * The least a chip's floor can be (it shrinks to its floor, its title
+   * ellipsised) and the gap after it, for the overflow count; the "+N" chip
+   * and its gap. What does not fit at the floor goes into "+N", so the row
+   * never passes the composer's edge. A chip's own floor is measured
+   * (`floors`): only its title gives way, so a chip with a note ("2
+   * questions", "cancelled") cannot be as narrow as one without.
    */
   const CHIP = 120;
   const GAP = 7;
@@ -349,6 +352,40 @@
   /* ---- overflow ------------------------------------------------------ */
 
   let rowWidth = $state(0);
+  /**
+   * Each chip's floor as drawn, by item: what does not give way in it (its
+   * mark, its note, its state, its padding and gaps) and a title of two
+   * letters' width, never under CHIP. The fit counts these, and each chip is
+   * held to its own, so the count and the row cannot disagree: a chip whose
+   * fixed parts outgrow CHIP no longer spills over the next one.
+   */
+  const floors = new SvelteMap<string, number>();
+  const floorOf = (id: string): number => floors.get(id) ?? CHIP;
+  function measureFloor(id: string) {
+    return (node: HTMLElement) => {
+      const title = node.querySelector<HTMLElement>(".title");
+      const take = () => {
+        const fixed = node.scrollWidth - (title?.clientWidth ?? 0);
+        const least = title
+          ? Number.parseFloat(getComputedStyle(title).fontSize) * 2
+          : 0;
+        const floor = Math.max(CHIP, Math.ceil(fixed + least));
+        if (floors.get(id) !== floor) {
+          floors.set(id, floor);
+        }
+      };
+      // Its parts change size with its state (a note arrives, a glyph
+      // swaps); the chip's own box may not, held as it is by the row.
+      const watch = new ResizeObserver(take);
+      for (const part of node.querySelectorAll(".mark, .words, .note, .slot")) {
+        watch.observe(part);
+      }
+      watch.observe(node);
+      return () => {
+        watch.disconnect();
+      };
+    };
+  }
   const fit = $derived.by(() => {
     const total = chips.length;
     if (rowWidth === 0) {
@@ -356,7 +393,11 @@
     }
     for (let n = total; n >= 1; n -= 1) {
       const hidden = total - n;
-      if (n * CHIP + (n - 1) * GAP + (hidden ? MORE : 0) <= rowWidth) {
+      let width = (n - 1) * GAP + (hidden ? MORE : 0);
+      for (const chip of chips.slice(0, n)) {
+        width += floorOf(chip.item.id);
+      }
+      if (width <= rowWidth) {
         return n;
       }
     }
@@ -888,8 +929,10 @@
     onpointerenter={() => onchipenter(item.id)}
     tabindex={current === at ? 0 : -1}
     type="button"
+    style:min-inline-size={fanned ? undefined : `${floorOf(item.id)}px`}
     class:finished={tone === "done" && (item.endedAt ?? 0) > mountedAt}
     class:fly={flies}
+    {@attach fanned ? undefined : measureFloor(item.id)}
   >
     {@render mark(item, flies)}
     <span aria-hidden="true" class="words">

@@ -44,6 +44,7 @@
     submitCommand,
   } from "./client.svelte";
   import { cleanDetail } from "./command-detail";
+  import { instanceTitle, projectOfRow } from "./home/home-state.svelte";
   import { delegateHandle } from "./links";
   import { planProgress, planShows } from "./plan/PlanPane.svelte";
   import PlanRing from "./plan/PlanRing.svelte";
@@ -576,14 +577,7 @@
    * and the machines.
    */
   const mentions = $derived<Mention[]>([
-    ...inLists(cawco.instances)
-      .filter((row) => row.id !== viewId)
-      .slice(0, 40)
-      .map((row) => ({
-        handle: delegateHandle(row),
-        label: delegateHandle(row),
-        detail: row.title?.trim() || row.cwd,
-      })),
+    // Threads first: what a person most often points a session at.
     ...cawco.threadRows.map((row) => ({
       handle: `thread#${(threadIdOf(row.id) ?? row.id).slice(0, 8)}`,
       label: row.title?.trim() || "Thread",
@@ -592,6 +586,16 @@
         "",
       thread: row.id,
     })),
+    // Then sessions by the name every list gives them (an attempt by its
+    // task's title), never their id; the handle is what reaches the agent.
+    ...inLists(cawco.instances)
+      .filter((row) => row.id !== viewId)
+      .slice(0, 40)
+      .map((row) => ({
+        handle: delegateHandle(row),
+        label: instanceTitle(row),
+        detail: projectOfRow(row),
+      })),
     ...cawco.machines.map((machine) => ({
       handle: machine.hostname || machine.machineId,
       label: machine.hostname || machine.machineId,
@@ -991,10 +995,13 @@
      call it gates until it is answered, and the card then settles into that
      row (transcript/settle.ts). -->
 {#snippet parkedPrompts()}
-  {#each parked as request (request.requestId)}
+  <!-- One ask at a time: each in full took most of a phone. The next one
+       stands up when this one settles into its row. -->
+  {#each parked.slice(0, 1) as request (request.requestId)}
     <div class="parked" data-flip out:settleInto={request.toolUseId}>
       <Prompt
         asker={agentName}
+        more={parked.length - 1}
         onanswer={(result) => onanswer(request, result)}
         {request}
       />

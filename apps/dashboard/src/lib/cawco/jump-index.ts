@@ -50,23 +50,28 @@ export interface JumpIndexInput {
     os: string;
   }>;
   projects: ReadonlyArray<{ id: string; name: string; cwd: string }>;
-  /** Running sessions as lists show them (a project's lead is its threads). */
+  /** Running sessions as lists show them (a project's lead is its threads), by name. */
   running: ReadonlyArray<{
     id: string;
     cwd: string;
     activityLabel: string;
+    name: string;
   }>;
   stored: ReadonlyArray<{
     machineId: string;
     hostname: string;
     catalog: NeutralSessionInfo[];
   }>;
-  /** Every thread with a project's Caw, by its title; `id` is its tab's. */
+  /**
+   * Every thread with a project's Caw, by its title; `id` is its tab's.
+   * `when` (its last activity) tells two of the same title apart.
+   */
   threads: ReadonlyArray<{
     id: string;
     title: string;
     project: string;
     activityLabel: string;
+    when: string;
   }>;
 }
 
@@ -92,7 +97,6 @@ const CAPS: Record<string, number> = {
  * them — before a key had been pressed.
  */
 const PREVIEW_CAP = 8;
-const leaf = (path: string) => path.split("/").filter(Boolean).pop() ?? path;
 
 const preview = (rows: JumpRow[]): RankedRow[] =>
   rows.slice(0, PREVIEW_CAP).map(unranked);
@@ -132,7 +136,7 @@ export function buildJumpIndex(input: JumpIndexInput): JumpIndex {
       kind: "thread",
       conversation: thread.id,
       label: thread.title,
-      detail: `${thread.project} · ${thread.activityLabel}`,
+      detail: `${thread.project} · ${thread.activityLabel} · ${thread.when}`,
       href: conversationHref(thread.id, index),
       hay: "",
       labelLower: "",
@@ -155,7 +159,7 @@ export function buildJumpIndex(input: JumpIndexInput): JumpIndex {
     running.rows.push({
       id: `live:${instance.id}`,
       kind: "live",
-      label: leaf(instance.cwd) || instance.id,
+      label: instance.name,
       detail: `${instance.cwd || "—"} · ${instance.activityLabel}`,
       href: conversationHref(instance.id, index),
       hay: "",

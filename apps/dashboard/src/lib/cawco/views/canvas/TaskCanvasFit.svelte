@@ -14,13 +14,19 @@
   import { useStore, useSvelteFlow } from "@xyflow/svelte";
   import { untrack } from "svelte";
   import { FIT } from "#lib/components/features/flow/fit.js";
-  import { dur, easeInOut, motionOk } from "../../motion/curves.svelte";
+  import {
+    dur,
+    easeInOut,
+    motionOk,
+    numberOf,
+  } from "../../motion/curves.svelte";
 
   let {
     nodeCount,
     ready,
     held,
     floor,
+    direction,
   }: {
     nodeCount: number;
     /**
@@ -30,6 +36,8 @@
     ready: boolean;
     /** The person has panned or zoomed since the last fit: the view is theirs. */
     held: boolean;
+    /** Which way the graph runs: its start is along it, its first rank across it. */
+    direction: "LR" | "TB";
     /** The least zoom at which the cards' smallest text is still 11px. */
     floor: number;
   } = $props();
@@ -60,40 +68,56 @@
       flow.fitView({ ...FIT, ...options });
       return;
     }
-    // Readable from its start: the leading corner, inset by the fit's
-    // padding share of the canvas; an axis the graph fits in is centred.
+    // Readable from its start, at the floor: along the graph's flow it
+    // starts at the canvas's leading edge, inset by the page's own step; across
+    // it, the whole graph is centred if it fits, else its first rank (the
+    // cards it starts with, which dagre centres on the graph's middle) is:
+    // whole if it fits, else from its own start.
     const zoom = floor;
-    const insetX = (width * FIT.padding) / 2;
-    const insetY = (height * FIT.padding) / 2;
-    const fitsX = bounds.width * zoom <= width - 2 * insetX;
-    const fitsY = bounds.height * zoom <= height - 2 * insetY;
-    flow.setViewport(
-      {
-        zoom,
-        x: fitsX
-          ? (width - bounds.width * zoom) / 2 - bounds.x * zoom
-          : insetX - bounds.x * zoom,
-        y: fitsY
-          ? (height - bounds.height * zoom) / 2 - bounds.y * zoom
-          : insetY - bounds.y * zoom,
-      },
-      options
+    const inset = numberOf("--space-4");
+    const across = direction === "TB" ? "x" : "y";
+    const along = direction === "TB" ? "y" : "x";
+    const size = { x: width, y: height };
+    const span = (
+      box: { x: number; y: number; width: number; height: number },
+      axis: "x" | "y"
+    ) => (axis === "x" ? box.width : box.height);
+    const first = Math.min(...nodes.map((node) => node.position[along]));
+    const rank = flow.getNodesBounds(
+      nodes.filter((node) => node.position[along] - first < 2)
     );
+    const place = (axis: "x" | "y", box: typeof bounds): number =>
+      (size[axis] - span(box, axis) * zoom) / 2 - box[axis] * zoom;
+    const at = { x: 0, y: 0 };
+    at[along] = inset - bounds[along] * zoom;
+    if (span(bounds, across) * zoom <= size[across] - 2 * inset) {
+      at[across] = place(across, bounds);
+    } else if (span(rank, across) * zoom <= size[across] - 2 * inset) {
+      at[across] = place(across, rank);
+    } else {
+      at[across] = inset - rank[across] * zoom;
+    }
+    flow.setViewport({ zoom, ...at }, options);
   }
 
   // The first frame once every card is measured and placed; a refit,
   // gliding, once a card that came or went has been laid out too. The frame
   // is taken on the next frame, after the layout's places are drawn.
   let framed: number | undefined;
+  let framedWay: "LR" | "TB" | undefined;
   let owed = false;
   $effect(() => {
     const count = nodeCount;
+    const way = direction;
     const placed = ready;
     untrack(() => {
-      if (framed !== undefined && count !== framed) {
+      // A card come or gone, or the graph turned (a canvas resized past the
+      // floor lays it out the other way): framed again once laid out.
+      if (framed !== undefined && (count !== framed || way !== framedWay)) {
         owed = true;
         framed = count;
       }
+      framedWay = way;
       if (!placed) {
         return;
       }

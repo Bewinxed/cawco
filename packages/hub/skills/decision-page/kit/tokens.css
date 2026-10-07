@@ -126,6 +126,8 @@
     /* A table's header band, one step under the field. */
     --surface-band: light-dark(oklch(95.7% 0.009 84), oklch(21.4% 0.006 70));
     --surface-recess-deep: light-dark(var(--neutral-4), var(--neutral-1));
+    /* A content well inside a raised card (the plan's and the preview's beside a conversation): the recess by day; at night the deep recess, which the raised card's own lightness would otherwise all but meet. */
+    --surface-well: light-dark(var(--surface-recess), var(--neutral-1));
     /* The bar folder tabs stand on, a step below recess-deep. */
     --surface-shelf: light-dark(var(--neutral-5), oklch(15.6% 0.004 70));
     --surface-lift: light-dark(var(--neutral-1), var(--neutral-6));
@@ -163,6 +165,8 @@
       color-mix(in oklab, var(--neutral-4) 34%, var(--neutral-3)),
       color-mix(in oklab, var(--neutral-5) 40%, var(--neutral-4))
     );
+    /* The edge of a well (surface-well): the hairline by day; at night the control edge, the hairline being all but invisible on the deep recess. */
+    --border-well: light-dark(var(--border-hairline), var(--neutral-6));
     --border-control: light-dark(var(--neutral-5), var(--neutral-6));
     --input: light-dark(
       var(--neutral-7),

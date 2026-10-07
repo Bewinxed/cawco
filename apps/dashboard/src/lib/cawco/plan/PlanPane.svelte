@@ -81,6 +81,7 @@
    * fade, their left edge the header's.
    */
   import type { Snippet } from "svelte";
+  import { Button } from "#lib/components/ui/button/index.js";
   import { IconTick } from "#lib/icons.js";
   import { cawco } from "../client.svelte";
   import { branch, nestFrom } from "../motion/branch.svelte";
@@ -122,11 +123,85 @@
       }))
     )
   );
-  const progress = $derived(plan ? planProgress(plan) : { done: 0, total: 0 });
+  /**
+   * A task's to-dos and nothing else (an attempt that has written no steps
+   * or spec): the card is titled by them, not "Plan" over a "To-dos" head.
+   */
+  const onlyTodos = $derived(
+    steps.length === 0 && !plan?.spec && todos.length > 0
+  );
+  const cardTitle = $derived(onlyTodos ? "To-dos" : "Plan");
   const projectId = $derived(
     cawco.instanceIndex.byId.get(instanceId)?.projectId ?? null
   );
   let specOpen = $state(false);
+
+  /** The spec's lead: its first lines, folded. */
+  const LEAD_LINES = 4;
+  /**
+   * Folds a block to its first `lines` lines of text, cut on the boundary
+   * between two lines (never through one): the last text line that ends
+   * within that many of the body's lines is where the fold falls. Read off
+   * the text's own line boxes, and again whenever the content is drawn or
+   * the width changes (the markdown renders after the block mounts).
+   */
+  function foldAtLine(lines: number) {
+    return (node: HTMLElement) => {
+      let frame = 0;
+      const fold = () => {
+        node.style.maxBlockSize = "none";
+        const { top } = node.getBoundingClientRect();
+        // The text's own line boxes, by where each ends.
+        const boxes: DOMRect[] = [];
+        const texts = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+        const range = document.createRange();
+        for (let text = texts.nextNode(); text; text = texts.nextNode()) {
+          range.selectNodeContents(text);
+          for (const box of range.getClientRects()) {
+            if (box.height > 0) {
+              boxes.push(box);
+            }
+          }
+        }
+        const ends = [
+          ...new Set(boxes.map((box) => Math.round(box.bottom))),
+        ].sort((a, b) => a - b);
+        if (ends.length <= lines) {
+          return;
+        }
+        // After the `lines`th line, halfway to the next one's top: no ink of
+        // the next line shows, and none of the last is cut.
+        const cut = ends[lines - 1];
+        const next = Math.min(
+          ...boxes.filter((box) => box.top >= cut - 0.5).map((box) => box.top)
+        );
+        node.style.maxBlockSize = `${Math.floor((cut + next) / 2 - top)}px`;
+      };
+      const soon = () => {
+        cancelAnimationFrame(frame);
+        frame = requestAnimationFrame(fold);
+      };
+      fold();
+      // Its width (the card's) and its content's own height (a face that
+      // loads late lays the same words out again).
+      const resized = new ResizeObserver(soon);
+      resized.observe(node.parentElement ?? node);
+      if (node.firstElementChild) {
+        resized.observe(node.firstElementChild);
+      }
+      const drawn = new MutationObserver(soon);
+      drawn.observe(node, {
+        childList: true,
+        subtree: true,
+        characterData: true,
+      });
+      return () => {
+        cancelAnimationFrame(frame);
+        resized.disconnect();
+        drawn.disconnect();
+      };
+    };
+  }
 </script>
 
 {#snippet mark(
@@ -165,15 +240,14 @@
   </ul>
 {/snippet}
 
+<!-- How far it has got is the ring's to say, on the composer: said once. -->
 <SideSurface
   class="plan-pane"
   label="Plan"
   {onclose}
-  subtitle={progress.total > 0
-    ? `${progress.done}/${progress.total} done`
-    : undefined}
+  subtitle={onlyTodos ? (plan?.taskId ?? undefined) : undefined}
   {switcher}
-  title={switcher ? undefined : "Plan"}
+  title={switcher ? undefined : cardTitle}
 >
   <div class="body kit-edge-fade-block">
     {#if steps.length > 0}
@@ -188,34 +262,40 @@
             <MessageBody source={plan.spec.markdown} />
           </div>
         {:else}
-          <div class="spec lead">
+          <div class="spec lead" {@attach foldAtLine(LEAD_LINES)}>
             <MessageBody source={plan.spec.markdown} />
           </div>
         {/if}
-        <button
-          class="more touch-hit"
+        <Button
+          class="more"
+          label={specOpen ? "Fold the spec" : "Read the spec"}
           onclick={() => {
             specOpen = !specOpen;
           }}
-          type="button"
-        >
-          {specOpen ? "Fold the spec" : "Read the spec"}
-        </button>
+          size="sm"
+          variant="link"
+        />
       </section>
     {/if}
 
     {#if todos.length > 0 && plan?.taskId}
       <section class="part">
-        <h3 class="part-head">To-dos <span class="ref">{plan.taskId}</span></h3>
+        {#if !onlyTodos}
+          <h3 class="part-head">
+            To-dos <span class="ref">{plan.taskId}</span>
+          </h3>
+        {/if}
         {@render tree(todos, false)}
         {#if projectId}
-          <a
+          <Button
             class="more"
             href="/project/{encodeURIComponent(
               projectId
             )}?view=canvas&task={encodeURIComponent(plan.taskId)}"
-            >Open in canvas</a
-          >
+            label="Open in canvas"
+            size="sm"
+            variant="link"
+          />
         {/if}
       </section>
     {/if}
@@ -223,18 +303,11 @@
 </SideSurface>
 
 <style>
-  /* The rows' inset in the well: the header's title stands on it too. */
-  :global(.plan-pane) {
-    --side-inset: var(--space-3);
-  }
   .body {
     flex: 1;
     min-height: 0;
     overflow-y: auto;
-    /* In the phone's sheet, its end also clears the part of the sheet the
-       middle snap leaves below the composer (SideSheet). */
-    padding: var(--space-3) var(--side-inset)
-      calc(var(--space-4) + var(--sheet-hidden, 0px));
+    padding: var(--space-3) var(--space-3) var(--space-4);
     display: flex;
     flex-direction: column;
     gap: var(--space-5);
@@ -298,10 +371,12 @@
       stroke-dashoffset: 0;
     }
   }
-  /* To come: an open ring; under way: the live dot, breathing. */
+  /* To come: an open ring; under way: the live dot, the house's size and
+     ink (TreeMark's), at full strength: it breathes in scale, never fading
+     below its contrast. */
   .dot {
-    inline-size: 6px;
-    block-size: 6px;
+    inline-size: var(--status-dot-size);
+    block-size: var(--status-dot-size);
     border-radius: 50%;
     box-shadow: inset 0 0 0 1px var(--ink-subtle);
   }
@@ -316,7 +391,7 @@
   }
   @keyframes plan-breath {
     50% {
-      opacity: 0.35;
+      scale: 0.7;
     }
   }
   .part {
@@ -333,34 +408,20 @@
     font: var(--type-code);
     color: var(--ink-subtle);
   }
-  /* The spec, a card on the well: raised inside a hairline, as a card
-     stands on the recess in both schemes. */
+  /* The spec, a card on the well: the app's card (TaskCard's raised
+     surface and tile edge), which stands off the recess in both schemes. */
   .spec {
     padding: var(--space-2) var(--space-3);
-    border-radius: var(--radius-md);
+    border-radius: var(--radius-sm);
     background: var(--surface-raised);
-    box-shadow: inset 0 0 0 1px var(--border-hairline);
+    box-shadow: var(--shadow-tile);
   }
-  /* Folded: its first lines, fading where it is cut. */
+  /* Folded: its first lines, cut between two of them (`foldAtLine`). */
   .spec.lead {
-    max-block-size: calc(var(--text-body) * 1.6 * 4 + var(--space-2) * 2);
     overflow: hidden;
-    mask-image: linear-gradient(to bottom, #000 60%, transparent);
   }
-  .more {
+  .part :global(.more) {
     align-self: flex-start;
-    padding: 0;
-    border: 0;
-    background: none;
-    font: var(--type-meta);
-    color: var(--link-ink);
-    text-decoration: none;
-    cursor: pointer;
-  }
-  @media (hover: hover) {
-    .more:hover {
-      text-decoration: underline;
-      text-underline-offset: 3px;
-    }
+    padding-inline: 0;
   }
 </style>

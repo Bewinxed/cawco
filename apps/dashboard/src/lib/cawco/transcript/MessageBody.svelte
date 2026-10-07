@@ -120,7 +120,8 @@
       background: var(--code-bg);
       box-shadow: inset 0 0 0 1px var(--border-hairline);
       padding-block: 0;
-      padding-inline: 4px;
+      /* Half a step: a wider pad read as a space inside "(ev-3121)". */
+      padding-inline: calc(var(--space-1) / 2);
       border-radius: var(--radius-xs);
       overflow-wrap: anywhere;
     }

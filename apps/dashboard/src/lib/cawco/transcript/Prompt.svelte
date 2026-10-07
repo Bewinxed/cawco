@@ -49,8 +49,11 @@
     request,
     onanswer,
     asker = "the agent",
+    more = 0,
   }: {
     request: PendingPermission;
+    /** How many more asks wait behind this one: only one card stands parked. */
+    more?: number;
     /** Who asks, as the conversation names its agent ("Caw" in a thread). */
     asker?: string;
     /**
@@ -291,6 +294,13 @@
   {/if}
 {/snippet}
 
+<!-- The asks waiting behind this one, said on it: they come one at a time. -->
+{#snippet waiting()}
+  {#if more > 0}
+    <span class="more num">+{more} more</span>
+  {/if}
+{/snippet}
+
 <section
   aria-label={questions ? `Question from ${asker}` : "Permission request"}
   class="hitl"
@@ -300,6 +310,7 @@
     <h2>
       <span class="pill attn"><IconNeedsYou />needs you</span>Question from
       {asker}
+      {@render waiting()}
     </h2>
     {#each questions as q, qi (q.question)}
       <p class="lede">{q.question}</p>
@@ -347,6 +358,7 @@
     <h2>
       <span class="pill attn"><IconNeedsYou />needs you</span>Permission —
       {request.toolName}
+      {@render waiting()}
     </h2>
     <p class="lede">{summary}</p>
     {#if command}
@@ -445,6 +457,11 @@
           backwards;
       }
     }
+  }
+  .more {
+    margin-inline-start: auto;
+    font: var(--type-meta);
+    color: var(--ink-muted);
   }
   h2 {
     font-size: var(--text-label);

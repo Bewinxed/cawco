@@ -67,7 +67,7 @@
   const budgetLine = $derived.by(() => {
     const budget = spend?.budget;
     if (!budget) {
-      return "No limit";
+      return "None";
     }
     return [
       budget.usd === undefined ? null : usd(budget.usd),
@@ -351,8 +351,14 @@
               {#snippet child({
                 props,
               })}
-                <Button {...props} size="sm" variant="outline"
-                  >Set limit</Button
+                <Button
+                  {...props}
+                  aria-label={spend?.budget
+                    ? "Change the attempt limit"
+                    : "Set the attempt limit"}
+                  size="sm"
+                  variant="outline"
+                  >{spend?.budget ? "Change" : "Set"}</Button
                 >
               {/snippet}
             </Popover.Trigger>
@@ -400,7 +406,7 @@
                 {/if}
                 <Button
                   class="self-end"
-                  label="Save limit"
+                  label="Save"
                   pending={saving}
                   pendingLabel="Saving…"
                   size="sm"

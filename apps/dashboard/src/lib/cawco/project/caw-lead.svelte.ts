@@ -299,8 +299,10 @@ export class CawLead {
     switch (this.status) {
       case "reconnecting":
         return { kind: "say", text: "Reconnecting" };
+      // The board's words while the board is unread, and only then: a seat
+      // waiting on his own view says nothing over a board already drawn.
       case "loading":
-        return this.waited || this.#reading()
+        return this.#reading()
           ? { kind: "say", text: "Reading the board…" }
           : null;
       case "needs-you": {

@@ -473,10 +473,13 @@
 {/snippet}
 
 {#snippet parkedPrompts()}
-  {#each asks as ask (ask.request.requestId)}
+  <!-- One ask at a time: each in full took most of a phone. The next one
+       stands up when this one settles into its row. -->
+  {#each asks.slice(0, 1) as ask (ask.request.requestId)}
     <div class="parked" data-flip out:settleInto={ask.request.toolUseId}>
       <Prompt
         asker="Caw"
+        more={asks.length - 1}
         onanswer={(result) => onanswer(ask, result)}
         request={ask.request}
       />

@@ -75,13 +75,13 @@
 >
   <div class="group">
     <p class="note">
-      A project's budget is what it may spend in a day or a month, set on its
-      Usage page. Each project follows this unless it sets its own.
+      Each project sets what it may spend in a day or a month on its Usage
+      page, and follows this unless it chooses otherwise.
     </p>
     <Field
       hint={means}
       id="spend-on-cap"
-      label="When a project reaches its budget"
+      label="When one is reached"
       problem={refused}
     >
       <NativeSelect

@@ -32,10 +32,12 @@
     IconSearch,
     IconUser,
   } from "#lib/icons.js";
+  import { formatDistanceToNow } from "#lib/utils/time.js";
   import { goto } from "$app/navigation";
   import { ACTIVITY_LABEL } from "./activity";
   import { cawco } from "./client.svelte";
   import CawFace from "./home/CawFace.svelte";
+  import { instanceTitle } from "./home/home-state.svelte";
   import JumpMatch from "./JumpMatch.svelte";
   import { buildJumpIndex, filterJumpIndex, type JumpKind } from "./jump-index";
   import {
@@ -69,6 +71,7 @@
           id: row.id,
           cwd: row.cwd,
           activityLabel: ACTIVITY_LABEL[cawco.activityOf(row.id)],
+          name: instanceTitle(row),
         })),
       threads: cawco.threadRows.map((row) => ({
         id: row.id,
@@ -77,6 +80,9 @@
           cawco.projects.find((project) => project.id === row.projectId)
             ?.name ?? "",
         activityLabel: ACTIVITY_LABEL[cawco.activityOf(row.id)],
+        when: formatDistanceToNow(
+          new Date(cawco.threadOf(row.id)?.lastAt ?? Date.now())
+        ),
       })),
       hidden: cawco.leadSessions,
       stored: cawco.machines.map((machine) => ({
@@ -270,7 +276,7 @@
         onkeydown={onSearchKey}
         placeholder={scope
           ? "Search these messages…"
-          : "Jump to a project, machine, or session…"}
+          : "Jump to a project, thread, machine, or session…"}
         bind:ref={input}
         bind:value={query}
       />

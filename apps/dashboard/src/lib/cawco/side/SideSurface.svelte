@@ -105,15 +105,13 @@
     height: 44px;
     flex-shrink: 0;
   }
-  /* The title's first letter stands where the well's content starts: the
-     well's hairline and the pane's own inset in it (`--side-inset`: a
-     plan's rows have one, a preview's page none). After the switch, a gap. */
+  /* The header's first thing, the switch or the title, stands on the
+     well's edge, with or without the switch. After the switch, a gap. */
   .identity {
     flex: 1;
     min-width: 0;
     display: flex;
     flex-direction: column;
-    padding-inline-start: calc(1px + var(--side-inset, 0px));
   }
   .side-head:has(:global([role="tablist"])) .identity {
     padding-inline-start: var(--space-1);
@@ -182,7 +180,8 @@
       background: var(--surface-hover);
     }
   }
-  /* The content's ground: the recess inside a hairline. */
+  /* The content's ground: a well inside its edge (surface-well, border-well:
+     the recess and hairline by day, deeper with a clear edge at night). */
   .side-well {
     position: relative;
     flex: 1;
@@ -190,8 +189,8 @@
     overflow: hidden;
     display: flex;
     flex-direction: column;
-    border: 1px solid var(--border-hairline);
+    border: 1px solid var(--border-well);
     border-radius: var(--radius-sm);
-    background: var(--surface-recess);
+    background: var(--surface-well);
   }
 </style>
