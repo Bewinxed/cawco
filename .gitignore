@@ -64,3 +64,6 @@ build.bak.*/
 
 # Each workspace's scratch (probes, renders, review pages).
 .context/
+
+# Probe captures and scratch hubs/agents for live checks
+.probe/
