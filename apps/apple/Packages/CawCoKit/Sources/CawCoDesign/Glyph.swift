@@ -126,6 +126,8 @@ public enum Glyph: String, CaseIterable, Sendable {
     case history = "history-bold-duotone"
     case soundOn = "volume-loud-bold-duotone"
     case soundOff = "volume-cross-bold-duotone"
+    /// TaskSheet.svelte's `IconLock`: a task that waits on others.
+    case lock = "lock-keyhole-minimalistic-bold-duotone"
 
     /// The web's names for glyphs the transcript already carries under its own.
     public static let send = Glyph.toolMessage // plain-2-bold-duotone (IconSend)

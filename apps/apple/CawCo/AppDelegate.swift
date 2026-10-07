@@ -152,17 +152,25 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
 
 /// Tap or Open opens what the push names; Approve answers in the background.
 /// The system may call this off the main thread, so it reads the response
-/// where it is called and hops to the main actor with what it read.
+/// where it is called, does the work on the main actor, and says it is done
+/// from there: UIKit asserts that the completion runs on the main thread
+/// (the `async` form of this method called it off it, and every tap crashed
+/// in `_performBlockAfterCATransactionCommitSynchronizes:`).
 extension AppDelegate: UNUserNotificationCenterDelegate {
-    nonisolated func userNotificationCenter(_: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
+    nonisolated func userNotificationCenter(_: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
+                                            withCompletionHandler completionHandler: @escaping () -> Void) {
         let note = PushNote(response)
-        switch note.action {
-        case PushCategories.approve:
-            await PushApproval.approve(note)
-        case UNNotificationDefaultActionIdentifier, PushCategories.open:
-            await PushTaps.deliver(note, to: nil)
-        default:
-            break
+        nonisolated(unsafe) let done = completionHandler
+        Task { @MainActor in
+            switch note.action {
+            case PushCategories.approve:
+                await PushApproval.approve(note)
+            case UNNotificationDefaultActionIdentifier, PushCategories.open:
+                PushTaps.deliver(note, to: nil)
+            default:
+                break
+            }
+            done()
         }
     }
 }

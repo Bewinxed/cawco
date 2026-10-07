@@ -218,7 +218,8 @@ public final class KitAlert: UIView {
 public final class KitBadge: UIView {
     public enum Variant: Sendable { case plain, secondary, outline, attn, done, fail, live }
 
-    public init(_ text: String, variant: Variant = .plain) {
+    /// `glyph`: the icon a badge leads with (`[&>svg]:size-3`, `gap-1`).
+    public init(_ text: String, variant: Variant = .plain, glyph: Glyph? = nil) {
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         layer.cornerRadius = Radius.radiusXs
@@ -234,13 +235,17 @@ public final class KitBadge: UIView {
         backgroundColor = ground
         let label = KitLabel(TypeScale.typeLabel, ink: ink)
         label.text = text
-        label.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(label)
+        let row = UIStackView(arrangedSubviews: [label])
+        row.spacing = Space.space1
+        row.alignment = .center
+        if let glyph { row.insertArrangedSubview(GlyphView(glyph, size: 12, tint: ink), at: 0) }
+        row.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(row)
         NSLayoutConstraint.activate([
             heightAnchor.constraint(equalToConstant: 20),
-            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 6),
-            label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -6),
-            label.centerYAnchor.constraint(equalTo: centerYAnchor),
+            row.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 6),
+            row.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -6),
+            row.centerYAnchor.constraint(equalTo: centerYAnchor),
         ])
         setContentHuggingPriority(.required, for: .horizontal)
         isAccessibilityElement = true

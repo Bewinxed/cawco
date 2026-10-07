@@ -524,6 +524,16 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         KitPopover.present(NewProjectController(hub: hub), from: source, in: railSheet ?? self)
     }
 
+    /// A task's sheet over its project's page (a `task` or `attempt` push):
+    /// the page first, then the sheet over whatever is in front.
+    func openTask(projectId: String, taskId: String, attempt: String?) {
+        go(.project(projectId))
+        // What was presented (another task's sheet, a dialog) gives way to this one.
+        if presentedViewController != nil { dismiss(animated: false) }
+        TaskSheetController.present(projectId: projectId, taskId: taskId, attempt: attempt, hub: hub,
+                                    from: self) { [weak self] id in self?.openSession(id) }
+    }
+
     /// FolderMenu's "Forget project…" and the project page's: the grouping
     /// goes, the checkout and its sessions stay; a project page that was
     /// showing it goes back to the place it was opened from.

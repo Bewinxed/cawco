@@ -70,6 +70,7 @@ public final class RootViewController: ObservedViewController {
             switch route {
             case let .session(id): board.openSession(id)
             case let .project(id): board.go(.project(id))
+            case let .task(projectId, taskId, attempt): board.openTask(projectId: projectId, taskId: taskId, attempt: attempt)
             case .board: board.go(.fleet)
             }
         }

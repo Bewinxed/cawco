@@ -136,6 +136,8 @@ const SOLAR_ICONS = [
   "history-bold-duotone", // IconHistory: the composer's history button
   "volume-loud-bold-duotone", // Sound on
   "volume-cross-bold-duotone", // Sound off
+  // The task sheet (tasks/TaskSheet.svelte).
+  "lock-keyhole-minimalistic-bold-duotone", // IconLock: waits on
 ];
 
 /**

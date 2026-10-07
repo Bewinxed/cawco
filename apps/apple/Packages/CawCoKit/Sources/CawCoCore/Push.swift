@@ -16,6 +16,8 @@ public enum PushRoute: Sendable, Equatable {
     case session(String)
     /// A project's page.
     case project(String)
+    /// A task's sheet over its project's page; `attempt` scrolls it to that attempt.
+    case task(projectId: String, taskId: String, attempt: String?)
     /// The board.
     case board
 }
@@ -59,7 +61,8 @@ public struct PushNote: Sendable {
     /// option and through the notification centre's delegate, and is routed once.
     public var key: String { "\(id)@\(delivered.timeIntervalSince1970)" }
 
-    /// By `cawco.kind`. A task or an attempt opens its project: the app has no task sheet yet.
+    /// By `cawco.kind`. A task opens its sheet over its project's page; an
+    /// attempt opens the same sheet at that attempt.
     public var route: PushRoute {
         switch kind {
         case "ask":
@@ -67,8 +70,9 @@ public struct PushNote: Sendable {
             if let instanceId, !instanceId.isEmpty { return .session(instanceId) }
             return .board
         case "task", "attempt":
-            if let projectId = fields["projectId"], !projectId.isEmpty { return .project(projectId) }
-            return .board
+            guard let projectId = fields["projectId"], !projectId.isEmpty else { return .board }
+            guard let taskId = fields["taskId"], !taskId.isEmpty else { return .project(projectId) }
+            return .task(projectId: projectId, taskId: taskId, attempt: kind == "attempt" ? fields["workItemId"] : nil)
         default:
             return .board
         }
@@ -146,6 +150,7 @@ public final class PushRegistry {
     func connected(to hub: URL) {
         Task {
             await readAuthorization()
+            log.notice("hub answered; notifications \(self.authorization.rawValue, privacy: .public)")
             if authorization == .notDetermined {
                 do {
                     _ = try await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])
