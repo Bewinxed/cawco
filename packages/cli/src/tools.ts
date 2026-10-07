@@ -4,7 +4,8 @@
  * go through the hub's own list and call doors (`/api/delegation/tools`,
  * `/api/delegation/call/:instanceId`), which resolve the session and refuse
  * what its role does not have exactly as the MCP server does: one role check,
- * two ways in.
+ * two ways in. An admin write waits, as it does over MCP, until the person
+ * approves it (it then runs) or denies it (the refusal is printed).
  *
  * The session is `--session <id>`, else `CAWCO_INSTANCE_ID`; its credential,
  * when it has one, is `CAWCO_SESSION_CREDENTIAL`, sent as the MCP server's
@@ -82,6 +83,9 @@ export const callTool = async (
       method: "POST",
       headers: { "content-type": "application/json", ...headers() },
       body: JSON.stringify({ name, arguments: args }),
+      // An admin write waits for the person to approve it; Bun's fetch would
+      // otherwise drop a response silent for five minutes.
+      timeout: false,
     }
   );
   if (!response.ok) {

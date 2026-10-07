@@ -7,7 +7,6 @@
  * validation, fan-out and persistence the dashboard uses. The tools are
  * read/write over fleet config — not session-scoped, not delegation-scoped.
  */
-import { ADMIN_WRITE_TOOL, ASKS_THE_PERSON } from "@cawco/core";
 import { z } from "zod";
 import { hubHttpUrl } from "./delegation-actions";
 
@@ -85,17 +84,18 @@ const marketplaceAction = async (
   return await api("PUT", path, { source });
 };
 
-/** Whether a tool is an admin write: the person approves each call before it runs (§5.3). */
+const ADMIN_WRITE_TOOL = /^admin_[a-z_]+_write$/;
+
+/** Whether a tool is an admin write: the hub asks the person before each call runs (admin-asks.ts). */
 export const isAdminWrite = (name: string): boolean =>
   ADMIN_WRITE_TOOL.test(name);
 
 /**
  * One group of fleet settings as two tools, named group first (§5.3):
  * `admin_<group>_read`, which takes only its read actions, and
- * `admin_<group>_write`, which takes the rest with the fields they need. The
- * write is marked as needing the person (`anthropic/requiresUserInteraction`),
- * so Claude Code asks before every call, in any permission mode; one handler
- * serves both, through the hub's own REST routes.
+ * `admin_<group>_write`, which takes the rest with the fields they need. One
+ * handler serves both, through the hub's own REST routes; a write runs only
+ * once the person approves it (admin-asks.ts).
  */
 function admin<T extends z.ZodRawShape>(
   group: string,
@@ -118,12 +118,12 @@ function admin<T extends z.ZodRawShape>(
   );
   const write = tool(
     `admin_${group}_write`,
-    `Change ${about} \`action\`: ${writes.map((action) => `'${action}'`).join(", ")}.${writeNote} The person approves each call before it runs; read with admin_${group}_read first.`,
+    `Change ${about} \`action\`: ${writes.map((action) => `'${action}'`).join(", ")}.${writeNote} The call waits while the person approves it, then runs once with these arguments; a refusal comes back with their reason. Read with admin_${group}_read first.`,
     { action: z.enum(writes), ...input },
     (args) =>
       handler(args as { action: string } & Partial<z.infer<z.ZodObject<T>>>)
   );
-  return [read, { ...write, _meta: { [ASKS_THE_PERSON]: true } }];
+  return [read, write];
 }
 
 /** The admin tools, separated from the handoff tools so the MCP server composes them. */

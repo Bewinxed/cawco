@@ -75,6 +75,7 @@ export const measureRoles = (): RoleSize[] => {
     // Only the definitions are read: nothing is called.
     tasks: {} as Tasks,
     projectFromSession: () => Promise.reject(new Error("measuring")),
+    askPerson: () => Promise.reject(new Error("measuring")),
     threadTools: (actor) =>
       createCaw({
         db: {} as never,

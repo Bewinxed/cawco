@@ -9,7 +9,7 @@
  * a workflow step its step tools).
  *
  * - **worker**: a session you started. Everything, fleet settings included
- *   (an `admin_*_write` asks you first, admin-tools.ts).
+ *   (an `admin_*_write` waits for you to approve it, admin-asks.ts).
  * - **delegate**: a delegated session or work item: the session tools, reads
  *   of its project's tasks and its own task's to-dos; changes to tasks and
  *   fleet settings go to its parent through handoff.

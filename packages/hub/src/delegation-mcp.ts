@@ -35,35 +35,10 @@ const LONG_CALLS: Record<string, string> = {
   start_session: "Waiting for the machine to start the session",
 };
 
+/** What an admin write's progress heartbeat says while the person decides. */
+const ASKING = "Waiting for the person to approve this fleet-settings change";
+
 declare const __CAWCO_RELEASE__: boolean | undefined;
-
-/**
- * Which way a call came in: the MCP server, where the harness has already
- * asked the person about an admin write, or the REST door (`cawco tool`, a
- * bridge), where nothing has.
- */
-export type CallDoor = "mcp" | "rest";
-
-/**
- * Why an admin write cannot run from here, or undefined when it can. Only
- * Claude Code asks the person before an MCP tool marked as needing them
- * (admin-tools.ts `admin`), in every permission mode; OpenCode's and pi's
- * permissions have no such ask, and the REST door none at all, so a write
- * from them does not run (PRODUCT.md: no fallback for a refused capability).
- */
-const adminWriteProblem = (
-  actor: InstanceRow,
-  name: string,
-  door: CallDoor
-): string | undefined => {
-  if (door === "rest") {
-    return `${name} changes fleet settings, which the person approves first; that ask comes from Claude Code's own prompt, so it runs only through a Claude Code session's cawco tools. Change it from the dashboard, or from a Claude Code session.`;
-  }
-  if (actor.harness !== "claude") {
-    return `${name} changes fleet settings, which the person approves first, and ${actor.harness ?? "this harness"} cannot ask before an MCP tool runs. Change it from the dashboard, or from a Claude Code session.`;
-  }
-  return undefined;
-};
 
 /** A tool as `tools/list` answers it. */
 const listed = ({
@@ -80,9 +55,6 @@ const listed = ({
   description,
   inputSchema: inputSchema as { type: "object" },
   ...("annotations" in entry ? { annotations: entry.annotations } : {}),
-  ...("_meta" in entry
-    ? { _meta: entry._meta as Record<string, unknown> }
-    : {}),
 });
 
 export function createDelegationMcp(options: {
@@ -115,6 +87,15 @@ export function createDelegationMcp(options: {
   projectFromSession?: (actor: InstanceRow) => Promise<AcceptResult>;
   /** Caw's thread tools, for a project's lead (caw.ts). */
   threadTools?: (actor: InstanceRow | undefined) => ThreadTool[];
+  /**
+   * Parks an admin write as the person's ask and waits: resolves when they
+   * approve it, rejects with the refusal when they deny it (admin-asks.ts).
+   */
+  askPerson: (
+    actor: InstanceRow,
+    name: string,
+    input: Record<string, unknown>
+  ) => Promise<void>;
 }) {
   let tools = options.tools ?? handoffTools;
   let admin = adminTools();
@@ -266,22 +247,22 @@ export function createDelegationMcp(options: {
     return candidates[0];
   };
 
-  /** An `admin_*` call, its role already checked; a write only where the person was asked. */
+  /**
+   * An `admin_*` call, its role already checked. A write, from any door,
+   * waits for the person to approve it (admin-asks.ts) and then runs once,
+   * with the arguments they were shown; a refusal is the caller's error.
+   */
   const administer = async (
     actor: InstanceRow,
     name: string,
-    input: Record<string, unknown>,
-    door: CallDoor
+    input: Record<string, unknown>
   ): Promise<CallToolResult> => {
-    const unasked = isAdminWrite(name)
-      ? adminWriteProblem(actor, name, door)
-      : undefined;
-    if (unasked) {
-      throw new Error(unasked);
-    }
     const entry = admin.find((tool) => tool.name === name);
     if (!entry) {
       throw new Error(`Unknown tool ${name}`);
+    }
+    if (isAdminWrite(name)) {
+      await options.askPerson(actor, name, input);
     }
     return (await entry.handler(input)) as CallToolResult;
   };
@@ -385,17 +366,12 @@ export function createDelegationMcp(options: {
 
   const THREADS: ReadonlySet<string> = new Set(THREAD_TOOLS);
 
-  /**
-   * Every call, MCP or REST, from any machine: held for a hub restart while
-   * it runs, refused behind its fence. `door` says which way it came in; the
-   * REST door (`cawco tool`, a bridge) is the default.
-   */
+  /** Every call, MCP or REST, from any machine: held for a hub restart while it runs, refused behind its fence. */
   const call = async (
     binding: string | null,
     name: string,
     args: Record<string, unknown>,
-    authorization?: string,
-    door: CallDoor = "rest"
+    authorization?: string
   ): Promise<CallToolResult> => {
     const admitted = admitToolCall(name, binding ?? "unbound");
     if ("refused" in admitted) {
@@ -405,7 +381,7 @@ export function createDelegationMcp(options: {
       };
     }
     try {
-      return await answer(binding, name, args, door, authorization);
+      return await answer(binding, name, args, authorization);
     } finally {
       admitted.release();
     }
@@ -415,11 +391,10 @@ export function createDelegationMcp(options: {
   const route = async (
     actor: InstanceRow,
     name: string,
-    input: Record<string, unknown>,
-    door: CallDoor
+    input: Record<string, unknown>
   ): Promise<CallToolResult | undefined> => {
     if (adminNames.has(name)) {
-      return await administer(actor, name, input, door);
+      return await administer(actor, name, input);
     }
     if (name === PROJECT_FROM_SESSION && options.projectFromSession) {
       return await projectCall(actor, name, input);
@@ -437,7 +412,6 @@ export function createDelegationMcp(options: {
     binding: string | null,
     name: string,
     args: Record<string, unknown>,
-    door: CallDoor,
     authorization?: string
   ): Promise<CallToolResult> => {
     try {
@@ -460,7 +434,7 @@ export function createDelegationMcp(options: {
         throw new Error(refusal(role, name));
       }
       return (
-        (await route(actor, name, input, door)) ??
+        (await route(actor, name, input)) ??
         (await sessionCall(actor, name, input, authorization))
       );
     } catch (error) {
@@ -555,7 +529,10 @@ export function createDelegationMcp(options: {
     server.setRequestHandler(CallToolRequestSchema, async (message, extra) => {
       const token = message.params._meta?.progressToken;
       let elapsed = 0;
-      const doing = LONG_CALLS[message.params.name];
+      // An admin write waits on the person as long as they take.
+      const doing =
+        LONG_CALLS[message.params.name] ??
+        (isAdminWrite(message.params.name) ? ASKING : undefined);
       const heartbeat =
         doing && token !== undefined
           ? setInterval(() => {
@@ -580,8 +557,7 @@ export function createDelegationMcp(options: {
           message.params.arguments ?? {},
           typeof extra.requestInfo?.headers.authorization === "string"
             ? extra.requestInfo.headers.authorization
-            : undefined,
-          "mcp"
+            : undefined
         );
       } finally {
         clearInterval(heartbeat);

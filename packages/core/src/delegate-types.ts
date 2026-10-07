@@ -99,22 +99,6 @@ export const SESSION_ROLES = [
 export type SessionRole = (typeof SESSION_ROLES)[number];
 
 /**
- * A `cawco` admin write (`admin_hooks_write`, …): fleet settings a session
- * changes only once the person approves the call (§5.3). Matched on the bare
- * tool name, or Claude's `mcp__cawco__` form of it.
- */
-export const ADMIN_WRITE_TOOL = /^(?:mcp__cawco__)?admin_[a-z_]+_write$/;
-
-/**
- * The MCP `_meta` key that makes Claude Code ask before every call of a tool,
- * in any permission mode: "MCP tools whose server sets
- * `_meta["anthropic/requiresUserInteraction"]` always fall through to the
- * callback" (https://docs.claude.com/en/docs/agent-sdk/permissions; Claude
- * Code v2.1.199 or later).
- */
-export const ASKS_THE_PERSON = "anthropic/requiresUserInteraction";
-
-/**
  * What a project's Caw may never call, in Claude's names, per harness: no
  * edit and no shell tools, so the lead coordinates through the board and
  * delegates. pi cannot deny tools ({@link denyToolsProblem}), so Caw does not

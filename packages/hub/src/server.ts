@@ -149,6 +149,8 @@ import {
 } from "@cawco/core/binary-updates";
 import { Elysia, t, ValidationError } from "elysia";
 import { websocket } from "elysia/websocket";
+import { createAdminAsks } from "./admin-asks";
+import { isAdminWrite } from "./admin-tools";
 import { createBinaryUpdates } from "./binary-updates";
 import { cawRoutes, createCaw, withCawDenials } from "./caw";
 import { DB_PATH, HUB_VERSION, SPAWN_START_TIMEOUT_MS } from "./config";
@@ -1640,6 +1642,10 @@ export const createServer = (
     }
     telegram?.onSettled(parked.requestId);
     push.onSettled(parked.requestId);
+    // An admin write whose ask left unanswered (its session ended) is refused.
+    if (outcome === "cancelled") {
+      adminAsks.withdrawn(parked.requestId);
+    }
     registry.broadcast({
       verb: "frames",
       machineId: parked.machineId,
@@ -6823,7 +6829,12 @@ export const createServer = (
     const receipt: { outcome?: "answered" | "cancelled" } = {};
     answeringPermissions.set(requestId, receipt);
     try {
-      if (answerWorkflow(pending, requestId, result)) {
+      // A hub-raised ask is settled here, never delivered to a machine: a
+      // workflow's question, or an admin write waiting on the person.
+      if (
+        answerWorkflow(pending, requestId, result) ||
+        adminAsks.answer(requestId, result)
+      ) {
         if (receipt.outcome !== "answered") {
           throw new Error("That request is no longer pending.");
         }
@@ -7471,6 +7482,35 @@ export const createServer = (
       workItems.cancelled(row);
     }
   }
+  /**
+   * An ask the hub itself raises for the person — a workflow's question, an
+   * admin write — parked like a session's own: on the pending ledger, to every
+   * dashboard, and to Telegram and push the first time.
+   */
+  const parkForPerson = (envelope: Envelope): void => {
+    if (!envelope.requestId) {
+      throw new Error("An ask for the person has no request id.");
+    }
+    const existed = pending.get(envelope.requestId);
+    if (!pending.remember(envelope.requestId, envelope)) {
+      return;
+    }
+    registry.broadcast(envelope);
+    if (
+      !existed &&
+      (envelope.payload as { routedTo?: string }).routedTo !== "parent"
+    ) {
+      telegram?.onAsk(envelope);
+      push.onAsk(envelope);
+    }
+  };
+  // Admin writes from any door wait on the person (admin-asks.ts).
+  const adminAsks = createAdminAsks({
+    park: parkForPerson,
+    settle: (requestId) => {
+      pending.resolve(requestId);
+    },
+  });
   const workflowRuntime = createWorkflowRuntime({
     custodyPending: (machineId, instanceId) => {
       const custody = machineCustody.get(machineId);
@@ -7525,23 +7565,7 @@ export const createServer = (
         observe();
       }),
     command: runOnMachine,
-    park: (envelope) => {
-      if (!envelope.requestId) {
-        throw new Error("Workflow question has no request id.");
-      }
-      const existed = pending.get(envelope.requestId);
-      if (!pending.remember(envelope.requestId, envelope)) {
-        return;
-      }
-      registry.broadcast(envelope);
-      if (
-        !existed &&
-        (envelope.payload as { routedTo?: string }).routedTo !== "parent"
-      ) {
-        telegram?.onAsk(envelope);
-        push.onAsk(envelope);
-      }
-    },
+    park: parkForPerson,
     settle: (id) => {
       pending.resolve(id);
     },
@@ -7696,6 +7720,7 @@ export const createServer = (
     projectFromSession: (actor) =>
       projectOffers.accept(actor.id, sessionActor(actor)),
     threadTools: (actor) => caw.tools(actor),
+    askPerson: (actor, name, input) => adminAsks.ask(actor, name, input),
     instances: () => withKeepAlive(db.listInstances()),
     instanceById: (id) => db.getInstancesByIds([id])[0],
     ledBy: (id, leadId) => workItems.ledBy(id, leadId),
@@ -7801,6 +7826,12 @@ export const createServer = (
         const answer = peekAnswer(control);
         if (!answer) {
           throw new Error("A permission answer names no request.");
+        }
+        if (adminAsks.has(answer.requestId)) {
+          throw new WorkItemRefusal(
+            403,
+            "That ask is a fleet-settings change waiting on the person; only they answer it."
+          );
         }
         await answerPermission(pending, row.id, answer.requestId, result);
         return;
@@ -8266,7 +8297,9 @@ export const createServer = (
             input.name === "generate_image" ||
             input.name === "continue_session" ||
             input.name === "delegate" ||
-            input.name === "finish_item"
+            input.name === "finish_item" ||
+            // An admin write waits on the person as long as they take.
+            isAdminWrite(input.name)
           ) {
             server?.timeout(request, 0);
           }
