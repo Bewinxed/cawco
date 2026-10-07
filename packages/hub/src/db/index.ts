@@ -302,15 +302,18 @@ export interface DbShape {
     kind: PlaceKind;
   }) => { place: PlaceRow; added: boolean };
   /** Adds a message to a thread, which moves it to the top of its project's list. */
-  readonly addThreadMessage: (message: {
-    threadId: string;
-    author: ThreadMessageRow["author"];
-    body: string;
-  }) => { thread: ThreadRow; message: ThreadMessageRow };
+  readonly addThreadMessage: (
+    message: Pick<ThreadMessageRow, "threadId" | "author" | "body"> &
+      Partial<
+        Pick<ThreadMessageRow, "noteTitle" | "tasks" | "question" | "answer">
+      >
+  ) => { thread: ThreadRow; message: ThreadMessageRow };
   /** A machine's last-known tool status by id; empty for one that never reported. */
   readonly agentAddressContract: (machineId: string) => boolean;
   readonly agentHarnesses: (machineId: string) => HarnessReport[] | undefined;
   readonly agentTools: (machineId: string) => Record<string, ToolStatus>;
+  /** Every project's threads, newest first. */
+  readonly allThreads: () => ThreadRow[];
   /** Records the answer, filing the offer first when it was taken unprompted. */
   readonly answerProjectOffer: (
     instanceId: string,
@@ -355,12 +358,13 @@ export interface DbShape {
     /** Made with Caw: its Caw starts on. */
     caw?: boolean;
   }) => ProjectRow;
-  /** Files a thread with its first message. */
+  /** Files a thread with its first message: yours, or an event that had no thread to go to. */
   readonly createThread: (thread: {
     id: string;
     projectId: string;
     title: string;
-    body: string;
+    first: Pick<ThreadMessageRow, "author" | "body"> &
+      Partial<Pick<ThreadMessageRow, "noteTitle">>;
   }) => { thread: ThreadRow; message: ThreadMessageRow };
   /** Files a work item as the hub accepted it. */
   readonly createWorkItem: (item: typeof workItems.$inferInsert) => WorkItemRow;
@@ -619,6 +623,8 @@ export interface DbShape {
     | { named: true; row: PublicInstanceRow }
     | { named: false; row: PublicInstanceRow }
     | undefined;
+  /** A project's newest thread: the one with the newest message. */
+  readonly newestThread: (projectId: string) => ThreadRow | undefined;
   /** Records the window a claude turn reported for its model. */
   readonly noteAgentAddressContract: (
     machineId: string,
@@ -1162,6 +1168,11 @@ export interface DbShape {
   readonly thread: (id: string) => ThreadRow | undefined;
   /** A thread's messages, oldest first. */
   readonly threadMessages: (threadId: string) => ThreadMessageRow[];
+  /** The newest of a project's threads in which Caw named the task (`thread_reply` with `tasks`). */
+  readonly threadOfTask: (
+    projectId: string,
+    taskId: string
+  ) => ThreadRow | undefined;
   readonly touchAgent: (machineId: string) => void;
   /** Files or moves a canvas onto the session showing it; a hash given becomes its page's. */
   readonly touchCanvas: (canvas: {
@@ -3951,6 +3962,37 @@ const make = (path: string): DbShape => {
         return { ...row, last: last?.body ?? "" };
       });
     },
+    newestThread: (projectId) =>
+      db
+        .select()
+        .from(projectThreads)
+        .where(eq(projectThreads.projectId, projectId))
+        .orderBy(desc(projectThreads.updatedAt), desc(projectThreads.id))
+        .limit(1)
+        .get(),
+    allThreads: () =>
+      db
+        .select()
+        .from(projectThreads)
+        .orderBy(desc(projectThreads.updatedAt), desc(projectThreads.id))
+        .all(),
+    threadOfTask: (projectId, taskId) =>
+      db
+        .select({ thread: projectThreads })
+        .from(threadMessages)
+        .innerJoin(
+          projectThreads,
+          eq(projectThreads.id, threadMessages.threadId)
+        )
+        .where(
+          and(
+            eq(projectThreads.projectId, projectId),
+            sql`exists (select 1 from json_each(${threadMessages.tasks}) where value = ${taskId})`
+          )
+        )
+        .orderBy(desc(threadMessages.createdAt), desc(threadMessages.id))
+        .limit(1)
+        .get()?.thread,
     thread: (id) =>
       db.select().from(projectThreads).where(eq(projectThreads.id, id)).get(),
     threadMessages: (threadId) =>
@@ -3960,7 +4002,7 @@ const make = (path: string): DbShape => {
         .where(eq(threadMessages.threadId, threadId))
         .orderBy(asc(threadMessages.createdAt), asc(threadMessages.id))
         .all(),
-    createThread: ({ id, projectId, title, body }) =>
+    createThread: ({ id, projectId, title, first }) =>
       db.transaction((tx) => {
         const at = new Date();
         const thread = tx
@@ -3971,26 +4013,24 @@ const make = (path: string): DbShape => {
         const message = tx
           .insert(threadMessages)
           .values({
+            ...first,
             id: crypto.randomUUID(),
             threadId: id,
-            author: "you",
-            body,
             createdAt: at,
           })
           .returning()
           .get();
         return { thread, message };
       }),
-    addThreadMessage: ({ threadId, author, body }) =>
+    addThreadMessage: ({ threadId, ...said }) =>
       db.transaction((tx) => {
         const at = new Date();
         const message = tx
           .insert(threadMessages)
           .values({
+            ...said,
             id: crypto.randomUUID(),
             threadId,
-            author,
-            body,
             createdAt: at,
           })
           .returning()

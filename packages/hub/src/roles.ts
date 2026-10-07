@@ -14,6 +14,7 @@
  *   of its project's tasks and its own task's to-dos; changes to tasks and
  *   fleet settings go to its parent through handoff.
  * - **lead**: a project's Caw. Board tools only: tasks and to-dos, threads,
+ *   drafting views,
  *   delegating and steering the project's work, the person's phone. It has
  *   no edit or shell tools in its harness either (caw.ts).
  * - **overseer**: fleet-watch triage: read the fleet, stop or interrupt, tell
@@ -51,8 +52,8 @@ const TASK_WRITE = [
   "task_retry",
 ] as const;
 
-/** A project's conversations with its Caw: Caw's own. */
-export const THREAD_TOOLS = ["thread_read", "thread_reply"] as const;
+/** Caw's own: a project's conversations with it, and the views it drafts (caw.ts). */
+export const CAW_TOOLS = ["thread_read", "thread_reply", "view_draft"] as const;
 
 /** The session tools a delegate keeps from the worker's set. */
 const DELEGATE_SESSION = [
@@ -84,7 +85,7 @@ const DELEGATE_SESSION = [
 
 /**
  * Each role's tools, by name; the worker's is every tool there is but Caw's
- * threads ({@link allows}).
+ * own ({@link allows}).
  */
 const TOOLS: Record<Exclude<SessionRole, "worker">, ReadonlySet<string>> = {
   delegate: new Set([...CORE, ...DELEGATE_SESSION, ...TASK_READ]),
@@ -92,7 +93,7 @@ const TOOLS: Record<Exclude<SessionRole, "worker">, ReadonlySet<string>> = {
     ...CORE,
     ...TASK_READ,
     ...TASK_WRITE,
-    ...THREAD_TOOLS,
+    ...CAW_TOOLS,
     "delegate",
     "list_delegate_types",
     "list_sessions",
@@ -122,11 +123,11 @@ const TOOLS: Record<Exclude<SessionRole, "worker">, ReadonlySet<string>> = {
   ]),
 };
 
-const THREADS: ReadonlySet<string> = new Set(THREAD_TOOLS);
+const CAWS: ReadonlySet<string> = new Set(CAW_TOOLS);
 
 /** Whether a session in `role` may see and call the tool `name`. */
 export const allows = (role: SessionRole, name: string): boolean =>
-  role === "worker" ? !THREADS.has(name) : TOOLS[role].has(name);
+  role === "worker" ? !CAWS.has(name) : TOOLS[role].has(name);
 
 /** What a session hears when it calls a tool its role does not have. */
 export const refusal = (role: SessionRole, name: string): string => {

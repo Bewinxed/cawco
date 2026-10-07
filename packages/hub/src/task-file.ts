@@ -800,6 +800,22 @@ export class TaskDoc {
     return this.read().title ?? titleFromPath(this.path);
   }
 
+  /** The front matter fields a task file does not know, each as its one scalar; a field written as a list or block is left out. */
+  extraFields(): Record<string, string> {
+    const known = new Set<string>(TASK_FIELDS);
+    const fields: Record<string, string> = {};
+    for (const line of this.front ?? []) {
+      if (line.key === undefined || known.has(line.key) || line.under.length) {
+        continue;
+      }
+      const value = scalarOf(line);
+      if (value !== null && !value.startsWith("[") && !value.startsWith("{")) {
+        fields[line.key] = value;
+      }
+    }
+    return fields;
+  }
+
   toString(): string {
     const body = this.body.join("\n");
     if (!this.front) {

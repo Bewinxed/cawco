@@ -7,6 +7,6 @@
     "rootDir": "./src",
     "types": ["bun"]
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "src/a2ui-spec/**/*.json"],
   "exclude": ["node_modules", "dist"]
 }

@@ -13,7 +13,7 @@
  *   groups above shows, and the transcripts stored on the machines.
  */
 import type { NeutralSessionInfo, WorkflowRun } from "@cawco/core";
-import { archiveRefusal, machineLabel } from "@cawco/core";
+import { archiveRefusal, machineLabel, questionsOf } from "@cawco/core";
 import {
   type BlockedRequest,
   cawco,
@@ -35,7 +35,6 @@ import { signInWarning } from "../machine";
 import { heldOrder } from "../motion/held-order.svelte";
 import { permissionSummary } from "../permission-summary";
 import { projectsFor } from "../projects";
-import { questionsOf } from "../question";
 import { rail } from "../rail.svelte";
 import { hasParent, rooted, topsIn, tree } from "../tree";
 import { runHref } from "../workflow-runs";

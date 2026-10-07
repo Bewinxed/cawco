@@ -1,36 +1,5 @@
-import type { PermissionResult, UserAnswers, UserQuestion } from "@cawco/core";
-import {
-  ASK_USER_QUESTION,
-  answeredQuestionInput,
-  QUESTION_DISMISSED,
-} from "@cawco/core";
-
-const looksLikeQuestion = (value: unknown): value is UserQuestion =>
-  typeof value === "object" &&
-  value !== null &&
-  typeof (value as UserQuestion).question === "string" &&
-  Array.isArray((value as UserQuestion).options);
-
-/**
- * What a parked tool call is really asking the reader, when it is asking rather
- * than requesting permission — `null` for every other tool, and for an
- * {@link ASK_USER_QUESTION} whose input does not carry questions to render.
- */
-export function questionsOf(
-  toolName: string,
-  input: Record<string, unknown>
-): UserQuestion[] | null {
-  if (toolName !== ASK_USER_QUESTION) {
-    return null;
-  }
-  const { questions } = input as { questions?: unknown };
-  if (!Array.isArray(questions) || questions.length === 0) {
-    return null;
-  }
-  return questions.every(looksLikeQuestion)
-    ? (questions as UserQuestion[])
-    : null;
-}
+import type { PermissionResult, UserAnswers } from "@cawco/core";
+import { answeredQuestionInput, QUESTION_DISMISSED } from "@cawco/core";
 
 /**
  * The reader's choices, back the way the tool reads them: its own input with

@@ -8,6 +8,8 @@ import type {
   AvailableCommand,
   BuildInfo,
   CanvasChoices,
+  CawHarness,
+  CawView,
   ChoiceChange,
   ClaudeLimits,
   CommandKind,
@@ -29,6 +31,7 @@ import type {
   PermissionResult,
   PermissionUpdate,
   ProjectOfferSummary,
+  ProjectView,
   SendPayload,
   SendRecord,
   SessionEffort,
@@ -40,6 +43,10 @@ import type {
   StopPayload,
   SupervisorEvent,
   SupportedCommands,
+  ThreadMessage,
+  ThreadRead,
+  ThreadSaid,
+  ThreadSummary,
   ToolGlance,
   TranscriptBlock,
   TranscriptBranch,
@@ -51,6 +58,7 @@ import type {
   UsageLimitsReading,
   UsageLimitsResponse,
   UsageSpend,
+  ViewData,
   WorkflowRun,
   WorkItemSummary,
 } from "@cawco/core";
@@ -89,6 +97,7 @@ import {
 import { unpickedMode } from "./permission-modes";
 import { type PendingSelection, selectionExtras } from "./preview/selection";
 import type { PreviewAsk } from "./preview/source";
+import { send as askHub, json } from "./project-tasks";
 import { placedOn, projectsFor } from "./projects";
 import { type ReloadHold, reloadForProtocol } from "./protocol-reload";
 import { checkServedBuild } from "./served-build.svelte";
@@ -279,6 +288,8 @@ export interface PendingPermission {
   /** Set when the hub routed the ask to its parent rather than to the user. */
   routedTo?: "parent";
   suggestions?: PermissionUpdate[];
+  /** A project lead's question: the thread it was asked in, where its answer lands. */
+  threadId?: string;
   toolName: string;
   /**
    * The call the ask gates, as its message's `toolCallId`: while the ask is
@@ -632,6 +643,16 @@ const state = $state({
    */
   continuations: [] as ContinuationJob[],
   projects: [] as ProjectRow[],
+  /**
+   * Each project's threads with its Caw, newest first, by project id: read
+   * with the fleet, then kept by `thread.upsert` frames.
+   */
+  threads: {} as Record<string, ThreadSummary[]>,
+  /**
+   * The messages of each thread this tab has read, oldest first, by thread
+   * id: kept by `thread.message` frames from the read on.
+   */
+  threadMessages: {} as Record<string, ThreadMessage[]>,
   sessions: {} as Record<string, SessionState>,
   /**
    * Each instance's coarse now-state, pushed by the daemon ~1/sec (broadcast).
@@ -1814,6 +1835,8 @@ async function refresh(): Promise<boolean> {
   readSpend();
   // Off the board's wait: an offer is a quiet card, not part of the fleet.
   readProjectOffers();
+  // Every project's threads, for the rail; frames keep them from here.
+  readThreads();
   const [machines, rows, projects, pending, handoffs, usage, continuations] =
     await Promise.all([
       load<Machine[]>("/api/agents"),
@@ -2275,6 +2298,16 @@ function handleFrame(frame: FramePayload): void {
     return;
   }
 
+  if (frame.kind === "thread.upsert") {
+    adoptThread(frame.thread);
+    return;
+  }
+
+  if (frame.kind === "thread.message") {
+    adoptThreadMessage(frame.threadId, frame.message);
+    return;
+  }
+
   if (frame.kind === "project_offer") {
     if (frame.offer) {
       state.projectOffers[frame.instanceId] = frame.offer;
@@ -2414,6 +2447,7 @@ function handleFrame(frame: FramePayload): void {
         routedTo,
         toolUseId: frame.toolUseId,
         raisedAt: frame.raisedAt,
+        threadId: frame.threadId,
       });
       break;
     }
@@ -4509,6 +4543,144 @@ export async function answerProjectOffer(
   return accepted;
 }
 
+// --- a project's Caw, its threads and views ---------------------------------
+
+const projectPath = (projectId: string) =>
+  `/api/projects/${encodeURIComponent(projectId)}`;
+
+/** Newest message first: the order the hub lists threads in. */
+const byLastAt = (a: ThreadSummary, b: ThreadSummary): number =>
+  b.lastAt - a.lastAt || (a.id < b.id ? 1 : -1);
+
+/** A thread's row as the hub has it now: placed in its project's list, newest first. */
+function adoptThread(thread: ThreadSummary): void {
+  const list = state.threads[thread.projectId] ?? [];
+  const held = list.find((row) => row.id === thread.id);
+  if (held && equal(held, thread)) {
+    return;
+  }
+  state.threads[thread.projectId] = [
+    thread,
+    ...list.filter((row) => row.id !== thread.id),
+  ].sort(byLastAt);
+}
+
+/** A message added to a thread this tab has read; a thread not read yet is read whole when it opens. */
+function adoptThreadMessage(threadId: string, message: ThreadMessage): void {
+  const messages = state.threadMessages[threadId];
+  if (messages && !messages.some((held) => held.id === message.id)) {
+    messages.push(message);
+  }
+}
+
+/** Every project's threads (`GET /api/threads`): the whole truth on each connect. */
+async function readThreads(): Promise<void> {
+  const threads = await load<Record<string, ThreadSummary[]>>("/api/threads");
+  if (threads) {
+    state.threads = threads;
+  }
+}
+
+/** A project's Caw: on or off, its harness, its session, why it cannot start, its spend. */
+export const cawOf = (projectId: string): Promise<CawView> =>
+  askHub(`${projectPath(projectId)}/caw`);
+
+/** Turns a project's Caw on or off, or moves it to another harness. */
+export const configureCaw = (
+  projectId: string,
+  change: { harness?: CawHarness; on?: boolean }
+): Promise<CawView> =>
+  askHub(`${projectPath(projectId)}/caw`, json("PATCH", change));
+
+/** A project's threads as the fleet read and the frames keep them, newest first. */
+export const threadsOf = (projectId: string): ThreadSummary[] =>
+  state.threads[projectId] ?? [];
+
+/** Reads a thread whole; `thread.message` frames keep it from then on. */
+export async function readThread(
+  projectId: string,
+  threadId: string
+): Promise<ThreadRead> {
+  const read = await askHub<ThreadRead>(
+    `${projectPath(projectId)}/threads/${encodeURIComponent(threadId)}`
+  );
+  state.threadMessages[threadId] = read.messages;
+  adoptThread(read.thread);
+  return read;
+}
+
+/** Starts a thread with your first message; Caw is woken with it. */
+export async function startThread(
+  projectId: string,
+  body: string
+): Promise<ThreadSaid> {
+  const said = await askHub<ThreadSaid>(
+    `${projectPath(projectId)}/threads`,
+    json("POST", { body })
+  );
+  state.threadMessages[said.thread.id] ??= [];
+  adoptThreadMessage(said.thread.id, said.message);
+  adoptThread(said.thread);
+  return said;
+}
+
+/** Writes in a thread; Caw is woken with it. */
+export async function sayInThread(
+  projectId: string,
+  threadId: string,
+  body: string
+): Promise<ThreadSaid> {
+  const said = await askHub<ThreadSaid>(
+    `${projectPath(projectId)}/threads/${encodeURIComponent(threadId)}/messages`,
+    json("POST", { body })
+  );
+  adoptThreadMessage(threadId, said.message);
+  adoptThread(said.thread);
+  return said;
+}
+
+/** A project's views: kept ones, then Caw's drafts. */
+export const viewsOf = (projectId: string): Promise<ProjectView[]> =>
+  askHub(`${projectPath(projectId)}/views`);
+
+/** Keeps a draft view: it becomes `views/<name>.json`, one commit. */
+export const keepView = (
+  projectId: string,
+  name: string
+): Promise<ProjectView> =>
+  askHub(
+    `${projectPath(projectId)}/views/${encodeURIComponent(name)}/keep`,
+    json("POST", {})
+  );
+
+/** Discards a draft view. */
+export const discardView = (
+  projectId: string,
+  name: string
+): Promise<{ ok: true }> =>
+  askHub(`${projectPath(projectId)}/views/drafts/${encodeURIComponent(name)}`, {
+    method: "DELETE",
+  });
+
+/** "Ask Caw for a view": a new thread with your words, Caw woken to draft it. */
+export async function requestView(
+  projectId: string,
+  text: string
+): Promise<ThreadSaid> {
+  const said = await askHub<ThreadSaid>(
+    `${projectPath(projectId)}/view-requests`,
+    json("POST", { text })
+  );
+  state.threadMessages[said.thread.id] ??= [];
+  adoptThreadMessage(said.thread.id, said.message);
+  adoptThread(said.thread);
+  return said;
+}
+
+/** What a project's views bind to, computed by the hub now. */
+export const viewData = (projectId: string): Promise<ViewData> =>
+  askHub(`${projectPath(projectId)}/view-data`);
+
 /** Forgets the project; the sessions started from it stay, just unattached. */
 export async function deleteProject(id: string): Promise<void> {
   const response = await fetch(`/api/projects/${id}`, { method: "DELETE" });
@@ -5774,6 +5946,11 @@ export const cawco = {
     state.projects.filter((project) => placedOn(project, machineId)),
   project: (id: string): ProjectRow | null =>
     state.projects.find((project) => project.id === id) ?? null,
+  /** A project's threads with its Caw, newest first, live. */
+  threadsOf,
+  /** A thread's messages, oldest first, once {@link readThread} read it; null before. */
+  threadMessagesOf: (threadId: string): ThreadMessage[] | null =>
+    state.threadMessages[threadId] ?? null,
   /** Sessions a project owns: started from it, or running in its checkout.
    *  Failed ones stay listed here too — same board rule as the sidebar. A
    *  delegate is the project's when the session at the top of its chain of

@@ -215,7 +215,7 @@ async function said(response: Response): Promise<string> {
 }
 
 /** The hub's sentence, thrown as it is: it already says what to do. */
-async function send<T>(url: string, init: RequestInit = {}): Promise<T> {
+export async function send<T>(url: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(url, init);
   if (!response.ok) {
     throw new Error(await said(response));
@@ -223,7 +223,7 @@ async function send<T>(url: string, init: RequestInit = {}): Promise<T> {
   return (await response.json()) as T;
 }
 
-const json = (method: string, body: unknown): RequestInit => ({
+export const json = (method: string, body: unknown): RequestInit => ({
   method,
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify(body),

@@ -37,6 +37,7 @@ import type {
   NeutralUserMessage,
   OpenCodeGoLimits,
   PermissionMode,
+  PermissionRequestFrame,
   PermissionResult,
   PreviewSource,
   RegisterAckPayload,
@@ -120,6 +121,7 @@ import {
   PROVIDER_RETRY,
   parseAgentFrontMatter,
   QUESTION_DISMISSED,
+  questionsOf,
   READ_HOOK_SCRIPT,
   READ_MEMORY_FILE,
   READ_SKILL_FILES,
@@ -152,7 +154,7 @@ import { websocket } from "elysia/websocket";
 import { createAdminAsks } from "./admin-asks";
 import { isAdminWrite } from "./admin-tools";
 import { createBinaryUpdates } from "./binary-updates";
-import { cawRoutes, createCaw, withCawDenials } from "./caw";
+import { type Caw, cawRoutes, createCaw, withCawDenials } from "./caw";
 import { DB_PATH, HUB_VERSION, SPAWN_START_TIMEOUT_MS } from "./config";
 import {
   type ContinuationSource,
@@ -257,6 +259,7 @@ import {
 } from "./transcripts";
 import { unwatchedMode } from "./unwatched-mode";
 import { UsageCounter } from "./usage-count";
+import { createViews, viewRoutes } from "./views";
 import {
   createWorkItems,
   LEAF_DELEGATE_REFUSAL,
@@ -1633,9 +1636,16 @@ export const createServer = (
     db,
     task: (projectId, id) => tasks.get(projectId, id),
   });
+  // Each project's Caw (caw.ts), made further down once its services are; the
+  // settlement, answer and process-end paths above it reach it through this.
+  let lead: Caw | undefined;
   pending.onSettled((parked, outcome) => {
     if (!(parked.requestId && parked.instanceId)) {
       return;
+    }
+    const { threadId } = parked.payload as { threadId?: string };
+    if (threadId) {
+      lead?.asksChanged(threadId);
     }
     const answering = answeringPermissions.get(parked.requestId);
     if (answering) {
@@ -2026,6 +2036,8 @@ export const createServer = (
     // Nor is it doing anything any more: a pulse outliving its process is the
     // same stale-liveness lie in memory instead of in a column.
     pulses.delete(instanceId);
+    // A lead's turn ends with its process: its thread is no longer working.
+    lead?.sessionEnded(instanceId);
     touched.delete(instanceId);
     // A session that died before it ever said anything is never going to name
     // itself; nothing should still be waiting to hear its first words.
@@ -6920,6 +6932,8 @@ export const createServer = (
         throw new Error("That request is no longer pending.");
       }
       recordDelegateAnswer(parked.machineId, instanceId, requestId, result);
+      // A project lead's question: your answer lands in its thread.
+      lead?.answered(parked, result);
     } finally {
       answeringPermissions.delete(requestId);
     }
@@ -7708,17 +7722,28 @@ export const createServer = (
   });
   // Attempts at tasks: started by a session, a stage's `runs:` hook, or the
   // dispatcher itself for a project that dispatches (dispatch.ts).
+  // A project's views: drafts Caw writes, kept when you approve (views.ts).
+  const views = createViews({
+    projectName: (id) => db.project(id)?.name,
+    tasks,
+  });
   // Each project's Caw: its lead session, woken by events only (caw.ts).
   const caw = createCaw({
+    asks: () => pending.list(),
     db,
     online: (machineId) => Boolean(registry.agent(machineId)),
+    // Thread rows and messages reach every dashboard on the ledger, as sessions do.
+    publish: (payload) =>
+      registry.broadcast({ verb: "frames", machineId: "hub", payload }),
     spawn: (machineId, payload) => spawnSession(machineId, payload),
     send: (envelope) => {
       deliverSend(envelope);
     },
     end: (instanceId) => endSession(instanceId, "stop"),
     task: (projectId, id) => tasks.get(projectId, id),
+    views,
   });
+  lead = caw;
   const dispatcher = createDispatcher({
     db,
     tasks,
@@ -7772,7 +7797,7 @@ export const createServer = (
       dispatcher.retryAttempt(projectId, ref, parent),
     projectFromSession: (actor) =>
       projectOffers.accept(actor.id, sessionActor(actor)),
-    threadTools: (actor) => caw.tools(actor),
+    cawTools: (actor) => caw.tools(actor),
     askPerson: (actor, name, input) => adminAsks.ask(actor, name, input),
     instances: () => withKeepAlive(db.listInstances()),
     instanceById: (id) => db.getInstancesByIds([id])[0],
@@ -8105,6 +8130,7 @@ export const createServer = (
       .use(projectOfferRoutes(projectOffers, YOU_ACTOR))
       .use(dispatchRoutes(dispatcher))
       .use(cawRoutes(caw))
+      .use(viewRoutes(views))
       .use(
         joinRoutes({
           online: (machineId) => Boolean(registry.agent(machineId)),
@@ -12050,13 +12076,31 @@ export const createServer = (
                 // A replayed ask (the daemon re-announces unresolved asks after
                 // every register) refreshes the parked copy without a second
                 // Telegram message or a second routing decision.
-                const alreadyParked =
-                  pending.get(message.requestId) !== undefined;
+                const parkedBefore = pending.get(message.requestId);
+                const alreadyParked = parkedBefore !== undefined;
+                // A project lead's question goes to a thread: the one whose
+                // message woke this turn, else the project's newest. A replay
+                // keeps the thread it was first given.
+                const askPayload = message.payload as PermissionRequestFrame;
+                const asking =
+                  questionsOf(askPayload.toolName, askPayload.input) !== null;
+                let threadId = (
+                  parkedBefore?.payload as PermissionRequestFrame | undefined
+                )?.threadId;
+                if (!alreadyParked && asking) {
+                  threadId = caw.askThread(owner);
+                }
+                if (threadId) {
+                  askPayload.threadId = threadId;
+                }
                 if (!pending.remember(message.requestId, message)) {
                   break;
                 }
                 if (alreadyParked) {
                   break;
+                }
+                if (threadId) {
+                  caw.asksChanged(threadId);
                 }
                 // A delegate's ask routes to its parent; the user is only the
                 // fallback. The parent must be live, or asleep with a
@@ -12154,6 +12198,7 @@ export const createServer = (
                 if (pulse) {
                   pulses.set(message.instanceId, pulse);
                   workItems.turnState(message.instanceId, pulse.busy);
+                  caw.pulse(message.instanceId, pulse.busy);
                   // A pulse is only ever emitted by a session doing something,
                   // so it is the fleet's cheapest honest signal for the column
                   // the rails age rows from.
@@ -12679,7 +12724,7 @@ export const createServer = (
         // which sets the flag Bun compresses on.
         perMessageDeflate: true,
         open(ws) {
-          // A page names the wire it was built for (WIRE_PROTOCOL, 5). One
+          // A page names the wire it was built for (WIRE_PROTOCOL, 6). One
           // that names none was built before pages did: a browser sends
           // `Origin` on every socket it opens, and the clients that are not
           // pages (the Apple app, scripts) send none and read this wire.

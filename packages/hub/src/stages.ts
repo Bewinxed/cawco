@@ -45,16 +45,10 @@
  * stage: it is every task whose stage is of kind `you`, worked out on read.
  */
 
-/** The fixed kinds a stage belongs to (WORDS.md: kind). */
-export const KINDS = [
-  "todo",
-  "active",
-  "waiting",
-  "you",
-  "done",
-  "dropped",
-] as const;
-export type StageKind = (typeof KINDS)[number];
+import { STAGE_KINDS as KINDS, type StageKind } from "@cawco/core";
+
+/** The fixed kinds a stage belongs to (WORDS.md: kind), core's: a view binds to them too. */
+export type { StageKind } from "@cawco/core";
 
 /** Who moves a task: you, the project's lead, a session, an approved action, a routine. */
 export const MOVERS = ["you", "lead", "session", "action", "routine"] as const;

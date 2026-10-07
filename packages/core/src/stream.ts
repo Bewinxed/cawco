@@ -33,12 +33,16 @@
  *    alone, never a delta. Pages built for 3 and 4 name nothing, took the
  *    first change-only delta as `state.machines = undefined`, and from then
  *    on threw on every board frame before reaching the reload at its end.
+ * 6: `thread.upsert` and `thread.message` frames carry a project's threads
+ *    and name no session. A page built for 5 reads any frame it does not
+ *    know as a session's and files a blank session under no id, so it
+ *    reloads first. The app logs a frame it cannot decode and goes on.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 5;
+export const WIRE_PROTOCOL = 6;
 
 /**
  * What a session's stream carries: the changes each frame made to its

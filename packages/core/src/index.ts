@@ -2,8 +2,10 @@ import type { FleetSyncReport } from "./fleet";
 import type { HarnessReport } from "./harness";
 import type { ToolStatus } from "./tools";
 
-// "Continue in new session": the size rules the hub and the dashboard share.
+// A project's views: CawCo's A2UI catalog, a view's file, and the data it binds to.
 // biome-ignore lint/performance/noBarrelFile: this is the package's public API surface — packages/core's consumers (hub, cli, dashboard) import from "@cawco/core" as one module, not per-file.
+export * from "./a2ui-catalog";
+// "Continue in new session": the size rules the hub and the dashboard share.
 export * from "./archive";
 export * from "./continuation";
 // Delegate types: named presets the `delegate` tool's `type` param resolves,
@@ -43,6 +45,8 @@ export * from "./ring";
 export * from "./rules";
 // The Ledger Protocol: canonical session streams + acknowledged commands.
 export * from "./stream";
+// A project's threads with its Caw: rows, messages and their frames.
+export * from "./threads";
 // The workflow-tool catalog and its status/policy shapes (NEW.md §10).
 export * from "./tools";
 // Transcripts: the hub folds each session's frames into blocks once
@@ -875,6 +879,8 @@ export type FramePayload =
   | import("./frames").PulseFrame
   | import("./frames").WorkItemFrame
   | import("./frames").ProjectOfferFrame
+  | import("./frames").ThreadUpsertFrame
+  | import("./frames").ThreadMessageFrame
   | import("./frames").DelegateEventFrame
   | import("./frames").SupervisorEventFrame
   | import("./frames").SupervisorStatusFrame

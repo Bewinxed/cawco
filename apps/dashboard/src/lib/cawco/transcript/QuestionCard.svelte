@@ -4,6 +4,7 @@
     UserQuestion,
     UserQuestionResult,
   } from "@cawco/core";
+  import { questionsOf } from "@cawco/core";
   import { untrack } from "svelte";
   import {
     CURVE,
@@ -15,7 +16,6 @@
   import { fold } from "#lib/cawco/motion/fold.svelte.js";
   import { depart, land } from "#lib/cawco/motion/share.svelte.js";
   import { IconAsk, IconCheck, IconClose } from "#lib/icons.js";
-  import { questionsOf } from "../question";
   /**
    * An answered (or dismissed) `AskUserQuestion` as it settled in the transcript
    * history — the same `.hitl` anatomy as the live prompt, but read-only: the

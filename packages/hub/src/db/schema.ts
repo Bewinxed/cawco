@@ -26,6 +26,9 @@ import type {
   SessionEffort,
   SessionTooling,
   SkillFile,
+  ThreadAnswer,
+  ThreadMessage,
+  ThreadQuestion,
   ToolStatus,
   WorkflowEffectKind,
   WorkflowFailure,
@@ -1696,7 +1699,10 @@ export const projectThreads = sqliteTable(
   (table) => [index("project_threads_project").on(table.projectId)]
 );
 
-/** One message in a thread: yours from the dashboard, or Caw's through `thread_reply`. */
+/**
+ * One message in a thread: yours from the dashboard (or your answer to Caw's
+ * question), Caw's through `thread_reply`, or an event that woke Caw.
+ */
 export const threadMessages = sqliteTable(
   "thread_messages",
   {
@@ -1704,8 +1710,16 @@ export const threadMessages = sqliteTable(
     threadId: text("thread_id")
       .notNull()
       .references(() => projectThreads.id, { onDelete: "cascade" }),
-    author: text("author").$type<"you" | "caw">().notNull(),
+    author: text("author").$type<ThreadMessage["author"]>().notNull(),
+    /** Empty for an event whose title says it all. */
     body: text("body").notNull(),
+    /** An event's one line. */
+    noteTitle: text("note_title"),
+    /** The tasks Caw's message is about (`tsk-12`). */
+    tasks: text("tasks", { mode: "json" }).$type<string[]>(),
+    /** Your answer's question and answer, from the lead's AskUserQuestion. */
+    question: text("question", { mode: "json" }).$type<ThreadQuestion>(),
+    answer: text("answer", { mode: "json" }).$type<ThreadAnswer>(),
     createdAt: timestamp("created_at").notNull(),
   },
   (table) => [index("thread_messages_thread").on(table.threadId)]

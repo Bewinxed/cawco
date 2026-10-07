@@ -19,6 +19,7 @@ import type {
   Verb,
   WorkItemSummary,
 } from "./index";
+import type { ThreadMessage, ThreadSummary } from "./threads";
 import type { UsageLimitsReading, UsageSpend } from "./usage";
 
 export interface FleetMcpFrame {
@@ -107,6 +108,12 @@ export interface PermissionRequestFrame {
   /** `tool` for a permission, `question` for an AskUserQuestion-shaped prompt. */
   requestKind?: "tool" | "question";
   suggestions?: PermissionUpdate[];
+  /**
+   * A project lead's question: the thread it was asked in (the one whose
+   * message woke that turn, else the project's newest). Its answer lands in
+   * that thread as your message.
+   */
+  threadId?: string;
   toolName: string;
   /** The tool call the ask gates, as its transcript message names it. */
   toolUseId?: string;
@@ -233,6 +240,21 @@ export interface ProjectOfferFrame {
   /** Hub-originated: the session's standing offer, or null once it was answered. */
   kind: "project_offer";
   offer: ProjectOfferSummary | null;
+}
+
+export interface ThreadUpsertFrame {
+  instanceId?: undefined;
+  /** Hub-originated: a thread was started, or its last message or status changed. */
+  kind: "thread.upsert";
+  thread: ThreadSummary;
+}
+
+export interface ThreadMessageFrame {
+  instanceId?: undefined;
+  /** Hub-originated: a message was added to a thread. */
+  kind: "thread.message";
+  message: ThreadMessage;
+  threadId: string;
 }
 
 export interface DelegateEventFrame {

@@ -11,7 +11,7 @@
 </script>
 
 <script lang="ts">
-  import { getToolGlance, machineLabel } from "@cawco/core";
+  import { getToolGlance, machineLabel, questionsOf } from "@cawco/core";
   /**
    * The middle step of the board's loop: glance at the fleet, peek at one
    * session, dive into it. A peek answers "what is this one actually doing"
@@ -69,7 +69,6 @@
   import OsMark from "./OsMark.svelte";
   import { permissionSummary } from "./permission-summary";
   import { plainMarkdown, plainStreaming } from "./plain-markdown";
-  import { questionsOf } from "./question";
   import SessionMark, { sessionStatus } from "./SessionMark.svelte";
   import TaskPanel from "./TaskPanel.svelte";
   import { refreshTasks, taskProgress, tasksOf } from "./tasks.svelte";

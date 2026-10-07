@@ -4388,6 +4388,23 @@
         }
       }
     },
+    "/api/threads": {
+      "get": {
+        "operationId": "getApiThreads",
+        "responses": {
+          "200": {
+            "description": "getApiThreads 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiThreads200"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects/{id}/threads": {
       "get": {
         "parameters": [
@@ -4500,7 +4517,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/postApiProjectsByIdThreads200"
+                  "$ref": "#/components/schemas/ThreadSaid"
                 }
               }
             }
@@ -4595,7 +4612,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/getApiProjectsByIdThreadsByThreadId200"
+                  "$ref": "#/components/schemas/ThreadRead"
                 }
               }
             }
@@ -4698,7 +4715,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/postApiProjectsByIdThreadsByThreadIdMessages200"
+                  "$ref": "#/components/schemas/ThreadSaid"
                 }
               }
             }
@@ -4755,6 +4772,597 @@
           },
           "502": {
             "description": "postApiProjectsByIdThreadsByThreadIdMessages 502",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/view-requests": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "text"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiProjectsByIdViewRequests",
+        "responses": {
+          "200": {
+            "description": "postApiProjectsByIdViewRequests 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadSaid"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiProjectsByIdViewRequests 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "postApiProjectsByIdViewRequests 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiProjectsByIdViewRequests 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiProjectsByIdViewRequests 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiProjectsByIdViewRequests 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "postApiProjectsByIdViewRequests 502",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/views": {
+      "get": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiProjectsByIdViews",
+        "responses": {
+          "200": {
+            "description": "getApiProjectsByIdViews 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiProjectsByIdViews200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "getApiProjectsByIdViews 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "getApiProjectsByIdViews 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "getApiProjectsByIdViews 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "getApiProjectsByIdViews 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "getApiProjectsByIdViews 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "getApiProjectsByIdViews 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiProjectsByIdViews 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "getApiProjectsByIdViews 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "getApiProjectsByIdViews 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/views/{name}/keep": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^[a-z0-9][a-z0-9-]{0,62}$",
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "postApiProjectsByIdViewsByNameKeep",
+        "responses": {
+          "200": {
+            "description": "postApiProjectsByIdViewsByNameKeep 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiProjectsByIdViewsByNameKeep 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "postApiProjectsByIdViewsByNameKeep 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiProjectsByIdViewsByNameKeep 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiProjectsByIdViewsByNameKeep 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "postApiProjectsByIdViewsByNameKeep 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "postApiProjectsByIdViewsByNameKeep 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiProjectsByIdViewsByNameKeep 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "postApiProjectsByIdViewsByNameKeep 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "postApiProjectsByIdViewsByNameKeep 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/views/drafts/{name}": {
+      "delete": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^[a-z0-9][a-z0-9-]{0,62}$",
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "deleteApiProjectsByIdViewsDraftsByName",
+        "responses": {
+          "200": {
+            "description": "deleteApiProjectsByIdViewsDraftsByName 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/deleteApiProjectsByIdViewsDraftsByName200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "deleteApiProjectsByIdViewsDraftsByName 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "deleteApiProjectsByIdViewsDraftsByName 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "deleteApiProjectsByIdViewsDraftsByName 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "deleteApiProjectsByIdViewsDraftsByName 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "deleteApiProjectsByIdViewsDraftsByName 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "deleteApiProjectsByIdViewsDraftsByName 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "deleteApiProjectsByIdViewsDraftsByName 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "deleteApiProjectsByIdViewsDraftsByName 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "deleteApiProjectsByIdViewsDraftsByName 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/view-data": {
+      "get": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiProjectsByIdViewData",
+        "responses": {
+          "200": {
+            "description": "getApiProjectsByIdViewData 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ViewData"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "getApiProjectsByIdViewData 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "getApiProjectsByIdViewData 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "getApiProjectsByIdViewData 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "getApiProjectsByIdViewData 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "getApiProjectsByIdViewData 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "getApiProjectsByIdViewData 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiProjectsByIdViewData 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "getApiProjectsByIdViewData 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "getApiProjectsByIdViewData 503",
             "content": {
               "text/plain": {
                 "schema": {
@@ -11226,230 +11834,33 @@
           "ok"
         ]
       },
+      "getApiThreads200": {
+        "type": "object"
+      },
       "getApiProjectsByIdThreads200": {
-        "type": "object",
-        "properties": {
-          "threads": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "createdAt": {
-                  "type": "number"
-                },
-                "updatedAt": {
-                  "type": "number"
-                },
-                "last": {
-                  "type": "string"
-                },
-                "id": {
-                  "type": "string"
-                },
-                "title": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "createdAt",
-                "id",
-                "title",
-                "updatedAt"
-              ]
-            }
-          }
-        },
-        "required": [
-          "threads"
-        ]
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/ThreadSummary"
+        }
       },
-      "postApiProjectsByIdThreads200": {
-        "type": "object",
-        "properties": {
-          "thread": {
-            "type": "object",
-            "properties": {
-              "createdAt": {
-                "type": "number"
-              },
-              "updatedAt": {
-                "type": "number"
-              },
-              "last": {
-                "type": "string"
-              },
-              "id": {
-                "type": "string"
-              },
-              "title": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "createdAt",
-              "id",
-              "title",
-              "updatedAt"
-            ]
-          },
-          "message": {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string"
-              },
-              "author": {
-                "enum": [
-                  "caw",
-                  "you"
-                ],
-                "type": "string"
-              },
-              "body": {
-                "type": "string"
-              },
-              "createdAt": {
-                "type": "number"
-              }
-            },
-            "required": [
-              "author",
-              "body",
-              "createdAt",
-              "id"
-            ]
-          }
-        },
-        "required": [
-          "message",
-          "thread"
-        ]
+      "getApiProjectsByIdViews200": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/ProjectView"
+        }
       },
-      "getApiProjectsByIdThreadsByThreadId200": {
+      "deleteApiProjectsByIdViewsDraftsByName200": {
         "type": "object",
         "properties": {
-          "thread": {
-            "type": "object",
-            "properties": {
-              "createdAt": {
-                "type": "number"
-              },
-              "updatedAt": {
-                "type": "number"
-              },
-              "last": {
-                "type": "string"
-              },
-              "id": {
-                "type": "string"
-              },
-              "title": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "createdAt",
-              "id",
-              "title",
-              "updatedAt"
-            ]
-          },
-          "messages": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "id": {
-                  "type": "string"
-                },
-                "author": {
-                  "enum": [
-                    "caw",
-                    "you"
-                  ],
-                  "type": "string"
-                },
-                "body": {
-                  "type": "string"
-                },
-                "createdAt": {
-                  "type": "number"
-                }
-              },
-              "required": [
-                "author",
-                "body",
-                "createdAt",
-                "id"
-              ]
-            }
-          }
-        },
-        "required": [
-          "messages",
-          "thread"
-        ]
-      },
-      "postApiProjectsByIdThreadsByThreadIdMessages200": {
-        "type": "object",
-        "properties": {
-          "thread": {
-            "type": "object",
-            "properties": {
-              "createdAt": {
-                "type": "number"
-              },
-              "updatedAt": {
-                "type": "number"
-              },
-              "last": {
-                "type": "string"
-              },
-              "id": {
-                "type": "string"
-              },
-              "title": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "createdAt",
-              "id",
-              "title",
-              "updatedAt"
-            ]
-          },
-          "message": {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string"
-              },
-              "author": {
-                "enum": [
-                  "caw",
-                  "you"
-                ],
-                "type": "string"
-              },
-              "body": {
-                "type": "string"
-              },
-              "createdAt": {
-                "type": "number"
-              }
-            },
-            "required": [
-              "author",
-              "body",
-              "createdAt",
-              "id"
+          "ok": {
+            "type": "boolean",
+            "enum": [
+              true
             ]
           }
         },
         "required": [
-          "message",
-          "thread"
+          "ok"
         ]
       },
       "getApiBinaryUpdatesMachines200": {
@@ -15345,6 +15756,12 @@
             "$ref": "#/components/schemas/ProjectOfferFrame"
           },
           {
+            "$ref": "#/components/schemas/ThreadUpsertFrame"
+          },
+          {
+            "$ref": "#/components/schemas/ThreadMessageFrame"
+          },
+          {
             "$ref": "#/components/schemas/DelegateEventFrame"
           },
           {
@@ -15382,6 +15799,8 @@
             "pulse": "#/components/schemas/PulseFrame",
             "work_item": "#/components/schemas/WorkItemFrame",
             "project_offer": "#/components/schemas/ProjectOfferFrame",
+            "thread.upsert": "#/components/schemas/ThreadUpsertFrame",
+            "thread.message": "#/components/schemas/ThreadMessageFrame",
             "delegate_event": "#/components/schemas/DelegateEventFrame",
             "supervisor_event": "#/components/schemas/SupervisorEventFrame",
             "supervisor_status": "#/components/schemas/SupervisorStatusFrame",
@@ -17695,7 +18114,7 @@
         ]
       },
       "CawView": {
-        "description": "A project's Caw, as its routes answer it.",
+        "description": "A project's Caw, as `GET`/`PATCH /api/projects/:id/caw` answer it.",
         "type": "object",
         "properties": {
           "harness": {
@@ -17738,6 +18157,1504 @@
           "opencode"
         ],
         "type": "string"
+      },
+      "ThreadSummary": {
+        "description": "A thread as the project's list and the `thread.upsert` frame carry it.",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "lastAt": {
+            "description": "When its newest message was added, ms epoch.",
+            "type": "number"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ThreadStatus"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "lastAt",
+          "projectId",
+          "status",
+          "title"
+        ]
+      },
+      "ThreadStatus": {
+        "description": "Where a thread stands, derived on every read and never stored: `working`\nwhile the lead session is busy on a turn that thread woke, `needs-you`\nwhile a question the lead asked in it is parked, else `ready`.",
+        "enum": [
+          "needs-you",
+          "ready",
+          "working"
+        ],
+        "type": "string"
+      },
+      "ThreadSaid": {
+        "description": "Your message as the hub took it: the thread (new or moved) and the message.",
+        "type": "object",
+        "properties": {
+          "message": {
+            "$ref": "#/components/schemas/ThreadMessage"
+          },
+          "thread": {
+            "$ref": "#/components/schemas/ThreadSummary"
+          }
+        },
+        "required": [
+          "message",
+          "thread"
+        ]
+      },
+      "ThreadMessage": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/YourThreadMessage"
+          },
+          {
+            "$ref": "#/components/schemas/CawThreadMessage"
+          },
+          {
+            "$ref": "#/components/schemas/EventThreadMessage"
+          }
+        ]
+      },
+      "YourThreadMessage": {
+        "description": "Yours: words you wrote, or your answer to the lead's question. An answer\ncarries `question` and `answer`, and `body` reads it in one line.",
+        "type": "object",
+        "properties": {
+          "answer": {
+            "description": "How you answered them: your choices, or that you walked away from them.",
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "annotations": {
+                    "type": "object",
+                    "description": "Per-question notes (preview selections), keyed by question text."
+                  },
+                  "answers": {
+                    "$ref": "#/components/schemas/UserAnswers"
+                  },
+                  "outcome": {
+                    "type": "string",
+                    "enum": [
+                      "answered"
+                    ]
+                  }
+                },
+                "required": [
+                  "answers",
+                  "outcome"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "outcome": {
+                    "type": "string",
+                    "enum": [
+                      "dismissed"
+                    ]
+                  }
+                },
+                "required": [
+                  "outcome"
+                ]
+              }
+            ]
+          },
+          "author": {
+            "type": "string",
+            "enum": [
+              "you"
+            ]
+          },
+          "body": {
+            "type": "string"
+          },
+          "question": {
+            "$ref": "#/components/schemas/ThreadQuestion",
+            "description": "The questions the lead asked you in a thread (its AskUserQuestion)."
+          },
+          "createdAt": {
+            "type": "number"
+          },
+          "id": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "author",
+          "body",
+          "createdAt",
+          "id",
+          "threadId"
+        ]
+      },
+      "UserAnswers": {
+        "description": "The reader's choices, back the way the tool reads them.",
+        "type": "object"
+      },
+      "ThreadQuestion": {
+        "description": "The questions the lead asked you in a thread (its AskUserQuestion).",
+        "type": "object",
+        "properties": {
+          "questions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UserQuestion"
+            }
+          }
+        },
+        "required": [
+          "questions"
+        ]
+      },
+      "UserQuestion": {
+        "description": "One question of an `AskUserQuestion`-shaped prompt, as every harness can express.",
+        "type": "object",
+        "properties": {
+          "header": {
+            "type": "string"
+          },
+          "multiSelect": {
+            "type": "boolean"
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "label": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "description",
+                "label"
+              ]
+            }
+          },
+          "question": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "header",
+          "multiSelect",
+          "options",
+          "question"
+        ]
+      },
+      "CawThreadMessage": {
+        "description": "Caw's, through `thread_reply`; `tasks` names the tasks it is about (`tsk-12`).",
+        "type": "object",
+        "properties": {
+          "author": {
+            "type": "string",
+            "enum": [
+              "caw"
+            ]
+          },
+          "body": {
+            "type": "string"
+          },
+          "tasks": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "createdAt": {
+            "type": "number"
+          },
+          "id": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "author",
+          "body",
+          "createdAt",
+          "id",
+          "threadId"
+        ]
+      },
+      "EventThreadMessage": {
+        "description": "Something that happened and woke Caw: a routine, an attempt landing, a task waiting for you.",
+        "type": "object",
+        "properties": {
+          "author": {
+            "type": "string",
+            "enum": [
+              "event"
+            ]
+          },
+          "body": {
+            "description": "What happened, opened like a fold; absent when the title says it all.",
+            "type": "string"
+          },
+          "noteTitle": {
+            "description": "One line: source, time and what, like \"Routine · 08:55 · 3 new GitHub issues\".",
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "number"
+          },
+          "id": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "author",
+          "createdAt",
+          "id",
+          "noteTitle",
+          "threadId"
+        ]
+      },
+      "ThreadRead": {
+        "description": "A thread and its messages, oldest first: `GET /api/projects/:id/threads/:threadId`.",
+        "type": "object",
+        "properties": {
+          "messages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ThreadMessage"
+            }
+          },
+          "thread": {
+            "$ref": "#/components/schemas/ThreadSummary"
+          }
+        },
+        "required": [
+          "messages",
+          "thread"
+        ]
+      },
+      "ProjectView": {
+        "description": "A view as `GET /api/projects/:id/views` lists it: kept (`views/<name>.json`) or a draft (`views/drafts/<name>.json`).",
+        "type": "object",
+        "properties": {
+          "draft": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "spec": {
+            "description": "A view's file: its messages, in order (the spec's `server_to_client_list.json`).",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ViewMessage"
+            }
+          }
+        },
+        "required": [
+          "draft",
+          "name",
+          "spec"
+        ]
+      },
+      "ViewMessage": {
+        "description": "One message of a view: the surface over CawCo's catalog, then its\ncomponents. A view carries no data of its own (no `updateDataModel`): it\nbinds to the hub's {@link ViewData}.",
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "createSurface": {
+                "type": "object",
+                "properties": {
+                  "catalogId": {
+                    "type": "string"
+                  },
+                  "surfaceId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "catalogId",
+                  "surfaceId"
+                ]
+              },
+              "version": {
+                "type": "string",
+                "enum": [
+                  "v0.9.1"
+                ]
+              }
+            },
+            "required": [
+              "createSurface",
+              "version"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "updateComponents": {
+                "type": "object",
+                "properties": {
+                  "components": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/ViewComponent"
+                    }
+                  },
+                  "surfaceId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "components",
+                  "surfaceId"
+                ]
+              },
+              "version": {
+                "type": "string",
+                "enum": [
+                  "v0.9.1"
+                ]
+              }
+            },
+            "required": [
+              "updateComponents",
+              "version"
+            ]
+          }
+        ]
+      },
+      "ViewComponent": {
+        "description": "One component of a view, by its catalog name.",
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/BoardProps"
+          },
+          {
+            "$ref": "#/components/schemas/StageColumnProps"
+          },
+          {
+            "$ref": "#/components/schemas/TaskCardProps"
+          },
+          {
+            "$ref": "#/components/schemas/TableProps"
+          },
+          {
+            "$ref": "#/components/schemas/CalendarProps"
+          },
+          {
+            "$ref": "#/components/schemas/PipelineProps"
+          },
+          {
+            "$ref": "#/components/schemas/StatTileProps"
+          },
+          {
+            "$ref": "#/components/schemas/TextProps"
+          },
+          {
+            "$ref": "#/components/schemas/RowProps"
+          },
+          {
+            "$ref": "#/components/schemas/ColumnProps"
+          },
+          {
+            "$ref": "#/components/schemas/BadgeProps"
+          }
+        ]
+      },
+      "BoardProps": {
+        "type": "object",
+        "properties": {
+          "children": {
+            "$ref": "#/components/schemas/ChildList"
+          },
+          "component": {
+            "type": "string",
+            "enum": [
+              "Board"
+            ]
+          },
+          "title": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DataBinding"
+              },
+              {
+                "$ref": "#/components/schemas/FunctionCall"
+              },
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "accessibility": {
+            "type": "object",
+            "properties": {
+              "description": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/DataBinding"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FunctionCall"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              },
+              "label": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/DataBinding"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FunctionCall"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              }
+            }
+          },
+          "id": {
+            "type": "string"
+          },
+          "weight": {
+            "description": "Its share of a Row's or Column's length, like CSS flex-grow.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "children",
+          "component",
+          "id"
+        ]
+      },
+      "ChildList": {
+        "anyOf": [
+          {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          {
+            "type": "object",
+            "properties": {
+              "componentId": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "componentId",
+              "path"
+            ]
+          }
+        ]
+      },
+      "DataBinding": {
+        "description": "A JSON Pointer into the view's data (common_types `DataBinding`).",
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ]
+      },
+      "FunctionCall": {
+        "description": "One of {@link CAWCO_FUNCTIONS}, called by name (common_types `FunctionCall`).",
+        "type": "object",
+        "properties": {
+          "args": {
+            "type": "object"
+          },
+          "call": {
+            "enum": [
+              "formatDate",
+              "formatNumber",
+              "formatString",
+              "pluralize"
+            ],
+            "type": "string"
+          },
+          "returnType": {
+            "enum": [
+              "any",
+              "array",
+              "boolean",
+              "number",
+              "object",
+              "string"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "call"
+        ]
+      },
+      "StageColumnProps": {
+        "type": "object",
+        "properties": {
+          "component": {
+            "type": "string",
+            "enum": [
+              "StageColumn"
+            ]
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "stage": {
+            "$ref": "#/components/schemas/DynamicString"
+          },
+          "accessibility": {
+            "type": "object",
+            "properties": {
+              "description": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/DataBinding"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FunctionCall"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              },
+              "label": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/DataBinding"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FunctionCall"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              }
+            }
+          },
+          "id": {
+            "type": "string"
+          },
+          "weight": {
+            "description": "Its share of a Row's or Column's length, like CSS flex-grow.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "component",
+          "id",
+          "stage"
+        ]
+      },
+      "DynamicString": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/DataBinding"
+          },
+          {
+            "$ref": "#/components/schemas/FunctionCall"
+          },
+          {
+            "type": "string"
+          }
+        ]
+      },
+      "TaskCardProps": {
+        "type": "object",
+        "properties": {
+          "component": {
+            "type": "string",
+            "enum": [
+              "TaskCard"
+            ]
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "task": {
+            "$ref": "#/components/schemas/DynamicString"
+          },
+          "accessibility": {
+            "type": "object",
+            "properties": {
+              "description": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/DataBinding"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FunctionCall"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              },
+              "label": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/DataBinding"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FunctionCall"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              }
+            }
+          },
+          "id": {
+            "type": "string"
+          },
+          "weight": {
+            "description": "Its share of a Row's or Column's length, like CSS flex-grow.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "component",
+          "id",
+          "task"
+        ]
+      },
+      "TableProps": {
+        "type": "object",
+        "properties": {
+          "columns": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "field": {
+                  "type": "string"
+                },
+                "label": {
+                  "$ref": "#/components/schemas/DynamicString"
+                }
+              },
+              "required": [
+                "field",
+                "label"
+              ]
+            }
+          },
+          "component": {
+            "type": "string",
+            "enum": [
+              "Table"
+            ]
+          },
+          "rows": {
+            "$ref": "#/components/schemas/DataBinding",
+            "description": "A JSON Pointer into the view's data (common_types `DataBinding`)."
+          },
+          "accessibility": {
+            "type": "object",
+            "properties": {
+              "description": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/DataBinding"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FunctionCall"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              },
+              "label": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/DataBinding"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FunctionCall"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              }
+            }
+          },
+          "id": {
+            "type": "string"
+          },
+          "weight": {
+            "description": "Its share of a Row's or Column's length, like CSS flex-grow.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "columns",
+          "component",
+          "id"
+        ]
+      },
+      "CalendarProps": {
+        "type": "object",
+        "properties": {
+          "component": {
+            "type": "string",
+            "enum": [
+              "Calendar"
+            ]
+          },
+          "date": {
+            "type": "string"
+          },
+          "range": {
+            "enum": [
+              "month",
+              "week"
+            ],
+            "type": "string"
+          },
+          "rows": {
+            "$ref": "#/components/schemas/DataBinding",
+            "description": "A JSON Pointer into the view's data (common_types `DataBinding`)."
+          },
+          "accessibility": {
+            "type": "object",
+            "properties": {
+              "description": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/DataBinding"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FunctionCall"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              },
+              "label": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/DataBinding"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FunctionCall"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              }
+            }
+          },
+          "id": {
+            "type": "string"
+          },
+          "weight": {
+            "description": "Its share of a Row's or Column's length, like CSS flex-grow.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "component",
+          "date",
+          "id"
+        ]
+      },
+      "PipelineProps": {
+        "type": "object",
+        "properties": {
+          "component": {
+            "type": "string",
+            "enum": [
+              "Pipeline"
+            ]
+          },
+          "stages": {
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              {
+                "$ref": "#/components/schemas/DataBinding"
+              },
+              {
+                "$ref": "#/components/schemas/FunctionCall"
+              }
+            ]
+          },
+          "accessibility": {
+            "type": "object",
+            "properties": {
+              "description": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/DataBinding"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FunctionCall"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              },
+              "label": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/DataBinding"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FunctionCall"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              }
+            }
+          },
+          "id": {
+            "type": "string"
+          },
+          "weight": {
+            "description": "Its share of a Row's or Column's length, like CSS flex-grow.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "component",
+          "id"
+        ]
+      },
+      "StatTileProps": {
+        "type": "object",
+        "properties": {
+          "component": {
+            "type": "string",
+            "enum": [
+              "StatTile"
+            ]
+          },
+          "label": {
+            "$ref": "#/components/schemas/DynamicString"
+          },
+          "tone": {
+            "enum": [
+              "attn",
+              "done",
+              "fail",
+              "live",
+              "neutral"
+            ],
+            "type": "string"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DataBinding"
+              },
+              {
+                "$ref": "#/components/schemas/FunctionCall"
+              },
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "value": {
+            "$ref": "#/components/schemas/DynamicValue"
+          },
+          "accessibility": {
+            "type": "object",
+            "properties": {
+              "description": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/DataBinding"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FunctionCall"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              },
+              "label": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/DataBinding"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FunctionCall"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              }
+            }
+          },
+          "id": {
+            "type": "string"
+          },
+          "weight": {
+            "description": "Its share of a Row's or Column's length, like CSS flex-grow.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "component",
+          "id",
+          "label",
+          "value"
+        ]
+      },
+      "DynamicValue": {
+        "anyOf": [
+          {
+            "type": "array",
+            "items": {}
+          },
+          {
+            "$ref": "#/components/schemas/DataBinding"
+          },
+          {
+            "$ref": "#/components/schemas/FunctionCall"
+          },
+          {
+            "type": "string"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          }
+        ]
+      },
+      "TextProps": {
+        "type": "object",
+        "properties": {
+          "component": {
+            "type": "string",
+            "enum": [
+              "Text"
+            ]
+          },
+          "text": {
+            "$ref": "#/components/schemas/DynamicString"
+          },
+          "variant": {
+            "enum": [
+              "body",
+              "label",
+              "meta",
+              "title"
+            ],
+            "type": "string"
+          },
+          "accessibility": {
+            "type": "object",
+            "properties": {
+              "description": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/DataBinding"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FunctionCall"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              },
+              "label": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/DataBinding"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FunctionCall"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              }
+            }
+          },
+          "id": {
+            "type": "string"
+          },
+          "weight": {
+            "description": "Its share of a Row's or Column's length, like CSS flex-grow.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "component",
+          "id",
+          "text"
+        ]
+      },
+      "RowProps": {
+        "type": "object",
+        "properties": {
+          "align": {
+            "enum": [
+              "center",
+              "end",
+              "start",
+              "stretch"
+            ],
+            "type": "string"
+          },
+          "children": {
+            "$ref": "#/components/schemas/ChildList"
+          },
+          "component": {
+            "type": "string",
+            "enum": [
+              "Row"
+            ]
+          },
+          "justify": {
+            "enum": [
+              "center",
+              "end",
+              "spaceBetween",
+              "start"
+            ],
+            "type": "string"
+          },
+          "accessibility": {
+            "type": "object",
+            "properties": {
+              "description": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/DataBinding"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FunctionCall"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              },
+              "label": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/DataBinding"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FunctionCall"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              }
+            }
+          },
+          "id": {
+            "type": "string"
+          },
+          "weight": {
+            "description": "Its share of a Row's or Column's length, like CSS flex-grow.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "children",
+          "component",
+          "id"
+        ]
+      },
+      "ColumnProps": {
+        "type": "object",
+        "properties": {
+          "align": {
+            "enum": [
+              "center",
+              "end",
+              "start",
+              "stretch"
+            ],
+            "type": "string"
+          },
+          "children": {
+            "$ref": "#/components/schemas/ChildList"
+          },
+          "component": {
+            "type": "string",
+            "enum": [
+              "Column"
+            ]
+          },
+          "accessibility": {
+            "type": "object",
+            "properties": {
+              "description": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/DataBinding"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FunctionCall"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              },
+              "label": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/DataBinding"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FunctionCall"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              }
+            }
+          },
+          "id": {
+            "type": "string"
+          },
+          "weight": {
+            "description": "Its share of a Row's or Column's length, like CSS flex-grow.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "children",
+          "component",
+          "id"
+        ]
+      },
+      "BadgeProps": {
+        "type": "object",
+        "properties": {
+          "component": {
+            "type": "string",
+            "enum": [
+              "Badge"
+            ]
+          },
+          "text": {
+            "$ref": "#/components/schemas/DynamicString"
+          },
+          "tone": {
+            "enum": [
+              "attn",
+              "done",
+              "fail",
+              "live",
+              "neutral"
+            ],
+            "type": "string"
+          },
+          "accessibility": {
+            "type": "object",
+            "properties": {
+              "description": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/DataBinding"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FunctionCall"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              },
+              "label": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/DataBinding"
+                  },
+                  {
+                    "$ref": "#/components/schemas/FunctionCall"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              }
+            }
+          },
+          "id": {
+            "type": "string"
+          },
+          "weight": {
+            "description": "Its share of a Row's or Column's length, like CSS flex-grow.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "component",
+          "id",
+          "text"
+        ]
+      },
+      "ViewData": {
+        "description": "What a view binds to: `GET /api/projects/:id/view-data`, computed by the hub on every read.",
+        "type": "object",
+        "properties": {
+          "counts": {
+            "type": "object",
+            "properties": {
+              "byKind": {
+                "type": "object",
+                "properties": {
+                  "done": {
+                    "type": "number"
+                  },
+                  "todo": {
+                    "type": "number"
+                  },
+                  "active": {
+                    "type": "number"
+                  },
+                  "waiting": {
+                    "type": "number"
+                  },
+                  "you": {
+                    "type": "number"
+                  },
+                  "dropped": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "active",
+                  "done",
+                  "dropped",
+                  "todo",
+                  "waiting",
+                  "you"
+                ]
+              },
+              "total": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "byKind",
+              "total"
+            ]
+          },
+          "project": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "name"
+            ]
+          },
+          "stages": {
+            "description": "The project's stages, in the order its stages file names them.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ViewStage"
+            }
+          },
+          "tasks": {
+            "description": "Every task, in rank order.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ViewTask"
+            }
+          }
+        },
+        "required": [
+          "counts",
+          "project",
+          "stages",
+          "tasks"
+        ]
+      },
+      "ViewStage": {
+        "description": "One stage as a view binds to it.",
+        "type": "object",
+        "properties": {
+          "count": {
+            "description": "Tasks in it now.",
+            "type": "number"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/StageKind"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "count",
+          "kind",
+          "name"
+        ]
+      },
+      "ViewTask": {
+        "description": "One task as a view binds to it.",
+        "type": "object",
+        "properties": {
+          "blockedBy": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "dates": {
+            "type": "object",
+            "description": "Its dates, ms epoch, by name: `updatedAt` always (when the hub last saw\nits file change); `attemptStartedAt` and `attemptEndedAt` of its newest\nattempt when it has one; and every field its file carries whose value is\nan ISO 8601 date, under the field's own name."
+          },
+          "fields": {
+            "type": "object",
+            "description": "The front matter fields its file carries beyond a task file's own, as written."
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "description": "Its stage's kind; null when its stage is not one of the project's.",
+            "enum": [
+              "active",
+              "done",
+              "dropped",
+              "todo",
+              "waiting",
+              "you"
+            ],
+            "type": "string"
+          },
+          "labels": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "liveAttempt": {
+            "type": "boolean"
+          },
+          "needsYou": {
+            "type": "boolean"
+          },
+          "number": {
+            "type": "number"
+          },
+          "rank": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "stage": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "todos": {
+            "type": "object",
+            "properties": {
+              "done": {
+                "type": "number"
+              },
+              "total": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "done",
+              "total"
+            ]
+          },
+          "type": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "blockedBy",
+          "dates",
+          "fields",
+          "id",
+          "labels",
+          "liveAttempt",
+          "needsYou",
+          "number",
+          "rank",
+          "stage",
+          "title",
+          "todos",
+          "type"
+        ]
       },
       "JoinInfo": {
         "description": "`GET /api/join`.",
@@ -20775,49 +22692,6 @@
           "answers",
           "outcome",
           "questions"
-        ]
-      },
-      "UserAnswers": {
-        "description": "The reader's choices, back the way the tool reads them.",
-        "type": "object"
-      },
-      "UserQuestion": {
-        "description": "One question of an `AskUserQuestion`-shaped prompt, as every harness can express.",
-        "type": "object",
-        "properties": {
-          "header": {
-            "type": "string"
-          },
-          "multiSelect": {
-            "type": "boolean"
-          },
-          "options": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "label": {
-                  "type": "string"
-                },
-                "description": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "description",
-                "label"
-              ]
-            }
-          },
-          "question": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "header",
-          "multiSelect",
-          "options",
-          "question"
         ]
       },
       "UserQuestionDismissed": {
@@ -24920,6 +26794,10 @@
               "$ref": "#/components/schemas/PermissionUpdate"
             }
           },
+          "threadId": {
+            "description": "A project lead's question: the thread it was asked in (the one whose\nmessage woke that turn, else the project's newest). Its answer lands in\nthat thread as your message.",
+            "type": "string"
+          },
           "toolName": {
             "type": "string"
           },
@@ -25527,6 +27405,48 @@
         "required": [
           "instanceId",
           "kind"
+        ]
+      },
+      "ThreadUpsertFrame": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "description": "Hub-originated: a thread was started, or its last message or status changed.",
+            "type": "string",
+            "enum": [
+              "thread.upsert"
+            ]
+          },
+          "thread": {
+            "$ref": "#/components/schemas/ThreadSummary"
+          }
+        },
+        "required": [
+          "kind",
+          "thread"
+        ]
+      },
+      "ThreadMessageFrame": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "description": "Hub-originated: a message was added to a thread.",
+            "type": "string",
+            "enum": [
+              "thread.message"
+            ]
+          },
+          "message": {
+            "$ref": "#/components/schemas/ThreadMessage"
+          },
+          "threadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "message",
+          "threadId"
         ]
       },
       "DelegateEventFrame": {

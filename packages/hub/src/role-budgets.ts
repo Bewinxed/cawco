@@ -76,14 +76,17 @@ export const measureRoles = (): RoleSize[] => {
     tasks: {} as Tasks,
     projectFromSession: () => Promise.reject(new Error("measuring")),
     askPerson: () => Promise.reject(new Error("measuring")),
-    threadTools: (actor) =>
+    cawTools: (actor) =>
       createCaw({
+        asks: () => [],
         db: {} as never,
         end: () => undefined,
         online: () => false,
+        publish: () => undefined,
         send: () => undefined,
         spawn: () => Promise.resolve(),
         task: () => Promise.reject(new Error("measuring")),
+        views: {} as never,
       }).tools(actor),
   });
   try {

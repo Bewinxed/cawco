@@ -1,4 +1,33 @@
 import type { PermissionResult, UserAnswers, UserQuestion } from "./harness";
+import { ASK_USER_QUESTION } from "./index";
+
+const looksLikeQuestion = (value: unknown): value is UserQuestion =>
+  typeof value === "object" &&
+  value !== null &&
+  typeof (value as UserQuestion).question === "string" &&
+  Array.isArray((value as UserQuestion).options);
+
+/**
+ * What a parked tool call is really asking the reader, when it is asking rather
+ * than requesting permission: null for every other tool, and for an
+ * {@link ASK_USER_QUESTION} whose input does not carry questions to render.
+ * The one reading the dashboard, the Telegram bridge and a lead's thread share.
+ */
+export function questionsOf(
+  toolName: string,
+  input: Record<string, unknown>
+): UserQuestion[] | null {
+  if (toolName !== ASK_USER_QUESTION) {
+    return null;
+  }
+  const { questions } = input as { questions?: unknown };
+  if (!Array.isArray(questions) || questions.length === 0) {
+    return null;
+  }
+  return questions.every(looksLikeQuestion)
+    ? (questions as UserQuestion[])
+    : null;
+}
 
 /**
  * The reader's choices, back the way the tool reads them: the question tool's

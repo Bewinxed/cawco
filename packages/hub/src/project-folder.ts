@@ -133,8 +133,12 @@ export type FolderRefusalStatus =
 /** A folder request the hub turns down, with the status and the words the caller reads. */
 export class FolderRefusal extends Error {
   readonly status: FolderRefusalStatus;
-  constructor(code: FolderRefusalStatus, message: string) {
-    super(message);
+  constructor(
+    code: FolderRefusalStatus,
+    message: string,
+    options?: ErrorOptions
+  ) {
+    super(message, options);
     this.status = code;
   }
 }
@@ -943,6 +947,56 @@ export const deleteFolderFile = async (
       }
       await run(root, ["reset", "-q", "--", rel]).catch(noop);
       throw putBack(error, rel);
+    }
+  });
+};
+
+/**
+ * Moves one file to another path (its folders made as needed, the old ones
+ * pruned) and commits both sides as one change. A file already at `to` is
+ * replaced. A failed commit puts both back as they were.
+ */
+export const moveFolderFile = async (
+  projectId: string,
+  rawFrom: string,
+  rawTo: string,
+  options: FolderWriteOptions = {}
+): Promise<FolderCommit> => {
+  const from = folderPath(rawFrom);
+  const to = folderPath(rawTo);
+  if (!(from && to)) {
+    throw new FolderRefusal(400, "Name the file to move and where it goes.");
+  }
+  const asked = askedMessage(options.message);
+  const root = projectRoot(projectId);
+  return await inTurn(projectId, async () => {
+    await prepare(projectId, root);
+    const source = await writable(root, from);
+    const info = await lstat(source).catch(notFound(from));
+    if (!info.isFile()) {
+      throw new FolderRefusal(
+        409,
+        `${from} is not a file, so it cannot be moved.`
+      );
+    }
+    const before = new Map<string, Buffer | undefined>();
+    const bytes = await readFile(source);
+    try {
+      await putFile(root, to, bytes, before);
+      before.set(source, bytes);
+      await unlink(source);
+      const done = await commitPaths(
+        root,
+        [from, to],
+        ["add", "-A", "--", from, to],
+        asked ?? `Move ${from} to ${to}`,
+        options.author ?? YOU
+      );
+      await pruneEmpty(root, dirname(source));
+      return { ...done, path: to };
+    } catch (error) {
+      await putBackAll(root, [from, to], before);
+      throw putBack(error, `${from} and ${to}`);
     }
   });
 };

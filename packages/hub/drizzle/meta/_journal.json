@@ -610,6 +610,13 @@
       "when": 1791348916920,
       "tag": "0086_caw_threads",
       "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "6",
+      "when": 1791355071722,
+      "tag": "0087_caw_thread_events",
+      "breakpoints": true
     }
   ]
 }

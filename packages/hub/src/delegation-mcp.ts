@@ -18,12 +18,12 @@ import {
   projectFromSessionTool,
 } from "./project-offers";
 import { admitToolCall } from "./restart-holds";
-import { allows, refusal, roleOf, THREAD_TOOLS } from "./roles";
+import { allows, CAW_TOOLS, refusal, roleOf } from "./roles";
 import { TASK_TOOLS, taskTools } from "./task-tools";
 import type { Tasks } from "./tasks";
 
 type ToolFactory = typeof handoffTools;
-type ThreadTool = ReturnType<Caw["tools"]>[number];
+type CawTool = ReturnType<Caw["tools"]>[number];
 
 /** Tools that run for minutes, and what their progress heartbeat says meanwhile. */
 const LONG_CALLS: Record<string, string> = {
@@ -85,8 +85,8 @@ export function createDelegationMcp(options: {
   ) => Promise<AttemptStart>;
   /** Makes the calling session a project, for `project_from_session` (project-offers.ts). */
   projectFromSession?: (actor: InstanceRow) => Promise<AcceptResult>;
-  /** Caw's thread tools, for a project's lead (caw.ts). */
-  threadTools?: (actor: InstanceRow | undefined) => ThreadTool[];
+  /** Caw's own tools (threads, views), for a project's lead (caw.ts). */
+  cawTools?: (actor: InstanceRow | undefined) => CawTool[];
   /**
    * Parks an admin write as the person's ask and waits: resolves when they
    * approve it, rejects with the refusal when they deny it (admin-asks.ts).
@@ -168,7 +168,7 @@ export function createDelegationMcp(options: {
       ...admin,
       ...(options.tasks ? taskTools(undefined) : []),
       ...(options.projectFromSession ? [projectFromSessionTool()] : []),
-      ...(options.threadTools ? options.threadTools(undefined) : []),
+      ...(options.cawTools ? options.cawTools(undefined) : []),
     ];
     if (!actor) {
       return all;
@@ -349,22 +349,20 @@ export function createDelegationMcp(options: {
     )) as CallToolResult;
   };
 
-  /** One of Caw's thread tools, its role already checked. */
-  const threadCall = async (
+  /** One of Caw's own tools (threads, views), its role already checked. */
+  const cawCall = async (
     actor: InstanceRow,
     name: string,
     input: Record<string, unknown>
   ): Promise<CallToolResult> => {
-    const entry = options
-      .threadTools?.(actor)
-      .find((tool) => tool.name === name);
+    const entry = options.cawTools?.(actor).find((tool) => tool.name === name);
     if (!entry) {
       throw new Error(`Unknown tool ${name}`);
     }
     return (await entry.handler(input)) as CallToolResult;
   };
 
-  const THREADS: ReadonlySet<string> = new Set(THREAD_TOOLS);
+  const CAWS: ReadonlySet<string> = new Set(CAW_TOOLS);
 
   /** Every call, MCP or REST, from any machine: held for a hub restart while it runs, refused behind its fence. */
   const call = async (
@@ -402,8 +400,8 @@ export function createDelegationMcp(options: {
     if (options.tasks && TASK_TOOLS.has(name)) {
       return await taskCall(actor, name, input);
     }
-    if (THREADS.has(name) && options.threadTools) {
-      return await threadCall(actor, name, input);
+    if (CAWS.has(name) && options.cawTools) {
+      return await cawCall(actor, name, input);
     }
     return undefined;
   };

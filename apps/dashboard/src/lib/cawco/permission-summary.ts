@@ -2,7 +2,7 @@ import type {
   PermissionUpdate,
   PermissionUpdateDestination,
 } from "@cawco/core";
-import { questionsOf } from "./question";
+import { questionsOf } from "@cawco/core";
 
 /**
  * One line naming what a parked tool call would do. The permission card and the

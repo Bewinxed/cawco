@@ -7,7 +7,7 @@ import type {
   UserAnswers,
   UserQuestion,
 } from "@cawco/core";
-import { ASK_USER_QUESTION, CAWCO_ENV, readEnv } from "@cawco/core";
+import { questionsOf as askedIn, CAWCO_ENV, readEnv } from "@cawco/core";
 import type { DbShape } from "./db";
 import type { PendingShape } from "./pending";
 import { answerPermission } from "./pending";
@@ -188,29 +188,9 @@ const fit = (lines: string[]): string => {
 const leaf = (cwd: string): string =>
   cwd.split("/").filter(Boolean).at(-1) ?? cwd;
 
-const looksLikeQuestion = (value: unknown): value is UserQuestion =>
-  typeof value === "object" &&
-  value !== null &&
-  typeof (value as UserQuestion).question === "string" &&
-  Array.isArray((value as UserQuestion).options);
-
-/**
- * What a parked tool call is asking the reader, when it is asking rather than
- * requesting permission. Mirrors the dashboard's `questionsOf`; the hub cannot
- * import a browser module, and neither end should re-model the SDK's schema.
- */
-const questionsOf = (request: PermissionRequest): UserQuestion[] | null => {
-  if (request.toolName !== ASK_USER_QUESTION) {
-    return null;
-  }
-  const { questions } = request.input as { questions?: unknown };
-  if (!Array.isArray(questions) || questions.length === 0) {
-    return null;
-  }
-  return questions.every(looksLikeQuestion)
-    ? (questions as UserQuestion[])
-    : null;
-};
+/** What a parked tool call is asking the reader, when it is asking rather than requesting permission (core's reading). */
+const questionsOf = (request: PermissionRequest): UserQuestion[] | null =>
+  askedIn(request.toolName, request.input);
 
 /**
  * One line of what a tool is about to do, off whichever field carries it. Best

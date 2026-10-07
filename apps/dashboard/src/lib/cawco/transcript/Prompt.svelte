@@ -16,6 +16,7 @@
     UserAnswers,
     UserQuestion,
   } from "@cawco/core";
+  import { questionsOf } from "@cawco/core";
   /**
    * The one human-in-the-loop surface, floating above the composer: a permission
    * gate (a measurably-symmetric Approve / Deny pair, with scope-widening kept
@@ -41,7 +42,7 @@
     permissionAnswer,
   } from "../client.svelte";
   import { permissionSummary, suggestedRule } from "../permission-summary";
-  import { questionAnswer, questionsOf } from "../question";
+  import { questionAnswer } from "../question";
   import { watchedSessions } from "./arrivals.svelte";
 
   let {
