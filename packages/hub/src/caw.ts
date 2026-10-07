@@ -69,6 +69,22 @@ import type {
 import type { TaskEvent, TaskView } from "./tasks";
 import type { Views } from "./views";
 
+/**
+ * The model Caw runs after a change: the one it names (blank is the
+ * harness's default), else none on a new harness (its models are its own),
+ * else the one he had.
+ */
+const modelAfter = (
+  had: string | null,
+  asked: string | null | undefined,
+  rehomed: boolean
+): string | null => {
+  if (asked !== undefined) {
+    return asked?.trim() || null;
+  }
+  return rehomed ? null : had;
+};
+
 /** The harnesses Caw runs on, in the order a picker offers them. */
 export const CAW_HARNESSES = Object.keys(CAW_DENIED_TOOLS) as CawHarness[];
 
@@ -196,6 +212,7 @@ export interface CawDeps {
     DbShape,
     | "addThreadMessage"
     | "allThreads"
+    | "addThreadSpend"
     | "createThread"
     | "getInstancesByIds"
     | "leadSpendUsd"
@@ -246,6 +263,12 @@ export const createCaw = ({
     string,
     { projectId: string; started: boolean; threadId: string }
   >();
+
+  /**
+   * The thread each lead's latest turn answered, kept past the turn's idle
+   * pulse: its result, which carries the turn's cost, can land after it.
+   */
+  const answered = new Map<string, string>();
 
   const projectOf = (projectId: string) =>
     db.project(projectId) ??
@@ -308,6 +331,7 @@ export const createCaw = ({
 
   /** The lead's turn now answers `threadId`: it is `working`, and the thread before it no longer. */
   const follow = (lead: InstanceRow, projectId: string, threadId: string) => {
+    answered.set(lead.id, threadId);
     const before = turns.get(lead.id);
     turns.set(lead.id, { projectId, threadId, started: false });
     if (before && before.threadId !== threadId) {
@@ -434,6 +458,7 @@ export const createCaw = ({
       instanceId,
       cwd: place.path,
       harness: project.cawHarness,
+      ...(project.cawModel ? { model: project.cawModel } : {}),
       projectId: project.id,
       title: "Caw",
       role: "lead",
@@ -547,6 +572,7 @@ export const createCaw = ({
     return {
       on: project.caw,
       harness: project.cawHarness,
+      model: project.cawModel,
       leadInstanceId: project.leadInstanceId,
       problem: problemOf(project),
       spendUsd: db.leadSpendUsd(projectId),
@@ -678,10 +704,14 @@ export const createCaw = ({
       };
     },
 
-    /** Turns Caw on or off, or moves it to another harness; a lead it had is ended. */
+    /**
+     * Turns Caw on or off, or moves it to another harness or model; a lead it
+     * had is ended. A harness of its own takes its own default model unless
+     * the change names one.
+     */
     configure(
       projectId: string,
-      change: { harness?: string; on?: boolean }
+      change: { harness?: string; model?: string | null; on?: boolean }
     ): CawView {
       const project = projectOf(projectId);
       if (change.harness !== undefined) {
@@ -693,12 +723,15 @@ export const createCaw = ({
       }
       const harness = (change.harness as CawHarness | undefined) ?? undefined;
       const on = change.on ?? project.caw;
-      const moved = harness !== undefined && harness !== project.cawHarness;
+      const rehomed = harness !== undefined && harness !== project.cawHarness;
+      const model = modelAfter(project.cawModel, change.model, rehomed);
+      const moved = rehomed || model !== project.cawModel;
       if ((!on && project.caw) || moved) {
         retire(project);
       }
       db.setProjectCaw(projectId, {
         caw: on,
+        cawModel: model,
         ...(harness ? { cawHarness: harness } : {}),
       });
       return view(projectId);
@@ -895,6 +928,37 @@ export const createCaw = ({
       }
     },
 
+    /**
+     * A lead's turn completed with the session's cumulative cost so far
+     * (`total_cost_usd`, called once per completed turn): the difference
+     * from what was booked before is this turn's, and goes to the thread
+     * that woke it. A session whose count started over (a resumed process)
+     * books what it reports. A turn no thread woke, or one that is not a
+     * thread's at all (`book` off: the cache keep-alive's), is booked to
+     * none, and the baseline still moves, so the next turn's cost is its own.
+     */
+    turnCost(instanceId: string, totalUsd: number, book = true): void {
+      const project = leadOf(row(instanceId));
+      if (!(project && Number.isFinite(totalUsd))) {
+        return;
+      }
+      const seen = project.leadCostSeen;
+      const spent = totalUsd >= seen ? totalUsd - seen : totalUsd;
+      db.setProjectCaw(project.id, { leadCostSeen: totalUsd });
+      if (!book) {
+        return;
+      }
+      // The turn this result closes: the one in flight, else the one whose
+      // idle pulse came first. Spent once booked, so a later turn no thread
+      // woke is never booked to this one.
+      const threadId =
+        turns.get(instanceId)?.threadId ?? answered.get(instanceId);
+      answered.delete(instanceId);
+      if (threadId && spent > 0) {
+        db.addThreadSpend(threadId, spent);
+      }
+    },
+
     /** A session's process ended: a lead's turn ends with it. */
     sessionEnded(instanceId: string): void {
       unfollow(instanceId);
@@ -1015,6 +1079,7 @@ export const cawRoutes = (caw: Caw) =>
         body: t.Object({
           on: t.Optional(t.Boolean()),
           harness: t.Optional(HARNESS),
+          model: t.Optional(t.Nullable(t.String())),
         }),
       },
       ({ params, body }) => {

@@ -9,6 +9,7 @@
   import type { CawHarness } from "@cawco/core";
   import { cawco, startThread, threadsOf } from "#lib/cawco/client.svelte.js";
   import CawFace from "#lib/cawco/home/CawFace.svelte";
+  import ModelCombobox from "#lib/cawco/ModelCombobox.svelte";
   import { usd } from "#lib/cawco/usage.js";
   import { Button } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
@@ -25,8 +26,6 @@
 
   const on = $derived(lead.view?.on ?? false);
   const lastThread = $derived(threadsOf(projectId)[0] ?? null);
-  /** The model the lead's session runs, once there is one. */
-  const model = $derived(lead.lead?.model ?? null);
   let talking = $state(false);
   /** The harness picker's word: where he runs, or that he is moving there. */
   const harnessWord = $derived.by(() => {
@@ -81,8 +80,13 @@
         {/each}
       </Select.Content>
     </Select.Root>
-    {#if model}
-      <span class="model">{model}</span>
+    {#if lead.view}
+      <ModelCombobox
+        harness={lead.view.harness}
+        onchoose={(chosen) => lead.configure({ model: chosen || null })}
+        showDefault
+        value={lead.view.model ?? ""}
+      />
     {/if}
   </div>
   <div class="row meta">
@@ -165,10 +169,6 @@
   }
   .muted,
   .meta {
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .model {
     font: var(--type-meta);
     color: var(--ink-muted);
   }

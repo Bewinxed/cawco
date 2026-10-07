@@ -309,6 +309,8 @@ export interface DbShape {
         Pick<ThreadMessageRow, "noteTitle" | "tasks" | "question" | "answer">
       >
   ) => { thread: ThreadRow; message: ThreadMessageRow };
+  /** Adds what a Caw turn the thread woke cost to the thread's spend. */
+  readonly addThreadSpend: (threadId: string, usd: number) => void;
   /** A machine's last-known tool status by id; empty for one that never reported. */
   readonly agentAddressContract: (machineId: string) => boolean;
   readonly agentHarnesses: (machineId: string) => HarnessReport[] | undefined;
@@ -779,7 +781,13 @@ export interface DbShape {
       usd: number;
     }[];
     monthUsd: number;
-    threads: { id: string; lastAt: number; title: string; wakes: number }[];
+    threads: {
+      id: string;
+      lastAt: number;
+      title: string;
+      usd: number;
+      wakes: number;
+    }[];
     todayUsd: number;
   };
   /**
@@ -1112,7 +1120,12 @@ export interface DbShape {
   /** The project's Caw: on or off, its harness, and its lead session (caw.ts). */
   readonly setProjectCaw: (
     id: string,
-    change: Partial<Pick<ProjectRow, "caw" | "cawHarness" | "leadInstanceId">>
+    change: Partial<
+      Pick<
+        ProjectRow,
+        "caw" | "cawHarness" | "cawModel" | "leadCostSeen" | "leadInstanceId"
+      >
+    >
   ) => void;
   /** The project's dispatch settings: whether it dispatches, its caps, its default budget and landing. */
   readonly setProjectDispatch: (
@@ -3968,9 +3981,20 @@ const make = (path: string): DbShape => {
       }
     },
     setProjectCaw: (id, change) => {
-      if (Object.keys(change).length > 0) {
-        db.update(projects).set(change).where(eq(projects.id, id)).run();
+      // A new lead session counts its cost from zero.
+      const set =
+        change.leadInstanceId === undefined
+          ? change
+          : { leadCostSeen: 0, ...change };
+      if (Object.keys(set).length > 0) {
+        db.update(projects).set(set).where(eq(projects.id, id)).run();
       }
+    },
+    addThreadSpend: (threadId, usd) => {
+      db.update(projectThreads)
+        .set({ spendUsd: sql`${projectThreads.spendUsd} + ${usd}` })
+        .where(eq(projectThreads.id, threadId))
+        .run();
     },
     leadSpendUsd: (projectId) =>
       db
@@ -4030,6 +4054,7 @@ const make = (path: string): DbShape => {
           id: projectThreads.id,
           title: projectThreads.title,
           lastAt: projectThreads.updatedAt,
+          usd: projectThreads.spendUsd,
           wakes: sql<number>`count(${threadMessages.id})`,
         })
         .from(projectThreads)

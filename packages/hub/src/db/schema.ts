@@ -285,6 +285,14 @@ export const projects = sqliteTable("projects", {
     .$type<import("@cawco/core").CawHarness>()
     .notNull()
     .default("claude"),
+  /** The model Caw's session runs; null: the harness's own default. */
+  cawModel: text("caw_model"),
+  /**
+   * What the lead session had cost when its last turn was booked to a
+   * thread: its results carry the session's cumulative cost, so a turn's own
+   * is the difference. Back to 0 with each new lead session.
+   */
+  leadCostSeen: real("lead_cost_seen").notNull().default(0),
   /**
    * Whether the hub starts attempts at ready tasks on its own (dispatch.ts).
    * Off until you turn it on, and inert without a lead.
@@ -1707,6 +1715,8 @@ export const projectThreads = sqliteTable(
     createdAt: timestamp("created_at").notNull(),
     /** When its newest message was added. */
     updatedAt: timestamp("updated_at").notNull(),
+    /** Dollars Caw's turns that this thread woke have cost. */
+    spendUsd: real("spend_usd").notNull().default(0),
   },
   (table) => [index("project_threads_project").on(table.projectId)]
 );

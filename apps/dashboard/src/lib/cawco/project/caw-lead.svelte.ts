@@ -6,9 +6,10 @@
  * the same status.
  *
  * The status (fable-lead-switch.md §3, design §2 States):
+ * - `reconnecting` while the hub is unreachable, `loading` while another
+ *   project's board is on its way past its grace;
  * - `sleeping` while the lead is off;
- * - `reconnecting` while the hub is unreachable, `loading` until his view
- *   is first read;
+ * - `loading` until his view is first read (shown past its grace);
  * - `needs-you` while the lead has a question parked in a thread;
  * - `working` while the lead session is in a turn of its own;
  * - `trying` while an attempt at a task runs again after a failed one;
@@ -95,15 +96,34 @@ export class CawLead {
 
   readonly #projectId: () => string;
   readonly #tasks: () => TaskSummary[];
+  readonly #reading: () => boolean;
+  /** The project `view` was read for. */
+  #viewFor: string | null = null;
 
-  constructor(projectId: () => string, tasks: () => TaskSummary[]) {
+  /**
+   * `reading`: the page is on its way to another project and the wait has
+   * outlasted its grace; Caw stands in for it (design §2, Loading).
+   */
+  constructor(
+    projectId: () => string,
+    tasks: () => TaskSummary[],
+    reading: () => boolean
+  ) {
     this.#projectId = projectId;
     this.#tasks = tasks;
+    this.#reading = reading;
   }
 
   /** Reads his view; the page calls it on arrival and after a reconnect. */
   async read(): Promise<void> {
     const id = this.#projectId();
+    // Another project's Caw is not this one's: his view goes, and a Caw
+    // already on screen holds `loading` until this project's is read.
+    if (this.#viewFor !== id) {
+      this.waited = this.view !== null || this.#reading();
+      this.view = null;
+      this.spend = null;
+    }
     const grace = this.view
       ? undefined
       : setTimeout(() => {
@@ -113,6 +133,7 @@ export class CawLead {
       const view = await cawOf(id);
       if (id === this.#projectId()) {
         this.view = view;
+        this.#viewFor = id;
         this.refused = null;
       }
     } catch (error) {
@@ -124,8 +145,12 @@ export class CawLead {
   }
 
   /** Caw is drawn: his view is read, the read outlasted its grace, or the hub is away. */
-  readonly shown = $derived(
-    this.view !== null || this.waited || cawco.hub === "unreachable"
+  readonly shown = $derived.by(
+    () =>
+      this.view !== null ||
+      this.waited ||
+      this.#reading() ||
+      cawco.hub === "unreachable"
   );
 
   /** Reads what the project has spent (the panel's line). */
@@ -141,8 +166,12 @@ export class CawLead {
     }
   }
 
-  /** Turns the lead on or off, or moves it to another harness. */
-  async configure(change: { harness?: CawHarness; on?: boolean }) {
+  /** Turns the lead on or off, or moves it to another harness or model. */
+  async configure(change: {
+    harness?: CawHarness;
+    model?: string | null;
+    on?: boolean;
+  }) {
     this.moving = true;
     try {
       this.view = await configureCaw(this.#projectId(), change);
@@ -183,11 +212,16 @@ export class CawLead {
   readonly retrying = $derived.by(() => this.#tasks().find(isRetry) ?? null);
 
   readonly status = $derived.by((): CawStatus => {
-    if (this.view && !this.view.on) {
-      return "sleeping";
-    }
+    // A wait stands over whatever he was: the hub away, or another
+    // project's board on its way.
     if (cawco.hub === "unreachable") {
       return "reconnecting";
+    }
+    if (this.#reading()) {
+      return "loading";
+    }
+    if (this.view && !this.view.on) {
+      return "sleeping";
     }
     if (!this.view) {
       return "loading";
@@ -221,7 +255,9 @@ export class CawLead {
       case "reconnecting":
         return { kind: "say", text: "Reconnecting" };
       case "loading":
-        return this.waited ? { kind: "say", text: "Reading the board…" } : null;
+        return this.waited || this.#reading()
+          ? { kind: "say", text: "Reading the board…" }
+          : null;
       case "needs-you": {
         const [first] = this.asks;
         const question = questionsOf(

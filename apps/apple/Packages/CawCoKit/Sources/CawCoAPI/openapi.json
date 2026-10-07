@@ -4307,6 +4307,12 @@
                       "claude",
                       "opencode"
                     ]
+                  },
+                  "model": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
                   }
                 }
               }
@@ -14593,6 +14599,15 @@
               ],
               "type": "string"
             },
+            "cawModel": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "leadCostSeen": {
+              "type": "number"
+            },
             "dispatch": {
               "type": "boolean"
             },
@@ -14647,11 +14662,13 @@
           "required": [
             "caw",
             "cawHarness",
+            "cawModel",
             "createdAt",
             "cwd",
             "dispatch",
             "id",
             "lands",
+            "leadCostSeen",
             "leadInstanceId",
             "machineId",
             "maxAttempts",
@@ -14742,6 +14759,15 @@
             ],
             "type": "string"
           },
+          "cawModel": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "leadCostSeen": {
+            "type": "number"
+          },
           "dispatch": {
             "type": "boolean"
           },
@@ -14796,11 +14822,13 @@
         "required": [
           "caw",
           "cawHarness",
+          "cawModel",
           "createdAt",
           "cwd",
           "dispatch",
           "id",
           "lands",
+          "leadCostSeen",
           "leadInstanceId",
           "machineId",
           "maxAttempts",
@@ -14903,6 +14931,15 @@
             ],
             "type": "string"
           },
+          "cawModel": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "leadCostSeen": {
+            "type": "number"
+          },
           "dispatch": {
             "type": "boolean"
           },
@@ -14957,11 +14994,13 @@
         "required": [
           "caw",
           "cawHarness",
+          "cawModel",
           "createdAt",
           "cwd",
           "dispatch",
           "id",
           "lands",
+          "leadCostSeen",
           "leadInstanceId",
           "machineId",
           "maxAttempts",
@@ -18204,6 +18243,13 @@
               "string"
             ]
           },
+          "model": {
+            "description": "The model Caw's session runs; null: its harness's default.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "on": {
             "type": "boolean"
           },
@@ -18222,6 +18268,7 @@
         "required": [
           "harness",
           "leadInstanceId",
+          "model",
           "on",
           "problem",
           "spendUsd"
@@ -18324,7 +18371,7 @@
             "type": "number"
           },
           "threads": {
-            "description": "Each thread with how many times it woke Caw (your messages and events in\nit), newest first. A thread has no dollars of its own: one lead session\nanswers every thread, and its usage is not reported per turn.",
+            "description": "Each thread, newest first, with how many times it woke Caw (your\nmessages and events in it) and what the turns it woke cost: each\nturn's share of the lead session's cumulative cost, booked to the\nthread that woke it.",
             "type": "array",
             "items": {
               "type": "object",
@@ -18338,6 +18385,9 @@
                 "title": {
                   "type": "string"
                 },
+                "usd": {
+                  "type": "number"
+                },
                 "wakes": {
                   "type": "number"
                 }
@@ -18346,6 +18396,7 @@
                 "id",
                 "lastAt",
                 "title",
+                "usd",
                 "wakes"
               ]
             }

@@ -4,8 +4,8 @@
    * month, its Caw's share this month, and what an attempt may spend — then
    * a ledger: Caw's threads with how often each woke him, and each task's
    * attempts with what they cost and how the newest stands. Rows open the
-   * thread or the task. A thread has no dollars of its own: one lead
-   * session answers every thread, and its usage is not reported per turn.
+   * thread or the task. A thread's dollars are the turns it woke: each
+   * turn's share of the lead session's cost, booked by the hub.
    */
   import type { ProjectSpend } from "@cawco/core";
   import { projectSpend, setProjectBudget } from "#lib/cawco/client.svelte.js";
@@ -219,12 +219,7 @@
                 <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th> -->
                 <Table.Head class="col-name" scope="col">Caw</Table.Head>
                 <Table.Head class="col-count" scope="col">Wakes</Table.Head>
-                <Table.Head
-                  class="col-usd num"
-                  scope="col"
-                  title="Caw's spend this month, every thread together"
-                  >{usd(spend.caw.monthUsd)}</Table.Head
-                >
+                <Table.Head class="col-usd" scope="col">Spent</Table.Head>
                 <Table.Head class="col-last" scope="col">Last</Table.Head>
                 <!-- biome-ignore-end lint/a11y/noHeaderScope: Table.Head renders a real <th> -->
               </Table.Row>
@@ -241,7 +236,7 @@
                     >{thread.wakes}
                     {thread.wakes === 1 ? "wake" : "wakes"}</Table.Cell
                   >
-                  <Table.Cell class="col-usd"></Table.Cell>
+                  <Table.Cell class="col-usd num">{usd(thread.usd)}</Table.Cell>
                   <Table.Cell class="col-last num"
                     >{formatAgeShort(thread.lastAt, now)}</Table.Cell
                   >
@@ -432,9 +427,6 @@
     }
     .ledger :global(tr.row td.col-name) {
       grid-column: 1 / -1;
-    }
-    .ledger :global(tr.row td.col-usd:empty) {
-      display: none;
     }
   }
 </style>

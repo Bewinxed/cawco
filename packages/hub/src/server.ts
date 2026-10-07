@@ -11982,6 +11982,10 @@ export const createServer = (
                         row.id,
                         keepAliveResult(row, neutral, true)
                       );
+                      // A keep-alive's cost is the session's, not a thread's.
+                      if (typeof neutral.total_cost_usd === "number") {
+                        caw.turnCost(row.id, neutral.total_cost_usd, false);
+                      }
                       const usage = keepAliveUsage(neutral);
                       console.info(
                         `[keepalive] ${row.id}: result ${neutral.uuid} input=${usage.input} read=${usage.read} write=${usage.write} at ${new Date().toISOString()}`
@@ -12022,6 +12026,10 @@ export const createServer = (
                   ) {
                     finalMessage.delete(message.instanceId);
                     break;
+                  }
+                  // Claimed once: a lead's turn books its cost to its thread.
+                  if (typeof neutral.total_cost_usd === "number") {
+                    caw.turnCost(message.instanceId, neutral.total_cost_usd);
                   }
                 }
                 const named = peekSessionKey(message.payload);

@@ -31,6 +31,7 @@
   import {
     crossIn,
     crossOut,
+    dur,
     motionOk,
   } from "#lib/cawco/motion/curves.svelte.js";
   import { ListSwap } from "#lib/cawco/motion/list-swap.svelte.js";
@@ -82,6 +83,7 @@
   } from "#lib/icons.js";
   import { browser } from "$app/env";
   import { goto } from "$app/navigation";
+  import { navigating, page } from "$app/state";
   import type { PageData } from "./$types";
 
   let { data }: { data: PageData } = $props();
@@ -147,9 +149,31 @@
 
   // --- Caw, the views and the data they bind to ------------------------------
 
+  /**
+   * On the way to another project (the page stays while its load runs): once
+   * the wait outlasts --dur-wait-grace the board stands as its skeleton and
+   * Caw reads it (design §2, Loading); a quick one shows nothing of its own.
+   */
+  const leavingFor = $derived(
+    navigating.to?.route.id === page.route.id &&
+      navigating.to?.params?.id !== projectId
+  );
+  let reading = $state(false);
+  $effect(() => {
+    if (!leavingFor) {
+      reading = false;
+      return;
+    }
+    const grace = setTimeout(() => {
+      reading = true;
+    }, dur("--dur-wait-grace"));
+    return () => clearTimeout(grace);
+  });
+
   const lead = new CawLead(
     () => projectId,
-    () => tasks
+    () => tasks,
+    () => reading
   );
   const leadOn = $derived(lead.view?.on === true);
 
@@ -863,25 +887,41 @@
     </div>
 
     <div
-      aria-busy={cawco.hub === "unreachable" || awaiting}
+      aria-busy={cawco.hub === "unreachable" || awaiting || reading}
       class="pane"
-      data-view={current}
+      data-view={reading ? "board" : current}
     >
-      <div class="swap">
-        {#key shown}
-          <div
-            class="current"
-            style="animation:{swap.rowAnim(0, ListSwap.leaveEnd(0))}"
-            out:leave
-          >
-            {#if shown === "awaiting"}
-              <Skeleton class="h-64 w-full rounded-[var(--radius-lg)]" />
-            {:else}
-              {@render pane(shown)}
-            {/if}
-          </div>
-        {/key}
-      </div>
+      {#if reading}
+        <!-- The board at its real layout, its columns standing empty: the
+             next project's read cross-fades in over it. -->
+        <div aria-hidden="true" class="board-skeleton" out:crossOut>
+          {#each stageList.filter(
+            (stage) => stage.kind !== "dropped"
+          ) as stage (stage.name)}
+            <div class="skeleton-column">
+              <Skeleton class="h-3.5 w-3/5" />
+              <Skeleton class="h-[54px] w-full rounded-[var(--radius-sm)]" />
+              <Skeleton class="h-[54px] w-full rounded-[var(--radius-sm)]" />
+            </div>
+          {/each}
+        </div>
+      {:else}
+        <div class="swap" in:crossIn>
+          {#key shown}
+            <div
+              class="current"
+              style="animation:{swap.rowAnim(0, ListSwap.leaveEnd(0))}"
+              out:leave
+            >
+              {#if shown === "awaiting"}
+                <Skeleton class="h-64 w-full rounded-[var(--radius-lg)]" />
+              {:else}
+                {@render pane(shown)}
+              {/if}
+            </div>
+          {/key}
+        </div>
+      {/if}
     </div>
   </div>
 
@@ -1022,6 +1062,28 @@
     display: flex;
     flex-direction: column;
     min-block-size: 0;
+  }
+  /* The board while the next project's is read: its grid, empty columns. */
+  .board-skeleton {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(15rem, 22rem);
+    gap: var(--space-3);
+    overflow: hidden;
+  }
+  .skeleton-column {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-2);
+    border-radius: var(--radius-lg);
+    background: var(--surface-band);
+    box-shadow: inset 0 0 0 1px var(--border-hairline);
+  }
+  @media (max-width: 639px) {
+    .board-skeleton {
+      grid-auto-columns: calc(100% - var(--space-8));
+    }
   }
   .current {
     display: flex;

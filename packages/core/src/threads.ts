@@ -11,6 +11,8 @@ export interface CawView {
   harness: CawHarness;
   /** Caw's session, once the hub has started one. */
   leadInstanceId: string | null;
+  /** The model Caw's session runs; null: its harness's default. */
+  model: string | null;
   on: boolean;
   /** Why Caw could not start now, while it is on; null when it could. */
   problem: string | null;
@@ -125,11 +127,18 @@ export interface ProjectSpend {
   monthStart: number;
   monthUsd: number;
   /**
-   * Each thread with how many times it woke Caw (your messages and events in
-   * it), newest first. A thread has no dollars of its own: one lead session
-   * answers every thread, and its usage is not reported per turn.
+   * Each thread, newest first, with how many times it woke Caw (your
+   * messages and events in it) and what the turns it woke cost: each
+   * turn's share of the lead session's cumulative cost, booked to the
+   * thread that woke it.
    */
-  threads: { id: string; lastAt: number; title: string; wakes: number }[];
+  threads: {
+    id: string;
+    lastAt: number;
+    title: string;
+    usd: number;
+    wakes: number;
+  }[];
   /** Midnight today, ms epoch. */
   todayStart: number;
   /** Every session of the project. */

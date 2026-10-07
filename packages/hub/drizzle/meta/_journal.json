@@ -624,6 +624,13 @@
       "when": 1791358290755,
       "tag": "0088_mcp_tool_listings",
       "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "6",
+      "when": 1791360270316,
+      "tag": "0089_caw_model_thread_spend",
+      "breakpoints": true
     }
   ]
 }

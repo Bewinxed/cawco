@@ -4585,10 +4585,10 @@ async function readThreads(): Promise<void> {
 export const cawOf = (projectId: string): Promise<CawView> =>
   askHub(`${projectPath(projectId)}/caw`);
 
-/** Turns a project's Caw on or off, or moves it to another harness. */
+/** Turns a project's Caw on or off, or moves it to another harness or model (null: the harness's default). */
 export const configureCaw = (
   projectId: string,
-  change: { harness?: CawHarness; on?: boolean }
+  change: { harness?: CawHarness; model?: string | null; on?: boolean }
 ): Promise<CawView> =>
   askHub(`${projectPath(projectId)}/caw`, json("PATCH", change));
 

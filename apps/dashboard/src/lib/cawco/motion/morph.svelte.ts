@@ -9,8 +9,11 @@
  * What is observed is the content (the container's children), never the
  * container: the tween resizes the container, and an observer watching the
  * box it resizes would report its own animation back to itself. For the
- * tween's length the children hold their natural size (no flex shrink), so
- * the container clips them instead of squashing a scrolling list inside it.
+ * tween's length the children hold their natural size (no flex shrink, and
+ * their settled block size), so the container clips them instead of
+ * squashing a scrolling list inside it, and a child sized by the container
+ * (`height: 100%`, a Command list's root) does not follow the tween and
+ * report it back: that is a ResizeObserver loop, the tween chasing itself.
  *
  * `rows`: what changes inside is a `reflow`'s rows (a run's steps opening
  * a result under one, motion/branch), so the container's edge moves with
@@ -45,13 +48,26 @@ export function morph({
      * fractional places, and a box rounded to whole pixels cut the last of
      * them by the difference while it slid.
      */
-    const sizeOf = (): { w: number; h: number } => {
+    const drawnSize = (): { w: number; h: number } => {
       if (rows) {
         const box = node.getBoundingClientRect();
         return { w: box.width, h: box.height };
       }
       return { w: node.offsetWidth, h: node.offsetHeight };
     };
+
+    /** Each child's block size as the box's content lays it out now. */
+    const childSizes = () =>
+      [...node.children]
+        .filter((child): child is HTMLElement => child instanceof HTMLElement)
+        .map((child) => ({
+          child,
+          blockSize: child.getBoundingClientRect().height,
+          was: child.style.blockSize,
+        }));
+
+    /** Its natural size and its children's, as laid out now. */
+    const measure = () => ({ size: drawnSize(), held: childSizes() });
 
     /**
      * The tween itself: its own curve, or the rows' (`rows`), at their
@@ -85,7 +101,7 @@ export function morph({
       const from = drawn ? { w: drawn.width, h: drawn.height } : settled;
       running?.cancel();
       running = undefined;
-      const next = sizeOf();
+      const { size: next, held } = measure();
       const moved =
         Math.abs(next.h - from.h) > 0.5 ||
         (width && Math.abs(next.w - from.w) > 0.5);
@@ -101,17 +117,18 @@ export function morph({
         frames[0].width = `${from.w}px`;
         frames[1].width = `${next.w}px`;
       }
-      const held = [...node.children].filter(
-        (child): child is HTMLElement => child instanceof HTMLElement
-      );
-      for (const child of held) {
+      // The children hold the sizes read above, at the box's new natural
+      // size, the tween in flight cancelled.
+      for (const { child, blockSize } of held) {
         child.style.flexShrink = "0";
+        child.style.blockSize = `${blockSize}px`;
       }
       const animation = play(frames, moves(from, next));
       running = animation;
       const done = () => {
-        for (const child of held) {
+        for (const { child, was } of held) {
           child.style.flexShrink = "";
+          child.style.blockSize = was;
         }
         if (running === animation) {
           running = undefined;
@@ -122,7 +139,7 @@ export function morph({
 
     const sizes = new ResizeObserver(() => {
       if (natural === null) {
-        natural = sizeOf();
+        natural = measure().size;
       } else {
         tween(natural);
       }
