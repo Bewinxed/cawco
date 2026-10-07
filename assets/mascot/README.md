@@ -5,6 +5,8 @@ already designed. `~/cawco-design-kit/05-mascot-pose-sheet.png` is his source ar
 live in `~/cawco-design-kit/caw/`. Image work only cleans, upscales or adds poses in that exact
 design; it never redraws him.
 
+His personality, how he acts, and how new animations are made: [PERSONALITY.md](PERSONALITY.md).
+
 **Changes to Caw happen in the `.riv` files, never by redrawing him in code** (Swift, Svelte or
 anything else). Apps load the file for the status they show and set its `Caw` view model, and
 that is all they do with him.
