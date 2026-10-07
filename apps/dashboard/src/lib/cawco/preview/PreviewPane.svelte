@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { ChoiceOp, PreviewChoices } from "@cawco/core";
   import { Button } from "#lib/components/ui/button/index.js";
   import PendingContent, {
     whileIdle,
@@ -10,14 +11,18 @@
     IconRefresh,
   } from "#lib/icons.js";
   import { cawco, closePreview } from "../client.svelte";
+  import { newId } from "../id";
   import { appear, dur } from "../motion/curves.svelte";
   import { closeInto, depart } from "../motion/share.svelte";
+  import { readChoices, sendChoices, writeChoice } from "./choices";
   import { type CapturedSelection, selectionShare } from "./selection";
-  import { previewSourceKey } from "./source";
+  import { previewSourceKey, previewSourceLabel } from "./source";
   import {
+    previewChoice,
     previewElement,
     previewError,
     previewPng,
+    previewSend,
     previewTitle,
     previewUrl,
   } from "./wire";
@@ -44,9 +49,10 @@
    * errors (a capture the page refused) reload the frame; a refused close
    * asks again.
    */
-  let failure = $state<{ message: string; again: "reload" | "close" } | null>(
-    null
-  );
+  let failure = $state<{
+    message: string;
+    again: "reload" | "close" | "send";
+  } | null>(null);
   let well = $state<HTMLDivElement>();
   const preview = $derived(cawco.previews[instanceId]);
   const source = $derived(preview?.source);
@@ -57,9 +63,7 @@
   let displayPath = $state("");
   const title = $derived(
     preview?.title ||
-      (connected && source && "dir" in source
-        ? source.dir.split("/").filter(Boolean).at(-1)
-        : "Preview") ||
+      (connected && source ? previewSourceLabel(source) : "Preview") ||
       "Preview"
   );
   const frameKey = $derived(`${preview?.revision}:${reload}`);
@@ -108,6 +112,94 @@
     selecting = on;
     post({ type: "cawco:mode", mode: on ? "select" : "off" });
   }
+
+  /**
+   * The picks on the page in the frame (§5.7 choices): what the hub keeps for
+   * it, read when the page says it is ready or moved, changed through the
+   * page's bridge, and handed back to the page after every change.
+   */
+  let choices = $state<PreviewChoices | null>(null);
+  /** The page's own path inside the preview: which page the picks are for. */
+  let pagePath = "/";
+  /** Writes go one at a time, in the order the page made them. */
+  let writes: Promise<unknown> = Promise.resolve();
+  let sending = $state(false);
+  /** One id per send press, so a retry after a lost answer is the same send. */
+  let sendId: string | null = null;
+  const picked = $derived(
+    choices?.picks.filter((pick) => pick.option || pick.options?.length)
+      .length ?? 0
+  );
+  const sendable = $derived(
+    !!choices?.canvasId &&
+      (choices.picks.length > 0 || Object.keys(choices.dials).length > 0)
+  );
+  function showChoices(next: PreviewChoices) {
+    choices = next;
+    post({ type: "cawco:picks", choices: $state.snapshot(next) });
+  }
+  function loadChoices(path: string) {
+    pagePath = path;
+    const asked = path;
+    // Most pages have no choices: a read that fails leaves the pane as it
+    // is, with no Send picks, rather than an error over someone's app.
+    readChoices(instanceId, path).then(
+      (next) => {
+        if (asked === pagePath) {
+          showChoices(next);
+        }
+      },
+      () => {
+        if (asked === pagePath) {
+          choices = null;
+        }
+      }
+    );
+  }
+  function keepChoice(op: ChoiceOp) {
+    const path = pagePath;
+    writes = writes
+      .then(() => writeChoice(instanceId, path, op))
+      .then(
+        (next) => {
+          if (path === pagePath) {
+            showChoices(next);
+          }
+        },
+        (error: unknown) => {
+          failure = frameError(
+            error instanceof Error ? error.message : String(error)
+          );
+        }
+      );
+  }
+  async function sendPicks(text?: string) {
+    if (sending) {
+      return;
+    }
+    // Picks still on their way to the hub go first, so the send carries them.
+    await writes;
+    const canvasId = choices?.canvasId;
+    if (!canvasId) {
+      return;
+    }
+    sending = true;
+    sendId ??= newId();
+    try {
+      await sendChoices(canvasId, sendId, text);
+      sendId = null;
+      failure = null;
+      post({ type: "cawco:sent" });
+      loadChoices(pagePath);
+    } catch (error) {
+      failure = {
+        message: error instanceof Error ? error.message : String(error),
+        again: "send",
+      };
+    } finally {
+      sending = false;
+    }
+  }
   export function parentEscape(event: KeyboardEvent) {
     if (
       event.key !== "Escape" ||
@@ -144,6 +236,9 @@
         const parsed = new URL(at);
         displayPath = `${parsed.pathname}${parsed.search}${parsed.hash}`;
         preview.title = previewTitle(message.title) ?? "";
+        if (message.type === "cawco:ready" || parsed.pathname !== pagePath) {
+          loadChoices(parsed.pathname);
+        }
         if (message.type === "cawco:ready") {
           connected = true;
           select(selecting);
@@ -204,6 +299,20 @@
       case "cawco:escape":
         select(false);
         break;
+      case "cawco:choice": {
+        const op = previewChoice(message);
+        if (op) {
+          keepChoice(op);
+        }
+        break;
+      }
+      case "cawco:send": {
+        const asked = previewSend(message);
+        if (asked) {
+          sendPicks(asked.text);
+        }
+        break;
+      }
       case "cawco:error":
         failure = frameError(previewError(message.message));
         retrying = false;
@@ -321,12 +430,24 @@
     <div class="identity">
       <span class="title">{title}</span
       ><span class="path"
-        >{displayPath ||
-          (source && "dir" in source
-            ? source.dir.split("/").filter(Boolean).at(-1)
-            : "")}</span
+        >{displayPath || (source ? previewSourceLabel(source) : "")}</span
       >
     </div>
+    {#if sendable}
+      <span class="picked num">{picked} picked</span>
+      <Button
+        disabled={!(choices?.unsent || sending)}
+        label="Send picks"
+        onclick={() => sendPicks()}
+        pending={sending}
+        pendingLabel="Sending…"
+        size="sm"
+        title={choices?.unsent
+          ? "Send your picks to the session as one message"
+          : "Sent. Change a pick to send again"}
+        variant={choices?.unsent ? "default" : "outline"}
+      />
+    {/if}
     <button
       aria-pressed={selecting}
       class="touch-hit"
@@ -415,6 +536,15 @@
             onclick={retry}
             pending={retrying}
             pendingLabel="Reloading…"
+            size="sm"
+            variant="outline"
+          />
+        {:else if failure.again === "send"}
+          <Button
+            label="Try again"
+            onclick={() => sendPicks()}
+            pending={sending}
+            pendingLabel="Sending…"
             size="sm"
             variant="outline"
           />
@@ -595,8 +725,16 @@
       font-weight: var(--weight-body);
     }
   }
+  .picked {
+    flex-shrink: 0;
+    color: var(--ink-muted);
+    font-size: var(--text-label);
+    font-weight: var(--weight-body);
+    white-space: nowrap;
+  }
   @container (max-width: 469px) {
-    .select-label {
+    .select-label,
+    .picked {
       display: none;
     }
   }

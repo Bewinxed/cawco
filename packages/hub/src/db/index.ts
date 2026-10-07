@@ -69,7 +69,9 @@ import { drizzle } from "drizzle-orm/bun-sqlite";
 import { migrate } from "drizzle-orm/bun-sqlite/migrator";
 import { Context, Effect, Layer } from "effect";
 import { DB_PATH } from "../config";
+import { shippedSkills } from "../shipped-skills";
 import { workflowSkill } from "../workflows/skills";
+import { type ChoicesStore, choicesStore } from "./choices";
 import {
   agents,
   apnsCredentials,
@@ -329,6 +331,8 @@ export interface DbShape {
    * their machines reported, as work-item budgets read them.
    */
   readonly cawSpendUsd: (projectId: string) => number;
+  /** Picks, notes and dials per previewed page (choices.ts). */
+  readonly choices: ChoicesStore;
   /** Claims one harness completion before any turn-end side effect. */
   readonly claimCompletedTurn: (
     instanceId: string,
@@ -1873,6 +1877,7 @@ const make = (path: string): DbShape => {
   };
 
   return {
+    choices: choicesStore(db),
     clearEndConfirmation: (id) => {
       db.update(instances)
         .set({ endConfirmedAt: null })
@@ -3173,6 +3178,12 @@ const make = (path: string): DbShape => {
               }
               return skill;
             }),
+          // The skills CawCo ships itself (decision-page), on every machine.
+          ...shippedSkills().map((skill) =>
+            held("skills", skill.name, skill.hash)
+              ? { ...skill, files: undefined }
+              : skill
+          ),
         ],
         // Only the rows a resolve filled in. A plugin the hub could not fetch is
         // simply absent here, and the daemon installs it the old way — which is

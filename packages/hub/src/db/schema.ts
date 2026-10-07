@@ -1703,3 +1703,73 @@ export const projectOffers = sqliteTable("project_offers", {
   /** The project accepting made or joined. */
   projectId: text("project_id"),
 });
+
+/**
+ * A canvas (§5.7 of the Projects spec): one previewed page whose picks,
+ * notes and dials the hub keeps (choices.ts). It outlives the session that
+ * made it and every revision of the page: `key` names the page, not the
+ * session or the revision, so a new revision with the same choice ids finds
+ * its picks still here.
+ */
+export const previewCanvases = sqliteTable(
+  "preview_canvases",
+  {
+    id: text("id").primaryKey(),
+    /**
+     * The page: `page:<projectId>:decisions/<name>` for a hub folder page,
+     * `dir:<machineId>:<dir>:<path>` or `port:<machineId>:<port>:<path>` for
+     * one a machine serves.
+     */
+    key: text("key").notNull().unique(),
+    projectId: text("project_id"),
+    /** The session the page was last a preview of: a send goes to it. */
+    instanceId: text("instance_id"),
+    /** `decisions/<name>`, or the page's path on its server. */
+    page: text("page").notNull(),
+    /** sha256 hex (16) of the page as the hub last served it. */
+    contentHash: text("content_hash"),
+    createdAt: timestamp("created_at").notNull(),
+    /** When a pick, note or dial last changed. */
+    changedAt: timestamp("changed_at").notNull(),
+    /** When the picks were last sent to the session; null before the first send. */
+    sentAt: timestamp("sent_at"),
+  },
+  (table) => [
+    index("preview_canvases_project").on(table.projectId),
+    index("preview_canvases_instance").on(table.instanceId),
+  ]
+);
+
+/** One choice on a canvas, by the id the page gives it: the pick and the note. */
+export const previewChoices = sqliteTable(
+  "preview_choices",
+  {
+    canvasId: text("canvas_id")
+      .notNull()
+      .references(() => previewCanvases.id, { onDelete: "cascade" }),
+    choiceId: text("choice_id").notNull(),
+    /** The one option picked; null when none is or the choice takes several. */
+    option: text("option"),
+    /** Every option picked, for a choice that takes several. */
+    options: text("options", { mode: "json" }).$type<string[]>(),
+    note: text("note"),
+    /** The page's content hash when this last changed. */
+    hash: text("hash"),
+    at: timestamp("at").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.canvasId, table.choiceId] })]
+);
+
+/** A dial a page set on its canvas (`cawco.set(key, value)`), as JSON. */
+export const previewDials = sqliteTable(
+  "preview_dials",
+  {
+    canvasId: text("canvas_id")
+      .notNull()
+      .references(() => previewCanvases.id, { onDelete: "cascade" }),
+    key: text("key").notNull(),
+    value: text("value", { mode: "json" }).$type<unknown>(),
+    at: timestamp("at").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.canvasId, table.key] })]
+);

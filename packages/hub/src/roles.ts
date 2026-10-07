@@ -74,6 +74,8 @@ const GROUPS = {
   ],
   /** Making the calling session a project. */
   project: ["project_from_session"],
+  /** Picks on the pages a session showed, and decision pages (choices.ts). */
+  choices: ["read_choices", "decision_publish"],
   /** Conversations with Caw in a project. */
   thread: ["thread_list", "thread_read", "thread_reply"],
   /** Fleet administration. */
@@ -108,6 +110,7 @@ const ROLE_GROUPS: Record<SessionRole, ReadonlySet<Group>> = {
     "taskRead",
     "taskWrite",
     "project",
+    "choices",
   ]),
   delegate: new Set<Group>([
     "core",
@@ -117,10 +120,17 @@ const ROLE_GROUPS: Record<SessionRole, ReadonlySet<Group>> = {
     "workflow",
     "step",
     "taskRead",
+    "choices",
   ]),
-  lead: new Set<Group>(["control", "taskRead", "taskWrite", "thread"]),
+  lead: new Set<Group>([
+    "control",
+    "taskRead",
+    "taskWrite",
+    "thread",
+    "choices",
+  ]),
   overseer: new Set<Group>(["control", "taskRead", "admin"]),
-  "web-facing": new Set<Group>(["item", "step", "taskRead"]),
+  "web-facing": new Set<Group>(["item", "step", "taskRead", "choices"]),
 };
 
 /** Core tools a role has although it lacks the rest of the group. */

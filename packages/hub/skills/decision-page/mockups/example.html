@@ -1,0 +1,36 @@
+<style>
+.mk-example{display:block;min-width:0;color:var(--ink);font-family:var(--f-body);font-size:12.5px;line-height:1.4;text-align:left}
+.mk-example *,.mk-example *::before,.mk-example *::after{box-sizing:border-box}
+.mk-example .ex-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px}
+.mk-example .ex-post{display:flex;flex-direction:column;gap:6px;min-width:0}
+.mk-example .ex-who{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--muted)}
+.mk-example .ex-who b{color:var(--ink);font-weight:500}
+.mk-example .ex-text{font-size:13px}
+.mk-example .ex-text em{font-style:normal;font-family:var(--f-mono);font-size:12px;color:var(--coral-ink)}
+.mk-example .ex-meta{display:flex;gap:6px;flex-wrap:wrap}
+.mk-example .ex-hot{position:relative}
+.mk-example .ex-hot::after{content:"";position:absolute;inset:-3px;border-radius:16px;border:1.5px solid var(--coral);opacity:.0;pointer-events:none}
+.mk-example.is-live .ex-hot::after{animation:ex-pulse 6s cubic-bezier(.2,.8,.2,1) infinite}
+@keyframes ex-pulse{0%,15%{opacity:0}30%,70%{opacity:1}85%,100%{opacity:0}}
+@media (prefers-reduced-motion: reduce){.mk-example.is-live .ex-hot::after{animation:none}}
+</style>
+<div class="mk mk-example" role="img" aria-label="Two drafts of the launch post side by side: a calm one led by numbers and a warm one led by a story.">
+  <div class="ex-grid">
+    <div class="mkf ex-hot">
+      <div class="mkf-bar"><b>Calm and exact</b><span class="sp"></span><span>08:55</span></div>
+      <div class="mkf-body ex-post">
+        <div class="ex-who"><b>site</b><span>@you</span></div>
+        <p class="ex-text">Projects ship today. One project, many places: <em>3 machines</em>, <em>12 tasks</em>, one board.</p>
+        <div class="ex-meta"><span class="mkchip model">Claude Code</span><span class="mkchip ok">Ready</span></div>
+      </div>
+    </div>
+    <div class="mkf">
+      <div class="mkf-bar"><b>Warm and personal</b><span class="sp"></span><span>08:55</span></div>
+      <div class="mkf-body ex-post">
+        <div class="ex-who"><b>site</b><span>@you</span></div>
+        <p class="ex-text">Last month I lost a task between two laptops. So we made projects: one place for the work, wherever it runs.</p>
+        <div class="ex-meta"><span class="mkchip model">Claude Code</span><span class="mkchip warn">Needs you</span></div>
+      </div>
+    </div>
+  </div>
+</div>

@@ -4335,7 +4335,10 @@ export async function openPreview(
     {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(source),
+      // A decision page is named alone: its project is the session's own.
+      body: JSON.stringify(
+        "project" in source ? { page: source.page } : source
+      ),
     }
   );
   if (!response.ok) {

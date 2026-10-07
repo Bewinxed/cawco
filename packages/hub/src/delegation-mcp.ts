@@ -8,6 +8,7 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { adminTools } from "./admin-tools";
+import { CHOICE_TOOLS, type Choices } from "./choices";
 import { handoffInstructions, handoffTools } from "./delegation-tools";
 import type { AttemptStart } from "./dispatch";
 import {
@@ -51,6 +52,8 @@ const LEAD_INSTRUCTIONS =
  */
 
 export function createDelegationMcp(options: {
+  /** Picks on previews and decision pages, for `read_choices` and `decision_publish` (choices.ts). */
+  choices?: Choices;
   instances: () => InstanceRow[];
   instanceById: (id: string) => InstanceRow | undefined;
   /** Whether `leadId` leads the project of the work item `instanceId` runs (work-items.ts `ledBy`). */
@@ -151,6 +154,7 @@ export function createDelegationMcp(options: {
       ...(options.tasks ? taskTools(undefined) : []),
       ...(options.projectFromSession ? [projectFromSessionTool()] : []),
       ...(options.threads ? threadTools(undefined) : []),
+      ...(options.choices ? options.choices.tools(undefined) : []),
     ];
     if (superset) {
       return all;
@@ -284,6 +288,21 @@ export function createDelegationMcp(options: {
     return (await entry.handler(input)) as CallToolResult;
   };
 
+  /** `read_choices` and `decision_publish`, on the caller's own pages. */
+  const choiceCall = async (
+    actor: InstanceRow,
+    name: string,
+    input: Record<string, unknown>
+  ): Promise<CallToolResult> => {
+    const entry = options.choices
+      ?.tools(actor)
+      .find((tool) => tool.name === name);
+    if (!entry) {
+      throw new Error(`Unknown tool ${name}`);
+    }
+    return (await entry.handler(input)) as CallToolResult;
+  };
+
   /**
    * The delegate-type catalog, which anyone may read without an actor; a
    * caller the bridge can name reads its project's catalog, where the
@@ -375,6 +394,9 @@ export function createDelegationMcp(options: {
     }
     if (options.threads && THREAD_TOOLS.has(name)) {
       return await threadCall(actor, name, input);
+    }
+    if (options.choices && CHOICE_TOOLS.has(name)) {
+      return await choiceCall(actor, name, input);
     }
     return undefined;
   };

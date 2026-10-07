@@ -193,6 +193,8 @@ export async function buildBinary(options: {
   }
   const assets = [
     ...(await filesUnder(join(ROOT, "packages/hub/drizzle"), "drizzle")),
+    // The skills CawCo ships to every machine (packages/hub/src/shipped-skills.ts).
+    ...(await filesUnder(join(ROOT, "packages/hub/skills"), "skills")),
     ...(await filesUnder(
       join(ROOT, "apps/dashboard/build/client"),
       "dashboard/client"

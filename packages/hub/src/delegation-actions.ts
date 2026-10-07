@@ -1022,7 +1022,15 @@ export const handoffActions = ({
     if (!response.ok) {
       throw new Error(await response.text());
     }
-    return `Preview opened beside the transcript: ${"port" in source ? `localhost:${source.port}` : source.dir}`;
+    let shown: string;
+    if ("port" in source) {
+      shown = `localhost:${source.port}`;
+    } else if ("dir" in source) {
+      shown = source.dir;
+    } else {
+      shown = source.page;
+    }
+    return `Preview opened beside the transcript: ${shown}`;
   },
   async listDelegateTypes() {
     const types = await fetchDelegateTypes((message) => {

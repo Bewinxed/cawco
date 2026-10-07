@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{{TITLE}}</title>
+<style>{{BASE_CSS}}</style>
+</head>
+<body>
+<main class="dp">
+
+<header class="dp-top">
+  <span class="eyebrow">Decision page</span>
+  <h1>{{TITLE}}</h1>
+  <p>One line on what is being decided and why now. Pick one path per card; add a note where a pick needs a condition. Send when you are done picking.</p>
+</header>
+
+<!--
+  One card per decision (RECIPES.md, "Decision card"). The ids are the
+  contract: a choice's id never changes once the page is published, so a
+  revision keeps the operator's picks. Change the words, not the ids.
+-->
+<article class="dec" id="voice">
+  <header><span class="did">D1</span><h3>How should the launch post sound?</h3><span class="state" data-for="voice">Not picked</span></header>
+  <p class="why">The draft reads like a changelog. Two tones are on the table.</p>
+  <div class="show solo">
+    <figure class="pane look"><span class="cap">How it would look</span>{{MK:example}}</figure>
+  </div>
+  <div class="opts" role="radiogroup" aria-label="D1 Launch post tone" data-cawco-choice="voice">
+    <button class="opt" type="button" role="radio" aria-checked="false" data-option="calm"><b>Calm and exact</b><span>Numbers first, no adjectives.</span><span class="tag">Recommended</span></button>
+    <button class="opt" type="button" role="radio" aria-checked="false" data-option="warm"><b>Warm and personal</b><span>First person, one story.</span></button>
+  </div>
+  <div class="foot">
+    <details class="more"><summary>Details</summary><div class="in"><p>Where the detail that most readers skip goes.</p></div></details>
+    <label class="note">Note <textarea data-cawco-note="voice" rows="1" placeholder="Anything to add"></textarea></label>
+  </div>
+</article>
+
+<article class="dec" id="channels">
+  <header><span class="did">D2</span><h3>Where does it go out first?</h3><span class="state" data-for="channels">Not picked</span></header>
+  <p class="why">Pick every channel that should carry it on day one.</p>
+  <div class="opts" aria-label="D2 Launch channels" data-cawco-choice="channels" data-cawco-multi>
+    <button class="opt" type="button" aria-pressed="false" data-option="x"><b>X</b><span>Thread from the brand account.</span></button>
+    <button class="opt" type="button" aria-pressed="false" data-option="blog"><b>Blog</b><span>The long version.</span></button>
+    <button class="opt" type="button" aria-pressed="false" data-option="email"><b>Email</b><span>To the waitlist.</span></button>
+  </div>
+  <div class="foot">
+    <label class="note">Note <textarea data-cawco-note="channels" rows="1" placeholder="Anything to add"></textarea></label>
+  </div>
+</article>
+
+<footer class="dp-bar">
+  <img class="caw-l" src="{{CAW:light-ready}}" alt="" width="24" height="24"><img class="caw-d" src="{{CAW:dark-ready}}" alt="" width="24" height="24">
+  <span class="dp-count"><span id="dp-n">0</span> of <span id="dp-t">0</span> picked</span>
+  <div class="bar" aria-hidden="true"><i id="dp-fill"></i></div>
+  <span class="dp-said" id="dp-said" role="status"></span>
+  <button class="dp-send" id="dp-send" type="button">Send picks</button>
+</footer>
+
+</main>
+<script>
+(function(){
+  "use strict";
+  /*
+   * Inside CawCo the preview overlay provides window.cawco (picks kept by the
+   * hub, read by the session with read_choices). Opened anywhere else, this
+   * stand-in keeps picks in the browser's local storage, so the page still
+   * works; Send then copies the picks as text.
+   */
+  var KEY = "cawco-decision-" + location.pathname;
+  if (!window.cawco) {
+    var listeners = { picks: [], sent: [] };
+    var state = { picks: [], dials: {} };
+    try { var kept = JSON.parse(localStorage.getItem(KEY) || "null"); if (kept && Array.isArray(kept.picks)) state = kept; } catch (e) {}
+    var find = function(id){ for (var i = 0; i < state.picks.length; i++) if (state.picks[i].id === id) return state.picks[i]; return null; };
+    var save = function(){ try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} mark(); listeners.picks.forEach(function(f){ f(JSON.parse(JSON.stringify(state))); }); };
+    var upsert = function(id){ var p = find(id); if (!p) { p = { id: id, option: null, options: null, note: null }; state.picks.push(p); } return p; };
+    var mark = function(){
+      document.querySelectorAll("[data-option]").forEach(function(el){
+        var g = el.hasAttribute("data-cawco-choice") ? el : el.parentElement && el.parentElement.closest("[data-cawco-choice]");
+        if (!g) return;
+        var p = find(g.getAttribute("data-cawco-choice")), o = el.getAttribute("data-option");
+        var on = !!p && (p.options ? p.options.indexOf(o) >= 0 : p.option === o);
+        el.toggleAttribute("data-cawco-picked", on);
+        if (el.getAttribute("role") === "radio") el.setAttribute("aria-checked", String(on)); else el.setAttribute("aria-pressed", String(on));
+      });
+      document.querySelectorAll("[data-cawco-note]").forEach(function(el){ if (document.activeElement !== el) { var p = find(el.getAttribute("data-cawco-note")); el.value = (p && p.note) || ""; } });
+    };
+    window.cawco = {
+      version: 0,
+      choose: function(id, option){ var p = upsert(id); if (Array.isArray(option)) { p.options = option.length ? option : null; p.option = null; } else { p.option = option; p.options = null; } save(); },
+      note: function(id, text){ upsert(id).note = String(text || "").trim() ? String(text) : null; save(); },
+      set: function(key, value){ if (value === null) delete state.dials[key]; else state.dials[key] = value; save(); },
+      picks: function(){ return JSON.parse(JSON.stringify(state)); },
+      on: function(kind, f){ if (!listeners[kind]) return function(){}; listeners[kind].push(f); if (kind === "picks") f(JSON.parse(JSON.stringify(state))); return function(){ listeners[kind] = listeners[kind].filter(function(g){ return g !== f; }); }; },
+      send: function(){
+        var text = state.picks.map(function(p){ return p.id + ": " + (p.options ? p.options.join(", ") : (p.option || "not picked")) + (p.note ? " (" + p.note + ")" : ""); }).join("\n");
+        try { navigator.clipboard.writeText(text); } catch (e) {}
+        listeners.sent.forEach(function(f){ f(JSON.parse(JSON.stringify(state))); });
+        return true;
+      }
+    };
+    document.addEventListener("click", function(ev){
+      var el = ev.target.closest && ev.target.closest("[data-option]"); if (!el) return;
+      var g = el.hasAttribute("data-cawco-choice") ? el : el.parentElement && el.parentElement.closest("[data-cawco-choice]"); if (!g) return;
+      var id = g.getAttribute("data-cawco-choice"), o = el.getAttribute("data-option"), p = find(id);
+      if (g.hasAttribute("data-cawco-multi")) { var list = (p && p.options) ? p.options.slice() : []; var i = list.indexOf(o); if (i >= 0) list.splice(i, 1); else list.push(o); window.cawco.choose(id, list); }
+      else window.cawco.choose(id, p && p.option === o ? null : o);
+    });
+    var waits = {};
+    document.addEventListener("input", function(ev){
+      var id = ev.target.getAttribute && ev.target.getAttribute("data-cawco-note"); if (!id) return;
+      clearTimeout(waits[id]); waits[id] = setTimeout(function(){ window.cawco.note(id, ev.target.value); }, 600);
+    });
+    mark();
+  }
+
+  /* mockups animate only while on screen (CONTRACT.md): is-live plus mk:live / mk:idle */
+  var reduce = false;
+  try { reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch (e) {}
+  if (!reduce && "IntersectionObserver" in window) {
+    var io = new IntersectionObserver(function(entries){
+      entries.forEach(function(en){
+        var el = en.target, on = en.isIntersecting;
+        if (el.classList.contains("is-live") === on) return;
+        el.classList.toggle("is-live", on);
+        el.dispatchEvent(new CustomEvent(on ? "mk:live" : "mk:idle"));
+      });
+    }, { threshold: 0.2 });
+    document.querySelectorAll(".mk").forEach(function(el){ io.observe(el); });
+  }
+
+  /* progress, state words and Send: the same for both */
+  var ids = Array.prototype.map.call(document.querySelectorAll("[data-cawco-choice]"), function(el){ return el.getAttribute("data-cawco-choice"); })
+    .filter(function(id, i, all){ return all.indexOf(id) === i; });
+  document.getElementById("dp-t").textContent = ids.length;
+  var said = document.getElementById("dp-said");
+  window.cawco.on("picks", function(choices){
+    var picked = {};
+    choices.picks.forEach(function(p){ if (p.option || (p.options && p.options.length)) picked[p.id] = p; });
+    var n = ids.filter(function(id){ return picked[id]; }).length;
+    document.getElementById("dp-n").textContent = n;
+    document.getElementById("dp-fill").style.width = (ids.length ? 100 * n / ids.length : 0) + "%";
+    document.querySelectorAll(".state[data-for]").forEach(function(st){
+      var p = picked[st.getAttribute("data-for")];
+      st.classList.toggle("on", !!p);
+      st.textContent = p ? (p.options ? p.options.length + " picked" : "Picked") : "Not picked";
+    });
+    said.textContent = "";
+  });
+  window.cawco.on("sent", function(){ said.textContent = "Sent to the session."; });
+  document.getElementById("dp-send").addEventListener("click", function(){ window.cawco.send(); });
+})();
+</script>
+</body>
+</html>

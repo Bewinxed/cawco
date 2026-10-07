@@ -11,7 +11,10 @@
   import { fleetMcpServers } from "#lib/cawco/fleet-mcp.svelte.js";
   import { mcpServerHost } from "#lib/cawco/mcp.js";
   import { dur, easeOut, motionOk } from "#lib/cawco/motion/curves.svelte.js";
-  import { previewSourceKey } from "#lib/cawco/preview/source.js";
+  import {
+    previewSourceKey,
+    previewSourceLabel,
+  } from "#lib/cawco/preview/source.js";
   import DiffView from "#lib/components/features/DiffView.svelte";
   import {
     describeTool,
@@ -46,7 +49,7 @@
   import type { Message } from "../types";
   import { useLedger } from "./arrivals.svelte";
   import { disclosure } from "./disclosure.svelte";
-  import { SHOW_IMAGE_TOOLS, SHOW_PREVIEW_TOOLS } from "./present";
+  import { previewInput, SHOW_IMAGE_TOOLS } from "./present";
   import TranscriptRow from "./Row.svelte";
   import Shot from "./Shot.svelte";
 
@@ -312,9 +315,7 @@
     if (!preview?.source) {
       return false;
     }
-    return "port" in wanted
-      ? "port" in preview.source && preview.source.port === wanted.port
-      : "dir" in preview.source && preview.source.dir === wanted.dir;
+    return previewSourceKey(preview.source) === previewSourceKey(wanted);
   }
 </script>
 
@@ -401,8 +402,11 @@
     <TranscriptRow id={callId(m)}>
       {#snippet children()}
         <div class="row" data-call={m.toolCallId} class:err={failed}>
-          {#if SHOW_PREVIEW_TOOLS.has(m.metadata?.toolName ?? "")}
-            {@const input = m.metadata?.toolInput as PreviewSource}
+          {#if previewInput(m.metadata?.toolName, m.metadata?.toolInput)}
+            {@const input = previewInput(
+              m.metadata?.toolName,
+              m.metadata?.toolInput
+            ) as PreviewSource}
             {@const current = cawco.previews[m.instanceId]}
             {@const preview = sameSource(current, input) ? current : undefined}
             {@const opened = preview?.state === "open"}
@@ -446,8 +450,7 @@
                       pendingLabel="Opening…"
                     /></span
                   ><span class="artifact-path"
-                    >{preview?.path ||
-                      ("dir" in input ? pathLeaf(input.dir) : "")}</span
+                    >{preview?.path || previewSourceLabel(input)}</span
                   ></span
                 >
               </button>

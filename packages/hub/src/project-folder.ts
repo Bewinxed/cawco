@@ -659,6 +659,26 @@ export const readFolderFile = async (
   return { path: rel, content, size: bytes.byteLength };
 };
 
+/**
+ * Where one file of the folder is on disk, for serving its bytes as they are
+ * (a decision page and its images, shown as a preview): the same path checks
+ * as a read, links followed only inside, and a folder or a missing file is
+ * not found.
+ */
+export const folderFileOnDisk = async (
+  projectId: string,
+  rawPath: string
+): Promise<string> => {
+  const rel = folderPath(rawPath);
+  const root = await forReading(projectId);
+  const real = await readable(root, rel);
+  const info = await stat(real).catch(notFound(rel));
+  if (!(rel && info.isFile())) {
+    throw new FolderRefusal(404, `${rel} is not a file in the project folder.`);
+  }
+  return real;
+};
+
 export interface FolderWriteOptions {
   /** Who the commit is by; the operator when left out. */
   author?: FolderAuthor;

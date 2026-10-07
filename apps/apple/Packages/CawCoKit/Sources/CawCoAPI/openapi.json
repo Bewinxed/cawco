@@ -3418,6 +3418,321 @@
         }
       }
     },
+    "/api/instances/{id}/preview/choices": {
+      "get": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "maxLength": 1024,
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiInstancesByIdPreviewChoices",
+        "responses": {
+          "200": {
+            "description": "getApiInstancesByIdPreviewChoices 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreviewChoices"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "getApiInstancesByIdPreviewChoices 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "getApiInstancesByIdPreviewChoices 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "getApiInstancesByIdPreviewChoices 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiInstancesByIdPreviewChoices 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "getApiInstancesByIdPreviewChoices 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "maxLength": 1024,
+                    "type": "string"
+                  },
+                  "op": {
+                    "type": "string",
+                    "enum": [
+                      "choose",
+                      "note",
+                      "set"
+                    ]
+                  },
+                  "id": {
+                    "maxLength": 100,
+                    "type": "string"
+                  },
+                  "option": {
+                    "maxLength": 200,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "options": {
+                    "maxItems": 50,
+                    "type": "array",
+                    "items": {
+                      "maxLength": 200,
+                      "type": "string"
+                    }
+                  },
+                  "text": {
+                    "maxLength": 2000,
+                    "type": "string"
+                  },
+                  "key": {
+                    "maxLength": 100,
+                    "type": "string"
+                  },
+                  "value": {}
+                },
+                "required": [
+                  "path",
+                  "op"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiInstancesByIdPreviewChoices",
+        "responses": {
+          "200": {
+            "description": "postApiInstancesByIdPreviewChoices 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreviewChoices"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiInstancesByIdPreviewChoices 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiInstancesByIdPreviewChoices 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiInstancesByIdPreviewChoices 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiInstancesByIdPreviewChoices 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "postApiInstancesByIdPreviewChoices 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/choices/{canvasId}/send": {
+      "post": {
+        "parameters": [
+          {
+            "name": "canvasId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "uuid": {
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "type": "string"
+                  },
+                  "text": {
+                    "maxLength": 2000,
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postApiChoicesByCanvasIdSend",
+        "responses": {
+          "200": {
+            "description": "postApiChoicesByCanvasIdSend 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiChoicesByCanvasIdSend200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiChoicesByCanvasIdSend 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiChoicesByCanvasIdSend 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiChoicesByCanvasIdSend 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiChoicesByCanvasIdSend 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "postApiChoicesByCanvasIdSend 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects/{id}/dispatch": {
       "get": {
         "parameters": [
@@ -6065,6 +6380,11 @@
                   "dir": {
                     "minLength": 1,
                     "pattern": "^/",
+                    "type": "string"
+                  },
+                  "page": {
+                    "minLength": 1,
+                    "maxLength": 200,
                     "type": "string"
                   }
                 }
@@ -10953,6 +11273,25 @@
         },
         "required": [
           "ok"
+        ]
+      },
+      "postApiChoicesByCanvasIdSend200": {
+        "type": "object",
+        "properties": {
+          "uuid": {
+            "type": "string"
+          },
+          "instanceId": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "instanceId",
+          "state",
+          "uuid"
         ]
       },
       "getApiProjectsByIdThreads200": {
@@ -17282,6 +17621,121 @@
           "unfiled"
         ]
       },
+      "PreviewChoices": {
+        "description": "The picks, notes and dials kept for one canvas (a preview, §5.7 of the\nProjects spec): kept by the hub after the session that made it ends, and\nacross revisions of the page, keyed by each choice's id.",
+        "type": "object",
+        "properties": {
+          "canvasId": {
+            "description": "Null when nothing has been picked on this page yet.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "contentHash": {
+            "description": "The page's content hash, as last served.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "dials": {
+            "type": "object"
+          },
+          "instanceId": {
+            "description": "The session the page is a preview of: the one a send goes to.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "page": {
+            "description": "`decisions/<name>` for a hub folder page, else the page's path.",
+            "type": "string"
+          },
+          "picks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PreviewChoice"
+            }
+          },
+          "projectId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "sentAt": {
+            "description": "When the picks were last sent to the session, ms epoch.",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "unsent": {
+            "description": "Whether anything changed since the last send.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "canvasId",
+          "contentHash",
+          "dials",
+          "instanceId",
+          "page",
+          "picks",
+          "projectId",
+          "sentAt",
+          "unsent"
+        ]
+      },
+      "PreviewChoice": {
+        "description": "One choice on a previewed page (a `data-cawco-choice` group, or an id a\npage's script names): the option or options picked, and a note.",
+        "type": "object",
+        "properties": {
+          "at": {
+            "description": "When it last changed, ms epoch.",
+            "type": "number"
+          },
+          "hash": {
+            "description": "The page's content hash when it last changed.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "note": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "option": {
+            "description": "The one option picked, for a single choice; null when none is.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "options": {
+            "description": "Every option picked, for a choice that takes several.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "at",
+          "hash",
+          "id",
+          "note",
+          "option"
+        ]
+      },
       "DispatchView": {
         "description": "A project's dispatch: its settings, and what the dispatcher would do now.",
         "type": "object",
@@ -19832,6 +20286,7 @@
             "type": "string"
           },
           "source": {
+            "description": "What a preview shows: a dev server's port or a folder on the session's\nmachine, or a page in a project's hub folder (`decisions/<name>`), which\nthe hub serves itself.",
             "anyOf": [
               {
                 "type": "object",
@@ -19853,6 +20308,21 @@
                 },
                 "required": [
                   "dir"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "project": {
+                    "type": "string"
+                  },
+                  "page": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "page",
+                  "project"
                 ]
               }
             ]

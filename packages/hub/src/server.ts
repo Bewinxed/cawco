@@ -151,6 +151,12 @@ import { Elysia, t, ValidationError } from "elysia";
 import { websocket } from "elysia/websocket";
 import { createBinaryUpdates } from "./binary-updates";
 import { cawRoutes, createCaw } from "./caw";
+import {
+  askedPreview,
+  ChoicesRefusal,
+  choiceRoutes,
+  createChoices,
+} from "./choices";
 import { DB_PATH, HUB_VERSION, SPAWN_START_TIMEOUT_MS } from "./config";
 import {
   type ContinuationSource,
@@ -203,7 +209,7 @@ import {
   onWorkflowAnswer,
 } from "./pending";
 import { resolveMarketplacePlugins } from "./plugins";
-import { previewFrame, previewTargets } from "./preview";
+import { previewFrame, previewTargets, servedByHub } from "./preview";
 import {
   makeProjectDelegateTypes,
   projectDelegateTypesRoutes,
@@ -3677,6 +3683,10 @@ export const createServer = (
     }
     previewTargets.delete(instanceId);
     publishPreview(instanceId, "closed", target.source, target.revision);
+    // A hub folder page has no listener on any machine to stop.
+    if (servedByHub(target.source)) {
+      return closed;
+    }
     const answer = await callAgent(
       target.machineId,
       PREVIEW_STOP,
@@ -3709,6 +3719,16 @@ export const createServer = (
     | { ok: false; code: 409 | 500 | 503 | 504; error: string }
   > => {
     const generation = nextPreviewGeneration(instanceId);
+    // A page in a project's hub folder is served by this hub's own preview
+    // listener (preview.ts): nothing to start on the session's machine.
+    if (servedByHub(source)) {
+      const revision = crypto.randomUUID();
+      previewTargets.set(instanceId, { machineId, source, revision });
+      return {
+        ok: true,
+        frame: publishPreview(instanceId, "open", source, revision),
+      };
+    }
     const stopLate = () =>
       callAgent(
         machineId,
@@ -3790,7 +3810,7 @@ export const createServer = (
       serving.map((listener) => [listener.instanceId, listener])
     );
     for (const [instanceId, target] of previewTargets) {
-      if (target.machineId !== machineId) {
+      if (target.machineId !== machineId || servedByHub(target.source)) {
         continue;
       }
       const listener = listeners.get(instanceId);
@@ -7630,7 +7650,37 @@ export const createServer = (
     // biome-ignore lint/complexity/noVoid: the catch-up logs its own failures
     void tasks.syncAll().catch(console.error);
   }
+  // Picks, notes and dials on previewed pages, and decision pages (choices.ts).
+  const choices = createChoices({
+    db,
+    instance: (id) => db.getInstancesByIds([id])[0],
+    target: (instanceId) => previewTargets.get(instanceId),
+    run: runOnMachine,
+    openPage: async (instance, source) => {
+      const opened = await openPreview(instance.id, instance.machineId, source);
+      return opened.ok ? { ok: true } : { ok: false, error: opened.error };
+    },
+    send: (instance, content, uuid) => {
+      const record = deliverSend({
+        verb: "send",
+        machineId: instance.machineId,
+        instanceId: instance.id,
+        payload: {
+          instanceId: instance.id,
+          message: {
+            type: "user",
+            uuid,
+            message: { role: "user", content },
+            parent_tool_use_id: null,
+            origin: { kind: "human" },
+          },
+        },
+      } satisfies Envelope<SendPayload>);
+      return { state: record.state, reason: record.reason };
+    },
+  });
   const delegationMcp = createDelegationMcp({
+    choices,
     tasks,
     workItemTask: (id) => db.workItem(id)?.taskId,
     workItemLands: (id) => db.workItem(id)?.lands,
@@ -7941,6 +7991,7 @@ export const createServer = (
       .use(taskRoutes(tasks))
       .use(pushRoutes(db, push))
       .use(projectOfferRoutes(projectOffers, YOU_ACTOR))
+      .use(choiceRoutes(choices))
       .use(dispatchRoutes(dispatcher))
       .use(cawRoutes(caw))
       .use(threadRoutes(threads))
@@ -8387,23 +8438,25 @@ export const createServer = (
           body: t.Object({
             port: t.Optional(t.Integer({ minimum: 1, maximum: 65_535 })),
             dir: t.Optional(t.String({ minLength: 1, pattern: "^/" })),
+            /** A decision page in the session's project folder: `decisions/<name>`. */
+            page: t.Optional(t.String({ minLength: 1, maxLength: 200 })),
           }),
         },
         async ({ params, body, status }) => {
-          if ((body.port === undefined) === (body.dir === undefined)) {
-            return status(400, "Pass exactly one of port or dir.");
-          }
           const [row] = db.getInstancesByIds([params.id]);
           if (!row) {
             return status(404, "Session not found.");
           }
-          const started = await openPreview(
-            row.id,
-            row.machineId,
-            body.port === undefined
-              ? { dir: body.dir as string }
-              : { port: body.port }
-          );
+          let source: PreviewSource;
+          try {
+            source = askedPreview(body, row.projectId ?? null);
+          } catch (error) {
+            if (error instanceof ChoicesRefusal) {
+              return status(error.status, error.message);
+            }
+            throw error;
+          }
+          const started = await openPreview(row.id, row.machineId, source);
           return started.ok
             ? started.frame
             : status(started.code, started.error);
@@ -12470,7 +12523,7 @@ export const createServer = (
           // starts one again (see `reconcilePreviews`). Nothing is published;
           // the panes keep the page they have until that "open" reloads them.
           for (const [instanceId, target] of previewTargets) {
-            if (target.machineId === machineId) {
+            if (target.machineId === machineId && !servedByHub(target.source)) {
               nextPreviewGeneration(instanceId);
               previewTargets.set(instanceId, {
                 machineId,

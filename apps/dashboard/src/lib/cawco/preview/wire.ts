@@ -1,4 +1,10 @@
-import type { PreviewElement } from "@cawco/core";
+import {
+  CHOICE_METHODS,
+  CHOICE_SEND_TEXT_MAX,
+  type ChoiceOp,
+  choiceOp,
+  type PreviewElement,
+} from "@cawco/core";
 
 /**
  * What the pane accepts from the previewed page. The overlay is ours, but it
@@ -163,4 +169,24 @@ export function previewElement(
     source: source(raw.source),
     url,
   };
+}
+
+/**
+ * A pick, note or dial the page's bridge sent (`cawco:choice`), bounded by
+ * `@cawco/core`'s choice rules, or null. The method must be the one the op
+ * maps onto (`ui/update-model-context`), so a stray message is not a pick.
+ */
+export function previewChoice(message: unknown): ChoiceOp | null {
+  const raw = record(message);
+  const op = choiceOp(raw?.params);
+  return op && raw?.method === CHOICE_METHODS[op.op] ? op : null;
+}
+
+/** A send the page's bridge asked for (`cawco:send`, `ui/message`): its words, or null when the shape is wrong. */
+export function previewSend(message: unknown): { text: string } | null {
+  const raw = record(message);
+  if (raw?.method !== CHOICE_METHODS.send) {
+    return null;
+  }
+  return { text: text(record(raw.params)?.text, CHOICE_SEND_TEXT_MAX) ?? "" };
 }

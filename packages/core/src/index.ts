@@ -5,6 +5,8 @@ import type { ToolStatus } from "./tools";
 // "Continue in new session": the size rules the hub and the dashboard share.
 // biome-ignore lint/performance/noBarrelFile: this is the package's public API surface — packages/core's consumers (hub, cli, dashboard) import from "@cawco/core" as one module, not per-file.
 export * from "./archive";
+// Choices in previews: the picks, notes and dials a previewed page reports, bounded.
+export * from "./choices";
 export * from "./continuation";
 // Delegate types: named presets the `delegate` tool's `type` param resolves,
 // so routing is by description instead of a raw model string.
@@ -892,7 +894,55 @@ export type FramePayload =
 
 export const CAWCO_HUB_PORT = 3456;
 
-export type PreviewSource = { port: number } | { dir: string };
+/**
+ * What a preview shows: a dev server's port or a folder on the session's
+ * machine, or a page in a project's hub folder (`decisions/<name>`), which
+ * the hub serves itself.
+ */
+export type PreviewSource =
+  | { port: number }
+  | { dir: string }
+  | { project: string; page: string };
+
+/**
+ * One choice on a previewed page (a `data-cawco-choice` group, or an id a
+ * page's script names): the option or options picked, and a note.
+ */
+export interface PreviewChoice {
+  /** When it last changed, ms epoch. */
+  at: number;
+  /** The page's content hash when it last changed. */
+  hash: string | null;
+  id: string;
+  note: string | null;
+  /** The one option picked, for a single choice; null when none is. */
+  option: string | null;
+  /** Every option picked, for a choice that takes several. */
+  options: string[] | null;
+}
+
+/**
+ * The picks, notes and dials kept for one canvas (a preview, §5.7 of the
+ * Projects spec): kept by the hub after the session that made it ends, and
+ * across revisions of the page, keyed by each choice's id.
+ */
+export interface PreviewChoices {
+  /** Null when nothing has been picked on this page yet. */
+  canvasId: string | null;
+  /** The page's content hash, as last served. */
+  contentHash: string | null;
+  dials: Record<string, unknown>;
+  /** The session the page is a preview of: the one a send goes to. */
+  instanceId: string | null;
+  /** `decisions/<name>` for a hub folder page, else the page's path. */
+  page: string;
+  picks: PreviewChoice[];
+  projectId: string | null;
+  /** When the picks were last sent to the session, ms epoch. */
+  sentAt: number | null;
+  /** Whether anything changed since the last send. */
+  unsent: boolean;
+}
 
 export interface PreviewElement {
   classes: string[];

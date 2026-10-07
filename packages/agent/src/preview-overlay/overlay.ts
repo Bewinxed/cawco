@@ -3,6 +3,7 @@
 
 import type { PreviewElement } from "@cawco/core";
 import { domToPng } from "modern-screenshot";
+import { receiveChoices, startChoices } from "./choices";
 
 const INSPECTOR_PATH = /^(.*):(\d+):(\d+)$/;
 const PNG_PREFIX = /^data:image\/png;base64,/;
@@ -448,8 +449,15 @@ window.addEventListener("message", async (event) => {
     mode(message.mode === "select");
   } else if (message?.type === "cawco:capture") {
     post("cawco:capture", await capture(document.documentElement));
+  } else if (
+    message?.type === "cawco:picks" ||
+    message?.type === "cawco:sent"
+  ) {
+    receiveChoices(message);
   }
 });
+
+startChoices(post, () => selecting);
 
 window.addEventListener("popstate", navigated);
 window.addEventListener("hashchange", navigated);

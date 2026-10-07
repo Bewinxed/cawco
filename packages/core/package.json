@@ -16,6 +16,7 @@
     "./binary-installation": "./src/binary-installation.ts",
     "./install-script": "./src/install-script.ts",
     "./preview-proxy": "./src/preview-proxy.ts",
+    "./choices": "./src/choices.ts",
     "./paths": "./src/paths.ts",
     ".": {
       "types": "./src/index.ts",

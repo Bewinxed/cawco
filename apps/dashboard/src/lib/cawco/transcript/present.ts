@@ -3,7 +3,7 @@
  * a delegate's live line, which tools draw a picture. Formatting only — every
  * block was built by the hub (`TranscriptBuilder`, @cawco/core).
  */
-import { getToolGlance } from "@cawco/core";
+import { getToolGlance, type PreviewSource } from "@cawco/core";
 import type { SubagentState } from "#lib/utils/flow-types.js";
 import type { JsonValue, Message } from "../types";
 
@@ -18,6 +18,35 @@ export const SHOW_PREVIEW_TOOLS = new Set([
   "cawco_show_preview",
   "show_preview",
 ]);
+
+/** Publishing a decision page shows it as the session's preview too. */
+export const DECISION_PUBLISH_TOOLS = new Set([
+  "mcp__cawco__decision_publish",
+  "cawco_decision_publish",
+  "decision_publish",
+]);
+
+/**
+ * What a tool call put in the preview, for the card that reopens it: a
+ * show_preview's port or folder, or a published decision page (its project
+ * is the session's own, which the hub fills in). Null for any other call.
+ */
+export function previewInput(
+  toolName: string | undefined,
+  toolInput: unknown
+): PreviewSource | null {
+  const input = toolInput as Record<string, unknown> | null | undefined;
+  if (SHOW_PREVIEW_TOOLS.has(toolName ?? "")) {
+    return (input ?? null) as PreviewSource | null;
+  }
+  if (
+    DECISION_PUBLISH_TOOLS.has(toolName ?? "") &&
+    typeof input?.name === "string"
+  ) {
+    return { project: "", page: `decisions/${input.name}` };
+  }
+  return null;
+}
 
 /**
  * Whether a parked ask was routed to its parent session rather than to the

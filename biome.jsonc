@@ -9,6 +9,8 @@
   "files": {
     "includes": [
       "!mocks",
+      // Skill kits CawCo ships to sessions (the decision-page kit is mocks/project-paths made a skill).
+      "!packages/hub/skills",
       "!.design-foundations",
       "!.mcp.json",
       "!packages/jsonl-parser",
