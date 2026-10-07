@@ -44,6 +44,7 @@ export function previewFrame(
     instanceId,
     state,
     path: `/preview/${encodeURIComponent(instanceId)}/${encodeURIComponent(revision)}/`,
+    port: PREVIEW_PORT,
     source,
     revision,
   };
@@ -103,7 +104,14 @@ export function startPreviewListener(hostname: string) {
     port: PREVIEW_PORT,
     websocket: previewWebSocket,
     async fetch(request, server) {
-      const instanceId = request.headers.get("x-cawco-preview");
+      // The dashboard names the preview in a header on every hop; a web
+      // view in the Apple app cannot put a header on the page's own loads,
+      // so it names it in a cookie on the hub's host, which they all carry.
+      const instanceId =
+        request.headers.get("x-cawco-preview") ??
+        new Bun.CookieMap(request.headers.get("cookie") ?? "").get(
+          "cawco-preview"
+        );
       const target = instanceId ? previewTargets.get(instanceId) : undefined;
       if (!target) {
         return new Response("No preview selected.", { status: 404 });

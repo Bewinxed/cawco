@@ -39,6 +39,12 @@ export interface PreviewFrame {
   kind: "preview";
   /** The path on the dashboard's own origin, e.g. `/preview/<id>/`. */
   path: string;
+  /**
+   * The hub's preview listener, on the hub's host: a client that is not a
+   * page (the Apple app) loads the preview from its root, naming the session
+   * in a `cawco-preview` cookie where the dashboard sends `x-cawco-preview`.
+   */
+  port: number;
   /** Identifies one successful open, including a rebuild of the same source. */
   revision: string;
   source?: PreviewSource;

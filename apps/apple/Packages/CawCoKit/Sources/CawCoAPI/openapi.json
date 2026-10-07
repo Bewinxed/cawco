@@ -22391,6 +22391,10 @@
             "description": "The path on the dashboard's own origin, e.g. `/preview/<id>/`.",
             "type": "string"
           },
+          "port": {
+            "description": "The hub's preview listener, on the hub's host: a client that is not a\npage (the Apple app) loads the preview from its root, naming the session\nin a `cawco-preview` cookie where the dashboard sends `x-cawco-preview`.",
+            "type": "number"
+          },
           "revision": {
             "description": "Identifies one successful open, including a rebuild of the same source.",
             "type": "string"
@@ -22449,6 +22453,7 @@
           "instanceId",
           "kind",
           "path",
+          "port",
           "revision",
           "state"
         ]
