@@ -371,26 +371,19 @@
 
   /** The lead-off line's height, standing where the composer would: the foot clears it. */
   let offHeight = $state(0);
-  /** Each parked card's height, by request: the transcript's foot clears them. */
-  const parkedHeights = $state<Record<string, number>>({});
   /**
-   * Room at the transcript's foot for what stands over it: the composer,
-   * Caw's rise above the pill (the part of his slot over the ledge line),
-   * and the cards parked above him with the stack's gaps. Nothing of the
-   * thread is ever under them; its tail moves up as a card parks.
+   * Room at the transcript's foot for what stands over it: the composer and
+   * Caw's rise above the pill (the part of his slot over the ledge line).
+   * A parked question card stands over the foot and moves nothing, as in a
+   * session: the owner, on a parked card, "it shouldn't push the transcript
+   * up" (a7443251).
    */
   const composerRoom = $derived.by(() => {
     if (!leadOn) {
       return view ? `${offHeight}px` : "0px";
     }
     const rise = seatSize * LEDGE_LINE;
-    const parked = asks.reduce(
-      (sum, ask) => sum + (parkedHeights[ask.request.requestId] ?? 0),
-      0
-    );
-    const cards =
-      asks.length > 0 ? ` + ${parked}px + var(--space-3) * ${asks.length}` : "";
-    return `var(--c-composer-panel) + var(--c-tray-row) + ${rise}px${cards}`;
+    return `var(--c-composer-panel) + var(--c-tray-row) + ${rise}px`;
   });
   const offLine = $derived(
     view?.on && view.problem
@@ -432,12 +425,6 @@
     <div
       class="parked"
       data-flip
-      bind:clientHeight={
-        () => parkedHeights[ask.request.requestId] ?? 0,
-        (height) => {
-    parkedHeights[ask.request.requestId] = height;
-  }
-      }
       out:settleInto={ask.request.toolUseId}
     >
       <Prompt
