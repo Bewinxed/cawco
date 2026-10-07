@@ -13,6 +13,8 @@
   import WorkflowRunView from "#lib/components/features/workflows/WorkflowRunView.svelte";
   import type { ServerTail } from "../client.svelte";
   import SessionPane from "../SessionPane.svelte";
+  import ThreadPane from "../ThreadPane.svelte";
+  import { isThreadTab } from "../thread-tabs";
   import Lightbox from "../transcript/Lightbox.svelte";
   import { runIdOf } from "../workflow-runs";
   import { dock, shownPanes, slots } from "./dock.svelte";
@@ -94,6 +96,13 @@
       {#if runId}
         <!-- A workflow run's tab: the run, as its own view. -->
         <WorkflowRunView {runId} />
+      {:else if isThreadTab(id)}
+        <!-- A thread with a project's Caw (ThreadPane). -->
+        <ThreadPane
+          focused={isActive && leaf?.id === workspace.focusedLeafId}
+          viewId={id}
+          visible={shownPanes.get(id) ?? false}
+        />
       {:else}
         <SessionPane
           browsing={ctx?.machine ?? null}

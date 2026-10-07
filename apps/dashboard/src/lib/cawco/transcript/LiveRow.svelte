@@ -165,6 +165,7 @@
     <section class="turn" class:grouped={live.grouped}>
       <Who
         grouped={live.grouped}
+        live={live.kind === "live"}
         name={agentName}
         timestamp={live.kind === "single" ? live.message.timestamp : undefined}
       />

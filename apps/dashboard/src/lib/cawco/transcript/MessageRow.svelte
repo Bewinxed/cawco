@@ -41,6 +41,7 @@
   import Shot from "./Shot.svelte";
   import SystemLine from "./SystemLine.svelte";
   import Thinking from "./Thinking.svelte";
+  import { useVoice } from "./voice";
   import Who from "./Who.svelte";
 
   /** A token-dressed micro count badge — shadcn Badge, off the stock 4/8/12
@@ -71,6 +72,8 @@
   } = $props();
 
   const kind = $derived(message.type);
+  /** Who answers here, when a pane says: what it draws under a turn. */
+  const voice = useVoice();
   /**
    * What the row offers. A queued message is edited in the composer, so it
    * offers Edit only where a composer is writing to its conversation.
@@ -677,6 +680,10 @@
   <section class="turn" class:grouped>
     <Who {grouped} name={agentName} timestamp={message.timestamp} />
     <MessageBody source={message.content} />
+    {#if voice?.tasks && message.metadata?.tasks?.length}
+      <!-- The tasks the turn is about, under it (a project's Caw). -->
+      {@render voice.tasks(message.metadata.tasks)}
+    {/if}
   </section>
 {:else if kind === "thinking"}
   {#if message.content.trim()}

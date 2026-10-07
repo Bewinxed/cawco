@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { newId } from "#lib/cawco/id.js";
   /**
    * One line to Caw: the kit Textarea in a field shell, one line that grows,
    * and the coral send beside it. Enter sends, Shift+Enter breaks the line.
@@ -8,6 +9,7 @@
    * Composer is not, since it needs a session to bind to.
    */
   import { appear } from "#lib/cawco/motion/curves.svelte.js";
+  import { departBox } from "#lib/cawco/motion/share.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Textarea } from "#lib/components/ui/textarea/index.js";
   import { IconSend } from "#lib/icons.js";
@@ -17,14 +19,26 @@
     placeholder,
     onsend,
     autofocus = false,
+    flies = false,
   }: {
     /** What the field is for, read out. */
     label: string;
     placeholder: string;
-    /** Sends the words; a throw is the hub's refusal, shown under the field. */
-    onsend: (text: string) => Promise<void>;
+    /**
+     * Sends the words, as message `id`; a throw is the hub's refusal, shown
+     * under the field.
+     */
+    onsend: (text: string, id: string) => Promise<void>;
     autofocus?: boolean;
+    /**
+     * The words fly to the row they become (motion/share): each send gets
+     * its message id here, the words depart under `sent:<id>` and the id
+     * goes to `onsend` to send them as. The field stays; its text flies.
+     */
+    flies?: boolean;
   } = $props();
+
+  let form = $state<HTMLFormElement | null>(null);
 
   let text = $state("");
   let sending = $state(false);
@@ -37,8 +51,13 @@
     }
     sending = true;
     refused = null;
+    const id = newId();
+    const field = form?.querySelector("textarea");
+    if (flies && field) {
+      departBox(`sent:${id}`, field);
+    }
     try {
-      await onsend(words);
+      await onsend(words, id);
       text = "";
     } catch (error) {
       refused = error instanceof Error ? error.message : String(error);
@@ -54,6 +73,7 @@
     event.preventDefault();
     send();
   }}
+  bind:this={form}
 >
   <div class="shell">
     <!-- svelte-ignore a11y_autofocus -->

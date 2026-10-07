@@ -2,6 +2,7 @@ import type { TranscriptPage } from "@cawco/core";
 import type { ServerTail } from "#lib/cawco/client.svelte.js";
 import { hubFailure } from "#lib/cawco/hub-read.js";
 import { transcriptUrl } from "#lib/cawco/links.js";
+import { isThreadTab } from "#lib/cawco/thread-tabs.js";
 import { runIdOf } from "#lib/cawco/workflow-runs.js";
 import type { PageServerLoad } from "./$types";
 
@@ -27,8 +28,9 @@ export const load: PageServerLoad = async ({
   isDataRequest,
 }): Promise<{ tail: ServerTail | null }> => {
   const viewId = untrack(() => params.id);
-  // The board, or a workflow run's tab: neither has a transcript to read.
-  if (!viewId || runIdOf(viewId) || isDataRequest) {
+  // The board, a workflow run's tab or a thread's: none has a transcript
+  // page to read (a thread's messages are read by its pane).
+  if (!viewId || runIdOf(viewId) || isThreadTab(viewId) || isDataRequest) {
     return { tail: null };
   }
   const response = await fetch(transcriptUrl(viewId));

@@ -309,7 +309,10 @@ export interface DbShape {
   readonly addThreadMessage: (
     message: Pick<ThreadMessageRow, "threadId" | "author" | "body"> &
       Partial<
-        Pick<ThreadMessageRow, "noteTitle" | "tasks" | "question" | "answer">
+        Pick<
+          ThreadMessageRow,
+          "id" | "noteTitle" | "tasks" | "question" | "answer"
+        >
       >
   ) => { thread: ThreadRow; message: ThreadMessageRow };
   /** Adds what a Caw turn the thread woke cost to the thread's spend. */
@@ -370,7 +373,7 @@ export interface DbShape {
     projectId: string;
     title: string;
     first: Pick<ThreadMessageRow, "author" | "body"> &
-      Partial<Pick<ThreadMessageRow, "noteTitle">>;
+      Partial<Pick<ThreadMessageRow, "id" | "noteTitle">>;
   }) => { thread: ThreadRow; message: ThreadMessageRow };
   /** Files a work item as the hub accepted it. */
   readonly createWorkItem: (item: typeof workItems.$inferInsert) => WorkItemRow;
@@ -711,6 +714,8 @@ export interface DbShape {
     role?: InstanceRole;
     /** The delegate type it was started as, and where it came from; set at its first spawn. */
     delegateType?: { name: string; projectId?: string };
+    /** The thread with the project's Caw it works for; set once, at its spawn. */
+    threadId?: string;
   }) => void;
   /** The offers nobody has answered yet. */
   readonly openProjectOffers: () => ProjectOfferRow[];
@@ -1216,6 +1221,8 @@ export interface DbShape {
   /** Every row of a project's task index, in id order. */
   readonly taskIndex: (projectId: string) => TaskIndexRow[];
   readonly thread: (id: string) => ThreadRow | undefined;
+  /** One thread message by its id, in any thread. */
+  readonly threadMessage: (id: string) => ThreadMessageRow | undefined;
   /** A thread's messages, oldest first. */
   readonly threadMessages: (threadId: string) => ThreadMessageRow[];
   /** The newest of a project's threads in which Caw named the task (`thread_reply` with `tasks`). */
@@ -2485,6 +2492,7 @@ const make = (path: string): DbShape => {
       workItemId,
       role,
       delegateType,
+      threadId,
       // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: opens (or reuses) the one live row for a conversation across every optional field a spawn can carry — see the "one conversation, one live row" invariant below.
     }) => {
       const now = new Date();
@@ -2559,6 +2567,7 @@ const make = (path: string): DbShape => {
           role,
           delegateType: delegateType?.name,
           delegateTypeProject: delegateType?.projectId,
+          threadId,
           // `starting`, not `running` — this row is written when a spawn is
           // *issued*, and issuing a spawn is not evidence that a process exists.
           // Writing `running` here is the original sin behind the 178-vs-42
@@ -2583,6 +2592,7 @@ const make = (path: string): DbShape => {
             ...(canDelegate === undefined ? {} : { canDelegate }),
             ...(workflowRunId ? { workflowRunId } : {}),
             ...(workflowStepId ? { workflowStepId } : {}),
+            ...(threadId ? { threadId } : {}),
             // `updatedAt` deliberately absent: a restore or relaunch re-issues
             // an existing session, so its last-activity time is whatever it
             // already was; stamping it here dated every restored session to the
@@ -4193,6 +4203,8 @@ const make = (path: string): DbShape => {
         .where(eq(threadMessages.threadId, threadId))
         .orderBy(asc(threadMessages.createdAt), asc(threadMessages.id))
         .all(),
+    threadMessage: (id) =>
+      db.select().from(threadMessages).where(eq(threadMessages.id, id)).get(),
     createThread: ({ id, projectId, title, first }) =>
       db.transaction((tx) => {
         const at = new Date();
@@ -4205,7 +4217,7 @@ const make = (path: string): DbShape => {
           .insert(threadMessages)
           .values({
             ...first,
-            id: crypto.randomUUID(),
+            id: first.id ?? crypto.randomUUID(),
             threadId: id,
             createdAt: at,
           })
@@ -4213,14 +4225,14 @@ const make = (path: string): DbShape => {
           .get();
         return { thread, message };
       }),
-    addThreadMessage: ({ threadId, ...said }) =>
+    addThreadMessage: ({ threadId, id, ...said }) =>
       db.transaction((tx) => {
         const at = new Date();
         const message = tx
           .insert(threadMessages)
           .values({
             ...said,
-            id: crypto.randomUUID(),
+            id: id ?? crypto.randomUUID(),
             threadId,
             createdAt: at,
           })

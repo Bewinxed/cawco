@@ -6,7 +6,9 @@
    * kept in `views/`, then each Caw drafted, marked `draft`, with Keep and
    * Discard over it. The tasks are the hub's: every change is a commit, so
    * the page shows what the hub answered and reads the list again after
-   * each of its own writes, on a reconnect, and when the tab comes back.
+   * each of its own writes, whenever the hub says the project's tasks
+   * changed (`tasks.changed`: Caw filed one, an attempt moved one), on a
+   * reconnect, and when the tab comes back.
    *
    * The view and the open task live in the URL (`?view=`, `?task=`), so a
    * link opens the same. Needs you is a filter, not a stage: the tasks whose
@@ -58,6 +60,7 @@
   import TaskBoard from "#lib/cawco/tasks/TaskBoard.svelte";
   import TaskSheet from "#lib/cawco/tasks/TaskSheet.svelte";
   import TaskTable from "#lib/cawco/tasks/TaskTable.svelte";
+  import { threadHref } from "#lib/cawco/thread-tabs.js";
   import ViewA2ui from "#lib/cawco/views/ViewA2ui.svelte";
   import ViewCalendar, {
     calendarField,
@@ -336,13 +339,17 @@
 
   // --- the hub's writes ---------------------------------------------------------
 
+  /** Reads of the tasks so far: only the newest one's answer is kept. */
+  let reads = 0;
   async function refresh() {
     const id = projectId;
+    reads += 1;
+    const ticket = reads;
     const [read, readStagesNow] = await Promise.allSettled([
       listTasks(id),
       readStages(id),
     ]);
-    if (id !== projectId) {
+    if (id !== projectId || ticket !== reads) {
       return;
     }
     if (read.status === "fulfilled") {
@@ -539,6 +546,17 @@
     });
   });
 
+  // Another hand changed the tasks (Caw filed one, an attempt moved one): the
+  // hub says so, and the list is read again.
+  let changesSeen = -1;
+  $effect(() => {
+    const changes = cawco.tasksChangedOf(projectId);
+    if (changesSeen !== -1 && changes !== changesSeen && list) {
+      untrack(() => refresh());
+    }
+    changesSeen = changes;
+  });
+
   // Another hand may have changed the tasks while the tab was away.
   $effect(() => {
     const back = () => {
@@ -615,6 +633,28 @@
   );
   /** Caw stands over the empty board while the lead is on; elsewhere he sits in the head. */
   const standing = $derived(empty && leadOn && !current.startsWith("view:"));
+
+  /**
+   * When he sits down (the first task landed, or the view moved off the
+   * board), the Caw standing over the board departs as he goes, and the
+   * head's seat lands him (CawSeat): one Caw, 80 into 48. His outro is the
+   * one moment he is known to be leaving while still drawn, so it is where
+   * he departs; it takes no time of its own.
+   */
+  function sitDown(node: HTMLElement): TransitionConfig {
+    depart(node);
+    return { duration: 0 };
+  }
+
+  /**
+   * The empty board's first words to Caw start a thread and open it: the
+   * words fly into its first row, and the standing Caw into its composer's
+   * seat (the navigation departs him).
+   */
+  async function firstWords(text: string, id: string) {
+    const said = await startThread(projectId, text, id);
+    await goto(threadHref(said.thread.id));
+  }
 </script>
 
 <svelte:head>
@@ -685,16 +725,15 @@
       <div class="state caw-empty">
         <EmptyState line={cawLine} title="Nothing on the board yet">
           {#snippet mark()}
-            <div class="caw-80" data-share="caw:{projectId}">
+            <div class="caw-80" data-share="caw:{projectId}" out:sitDown|global>
               <Caw size={80} status="ready" />
             </div>
           {/snippet}
           {#snippet action()}
             <CawField
+              flies
               label="Message the project"
-              onsend={async (text) => {
-                await startThread(projectId, text);
-              }}
+              onsend={firstWords}
               placeholder="Message the project…"
             />
           {/snippet}

@@ -682,6 +682,11 @@ export interface InstanceRow {
   sessionId: string | null;
   status: InstanceStatus;
   /**
+   * The thread with its project's Caw this session works for, when Caw's
+   * work started it: the rail nests it under that thread.
+   */
+  threadId?: string | null;
+  /**
    * What the session is called: the owner's rename, else the name the session
    * gave itself (`set_title`) or was spawned under, else {@link derivedTitle}.
    */
@@ -898,6 +903,7 @@ export type FramePayload =
   | import("./frames").ProjectOfferFrame
   | import("./frames").ThreadUpsertFrame
   | import("./frames").ThreadMessageFrame
+  | import("./frames").TasksChangedFrame
   | import("./frames").DelegateEventFrame
   | import("./frames").SupervisorEventFrame
   | import("./frames").SupervisorStatusFrame

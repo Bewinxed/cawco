@@ -30,7 +30,9 @@
   import { page } from "$app/state";
   import type { ServerTail } from "../client.svelte";
   import SessionPane from "../SessionPane.svelte";
+  import { isThreadTab } from "../thread-tabs";
   import Composer from "../transcript/Composer.svelte";
+  import TranscriptSkeleton from "../transcript/TranscriptSkeleton.svelte";
   import { runIdOf } from "../workflow-runs";
   import { composerBindings } from "./composer-dock.svelte";
   import { dropHint, paneDropTarget } from "./dnd.svelte";
@@ -385,6 +387,9 @@
              in the same place. -->
         {#if !browser && runIdOf(paneId)}
           <WorkflowRunView runId={runIdOf(paneId) ?? ""} />
+        {:else if !browser && isThreadTab(paneId)}
+          <!-- A thread's messages are read by its pane, in the browser. -->
+          <TranscriptSkeleton />
         {:else if !browser}
           <SessionPane
             browsing={ctx?.machine ?? null}
@@ -421,6 +426,8 @@
         onstop={bound.onstop}
         onsubmit={bound.onsubmit}
         paneVisible={bound.paneVisible}
+        perch={bound.perch}
+        placeholder={bound.placeholder}
         previewPhone={bound.previewPhone}
         prompts={bound.prompts}
         recallOf={bound.recallOf}

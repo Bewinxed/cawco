@@ -26,13 +26,18 @@ export interface ComposerBinding {
   /** The session whose delegates the composer's tray shows. */
   readonly delegatesOf: string;
   readonly draft: ComposerDraft;
-  leading: Snippet;
+  /** What stands before the field in the pill; a project's Caw has nothing there. */
+  leading?: Snippet;
   readonly mentions: Mention[];
   oninterruptsend: (text: string, extras: SendExtras, id: string) => void;
   onmenu: () => void;
   onstop: () => void;
   onsubmit: (text: string, extras: SendExtras, id: string) => void;
   readonly paneVisible: boolean;
+  /** What stands on the pill's top-leading corner: a project's Caw, in a thread. */
+  readonly perch?: Snippet;
+  /** The field's hint, where the agent takes no `/` or `@` (a project's Caw). */
+  readonly placeholder?: string;
   readonly previewPhone: boolean;
   prompts: Snippet;
   /** The conversation whose sent messages the composer recalls. */

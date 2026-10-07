@@ -4195,6 +4195,17 @@ export const createServer = (
    * recorded as every spawn is: the row is what puts it in the rail. A
    * conversation that starts here is named by its first turn.
    */
+  /** The thread a session Caw's work starts belongs to, if it is one (caw.ts `spawnThread`). */
+  const threadOfSpawn = (
+    parentInstanceId: string | undefined,
+    workItemId: string | undefined
+  ): { threadId?: string } => {
+    const threadId = parentInstanceId
+      ? caw.spawnThread(parentInstanceId, workItemId)
+      : undefined;
+    return threadId ? { threadId } : {};
+  };
+
   const issueSpawn = (
     machineId: string,
     asked: SpawnPayload,
@@ -4236,6 +4247,7 @@ export const createServer = (
       ...(workItemId ? { workItemId } : {}),
       ...(payload.role ? { role: payload.role } : {}),
       ...(payload.delegateType ? { delegateType: payload.delegateType } : {}),
+      ...threadOfSpawn(peekParent(payload).parentInstanceId, workItemId),
     });
     sendSpawn(agent, machineId, {
       verb: "spawn",
@@ -7797,6 +7809,14 @@ export const createServer = (
   tasks.listen(dispatcher.taskChanged);
   tasks.listen(push.taskChanged);
   tasks.listen(caw.taskChanged);
+  // Every dashboard showing the project reads its tasks again, whoever moved them.
+  tasks.listen((event) =>
+    registry.broadcast({
+      verb: "frames",
+      machineId: "hub",
+      payload: { kind: "tasks.changed", projectId: event.projectId },
+    })
+  );
   // "Make this a project": offered once to a plain session that outgrew
   // itself, at a turn's end or a delegate's spawn (project-offers.ts).
   const projectOffers = createProjectOffers({

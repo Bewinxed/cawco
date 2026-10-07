@@ -17,6 +17,7 @@
   import type { Message } from "../types";
   import MessageBody from "./MessageBody.svelte";
   import type { HarnessNote } from "./rows";
+  import { CAW_EVENT } from "./voice";
 
   let {
     message,
@@ -74,6 +75,25 @@
   );
 
   const open = $derived(disclosed.get());
+
+  /**
+   * Something that woke a project's Caw (a routine, an attempt landing, a
+   * task waiting on you): its line is code, so it stands in the dashed box,
+   * and when it happened is said in the reader's own time.
+   */
+  const wokeCaw = $derived(message?.metadata?.noteKind === CAW_EVENT);
+  const eventAt = $derived(
+    wokeCaw && message?.timestamp ? new Date(message.timestamp) : null
+  );
+  const eventClock = $derived(
+    eventAt
+      ? eventAt.toLocaleTimeString(undefined, {
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false,
+        })
+      : ""
+  );
 </script>
 
 <!-- Every line here is a rail row (app.css `.rail-row`): its mark in the
@@ -159,11 +179,16 @@
     <p class="handoff rail-hang">{message?.content}</p>
   </div>
 {:else if foldCommand || foldBody}
-  <div class="note rail-row">
+  <div class="note rail-row" data-code={wokeCaw || undefined}>
     <Collapsible.Root bind:open={disclosed.get, disclosed.set}>
       <Collapsible.Trigger class="ftrig rail-line">
         <span class="rail-cell"><IconInfo /></span>
         <span class="ftitle">{foldTitle}</span>
+        {#if eventAt}
+          <time class="eat num" datetime={eventAt.toISOString()}
+            >{eventClock}</time
+          >
+        {/if}
         <span class="hchev" class:open={open}><IconChevronRight /></span>
       </Collapsible.Trigger>
       <Collapsible.Content reveal>
@@ -178,10 +203,15 @@
 {:else}
   <!-- Nothing to open, so nothing that looks openable — the same dead-disclosure
        refusal the harness line and the tool rows already make. -->
-  <div class="note rail-row">
+  <div class="note rail-row" data-code={wokeCaw || undefined}>
     <span class="hline rail-line">
       <span class="rail-cell"><IconInfo /></span>
       <span class="ftitle">{foldTitle}</span>
+      {#if eventAt}
+        <time class="eat num" datetime={eventAt.toISOString()}
+          >{eventClock}</time
+        >
+      {/if}
     </span>
   </div>
 {/if}
@@ -235,6 +265,12 @@
     overflow: hidden;
     text-overflow: ellipsis;
   }
+  .eat {
+    flex: none;
+    margin-inline-start: var(--space-2);
+    font-weight: var(--weight-body);
+    color: var(--ink-subtle);
+  }
   /* The non-expandable twin: same line, no button, because there is nothing
      under it to open. */
   .hline {
@@ -243,6 +279,14 @@
     font-size: var(--text-label);
     font-weight: var(--weight-strong);
     color: var(--ink-muted);
+  }
+  /* An event that woke a project's Caw is code: its line stands in a 1px
+     dashed box in the control edge (design §1, SystemLine). */
+  .note[data-code] .hline,
+  .note[data-code] :global(.ftrig) {
+    padding: 0 var(--space-2);
+    border: 1px dashed var(--border-control);
+    border-radius: var(--radius-xs);
   }
   .hstatus {
     flex: 0 0 auto;

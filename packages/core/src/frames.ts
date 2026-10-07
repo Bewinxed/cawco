@@ -255,6 +255,16 @@ export interface ThreadUpsertFrame {
   thread: ThreadSummary;
 }
 
+export interface TasksChangedFrame {
+  instanceId?: undefined;
+  /**
+   * Hub-originated: a project's tasks changed (one was created or moved, or
+   * its folder was written), by anyone: read them again.
+   */
+  kind: "tasks.changed";
+  projectId: string;
+}
+
 export interface ThreadMessageFrame {
   instanceId?: undefined;
   /** Hub-originated: a message was added to a thread. */

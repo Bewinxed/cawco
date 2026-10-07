@@ -69,6 +69,7 @@
   import LiveSessionMenu from "./LiveSessionMenu.svelte";
   import SessionMark, { sessionStatus, statusWord } from "./SessionMark.svelte";
   import StoredSessionMenu from "./StoredSessionMenu.svelte";
+  import { isThreadTab } from "./thread-tabs";
   import { runIdOf } from "./workflow-runs";
   import { dragSession } from "./workspace/dnd.svelte";
 
@@ -126,6 +127,8 @@
   const sessionId = $derived(instance?.id ?? info?.sessionId ?? "");
   /** The row is a workflow run (workflow-runs.ts), not a session. */
   const run = $derived(instance ? runIdOf(instance.id) !== null : false);
+  /** The row is a thread with the project's Caw (thread-tabs.ts), not a session. */
+  const thread = $derived(instance ? isThreadTab(instance.id) : false);
   const status = $derived(sessionStatus(instance, done));
   /** Where it runs, for its mark's hue: the same seed in every list. */
   const place = $derived(
@@ -238,8 +241,9 @@
   </div>
 {/snippet}
 
-{#if run}
-  <!-- A workflow run takes no session commands; archive is on the row. -->
+{#if run || thread}
+  <!-- A workflow run, or a thread, takes no session commands; archive is on
+       the row. -->
   {@render body({})}
 {:else if instance}
   <LiveSessionMenu {instance} {onarchive}>

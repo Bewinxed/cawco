@@ -452,6 +452,9 @@ public enum Size {
     public static let cComposerField: Double = 34
     public static let cComposerInset: Double = 7
     public static let cComposerPanel: Double = 50
+    /// The group composer's column: its panel, the cards parked over it and its tray, and whatever stands in its place (a thread's lead-off line).
+    /// At most this, in points: on the web the least of it and a share of its container (min).
+    public static let cComposerW: Double = 720
     /// A suggestion chip: its Tab key cap, padding and border.
     public static let cSuggestChip: Double = 30
     public static let cSuggestRow: Double = 52

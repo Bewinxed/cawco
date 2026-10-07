@@ -4704,6 +4704,10 @@
                 "properties": {
                   "body": {
                     "type": "string"
+                  },
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
                   }
                 },
                 "required": [
@@ -4902,6 +4906,10 @@
                 "properties": {
                   "body": {
                     "type": "string"
+                  },
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
                   }
                 },
                 "required": [
@@ -13169,6 +13177,12 @@
                   "string"
                 ]
               },
+              "threadId": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
               "projectId": {
                 "type": [
                   "null",
@@ -13284,6 +13298,7 @@
               "projectId",
               "sessionId",
               "status",
+              "threadId",
               "title",
               "updatedAt",
               "workItemId",
@@ -13429,6 +13444,12 @@
                     "string"
                   ]
                 },
+                "threadId": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
                 "projectId": {
                   "type": [
                     "null",
@@ -13545,6 +13566,7 @@
                 "runningDelegates",
                 "sessionId",
                 "status",
+                "threadId",
                 "title",
                 "updatedAt",
                 "workItemId",
@@ -16035,6 +16057,9 @@
             "$ref": "#/components/schemas/ThreadMessageFrame"
           },
           {
+            "$ref": "#/components/schemas/TasksChangedFrame"
+          },
+          {
             "$ref": "#/components/schemas/DelegateEventFrame"
           },
           {
@@ -16074,6 +16099,7 @@
             "project_offer": "#/components/schemas/ProjectOfferFrame",
             "thread.upsert": "#/components/schemas/ThreadUpsertFrame",
             "thread.message": "#/components/schemas/ThreadMessageFrame",
+            "tasks.changed": "#/components/schemas/TasksChangedFrame",
             "delegate_event": "#/components/schemas/DelegateEventFrame",
             "supervisor_event": "#/components/schemas/SupervisorEventFrame",
             "supervisor_status": "#/components/schemas/SupervisorStatusFrame",
@@ -18863,6 +18889,10 @@
             "items": {
               "$ref": "#/components/schemas/UserQuestion"
             }
+          },
+          "toolUseId": {
+            "description": "The lead's call that asked them: the parked card on the thread's\ncomposer settles into the answered row that carries it.",
+            "type": "string"
           }
         },
         "required": [
@@ -27359,6 +27389,13 @@
           "status": {
             "$ref": "#/components/schemas/InstanceStatus"
           },
+          "threadId": {
+            "description": "The thread with its project's Caw this session works for, when Caw's\nwork started it: the rail nests it under that thread.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "title": {
             "description": "What the session is called: the owner's rename, else the name the session\ngave itself (`set_title`) or was spawned under, else {@link derivedTitle}.",
             "type": [
@@ -28186,6 +28223,25 @@
           "kind",
           "message",
           "threadId"
+        ]
+      },
+      "TasksChangedFrame": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "description": "Hub-originated: a project's tasks changed (one was created or moved, or\nits folder was written), by anyone: read them again.",
+            "type": "string",
+            "enum": [
+              "tasks.changed"
+            ]
+          },
+          "projectId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "projectId"
         ]
       },
       "DelegateEventFrame": {

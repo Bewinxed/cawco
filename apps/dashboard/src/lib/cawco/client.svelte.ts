@@ -134,6 +134,7 @@ import {
   refreshTasks,
   TASK_LEDGER_TOOLS,
 } from "./tasks.svelte";
+import { isThreadTab, threadIdOf, threadRowOf } from "./thread-tabs";
 import { warmCompactionMark } from "./transcript/compaction-mark";
 import { errorMessage, localUserMessage } from "./transcript/local";
 import { routedToParent } from "./transcript/present";
@@ -578,13 +579,47 @@ const runRows = $derived(
 );
 /** The runs the board lists, by the hub's window for sessions (`onBoard`). */
 const boardRuns = $derived(runRows.filter((row) => onBoard(row, Date.now())));
+/** What a thread's status says it is doing, in the fleet's words. */
+const THREAD_DOING: Record<ThreadSummary["status"], Activity> = {
+  working: "working",
+  "needs-you": "blocked",
+  ready: "idle",
+};
 /** The run a `run:` id names, when it is one this browser has. */
 const runOf = (id: string): WorkflowRun | undefined => {
   const runId = runIdOf(id);
   return runId ? workflowState.runs[runId] : undefined;
 };
-/** The same rows looked up by id and by session, runs among them, rebuilt once per change. */
-const instanceIndex = $derived(indexInstances([...instances, ...runRows]));
+/**
+ * Every thread with a project's Caw as a session row (thread-tabs.ts): what
+ * the rail lists, nests under and orders it by, and what its tab is named
+ * from. Read with the fleet, kept by `thread.upsert` frames.
+ */
+const threadRows = $derived.by(() =>
+  state.projects.flatMap((project) =>
+    (state.threads[project.id] ?? []).map((thread) =>
+      threadRowOf(thread, project)
+    )
+  )
+);
+/** Each thread by its id, for what a `thread:` tab or row asks of it. */
+const threadsById = $derived.by(
+  () =>
+    new Map(
+      Object.values(state.threads)
+        .flat()
+        .map((thread) => [thread.id, thread])
+    )
+);
+/** The thread a `thread:` id names, when this browser has it. */
+const threadOf = (id: string): ThreadSummary | undefined => {
+  const threadId = threadIdOf(id);
+  return threadId ? threadsById.get(threadId) : undefined;
+};
+/** The same rows looked up by id and by session, runs and threads among them, rebuilt once per change. */
+const instanceIndex = $derived(
+  indexInstances([...instances, ...runRows, ...threadRows])
+);
 const runningInstances = $derived(instances.filter(isLive));
 const staleInstances = $derived(instances.filter(isStale));
 const listedInstances = $derived(instances.filter(isListed));
@@ -655,6 +690,12 @@ const state = $state({
    * id: kept by `thread.message` frames from the read on.
    */
   threadMessages: {} as Record<string, ThreadMessage[]>,
+  /**
+   * How many times each project's tasks have changed since this page
+   * connected, by project id (`tasks.changed` frames): what shows its tasks
+   * reads them again when it moves.
+   */
+  tasksChanged: {} as Record<string, number>,
   sessions: {} as Record<string, SessionState>,
   /**
    * Each instance's coarse now-state, pushed by the daemon ~1/sec (broadcast).
@@ -2315,6 +2356,12 @@ function handleFrame(frame: FramePayload): void {
     return;
   }
 
+  if (frame.kind === "tasks.changed") {
+    state.tasksChanged[frame.projectId] =
+      (state.tasksChanged[frame.projectId] ?? 0) + 1;
+    return;
+  }
+
   if (frame.kind === "project_offer") {
     if (frame.offer) {
       state.projectOffers[frame.instanceId] = frame.offer;
@@ -3538,8 +3585,9 @@ function subscriptionIds(): string[] {
     ids.add(id);
   }
   // A run's tab streams no frames of its own: its run and steps come with
-  // the workflow frames every dashboard already receives.
-  return [...ids].filter((id) => !runIdOf(id));
+  // the workflow frames every dashboard already receives. A thread's comes
+  // with the thread frames, which every dashboard receives too.
+  return [...ids].filter((id) => !(runIdOf(id) || isThreadTab(id)));
 }
 
 /** The last subscription set sent, so an unchanged set of tabs stays quiet. */
@@ -3578,8 +3626,8 @@ export function setPeeked(id: string | null): void {
 
 /** One more reader of this delegate: its frames stream while any reader remains. */
 export function watchDelegate(instanceId: string): void {
-  // A workflow run streams no frames of its own (see `subscriptionIds`).
-  if (runIdOf(instanceId)) {
+  // A workflow run or a thread streams no frames of its own (see `subscriptionIds`).
+  if (runIdOf(instanceId) || isThreadTab(instanceId)) {
     return;
   }
   watchedDelegates.set(instanceId, (watchedDelegates.get(instanceId) ?? 0) + 1);
@@ -4640,14 +4688,19 @@ export async function readThread(
   return read;
 }
 
-/** Starts a thread with your first message; Caw is woken with it. */
+/**
+ * Starts a thread with your first message; Caw is woken with it. `id` is the
+ * message's, chosen here as a session's composer chooses its own: the row it
+ * becomes lands the words that flew under it, whenever the hub draws it.
+ */
 export async function startThread(
   projectId: string,
-  body: string
+  body: string,
+  id?: string
 ): Promise<ThreadSaid> {
   const said = await askHub<ThreadSaid>(
     `${projectPath(projectId)}/threads`,
-    json("POST", { body })
+    json("POST", { body, ...(id ? { id } : {}) })
   );
   state.threadMessages[said.thread.id] ??= [];
   adoptThreadMessage(said.thread.id, said.message);
@@ -4655,15 +4708,16 @@ export async function startThread(
   return said;
 }
 
-/** Writes in a thread; Caw is woken with it. */
+/** Writes in a thread; Caw is woken with it. `id` as for {@link startThread}. */
 export async function sayInThread(
   projectId: string,
   threadId: string,
-  body: string
+  body: string,
+  id?: string
 ): Promise<ThreadSaid> {
   const said = await askHub<ThreadSaid>(
     `${projectPath(projectId)}/threads/${encodeURIComponent(threadId)}/messages`,
-    json("POST", { body })
+    json("POST", { body, ...(id ? { id } : {}) })
   );
   adoptThreadMessage(threadId, said.message);
   adoptThread(said.thread);
@@ -4923,8 +4977,9 @@ export function readTranscript(
   again = false,
   fresh = false
 ): Promise<TranscriptOutcome> {
-  // A workflow run's tab has no transcript of its own: its steps' do.
-  if (runIdOf(viewId)) {
+  // A workflow run's tab has no transcript of its own: its steps' do. A
+  // thread's is its messages (`readThread`).
+  if (runIdOf(viewId) || isThreadTab(viewId)) {
     return Promise.resolve({ ok: true, skipped: true });
   }
   const inFlight = pageReads.get(viewId);
@@ -5971,6 +6026,12 @@ export const cawco = {
   get runRows(): InstanceRow[] {
     return boardRuns;
   },
+  /** Every thread with a project's Caw, as session rows (thread-tabs.ts). */
+  get threadRows(): InstanceRow[] {
+    return threadRows;
+  },
+  /** The thread a `thread:` id names, when this browser has it. */
+  threadOf,
   /** Side quests across the fleet — kept in their own section, not per machine. */
   get scratchInstances(): InstanceRow[] {
     return instances.filter((row) => isListed(row) && row.kind === "scratch");
@@ -5991,6 +6052,9 @@ export const cawco = {
   /** A project's threads with its Caw, newest first, live. */
   threadsOf,
   /** A thread's messages, oldest first, once {@link readThread} read it; null before. */
+  /** A count that moves each time the project's tasks change (`tasks.changed`). */
+  tasksChangedOf: (projectId: string): number =>
+    state.tasksChanged[projectId] ?? 0,
   threadMessagesOf: (threadId: string): ThreadMessage[] | null =>
     state.threadMessages[threadId] ?? null,
   session: (instanceId: string): SessionState | null =>
@@ -6065,6 +6129,10 @@ export const cawco = {
     if (run) {
       return runDoing(run.status);
     }
+    const thread = threadOf(instanceId);
+    if (thread) {
+      return THREAD_DOING[thread.status];
+    }
     const target = state.sessions[instanceId];
     // Blocked wins everywhere: a parked permission is broadcast, not filtered.
     if (target && target.pending.length > 0) {
@@ -6136,6 +6204,10 @@ export const cawco = {
     const run = runOf(instanceId);
     if (run) {
       return runMovedAt(run, workflowState.details[run.id]?.steps);
+    }
+    const thread = threadOf(instanceId);
+    if (thread) {
+      return thread.lastAt;
     }
     return state.pulses[instanceId]?.at;
   },

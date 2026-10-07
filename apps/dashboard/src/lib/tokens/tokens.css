@@ -593,6 +593,8 @@
       2 +
       2px
     );
+    /* The group composer's column: its panel, the cards parked over it and its tray, and whatever stands in its place (a thread's lead-off line). */
+    --c-composer-w: min(720px, calc(100% - 50px));
     /* A suggestion chip: its Tab key cap, padding and border. */
     --c-suggest-chip: calc(1.25rem + var(--space-1) * 2 + 2px);
     --c-suggest-row: calc(

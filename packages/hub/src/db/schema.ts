@@ -499,6 +499,12 @@ export const instances = sqliteTable("instances", {
   keepAliveTurn: text("keep_alive_turn"),
   workflowRunId: text("workflow_run_id"),
   workflowStepId: text("workflow_step_id"),
+  /**
+   * The thread with the project's Caw this session works for: an attempt at
+   * a task, the thread that named the task; a session Caw started, the
+   * thread his turn was answering. Set once, at its spawn.
+   */
+  threadId: text("thread_id"),
   id: text("id").primaryKey(),
   machineId: text("machine_id")
     .notNull()

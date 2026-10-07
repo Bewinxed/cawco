@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { ThreadMessage } from "@cawco/core";
   /**
    * The rail's session card: resting the pointer on a session row (Working,
    * Finished, a project's sessions) opens the delegate tray's panel
@@ -16,15 +17,24 @@
    */
   import { Portal } from "bits-ui";
   import { IconAsk, IconSuccess, IconWarningTriangle } from "#lib/icons.js";
-  import { cawco, isFailed, readTranscript } from "./client.svelte";
+  import {
+    cawco,
+    isFailed,
+    projectSpend,
+    readThread,
+    readTranscript,
+  } from "./client.svelte";
   import HoverPanel from "./HoverPanel.svelte";
+  import CawFace from "./home/CawFace.svelte";
   import { instanceTitle } from "./home/home-state.svelte";
   import { markHue, sessionSprite } from "./mark";
   import RunSteps from "./RunSteps.svelte";
+  import { threadIdOf } from "./thread-tabs";
   import DelegateTail, {
     type TailNote,
   } from "./transcript/DelegateTail.svelte";
   import { askDetailOf } from "./transcript/present";
+  import { money } from "./usage";
   import { runIdOf } from "./workflow-runs";
   import { workflowState } from "./workflow-state.svelte";
 
@@ -52,6 +62,11 @@
       return;
     }
     fetched = id;
+    const threadId = threadIdOf(id);
+    if (threadId) {
+      readThreadCard(threadId);
+      return;
+    }
     // A workflow run's card reads its running step's tail, not its own.
     const tail = runningStep(id) ?? (runIdOf(id) ? null : id);
     if (tail && !cawco.session(tail)?.messages.length) {
@@ -59,6 +74,44 @@
       void readTranscript(tail);
     }
   }
+
+  /**
+   * What a thread's card says that its row cannot: what its turns cost, read
+   * from its project's spend each time the card is asked for, by thread id.
+   */
+  let threadSpend = $state<Record<string, number>>({});
+  function readThreadCard(threadId: string): void {
+    const thread = cawco.threadOf(`thread:${threadId}`);
+    if (!thread) {
+      return;
+    }
+    if (!cawco.threadMessagesOf(threadId)) {
+      // biome-ignore lint/complexity/noVoid: fire-and-forget; the card draws whatever has arrived.
+      void readThread(thread.projectId, threadId).catch(() => undefined);
+    }
+    projectSpend(thread.projectId).then(
+      (spend) => {
+        for (const each of spend.threads) {
+          threadSpend[each.id] = each.usd;
+        }
+      },
+      () => undefined
+    );
+  }
+
+  /** A thread's newest line, as the card's tail ends on it. */
+  const newestLine = (message: ThreadMessage | undefined): string | null => {
+    if (!message) {
+      return null;
+    }
+    const words = message.author === "event" ? message.noteTitle : message.body;
+    return words.trim().split("\n")[0] ?? null;
+  };
+  const SPEAKER: Record<ThreadMessage["author"], string> = {
+    caw: "Caw",
+    event: "Event",
+    you: "You",
+  };
 
   /** The session of a run's running step, whose tail is the run's live tail. */
   function runningStep(id: string): string | null {
@@ -208,6 +261,13 @@
 
   type Tone = "live" | "needs" | "done" | "failed" | "idle";
   const toneOf = (id: string): Tone => {
+    const thread = cawco.threadOf(id);
+    if (thread) {
+      if (thread.status === "needs-you") {
+        return "needs";
+      }
+      return thread.status === "working" ? "live" : "idle";
+    }
     const row = cawco.instanceIndex.byId.get(id);
     if (row && isFailed(row)) {
       return "failed";
@@ -275,11 +335,16 @@
       {@const tone = toneOf(id)}
       {@const Sprite = sessionSprite(id)}
       {@const runId = runIdOf(id)}
+      {@const thread = cawco.threadOf(id)}
       <div data-nest-host>
         <div class="head">
-          <span aria-hidden="true" class="mark m{markHue(row?.cwd || id)}"
-            ><Sprite /></span
-          >
+          <span aria-hidden="true" class="mark m{markHue(row?.cwd || id)}">
+            {#if thread}
+              <CawFace size={14} status={thread.status} />
+            {:else}
+              <Sprite />
+            {/if}
+          </span>
           <span class="title">{row ? instanceTitle(row) : "Session"}</span>
           <span aria-label={WORD[tone]} class="state {tone}" role="img">
             {#if tone === "live"}
@@ -293,7 +358,21 @@
             {/if}
           </span>
         </div>
-        {#if runId}
+        {#if thread}
+          <!-- A thread's card: its newest line, and what its turns cost. -->
+          {@const newest = cawco.threadMessagesOf(thread.id)?.at(-1)}
+          {@const line = newestLine(newest)}
+          {@const spent = threadSpend[thread.id]}
+          {#if newest && line}
+            <p class="newest">
+              <span class="who">{SPEAKER[newest.author]}</span>
+              <span class="said">{line}</span>
+            </p>
+          {/if}
+          {#if spent !== undefined}
+            <p class="spent num">{money(spent)} spent</p>
+          {/if}
+        {:else if runId}
           <!-- A workflow run's card: its steps under it, then the live tail of
              the one running, the way a session's card ends on its own. -->
           {@const step = runningStep(id)}
@@ -365,6 +444,28 @@
   }
   .mark.m8 {
     background-color: var(--mark-8);
+  }
+  .newest {
+    display: flex;
+    gap: var(--space-2);
+    min-inline-size: 0;
+    font-size: var(--text-meta);
+    color: var(--ink-strong);
+  }
+  .who {
+    flex: none;
+    font-weight: var(--weight-strong);
+  }
+  .said {
+    min-inline-size: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .spent {
+    margin-block-start: var(--space-1);
+    font-size: var(--text-meta);
+    color: var(--ink-muted);
   }
   .state {
     flex: none;

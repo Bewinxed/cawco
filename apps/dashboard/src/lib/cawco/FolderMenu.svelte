@@ -13,6 +13,7 @@
   import * as ContextMenu from "#lib/components/ui/context-menu/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import {
+    IconChat,
     IconChevronUp,
     IconExternal,
     IconPalette,
@@ -21,10 +22,11 @@
     IconTrash,
   } from "#lib/icons.js";
   import { goto } from "$app/navigation";
-  import { deleteProject, type ProjectRow } from "./client.svelte";
+  import { cawOf, deleteProject, type ProjectRow } from "./client.svelte";
   import { folderPrefs } from "./folder-prefs.svelte";
   import { HUES } from "./identity";
   import { rail } from "./rail.svelte";
+  import { newThreadTabId } from "./thread-tabs";
 
   interface Props {
     children: Snippet;
@@ -56,6 +58,35 @@
 
   const pinned = $derived(project ? rail.isPinned(project.id) : false);
 
+  let open = $state(false);
+  /**
+   * The project's Caw can take a thread now: his lead is on and the hub can
+   * start it. Read each time the menu opens, so it says what is true then.
+   */
+  let leadOn = $state(false);
+  $effect(() => {
+    const id = project?.id;
+    if (!(open && id)) {
+      return;
+    }
+    let live = true;
+    cawOf(id).then(
+      (view) => {
+        if (live) {
+          leadOn = view.on && !view.problem;
+        }
+      },
+      () => {
+        if (live) {
+          leadOn = false;
+        }
+      }
+    );
+    return () => {
+      live = false;
+    };
+  });
+
   let confirmingForget = $state(false);
   let busy = $state(false);
   /** The last forget went through (a failed one leaves the dialog open). */
@@ -77,7 +108,7 @@
   }
 </script>
 
-<ContextMenu.Root>
+<ContextMenu.Root bind:open>
   <ContextMenu.Trigger class="contents">
     {@render children()}
   </ContextMenu.Trigger>
@@ -87,6 +118,14 @@
       <IconPlus />
       New session here
     </ContextMenu.Item>
+    {#if project && leadOn}
+      <ContextMenu.Item
+        onSelect={() => goto(`/session/${newThreadTabId(project.id)}`)}
+      >
+        <IconChat />
+        New thread
+      </ContextMenu.Item>
+    {/if}
     {#if project}
       <ContextMenu.Item onSelect={() => goto(`/project/${project.id}`)}>
         <IconExternal />

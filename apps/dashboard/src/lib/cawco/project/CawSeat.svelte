@@ -10,6 +10,7 @@
   import { MediaQuery } from "svelte/reactivity";
   import { cawLoop } from "#lib/cawco/feel.svelte.js";
   import Caw from "#lib/cawco/home/Caw.svelte";
+  import { land } from "#lib/cawco/motion/share.svelte.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Drawer from "#lib/components/ui/drawer/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
@@ -86,6 +87,7 @@
   type="button"
   bind:this={anchor}
   style:--seat="{size}px"
+  {@attach land(() => `caw:${projectId}`, { uniform: true })}
 >
   {#if lead.shown}
     <Caw next={HEAD_NEXT} {size} status={lead.status} {still} />

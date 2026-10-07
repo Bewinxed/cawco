@@ -10,6 +10,7 @@
    * 3px from the other and read visibly off-centre. 18 − 12 = 6 splits 3/3.
    */
   import { IconAgent, IconUser } from "#lib/icons.js";
+  import { useVoice } from "./voice";
 
   let {
     you = false,
@@ -17,8 +18,14 @@
     name,
     timestamp,
     note,
+    live = false,
   }: {
     you?: boolean;
+    /**
+     * The turn in flight: a pane's own face for its speaker (`voice`) draws
+     * it at work.
+     */
+    live?: boolean;
     /**
      * The speaker's turn right above said who this is: no mark and no name on
      * screen (the name stays for a screen reader, so every turn is still a
@@ -37,6 +44,9 @@
      */
     note?: string;
   } = $props();
+
+  /** Who answers here, when a pane says (a project's Caw): its face is the mark. */
+  const voice = useVoice();
 
   /** A transcript may arrive with its timestamp already serialised to a string. */
   const at = $derived(timestamp ? new Date(timestamp) : null);
@@ -58,13 +68,19 @@
   {#if grouped}
     <span class="sr-only">{name}</span>
   {:else}
-    <span aria-hidden="true" class="dot {you ? "u" : "a"}">
-      {#if you}
-        <IconUser />
-      {:else}
-        <IconAgent />
-      {/if}
-    </span>
+    {#if !you && voice?.face}
+      <span aria-hidden="true" class="dot face"
+        >{@render voice.face(live)}</span
+      >
+    {:else}
+      <span aria-hidden="true" class="dot {you ? "u" : "a"}">
+        {#if you}
+          <IconUser />
+        {:else}
+          <IconAgent />
+        {/if}
+      </span>
+    {/if}
     <span class="role">{name}</span>
   {/if}
   {#if note}
@@ -136,6 +152,10 @@
     &.a {
       background: var(--brand-solid);
       color: var(--on-brand);
+    }
+    /* A pane's own face for its speaker stands bare in the mark's box. */
+    &.face {
+      overflow: visible;
     }
   }
   .role {

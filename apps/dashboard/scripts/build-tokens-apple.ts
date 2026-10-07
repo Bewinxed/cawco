@@ -395,6 +395,22 @@ class Tokens {
     return arith(substituted, where);
   }
 
+  /**
+   * A web `min()` of a length and a share of its container (`%`), as the
+   * length: the most the size may be. The container's side has no meaning
+   * outside a layout, so a min() of anything else is refused.
+   */
+  cap(raw: string, where: string): number {
+    const fn = call(raw.trim());
+    const fixed = fn
+      ? splitTop(fn.args, ",").filter((arg) => !arg.includes("%"))
+      : [];
+    if (!(fn?.name === "min" && fixed.length === 1)) {
+      throw new Error(`${where}: unsupported "${raw}"`);
+    }
+    return this.numeric(fixed[0], where);
+  }
+
   /** A size as min...max: one value is min == max, a clamp() its bounds. */
   range(raw: string, where: string): [number, number] {
     const s = raw.trim();
@@ -701,6 +717,15 @@ function declare(token: TransformedToken, tokens: Tokens): Declaration[] {
           one(
             `public static let ${name}: ClosedRange<Double> = ${swiftNumber(min)}...${swiftNumber(max)}`,
             ["Fluid on the web (clamp); its bounds in points."]
+          )
+        );
+      } else if (call(raw)?.name === "min") {
+        out.push(
+          one(
+            `public static let ${name}: Double = ${swiftNumber(tokens.cap(raw, where))}`,
+            [
+              "At most this, in points: on the web the least of it and a share of its container (min).",
+            ]
           )
         );
       } else {

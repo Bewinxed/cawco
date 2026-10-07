@@ -2136,6 +2136,11 @@
       "$type": "dimension",
       "$value": "calc({size.c-composer-field} + {size.c-composer-inset} * 2 + 2px)"
     },
+    "c-composer-w": {
+      "$type": "dimension",
+      "$value": "min(720px, calc(100% - 50px))",
+      "$description": "The group composer's column: its panel, the cards parked over it and its tray, and whatever stands in its place (a thread's lead-off line)."
+    },
     "c-suggest-chip": {
       "$type": "dimension",
       "$value": "calc(1.25rem + {space.space-1} * 2 + 2px)",

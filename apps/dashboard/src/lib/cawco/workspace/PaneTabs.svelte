@@ -66,9 +66,11 @@
   } from "../activity";
   import { cawco, isFailed, isStale } from "../client.svelte";
   import { continueInNewSession, continueSourceOf } from "../continue.svelte";
+  import CawFace from "../home/CawFace.svelte";
   import type { HubRead } from "../hub-read";
   import { conversationHref } from "../links";
   import { sessionName } from "../session-name";
+  import { isThreadTab } from "../thread-tabs";
   import { runIdOf } from "../workflow-runs";
   import { workingSet } from "../working-set.svelte";
   import { dragSession, dropHint, tabDropTarget } from "./dnd.svelte";
@@ -111,7 +113,10 @@
     const row = cawco.instanceIndex.byId.get(id);
     const view = cawco.session(id);
     const ctx = contextOf(id);
-    const { label, named } = sessionName(id, servedNames);
+    const thread = cawco.threadOf(id);
+    const { label, named } = isThreadTab(id)
+      ? { label: thread?.title ?? "New thread", named: true }
+      : sessionName(id, servedNames);
     const activity = cawco.activityOf(id);
     const failed = row ? isFailed(row) : false;
     const stale = row ? isStale(row) : false;
@@ -142,6 +147,11 @@
       stale,
       status,
     };
+  }
+
+  /** Which of Caw's files a thread's tab shows: what the thread is doing. */
+  function threadFace(id: string): "ready" | "working" | "needs-you" {
+    return cawco.threadOf(id)?.status ?? "ready";
   }
 
   /**
@@ -216,8 +226,9 @@
     morphing = false;
   }
   function showDetails(id: string, anchor: HTMLElement, pin: boolean) {
-    // A workflow run's tab is its own details: it has no session card.
-    if (runIdOf(id)) {
+    // A workflow run's tab is its own details, and a thread's is its
+    // messages: neither has a session card.
+    if (runIdOf(id) || isThreadTab(id)) {
       return;
     }
     clearTimeout(timer);
@@ -652,7 +663,12 @@
               value={tab.id}
             >
               {#snippet lead()}
-                <SessionStatus compact sessionId={tab.id} />
+                {#if isThreadTab(tab.id)}
+                  <!-- A thread's mark is Caw, at what the thread is doing. -->
+                  <CawFace size={18} status={threadFace(tab.id)} />
+                {:else}
+                  <SessionStatus compact sessionId={tab.id} />
+                {/if}
               {/snippet}
               {#snippet trail()}
                 <!-- Every tab keeps the details slot, so choosing one never
@@ -660,7 +676,7 @@
                      only. The empty slot on another tab is part of that
                      tab, and a click there chooses it. A workflow run's tab
                      has no details card, and so no slot. -->
-                {#if !runIdOf(tab.id)}
+                {#if !(runIdOf(tab.id) || isThreadTab(tab.id))}
                   <button
                     aria-expanded={chosen
                       ? detailsOpen && detailId === tab.id
@@ -698,7 +714,7 @@
             </TabItem>
           </ContextMenu.Trigger>
           <ContextMenu.Content>
-            {#if !runIdOf(tab.id)}
+            {#if !(runIdOf(tab.id) || isThreadTab(tab.id))}
               <ContextMenu.Item
                 onSelect={() => {
                   const anchor = document.querySelector<HTMLElement>(

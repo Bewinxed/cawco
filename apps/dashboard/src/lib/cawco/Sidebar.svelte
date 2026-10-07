@@ -79,6 +79,7 @@
   import SessionHover from "./SessionHover.svelte";
   import SessionRow, { ROW_PILL } from "./SessionRow.svelte";
   import { newSession } from "./spawn/new-session.svelte";
+  import { isThreadTab, underThread } from "./thread-tabs";
   import { rooted, topsIn, tree } from "./tree";
   import UsageMeter from "./UsageMeter.svelte";
   import { workflowState } from "./workflow-state.svelte";
@@ -245,10 +246,19 @@
     }
   }
 
-  /** What is running now: sessions, and workflow runs still going. */
+  /**
+   * A row as the rail lists it. A project's Caw is its threads, so his lead
+   * session is not a row of its own; a session his work started hangs under
+   * the thread it works for (thread-tabs.ts `underThread`).
+   */
+  const forRail = (rows: InstanceRow[]): InstanceRow[] =>
+    rows.filter((row) => row.role !== "lead").map(underThread);
+
+  /** What is running now: sessions, workflow runs still going, threads Caw is on. */
   const running = $derived([
-    ...cawco.runningInstances,
+    ...forRail(cawco.runningInstances),
     ...cawco.runRows.filter((row) => row.status === "running"),
+    ...cawco.threadRows.filter((row) => row.status === "running"),
   ]);
 
   const orderedProjects = $derived.by(() =>
@@ -469,10 +479,13 @@
 
   /** What a project says when nothing in it runs: how much of it is resumable. */
   const notRunning = $derived([
-    ...cawco.listedInstances.filter(
-      (row) => isResumable(row) || isStale(row) || isFailed(row)
+    ...forRail(
+      cawco.listedInstances.filter(
+        (row) => isResumable(row) || isStale(row) || isFailed(row)
+      )
     ),
     ...cawco.runRows.filter(isFailed),
+    ...cawco.threadRows.filter((row) => row.status !== "running"),
   ]);
 
   /* ---- order -----------------------------------------------------------
@@ -530,6 +543,11 @@
   function sorted(rows: InstanceRow[]): InstanceRow[] {
     const by = rail.sort;
     return [...rows].sort((a, b) => {
+      // A project's threads with Caw come first, then its sessions (picks.md).
+      const thread = Number(isThreadTab(b.id)) - Number(isThreadTab(a.id));
+      if (thread !== 0) {
+        return thread;
+      }
       if (by === "name") {
         const cmp = sessionName(a).localeCompare(sessionName(b));
         if (cmp !== 0) {

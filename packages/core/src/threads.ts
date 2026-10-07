@@ -40,6 +40,11 @@ export interface ThreadSummary {
 /** The questions the lead asked you in a thread (its AskUserQuestion). */
 export interface ThreadQuestion {
   questions: UserQuestion[];
+  /**
+   * The lead's call that asked them: the parked card on the thread's
+   * composer settles into the answered row that carries it.
+   */
+  toolUseId?: string;
 }
 
 /** How you answered them: your choices, or that you walked away from them. */

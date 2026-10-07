@@ -1,0 +1,1 @@
+ALTER TABLE `instances` ADD `thread_id` text;

@@ -66,7 +66,9 @@
    * a session; its deck, count, switch, echo and status dot are the tree
    * mark's, and the row says the status in its name (`statusWord`).
    */
+  import CawFace from "./home/CawFace.svelte";
   import { markHue, sessionSprite } from "./mark";
+  import { isThreadTab } from "./thread-tabs";
 
   let {
     id,
@@ -90,6 +92,10 @@
   } = $props();
 
   const Sprite = $derived(sessionSprite(id));
+  /** A thread's mark is Caw at what the thread is doing (thread-tabs.ts). */
+  const caw = $derived(
+    isThreadTab(id) ? (cawco.threadOf(id)?.status ?? "ready") : null
+  );
 </script>
 
 <TreeMark
@@ -100,7 +106,11 @@
   {status}
 >
   {#snippet face()}
-    <Sprite aria-hidden="true" class="session-mark-glyph" />
+    {#if caw}
+      <CawFace size={14} status={caw} />
+    {:else}
+      <Sprite aria-hidden="true" class="session-mark-glyph" />
+    {/if}
   {/snippet}
 </TreeMark>
 

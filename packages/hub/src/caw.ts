@@ -223,7 +223,9 @@ export interface CawDeps {
     | "setProjectCaw"
     | "thread"
     | "threadMessages"
+    | "threadMessage"
     | "threadOfTask"
+    | "workItem"
   >;
   /** Ends a session (the lead, when Caw is turned off or moves harness). */
   readonly end: (instanceId: string) => void;
@@ -628,13 +630,24 @@ export const createCaw = ({
     };
   };
 
-  /** Starts a thread with your first message, to every dashboard; the wake that follows publishes its row. */
-  const open = (projectId: string, body: string) => {
+  /** A message id the dashboard chose is a new one: a second send of it is refused. */
+  const unsaid = (id: string | undefined): void => {
+    if (id && db.threadMessage(id)) {
+      refuse(409, "That message is already in its thread.");
+    }
+  };
+
+  /**
+   * Starts a thread with your first message, to every dashboard; the wake
+   * that follows publishes its row. `id` is the message's, when the
+   * dashboard chose it (see `say`).
+   */
+  const open = (projectId: string, body: string, id?: string) => {
     const made = db.createThread({
       id: crypto.randomUUID(),
       projectId,
       title: titleFrom(body),
-      first: { author: "you", body },
+      first: { author: "you", body, ...(id ? { id } : {}) },
     });
     return { row: made.thread, said: said(made.thread, made.message, false) };
   };
@@ -752,10 +765,15 @@ export const createCaw = ({
     },
 
     /** Starts a thread with your first message, and wakes Caw with it. */
-    async start(projectId: string, raw: string): Promise<ThreadSaid> {
+    async start(
+      projectId: string,
+      raw: string,
+      id?: string
+    ): Promise<ThreadSaid> {
       const body = bodyOf(raw);
+      unsaid(id);
       listening(projectId);
-      const opened = open(projectId, body);
+      const opened = open(projectId, body, id);
       await wake(projectId, {
         text: yourWords(opened.row, body, true),
         threadId: opened.row.id,
@@ -763,16 +781,28 @@ export const createCaw = ({
       return { ...opened.said, thread: summaryOf(opened.row) };
     },
 
-    /** Adds your message to a thread, and wakes Caw with it. */
+    /**
+     * Adds your message to a thread, and wakes Caw with it. `id` is the
+     * message's when the dashboard chose it, as a session's composer does:
+     * the row your words fly into is then the one they went out as, however
+     * soon the hub's frame draws it.
+     */
     async say(
       projectId: string,
       threadId: string,
-      raw: string
+      raw: string,
+      id?: string
     ): Promise<ThreadSaid> {
       const body = bodyOf(raw);
       threadIn(projectId, threadId);
+      unsaid(id);
       listening(projectId);
-      const added = db.addThreadMessage({ threadId, author: "you", body });
+      const added = db.addThreadMessage({
+        threadId,
+        author: "you",
+        body,
+        ...(id ? { id } : {}),
+      });
       const out = said(added.thread, added.message, false);
       await wake(projectId, {
         text: yourWords(added.thread, body, false),
@@ -909,7 +939,10 @@ export const createCaw = ({
         threadId: thread.id,
         author: "you",
         body,
-        question: { questions },
+        question: {
+          questions,
+          ...(ask.toolUseId ? { toolUseId: ask.toolUseId } : {}),
+        },
         answer,
       });
       said(added.thread, added.message);
@@ -926,6 +959,24 @@ export const createCaw = ({
       } else if (turn.started) {
         unfollow(instanceId);
       }
+    },
+
+    /**
+     * The thread a session started by the project's Caw works for: an
+     * attempt at a task, the thread that named the task; anything else his
+     * turn starts, the thread that turn answers. Undefined when `parentId`
+     * is not a project's lead.
+     */
+    spawnThread(parentId: string, workItemId?: string): string | undefined {
+      const project = leadOf(row(parentId));
+      if (!project) {
+        return;
+      }
+      const taskId = workItemId ? db.workItem(workItemId)?.taskId : undefined;
+      const named = taskId
+        ? db.threadOfTask(project.id, taskId)?.id
+        : undefined;
+      return named ?? turns.get(parentId)?.threadId ?? answered.get(parentId);
     },
 
     /**
@@ -1063,6 +1114,12 @@ const answer = (error: unknown) => {
 
 const HARNESS = t.Union(CAW_HARNESSES.map((harness) => t.Literal(harness)));
 
+/** Your words to Caw, and the id the dashboard sent them as (its own, like a session's). */
+const YOUR_WORDS = t.Object({
+  body: t.String(),
+  id: t.Optional(t.String({ format: "uuid" })),
+});
+
 /** The routes for a project's Caw, its threads and your asks for views. */
 export const cawRoutes = (caw: Caw) =>
   new Elysia()
@@ -1107,12 +1164,12 @@ export const cawRoutes = (caw: Caw) =>
     })
     .post(
       "/api/projects/:id/threads",
-      { body: t.Object({ body: t.String() }) },
+      { body: YOUR_WORDS },
       async ({ params, body, request, server }) => {
         // Caw's session may be starting on a machine; that can take a while.
         server?.timeout(request, 0);
         try {
-          return await caw.start(params.id, body.body);
+          return await caw.start(params.id, body.body, body.id);
         } catch (error) {
           return answer(error);
         }
@@ -1127,11 +1184,11 @@ export const cawRoutes = (caw: Caw) =>
     })
     .post(
       "/api/projects/:id/threads/:threadId/messages",
-      { body: t.Object({ body: t.String() }) },
+      { body: YOUR_WORDS },
       async ({ params, body, request, server }) => {
         server?.timeout(request, 0);
         try {
-          return await caw.say(params.id, params.threadId, body.body);
+          return await caw.say(params.id, params.threadId, body.body, body.id);
         } catch (error) {
           return answer(error);
         }

@@ -119,6 +119,8 @@
     onstop,
     prompts,
     leading,
+    perch,
+    placeholder,
     suggest,
     delegatesOf,
     recallOf,
@@ -176,6 +178,13 @@
     prompts?: Snippet;
     /** Controls rendered before the attach button in the composer row. */
     leading?: Snippet;
+    /**
+     * What stands on the pill's top-leading corner, its box's foot on the
+     * pill's top edge: a project's Caw peeking over the composer.
+     */
+    perch?: Snippet;
+    /** The field's hint, for a surface whose agent takes no `/` or `@`. */
+    placeholder?: string;
     /**
      * The session's skills and MCP servers, and its last reply, for the
      * suggestion chips. Absent on surfaces with no session behind them.
@@ -239,8 +248,12 @@
   let field = $state<HTMLTextAreaElement>();
 
   /** The field's hint in full, and its first part, which fits any field. */
-  const HINT = "Message the agent…  /  for commands, @ to mention";
-  const HINT_SHORT = "Message the agent…";
+  const HINT = $derived(
+    placeholder ?? "Message the agent…  /  for commands, @ to mention"
+  );
+  const HINT_SHORT = $derived(placeholder ?? "Message the agent…");
+  /** What the field is called, read out: its hint without the trailing ellipsis. */
+  const FIELD_LABEL = $derived(HINT_SHORT.replace(/…$/, ""));
   /**
    * The hint the field shows: in full wherever the field's own width holds
    * it on one line, else its first part. The server draws the short one,
@@ -248,7 +261,9 @@
    * brings in the full one once it is on the page. It is the field that is
    * measured, not the viewport: a narrow pane on a wide screen is narrow.
    */
-  let hint = $state(HINT_SHORT);
+  let hint = $state(untrack(() => HINT_SHORT));
+  /** The perch's width: the parked cards stand clear of it on the same edge. */
+  let perchWidth = $state(0);
   const fitHint = (node: HTMLTextAreaElement) => {
     const probe = document.createElement("span");
     probe.setAttribute("aria-hidden", "true");
@@ -2025,7 +2040,13 @@
      longer deliver ("ResizeObserver loop completed with undelivered
      notifications", every frame the field grew), and it stood a frame
      behind the panel. -->
-<div class="dock" data-keeps-draft>
+<div
+  class="dock"
+  data-keeps-draft
+  style:--perch-room={perch && perchWidth
+    ? `calc(${perchWidth}px + var(--space-3))`
+    : null}
+>
   {#if prompts}
     <div class="prompts" {@attach reflow()}>
       <div class="stack" bind:clientHeight={stack}>{@render prompts()}</div>
@@ -2191,7 +2212,7 @@
          touches. -->
       <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: the press handlers read a touch held on the pill for the recall wheel; everything it leads to is also a key (↑) and a button (history) -->
       <form
-        aria-label="Message the agent"
+        aria-label={FIELD_LABEL}
         class="cin field-shell"
         onclickcapture={onholdclick}
         oncontextmenu={onholdnative}
@@ -2202,6 +2223,11 @@
         class:grown={!!edit}
         class:wheeling={wheeling}
       >
+        {#if perch}
+          <div aria-hidden="true" class="perch" bind:clientWidth={perchWidth}>
+            {@render perch()}
+          </div>
+        {/if}
         <input
           accept="image/*,text/*,.md,.json,.csv,.log"
           class="hidden-file"
@@ -2257,7 +2283,7 @@
             aria-autocomplete="list"
             aria-controls={recall ? recallId : "composer-menu"}
             aria-expanded={menuOpen || !!recall}
-            aria-label="Message the agent"
+            aria-label={FIELD_LABEL}
             onblur={() => {
               dismissed = true;
               refocus(false);
@@ -2420,7 +2446,7 @@
   }
   .composer {
     flex: none;
-    width: min(720px, calc(100% - 50px));
+    width: var(--c-composer-w);
     display: flex;
     flex-direction: column;
     gap: var(--space-3);
@@ -2435,7 +2461,7 @@
   .prompts {
     flex: 1 1 0;
     min-height: 0;
-    width: min(720px, calc(100% - 50px));
+    width: var(--c-composer-w);
     display: flex;
     flex-direction: column;
     justify-content: flex-end;
@@ -2446,7 +2472,7 @@
   .lift {
     position: relative;
     flex: none;
-    width: min(720px, calc(100% - 50px));
+    width: var(--c-composer-w);
     pointer-events: none;
   }
   /* One conversation's tray over the next while they cross-fade, in a column
@@ -2493,6 +2519,19 @@
      the pill, stepped aside, draws none. */
   .shell {
     position: relative;
+  }
+  /* On the pill's top-leading corner, its foot on the pill's top edge: what
+     stands there (a project's Caw) peeks over the composer and takes no
+     pointer. */
+  .perch {
+    position: absolute;
+    inset-block-end: 100%;
+    inset-inline-start: var(--space-3);
+    pointer-events: none;
+  }
+  /* A parked card stands beside it, on the same edge, not over it. */
+  .dock:has(.perch) .prompts {
+    padding-inline-start: var(--perch-room, 0px);
   }
   .cin {
     --cin-pad: var(--c-composer-inset);
