@@ -611,10 +611,19 @@ public final class HubConnection {
             // The small limits frame the hub pushes on each report (USAGE-SPEC.md §6.4).
             fleet.adopt(limits: frame.limits.map { ($0.machineId, $0.payload, $0.openCodeGo) })
             fleet.adopt(spend: frame.spend)
+        case .thread:
+            // Said once per connection object, never per frame: threads arrive for every Caw thread.
+            if !threadsNoted {
+                threadsNoted = true
+                log.info("hub sends Caw thread frames; this app has no thread screen yet, so they are ignored")
+            }
         case .ignored:
             break
         }
     }
+
+    /// The first thread frame has been logged.
+    @ObservationIgnored private var threadsNoted = false
 
     struct ControlError: LocalizedError {
         let message: String

@@ -158,6 +158,9 @@ enum Frame {
     case workflow(Components.Schemas.WorkflowFrame)
     /// A delegate's work item changed: its parent's tray reads it.
     case workItem(Components.Schemas.WorkItemSummary)
+    /// A Caw thread's row or message (wire protocol 6): read by the thread
+    /// screen, which this app does not have yet.
+    case thread
     case ignored
 
     /// `answering`: the envelope's own `requestId`, which an error frame takes
@@ -190,6 +193,8 @@ enum Frame {
             self = .workflow(frame)
         case .workItem(let frame):
             self = .workItem(frame.item)
+        case .thread_upsert, .thread_message:
+            self = .thread
         default:
             self = .ignored
         }
