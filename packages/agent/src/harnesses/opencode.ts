@@ -3610,7 +3610,7 @@ export class OpencodeSession implements HarnessSession {
    * A session an earlier agent launched still holds its credential in the
    * store the plugin reads; the hub acknowledging it is the proof.
    */
-  async #verifyCredential(): Promise<void> {
+  async #verifyCredential(): Promise<{ credential: string }> {
     const credential = (await readOpencodeCredentials())[
       this.#opencodeSessionId()
     ]?.credential;
@@ -3619,6 +3619,7 @@ export class OpencodeSession implements HarnessSession {
     }
     await acknowledgeSessionCredential(credential);
     console.info(`[opencode] held credential verified ${this.instanceId}`);
+    return { credential };
   }
 
   #opencodeSessionId(): string {

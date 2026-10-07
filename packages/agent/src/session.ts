@@ -85,6 +85,7 @@ import { prepareFleetMcp } from "./mcp-launcher";
 import { startPreview, stopPreview, stopPreviews } from "./preview";
 import { parseProcId, SESSION_PROC_KINDS } from "./proc-id";
 import { type PromptWriteNotice, withPromptWrites } from "./prompt-writes";
+import { rememberCredential } from "./redaction";
 import { fenced } from "./restart";
 import { endProc, procEpoch, SessiondClient } from "./sessiond-client";
 import { installTool, probeTools } from "./tools";
@@ -1469,13 +1470,24 @@ export class SessionSupervisor {
    * spawn's failure with the reason.
    */
   async #admit(
+    instanceId: string,
     session: HarnessSession,
     launched: { credential: string | undefined } | undefined
   ): Promise<void> {
     try {
       if (!launched) {
-        await session.control(VERIFY_SESSION_CREDENTIAL, []);
+        // A harness that can read the credential its held process carries
+        // says it, so this agent redacts it too (a pi host's was recorded
+        // when this agent installed it).
+        const held = (await session.control(VERIFY_SESSION_CREDENTIAL, [])) as
+          | { credential?: string }
+          | undefined;
+        if (held?.credential) {
+          rememberCredential(instanceId, held.credential);
+        }
       } else if (launched.credential) {
+        // Known before the session can print it: nothing it sends carries it.
+        rememberCredential(instanceId, launched.credential);
         await session.control(INSTALL_SESSION_CREDENTIAL, [
           launched.credential,
           "initial",
@@ -1696,6 +1708,7 @@ export class SessionSupervisor {
       await this.#applyStoredPermissionMode(session, payload.permissionMode);
       // A reattach attaches to a process that already holds its credential.
       await this.#admit(
+        instanceId,
         session,
         payload.reattachOnly
           ? undefined
@@ -2301,7 +2314,7 @@ export class SessionSupervisor {
     });
     holder.session = session;
     await this.#applyStoredPermissionMode(session, row.permissionMode);
-    await this.#admit(session, undefined);
+    await this.#admit(row.instanceId, session, undefined);
     this.#sessions.set(row.instanceId, session);
     // biome-ignore lint/complexity/noVoid: the catalog read dates a rest already under way; nothing waits on it
     void this.#dateActivity(row.instanceId, claude, session, row.cwd);

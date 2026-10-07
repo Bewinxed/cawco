@@ -51,6 +51,7 @@ import { machineId } from "./machine-id";
 import { startMcpGateway } from "./mcp-oauth";
 import { servingPreviews } from "./preview";
 import { parseProcId, SESSION_PROC_KINDS } from "./proc-id";
+import { outbound, redactConsole } from "./redaction";
 import { fenced, setRestartSource } from "./restart";
 import { TranscriptSearchService } from "./search";
 import { resumableSessions, SessionSupervisor } from "./session";
@@ -336,8 +337,11 @@ export const reconnecting = <E extends { readonly reason: string }, R>(
 const closeReason = (event: CloseEvent): string =>
   event.reason || `close code ${event.code}`;
 
+/** The one way anything leaves for the hub: no session credential does ({@link outbound}). */
 const send = (socket: WebSocket, envelope: Envelope): void => {
-  socket.send(JSON.stringify(envelope));
+  for (const message of outbound(envelope)) {
+    socket.send(message);
+  }
 };
 
 /** Succeeds with an open socket; fails if the socket closes before opening. */
@@ -1312,6 +1316,8 @@ export const startDaemon = (auth?: AuthState, rediscover = false) =>
  * already gone, and kills the daemon the usual way.
  */
 export const runDaemon = (auth?: AuthState, rediscover = false): void => {
+  // No log line prints a session credential.
+  redactConsole();
   const daemon = Effect.runFork(
     startDaemon(auth, rediscover).pipe(
       Effect.catchDefect((error) =>

@@ -1619,8 +1619,10 @@ class ClaudeSession implements HarnessSession {
         "This Claude process was launched without a CawCo session credential."
       );
     }
-    await acknowledgeSessionCredential(header.slice("Bearer ".length));
+    const credential = header.slice("Bearer ".length);
+    await acknowledgeSessionCredential(credential);
     console.info(`[claude] held credential verified ${this.instanceId}`);
+    return { credential };
   }
 
   resolvePermission(
