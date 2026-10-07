@@ -36,6 +36,7 @@
     saveMemory,
     saveMemoryDoc,
   } from "../../fleet";
+  import AddMachineLink from "../../join/AddMachineLink.svelte";
   import { machineOs } from "../../machine";
   import { orderMachines } from "../../rail.svelte";
   import { drafts, keepDraft } from "../drafts.svelte";
@@ -597,7 +598,8 @@
   <EditorSection hue={HUE} icon={IconLaptop} label="Per machine">
     {#if machines.length === 0}
       <p class="note">
-        No machines yet — this lands on the first one that registers.
+        <AddMachineLink>No machines yet</AddMachineLink>
+        — this lands on the first one that registers.
       </p>
     {:else}
       {#if applied.length > 0}

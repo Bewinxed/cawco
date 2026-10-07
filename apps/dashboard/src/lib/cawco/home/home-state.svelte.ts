@@ -514,6 +514,22 @@ class Home {
   readonly live = $derived(cawco.hub === "connected");
 
   /**
+   * Where the fleet's machines stand, once the hub is live and has listed
+   * them: none registered (`none`), registered but none online (`offline`),
+   * or at least one online. `null` before then, so an empty fleet is never
+   * claimed over a list still being read.
+   */
+  readonly machines = $derived.by<"none" | "offline" | "online" | null>(() => {
+    if (!(this.live && cawco.fleetRead)) {
+      return null;
+    }
+    if (cawco.machines.length === 0) {
+      return "none";
+    }
+    return cawco.onlineMachines.length === 0 ? "offline" : "online";
+  });
+
+  /**
    * What hangs directly under each session and run, as every list nests it
    * (a session's delegates and runs, a run's steps and child runs): the
    * rows' own parents, runs among them.

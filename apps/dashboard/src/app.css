@@ -1232,6 +1232,57 @@
     transition: --hl-show var(--dur-fade) var(--ease-out);
   }
 
+  /* ---- Icon cards: New project's templates, the empty fleet's ways in.
+     As many to a row as fit, two on a phone, one on the narrowest. Each
+     card is a bordered box over the list's highlight (components/ui/
+     highlight): the hover ghost under it, and the selection pill drawn in
+     the channel-card recipe (DESIGN.md, Channel cards): 1px brand-solid
+     over surface-recess, at the card's own radius, which the pill takes
+     from the card. Its face is CardFace. */
+  .icon-cards {
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: var(--space-3);
+
+    @media (max-width: 639px) {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    @media (max-width: 399px) {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    & :is(.kit-pill, .kit-pill-trail) {
+      box-sizing: border-box;
+      border: 1px solid var(--brand-solid);
+      background: var(--surface-recess);
+    }
+  }
+
+  .icon-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    padding: var(--space-7) var(--space-4) var(--space-4);
+    border: 1px solid var(--border-control);
+    border-radius: var(--radius-md);
+    background: none;
+    color: var(--ink-strong);
+    font: var(--type-meta);
+    text-align: start;
+    cursor: pointer;
+    transition: var(--transition-control);
+
+    &:active {
+      background: var(--surface-fill);
+    }
+    &:focus-visible {
+      outline: var(--focus-ring-width) solid var(--focus-ring);
+      outline-offset: -2px;
+    }
+  }
+
   /* ---- The transcript's columns. Every row kind lays out on these four
      edges, measured from the row's own inline start: the rail, the glyph
      cell 11px past it, the 16px cell, and the text column 7px past the

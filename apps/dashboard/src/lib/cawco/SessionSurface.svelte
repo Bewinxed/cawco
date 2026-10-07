@@ -43,6 +43,7 @@
   } from "#lib/cawco/home/home-state.svelte.js";
   import PeekSheet from "#lib/cawco/home/PeekSheet.svelte";
   import { instanceForSession } from "#lib/cawco/links.js";
+  import MachinesEmpty from "#lib/cawco/MachinesEmpty.svelte";
   import {
     crossIn,
     crossOut,
@@ -151,8 +152,23 @@
     }
   });
   const detailShown = $derived(detailEmpty || entering);
+
+  /* ── No machine to run a session on ──────────────────────────────────
+     Read and live with nothing to open, and no machine registered or none
+     online: the detail area guides the reader to one (MachinesEmpty) in
+     place of Caw's "Open a session" line. One Caw at a time: the other one
+     comes only once this one has gone. */
+  const machineless = $derived(
+    fleetHome.machines === "none" || fleetHome.machines === "offline"
+  );
+  /** The fleet state it shows: from the moment it is wanted until it has gone. */
+  let machinesThere = $state<"none" | "offline" | null>(null);
+
   const cawShown = $derived(
-    entering || waitShown || (detailEmpty && atRest && nothingToOpen)
+    !machinesThere &&
+      (entering ||
+        waitShown ||
+        (detailEmpty && atRest && nothingToOpen && !machineless))
   );
 
   /** Caw is mounted: from the moment he is wanted until he has faded out. */
@@ -160,6 +176,16 @@
   $effect(() => {
     if (cawShown) {
       cawThere = true;
+    }
+  });
+
+  const machinesShown = $derived(
+    detailEmpty && atRest && nothingToOpen && machineless && !cawThere
+  );
+  $effect(() => {
+    const fleet = fleetHome.machines;
+    if (machinesShown && (fleet === "none" || fleet === "offline")) {
+      machinesThere = fleet;
     }
   });
 
@@ -555,7 +581,7 @@
          deck makes them reachable: the groups are a vertical stack that two
          fingers page through, so widening the window restores the grid and
          narrowing it loses nothing. -->
-    {#if detailShown || cawThere}
+    {#if detailShown || cawThere || machinesThere}
       <!-- A wide screen with nothing open: while the fleet is first read,
            or the hub is being reached again, for longer than the grace, Caw
            says so; once it is read and nothing could be opened, the detail
@@ -567,6 +593,17 @@
            conversation is never kept waiting on him. The line under him
            cross-fades in one cell. -->
       <div class="empty-detail" class:over={!detailShown}>
+        {#if machinesThere}
+          <div class="machines-state">
+            <MachinesEmpty
+              fleet={machinesThere}
+              ongone={() => {
+                machinesThere = null;
+              }}
+              present={machinesShown}
+            />
+          </div>
+        {/if}
         {#if cawThere}
           <div class="detail-state" {@attach holdWhileEntering}>
             <Caw
@@ -676,6 +713,10 @@
     z-index: 1;
     background-color: transparent;
     pointer-events: none;
+  }
+  .machines-state {
+    inline-size: 100%;
+    padding: var(--space-6);
   }
   .detail-state {
     display: flex;

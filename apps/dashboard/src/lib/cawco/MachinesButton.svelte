@@ -6,7 +6,10 @@
    * one has dropped and the attention ink when one needs a hand (behind the
    * hub, a stuck sync), so a dropped machine is still seen without the list.
    * The popover lists each machine (its menu on right-click or long-press:
-   * update, reload, log in, unlock, forget) and ends with Add machine.
+   * update, reload, log in, unlock, forget) and ends with Add machine. With
+   * no machine yet it is the empty fleet's compact form: one line and the
+   * two ways in (MachinesEmpty), each opening Connect a machine on its tab.
+   * The home's Check machines opens it too (join `machinesPopover`).
    */
   import { mergeProps } from "bits-ui";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -21,10 +24,9 @@
   import { IconPlus, IconServer } from "#lib/icons.js";
   import { cawco } from "./client.svelte";
   import { home } from "./home/home-state.svelte";
-  import { addMachine } from "./join/join.svelte";
+  import { addMachine, machinesPopover } from "./join/join.svelte";
   import MachineMenu from "./MachineMenu.svelte";
-
-  let shown = $state(false);
+  import { JOIN_WAYS } from "./MachinesEmpty.svelte";
 
   const online = $derived(
     cawco.machines.filter((machine) => machine.status === "online").length
@@ -53,7 +55,14 @@
     home.exceptions.find((entry) => entry.machineId === machineId)?.text;
 </script>
 
-<Popover.Root bind:open={shown}>
+<Popover.Root
+  bind:open={
+    () => machinesPopover.open,
+    (value) => {
+    machinesPopover.open = value;
+  }
+  }
+>
   <Tip label="Machines">
     {#snippet children(
       tip
@@ -85,37 +94,64 @@
     side="bottom"
     sideOffset={6}
   >
-    <ul class="list">
-      {#each cawco.machines as machine, index (machine.machineId)}
-        {@const up = machine.status === "online"}
-        {@const live = liveOn(machine.machineId)}
-        {@const fault = faultOf(machine.machineId)}
-        <li>
-          <MachineMenu {machine}>
-            <div class="row press-tint focus-inset" tabindex="-1">
-              <MachineRow
-                hue={machineHue(index, up)}
-                icon={machineIcon(machine.os ?? "")}
-                meta={[`${live} live`, fault].filter(Boolean).join(" · ")}
-                name={machineLabel(machine.hostname)}
-                presence={presenceOf(up, fault)}
-              />
-            </div>
-          </MachineMenu>
-        </li>
-      {/each}
-    </ul>
-    <button
-      class="row add press-tint focus-inset"
-      onclick={() => {
-        shown = false;
-        addMachine.show();
-      }}
-      type="button"
-    >
-      <IconPlus aria-hidden="true" />
-      Add machine
-    </button>
+    {#if cawco.machines.length === 0}
+      <!-- No machine yet: the empty fleet's two ways in, as rows. -->
+      <p class="none">Connect a machine to run sessions.</p>
+      <ul class="list">
+        {#each JOIN_WAYS as way (way.way)}
+          {@const Icon = way.icon}
+          <li>
+            <button
+              aria-haspopup="dialog"
+              class="row way press-tint focus-inset"
+              onclick={() => {
+                machinesPopover.open = false;
+                addMachine.show(way.way);
+              }}
+              type="button"
+            >
+              <span class="glyph" style:color={way.hue}><Icon /></span>
+              <span class="words">
+                <span class="name">{way.name}</span>
+                <span class="meta">{way.meta}</span>
+              </span>
+            </button>
+          </li>
+        {/each}
+      </ul>
+    {:else}
+      <ul class="list">
+        {#each cawco.machines as machine, index (machine.machineId)}
+          {@const up = machine.status === "online"}
+          {@const live = liveOn(machine.machineId)}
+          {@const fault = faultOf(machine.machineId)}
+          <li>
+            <MachineMenu {machine}>
+              <div class="row press-tint focus-inset" tabindex="-1">
+                <MachineRow
+                  hue={machineHue(index, up)}
+                  icon={machineIcon(machine.os ?? "")}
+                  meta={[`${live} live`, fault].filter(Boolean).join(" · ")}
+                  name={machineLabel(machine.hostname)}
+                  presence={presenceOf(up, fault)}
+                />
+              </div>
+            </MachineMenu>
+          </li>
+        {/each}
+      </ul>
+      <button
+        class="row add press-tint focus-inset"
+        onclick={() => {
+          machinesPopover.open = false;
+          addMachine.show();
+        }}
+        type="button"
+      >
+        <IconPlus aria-hidden="true" />
+        Add machine
+      </button>
+    {/if}
   </Popover.Content>
 </Popover.Root>
 
@@ -171,6 +207,39 @@
         background: var(--surface-hover);
       }
     }
+  }
+  .none {
+    margin: 0;
+    padding: var(--space-1) var(--space-2) var(--space-2);
+    font: var(--type-meta);
+    color: var(--ink-muted);
+  }
+  .way {
+    cursor: pointer;
+  }
+  /* The row's glyph in its way's hue, at the machine rows' 16px. */
+  .glyph {
+    display: inline-grid;
+    place-items: center;
+    flex: none;
+    inline-size: 16px;
+  }
+  .glyph :global(svg) {
+    width: 16px;
+    height: 16px;
+  }
+  .words {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .name {
+    font: var(--type-label);
+    color: var(--ink-strong);
+  }
+  .meta {
+    font: var(--type-meta);
+    color: var(--ink-muted);
   }
   .add {
     margin-top: var(--space-1);

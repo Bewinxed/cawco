@@ -41,11 +41,13 @@
     addMachine,
     CheckIn,
     installCommand,
+    type JoinWay,
     joinInfo,
     sshJoin,
   } from "./join/join.svelte";
 
-  let tab = $state<"ssh" | "command">("ssh");
+  /** The way in shown, which every entry can name as it opens the dialog. */
+  const tab = $derived(addMachine.way);
   let target = $state("");
   let port = $state("");
   let hubUrl = $state("");
@@ -244,7 +246,7 @@
 
     <Tabs
       onValueChange={(value) => {
-        tab = value as "ssh" | "command";
+        addMachine.way = value as JoinWay;
       }}
       value={tab}
     >

@@ -1,7 +1,7 @@
 <script lang="ts">
   /**
-   * New project's template cards (design §5): radio cards on the channel-card
-   * recipe (DESIGN.md, Channel cards: one selection frame for the set, 1px
+   * New project's template cards (design §5): radio cards on app.css's icon
+   * cards (the channel-card recipe: one selection frame for the set, 1px
    * `brand-solid` over `surface-recess`), as many to a row as fit. The
    * frame is the house highlight's selection pill (components/ui/highlight,
    * the new-session dialog's list), drawn in that recipe: it glides to the
@@ -17,6 +17,7 @@
   import { appear } from "#lib/cawco/motion/curves.svelte.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import Caw, { LEDGE_LINE } from "../home/Caw.svelte";
+  import CardFace from "./CardFace.svelte";
   import type { TemplateCard, TemplateName } from "./new-project";
 
   let {
@@ -117,33 +118,36 @@
 <div class="templates">
   <RadioGroup.Root
     aria-label="Template"
-    class="cards"
+    class="icon-cards cards"
     onValueChange={(next) => {
       selected = (next || null) as TemplateName | null;
     }}
     value={selected ?? ""}
     {@attach measure}
     {@attach highlight({
-      rows: ".tcard",
-      selected: '.tcard[data-state="checked"]',
+      rows: ".icon-card",
+      selected: '.icon-card[data-state="checked"]',
       axis: "xy",
     })}
   >
     {#each cards as card (card.template)}
       <RadioGroup.Item
-        class="tcard"
+        class="icon-card"
         data-template={card.template}
         value={card.template}
       >
-        {@const Icon = card.icon}
-        <span class="head">
-          <span class="tile" style:color={card.hue}><Icon /></span>
-          {#if fit === card.template && peek}
-            <span class="fits" transition:appear>Fits your prompt</span>
-          {/if}
-        </span>
-        <span class="name">{card.name}</span>
-        <span class="meta">{metaOf(card)}</span>
+        <CardFace
+          hue={card.hue}
+          icon={card.icon}
+          meta={metaOf(card)}
+          name={card.name}
+        >
+          {#snippet aside()}
+            {#if fit === card.template && peek}
+              <span class="fits" transition:appear>Fits your prompt</span>
+            {/if}
+          {/snippet}
+        </CardFace>
       </RadioGroup.Item>
     {/each}
 
@@ -174,91 +178,14 @@
   .templates {
     padding-top: var(--space-8);
   }
+  /* The cards are app.css's icon cards; rows stand further apart here, so
+     Caw's rise has the room. */
   .templates :global(.cards) {
-    position: relative;
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-    gap: var(--space-8) var(--space-3);
-  }
-  @media (max-width: 639px) {
-    .templates :global(.cards) {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-  }
-  @media (max-width: 399px) {
-    .templates :global(.cards) {
-      grid-template-columns: minmax(0, 1fr);
-    }
-  }
-  .templates :global(.tcard) {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    padding: var(--space-7) var(--space-4) var(--space-4);
-    border: 1px solid var(--border-control);
-    border-radius: var(--radius-md);
-    background: none;
-    color: var(--ink-strong);
-    font: var(--type-meta);
-    text-align: start;
-    cursor: pointer;
-    transition: var(--transition-control);
-  }
-  .templates :global(.tcard) > :global(*) {
-    position: relative;
-    z-index: 2;
-  }
-  .templates :global(.tcard:active) {
-    background: var(--surface-fill);
-  }
-  .templates :global(.tcard:focus-visible) {
-    outline: var(--focus-ring-width) solid var(--focus-ring);
-    outline-offset: -2px;
-  }
-  /* Its head: the icon tile (DESIGN.md: the duotone glyph on a raised
-     26px tile, in its section hue), and the fit beside it. */
-  .head {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    min-block-size: 26px;
-    margin-block-end: var(--space-2);
-  }
-  .tile {
-    display: inline-grid;
-    place-items: center;
-    flex: none;
-    inline-size: 26px;
-    block-size: 26px;
-    border-radius: var(--radius-sm);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-tile);
-  }
-  .tile :global(svg) {
-    inline-size: 16px;
-    block-size: 16px;
-  }
-  .name {
-    font: var(--type-label);
-    font-weight: var(--weight-strong);
-    color: var(--ink-strong);
-  }
-  .meta {
-    color: var(--ink-muted);
+    row-gap: var(--space-8);
   }
   .fits {
     font: var(--type-label);
     color: var(--brand-ink);
-  }
-  /* The selection: the house pill (app.css .kit-pill) in the channel-card
-     recipe (DESIGN.md, Channel cards): 1px brand-solid over surface-recess,
-     at the card's own radius, which the pill takes from the card. */
-  .templates :global(.kit-pill),
-  .templates :global(.kit-pill-trail) {
-    box-sizing: border-box;
-    border: 1px solid var(--brand-solid);
-    background: var(--surface-recess);
   }
   /* Caw stands on the fitting card, painted over the grid. */
   .peek {

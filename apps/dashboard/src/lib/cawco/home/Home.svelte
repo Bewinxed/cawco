@@ -17,6 +17,7 @@
   import { IconPlus } from "#lib/icons.js";
   import Attention from "~icons/solar/hand-shake-bold-duotone";
   import { cawco } from "../client.svelte";
+  import MachinesEmpty from "../MachinesEmpty.svelte";
   import { crossIn, crossOut, morphMs } from "../motion/curves.svelte";
   import { reflow } from "../motion/rows.svelte";
   import { servedNewer } from "../served-build.svelte";
@@ -90,9 +91,22 @@
    * and reading the list here built it — every stored transcript on every
    * machine, mapped and sorted — on every turn that ended anywhere.
    */
+  /**
+   * No machine registered, or none online: then the board's place guides
+   * the reader to one (MachinesEmpty), on the phone's page here and on a
+   * wide screen in the detail area (SessionSurface), and Caw's first-run
+   * line does not stand in for it.
+   */
+  const machineless = $derived(
+    home.machines === "none" || home.machines === "offline"
+  );
+  /** The fleet state the page shows, from the moment it is wanted until it has gone. */
+  let machinesThere = $state<"none" | "offline" | null>(null);
   const firstRun = $derived(
     home.ready &&
       home.live &&
+      !machineless &&
+      machinesThere === null &&
       home.needs.length + home.working.length + home.finished.length === 0 &&
       home.empty
   );
@@ -103,6 +117,18 @@
       cawThere = true;
     }
   });
+  /** One Caw at a time: the guide comes once the first-run Caw has gone. */
+  const machinesShown = $derived(
+    variant === "page" && home.ready && machineless && !cawThere
+  );
+  $effect(() => {
+    const fleet = home.machines;
+    if (machinesShown && (fleet === "none" || fleet === "offline")) {
+      machinesThere = fleet;
+    }
+  });
+  /** No machine at all: the page is the guide alone, with nothing to list or start. */
+  const noFleet = $derived(machinesThere === "none");
   /**
    * In the rail, the block over the groups with nothing in it: the hub is
    * live and read (no status line) and nothing needs the reader (no
@@ -205,13 +231,27 @@
       </section>
     {/if}
 
-    <WorkTabs
-      {markedElsewhere}
-      onstart={() => newSession()}
-      {stale}
-      waiting={!home.ready}
-      bind:relaying
-    />
+    {#if !noFleet}
+      <WorkTabs
+        {markedElsewhere}
+        onstart={() => newSession()}
+        {stale}
+        waiting={!home.ready}
+        bind:relaying
+      />
+    {/if}
+
+    {#if machinesThere}
+      <div class="machines" data-flip>
+        <MachinesEmpty
+          fleet={machinesThere}
+          ongone={() => {
+            machinesThere = null;
+          }}
+          present={machinesShown}
+        />
+      </div>
+    {/if}
 
     {#if cawThere}
       <!-- Caw only on a fleet with nothing in it yet, or while a machine
@@ -241,12 +281,12 @@
       </figure>
     {/if}
 
-    {#if variant === "page"}
+    {#if variant === "page" && !noFleet}
       <HomeRecent />
     {/if}
   </div>
 
-  {#if variant === "page"}
+  {#if variant === "page" && !noFleet}
     <!-- The phone's thumb reaches the bottom; Start session lives there. -->
     <div class="dock">
       <Button class="w-full" onclick={() => newSession()} size="lg">
@@ -356,6 +396,9 @@
     align-items: center;
     gap: var(--space-2);
     margin: var(--space-4) 0;
+  }
+  .machines {
+    margin: var(--space-6) 0;
   }
   .caw figcaption {
     position: relative;

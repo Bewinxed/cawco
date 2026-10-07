@@ -31,6 +31,7 @@
   import FleetFault from "../FleetFault.svelte";
   import { syncFleet } from "../fleet";
   import { causeOf, type FaultScope } from "../fleet-faults";
+  import AddMachineLink from "../join/AddMachineLink.svelte";
   import { machineOs } from "../machine";
   import { appear, morphMs } from "../motion/curves.svelte";
 
@@ -138,7 +139,8 @@
   <Popover.Content align="end" class="w-[360px] max-w-[calc(100vw-2rem)] gap-1">
     {#if machines.length === 0}
       <p class="none">
-        No machines yet — this lands on the first one that registers.
+        <AddMachineLink>No machines yet</AddMachineLink>
+        — this lands on the first one that registers.
       </p>
     {/if}
     {#each machines as machine, index (machine.machineId)}

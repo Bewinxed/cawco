@@ -16,6 +16,7 @@
   import { IconChevronDown, IconChevronRight, IconLaptop } from "#lib/icons.js";
   import type { Machine } from "./client.svelte";
   import { adoptSkill, inspectMachine, saveMcpServer } from "./fleet";
+  import AddMachineLink from "./join/AddMachineLink.svelte";
   import OsMark from "./OsMark.svelte";
 
   let {
@@ -112,7 +113,10 @@
        drops for a moment says "Offline" in the same place, so nothing under
        the list moves. It opens only while it is up; open, it can still close. -->
   {#if machines.length === 0}
-    <p class="note">No machine is registered to ask.</p>
+    <p class="note">
+      <AddMachineLink>No machines yet</AddMachineLink>
+      — each one reports what it has once it registers.
+    </p>
   {:else}
     <ul class="machines">
       {#each machines as machine (machine.machineId)}

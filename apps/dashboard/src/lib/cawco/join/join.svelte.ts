@@ -62,9 +62,19 @@ export class CheckIn {
   );
 }
 
-const dialog = $state({ open: false });
+/** The dialog's two ways in: the hub installs over SSH, or one command run on the machine. */
+export type JoinWay = "ssh" | "command";
 
-/** The Connect a machine dialog, mounted once in the shell and opened from anywhere. */
+const dialog = $state<{ open: boolean; way: JoinWay }>({
+  open: false,
+  way: "ssh",
+});
+
+/**
+ * The Connect a machine dialog, mounted once in the shell and opened from
+ * anywhere. `show` opens it on the way it names, or on the one it was left
+ * on.
+ */
 export const addMachine = {
   get open(): boolean {
     return dialog.open;
@@ -72,8 +82,29 @@ export const addMachine = {
   set open(value: boolean) {
     dialog.open = value;
   },
-  show(): void {
+  get way(): JoinWay {
+    return dialog.way;
+  },
+  set way(value: JoinWay) {
+    dialog.way = value;
+  },
+  show(way?: JoinWay): void {
+    if (way) {
+      dialog.way = way;
+    }
     dialog.open = true;
+  },
+};
+
+const popover = $state({ open: false });
+
+/** The top bar's Machines popover, opened from its button or from the home's "Check machines". */
+export const machinesPopover = {
+  get open(): boolean {
+    return popover.open;
+  },
+  set open(value: boolean) {
+    popover.open = value;
   },
 };
 
