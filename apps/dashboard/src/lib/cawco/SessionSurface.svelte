@@ -714,9 +714,14 @@
     background-color: transparent;
     pointer-events: none;
   }
+  /* The empty fleet stands where New project's ask does: from the top,
+     padded as that page pads (routes/project/new), not centred. */
   .machines-state {
+    align-self: flex-start;
     inline-size: 100%;
-    padding: var(--space-6);
+    max-block-size: 100%;
+    overflow-y: auto;
+    padding: calc(var(--space-8) * 2) var(--space-6) var(--space-8);
   }
   .detail-state {
     display: flex;

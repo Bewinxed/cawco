@@ -402,7 +402,15 @@
             variant="outline"
           />
         {:else}
-          <Button href="/usage" label="Open Usage" size="xs" variant="link" />
+          <!-- A text link: no box to pad, so its words start where the
+               strip's mark does when it wraps under the line. -->
+          <Button
+            class="px-0"
+            href="/usage"
+            label="Open Usage"
+            size="xs"
+            variant="link"
+          />
         {/if}
       {/snippet}
     </EmptyState>

@@ -54,7 +54,7 @@
     inline-size: 26px;
     block-size: 26px;
     border-radius: var(--radius-sm);
-    background: var(--surface-raised);
+    background: var(--surface-tile);
     box-shadow: var(--shadow-tile);
   }
   .tile :global(svg) {

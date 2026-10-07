@@ -27,13 +27,7 @@
   import * as NativeSelect from "#lib/components/ui/native-select/index.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import { followTail } from "#lib/hooks/follow-tail.js";
-  import {
-    IconChevronRight,
-    IconError,
-    IconServer,
-    IconSuccess,
-    IconTerminal,
-  } from "#lib/icons.js";
+  import { IconChevronRight, IconError, IconSuccess } from "#lib/icons.js";
   import { cawco } from "./client.svelte";
   import CheckInStatus from "./join/CheckInStatus.svelte";
   import CopyBox from "./join/CopyBox.svelte";
@@ -41,6 +35,7 @@
     addMachine,
     CheckIn,
     installCommand,
+    JOIN_WAYS,
     type JoinWay,
     joinInfo,
     sshJoin,
@@ -251,8 +246,9 @@
       value={tab}
     >
       <TabsList aria-label="How to connect the machine">
-        <TabItem icon={IconServer} label="SSH" value="ssh" />
-        <TabItem icon={IconTerminal} label="Command" value="command" />
+        {#each JOIN_WAYS as way (way.way)}
+          <TabItem icon={way.icon} label={way.name} value={way.way} />
+        {/each}
       </TabsList>
     </Tabs>
 

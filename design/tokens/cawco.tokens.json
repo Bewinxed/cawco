@@ -769,6 +769,16 @@
         }
       }
     },
+    "surface-tile": {
+      "$type": "color",
+      "$value": "{color.neutral-1}",
+      "$description": "An icon tile's ground (DESIGN.md: the duotone glyph on a raised 26px tile): the raised surface by day; at night two steps past it, raised meeting the recess it stands on.",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "{color.neutral-5}"
+        }
+      }
+    },
     "surface-fill": {
       "$type": "color",
       "$value": "{color.neutral-4}",
@@ -935,6 +945,16 @@
       "$extensions": {
         "dev.cawco": {
           "dark": "{color.neutral-6}"
+        }
+      }
+    },
+    "border-card": {
+      "$type": "color",
+      "$value": "{color.neutral-5}",
+      "$description": "An icon card's edge (New project's templates, the empty fleet's ways in) on the recess: the control edge by day; at night a step past it, the control edge all but meeting the recess.",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "{color.neutral-7}"
         }
       }
     },

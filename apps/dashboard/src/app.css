@@ -1265,7 +1265,7 @@
     flex-direction: column;
     gap: var(--space-1);
     padding: var(--space-7) var(--space-4) var(--space-4);
-    border: 1px solid var(--border-control);
+    border: 1px solid var(--border-card);
     border-radius: var(--radius-md);
     background: none;
     color: var(--ink-strong);

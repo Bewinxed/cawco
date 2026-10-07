@@ -56,6 +56,7 @@
   import { folderPrefs } from "./folder-prefs.svelte";
   import Home from "./home/Home.svelte";
   import HomeRecent from "./home/HomeRecent.svelte";
+  import { home } from "./home/home-state.svelte";
   import { rowHref } from "./links";
   import { markHue } from "./mark";
   import { type BranchOptions, branch, nestFrom } from "./motion/branch.svelte";
@@ -1024,12 +1025,8 @@
         {#if orderedProjects.length === 0}
           <p class="px-2.5 text-meta text-muted-foreground" data-flip>
             {#if cawco.machines.length === 0}
-              Run
-              <code
-                class="font-mono text-[length:var(--text-label)] text-foreground"
-                >cawco</code
-              >
-              on a machine, then group its checkouts here.
+              No projects yet — start one with New project. Once CawCo runs on a
+              machine, its checkouts group here too.
             {:else}
               No projects yet — name a checkout to group its sessions.
             {/if}
@@ -1149,7 +1146,11 @@
   <!-- ────────────────────── footer ──────────────────────── -->
 
   <Sidebar.Footer {@attach reflow()}>
-    <UsageMeter />
+    <!-- Limits are read on machines: with none registered there is nothing
+         for the strip to say that the empty fleet does not say already. -->
+    {#if home.machines !== "none"}
+      <UsageMeter />
+    {/if}
     <div class="flex items-center gap-1" data-flip>
       <Sidebar.Menu aria-label="User" class="min-w-0 flex-1">
         <Sidebar.MenuItem>

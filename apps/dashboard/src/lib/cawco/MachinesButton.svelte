@@ -24,9 +24,15 @@
   import { IconPlus, IconServer } from "#lib/icons.js";
   import { cawco } from "./client.svelte";
   import { home } from "./home/home-state.svelte";
-  import { addMachine, machinesPopover } from "./join/join.svelte";
+  import { addMachine, JOIN_WAYS, machinesPopover } from "./join/join.svelte";
   import MachineMenu from "./MachineMenu.svelte";
-  import { JOIN_WAYS } from "./MachinesEmpty.svelte";
+
+  let content = $state<HTMLElement | null>(null);
+  /**
+   * The last thing that could open the popover was a pointer press, not a
+   * key: its own button, or the home's Check machines.
+   */
+  let byPointer = false;
 
   const online = $derived(
     cawco.machines.filter((machine) => machine.status === "online").length
@@ -54,6 +60,15 @@
   const faultOf = (machineId: string): string | undefined =>
     home.exceptions.find((entry) => entry.machineId === machineId)?.text;
 </script>
+
+<svelte:window
+  onkeydowncapture={() => {
+    byPointer = false;
+  }}
+  onpointerdowncapture={() => {
+    byPointer = true;
+  }}
+/>
 
 <Popover.Root
   bind:open={
@@ -91,12 +106,23 @@
     aria-label="Machines"
     class="machines-pop w-[min(20rem,calc(100vw-16px))] gap-0"
     collisionPadding={8}
+    onOpenAutoFocus={(event) => {
+      // Opened by a press, focus goes into the list as it does from a key,
+      // but without the ring: a script's focus would draw it after a press.
+      if (byPointer) {
+        event.preventDefault();
+        content
+          ?.querySelector<HTMLElement>(".row")
+          ?.focus({ focusVisible: false } as FocusOptions);
+      }
+    }}
     side="bottom"
     sideOffset={6}
+    bind:ref={content}
   >
     {#if cawco.machines.length === 0}
       <!-- No machine yet: the empty fleet's two ways in, as rows. -->
-      <p class="none">Connect a machine to run sessions.</p>
+      <p class="none">Connect a machine to run sessions</p>
       <ul class="list">
         {#each JOIN_WAYS as way (way.way)}
           {@const Icon = way.icon}

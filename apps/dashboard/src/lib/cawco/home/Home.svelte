@@ -166,13 +166,15 @@
   data-flip={variant === "rail" && !relaying ? "box" : undefined}
   {@attach reflow()}
 >
-  <div class="top" class:bare={bare}>
+  <div class="top" class:bare={bare || noFleet}>
     <!-- The line every other line on this screen is believed by; live and
          read, it says nothing and takes no room. -->
     <StatusLine />
-    {#if variant === "page"}
-      <!-- The phone has no rail: the rail's usage strip stands here, always
-           (owner pick i), on the home's own ground. -->
+    {#if variant === "page" && home.machines !== "none"}
+      <!-- The phone has no rail: the rail's usage strip stands here (owner
+           pick i), on the home's own ground, whenever a machine is
+           registered: limits are read on machines, and with none the empty
+           fleet below already says what is missing. -->
       <div class="usage">
         <UsageMeter />
       </div>
@@ -286,8 +288,9 @@
     {/if}
   </div>
 
-  {#if variant === "page" && !noFleet}
-    <!-- The phone's thumb reaches the bottom; Start session lives there. -->
+  {#if variant === "page" && !noFleet && !machineless}
+    <!-- The phone's thumb reaches the bottom; Start session lives there,
+         while a machine is online to start one on. -->
     <div class="dock">
       <Button class="w-full" onclick={() => newSession()} size="lg">
         <IconPlus />
@@ -328,7 +331,10 @@
   .rail .top {
     padding: var(--space-2) var(--space-3) var(--space-1);
   }
-  .rail .top.bare {
+  /* Nothing in it: in the rail, live and read with nothing needing the
+     reader; on the page, the empty fleet, whose block stands where New
+     project's ask does. */
+  .top.bare {
     padding: 0;
   }
   /* The strip's edges line up with the status line's text. */
@@ -397,8 +403,10 @@
     gap: var(--space-2);
     margin: var(--space-4) 0;
   }
+  /* Anchored as New project's ask is (its page pads --space-7 on a phone):
+     the groups' own top padding and this margin make that. */
   .machines {
-    margin: var(--space-6) 0;
+    margin: var(--space-5) 0 var(--space-6);
   }
   .caw figcaption {
     position: relative;

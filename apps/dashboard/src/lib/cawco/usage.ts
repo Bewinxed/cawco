@@ -452,6 +452,15 @@ export function claudeGap(
   const [machineId, reading] = first;
   const machine = machines.find((m) => m.machineId === machineId) ?? null;
   const host = machine?.hostname ?? "a removed machine";
+  // A machine the hub cannot reach can neither be read nor signed in on:
+  // its last word is not offered as something to act on.
+  if (machine && machine.status !== "online") {
+    return {
+      machine,
+      reason: `${host} is offline. Its Claude limits are read again once it's back.`,
+      signIn: false,
+    };
+  }
   if (reading.error === "not signed in") {
     return {
       machine,

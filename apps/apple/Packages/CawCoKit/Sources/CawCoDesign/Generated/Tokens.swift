@@ -106,6 +106,8 @@ public enum Palette {
     /// The bar folder tabs stand on, a step below recess-deep.
     public static let surfaceShelf = Palette.named("surface-shelf")
     public static let surfaceLift = Palette.named("surface-lift")
+    /// An icon tile's ground (DESIGN.md: the duotone glyph on a raised 26px tile): the raised surface by day; at night two steps past it, raised meeting the recess it stands on.
+    public static let surfaceTile = Palette.named("surface-tile")
     public static let surfaceFill = Palette.named("surface-fill")
     /// A filled control a step over surface-fill: its hover, and its on state (a parent's child count when its children are open).
     public static let surfaceFillStrong = Palette.named("surface-fill-strong")
@@ -131,6 +133,8 @@ public enum Palette {
     /// The edge of a well (surface-well): the hairline by day; at night the control edge, the hairline being all but invisible on the deep recess.
     public static let borderWell = Palette.named("border-well")
     public static let borderControl = Palette.named("border-control")
+    /// An icon card's edge (New project's templates, the empty fleet's ways in) on the recess: the control edge by day; at night a step past it, the control edge all but meeting the recess.
+    public static let borderCard = Palette.named("border-card")
     public static let input = Palette.named("input")
     /// Inks. Subtle is the weakest mix that holds 4.5:1 on fill, hover and raised.
     public static let inkStrong = Palette.named("ink-strong")

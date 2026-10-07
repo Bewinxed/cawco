@@ -1,36 +1,3 @@
-<script lang="ts" module>
-  import type { Component } from "svelte";
-  import { IconServer, IconTerminal } from "#lib/icons.js";
-  import type { JoinWay } from "./join/join.svelte";
-
-  /** One way a machine joins, as the empty fleet offers it: the dialog's tab of the same name. */
-  export interface JoinWayCard {
-    hue: string;
-    icon: Component;
-    meta: string;
-    name: string;
-    way: JoinWay;
-  }
-
-  /** The Connect a machine dialog's two ways in, in its tabs' order and with its tabs' glyphs. */
-  export const JOIN_WAYS: readonly JoinWayCard[] = [
-    {
-      way: "ssh",
-      icon: IconServer,
-      hue: "var(--hue-cyan-500)",
-      name: "Over SSH",
-      meta: "The hub installs CawCo on a machine it can reach",
-    },
-    {
-      way: "command",
-      icon: IconTerminal,
-      hue: "var(--hue-green-500)",
-      name: "With one command",
-      meta: "Run the install command on the machine itself",
-    },
-  ];
-</script>
-
 <script lang="ts">
   /**
    * The fleet with no machine to run a session on, where the board would
@@ -51,7 +18,7 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import Caw from "./home/Caw.svelte";
-  import { addMachine, machinesPopover } from "./join/join.svelte";
+  import { addMachine, JOIN_WAYS, machinesPopover } from "./join/join.svelte";
   import { crossIn, crossOut } from "./motion/curves.svelte";
   import { ListSwap } from "./motion/list-swap.svelte";
   import CardFace from "./project/CardFace.svelte";
@@ -133,7 +100,6 @@
             onclick={() => {
               machinesPopover.open = true;
             }}
-            variant="outline"
           >
             Check machines
           </Button>
