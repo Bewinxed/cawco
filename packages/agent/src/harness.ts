@@ -29,7 +29,19 @@ import type {
   SentMessage,
   SessionMessage,
   SpawnPayload,
+  TextAttachment,
 } from "@cawco/core";
+
+/**
+ * What a turn carries to its harness beside its words: the texts it folds in
+ * and the pictures it leads with. Files are not here: the supervisor has put
+ * them on this machine and named them in the words already.
+ */
+export interface TurnExtras {
+  attachments?: TextAttachment[];
+  images?: SendPayload["images"];
+  urgent?: boolean;
+}
 
 /** Known surviving custody requires an operator decision, not another probe or a replacement. */
 export class HarnessRecoveryRefused extends Error {}
@@ -129,10 +141,7 @@ export interface HarnessSession {
   resolvePermission(requestId: string, result: PermissionResult): void;
   /** Push one user turn into the session's prompt stream. */
   // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
-  send(
-    message: SentMessage,
-    extras: Pick<SendPayload, "attachments" | "images" | "urgent">
-  ): void;
+  send(message: SentMessage, extras: TurnExtras): void;
   /** The runtime's own session id, once known. */
   sessionId: string | null;
   /** End the session gracefully: unblock, interrupt, let the turn settle, close. */

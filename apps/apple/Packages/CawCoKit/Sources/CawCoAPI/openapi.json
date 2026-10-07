@@ -8133,6 +8133,103 @@
         }
       }
     },
+    "/api/files": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "x-file-name",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "postApiFiles",
+        "responses": {
+          "200": {
+            "description": "postApiFiles 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiFiles200"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "postApiFiles 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiFiles 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/files/{hash}": {
+      "get": {
+        "parameters": [
+          {
+            "name": "hash",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiFilesByHash",
+        "responses": {
+          "200": {
+            "description": "getApiFilesByHash 200",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "getApiFilesByHash 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/instances/{id}/tooling": {
       "get": {
         "parameters": [
@@ -13839,6 +13936,29 @@
           ]
         }
       },
+      "postApiFiles200": {
+        "type": "object",
+        "properties": {
+          "ref": {
+            "type": "string"
+          },
+          "size": {
+            "type": "number"
+          },
+          "mediaType": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "mediaType",
+          "name",
+          "ref",
+          "size"
+        ]
+      },
       "postApiSeen200": {
         "type": "object",
         "properties": {
@@ -16834,29 +16954,10 @@
         "type": "object",
         "properties": {
           "attachments": {
-            "description": "Text the user pasted rather than typed, kept out of `message` so the agent\ncan fold it into the turn as quoted material the model won't mistake for\nthe sentence around it.",
+            "description": "Text the user pasted rather than typed, kept out of `message` so the agent\ncan fold it into the turn as quoted material the model won't mistake for\nthe sentence around it; and files, by the hub's reference, which the\nagent fetches onto the session's machine and names by path in `message`.",
             "type": "array",
             "items": {
-              "type": "object",
-              "properties": {
-                "kind": {
-                  "type": "string",
-                  "enum": [
-                    "text"
-                  ]
-                },
-                "name": {
-                  "type": "string"
-                },
-                "content": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "content",
-                "kind",
-                "name"
-              ]
+              "$ref": "#/components/schemas/SendAttachment"
             }
           },
           "from": {
@@ -23416,21 +23517,35 @@
             "type": "string"
           },
           "attachments": {
-            "description": "Files the reader attached to the turn, parsed back out of its `<pasted-text>` blocks.",
+            "description": "What the reader attached to the turn: texts, parsed back out of its\n`<pasted-text>` blocks, and files, out of its `Attached file:` lines.",
             "type": "array",
             "items": {
-              "type": "object",
-              "properties": {
-                "name": {
-                  "type": "string"
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/ShownFile"
                 },
-                "content": {
-                  "type": "string"
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "text"
+                      ]
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "content": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "content",
+                    "kind",
+                    "name"
+                  ]
                 }
-              },
-              "required": [
-                "content",
-                "name"
               ]
             }
           },
@@ -23670,6 +23785,37 @@
             "type": "string"
           }
         }
+      },
+      "ShownFile": {
+        "description": "A file a sent turn names, as its transcript row shows it.",
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "file"
+            ]
+          },
+          "mediaType": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "ref": {
+            "description": "Present when the line named the whole hash (the hub's own record).",
+            "type": "string"
+          },
+          "size": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "kind",
+          "mediaType",
+          "name",
+          "size"
+        ]
       },
       "BlockTooling": {
         "description": "The MCP servers and tools an `init` announced.",
@@ -29251,6 +29397,71 @@
         "required": [
           "id",
           "path"
+        ]
+      },
+      "SendAttachment": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/TextAttachment"
+          },
+          {
+            "$ref": "#/components/schemas/FileAttachment"
+          }
+        ]
+      },
+      "TextAttachment": {
+        "description": "What a turn carries beside its typed words, other than pictures: a text\nthe reader attached or pasted at length, folded into the prompt as quoted\nmaterial; or any other file, which the hub stores (`POST /api/files`) and\nthe session's machine fetches and puts on its own disk before the harness\nsees the turn, naming its path in one line of the message.",
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "text"
+            ]
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "content",
+          "kind",
+          "name"
+        ]
+      },
+      "FileAttachment": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "file"
+            ]
+          },
+          "mediaType": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "ref": {
+            "description": "The hub's reference to its bytes: `/api/files/<sha256>`.",
+            "type": "string"
+          },
+          "size": {
+            "description": "Its length in bytes.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "kind",
+          "mediaType",
+          "name",
+          "ref",
+          "size"
         ]
       },
       "SentMessage": {

@@ -74,8 +74,11 @@ import {
   ACKNOWLEDGE_BINARY_UPDATE,
   AGENT_BUSY,
   ASK_USER_QUESTION,
+  ATTACHMENTS_HOME,
   agentProblem,
   archiveRefusal,
+  attachedFileLine,
+  attachedFileName,
   BUCKET_MS,
   CANCEL_BINARY_UPDATE,
   CLAUDE_CONVERSATION_GONE,
@@ -208,7 +211,14 @@ import {
 } from "./keep-alive";
 import { probe } from "./llm";
 import { MeaningJudge } from "./meaning";
-import { externalizeImages, mediaContentType, mediaFilePath } from "./media";
+import {
+  externalizeImages,
+  FILE_LIMIT_BYTES,
+  mediaContentType,
+  mediaFilePath,
+  storedFilePath,
+  storeFile,
+} from "./media";
 import type { PendingShape } from "./pending";
 import {
   answerPermission,
@@ -3049,10 +3059,14 @@ export const createServer = (
 
   /**
    * A send as its record keeps it (`SendRecord.body`): the message under its
-   * uuid, with what rode with it put back in — images first and pastes after
-   * the typed words, the order every adapter hands them to its harness in.
+   * uuid, with what rode with it put back in — images first, then the typed
+   * words, the files' lines and the pastes, the order the agent and every
+   * adapter hand them to the harness in. A file's line names it by its whole
+   * hash, which is what lets its row open it; the machine's own copy of the
+   * line names its path there.
    */
   const sentFrame = ({
+    instanceId,
     message,
     images = [],
     attachments = [],
@@ -3060,12 +3074,26 @@ export const createServer = (
     if (!(images.length || attachments.length)) {
       return message;
     }
+    const files = attachments
+      .flatMap((attachment) =>
+        attachment.kind === "file"
+          ? [
+              attachedFileLine(
+                `${ATTACHMENTS_HOME}/${attachedFileName(instanceId, attachment, true)}`,
+                attachment
+              ),
+            ]
+          : []
+      )
+      .join("\n");
     const pasted = attachments
-      .map(
-        ({ name, content }) =>
-          `\n\n<pasted-text name="${name}">\n${content}\n</pasted-text>`
+      .map((attachment) =>
+        attachment.kind === "text"
+          ? `\n\n<pasted-text name="${attachment.name}">\n${attachment.content}\n</pasted-text>`
+          : ""
       )
       .join("");
+    const lines = `${files ? `\n\n${files}` : ""}${pasted}`;
     const said = message.message.content;
     return {
       ...message,
@@ -3077,7 +3105,7 @@ export const createServer = (
             source: { type: "base64" as const, media_type: mediaType, data },
           })),
           ...(typeof said === "string"
-            ? [{ type: "text" as const, text: said + pasted }]
+            ? [{ type: "text" as const, text: said + lines }]
             : said),
         ],
       },
@@ -9596,6 +9624,59 @@ export const createServer = (
         return new Response(file, {
           headers: {
             "Content-Type": mediaContentType(params.name),
+            "Cache-Control": "public, max-age=31536000, immutable",
+          },
+        });
+      })
+      // A file the reader attached, raw: its bytes are the body, its type the
+      // Content-Type, its name `X-File-Name` (URI-encoded). Kept by the hash
+      // of its bytes; a send carries the reference, and the session's machine
+      // fetches it from here.
+      .post(
+        "/api/files",
+        {
+          parse: "none",
+          headers: t.Object({ "x-file-name": t.String({ minLength: 1 }) }),
+          detail: {
+            requestBody: {
+              required: true,
+              content: {
+                "application/octet-stream": {
+                  schema: { type: "string", format: "binary" },
+                },
+              },
+            },
+          },
+        },
+        async ({ request, headers, status }) => {
+          const declared = Number(request.headers.get("content-length") ?? 0);
+          if (declared > FILE_LIMIT_BYTES) {
+            return status(413, "Files up to 100 MB.");
+          }
+          const bytes = new Uint8Array(await request.arrayBuffer());
+          if (bytes.byteLength > FILE_LIMIT_BYTES) {
+            return status(413, "Files up to 100 MB.");
+          }
+          const hash = await storeFile(bytes);
+          return {
+            ref: `/api/files/${hash}`,
+            size: bytes.byteLength,
+            mediaType:
+              request.headers.get("content-type") || "application/octet-stream",
+            name: decodeURIComponent(headers["x-file-name"]),
+          };
+        }
+      )
+      // An attached file's bytes, by the hash a send's reference names.
+      .get("/api/files/:hash", async ({ params, status }) => {
+        const path = storedFilePath(params.hash);
+        const file = path ? Bun.file(path) : undefined;
+        if (!(file && (await file.exists()))) {
+          return status(404, "no such file");
+        }
+        return new Response(file, {
+          headers: {
+            "Content-Type": "application/octet-stream",
             "Cache-Control": "public, max-age=31536000, immutable",
           },
         });

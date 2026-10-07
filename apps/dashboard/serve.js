@@ -62,6 +62,10 @@ process.env.HOST_HEADER = HOST_HEADER;
 if (standalone && !process.env.ADDRESS_HEADER) {
   process.env.ADDRESS_HEADER = "x-cawco-peer-address";
 }
+// A file the reader attaches goes to the hub through `/api/files`, up to the
+// hub's own 100 MB (media.ts `FILE_LIMIT_BYTES`), which answers a larger one
+// itself; the adapter's 512K default refused any file past it here first.
+process.env.BODY_SIZE_LIMIT = "101M";
 const { handler } = await import("./build/handler.js");
 // Captured once: version.json on disk changes during a build before this process restarts.
 const runningVersion = readFileSync(

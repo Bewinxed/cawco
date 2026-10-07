@@ -18,6 +18,9 @@ final class RowEnv {
     /// Toggles a disclosure by its key, animating the row it sits in.
     var toggle: (String, UIView) -> Void = { _, _ in }
     var openLightbox: (Lightbox.Item, UIView) -> Void = { _, _ in }
+    /// Fetches a file a turn carried (its hub reference, its name) and offers
+    /// it in the share sheet, from the view tapped.
+    var openFile: (String, String, UIView) -> Void = { _, _, _ in }
     /// The transcripts of delegates opened in this one (Delegate.svelte).
     var delegateTranscript: (String) -> SessionTranscript? = { _ in nil }
     /// A delegate's card opened or folded: its transcript is wanted, or not.

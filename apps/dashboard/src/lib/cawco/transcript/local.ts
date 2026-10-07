@@ -31,10 +31,21 @@ export function localUserMessage(
     // build them from, since the live path never echoes the user's own turn.
     metadata: carried
       ? {
-          attachments: attachments?.map(({ name, content }) => ({
-            name,
-            content,
-          })),
+          attachments: attachments?.map((attachment) =>
+            attachment.kind === "file"
+              ? {
+                  kind: "file" as const,
+                  name: attachment.name,
+                  mediaType: attachment.mediaType,
+                  size: attachment.size,
+                  ref: attachment.ref,
+                }
+              : {
+                  kind: "text" as const,
+                  name: attachment.name,
+                  content: attachment.content,
+                }
+          ),
           images: images?.map(({ mediaType, data }) => ({
             mediaType,
             src: `data:${mediaType};base64,${data}`,

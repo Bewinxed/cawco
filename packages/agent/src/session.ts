@@ -68,6 +68,7 @@ import {
 } from "@cawco/core/binary-updates";
 import { sessiondEndpoint } from "@cawco/core/sessiond";
 import { Effect } from "effect";
+import { withFiles } from "./attachments";
 import { type Boundary, boundaryFor } from "./boundary";
 import { fetchDefaultBranch } from "./clone";
 import { harnessMcpUrl } from "./delegation";
@@ -2458,12 +2459,11 @@ export class SessionSupervisor {
     });
   }
 
-  // biome-ignore lint/suspicious/useAwait: must stay async to match #route()'s Promise<void>-returning verb handlers
   async #send(payload: SendPayload): Promise<void> {
-    const { instanceId, attachments, images, urgent } = payload;
-    let { message } = payload;
+    const { instanceId, images, urgent } = payload;
     const keepAlive =
-      message.origin.kind === "system" && message.origin.name === "keepalive";
+      payload.message.origin.kind === "system" &&
+      payload.message.origin.name === "keepalive";
     // Sent before the hub heard this session was put to sleep: it waits for
     // the process the hub's wake starts ({@link sleep}). A keep-alive ping is
     // not held: nothing wakes a session to keep its cache warm, and it is
@@ -2476,6 +2476,15 @@ export class SessionSupervisor {
       crossed.push(payload);
       return;
     }
+    // Files go onto this machine before any harness sees the turn, which
+    // names each by its path; a file that cannot be fetched fails the send.
+    const carried = await withFiles(
+      instanceId,
+      payload.message,
+      payload.attachments
+    );
+    const attachments = carried.texts;
+    let { message } = carried;
     const worktree = this.#worktrees.get(instanceId);
     const { content } = message.message;
     if (!keepAlive && worktree?.announce && typeof content === "string") {

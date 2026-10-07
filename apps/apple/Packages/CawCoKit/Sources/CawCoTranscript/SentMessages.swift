@@ -39,18 +39,26 @@ public enum SentMessages {
     }
 
     /// What a send carried beside its words, for sending it again in its
-    /// place: its pasted texts, and its pictures as the hub serves them.
-    public static func extras(of id: String, in transcript: SessionTranscript) -> (texts: [(name: String, content: String)], images: [(src: String, mediaType: String)]) {
-        guard let raw = (transcript.queued + transcript.blocks).first(where: { $0.id == id }), let block = Block(raw) else { return ([], []) }
-        let texts = (block.meta["attachments"] as? [[String: Any]] ?? []).compactMap { attachment -> (name: String, content: String)? in
+    /// place: its pasted texts, its files by the hub's reference, and its
+    /// pictures as the hub serves them.
+    public static func extras(of id: String, in transcript: SessionTranscript)
+        -> (texts: [(name: String, content: String)], files: [SentFile], images: [(src: String, mediaType: String)]) {
+        guard let raw = (transcript.queued + transcript.blocks).first(where: { $0.id == id }), let block = Block(raw) else { return ([], [], []) }
+        let attachments = block.meta["attachments"] as? [[String: Any]] ?? []
+        let texts = attachments.compactMap { attachment -> (name: String, content: String)? in
             guard let content = attachment["content"] as? String else { return nil }
             return (attachment["name"] as? String ?? "Pasted text", content)
+        }
+        let files = attachments.compactMap { attachment -> SentFile? in
+            guard attachment["kind"] as? String == "file", let ref = attachment["ref"] as? String else { return nil }
+            return SentFile(name: attachment["name"] as? String ?? "file", mediaType: attachment["mediaType"] as? String ?? "application/octet-stream",
+                            size: (attachment["size"] as? NSNumber)?.intValue ?? 0, ref: ref)
         }
         let images = (block.meta["images"] as? [[String: Any]] ?? []).compactMap { image -> (src: String, mediaType: String)? in
             guard let src = image["src"] as? String else { return nil }
             return (src, image["mediaType"] as? String ?? "image/png")
         }
-        return (texts, images)
+        return (texts, files, images)
     }
 
     private static func entry(_ block: Components.Schemas.TranscriptBlock) -> RecallEntry? {

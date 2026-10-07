@@ -4,14 +4,13 @@ import { fileURLToPath } from "node:url";
 import type {
   NeutralMessage,
   PermissionResult,
-  SendPayload,
   SentMessage,
   SpawnPayload,
 } from "@cawco/core";
 import { CAWCO_ENV, CONTROL_INTERRUPT, MESSAGES_HELD } from "@cawco/core";
 import { standalone } from "@cawco/core/runtime";
 import { sessiondEndpoint } from "@cawco/core/sessiond";
-import type { HarnessContext, HarnessSession } from "../harness";
+import type { HarnessContext, HarnessSession, TurnExtras } from "../harness";
 import { procIdFor } from "../proc-id";
 import type { SessiondAwareContext } from "../session";
 import { ensureSessiond, procEpoch, SessiondClient } from "../sessiond-client";
@@ -21,7 +20,7 @@ export type PiHostCommand =
   | {
       type: "send";
       message: SentMessage;
-      extras: Pick<SendPayload, "attachments" | "images" | "urgent">;
+      extras: TurnExtras;
     }
   | { type: "control"; id: string; method: string; args: unknown[] }
   | { type: "snapshot"; id: string }
@@ -220,10 +219,7 @@ export class PiRemoteSession implements HarnessSession {
     return response;
   }
 
-  send(
-    message: SentMessage,
-    extras: Pick<SendPayload, "attachments" | "images" | "urgent">
-  ): void {
+  send(message: SentMessage, extras: TurnExtras): void {
     this.#setBusy(true);
     this.write({ type: "send", message, extras }).catch((error: unknown) =>
       this.#ctx.rejected(message.uuid, error)

@@ -35,6 +35,7 @@ import type {
   ProjectOfferSummary,
   ProjectSpend,
   ProjectView,
+  SendAttachment,
   SendPayload,
   SendRecord,
   SessionEffort,
@@ -3315,6 +3316,23 @@ export function retryOf(uuid: string): CommandRecord | null {
 }
 
 /**
+ * What a sent row carried, as a send carries it again: its texts, and its
+ * files by the hub's reference (a row drawn from the hub's record names
+ * every file it carried by one).
+ */
+function resentAttachments(message: Message): SendPayload["attachments"] {
+  return message.metadata?.attachments?.flatMap<SendAttachment>(
+    (attachment) => {
+      if (attachment.kind === "text") {
+        return [attachment];
+      }
+      const { name, mediaType, size, ref } = attachment;
+      return ref ? [{ kind: "file" as const, name, mediaType, size, ref }] : [];
+    }
+  );
+}
+
+/**
  * Sends again, as a new send that replaces it, a send the hub failed — from
  * any screen, after any reload: the words and pictures are the row's own,
  * from its record. The hub retires the failed one (`replaced`) as it takes
@@ -3333,9 +3351,7 @@ export async function retryFailed(message: Message): Promise<void> {
     {
       text: message.content,
       extras: {
-        attachments: message.metadata?.attachments?.map(
-          ({ name, content }) => ({ kind: "text" as const, name, content })
-        ),
+        attachments: resentAttachments(message),
         images,
       },
       replaces: message.id,
@@ -3430,9 +3446,7 @@ export async function replaceQueued(
     {
       sendId: message.id,
       extras: {
-        attachments: message.metadata?.attachments?.map(
-          ({ name, content }) => ({ kind: "text" as const, name, content })
-        ),
+        attachments: resentAttachments(message),
         images,
       },
       replacement,

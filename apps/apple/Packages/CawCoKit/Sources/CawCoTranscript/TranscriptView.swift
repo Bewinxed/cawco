@@ -270,6 +270,35 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         }
     }
 
+    private struct FileGone: LocalizedError {
+        var errorDescription: String? { "The hub no longer has that file." }
+    }
+
+    /// A file a turn carried, fetched from the hub under its own name and
+    /// offered in the share sheet (save to Files, open in another app).
+    private func share(_ ref: String, name: String, from source: UIView) {
+        guard let url = env.url(ref) else { return }
+        Task { [weak self, weak source] in
+            do {
+                let (download, response) = try await URLSession.shared.download(from: url)
+                guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw FileGone() }
+                let folder = FileManager.default.temporaryDirectory.appending(path: "cawco-files/\(UUID().uuidString)", directoryHint: .isDirectory)
+                try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+                let file = folder.appending(path: name.isEmpty ? "file" : (name as NSString).lastPathComponent)
+                try FileManager.default.moveItem(at: download, to: file)
+                guard let self, let source, let host = window?.rootViewController else { return }
+                var top = host
+                while let shown = top.presentedViewController { top = shown }
+                let sheet = UIActivityViewController(activityItems: [file], applicationActivities: nil)
+                sheet.popoverPresentationController?.sourceView = source
+                sheet.popoverPresentationController?.sourceRect = source.bounds
+                top.present(sheet, animated: true)
+            } catch {
+                Toast.error("Couldn't open \(name). \(error.localizedDescription)", in: self)
+            }
+        }
+    }
+
     private func wireEnv() {
         env.isOpen = { [weak self] key in self?.open.contains(key) ?? false }
         env.toggle = { [weak self] key, view in self?.toggle(key, from: view) }
@@ -279,6 +308,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             while let shown = top.presentedViewController { top = shown }
             top.present(Lightbox(item, env: env), animated: !UIAccessibility.isReduceMotionEnabled)
         }
+        env.openFile = { [weak self] ref, name, source in self?.share(ref, name: name, from: source) }
         env.parentBlocks = { [weak self] in self?.blocks ?? [] }
         env.delegateTranscript = { [weak self] id in self?.hub?.sessions.transcripts[id] }
         env.watchDelegate = { [weak self] id, watch in

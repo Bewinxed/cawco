@@ -27,6 +27,10 @@ public final class SessionComposerBinding {
     public var attachMenu: UIMenu?
     public var onSend: (String, [ComposerAttachment]) -> Void = { _, _ in }
     public var onStop: () -> Void = {}
+    /// Pictures and files pasted into the field, for the pane to attach.
+    public var onPasteItems: ([NSItemProvider]) -> Void = { _ in }
+    /// A tap on a file whose upload failed: upload it again.
+    public var onRetryFile: (String) -> Void = { _ in }
 
     // MARK: Recall and the queued message
 
@@ -77,7 +81,33 @@ public final class SessionComposerBinding {
 
     public func attach(_ attachment: ComposerAttachment) {
         attachments.append(attachment)
-        composer?.loadDraft(of: self)
+        composer?.attachmentsChanged(of: self)
+    }
+
+    /// Where the upload of the file `id` stands now. A file the reader has
+    /// removed meanwhile, or that went with a send, stays gone.
+    public func updateFile(_ id: String, _ state: ComposerAttachment.FileState) {
+        guard let at = attachments.firstIndex(where: { $0.slot == id }),
+              case let .file(_, name, mediaType, size, _) = attachments[at] else { return }
+        attachments[at] = .file(id: id, name: name, mediaType: mediaType, size: size, state: state)
+        composer?.attachmentsChanged(of: self)
+    }
+
+    /// The pick `id` has been read: what it became takes its place, or,
+    /// when it could not be read (nil), the place goes. A pick whose place
+    /// is gone (removed, or the draft was sent) is dropped: it can never
+    /// land in another message.
+    /// Answers whether the place was still there.
+    @discardableResult
+    public func resolve(_ id: String, with attachment: ComposerAttachment?) -> Bool {
+        guard let at = attachments.firstIndex(where: { $0.slot == id }) else { return false }
+        if let attachment {
+            attachments[at] = attachment
+        } else {
+            attachments.remove(at: at)
+        }
+        composer?.attachmentsChanged(of: self)
+        return true
     }
 
     /// Lifts the queued message `entry` into the composer to edit (a tap

@@ -284,11 +284,12 @@ public final class SessionsStore {
     }
 
     /// A user turn (core `SendPayload`): its words, and what it carries
-    /// beside them, images as base64 with no `data:` prefix and texts the
-    /// reader attached or pasted at length. `replaces` names the send this
-    /// one stands in for (a withdrawn queued send), which the hub then retires.
+    /// beside them, images as base64 with no `data:` prefix, texts the
+    /// reader attached or pasted at length, and files the hub already holds,
+    /// by its reference. `replaces` names the send this one stands in for
+    /// (a withdrawn queued send), which the hub then retires.
     public func steer(_ row: InstanceRow, text: String, images: [(mediaType: String, data: Data)] = [], texts: [(name: String, content: String)] = [],
-                      replaces: String? = nil) -> String {
+                      files: [SentFile] = [], replaces: String? = nil) -> String {
         let uuid = UUID().uuidString.lowercased()
         var message: [String: any Sendable] = [
             "type": "user", "uuid": uuid, "origin": ["kind": "human"],
@@ -299,8 +300,9 @@ public final class SessionsStore {
         if !images.isEmpty {
             body["images"] = images.map { ["mediaType": $0.mediaType, "data": $0.data.base64EncodedString()] as [String: any Sendable] }
         }
-        if !texts.isEmpty {
+        if !texts.isEmpty || !files.isEmpty {
             body["attachments"] = texts.map { ["kind": "text", "name": $0.name, "content": $0.content] as [String: any Sendable] }
+                + files.map { ["kind": "file", "name": $0.name, "mediaType": $0.mediaType, "size": $0.size, "ref": $0.ref] as [String: any Sendable] }
         }
         let payload = try! OpenAPIValueContainer(unvalidatedValue: body)
         return hub.ledger.submit(kind: .send, sessionId: row.id, machineId: row.machineId, payload: payload, settlesAt: .accepted)

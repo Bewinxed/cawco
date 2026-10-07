@@ -92,7 +92,12 @@ import {
   readSkillFiles,
   syncFleetConfig,
 } from "../fleet";
-import type { Harness, HarnessContext, HarnessSession } from "../harness";
+import type {
+  Harness,
+  HarnessContext,
+  HarnessSession,
+  TurnExtras,
+} from "../harness";
 import {
   beginLogin,
   clearCredentials,
@@ -467,7 +472,7 @@ type Base64Source = Extract<
  */
 function withExtras(
   message: SDKUserMessage,
-  attachments: SendPayload["attachments"],
+  attachments: TurnExtras["attachments"],
   images: SendPayload["images"]
 ): SDKUserMessage {
   if (!(attachments?.length || images?.length)) {
@@ -1418,10 +1423,7 @@ class ClaudeSession implements HarnessSession {
       : undefined;
   }
 
-  send(
-    message: SentMessage,
-    extras: Pick<SendPayload, "attachments" | "images" | "urgent">
-  ): void {
+  send(message: SentMessage, extras: TurnExtras): void {
     // The uuid rides on the message: the CLI keeps it as the command's own id
     // and names it in the `command_lifecycle` that says it was consumed.
     // Every send goes to the CLI as a query, whatever its `shouldQuery`. Into a

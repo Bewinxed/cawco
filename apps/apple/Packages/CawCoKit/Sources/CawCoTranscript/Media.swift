@@ -176,12 +176,11 @@ final class ShotView: UIView {
 /// to its name, the head of the name giving way before its tail does.
 final class DocThumb: UIControl {
     let name: String
-    let content: String
     var onOpen: () -> Void = {}
 
-    init(name: String, content: String) {
+    /// `meta` is the line under the name: a text's lines and size, or a file's size.
+    init(name: String, meta metaLine: String) {
         self.name = name
-        self.content = content
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         backgroundColor = Palette.surfaceRecess
@@ -197,7 +196,7 @@ final class DocThumb: UIControl {
         end.attributedText = Styled.string(String(name.suffix(name.count - cut)), TypeScale.typeLabel, color: Palette.inkStrong, leading: TypeScale.leadingUi)
         let nameLine = UIStackView(arrangedSubviews: [head, end])
         let meta = LineLabel()
-        meta.attributedText = Styled.string(Self.size(content), TypeScale.typeMeta, color: Palette.inkMuted, leading: TypeScale.leadingUi, tabular: true)
+        meta.attributedText = Styled.string(metaLine, TypeScale.typeMeta, color: Palette.inkMuted, leading: TypeScale.leadingUi, tabular: true)
         let text = UIStackView(arrangedSubviews: [nameLine, meta])
         text.axis = .vertical
         let row = railLine([glyph, text])

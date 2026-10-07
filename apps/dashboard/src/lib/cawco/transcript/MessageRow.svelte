@@ -637,7 +637,11 @@
           <div class="chips" data-gallery>
             {#each message.metadata.attachments ??
               [] as att, i (`${att.name}-${i}`)}
-              <DocThumb content={att.content} name={att.name} />
+              {#if att.kind === "file"}
+                <DocThumb href={att.ref} name={att.name} size={att.size} />
+              {:else}
+                <DocThumb content={att.content} name={att.name} />
+              {/if}
             {/each}
             <!-- Keyed by position: the same picture sent twice is two pictures. -->
             {#each message.metadata.images ??

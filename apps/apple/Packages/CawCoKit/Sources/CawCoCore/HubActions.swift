@@ -250,7 +250,7 @@ extension HubConnection {
     /// and images use the generated SendPayload entries without re-shaping.
     @discardableResult
     public func sendMessage(instanceId: String, machineId: String, text: String,
-        attachments: Components.Schemas.SendPayload.AttachmentsPayload? = nil,
+        attachments: [Components.Schemas.SendAttachment]? = nil,
         images: Components.Schemas.SendPayload.ImagesPayload? = nil) async throws -> Ledger.Command {
         try await ledger.execute(kind: .send, sessionId: instanceId, machineId: machineId) { id in
             let message = try OpenAPIValueContainer(unvalidatedValue: [
@@ -265,7 +265,7 @@ extension HubConnection {
     }
     @discardableResult
     public func interruptAndSend(instanceId: String, machineId: String, text: String,
-        attachments: Components.Schemas.SendPayload.AttachmentsPayload? = nil,
+        attachments: [Components.Schemas.SendAttachment]? = nil,
         images: Components.Schemas.SendPayload.ImagesPayload? = nil) async throws -> Ledger.Command {
         _ = try await command(instanceId: instanceId, machineId: machineId, kind: .interrupt, method: "interrupt", args: [])
         return try await sendMessage(instanceId: instanceId, machineId: machineId, text: text, attachments: attachments, images: images)

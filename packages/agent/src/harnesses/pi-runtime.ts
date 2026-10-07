@@ -1,7 +1,6 @@
 /** Host-only pi turns. This module is absent from the agent process graph. */
 import type {
   PermissionResult,
-  SendPayload,
   SentMessage,
   SpawnPayload,
   SupportedCommands,
@@ -35,7 +34,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { type Boundary, boundaryCommand } from "../boundary";
 import { callDelegationTool, delegationTools } from "../delegation";
-import type { HarnessContext, HarnessSession } from "../harness";
+import type { HarnessContext, HarnessSession, TurnExtras } from "../harness";
 import { acknowledgeSessionCredential } from "../session-identity";
 import {
   compactBoundaryId,
@@ -330,10 +329,7 @@ class PiSession implements HarnessSession {
     }
   }
 
-  send(
-    message: SentMessage,
-    extras: Pick<SendPayload, "attachments" | "images" | "urgent">
-  ): void {
+  send(message: SentMessage, extras: TurnExtras): void {
     const text = textOf(message.message.content);
     const images = (extras.images ?? []).map((image) => ({
       type: "image" as const,

@@ -50,6 +50,8 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
         super.init(nibName: nil, bundle: nil)
         composerBinding.onSend = { [weak self] words, attachments in self?.send(words, attachments) }
         composerBinding.onStop = { [weak self] in self?.stopTurn() }
+        composerBinding.onPasteItems = { [weak self] items in self?.attachPasted(items) }
+        composerBinding.onRetryFile = { [weak self] id in self?.upload(id) }
         composerBinding.attachMenu = attachMenu()
         composerBinding.recall = { [weak self] in self.map { SentMessages.recall($0.transcript) } ?? [] }
         composerBinding.editableQueued = { [weak self] in self?.editableQueued() }
@@ -441,13 +443,17 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
         editNote = nil
         var images: [(mediaType: String, data: Data)] = []
         var texts: [(name: String, content: String)] = []
+        var files: [SentFile] = []
         for attachment in attachments {
             switch attachment {
             case let .image(_, mediaType, data): images.append((mediaType, data))
             case let .text(name, content): texts.append((name, content))
+            case let .file(_, name, mediaType, size, .ready(ref)): files.append(SentFile(name: name, mediaType: mediaType, size: size, ref: ref))
+            // The composer sends nothing while a pick is being read or a file is not on the hub.
+            case .file, .pending: return
             }
         }
-        let id = hub.sessions.steer(row, text: words, images: images, texts: texts)
+        let id = hub.sessions.steer(row, text: words, images: images, texts: texts, files: files)
         sent = id
         if hub.ledger.commands[id]?.undelivered != true { composerBinding.sent() }
         requestRefresh()
@@ -504,17 +510,17 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
                 }
                 images.append((image.mediaType, fetched.0))
             }
-            self?.withdraw(id, row: row, text: text, images: images, texts: extras.texts)
+            self?.withdraw(id, row: row, text: text, images: images, texts: extras.texts, files: extras.files)
         }
     }
 
     private func withdraw(_ id: String, row: InstanceRow, text: String, images: [(mediaType: String, data: Data)],
-                          texts: [(name: String, content: String)]) {
+                          texts: [(name: String, content: String)], files: [SentFile]) {
         var command = ""
         command = hub.sessions.withdraw(row, sendId: id) { [weak self] stage, reason in
             guard let self else { return }
             if stage == .applied, hub.ledger.commands[command]?.outcome == "withdrawn" {
-                let replacement = hub.sessions.steer(row, text: text, images: images, texts: texts, replaces: id)
+                let replacement = hub.sessions.steer(row, text: text, images: images, texts: texts, files: files, replaces: id)
                 sent = replacement
                 // Withdrawn and its replacement never left this device: the words are only here, so they go back
                 // to the composer (as a plain send keeps its draft). A later failure stays a failed row to try again.
@@ -561,17 +567,18 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
 
     private func pickPhotos() {
         var config = PHPickerConfiguration()
-        config.filter = .images
+        config.filter = .any(of: [.images, .videos])
+        // A video as it is stored, not transcoded first.
+        config.preferredAssetRepresentationMode = .current
         config.selectionLimit = 0
         let picker = PHPickerViewController(configuration: config)
         picker.delegate = self
         present(picker, animated: true)
     }
 
+    /// Any file at all: a picture, a text, or anything else, which uploads.
     private func pickFiles() {
-        var types: [UTType] = [.image, .plainText, .text, .json, .commaSeparatedText, .log]
-        if let markdown = UTType(filenameExtension: "md") { types.append(markdown) }
-        let picker = UIDocumentPickerViewController(forOpeningContentTypes: types, asCopy: true)
+        let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.item], asCopy: true)
         picker.allowsMultipleSelection = true
         picker.delegate = self
         present(picker, animated: true)
@@ -581,24 +588,182 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
         picker.dismiss(animated: true)
         for result in results {
             let provider = result.itemProvider
-            let name = provider.suggestedName ?? "Image"
-            provider.loadDataRepresentation(forTypeIdentifier: UTType.image.identifier) { [weak self] data, _ in
-                guard let data, let image = Self.sendable(data) else { return }
-                Task { @MainActor in self?.composerBinding.attach(.image(name: name, mediaType: image.type, data: image.data)) }
+            if provider.hasItemConformingToTypeIdentifier(UTType.movie.identifier) {
+                loadFile(provider, type: .movie)
+            } else {
+                loadImage(provider)
             }
         }
     }
 
     func documentPicker(_: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
         for url in urls {
-            guard let data = try? Data(contentsOf: url) else { continue }
-            let type = UTType(filenameExtension: url.pathExtension)
-            if type?.conforms(to: .image) == true, let image = Self.sendable(data) {
-                composerBinding.attach(.image(name: url.lastPathComponent, mediaType: image.type, data: image.data))
-            } else if let text = String(data: data, encoding: .utf8) {
-                composerBinding.attach(.text(name: url.lastPathComponent, content: text))
+            let type = (try? url.resourceValues(forKeys: [.contentTypeKey]).contentType) ?? UTType(filenameExtension: url.pathExtension)
+            ingest(url, name: url.lastPathComponent, type: type)
+        }
+    }
+
+    /// Pictures and files pasted into the composer: a picture as a picture,
+    /// a file as Choose File takes it.
+    private func attachPasted(_ items: [NSItemProvider]) {
+        for provider in items {
+            if provider.hasItemConformingToTypeIdentifier(UTType.image.identifier) {
+                loadImage(provider)
+            } else if let type = provider.registeredTypeIdentifiers.compactMap(UTType.init)
+                .first(where: { $0.conforms(to: .data) || $0.conforms(to: .content) }) {
+                loadFile(provider, type: type)
             }
         }
+    }
+
+    /// A pick or paste is read off its source in the background. Its place
+    /// in the draft is taken now, under its own id, and what it becomes
+    /// fills that place and no other: a read that lands after the place is
+    /// gone (removed, or sent) is dropped rather than riding the next message.
+    private func reserve(_ name: String) -> String {
+        let id = UUID().uuidString
+        composerBinding.attach(.pending(id: id, name: name))
+        return id
+    }
+
+    private func loadImage(_ provider: NSItemProvider) {
+        let name = provider.suggestedName ?? "Image"
+        let slot = reserve(name)
+        provider.loadDataRepresentation(forTypeIdentifier: UTType.image.identifier) { [weak self] data, error in
+            let image = data.flatMap(Self.sendable)
+            Task { @MainActor in
+                guard let self else { return }
+                guard let image else {
+                    self.composerBinding.resolve(slot, with: nil)
+                    Toast.error("Couldn't attach \(name). \(error?.localizedDescription ?? "The picture couldn't be read.")", in: self.view)
+                    return
+                }
+                self.composerBinding.resolve(slot, with: .image(name: name, mediaType: image.type, data: image.data))
+            }
+        }
+    }
+
+    /// A provider's file, copied out of the callback (its copy is gone once
+    /// the callback returns) and taken as a picked file, in its own place.
+    private func loadFile(_ provider: NSItemProvider, type: UTType) {
+        let suggested = provider.suggestedName
+        let slot = reserve(suggested ?? "File")
+        provider.loadFileRepresentation(forTypeIdentifier: type.identifier) { [weak self] url, error in
+            let kept = url.flatMap { Self.keep($0, name: Self.fileName(suggested, url: $0, type: type)) }
+            // The copy's own type is the narrower one (a video picked as any movie is a QuickTime movie).
+            let actual = kept.flatMap { UTType(filenameExtension: $0.pathExtension) }.flatMap { $0.conforms(to: type) ? $0 : nil } ?? type
+            let reason = error?.localizedDescription ?? "The file couldn't be read."
+            Task { @MainActor in
+                guard let self else { return }
+                guard let kept else {
+                    self.composerBinding.resolve(slot, with: nil)
+                    Toast.error("Couldn't attach that file. \(reason)", in: self.view)
+                    return
+                }
+                self.ingest(kept, name: kept.lastPathComponent, type: actual, slot: slot)
+            }
+        }
+    }
+
+    /// The largest text that rides as text, folded into the turn.
+    private static let textLimit = 1024 * 1024
+
+    /// What a file becomes (Composer.svelte `addFiles`): a picture, through
+    /// `sendable`; a text, when it is one, reads as UTF-8 and is at most
+    /// 1 MB; anything else a file, uploading to the hub at once.
+    /// `slot`: the place a pick reserved, which this fills; without one the
+    /// attachment is added at the end.
+    private func ingest(_ url: URL, name: String, type: UTType?, slot: String? = nil) {
+        let place = { [composerBinding] (attachment: ComposerAttachment) -> Bool in
+            guard let slot else {
+                composerBinding.attach(attachment)
+                return true
+            }
+            return composerBinding.resolve(slot, with: attachment)
+        }
+        let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+        if type?.conforms(to: .image) == true, let data = try? Data(contentsOf: url), let image = Self.sendable(data) {
+            place(.image(name: name, mediaType: image.type, data: image.data))
+            return
+        }
+        if type?.conforms(to: .text) == true, size <= Self.textLimit,
+           let data = try? Data(contentsOf: url), let text = String(data: data, encoding: .utf8) {
+            place(.text(name: name, content: text))
+            return
+        }
+        let id = slot ?? UUID().uuidString
+        let mediaType = type?.preferredMIMEType ?? "application/octet-stream"
+        guard place(.file(id: id, name: name, mediaType: mediaType, size: size, state: .uploading(0))) else { return }
+        uploads[id] = Upload(url: url, name: name, mediaType: mediaType)
+        upload(id)
+    }
+
+    /// A file on its way to the hub, kept until the hub has it so a failed
+    /// upload can be tried again. `attempt` lets a late word from an earlier
+    /// try fall on the floor.
+    private struct Upload {
+        let url: URL
+        let name: String
+        let mediaType: String
+        var attempt = 0
+    }
+
+    private var uploads: [String: Upload] = [:]
+
+    /// Uploads (again) the file `id`; its chip follows along.
+    private func upload(_ id: String) {
+        guard var job = uploads[id] else { return }
+        job.attempt += 1
+        uploads[id] = job
+        let attempt = job.attempt
+        composerBinding.updateFile(id, .uploading(0))
+        // Heard on URLSession's queue; the chip moves on the main actor.
+        let report: @Sendable (Double) -> Void = { [weak self] fraction in
+            Task { @MainActor in
+                guard let self, self.uploads[id]?.attempt == attempt else { return }
+                self.composerBinding.updateFile(id, .uploading(fraction))
+            }
+        }
+        Task { [weak self, hub] in
+            do {
+                let file = try await hub.uploadFile(at: job.url, name: job.name, mediaType: job.mediaType, progress: report)
+                guard let self, uploads[id]?.attempt == attempt else { return }
+                uploads[id] = nil
+                composerBinding.updateFile(id, .ready(file.ref))
+                if job.url.path.hasPrefix(Self.keptFiles.path) { try? FileManager.default.removeItem(at: job.url.deletingLastPathComponent()) }
+            } catch {
+                guard let self, uploads[id]?.attempt == attempt else { return }
+                // A later progress word from this try must not bring the ring back.
+                uploads[id]?.attempt += 1
+                composerBinding.updateFile(id, .failed(error.localizedDescription))
+            }
+        }
+    }
+
+    /// Where pasted and picked files wait to upload: a folder of their own each.
+    nonisolated private static var keptFiles: URL {
+        FileManager.default.temporaryDirectory.appending(path: "cawco-uploads", directoryHint: .isDirectory)
+    }
+
+    nonisolated private static func keep(_ url: URL, name: String) -> URL? {
+        let folder = keptFiles.appending(path: UUID().uuidString, directoryHint: .isDirectory)
+        let kept = folder.appending(path: name)
+        do {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            try FileManager.default.copyItem(at: url, to: kept)
+            return kept
+        } catch {
+            return nil
+        }
+    }
+
+    /// The name a pasted or picked file goes by: the name its source
+    /// suggested, with its type's extension, else the copy's own.
+    nonisolated private static func fileName(_ suggested: String?, url: URL, type: UTType) -> String {
+        guard let suggested, !suggested.isEmpty else { return url.lastPathComponent }
+        guard let ext = type.preferredFilenameExtension ?? (url.pathExtension.isEmpty ? nil : url.pathExtension),
+              (suggested as NSString).pathExtension.isEmpty else { return suggested }
+        return "\(suggested).\(ext)"
     }
 
     /// An image as a turn carries it: PNG stays PNG, anything else as JPEG.

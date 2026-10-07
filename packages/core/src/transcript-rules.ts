@@ -8,6 +8,8 @@
  * Pure by design: it returns what a frame means and the builder
  * (`transcript.ts`) applies it.
  */
+
+import { attachedFiles } from "./attachments";
 import type {
   NeutralAssistantMessage,
   NeutralMessage,
@@ -1275,14 +1277,16 @@ function pastedText(text: string): {
   typed: string;
   attachments?: NonNullable<BlockMetadata["attachments"]>;
 } {
-  const attachments = Array.from(text.matchAll(PASTED_TEXT), (match) => ({
+  const texts = Array.from(text.matchAll(PASTED_TEXT), (match) => ({
+    kind: "text" as const,
     name: match[1],
     content: match[2],
   }));
-  if (!attachments.length) {
-    return { typed: text };
-  }
-  return { typed: text.replace(PASTED_TEXT, "").trimEnd(), attachments };
+  const { typed, files = [] } = attachedFiles(
+    texts.length ? text.replace(PASTED_TEXT, "").trimEnd() : text
+  );
+  const attachments = [...texts, ...files];
+  return attachments.length ? { typed, attachments } : { typed };
 }
 
 const TASK_NOTIFICATION_SUMMARY = /<summary>([\s\S]*?)<\/summary>/;

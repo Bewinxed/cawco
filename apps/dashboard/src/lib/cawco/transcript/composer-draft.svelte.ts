@@ -32,6 +32,25 @@ export interface PendingText {
   name: string;
 }
 
+/**
+ * A file that is neither a picture nor text: uploading to the hub as soon as
+ * it is attached, then ready (`ref`), or failed (`error`) and kept with its
+ * bytes so a tap tries it again.
+ */
+export interface PendingFile {
+  /** Its bytes, while this tab may have to upload them (again). */
+  blob?: Blob;
+  error?: string;
+  id: string;
+  mediaType: string;
+  name: string;
+  /** How far its upload has gone, 0 to 1. */
+  progress: number;
+  /** The hub's reference, once it has the file. */
+  ref?: string;
+  size: number;
+}
+
 /** The most element notes one message carries. */
 const MAX_SELECTIONS = 12;
 
@@ -59,6 +78,7 @@ export class ComposerDraft {
   text = $state("");
   images = $state<PendingImage[]>([]);
   texts = $state<PendingText[]>([]);
+  files = $state<PendingFile[]>([]);
   selections = $state<PendingSelection[]>([]);
   /** The note whose editor is (or was last) open, and whether it is open. */
   editing = $state<PendingSelection | null>(null);
@@ -98,7 +118,10 @@ export class ComposerDraft {
       return $state.snapshot(this.lifted.aside);
     }
     const writing =
-      this.text.length > 0 || this.images.length > 0 || this.texts.length > 0;
+      this.text.length > 0 ||
+      this.images.length > 0 ||
+      this.texts.length > 0 ||
+      this.files.length > 0;
     // Held in state, the unsent message is a proxy all the way down, and a
     // proxy cannot be stored: its plain copy is what gets kept.
     if (!writing && this.unsent) {
@@ -108,6 +131,7 @@ export class ComposerDraft {
       text: this.text,
       images: this.images,
       texts: $state.snapshot(this.texts),
+      files: $state.snapshot(this.files),
       selections: $state.snapshot(this.selections),
     };
   }
@@ -117,6 +141,7 @@ export class ComposerDraft {
     this.text = content.text;
     this.images = content.images;
     this.texts = content.texts;
+    this.files = content.files;
     this.selections = content.selections;
   }
 
@@ -133,6 +158,7 @@ export class ComposerDraft {
         text: this.text,
         images: this.images,
         texts: $state.snapshot(this.texts),
+        files: $state.snapshot(this.files),
         selections: $state.snapshot(this.selections),
       },
     };
@@ -142,6 +168,7 @@ export class ComposerDraft {
     this.text = words;
     this.images = [];
     this.texts = [];
+    this.files = [];
     this.selections = [];
   }
 
@@ -178,8 +205,14 @@ export class ComposerDraft {
     this.text.trim().length > 0 ||
       this.images.length > 0 ||
       this.texts.length > 0 ||
+      this.files.length > 0 ||
       this.selections.length > 0
   );
+
+  /** A file is still on its way to the hub: nothing sends until it lands. */
+  uploading = $derived(this.files.some((file) => !(file.ref || file.error)));
+  /** A file the hub does not have: sending now would leave it behind. */
+  unready = $derived(this.files.some((file) => !file.ref));
 
   /** An element picked in the preview becomes a note on the next message. */
   attach(selection: CapturedSelection): "added" | "duplicate" | "full" {
@@ -260,8 +293,13 @@ export class ComposerDraft {
     if (this.selections.length) {
       extras.selections = $state.snapshot(this.selections);
     }
-    if (this.texts.length) {
-      extras.attachments = this.texts.map((t) => ({ ...t }));
+    if (this.texts.length || this.files.length) {
+      extras.attachments = [
+        ...this.texts.map((t) => ({ ...t })),
+        ...this.files.flatMap(({ name, mediaType, size, ref }) =>
+          ref ? [{ kind: "file" as const, name, mediaType, size, ref }] : []
+        ),
+      ];
     }
     if (this.images.length) {
       extras.images = this.images.map((i) => ({
@@ -274,11 +312,13 @@ export class ComposerDraft {
       text,
       images: this.images,
       texts: $state.snapshot(this.texts),
+      files: $state.snapshot(this.files),
       selections: $state.snapshot(this.selections),
     };
     this.text = "";
     this.images = [];
     this.texts = [];
+    this.files = [];
     this.editorOpen = false;
     this.editing = null;
     return { text, extras };
@@ -297,11 +337,25 @@ export class ComposerDraft {
     this.putBack();
     this.text = text;
     this.selections = extras.selections ?? [];
-    this.texts = (extras.attachments ?? []).map((attachment) => ({
-      kind: "text",
-      name: attachment.name,
-      content: attachment.content,
-    }));
+    this.texts = (extras.attachments ?? []).flatMap((attachment) =>
+      attachment.kind === "text"
+        ? [{ kind: "text", name: attachment.name, content: attachment.content }]
+        : []
+    );
+    this.files = (extras.attachments ?? []).flatMap((attachment) =>
+      attachment.kind === "file"
+        ? [
+            {
+              id: newId(),
+              name: attachment.name,
+              mediaType: attachment.mediaType,
+              size: attachment.size,
+              ref: attachment.ref,
+              progress: 1,
+            },
+          ]
+        : []
+    );
     this.images = (extras.images ?? []).map((image, at) => ({
       mediaType: image.mediaType,
       data: image.data,

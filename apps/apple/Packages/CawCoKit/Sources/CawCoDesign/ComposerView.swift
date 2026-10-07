@@ -1,17 +1,63 @@
+import CawCoCore
 import CoreImage
 import CoreImage.CIFilterBuiltins
 import UIKit
+import UniformTypeIdentifiers
 
 /// Something the turn carries beside its typed words (Composer.svelte
-/// `draft.images` / `draft.texts`): an image, or a text the reader attached
-/// or pasted at length.
+/// `draft.images` / `draft.texts` / `draft.files`): an image, a text the
+/// reader attached or pasted at length, or any other file, which uploads to
+/// the hub as soon as it is attached and rides the send as its reference.
 public enum ComposerAttachment: Sendable, Equatable {
     case image(name: String, mediaType: String, data: Data)
     case text(name: String, content: String)
+    /// `id` follows the file through its upload.
+    case file(id: String, name: String, mediaType: String, size: Int, state: FileState)
+    /// A pick or a paste still being read off its source: it holds its place
+    /// in the draft, under its own `id`, until what it becomes takes that
+    /// place (`SessionComposerBinding.resolve`). Nothing sends meanwhile, and
+    /// a read that lands after its place has gone (removed, or sent) is dropped.
+    case pending(id: String, name: String)
+
+    /// Where a file's upload stands.
+    public enum FileState: Sendable, Equatable {
+        /// How far it has gone, 0 to 1.
+        case uploading(Double)
+        /// The hub has it, under this reference.
+        case ready(String)
+        case failed(String)
+    }
 
     public var name: String {
         switch self {
-        case let .image(name, _, _), let .text(name, _): name
+        case let .image(name, _, _), let .text(name, _), let .file(_, name, _, _, _), let .pending(_, name): name
+        }
+    }
+
+    /// Its own place in the draft, for a file or a pick still being read.
+    var slot: String? {
+        switch self {
+        case let .file(id, _, _, _, _), let .pending(id, _): id
+        case .image, .text: nil
+        }
+    }
+
+    /// Not yet something a send can carry: a pick still being read, or a
+    /// file the hub does not have (uploading, or failed).
+    var isUnready: Bool {
+        switch self {
+        case .pending: true
+        case .file(_, _, _, _, .ready): false
+        case .file: true
+        case .image, .text: false
+        }
+    }
+
+    /// The same chip as `other`: the same kind of attachment, and for a file the same file.
+    func sameChip(as other: ComposerAttachment) -> Bool {
+        switch (self, other) {
+        case let (.file(a, _, _, _, _), .file(b, _, _, _, _)): a == b
+        default: self == other
         }
     }
 }
@@ -249,6 +295,7 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
         field.accessibilityIdentifier = "steer-message"
         field.translatesAutoresizingMaskIntoConstraints = false
         field.onPaste = { [weak self] long in self?.attachPaste(long) }
+        field.onPasteItems = { [weak self] items in self?.binding?.onPasteItems(items) }
         field.onReturn = { [weak self] in self?.returned() }
         hint.text = Self.hintShort
         hint.isUserInteractionEnabled = false
@@ -415,6 +462,17 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
         wheel?.dismiss()
         endFlight()
         setField(source.draft)
+        attachments = source.attachments
+    }
+
+    /// Only the attachments changed (a file's upload moved along): the
+    /// field, its caret and the wheel stay as they are.
+    func attachmentsChanged(of source: SessionComposerBinding) {
+        guard source === binding else { return }
+        if let edit {
+            edit.attachments = source.attachments
+            return
+        }
         attachments = source.attachments
     }
 
@@ -693,6 +751,12 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
         !field.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !attachments.isEmpty
     }
 
+    /// A file the hub does not have yet: nothing sends until it is there,
+    /// or the reader removes it.
+    private var unready: Bool {
+        attachments.contains(where: \.isUnready)
+    }
+
     /// What the button does now. While a queued message is being edited it
     /// puts the edit in its place, even mid-turn, when the agent is working.
     private var shownAction: Action {
@@ -734,14 +798,14 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
             }
             return
         }
-        guard let binding, writable, !held, action != .sending, hasContent, flight == nil else { return }
+        guard let binding, writable, !held, action != .sending, hasContent, !unready, flight == nil else { return }
         let words = field.text.trimmingCharacters(in: .whitespacesAndNewlines)
         binding.onSend(words, attachments)
     }
 
     private func renderAction(animated: Bool) {
         let action = shownAction
-        let enabled = writable && !held && (action != .send || hasContent || wheel != nil)
+        let enabled = writable && !held && (action != .send || (hasContent && !unready) || wheel != nil)
         actionBox.isEnabled = enabled && action != .sending
         actionBox.isUserInteractionEnabled = action != .sending
         actionBox.alpha = enabled || action == .sending ? 1 : 0.55
@@ -797,11 +861,21 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
 
     private func renderAttachments() {
         if edit == nil { binding?.attachments = attachments }
+        let shown = chips.arrangedSubviews.compactMap { $0 as? AttachmentChip }
+        // The same chips as before, a file's upload having moved along: each
+        // takes its new state in place, so its ring fills rather than restarts.
+        if shown.count == attachments.count, zip(shown, attachments).allSatisfy({ $0.attachment.sameChip(as: $1) }) {
+            for (chip, attachment) in zip(shown, attachments) { chip.update(attachment) }
+            renderAction(animated: true)
+            return
+        }
         chips.arrangedSubviews.forEach { $0.removeFromSuperview() }
-        for (index, attachment) in attachments.enumerated() {
-            let chip = AttachmentChip(attachment) { [weak self] in
-                guard let self, index < attachments.count else { return }
+        for attachment in attachments {
+            let chip = AttachmentChip(attachment) { [weak self] chip in
+                guard let self, let index = chips.arrangedSubviews.firstIndex(of: chip), index < attachments.count else { return }
                 attachments.remove(at: index)
+            } onRetry: { [weak self] id in
+                self?.binding?.onRetryFile(id)
             }
             chips.addArrangedSubview(chip)
         }
@@ -1049,10 +1123,13 @@ extension ComposerView {
 // MARK: The field
 
 /// The composer's text view: Return sends (Shift-Return is a new line on a
-/// keyboard), and a long paste becomes an attachment.
+/// keyboard), a long paste becomes an attachment, and a pasted picture or
+/// file (a screenshot copied in Photos, a file copied in Files) is attached.
 final class ComposerField: UITextView {
     var onReturn: () -> Void = {}
     var onPaste: (String) -> Void = { _ in }
+    /// Pictures and files pasted in, as the pasteboard's item providers.
+    var onPasteItems: ([NSItemProvider]) -> Void = { _ in }
     /// Asked before a backspace; false keeps it from the text (the wheel's filter took it).
     var onDeleteBackward: () -> Bool = { true }
 
@@ -1060,12 +1137,38 @@ final class ComposerField: UITextView {
         if onDeleteBackward() { super.deleteBackward() }
     }
 
+    /// Paste is offered for pictures and files as well as words. Reading
+    /// what kinds the pasteboard holds asks the reader nothing.
+    override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
+        if action == #selector(paste(_:)) {
+            let board = UIPasteboard.general
+            if board.hasImages || board.numberOfItems > 0 { return true }
+        }
+        return super.canPerformAction(action, withSender: sender)
+    }
+
     override func paste(_ sender: Any?) {
-        if let text = UIPasteboard.general.string, text.count > ComposerView.largePaste {
+        let board = UIPasteboard.general
+        let attached = board.itemProviders.filter { Self.isAttachment($0) }
+        if !attached.isEmpty {
+            onPasteItems(attached)
+            return
+        }
+        if let text = board.string, text.count > ComposerView.largePaste {
             onPaste(text)
             return
         }
         super.paste(sender)
+    }
+
+    /// A pasted item that is a picture or a file rather than words: a
+    /// picture, or something whose types are none of them text or a link
+    /// (a page's words come as text beside its archive, and stay words).
+    static func isAttachment(_ provider: NSItemProvider) -> Bool {
+        if provider.hasItemConformingToTypeIdentifier(UTType.image.identifier) { return true }
+        let types = provider.registeredTypeIdentifiers.compactMap(UTType.init)
+        if types.contains(where: { $0.conforms(to: .text) || $0.conforms(to: .url) }) { return false }
+        return types.contains { $0.conforms(to: .data) || $0.conforms(to: .content) }
     }
 
     override func insertText(_ text: String) {
@@ -1271,11 +1374,24 @@ public final class SpinnerView: UIView {
 /// A pending attachment above the pill (`.att`): raised, on a hairline, the
 /// tile shadow, its 20pt thumbnail or document glyph, its name in the label
 /// role, and its 20pt remove.
+///
+/// A file says its size after its name. While it uploads, a 16pt ring (the
+/// kit spinner's, filled as far as the upload has gone) stands in its
+/// glyph's place and gives way to the glyph in a fade once the hub has it.
+/// If the upload failed it says "Couldn't upload" in the failure ink, and a
+/// tap on it tries again.
 final class AttachmentChip: UIView {
-    private let onRemove: () -> Void
+    private(set) var attachment: ComposerAttachment
+    private let onRemove: (AttachmentChip) -> Void
+    private let onRetry: (String) -> Void
+    private let progress = ProgressRing()
+    private let glyph = GlyphView(.document, size: Size.iconMd, tint: Palette.inkMuted)
+    private let meta = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
 
-    init(_ attachment: ComposerAttachment, onRemove: @escaping () -> Void) {
+    init(_ attachment: ComposerAttachment, onRemove: @escaping (AttachmentChip) -> Void, onRetry: @escaping (String) -> Void) {
+        self.attachment = attachment
         self.onRemove = onRemove
+        self.onRetry = onRetry
         super.init(frame: .zero)
         backgroundColor = Palette.surfaceRaised
         layer.cornerRadius = Radius.radiusSm
@@ -1289,21 +1405,64 @@ final class AttachmentChip: UIView {
             image.layer.cornerRadius = Radius.radiusXs
             thumb = image
         case .text:
-            thumb = GlyphView(.document, size: Size.iconMd, tint: Palette.inkMuted)
+            thumb = glyph
+        case .file:
+            // The glyph and the ring share the thumb's place; one shows at a time.
+            let slot = UIView()
+            for view in [glyph, progress] as [UIView] {
+                view.translatesAutoresizingMaskIntoConstraints = false
+                slot.addSubview(view)
+                NSLayoutConstraint.activate([
+                    view.centerXAnchor.constraint(equalTo: slot.centerXAnchor),
+                    view.centerYAnchor.constraint(equalTo: slot.centerYAnchor),
+                ])
+            }
+            NSLayoutConstraint.activate([
+                progress.widthAnchor.constraint(equalToConstant: Size.iconMd),
+                progress.heightAnchor.constraint(equalToConstant: Size.iconMd),
+            ])
+            thumb = slot
+        case .pending:
+            // The kit spinner while the pick is read off its source.
+            let slot = UIView()
+            let spinner = SpinnerView(frame: CGRect(x: 0, y: 0, width: Size.iconMd, height: Size.iconMd))
+            spinner.tintColor = Palette.inkMuted
+            spinner.accessibilityLabel = "Reading \(attachment.name)"
+            spinner.translatesAutoresizingMaskIntoConstraints = false
+            slot.addSubview(spinner)
+            NSLayoutConstraint.activate([
+                spinner.centerXAnchor.constraint(equalTo: slot.centerXAnchor),
+                spinner.centerYAnchor.constraint(equalTo: slot.centerYAnchor),
+                spinner.widthAnchor.constraint(equalToConstant: Size.iconMd),
+                spinner.heightAnchor.constraint(equalToConstant: Size.iconMd),
+            ])
+            thumb = slot
         }
         thumb.translatesAutoresizingMaskIntoConstraints = false
         let name = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong)
         name.text = attachment.name
         name.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        meta.tabular = true
+        meta.setContentCompressionResistancePriority(.required, for: .horizontal)
+        meta.setContentHuggingPriority(.required, for: .horizontal)
         var config = UIButton.Configuration.plain()
         config.image = Glyph.close.image.resized(to: Size.iconMd)
         config.imageColorTransformer = UIConfigurationColorTransformer { _ in Palette.inkMuted }
         config.contentInsets = .zero
         config.background.cornerRadius = Radius.radiusXs
-        let remove = UIButton(configuration: config, primaryAction: UIAction { [weak self] _ in self?.onRemove() })
+        let remove = UIButton(configuration: config, primaryAction: UIAction { [weak self] _ in
+            guard let self else { return }
+            onRemove(self)
+        })
         remove.accessibilityLabel = "Remove \(attachment.name)"
         remove.houseStyle()
-        let row = UIStackView(arrangedSubviews: [thumb, name, remove])
+        var parts: [UIView] = [thumb, name]
+        if case .file = attachment {
+            parts.append(meta)
+            addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(tapped)))
+        }
+        parts.append(remove)
+        let row = UIStackView(arrangedSubviews: parts)
         row.spacing = Space.space2
         row.alignment = .center
         row.translatesAutoresizingMaskIntoConstraints = false
@@ -1324,6 +1483,7 @@ final class AttachmentChip: UIView {
             chip.paint()
         }
         paint()
+        renderFile(animated: false)
     }
 
     @available(*, unavailable)
@@ -1331,8 +1491,131 @@ final class AttachmentChip: UIView {
         fatalError("AttachmentChip is built in code")
     }
 
+    /// The same attachment as it stands now: a file's upload moved along.
+    func update(_ next: ComposerAttachment) {
+        guard next != attachment else { return }
+        attachment = next
+        renderFile(animated: window != nil)
+    }
+
+    /// A file's face for where its upload stands.
+    private func renderFile(animated: Bool) {
+        guard case let .file(_, name, _, size, state) = attachment else { return }
+        let uploading: Bool
+        switch state {
+        case let .uploading(fraction):
+            uploading = true
+            progress.set(fraction, animated: animated)
+            meta.text = humanSize(size)
+            meta.ink = Palette.inkMuted
+            accessibilityHint = nil
+            meta.accessibilityLabel = "Uploading, \(Int((fraction * 100).rounded())) percent"
+        case .ready:
+            uploading = false
+            meta.text = humanSize(size)
+            meta.ink = Palette.inkMuted
+            meta.accessibilityLabel = nil
+        case .failed:
+            uploading = false
+            meta.text = "Couldn't upload"
+            meta.ink = Palette.statusFailInk
+            meta.accessibilityLabel = "Couldn't upload \(name). Tap to try again."
+        }
+        meta.accessibilityTraits = isFailed ? .button : .staticText
+        // The ring gives way to the glyph (and back, for a retry) in a fade;
+        // opacity alone, so it keeps under Reduce Motion.
+        let show = { [progress, glyph] in
+            progress.alpha = uploading ? 1 : 0
+            glyph.alpha = uploading ? 0 : 1
+        }
+        if animated {
+            Motion.easeOut.animator(Motion.durControl) { show() }.startAnimation()
+        } else {
+            show()
+        }
+    }
+
+    private var isFailed: Bool {
+        if case .file(_, _, _, _, .failed) = attachment { return true }
+        return false
+    }
+
+    @objc private func tapped() {
+        guard isFailed, case let .file(id, _, _, _, _) = attachment else { return }
+        Feel.prepare()
+        onRetry(id)
+    }
+
     private func paint() {
         layer.borderWidth = 1
         layer.borderColor = Palette.borderHairline.resolvedColor(with: traitCollection).cgColor
+    }
+}
+
+/// The kit spinner's ring (`SpinnerView`), still and filled as far as an
+/// upload has gone: a 16pt ring at 25% in the tint, the arc from the top.
+/// A new fraction eases the arc on from where it stands, never from empty.
+final class ProgressRing: UIView {
+    private let track = CAShapeLayer()
+    private let arc = CAShapeLayer()
+
+    init() {
+        super.init(frame: .zero)
+        isUserInteractionEnabled = false
+        isAccessibilityElement = false
+        tintColor = Palette.inkMuted
+        for layer in [track, arc] {
+            layer.fillColor = nil
+            layer.lineWidth = 2.5 * Size.iconMd / 24
+            layer.lineCap = .round
+            self.layer.addSublayer(layer)
+        }
+        track.opacity = 0.25
+        arc.strokeEnd = 0
+    }
+
+    @available(*, unavailable)
+    required init?(coder _: NSCoder) {
+        fatalError("ProgressRing is built in code")
+    }
+
+    func set(_ fraction: Double, animated: Bool) {
+        let to = min(1, max(0, fraction))
+        let from = arc.presentation()?.strokeEnd ?? arc.strokeEnd
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        arc.strokeEnd = to
+        CATransaction.commit()
+        guard animated, !UIAccessibility.isReduceMotionEnabled else {
+            arc.removeAnimation(forKey: "fill")
+            return
+        }
+        let fill = CABasicAnimation(keyPath: "strokeEnd")
+        fill.fromValue = from
+        fill.toValue = to
+        fill.duration = Motion.durControl
+        fill.timingFunction = Motion.easeOut.function
+        arc.add(fill, forKey: "fill")
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        let path = UIBezierPath(arcCenter: CGPoint(x: bounds.midX, y: bounds.midY), radius: bounds.width * 9 / 24,
+                                startAngle: -.pi / 2, endAngle: .pi * 1.5, clockwise: true).cgPath
+        for layer in [track, arc] {
+            layer.frame = bounds
+            layer.path = path
+        }
+    }
+
+    override func tintColorDidChange() {
+        super.tintColorDidChange()
+        track.strokeColor = tintColor.cgColor
+        arc.strokeColor = tintColor.cgColor
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        tintColorDidChange()
     }
 }

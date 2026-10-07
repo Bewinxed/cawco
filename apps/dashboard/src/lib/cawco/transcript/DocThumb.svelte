@@ -25,12 +25,17 @@
 
 <script lang="ts">
   /**
-   * An attached text file, drawn in the thumbnail row beside the pictures a
-   * turn carried: the same 48px-high box, radius, hairline and focus ring as
-   * `<Shot size="thumb">`, widened to hold the file's name. Clicking it opens
-   * the file in the lightbox, which flies out of this box and back into it
-   * (motion/share.svelte.ts).
+   * An attached file, drawn in the thumbnail row beside the pictures a turn
+   * carried: the same 48px-high box, radius, hairline and focus ring as
+   * `<Shot size="thumb">`, widened to hold the file's name.
+   *
+   * A text (`content`) opens in the lightbox, which flies out of this box and
+   * back into it (motion/share.svelte.ts). Any other file (`size`) says its
+   * size: while it uploads, a ring in place of its glyph fills as it goes;
+   * if the upload failed, "Couldn't upload", and a press tries again; once
+   * the hub has it (`href`), a press downloads it.
    */
+  import { humanSize } from "@cawco/core";
   import {
     IconDocument,
     IconFileCode,
@@ -40,7 +45,23 @@
   } from "#lib/icons.js";
   import { lightbox } from "./lightbox-state.svelte";
 
-  let { name, content }: { name: string; content: string } = $props();
+  type Props =
+    | { name: string; content: string }
+    | {
+        name: string;
+        size: number;
+        /** Where the hub serves it; a press downloads it. */
+        href?: string;
+        /** How far its upload has gone, 0 to 1, while it uploads. */
+        progress?: number;
+        /** The upload failed: a press calls `onretry`. */
+        failed?: boolean;
+        onretry?: () => void;
+      };
+
+  const props: Props = $props();
+  const { name } = $derived(props);
+  const file = $derived("content" in props ? undefined : props);
 
   const uid = $props.id();
   /** What the lightbox flies out of and back into (motion/share.svelte.ts). */
@@ -56,26 +77,94 @@
     }[extension] ?? IconDocument
   );
   const cut = $derived(Math.max(0, name.length - TAIL));
-  const meta = $derived(sizeLine(content));
+  const meta = $derived(
+    "content" in props ? sizeLine(props.content) : humanSize(props.size)
+  );
+  const uploading = $derived(
+    !!file && file.progress !== undefined && !file.failed && !file.href
+  );
+  /** The ring's arc: its circumference, and how much of it is still to fill. */
+  const RING = 2 * Math.PI * 9;
 </script>
 
-<button
-  aria-label={`Open ${name}`}
-  class="doc press-tint"
-  data-share={share}
-  onclick={() => lightbox.open({ kind: "text", name, content, share })}
-  title={name}
-  type="button"
->
-  <span aria-hidden="true" class="glyph"><Glyph /></span>
+{#snippet face()}
+  {#if uploading}
+    <span aria-hidden="true" class="glyph">
+      <svg aria-hidden="true" class="ring" viewBox="0 0 24 24">
+        <circle class="track" cx="12" cy="12" r="9" />
+        <circle
+          class="arc"
+          cx="12"
+          cy="12"
+          r="9"
+          stroke-dasharray={RING}
+          stroke-dashoffset={RING * (1 - (file?.progress ?? 0))}
+        />
+      </svg>
+    </span>
+  {:else}
+    <span aria-hidden="true" class="glyph"><Glyph /></span>
+  {/if}
   <span class="text">
     <span class="name"
       ><span class="head">{name.slice(0, cut)}</span
       ><span class="tail">{name.slice(cut)}</span></span
     >
-    <span class="meta">{meta}</span>
+    {#if file?.failed}
+      <span class="meta failed">Couldn't upload</span>
+    {:else}
+      <span class="meta">{meta}</span>
+    {/if}
   </span>
-</button>
+{/snippet}
+
+{#if "content" in props}
+  <button
+    aria-label={`Open ${name}`}
+    class="doc press-tint"
+    data-share={share}
+    onclick={() =>
+      lightbox.open({ kind: "text", name, content: props.content, share })}
+    title={name}
+    type="button"
+  >
+    {@render face()}
+  </button>
+{:else if file?.href}
+  <a
+    aria-label={`Download ${name}`}
+    class="doc press-tint"
+    download={name}
+    href={file.href}
+    title={name}
+  >
+    {@render face()}
+  </a>
+{:else if file?.failed}
+  <button
+    aria-label={`Couldn't upload ${name}. Try again`}
+    class="doc press-tint"
+    onclick={() => file?.onretry?.()}
+    title={name}
+    type="button"
+  >
+    {@render face()}
+  </button>
+{:else}
+  {#if uploading}
+    <span
+      aria-busy="true"
+      aria-label={`Uploading ${name}`}
+      class="doc still"
+      role="status"
+      title={name}
+    >
+      {@render face()}
+    </span>
+  {:else}
+    <span class="doc still" title={name}>{@render face()}</span>
+  {/if}
+{/if}
 
 <style>
   /* Shot's thumb box — 48px high, --radius-sm, hairline, recess — with the
@@ -147,5 +236,40 @@
     line-height: var(--leading-ui);
     color: var(--ink-muted);
     white-space: nowrap;
+  }
+  .meta.failed {
+    color: var(--status-fail-ink);
+  }
+  /* A file this box can do nothing with yet: no press, no hover. */
+  .doc.still {
+    cursor: default;
+
+    &:hover {
+      background: var(--surface-recess);
+    }
+  }
+  /* The kit spinner's ring, filled as far as the upload has gone: the
+     glyph's slot, a 16px ring in it, the track at a quarter. */
+  .glyph .ring {
+    inline-size: var(--icon-md);
+    block-size: var(--icon-md);
+    margin: var(--space-1);
+    rotate: -90deg;
+  }
+  .ring circle {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2.5;
+  }
+  .ring .track {
+    opacity: 0.25;
+  }
+  .ring .arc {
+    stroke-linecap: round;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .ring .arc {
+      transition: stroke-dashoffset var(--dur-control) var(--ease-out);
+    }
   }
 </style>

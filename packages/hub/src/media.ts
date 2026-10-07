@@ -104,6 +104,34 @@ export function mediaFilePath(name: string): string | undefined {
   return MEDIA_NAME.test(name) ? join(MEDIA_DIR, name) : undefined;
 }
 
+/**
+ * Files the reader attaches that are neither a picture nor text: stored as
+ * they came, by the hash of their bytes, until a machine fetches one to put
+ * beside the session it was sent to.
+ */
+const FILES_DIR = join(MEDIA_DIR, "files");
+
+/** The most one attached file may weigh. */
+export const FILE_LIMIT_BYTES = 100 * 1024 * 1024;
+
+const FILE_HASH = /^[a-f0-9]{64}$/;
+
+/** Stores `bytes` once under their hash, and answers that hash. */
+export async function storeFile(bytes: Uint8Array): Promise<string> {
+  const hash = createHash("sha256").update(bytes).digest("hex");
+  const path = join(FILES_DIR, hash);
+  mkdirSync(FILES_DIR, { recursive: true });
+  if (!existsSync(path)) {
+    await Bun.write(path, bytes);
+  }
+  return hash;
+}
+
+/** The file behind a hash, or undefined for anything that is not one. */
+export function storedFilePath(hash: string): string | undefined {
+  return FILE_HASH.test(hash) ? join(FILES_DIR, hash) : undefined;
+}
+
 export function mediaContentType(name: string): string {
   const ext = name.slice(name.lastIndexOf(".") + 1);
   return (

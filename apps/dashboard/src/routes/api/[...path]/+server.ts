@@ -35,20 +35,26 @@ async function proxyToHub(
   const targetUrl = `${HUB_URL}/api/${path}${url.search}`;
   const authorization = request.headers.get("authorization");
 
+  const fileName = request.headers.get("x-file-name");
+  const hasBody = request.method !== "GET" && request.method !== "HEAD";
+
   try {
     const response = await fetch(targetUrl, {
       method: request.method,
       headers: {
-        "Content-Type": "application/json",
+        // The body's own type: JSON for the API's calls, the file's for a
+        // file the reader attached (`POST /api/files`, raw bytes).
+        "Content-Type":
+          request.headers.get("content-type") || "application/json",
         // Forward relevant headers
         ...(authorization && { Authorization: authorization }),
         ...(clientAddress && { "X-Cawco-Client-Address": clientAddress }),
+        ...(fileName && { "X-File-Name": fileName }),
       },
-      body:
-        request.method !== "GET" && request.method !== "HEAD"
-          ? await request.text()
-          : undefined,
-    });
+      // Streamed through as bytes: an attached file is up to 100 MB and not text.
+      body: hasBody ? request.body : undefined,
+      ...(hasBody && { duplex: "half" }),
+    } as RequestInit);
 
     // Forward the response. Node's fetch (undici) cancels a body once the
     // Response that owns it is garbage-collected (nodejs/undici#3199), and

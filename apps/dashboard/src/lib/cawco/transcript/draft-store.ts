@@ -9,8 +9,18 @@
  * drafts edited longest ago are dropped until it fits, never the one being
  * written.
  */
+import { newId } from "../id";
 import type { PendingSelection } from "../preview/selection";
-import type { PendingImage, PendingText } from "./composer-draft.svelte";
+import type {
+  PendingFile,
+  PendingImage,
+  PendingText,
+} from "./composer-draft.svelte";
+
+/** A file as a stored draft keeps it: the hub's reference, or its bytes to upload again. */
+type StoredFile = Pick<PendingFile, "name" | "mediaType" | "size" | "ref"> & {
+  blob?: Blob;
+};
 
 const DB_NAME = "cawco";
 const DB_VERSION = 1;
@@ -20,6 +30,8 @@ const STORE = "drafts";
 export const CAP_BYTES = 50 * 1024 * 1024;
 
 interface DraftRecord {
+  /** Absent on a record stored before files could be attached. */
+  files?: StoredFile[];
   images: { blob: Blob; mediaType: string; name: string }[];
   selections: PendingSelection[];
   sessionId: string;
@@ -90,6 +102,7 @@ function base64Of(blob: Blob): Promise<string> {
 
 /** What a stored draft is made of: the composer's own pieces. */
 export interface DraftContent {
+  files: PendingFile[];
   images: PendingImage[];
   selections: PendingSelection[];
   text: string;
@@ -117,6 +130,13 @@ export async function loadDraft(
       }))
     ),
     texts: record.texts,
+    // A file whose upload a reload cut short is one to try again.
+    files: (record.files ?? []).map((file) => ({
+      ...file,
+      id: newId(),
+      progress: file.ref ? 1 : 0,
+      ...(file.ref ? {} : { error: "Couldn't upload" }),
+    })),
     // The page that was drawing a note's screenshot went with the reload:
     // nothing will answer it now, so the note stands without one.
     selections: record.selections.map((selection) => ({
@@ -131,6 +151,7 @@ const isEmpty = (draft: DraftContent) =>
     draft.text ||
     draft.images.length ||
     draft.texts.length ||
+    draft.files.length ||
     draft.selections.length
   );
 
@@ -156,8 +177,25 @@ export async function saveDraft(
     blob: blobOf(image),
   }));
   const { selections } = draft;
+  // The hub keeps a file it has; only one it does not have keeps its bytes here.
+  const files: StoredFile[] = draft.files.map((file) =>
+    file.ref
+      ? {
+          name: file.name,
+          mediaType: file.mediaType,
+          size: file.size,
+          ref: file.ref,
+        }
+      : {
+          name: file.name,
+          mediaType: file.mediaType,
+          size: file.size,
+          blob: file.blob,
+        }
+  );
   const size =
     images.reduce((sum, image) => sum + image.blob.size, 0) +
+    files.reduce((sum, file) => sum + (file.blob?.size ?? 0), 0) +
     2 *
       (draft.text.length +
         draft.texts.reduce((sum, t) => sum + t.content.length, 0) +
@@ -167,6 +205,7 @@ export async function saveDraft(
     text: draft.text,
     images,
     texts: draft.texts,
+    files,
     selections,
     size,
     updatedAt: Date.now(),

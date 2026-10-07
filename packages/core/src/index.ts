@@ -7,6 +7,8 @@ import type { ToolStatus } from "./tools";
 export * from "./a2ui-catalog";
 // "Continue in new session": the size rules the hub and the dashboard share.
 export * from "./archive";
+// Files and texts a turn carries, and the line naming each attached file.
+export * from "./attachments";
 export * from "./continuation";
 // Delegate types: named presets the `delegate` tool's `type` param resolves,
 // so routing is by description instead of a raw model string.
@@ -275,9 +277,10 @@ export interface SendPayload {
   /**
    * Text the user pasted rather than typed, kept out of `message` so the agent
    * can fold it into the turn as quoted material the model won't mistake for
-   * the sentence around it.
+   * the sentence around it; and files, by the hub's reference, which the
+   * agent fetches onto the session's machine and names by path in `message`.
    */
-  attachments?: { kind: "text"; name: string; content: string }[];
+  attachments?: import("./attachments").SendAttachment[];
   /** The instance a fleet-originated send claims as its caller. */
   from?: string;
   /** Images the turn carries: base64, with no `data:` URI prefix. */

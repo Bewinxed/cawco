@@ -59,8 +59,14 @@ export interface BlockMetadata {
   askLabel?: string;
   /** A `user.delegate_ask`'s hub permission requestId — what it waits on to be answered. */
   askRequestId?: string;
-  /** Files the reader attached to the turn, parsed back out of its `<pasted-text>` blocks. */
-  attachments?: Array<{ name: string; content: string }>;
+  /**
+   * What the reader attached to the turn: texts, parsed back out of its
+   * `<pasted-text>` blocks, and files, out of its `Attached file:` lines.
+   */
+  attachments?: Array<
+    | { kind: "text"; name: string; content: string }
+    | import("./attachments").ShownFile
+  >;
   cwd?: string;
   /** The delegate a `tool.handoff` started, read once off its result. */
   delegateInstanceId?: string;

@@ -389,10 +389,26 @@ final class UserTurnView: UIView, RowContent, UIGestureRecognizerDelegate {
     private func configureChips(_ block: Block) {
         var views: [UIView] = []
         for attachment in block.meta["attachments"] as? [[String: Any]] ?? [] {
-            let doc = DocThumb(name: attachment["name"] as? String ?? "", content: attachment["content"] as? String ?? "")
+            let name = attachment["name"] as? String ?? ""
+            if attachment["kind"] as? String == "file" {
+                // Any other file: its size; a tap fetches it into the share sheet.
+                let doc = DocThumb(name: name, meta: humanSize((attachment["size"] as? NSNumber)?.intValue ?? 0))
+                if let ref = attachment["ref"] as? String {
+                    doc.onOpen = { [weak self, weak doc] in
+                        guard let self, let doc else { return }
+                        env.openFile(ref, doc.name, doc)
+                    }
+                } else {
+                    doc.isEnabled = false
+                }
+                views.append(doc)
+                continue
+            }
+            let content = attachment["content"] as? String ?? ""
+            let doc = DocThumb(name: name, meta: DocThumb.size(content))
             doc.onOpen = { [weak self, weak doc] in
                 guard let self, let doc else { return }
-                env.openLightbox(.text(name: doc.name, content: doc.content), doc)
+                env.openLightbox(.text(name: doc.name, content: content), doc)
             }
             views.append(doc)
         }

@@ -109,10 +109,15 @@
     suggestions,
   } from "../suggest.svelte";
   import type { Message } from "../types";
-  import type { ComposerDraft, PendingImage } from "./composer-draft.svelte";
+  import type {
+    ComposerDraft,
+    PendingFile,
+    PendingImage,
+  } from "./composer-draft.svelte";
   import { stand } from "./composer-presence.svelte";
   import DelegateTray from "./DelegateTray.svelte";
   import DocThumb from "./DocThumb.svelte";
+  import { uploadFile } from "./file-upload";
   import { GrownShape, type LineBox, measureShape } from "./grown";
   import {
     asBubble,
@@ -1129,6 +1134,14 @@
     }
     if (!draft.hasContent) {
       sendBlock = "Write a message before sending.";
+      return;
+    }
+    if (draft.uploading) {
+      sendBlock = "Wait for your file to finish uploading.";
+      return;
+    }
+    if (draft.unready) {
+      sendBlock = "A file couldn't upload. Tap it to try again, or remove it.";
       return;
     }
     sendBlock = "";
@@ -2249,18 +2262,85 @@
     });
   }
 
+  /** The largest file that rides as text, folded into the turn. */
+  const TEXT_LIMIT = 1024 * 1024;
+
+  /** A file's words, when it is small and reads as UTF-8 text; else undefined. */
+  async function textOf(file: File): Promise<string | undefined> {
+    if (file.size > TEXT_LIMIT) {
+      return;
+    }
+    let text: string | undefined;
+    try {
+      text = new TextDecoder("utf-8", { fatal: true }).decode(
+        await file.arrayBuffer()
+      );
+    } catch {
+      // Not UTF-8: a file, not a text.
+    }
+    return text?.includes("\u0000") ? undefined : text;
+  }
+
+  /**
+   * What an attached file becomes, as on iOS: a picture; a text (up to
+   * 1 MB, UTF-8), folded into the turn; or any other file, which goes up to
+   * the hub at once and rides the send as the hub's reference.
+   */
   async function addFiles(files: Iterable<File>): Promise<void> {
+    const target = draft;
     for (const file of files) {
       if (file.type.startsWith("image/")) {
         // biome-ignore lint/performance/noAwaitInLoops: sequential by intent — each attachment must append in the order it was picked, not the order its read happens to settle.
-        draft.images = [...draft.images, await readImage(file)];
+        target.images = [...target.images, await readImage(file)];
+        continue;
+      }
+      const text = await textOf(file);
+      if (text === undefined) {
+        const id = newId();
+        target.files = [
+          ...target.files,
+          {
+            id,
+            name: file.name,
+            mediaType: file.type || "application/octet-stream",
+            size: file.size,
+            progress: 0,
+            blob: file,
+          },
+        ];
+        upload(target, id);
       } else {
-        draft.texts = [
-          ...draft.texts,
-          { kind: "text", name: file.name, content: await file.text() },
+        target.texts = [
+          ...target.texts,
+          { kind: "text", name: file.name, content: text },
         ];
       }
     }
+  }
+
+  /** Sends one pending file's bytes to the hub, its chip following along. */
+  function upload(target: ComposerDraft, id: string): void {
+    const file = target.files.find((each) => each.id === id);
+    if (!file?.blob) {
+      return;
+    }
+    file.error = undefined;
+    file.progress = 0;
+    const patch = (change: Partial<PendingFile>) => {
+      const kept = target.files.find((each) => each.id === id);
+      if (kept) {
+        Object.assign(kept, change);
+      }
+    };
+    uploadFile(file.blob, file.name, (progress) => patch({ progress }))
+      .then(({ ref, size, mediaType }) =>
+        patch({ ref, size, mediaType, progress: 1, blob: undefined })
+      )
+      .catch((error: unknown) =>
+        patch({
+          error: error instanceof Error ? error.message : String(error),
+        })
+      );
   }
 
   function onpick(event: Event): void {
@@ -2375,6 +2455,9 @@
   const removeText = (i: number) => {
     draft.texts = draft.texts.filter((_, n) => n !== i);
   };
+  const removeFile = (id: string) => {
+    draft.files = draft.files.filter((file) => file.id !== id);
+  };
 </script>
 
 <!-- The dock is one column from the top of the pane down to the composer's
@@ -2446,7 +2529,10 @@
        with its first chip and shut with its last. The chips in it are a
        list (motion/rows.svelte.ts): one added pops in, one removed shrinks
        to the pop scale as it fades, and the rest slide together. -->
-    {#if draft.images.length || draft.texts.length || draft.selections.length}
+    {#if draft.images.length ||
+      draft.texts.length ||
+      draft.files.length ||
+      draft.selections.length}
       <div class="atts" transition:unfold {@attach reflow()}>
         {#each draft.selections as selection (`${selection.element.url}:${selection.element.selector}`)}
           <SelectionChip
@@ -2484,6 +2570,27 @@
               aria-label={`Remove ${t.name}`}
               class="doc-remove touch-hit"
               onclick={() => removeText(i)}
+              type="button"
+            >
+              <IconClose />
+            </button>
+          </span>
+        {/each}
+        <!-- Any other file: its size, a ring filling while it uploads,
+           "Couldn't upload" and a press to try again if it failed. -->
+        {#each draft.files as f (f.id)}
+          <span class="doc-att" data-flip="pop">
+            <DocThumb
+              failed={!!f.error}
+              name={f.name}
+              onretry={() => upload(draft, f.id)}
+              progress={f.ref || f.error ? undefined : f.progress}
+              size={f.size}
+            />
+            <button
+              aria-label={`Remove ${f.name}`}
+              class="doc-remove touch-hit"
+              onclick={() => removeFile(f.id)}
               type="button"
             >
               <IconClose />
@@ -2618,7 +2725,6 @@
           </div>
         {/if}
         <input
-          accept="image/*,text/*,.md,.json,.csv,.log"
           class="hidden-file"
           multiple
           onchange={onpick}
@@ -2795,7 +2901,12 @@
             aria-disabled={pending || held || undefined}
             aria-label={stops ? "Stop the agent" : "Send message"}
             class="stop touch-hit pressable"
-            disabled={!(busy || pending || draft.hasContent || recall)}
+            disabled={!(
+              busy ||
+              pending ||
+              (draft.hasContent && !draft.uploading) ||
+              recall
+            )}
             onclick={whileIdle(() => pending, onaction)}
             type="button"
           >
