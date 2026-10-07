@@ -8,7 +8,11 @@ case ${1:-} in
     "${SSH[@]}" '/usr/bin/python3 - --status' < apps/apple/scripts/testflight.py
     exit ;;
   '') ;;
-  *) echo 'usage: testflight.sh [--status]' >&2; exit 2 ;;
+  --attach)
+    [[ $# -eq 2 ]] || { echo 'usage: testflight.sh --attach <build>' >&2; exit 2; }
+    "${SSH[@]}" '/usr/bin/python3 - --attach' "$2" < apps/apple/scripts/testflight.py
+    exit ;;
+  *) echo 'usage: testflight.sh [--status | --attach <build>]' >&2; exit 2 ;;
 esac
 mkdir -p "$HOME/.cache"
 exec 9>"$HOME/.cache/cawco-testflight.lock"

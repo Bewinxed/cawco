@@ -54,14 +54,24 @@ def group(app):
     return next((g for g in groups if g["attributes"]["isInternalGroup"] and g["attributes"]["name"] == "Internal"), None)
 
 
+def plain(text):
+    """App Store Connect rejects some glyphs in whatsNew - 0.1.11's notes carry
+    U+2715 - so fold the few we use to words and drop the rest, keeping the
+    ordinary typography it does accept."""
+    for glyph, replacement in {"✕": "x", "✖": "x", "✓": "yes", "✔": "yes", "↑": "Up", "↓": "Down", "←": "Left", "→": "Right"}.items():
+        text = text.replace(glyph, replacement)
+    keep = " -–—''\"“”‘’…·()[]{},.:;!?/&%$#@+=*<>|~^`"
+    return "".join(char for char in text if char.isascii() or char in keep)
+
+
 def whats_new(version):
     """The shipped version's own release notes, as TestFlight's what-to-know text."""
     path = ROOT / "source/docs/releases" / f"{version}.md"
     if path.exists():
         bullets = [line[2:].strip() for line in path.read_text().splitlines() if line.strip().startswith(("- ", "* "))]
         if bullets:
-            return f"{version}\n" + "\n".join(bullets)
-    return f"{version}\nCawCo {version} for iPhone and iPad. Connect to your hub to see the live fleet, sessions and transcripts."
+            return plain(f"{version}\n" + "\n".join(bullets))
+    return plain(f"{version}\nCawCo {version} for iPhone and iPad. Connect to your hub to see the live fleet, sessions and transcripts.")
 
 
 def status(app):
@@ -80,6 +90,45 @@ def status(app):
         raise RuntimeError("MISSING newest build in internal beta group")
     version = api("GET", f"/v1/builds/{latest['id']}/preReleaseVersion")["data"]["attributes"]["version"]
     print(f"IN_BETA_GROUP {version} ({latest['attributes']['version']})")
+
+
+def await_build(app, number):
+    """Wait for an uploaded build to finish processing, so an interrupted run can
+    pick up where it stopped instead of burning another build number."""
+    deadline = time.monotonic() + 1800
+    while time.monotonic() < deadline:
+        build = next((b for b in builds(app) if b["attributes"]["version"] == number), None)
+        state = build["attributes"]["processingState"] if build else "NOT_YET_VISIBLE"
+        print(f"PROCESSING {number} {state}", flush=True)
+        if state == "VALID":
+            return build
+        if state in ["FAILED", "INVALID"]:
+            raise RuntimeError(f"Build {number} processingState {state}")
+        time.sleep(20)
+    raise RuntimeError(f"Build {number} not VALID after 30 minutes")
+
+
+def finish(app, build):
+    """Everything ship() does once a build is VALID: tester, notes, beta group."""
+    internal = group(app)
+    if internal is None:
+        internal = api("POST", "/v1/betaGroups", {"data": {"type": "betaGroups", "attributes": {"name": "Internal", "isInternalGroup": True}, "relationships": {"app": relationship("apps", app)}}})["data"]
+    testers = listed("/v1/betaGroups/18bd36fb-1016-42b2-bc5a-e080c46f1c23/betaTesters?limit=200")
+    owner = next(t for t in testers if t["id"] == "7ca9213a-a5dd-4a65-a37d-927043b3780e")
+    members = listed(f"/v1/betaGroups/{internal['id']}/betaTesters?limit=200")
+    if not any(t["attributes"]["email"] == owner["attributes"]["email"] for t in members):
+        api("POST", "/v1/betaTesters", {"data": {"type": "betaTesters", "attributes": {key: owner["attributes"][key] for key in ["email", "firstName", "lastName"]}, "relationships": {"betaGroups": {"data": [{"type": "betaGroups", "id": internal["id"]}]}}}})
+    version = api("GET", f"/v1/builds/{build['id']}/preReleaseVersion")["data"]["attributes"]["version"]
+    localizations = listed(f"/v1/builds/{build['id']}/betaBuildLocalizations")
+    english = next((row for row in localizations if row["attributes"]["locale"] == "en-US"), None)
+    notes = whats_new(version)
+    if english is None:
+        api("POST", "/v1/betaBuildLocalizations", {"data": {"type": "betaBuildLocalizations", "attributes": {"locale": "en-US", "whatsNew": notes}, "relationships": {"build": relationship("builds", build["id"])}}})
+    elif not english["attributes"].get("whatsNew"):
+        api("PATCH", f"/v1/betaBuildLocalizations/{english['id']}", {"data": {"type": "betaBuildLocalizations", "id": english["id"], "attributes": {"whatsNew": notes}}})
+    api("POST", f"/v1/betaGroups/{internal['id']}/relationships/builds", {"data": [{"type": "builds", "id": build["id"]}]})
+    print(f"APP_ID {app} GROUP_ID {internal['id']} BUILD_ID {build['id']}")
+    status(app)
 
 
 def signed(command, log):
@@ -137,31 +186,8 @@ def ship(app):
         key_id = next(v for k, v in identifiers.items() if k.endswith("KEY_ID"))
         issuer = next(v for k, v in identifiers.items() if k.endswith("ISSUER_ID"))
         signed(["xcodebuild", "-exportArchive", "-archivePath", str(archive), "-exportOptionsPlist", str(options), "-exportPath", str(ROOT / "export"), "-authenticationKeyPath", str(HOME / f".appstoreconnect/private_keys/AuthKey_{key_id}.p8"), "-authenticationKeyID", key_id, "-authenticationKeyIssuerID", issuer], ROOT / "upload.log")
-        deadline = time.monotonic() + 1800
-        while time.monotonic() < deadline:
-            build = next((b for b in builds(app) if b["attributes"]["version"] == number), None)
-            state = build["attributes"]["processingState"] if build else "NOT_YET_VISIBLE"
-            print(f"PROCESSING {number} {state}", flush=True)
-            if state == "VALID":
-                break
-            if state in ["FAILED", "INVALID"]:
-                raise RuntimeError(f"Build {number} processingState {state}")
-            time.sleep(20)
-        else:
-            raise RuntimeError(f"Build {number} not VALID after 30 minutes")
-        internal = group(app)
-        if internal is None:
-            internal = api("POST", "/v1/betaGroups", {"data": {"type": "betaGroups", "attributes": {"name": "Internal", "isInternalGroup": True}, "relationships": {"app": relationship("apps", app)}}})["data"]
-        testers = listed("/v1/betaGroups/18bd36fb-1016-42b2-bc5a-e080c46f1c23/betaTesters?limit=200")
-        owner = next(t for t in testers if t["id"] == "7ca9213a-a5dd-4a65-a37d-927043b3780e")
-        members = listed(f"/v1/betaGroups/{internal['id']}/betaTesters?limit=200")
-        if not any(t["attributes"]["email"] == owner["attributes"]["email"] for t in members):
-            api("POST", "/v1/betaTesters", {"data": {"type": "betaTesters", "attributes": {key: owner["attributes"][key] for key in ["email", "firstName", "lastName"]}, "relationships": {"betaGroups": {"data": [{"type": "betaGroups", "id": internal["id"]}]}}}})
-        if not any(row["attributes"]["locale"] == "en-US" for row in listed(f"/v1/builds/{build['id']}/betaBuildLocalizations")):
-            api("POST", "/v1/betaBuildLocalizations", {"data": {"type": "betaBuildLocalizations", "attributes": {"locale": "en-US", "whatsNew": whats_new(api("GET", f"/v1/builds/{build['id']}/preReleaseVersion")["data"]["attributes"]["version"])}, "relationships": {"build": relationship("builds", build["id"])}}})
-        api("POST", f"/v1/betaGroups/{internal['id']}/relationships/builds", {"data": [{"type": "builds", "id": build["id"]}]})
-        print(f"APP_ID {app} GROUP_ID {internal['id']} BUILD_ID {build['id']}")
-        status(app)
+        build = await_build(app, number)
+        finish(app, build)
     finally:
         lock.rmdir()
 
@@ -173,10 +199,12 @@ try:
     app = apps[0]["id"] if apps else None
     if sys.argv[1:] == ["--status"]:
         status(app)
+    elif sys.argv[1:2] == ["--attach"]:
+        finish(app, await_build(app, sys.argv[2]))
     elif not sys.argv[1:] or sys.argv[1:] in [["--archive"], ["--upload-archive"]]:
         ship(app)
     else:
-        raise RuntimeError("usage: testflight.py [--status]")
+        raise RuntimeError("usage: testflight.py [--status | --attach <build>]")
 except (RuntimeError, OSError, subprocess.CalledProcessError, StopIteration) as error:
     print(str(error), file=sys.stderr)
     sys.exit(1)

@@ -49,7 +49,11 @@ targets:
         # The Mac app is sandboxed and may open connections to the hub.
         ENABLE_APP_SANDBOX: YES
         ENABLE_OUTGOING_NETWORK_CONNECTIONS: YES
-        ENABLE_HARDENED_RUNTIME: YES
+        # An ad-hoc signature carries no Team ID, so the hardened runtime's library
+        # validation refuses the embedded RiveRuntime ("mapping process and mapped
+        # file have different Team IDs") and the Mac app cannot launch at all.
+        # Revisit together with the team signing above.
+        ENABLE_HARDENED_RUNTIME[sdk=macosx*]: NO
       configs:
         Release:
           "CODE_SIGN_STYLE[sdk=iphoneos*]": Manual
