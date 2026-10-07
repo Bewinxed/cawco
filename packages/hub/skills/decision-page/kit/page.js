@@ -30,7 +30,9 @@
 
   /* Each option's keycap, its digit in its card (DESIGN.md, option chips). */
   for (const group of document.querySelectorAll("[data-cawco-choice]")) {
-    for (const [n, option] of [...group.querySelectorAll("[data-option]")].entries()) {
+    for (const [n, option] of [
+      ...group.querySelectorAll("[data-option]"),
+    ].entries()) {
       const label = option.querySelector("b") ?? option;
       if (!label.querySelector(".dp-kc")) {
         const cap = document.createElement("span");

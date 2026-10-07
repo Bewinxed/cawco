@@ -569,8 +569,8 @@
       : ""}"
   >
     <SideSplit
-      oncapture={(pick, shot) => draft.captured(pick, shot)}
       {active}
+      oncapture={(pick, shot) => draft.captured(pick, shot)}
       onescape={() => draft.closeSelectionEditor()}
       onselect={(selection) => draft.attach(selection)}
       {phone}
