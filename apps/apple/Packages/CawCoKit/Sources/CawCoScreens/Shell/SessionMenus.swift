@@ -264,7 +264,7 @@ final class RenameDialog: KitDialogController, UITextFieldDelegate {
     private let current: String
     private let rename: (String) async throws -> Void
     private let field = KitField()
-    private let problem = KitLabel(TypeScale.typeLabel.withWeight(.regular), ink: Palette.destructive, lines: 0)
+    private let problem = KitLabel(TypeScale.typeLabel, ink: Palette.destructive, lines: 0)
     private var submit: UIButton!
     private var busy = false
 

@@ -1,48 +1,41 @@
 import UIKit
 
-/// The app's one confirm (ConfirmDialog.svelte on the kit's `alert-dialog`):
-/// a centred card over the scrim, `--radius-modal` on the recess with the
-/// overlay shadow and 6pt of frame round the raised body (`--radius-lg`,
-/// 18pt in). The title in title type, the description in label type and
-/// muted ink, then Cancel and the confirm. The confirm runs the asked work
-/// and stays pending, the dialog open, until it ends: work that fails keeps
-/// it open and says why under the description; only work that succeeds
-/// closes it. It rises 6pt as it fades in over `durPanel` on the out curve
-/// and leaves the same way over `durExit`. Up to 448pt wide from a 640pt
-/// screen (its text left, its buttons in a row at the end), 320pt below
-/// (centred, the confirm stacked over Cancel). A body of several paragraphs
-/// (split by a blank line) reads from its start at every width. `grant`
-/// draws the confirm as a consequential grant (button.svelte `grant`): the
-/// warning tint, its ink and a real edge, the shield before the label.
-public final class ConfirmDialog: UIViewController, UIViewControllerTransitioningDelegate {
+/// The app's one confirm (ConfirmDialog.svelte on the kit's `alert-dialog`),
+/// in the kit's dialog chrome without a close button. The title in title
+/// type, the description in label type and muted ink, 6pt apart
+/// (`gap-1.5`), then Cancel and the confirm in the kit footer. The confirm
+/// runs the asked work and stays pending, the dialog open, until it ends:
+/// work that fails keeps it open and says why under the description; only
+/// work that succeeds closes it. Up to 448pt wide from a 640pt screen (its
+/// text left, its buttons in a row at the end), 320pt below (centred, the
+/// confirm stacked over Cancel). A body of several paragraphs (split by a
+/// blank line) reads from its start at every width. `grant` draws the
+/// confirm as a consequential grant (button.svelte `grant`): the warning
+/// tint, its ink and a real edge, the shield before the label.
+public final class ConfirmDialog: KitDialogController {
     private let titleText: String
-    private let body: String?
+    private let bodyText: String?
     private let confirmLabel: String
     private let pendingLabel: String?
     private let cancelLabel: String
     private let destructive: Bool
     private let grant: Bool
     private let work: () async throws -> Void
-    private let frameView = UIView()
-    private let card = UIView()
-    private let failure = UILabel()
+    private let failure = KitLabel(TypeScale.typeBody, ink: Palette.statusFailInk, lines: 0)
     private var confirm: UIButton!
-    private var running = false
 
     public init(title: String, body: String? = nil, confirmLabel: String = "Confirm", pendingLabel: String? = nil,
                 cancelLabel: String = "Cancel", destructive: Bool = false, grant: Bool = false,
                 work: @escaping () async throws -> Void) {
         titleText = title
-        self.body = body
+        bodyText = body
         self.confirmLabel = confirmLabel
         self.pendingLabel = pendingLabel
         self.cancelLabel = cancelLabel
         self.destructive = destructive
         self.grant = grant
         self.work = work
-        super.init(nibName: nil, bundle: nil)
-        modalPresentationStyle = .custom
-        transitioningDelegate = self
+        super.init(width: KitDialogController.wide ? .md : .xs, closable: false)
     }
 
     @available(*, unavailable)
@@ -52,34 +45,22 @@ public final class ConfirmDialog: UIViewController, UIViewControllerTransitionin
 
     override public func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = .clear
-        frameView.backgroundColor = Palette.surfaceRecess
-        frameView.layer.cornerRadius = Radius.radiusModal
-        frameView.layer.cornerCurve = .continuous
-        frameView.boxShadow = Shadow.shadowOverlay
-        frameView.translatesAutoresizingMaskIntoConstraints = false
-        card.backgroundColor = Palette.surfaceRaised
-        card.layer.cornerRadius = Radius.radiusLg
-        card.layer.cornerCurve = .continuous
-        card.translatesAutoresizingMaskIntoConstraints = false
-        frameView.addSubview(card)
-        view.addSubview(frameView)
-
         let title = KitLabel(TypeScale.typeTitle, ink: Palette.foreground, lines: 0)
         title.text = titleText
-        let description = KitLabel(TypeScale.typeLabel.withWeight(.regular), ink: Palette.mutedForeground, lines: 0)
-        description.text = body
+        title.accessibilityTraits = .header
+        let description = KitLabel(TypeScale.typeLabel, ink: Palette.mutedForeground, lines: 0)
+        description.text = bodyText
         // `text-balance md:text-pretty` (alert-dialog-description.svelte).
         description.wrap = UIScreen.main.bounds.width >= 768 ? .pretty : .balance
-        description.isHidden = body == nil
-        failure.font = TypeScale.typeBody.font
-        failure.textColor = Palette.statusFailInk
-        failure.numberOfLines = 0
+        description.isHidden = bodyText == nil
         failure.isHidden = true
         let header = UIStackView(arrangedSubviews: [title, description, failure])
         header.axis = .vertical
         header.spacing = 6
-        header.alignment = .fill
+        // Centred below 640pt, unless several paragraphs read from their start.
+        if !KitDialogController.wide, bodyText?.contains("\n\n") != true {
+            [title, description, failure].forEach { $0.textAlignment = .center }
+        }
 
         if destructive || grant {
             let style = grant ? Self.grantStyle(confirmLabel) : Self.destructiveStyle(confirmLabel)
@@ -91,47 +72,9 @@ public final class ConfirmDialog: UIViewController, UIViewControllerTransitionin
             confirm = KitButton.make(confirmLabel, variant: .action) { [weak self] in self?.accept() }
         }
         let cancel = KitButton.make(cancelLabel, variant: .outline) { [weak self] in self?.dismiss(animated: true) }
-        let footer = UIStackView()
-        footer.spacing = 8
-        if wideLayout {
-            footer.axis = .horizontal
-            footer.addArrangedSubview(UIView())
-            footer.addArrangedSubview(cancel)
-            footer.addArrangedSubview(confirm)
-        } else {
-            footer.axis = .vertical
-            footer.addArrangedSubview(confirm)
-            footer.addArrangedSubview(cancel)
-            let paragraphs = body?.contains("\n\n") == true
-            title.textAlignment = paragraphs ? .natural : .center
-            description.textAlignment = paragraphs ? .natural : .center
-            failure.textAlignment = paragraphs ? .natural : .center
-        }
-        let stack = UIStackView(arrangedSubviews: [header, footer])
-        stack.axis = .vertical
-        stack.spacing = 24
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        card.addSubview(stack)
-        let width = frameView.widthAnchor.constraint(equalToConstant: wideLayout ? 448 : 320)
-        width.priority = .defaultHigh
-        NSLayoutConstraint.activate([
-            frameView.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            frameView.centerYAnchor.constraint(equalTo: view.centerYAnchor),
-            width,
-            frameView.widthAnchor.constraint(lessThanOrEqualTo: view.widthAnchor, constant: -32),
-            card.topAnchor.constraint(equalTo: frameView.topAnchor, constant: 6),
-            card.bottomAnchor.constraint(equalTo: frameView.bottomAnchor, constant: -6),
-            card.leadingAnchor.constraint(equalTo: frameView.leadingAnchor, constant: 6),
-            card.trailingAnchor.constraint(equalTo: frameView.trailingAnchor, constant: -6),
-            stack.topAnchor.constraint(equalTo: card.topAnchor, constant: 18),
-            stack.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -18),
-            stack.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 18),
-            stack.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -18),
-        ])
+        body.addArrangedSubview(header)
+        body.addArrangedSubview(KitDialogController.footer([cancel, confirm]))
     }
-
-    /// Decided once, from the screen it opens on.
-    private lazy var wideLayout = UIScreen.main.bounds.width >= 640 || traitCollection.horizontalSizeClass == .regular
 
     /// A destructive confirm: the error border and ink on no fill (button.svelte `destructive`).
     private static func destructiveStyle(_ title: String) -> UIButton.Configuration {
@@ -174,47 +117,24 @@ public final class ConfirmDialog: UIViewController, UIViewControllerTransitionin
         confirm.configuration?.activityIndicatorColorTransformer = UIConfigurationColorTransformer { _ in ink }
     }
 
+    /// While the work runs the scrim and Escape leave the dialog up; Cancel still closes it.
     private func accept() {
-        guard !running else { return }
-        running = true
+        guard !holdsOpen else { return }
+        holdsOpen = true
         pending(true)
         Task { @MainActor in
             do {
                 try await work()
+                holdsOpen = false
                 dismiss(animated: true)
             } catch {
-                running = false
+                holdsOpen = false
                 pending(false)
                 failure.text = error.localizedDescription
-                Motion.easeOut.animator(Motion.durMorph) {
-                    self.failure.isHidden = false
-                    self.view.layoutIfNeeded()
-                }.startAnimation()
+                morph { failure.isHidden = false }
+                UIAccessibility.post(notification: .announcement, argument: failure.text)
             }
         }
-    }
-
-    // MARK: Presentation
-
-    public func presentationController(forPresented presented: UIViewController, presenting: UIViewController?, source _: UIViewController) -> UIPresentationController? {
-        ScrimPresentation(presentedViewController: presented, presenting: presenting) { [weak self] in
-            guard self?.running == false else { return }
-            self?.dismiss(animated: true)
-        }
-    }
-
-    public func animationController(forPresented _: UIViewController, presenting _: UIViewController, source _: UIViewController) -> (any UIViewControllerAnimatedTransitioning)? {
-        DialogAnimator(presenting: true)
-    }
-
-    public func animationController(forDismissed _: UIViewController) -> (any UIViewControllerAnimatedTransitioning)? {
-        DialogAnimator(presenting: false)
-    }
-
-    override public func accessibilityPerformEscape() -> Bool {
-        guard !running else { return false }
-        dismiss(animated: true)
-        return true
     }
 }
 

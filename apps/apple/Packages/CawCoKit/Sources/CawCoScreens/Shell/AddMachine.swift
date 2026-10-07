@@ -141,7 +141,7 @@ final class AddMachineController: KitDialogController {
         body.addArrangedSubview(infoAlert)
         body.addArrangedSubview(pane)
         body.addArrangedSubview(footer)
-        footer.spacing = Space.space2
+        footer.axis = .vertical
         target.autocapitalizationType = .none
         target.accessibilityLabel = "SSH target"
         target.addAction(UIAction { [weak self] _ in self?.paintFooter() }, for: .editingChanged)
@@ -328,6 +328,8 @@ final class AddMachineController: KitDialogController {
         config.imageColorTransformer = UIConfigurationColorTransformer { _ in Palette.inkMuted }
         let button = UIButton(configuration: config, primaryAction: UIAction { _ in action() })
         button.houseStyle()
+        // `summary` is inline at the start of its column, whatever the column's width.
+        button.contentHorizontalAlignment = .leading
         button.imageView?.transform = open ? CGAffineTransform(rotationAngle: .pi / 2) : .identity
         button.accessibilityTraits.insert(open ? .selected : [])
         return button
@@ -374,22 +376,10 @@ final class AddMachineController: KitDialogController {
     /// `INSTALL_STEP_PREFIX`: the install script's and `cawco join`'s step lines.
     private static let stepPrefix = "cawco-install: "
 
+    /// The dialog's `pre`: hover fill, control border, `--radius-md`, 10/12 in, 1.5 leading.
     private func outputBox(_ text: String, max: Double, follow: Bool = false) -> UIView {
-        let view = UITextView()
-        view.isEditable = false
-        view.text = text
-        view.font = TypeScale.typeCode.with(points: TypeScale.typeMeta.points).font
-        view.textColor = Palette.inkStrong
-        view.backgroundColor = Palette.surfaceHover
-        view.layer.cornerRadius = Radius.radiusMd
-        view.layer.borderWidth = 1
-        view.layer.borderColor = Palette.borderControl.resolvedColor(with: traitCollection).cgColor
-        view.textContainerInset = UIEdgeInsets(top: 10, left: 12, bottom: 10, right: 12)
-        view.translatesAutoresizingMaskIntoConstraints = false
-        let height = min(max, view.sizeThatFits(CGSize(width: 440, height: CGFloat.greatestFiniteMagnitude)).height)
-        view.heightAnchor.constraint(equalToConstant: height).isActive = true
-        if follow { view.scrollRangeToVisible(NSRange(location: (text as NSString).length, length: 0)) }
-        return view
+        KitPre(text, fill: Palette.surfaceHover, border: Palette.borderControl, radius: Radius.radiusMd,
+               inset: NSDirectionalEdgeInsets(top: 10, leading: 12, bottom: 10, trailing: 12), leading: 1.5, maxHeight: max, follow: follow)
     }
 
     /// A failed run, said with the error formula: what happened, why, how to fix it, what next.

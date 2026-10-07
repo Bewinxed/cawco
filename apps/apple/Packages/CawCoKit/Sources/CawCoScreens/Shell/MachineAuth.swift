@@ -70,7 +70,7 @@ final class MachineAuthStatusView: UIStackView {
     }
 
     private func sayLine(_ text: String) {
-        let label = KitLabel(TypeScale.typeLabel.withWeight(.regular), ink: Palette.mutedForeground, lines: 0)
+        let label = KitLabel(TypeScale.typeLabel, ink: Palette.mutedForeground, lines: 0)
         label.text = text
         label.wrap = .pretty
         line.show(label)
@@ -151,7 +151,7 @@ class MachineAuthDialog: KitDialogController {
 /// back into that sign-in. Claude Code on the machine keeps the login.
 final class MachineLoginController: MachineAuthDialog, UITextFieldDelegate {
     private let codeField = KitField(placeholder: "Paste the code from that page", mono: true)
-    private let asking = KitLabel(TypeScale.typeLabel.withWeight(.regular), ink: Palette.mutedForeground, lines: 0)
+    private let asking = KitLabel(TypeScale.typeLabel, ink: Palette.mutedForeground, lines: 0)
     private let problem = KitLabel(TypeScale.typeMeta, ink: Palette.destructive, lines: 0)
     private var openLink: UIButton!
     private var submit: UIButton!
@@ -204,7 +204,7 @@ final class MachineLoginController: MachineAuthDialog, UITextFieldDelegate {
         let cancel = KitButton.make("Cancel", variant: .outline) { [weak self] in self?.dismiss(animated: true) }
         submit = KitButton.make("Log in", variant: .action) { [weak self] in self?.finish() }
         submit.isEnabled = false
-        let fields = UIStackView(arrangedSubviews: [asking, openLink, codeField, problem, KitDialogController.footer([cancel, submit])])
+        let fields = UIStackView(arrangedSubviews: [asking, openLink, codeField, problem, KitDialogController.actions([cancel, submit])])
         fields.axis = .vertical
         fields.spacing = Space.space4
         let stack = UIStackView(arrangedSubviews: [header, fields])
@@ -288,7 +288,7 @@ final class MachineLoginController: MachineAuthDialog, UITextFieldDelegate {
 final class UnlockKeychainController: MachineAuthDialog, UITextFieldDelegate {
     private let password = KitField()
     private let note = KitLabel(TypeScale.typeMeta, ink: Palette.mutedForeground, lines: 0)
-    private let problem = KitLabel(TypeScale.typeLabel.withWeight(.regular), ink: Palette.destructive, lines: 0)
+    private let problem = KitLabel(TypeScale.typeLabel, ink: Palette.destructive, lines: 0)
     private var submit: UIButton!
 
     init(hub: HubConnection, machine: MachineRow) {
@@ -340,7 +340,7 @@ final class UnlockKeychainController: MachineAuthDialog, UITextFieldDelegate {
         let cancel = KitButton.make("Cancel", variant: .outline) { [weak self] in self?.dismiss(animated: true) }
         submit = KitButton.make("Unlock", variant: .action) { [weak self] in self?.unlock() }
         submit.isEnabled = false
-        let fields = UIStackView(arrangedSubviews: [password, problem, note, KitDialogController.footer([cancel, submit])])
+        let fields = UIStackView(arrangedSubviews: [password, problem, note, KitDialogController.actions([cancel, submit])])
         fields.axis = .vertical
         fields.spacing = Space.space3
         let stack = UIStackView(arrangedSubviews: [header, fields])
@@ -403,24 +403,10 @@ final class ErrorDialogController: KitDialogController {
     override func viewDidLoad() {
         super.viewDidLoad()
         body.addArrangedSubview(KitDialogController.header(title: titleText, glyph: .alert, glyphTint: Palette.destructive))
-        let text = UITextView()
-        text.isEditable = false
-        text.isSelectable = true
-        text.text = message
-        text.font = TypeScale.typeCode.with(points: TypeScale.typeMeta.points).font
-        text.textColor = Palette.inkStrong
-        text.backgroundColor = Palette.surfaceRecess
-        text.layer.cornerRadius = Radius.radiusMd
-        text.layer.borderWidth = 1
-        text.layer.borderColor = Palette.borderHairline.resolvedColor(with: traitCollection).cgColor
-        text.textContainerInset = UIEdgeInsets(top: Space.space3, left: Space.space3, bottom: Space.space3, right: Space.space3)
-        text.translatesAutoresizingMaskIntoConstraints = false
-        let fit = text.heightAnchor.constraint(equalToConstant: 120)
-        fit.priority = .defaultLow
-        NSLayoutConstraint.activate([fit, text.heightAnchor.constraint(lessThanOrEqualToConstant: UIScreen.main.bounds.height * 0.6)])
-        body.addArrangedSubview(text)
-        text.layoutIfNeeded()
-        fit.constant = text.sizeThatFits(CGSize(width: 600, height: CGFloat.greatestFiniteMagnitude)).height
+        // `.error-text`: recess, hairline, `--radius-sm`, `--space-3` in, 1.55 leading, up to 60vh.
+        let inset = NSDirectionalEdgeInsets(top: Space.space3, leading: Space.space3, bottom: Space.space3, trailing: Space.space3)
+        body.addArrangedSubview(KitPre(message, fill: Palette.surfaceRecess, border: Palette.borderHairline, radius: Radius.radiusSm,
+                                       inset: inset, leading: 1.55, maxHeight: UIScreen.main.bounds.height * 0.6))
         var copyButton: UIButton!
         copyButton = KitButton.make("Copy error", glyph: .copy, variant: .outline) { [message] in
             UIPasteboard.general.string = message

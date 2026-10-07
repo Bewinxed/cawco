@@ -11,12 +11,13 @@ import UIKit
 /// over `durPanel`, and leaves over `durExit`. A tap on the scrim, Escape
 /// or the close button closes it, unless `holdsOpen`.
 open class KitDialogController: UIViewController, UIViewControllerTransitioningDelegate {
-    /// `sm:max-w-md`, `-lg`, `-xl`, `-2xl`.
+    /// `max-w-xs` (the alert dialog below `sm`), `sm:max-w-md`, `-lg`, `-xl`, `-2xl`.
     public enum Width: Sendable {
-        case md, lg, xl, xl2
+        case xs, md, lg, xl, xl2
 
         var points: Double {
             switch self {
+            case .xs: 320
             case .md: 448
             case .lg: 512
             case .xl: 576
@@ -38,7 +39,7 @@ open class KitDialogController: UIViewController, UIViewControllerTransitioningD
     private let width: Width
     private let closable: Bool
     private let frameView = UIView()
-    private let card = UIView()
+    private let card = TouchTargetCard()
     private let scroll = UIScrollView()
 
     public init(width: Width = .md, closable: Bool = true) {
@@ -219,31 +220,126 @@ open class KitDialogController: UIViewController, UIViewControllerTransitioningD
         stack.axis = .vertical
         stack.spacing = 8
         if let description {
-            let label = KitLabel(TypeScale.typeLabel.withWeight(.regular), ink: Palette.mutedForeground, lines: 0)
+            let label = KitLabel(TypeScale.typeLabel, ink: Palette.mutedForeground, lines: 0)
             label.text = description
             stack.addArrangedSubview(label)
         }
         return stack
     }
 
+    /// The kit's `sm` breakpoint (640pt), where a dialog's footer turns from a
+    /// stack into a row. Decided from the screen the dialog opens on.
+    public static var wide: Bool { UIScreen.main.bounds.width >= 640 }
+
     /// The kit's dialog footer (`dialog-footer`): the buttons at the end in
     /// a row from 640pt, stacked below it with the last one on top. Every
     /// button keeps its own height: a footer given more room than its buttons
     /// (a dialog holding its height while it works) never stretches them.
     public static func footer(_ buttons: [UIView]) -> UIStackView {
-        let wide = UIScreen.main.bounds.width >= 640
-        let stack = UIStackView()
-        stack.spacing = 8
-        if wide {
-            stack.axis = .horizontal
-            stack.alignment = .center
-            stack.addArrangedSubview(UIView())
-            buttons.forEach(stack.addArrangedSubview)
-        } else {
+        guard wide else {
+            let stack = UIStackView(arrangedSubviews: buttons.reversed())
             stack.axis = .vertical
-            buttons.reversed().forEach(stack.addArrangedSubview)
+            stack.spacing = 8
+            return stack
         }
+        return actions(buttons)
+    }
+
+    /// A form's own button row (`flex justify-end gap-2`): the buttons at the
+    /// end, in reading order, at every width, each at its own height.
+    public static func actions(_ buttons: [UIView]) -> UIStackView {
+        let stack = UIStackView(arrangedSubviews: [UIView()] + buttons)
+        stack.spacing = 8
+        stack.alignment = .center
         return stack
+    }
+}
+
+/// The dialog's raised body, where every button answers a touch over at
+/// least 44×44pt (`touch-hit`, `--c-btn-h-lg`) centred on its drawn box:
+/// the drawn size stays its token, only the touch area grows. A touch on a
+/// control itself always goes to it; one in the grown margin goes to the
+/// nearest button whose area holds it, so two neighbours split the gap
+/// between them at its midpoint.
+private final class TouchTargetCard: UIView {
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        let direct = super.hitTest(point, with: event)
+        guard isUserInteractionEnabled, !isHidden, alpha > 0.01, self.point(inside: point, with: event) else { return direct }
+        var view = direct
+        while let current = view, current !== self {
+            if current is UIControl { return direct }
+            view = current.superview
+        }
+        var best: (button: UIButton, distance: Double)?
+        func visit(_ view: UIView) {
+            guard !view.isHidden, view.alpha > 0.01, view.isUserInteractionEnabled else { return }
+            if let button = view as? UIButton {
+                let box = button.convert(button.bounds, to: self)
+                let grown = box.insetBy(dx: -max(0, (Size.cBtnHLg - box.width) / 2), dy: -max(0, (Size.cBtnHLg - box.height) / 2))
+                guard grown.contains(point) else { return }
+                let distance = hypot(max(box.minX - point.x, 0, point.x - box.maxX), max(box.minY - point.y, 0, point.y - box.maxY))
+                if best.map({ distance < $0.distance }) ?? true { best = (button, distance) }
+                return
+            }
+            view.subviews.forEach(visit)
+        }
+        visit(self)
+        return best?.button ?? direct
+    }
+}
+
+/// A block of preformatted text in a dialog (`<pre>`): monospaced at meta
+/// size, selectable, in a bordered box as tall as its text up to `maxHeight`,
+/// then scrolling. `follow` keeps the last line in view as text arrives.
+public final class KitPre: UITextView {
+    private let maxHeight: Double
+    private let border: UIColor
+    private let follow: Bool
+
+    /// `leading` is the box's line height over its font size (`line-height`).
+    public init(_ text: String, fill: UIColor, border: UIColor, radius: Double, inset: NSDirectionalEdgeInsets,
+                leading: Double, maxHeight: Double, follow: Bool = false) {
+        self.maxHeight = maxHeight
+        self.border = border
+        self.follow = follow
+        super.init(frame: .zero, textContainer: nil)
+        translatesAutoresizingMaskIntoConstraints = false
+        isEditable = false
+        isSelectable = true
+        let font = TypeScale.typeCode.with(points: TypeScale.typeMeta.points).font
+        let line = NSMutableParagraphStyle()
+        line.minimumLineHeight = font.pointSize * leading
+        line.maximumLineHeight = font.pointSize * leading
+        attributedText = NSAttributedString(string: text, attributes: [.font: font, .foregroundColor: Palette.inkStrong, .paragraphStyle: line])
+        backgroundColor = fill
+        layer.cornerRadius = radius
+        layer.cornerCurve = .continuous
+        layer.borderWidth = 1
+        textContainerInset = UIEdgeInsets(top: inset.top, left: inset.leading, bottom: inset.bottom, right: inset.trailing)
+        textContainer.lineFragmentPadding = 0
+        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (pre: KitPre, _: UITraitCollection) in pre.paint() }
+        paint()
+    }
+
+    @available(*, unavailable)
+    required init?(coder _: NSCoder) {
+        fatalError("KitPre is built in code")
+    }
+
+    private func paint() {
+        layer.borderColor = border.resolvedColor(with: traitCollection).cgColor
+    }
+
+    override public var contentSize: CGSize {
+        didSet {
+            guard contentSize.height != oldValue.height else { return }
+            invalidateIntrinsicContentSize()
+            if follow { setContentOffset(CGPoint(x: 0, y: max(0, contentSize.height - bounds.height)), animated: false) }
+        }
+    }
+
+    override public var intrinsicContentSize: CGSize {
+        CGSize(width: UIView.noIntrinsicMetric, height: min(maxHeight, contentSize.height))
     }
 }
 
