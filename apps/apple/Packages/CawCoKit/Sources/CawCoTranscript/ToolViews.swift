@@ -129,6 +129,16 @@ final class ToolLineView: RailRow, RowContent, Disclosing {
 
     private var block: Block?
 
+    /// A `show_preview` card: full presence while the session's open preview
+    /// shows this call's page. Called again when the preview changes.
+    func previewChanged() {
+        guard let block, PresentTools.preview.contains(block.toolName ?? "") else { return }
+        let input = block.toolInput
+        let shown = env.hub?.previews.byInstance[env.sessionId]
+        let opened = shown?.state == .open && shown.flatMap(PreviewKey.of) == PreviewKey.of(ask: input)
+        preview.configure(input, opened: opened) { [weak self] in self?.env.openPreview(input) }
+    }
+
     func configure(_ item: Item) {
         guard case let .tool(block) = item.kind else { return }
         place()
@@ -173,7 +183,7 @@ final class ToolLineView: RailRow, RowContent, Disclosing {
         let preview = PresentTools.preview.contains(block.toolName ?? "")
         self.preview.isHidden = !preview
         line.isHidden = preview
-        if preview { self.preview.configure(block.toolInput) }
+        if preview { previewChanged() }
         let hasBody = !preview && Self.hasBody(d, block: block)
         chevron.isHidden = !hasBody
         let open = hasBody && env.isOpen(key)
@@ -410,15 +420,21 @@ final class CappedText: UIView {
 }
 
 /// A `show_preview` call (ToolGroup `.preview-tool`): the artifact's card,
-/// its mark, title and path. The app opens no preview pane, so it stands as
-/// the web draws a preview this tab has not opened: at half presence.
+/// its mark, title and path. A tap opens its page in the session's preview;
+/// while that preview shows something else, or nothing, the card stands at
+/// half presence, as the web draws a preview this tab has not opened.
 final class PreviewCard: UIView {
     private let title = LineLabel()
     private let path = LineLabel()
+    private var onOpen: () -> Void = {}
 
     init() {
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
+        addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(open)))
+        isAccessibilityElement = true
+        accessibilityTraits = .button
+        accessibilityHint = "Opens the preview"
         let card = UIView()
         card.translatesAutoresizingMaskIntoConstraints = false
         card.backgroundColor = Palette.surfaceRaised
@@ -448,7 +464,6 @@ final class PreviewCard: UIView {
             card.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -Space.space2),
             card.heightAnchor.constraint(greaterThanOrEqualToConstant: Size.txPreviewMin),
         ])
-        alpha = 0.5
         card.boxShadow = Shadow.shadowTile
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (view: PreviewCard, _: UITraitCollection) in view.paint(card) }
         paint(card)
@@ -461,11 +476,18 @@ final class PreviewCard: UIView {
     @available(*, unavailable)
     required init?(coder _: NSCoder) { fatalError("built in code") }
 
-    func configure(_ input: [String: Any]) {
+    @objc private func open() { onOpen() }
+
+    func configure(_ input: [String: Any], opened: Bool, onOpen: @escaping () -> Void) {
+        self.onOpen = onOpen
+        alpha = opened ? 1 : 0.5
         title.attributedText = Styled.string("Preview", TypeScale.typeLabel, color: Palette.inkStrong, leading: TypeScale.leadingRoot)
-        let dir = (input["dir"] as? String).map(ToolDescriptor.pathLeaf) ?? ""
-        path.attributedText = Styled.string(dir, TypeScale.typeMeta, color: Palette.inkMuted, size: TypeScale.textMeta, leading: TypeScale.leadingRoot, mono: true)
-        path.isHidden = dir.isEmpty
+        // source.ts `previewPlace`: a decision page by name, a folder by its leaf.
+        let place = (input["page"] as? String).map { "decisions/\($0)" }
+            ?? (input["dir"] as? String).map(ToolDescriptor.pathLeaf) ?? ""
+        path.attributedText = Styled.string(place, TypeScale.typeMeta, color: Palette.inkMuted, size: TypeScale.textMeta, leading: TypeScale.leadingRoot, mono: true)
+        path.isHidden = place.isEmpty
+        accessibilityLabel = place.isEmpty ? "Preview" : "Preview, \(place)"
     }
 }
 

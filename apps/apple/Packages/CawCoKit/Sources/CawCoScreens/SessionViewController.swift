@@ -12,7 +12,7 @@ import UniformTypeIdentifiers
 /// permission and question cards) and its group draws one composer over the
 /// active tab. The group says how far up the pane that composer stands
 /// (`composerInset`), and the transcript keeps its last line clear of it.
-final class SessionViewController: ObservedViewController, PHPickerViewControllerDelegate, UIDocumentPickerDelegate {
+final class SessionViewController: ObservedViewController, PHPickerViewControllerDelegate, UIDocumentPickerDelegate, UISheetPresentationControllerDelegate {
     let sessionId: String
     private let hub: HubConnection
     private let transcript: SessionTranscript
@@ -73,13 +73,15 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
         transcriptView.onReturnToFleet = { [weak self] in self?.onReturnToFleet() }
         transcriptView.canEditQueued = { [weak self] id in self?.canWithdraw(id) ?? false }
         transcriptView.onEditQueued = { [weak self] id in self?.liftQueued(id) }
+        transcriptView.onOpenPreview = { [weak self] input in self?.openPreview(input) }
         transcriptHost.view.addSubview(transcriptView)
         view.addSubview(transcriptHost.view)
         transcriptHost.didMove(toParent: self)
+        transcriptTrailing = transcriptHost.view.trailingAnchor.constraint(equalTo: view.trailingAnchor)
         NSLayoutConstraint.activate([
             transcriptHost.view.topAnchor.constraint(equalTo: view.topAnchor),
             transcriptHost.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            transcriptHost.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            transcriptTrailing,
             transcriptHost.view.bottomAnchor.constraint(equalTo: view.bottomAnchor),
             transcriptView.topAnchor.constraint(equalTo: transcriptHost.view.topAnchor),
             transcriptView.leadingAnchor.constraint(equalTo: transcriptHost.view.leadingAnchor),
@@ -102,6 +104,8 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         shownOnce = true
+        // An open preview whose sheet could not be shown off screen is shown now.
+        syncPreview()
     }
 
     /// Ends the subscription; PaneHost calls it when the tab closes.
@@ -154,6 +158,145 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
         composerBinding.sendError = editNote ?? (command?.stage == .failed ? "Couldn't send that message.\(command?.reason.map { " \($0)" } ?? "")" : nil)
         syncCards(machineId: row?.machineId)
         composerBinding.publish()
+        syncPreview()
+    }
+
+    // MARK: The preview (SessionPane's preview split, PreviewSheet)
+
+    private var preview: PreviewController?
+    private var transcriptTrailing: NSLayoutConstraint!
+    /// The preview's key the transcript's cards were last drawn against.
+    private var drawnPreview: String?
+
+    /// A `show_preview` card was tapped: the hub opens its page (again), and
+    /// the frame it answers with puts the preview on screen.
+    private func openPreview(_ input: [String: Any]) {
+        if let shown = hub.previews.byInstance[sessionId], shown.state == .open,
+           PreviewKey.of(shown) == PreviewKey.of(ask: input), let preview {
+            reveal(preview)
+            return
+        }
+        Task { [weak self] in
+            guard let self else { return }
+            do { try await hub.openPreview(sessionId, ask: input) } catch { Toast.error(error.localizedDescription, in: view) }
+        }
+    }
+
+    /// The preview as the hub says it: open, beside the transcript on a
+    /// regular width (the web's split) or in a sheet on a compact one (its
+    /// phone sheet); closed, gone.
+    private func syncPreview() {
+        let frame = hub.previews.byInstance[sessionId]
+        let key = frame?.state == .open ? frame.flatMap(PreviewKey.of) : nil
+        if key != drawnPreview {
+            drawnPreview = key
+            // The transcript's cards stand at full presence for the page now shown.
+            transcriptView.previewChanged()
+        }
+        guard frame?.state == .open else {
+            removePreview()
+            return
+        }
+        let controller = preview ?? makePreview()
+        let side = traitCollection.horizontalSizeClass == .regular
+        if side, controller.parent !== self {
+            if controller.presentingViewController != nil { controller.dismiss(animated: false) }
+            embed(controller)
+        } else if !side, controller.parent === self {
+            unembed(controller)
+            presentSheet(controller)
+        } else if !side, controller.presentingViewController == nil, view.window != nil {
+            presentSheet(controller)
+        }
+        controller.show()
+    }
+
+    private func makePreview() -> PreviewController {
+        let controller = PreviewController(hub: hub, instanceId: sessionId)
+        controller.onSelect = { [weak self] attachments in
+            guard let self else { return }
+            for attachment in attachments { composerBinding.attach(attachment) }
+        }
+        preview = controller
+        return controller
+    }
+
+    /// The web's wide layout: the preview beside the transcript, its share of
+    /// the pane's width, never under its 320pt floor.
+    private func embed(_ controller: PreviewController) {
+        addChild(controller)
+        controller.view.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(controller.view)
+        transcriptTrailing.isActive = false
+        let share = controller.view.widthAnchor.constraint(equalTo: view.widthAnchor, multiplier: 0.45)
+        share.priority = .defaultHigh
+        transcriptTrailing = transcriptHost.view.trailingAnchor.constraint(equalTo: controller.view.leadingAnchor, constant: -Space.space2)
+        NSLayoutConstraint.activate([
+            controller.view.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: Space.space2),
+            controller.view.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -Space.space2),
+            controller.view.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -Space.space2),
+            share,
+            controller.view.widthAnchor.constraint(greaterThanOrEqualToConstant: 320),
+            transcriptTrailing,
+        ])
+        controller.view.layer.cornerRadius = Radius.radiusLg
+        controller.view.layer.cornerCurve = .continuous
+        controller.view.boxShadow = Shadow.shadowDrawer
+        controller.didMove(toParent: self)
+    }
+
+    private func unembed(_ controller: PreviewController) {
+        controller.willMove(toParent: nil)
+        controller.view.removeFromSuperview()
+        controller.removeFromParent()
+        transcriptTrailing.isActive = false
+        transcriptTrailing = transcriptHost.view.trailingAnchor.constraint(equalTo: view.trailingAnchor)
+        transcriptTrailing.isActive = true
+    }
+
+    /// The phone's sheet: a middle detent at 60% of the screen and the full
+    /// one, the transcript usable behind it at the middle (the web's sheet is
+    /// not modal). A swipe down closes the preview, as Close does.
+    private func presentSheet(_ controller: PreviewController) {
+        guard view.window != nil, presentedViewController == nil else { return }
+        controller.modalPresentationStyle = .pageSheet
+        if let sheet = controller.sheetPresentationController {
+            let middle = UISheetPresentationController.Detent.Identifier("preview.middle")
+            sheet.detents = [.custom(identifier: middle) { $0.maximumDetentValue * 0.6 }, .large()]
+            sheet.selectedDetentIdentifier = middle
+            sheet.largestUndimmedDetentIdentifier = middle
+            sheet.prefersGrabberVisible = true
+            sheet.prefersScrollingExpandsWhenScrolledToEdge = false
+            sheet.delegate = self
+        }
+        present(controller, animated: true)
+    }
+
+    /// Back to its middle detent (client.svelte.ts `revealPreview`).
+    private func reveal(_ controller: PreviewController) {
+        guard let sheet = controller.sheetPresentationController, controller.presentingViewController != nil else { return }
+        sheet.animateChanges { sheet.selectedDetentIdentifier = sheet.detents.first?.identifier }
+    }
+
+    private func removePreview() {
+        guard let controller = preview else { return }
+        preview = nil
+        if controller.parent === self {
+            unembed(controller)
+        } else if controller.presentingViewController != nil {
+            controller.dismiss(animated: true)
+        }
+    }
+
+    override func traitCollectionDidChange(_ previous: UITraitCollection?) {
+        super.traitCollectionDidChange(previous)
+        if previous?.horizontalSizeClass != traitCollection.horizontalSizeClass { syncPreview() }
+    }
+
+    /// A swipe down took the sheet away: that closes the preview, as Close does.
+    func presentationControllerDidDismiss(_ presentation: UIPresentationController) {
+        guard let controller = presentation.presentedViewController as? PreviewController else { return }
+        controller.close()
     }
 
     /// The parked asks as the composer's cards, in arrival order: a card that

@@ -40,6 +40,43 @@ public final class RootViewController: ObservedViewController {
         super.viewIsAppearing(animated)
         // The scheme the reader chose in the rail, on this window too.
         Theme.apply(to: view.window)
+        watchScene()
+    }
+
+    // MARK: Background and foreground
+
+    private var sceneWatch: [any NSObjectProtocol] = []
+
+    /// This window's scene, not the app: on an iPad a window in the
+    /// background closes its own hub socket while another stays in front.
+    private func watchScene() {
+        guard sceneWatch.isEmpty, let scene = view.window?.windowScene else { return }
+        let center = NotificationCenter.default
+        sceneWatch = [
+            center.addObserver(forName: UIScene.didEnterBackgroundNotification, object: scene, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.wentToBackground() }
+            },
+            center.addObserver(forName: UIScene.willEnterForegroundNotification, object: scene, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.hub.enterForeground() }
+            },
+        ]
+    }
+
+    /// The socket closes, and the screens redraw before this returns: iOS
+    /// takes the snapshot it shows on the way back after it, and that
+    /// snapshot must read the hub as connecting, never the board as it was.
+    private func wentToBackground() {
+        hub.enterBackground()
+        Self.refresh(self)
+        view.window?.layoutIfNeeded()
+    }
+
+    private static func refresh(_ controller: UIViewController) {
+        (controller as? ObservedViewController)?.requestRefresh()
+        for child in controller.children { refresh(child) }
+        if let presented = controller.presentedViewController, presented.presentingViewController === controller {
+            refresh(presented)
+        }
     }
 
     override public func refreshContent() {
@@ -53,6 +90,11 @@ public final class RootViewController: ObservedViewController {
         let read = readFrom == address
         if !read, hub.state == .unreachable {
             show(key: "reconnecting") { ConnectViewController(hub: hub, mode: .reconnecting) }
+            return
+        }
+        // A hub this app cannot read is said once, in place of a wait that would never end.
+        if !read, let incompatible = hub.incompatible {
+            show(key: "too-old:\(incompatible.hubVersion ?? "")") { HubTooOldController(hub: hub, incompatible: incompatible) }
             return
         }
         waiting.content = board

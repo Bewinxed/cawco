@@ -79,6 +79,7 @@ public final class SessionsStore {
         if let existing = transcripts[id] { return existing }
         let transcript = SessionTranscript(id)
         transcripts[id] = transcript
+        log.info("watching \(id, privacy: .public): \(self.watches.count) sessions watched")
         read(id)
         return transcript
     }
@@ -90,6 +91,7 @@ public final class SessionsStore {
         readers.removeValue(forKey: id)?.cancel()
         transcripts[id] = nil
         hub.ledger.sync(watched)
+        log.info("stopped watching \(id, privacy: .public): \(self.watches.count) sessions watched")
     }
 
     func reset() {

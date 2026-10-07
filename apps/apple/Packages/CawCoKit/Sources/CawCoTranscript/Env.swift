@@ -29,6 +29,8 @@ final class RowEnv {
     /// Opening another session, or a run, in its own view (the host routes it).
     var openSession: (String) -> Void = { _ in }
     var openRun: (String) -> Void = { _ in }
+    /// Opens a `show_preview` call's page (its input) in this session's preview.
+    var openPreview: ([String: Any]) -> Void = { _ in }
     /// The queued message whose words are in the composer: its bubble folds to its tag.
     var isTaken: (String) -> Bool = { _ in false }
     /// What a queued message was just replaced with, until the hub's own record of the new send arrives.

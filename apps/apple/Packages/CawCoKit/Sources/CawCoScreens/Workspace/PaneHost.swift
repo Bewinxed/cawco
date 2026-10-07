@@ -2,14 +2,17 @@ import CawCoCore
 import CawCoDesign
 import UIKit
 
-/// Every open conversation's screen, built once and kept
-/// (workspace/PaneHost.svelte): a group docks it, and a move, a split or a
-/// change of layout hands the same controller to another group, so a
-/// transcript is never rebuilt and its scroll and draft go with it.
+/// The conversations live on screen, and one swipe from it
+/// (workspace/PaneHost.svelte): a group docks a screen, and a move, a split
+/// or a change of layout hands the same controller to another group. A tab
+/// its group lets go of is released: its subscription ends, and its draft
+/// and scroll are kept here until it is built again.
 @MainActor
 final class PaneHost {
     private let hub: HubConnection
     private var built: [String: UIViewController] = [:]
+    /// A released conversation's draft and scroll, for when it comes back.
+    private var parked: [String: [String: Any]] = [:]
     /// A conversation's own back or close: its tab closes.
     var onReturnToFleet: (String) -> Void = { _ in }
     var onOpen: (String) -> Void = { _ in }
@@ -40,6 +43,7 @@ final class PaneHost {
             let session = SessionViewController(hub: hub, id: id)
             session.onReturnToFleet = { [weak self] in self?.onReturnToFleet(id) }
             session.onOpenSession = { [weak self] id in self?.onOpen(id) }
+            if let values = parked.removeValue(forKey: id) { session.restoreValues(values) }
             made = session
         }
         built[id] = made
@@ -48,12 +52,25 @@ final class PaneHost {
 
     /// Ends what a closed tab held.
     func drop(_ id: String) {
+        parked[id] = nil
         (built.removeValue(forKey: id) as? SessionViewController)?.close()
+    }
+
+    /// A tab left its group's window: its subscription ends, and its draft
+    /// and scroll wait here for it.
+    func release(_ id: String) {
+        guard let session = built.removeValue(forKey: id) as? SessionViewController else {
+            built[id] = nil
+            return
+        }
+        parked[id] = session.restorationValues
+        session.close()
     }
 
     /// Keeps only the conversations the workspace still holds.
     func keep(_ ids: Set<String>) {
         for id in built.keys where !ids.contains(id) { drop(id) }
+        parked = parked.filter { ids.contains($0.key) }
     }
 
     func session(_ id: String) -> SessionViewController? { built[id] as? SessionViewController }

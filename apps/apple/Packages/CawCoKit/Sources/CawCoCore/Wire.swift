@@ -161,6 +161,8 @@ enum Frame {
     /// A Caw thread's row or message (wire protocol 6): read by the thread
     /// screen, which this app does not have yet.
     case thread
+    /// A session's preview opened, changed or closed.
+    case preview(Components.Schemas.PreviewFrame)
     case ignored
 
     /// `answering`: the envelope's own `requestId`, which an error frame takes
@@ -195,6 +197,8 @@ enum Frame {
             self = .workItem(frame.item)
         case .thread_upsert, .thread_message:
             self = .thread
+        case .preview(let frame):
+            self = .preview(frame)
         default:
             self = .ignored
         }

@@ -10,7 +10,7 @@ import OpenAPIRuntime
 
 public typealias TaskView = Components.Schemas.TaskView
 public typealias TaskSummary = Components.Schemas.TaskSummary
-public typealias TaskTodo = Components.Schemas.Todo
+public typealias TaskTodo = Components.Schemas.TaskTodo
 public typealias TaskAttempt = Components.Schemas.TaskAttempt
 public typealias StagesView = Components.Schemas.StagesView
 

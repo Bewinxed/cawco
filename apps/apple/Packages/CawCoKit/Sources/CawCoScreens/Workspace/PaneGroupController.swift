@@ -300,19 +300,39 @@ final class PaneGroupController: UIViewController, UIDropInteractionDelegate {
     }
 
     /// The other open conversations mount nearest first, one at a time.
+    /// What this group keeps live: the tab in front and the ones either side
+    /// of it, which a swipe can land on. Every other tab is a row in the
+    /// strip, named from the fleet, with no transcript read and no stream:
+    /// catch-up is bounded to what is on screen, or one swipe from it.
+    private var window: Set<String> {
+        guard let leaf, let here = leaf.active, let at = leaf.tabs.firstIndex(of: here) else { return [] }
+        return Set(leaf.tabs[max(0, at - 1)...min(leaf.tabs.count - 1, at + 1)])
+    }
+
+    /// After a switch settles: a tab that left the window is released (its
+    /// subscription ends, its draft and scroll are kept for its return), then
+    /// the neighbours not mounted yet are, nearest first, before a swipe can
+    /// reach them.
     private func scheduleBackground() {
         queue?.cancel()
         guard let leaf, let here = leaf.active, let at = leaf.tabs.firstIndex(of: here) else { return }
-        let waiting = leaf.tabs.filter { $0 != here && !mounted.contains($0) }
+        let window = window
+        let leaving = mounted.filter { !window.contains($0) }
+        let waiting = leaf.tabs.filter { window.contains($0) && $0 != here && !mounted.contains($0) }
             .sorted { abs((leaf.tabs.firstIndex(of: $0) ?? 0) - at) < abs((leaf.tabs.firstIndex(of: $1) ?? 0) - at) }
-        guard let next = waiting.first else { return }
+        guard !leaving.isEmpty || !waiting.isEmpty else { return }
         let work = DispatchWorkItem { [weak self] in
-            guard let self else { return }
-            mount(next)
+            guard let self, !stack.active else { return }
+            for id in leaving where !self.window.contains(id) {
+                unmount(id)
+                panes.release(id)
+            }
+            if let next = waiting.first, self.window.contains(next), !mounted.contains(next) { mount(next) }
             scheduleBackground(after: 0.3)
         }
         queue = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + (swipeable ? 0.12 : 0.8), execute: work)
+        // Past the switch's own motion, so nothing leaves while it is drawn.
+        DispatchQueue.main.asyncAfter(deadline: .now() + (swipeable ? 0.3 : 0.8), execute: work)
     }
 
     private func scheduleBackground(after gap: TimeInterval) {

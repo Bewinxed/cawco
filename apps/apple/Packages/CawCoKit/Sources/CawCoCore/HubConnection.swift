@@ -3,7 +3,6 @@ public import Foundation
 import Observation
 import OpenAPIRuntime
 import OSLog
-import UIKit
 
 /// The one connection to the hub: its address, entered once and kept; the
 /// `/ws/dashboard` socket and its reconnects; the connect-time reads; and the
@@ -44,8 +43,22 @@ public final class HubConnection {
         socket == .connected ? .connected : (outage ? .unreachable : .connecting)
     }
 
+    /// The hub answered in a shape this app cannot read: it is older (or
+    /// newer) than the app. Set by the connect-time read, cleared on the next
+    /// connection; the screens say so instead of waiting.
+    public private(set) var incompatible: Incompatible?
+
+    public struct Incompatible: Sendable, Equatable {
+        /// The hub's own version, from `/health`; nil when that did not answer.
+        public let hubVersion: String?
+        /// What could not be read, for the log and the details line.
+        public let read: String
+    }
+
     public let ledger = Ledger()
     public let fleet = FleetStore()
+    /// Each session's preview, as the hub says it.
+    public let previews = PreviewStore()
     /// What the new-session form was last set to: every start without a form runs on it.
     public let spawnPrefs = SpawnPrefs()
     public let needs: NeedsYouStore
@@ -66,8 +79,6 @@ public final class HubConnection {
     @ObservationIgnored private var suspended = false
     /// Counts `start`s, so a replaced loop knows it was replaced.
     @ObservationIgnored private var generation = 0
-    /// The background and foreground observers.
-    @ObservationIgnored private var lifecycle: [any NSObjectProtocol] = []
     @ObservationIgnored private var waiters: [String: CheckedContinuation<OpenAPIValueContainer?, any Error>] = [:]
     private let log = Logger(subsystem: "dev.cawco.app", category: "Hub")
 
@@ -93,26 +104,18 @@ public final class HubConnection {
         workflows = WorkflowsStore(hub: self)
         ledger.applyFrame = { [weak self] id, data in self?.sessions.apply(id, data: data) }
         ledger.rereadHistory = { [weak self] id in self?.sessions.read(id) }
-        let center = NotificationCenter.default
-        lifecycle = [
-            center.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated { self?.enteredBackground() }
-            },
-            center.addObserver(forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated { self?.willEnterForeground() }
-            },
-        ]
         if address != nil {
             start()
         }
     }
 
-    /// The app is in the background: its socket is closed here, on purpose.
-    /// A suspended app answers no pings, so the hub drops the socket, but the
-    /// app hears nothing until it runs again: kept, that dead socket would
-    /// still read `connected` on return, and every row would show the status
-    /// it had before the app went away as if it were the hub's word now.
-    private func enteredBackground() {
+    /// Its window went to the background: the socket is closed here, on
+    /// purpose. A suspended app answers no pings, so the hub drops the socket,
+    /// but the app hears nothing until it runs again: kept, that dead socket
+    /// would still read `connected` on return, and every row would show the
+    /// status it had before the app went away as if it were the hub's word
+    /// now. The window's root calls this for its own scene.
+    public func enterBackground() {
         guard address != nil, !suspended else {
             return
         }
@@ -130,7 +133,7 @@ public final class HubConnection {
     /// first frame lands the board reads `connecting` (StatusLine's
     /// "Connecting…", rows greyed), never the pre-background state as current;
     /// that frame and the pending read bring it to the hub's word.
-    private func willEnterForeground() {
+    public func enterForeground() {
         guard suspended else {
             return
         }
@@ -176,6 +179,13 @@ public final class HubConnection {
         start()
     }
 
+    /// A new connection now, whatever the socket's state: the reader updated
+    /// the hub and wants it read again.
+    public func reconnect() {
+        attempts = 0
+        start()
+    }
+
     /// Reconnects now instead of waiting out the backoff.
     public func reconnectNow() {
         guard socket == .closed else {
@@ -214,6 +224,7 @@ public final class HubConnection {
         fleet.spend = nil
         fleet.spendFailed = false
         fleet.limitsRead = false
+        previews.reset()
         needs.parked = [:]
         sessions.reset()
         tasks.reset()
@@ -274,6 +285,8 @@ public final class HubConnection {
         outageTimer?.cancel()
         outageTimer = nil
         outage = false
+        // A new connection may be to an updated hub: its answers are read again, once.
+        incompatible = nil
         sessions.reconnected()
         readFleet(after: .seconds(1))
         if let address { PushRegistry.shared.connected(to: address) }
@@ -303,7 +316,9 @@ public final class HubConnection {
     // MARK: Reads
 
     /// The connect-time read, again 1 s, 2 s, 4 s, 8 s, then every 10 s
-    /// while the socket stays open, until the board's reads land.
+    /// while the socket stays open, until the board's reads land. A hub whose
+    /// answers this app cannot read is not asked again on this connection:
+    /// nothing changes until it is updated, and a reconnect reads once more.
     private func readFleet(after first: Duration) {
         fleetRead?.cancel()
         fleetRead = Task { [weak self] in
@@ -313,7 +328,7 @@ public final class HubConnection {
                     readCatalogs()
                     return
                 }
-                guard socket == .connected else {
+                guard socket == .connected, incompatible == nil else {
                     return
                 }
                 try? await Task.sleep(for: delay)
@@ -426,9 +441,9 @@ public final class HubConnection {
     /// their envelopes. Nothing here touches the main actor.
     @concurrent
     private nonisolated static func readFleet(_ client: Client) async -> Adoption<Bool> {
-        async let machines = try? await client.getApiAgents().ok.body.json
-        async let rows = try? await client.getApiInstances().ok.body.json
-        async let projects = try? await client.getApiProjects().ok.body.json
+        async let machinesRead = attempt { try await client.getApiAgents().ok.body.json }
+        async let rowsRead = attempt { try await client.getApiInstances().ok.body.json }
+        async let projectsRead = attempt { try await client.getApiProjects().ok.body.json }
         async let pending = try? await client.getApiPending().ok.body.json
         // A continuation that moved while this device was away.
         async let carried = try? await client.getApiContinuations().ok.body.json
@@ -436,10 +451,19 @@ public final class HubConnection {
         // between reports has missed every `usage` frame.
         async let limits = try? await client.getApiUsageLimits().ok.body.json
         async let spend = try? await client.getApiUsageSpend().ok.body.json
-        let (readMachines, readRows, readProjects, readPending, readLimits, readSpend, readCarried) =
-            await (machines, rows, projects, pending, limits, spend, carried)
+        let (machines, rows, projects, readPending, readLimits, readSpend, readCarried) =
+            await (machinesRead, rowsRead, projectsRead, pending, limits, spend, carried)
+        let readMachines = try? machines.get()
+        let readRows = try? rows.get()
+        let readProjects = try? projects.get()
         let cancelled = Task.isCancelled
         let boardRows = readRows.map { read in Result { try Wire.transcode(read, as: [InstanceRow].self) } }
+        // An answer that arrived and did not decode is a hub on another version
+        // than this app: asking again changes nothing until one of them updates.
+        var unreadable: [String] = []
+        for (name, failure) in [("machines", machines.failure), ("instances", rows.failure ?? boardRows?.failure), ("projects", projects.failure)] {
+            if let failure, undecodable(failure) { unreadable.append("\(name): \(String(describing: failure).prefix(300))") }
+        }
         // The hub's whole list of asks: one settled while this device was away
         // sent its `permission_settled` to nobody listening.
         var asks: [(AskFrame, String?)] = []
@@ -491,6 +515,10 @@ public final class HubConnection {
             if let readCarried {
                 hub.fleet.continuations = readCarried
             }
+            if !unreadable.isEmpty {
+                hub.cannotRead(unreadable)
+                return false
+            }
             if readMachines == nil || readRows == nil || readProjects == nil {
                 hub.log.error("fleet read incomplete: machines \(readMachines != nil) rows \(readRows != nil) projects \(readProjects != nil)")
                 return false
@@ -498,6 +526,42 @@ public final class HubConnection {
             hub.fleet.fleetRead = true
             return true
         }
+    }
+
+    /// A read's result, its error kept: a failure to decode is told apart from a failure to reach.
+    private nonisolated static func attempt<T: Sendable>(_ body: @Sendable () async throws -> T) async -> Result<T, any Error> {
+        do { return .success(try await body()) } catch { return .failure(error) }
+    }
+
+    /// The answer came and was not in this app's shape (the generated client
+    /// wraps the decoder's error in its own).
+    private nonisolated static func undecodable(_ error: any Error) -> Bool {
+        if error is DecodingError { return true }
+        if let client = error as? ClientError { return client.underlyingError is DecodingError }
+        return false
+    }
+
+    /// Said once per connection: the hub's answers do not decode. The reads
+    /// stop, and the hub's own version is asked of `/health` for the screen.
+    private func cannotRead(_ unreadable: [String]) {
+        guard incompatible == nil else { return }
+        let read = unreadable.joined(separator: "; ")
+        log.error("hub answers this app cannot read, reads stopped until a reconnect: \(read, privacy: .public)")
+        incompatible = Incompatible(hubVersion: nil, read: read)
+        guard let address else { return }
+        Task { [weak self] in
+            let version = await Self.hubVersion(address)
+            guard let self, incompatible?.read == read else { return }
+            incompatible = Incompatible(hubVersion: version, read: read)
+        }
+    }
+
+    /// The hub's version, as its `/health` says it.
+    @concurrent
+    private nonisolated static func hubVersion(_ address: URL) async -> String? {
+        guard let (data, _) = try? await URLSession.shared.data(from: address.appending(path: "health")),
+              let body = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        return body["version"] as? String
     }
 
     /// A machine that came online after the connect-time read has its stored sessions read now.
@@ -628,6 +692,7 @@ public final class HubConnection {
             fleet.continuations = board.continuations
             adopt(machines: board.agents)
             fleet.adopt(rows: board.instances)
+            previews.reconcile(board.previews)
             tasks.sweepLiveLedgers()
             fleet.liveRead = true
         case let .instancesDelta(delta, hubBuild):
@@ -637,6 +702,7 @@ public final class HubConnection {
                 patchMachines(delta.agents ?? [], removed: delta.removedAgents ?? [])
             }
             fleet.patch(upserts: delta.upserts, removed: delta.removed)
+            previews.reconcile(delta.previews)
             tasks.sweepLiveLedgers()
         case let .permissionRequest(ask, routedTo):
             needs.park(ask, routedTo: routedTo)
@@ -677,6 +743,8 @@ public final class HubConnection {
                 threadsNoted = true
                 log.info("hub sends Caw thread frames; this app has no thread screen yet, so they are ignored")
             }
+        case let .preview(frame):
+            previews.adopt(frame)
         case .ignored:
             break
         }
@@ -688,5 +756,12 @@ public final class HubConnection {
     struct ControlError: LocalizedError {
         let message: String
         var errorDescription: String? { message }
+    }
+}
+
+private extension Result {
+    var failure: Failure? {
+        if case let .failure(error) = self { return error }
+        return nil
     }
 }

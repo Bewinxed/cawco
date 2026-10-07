@@ -23,6 +23,8 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     /// Opening another session or a run in its own view; the host routes it.
     public var onOpenSession: (String) -> Void = { _ in }
     public var onOpenRun: (String) -> Void = { _ in }
+    /// A `show_preview` call's card was tapped: its input, what to show.
+    public var onOpenPreview: ([String: Any]) -> Void = { _ in }
     /// "Back to the fleet", from the state an unreachable id shows.
     public var onReturnToFleet: () -> Void = {}
     /// Whether a queued message can be taken back and edited, and lifting
@@ -280,6 +282,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         env.runSteps = { [weak self] id in self.map { $0.steps(id) } ?? [] }
         env.openSession = { [weak self] id in self?.onOpenSession(id) }
         env.openRun = { [weak self] id in self?.onOpenRun(id) }
+        env.openPreview = { [weak self] input in self?.onOpenPreview(input) }
         env.isTaken = { [weak self] id in self?.liftedQueued == id }
         env.replacement = { [weak self] id in self?.replacements[id] }
         env.canEditQueued = { [weak self] id in self?.canEditQueued(id) ?? false }
@@ -489,6 +492,14 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     }
 
     // MARK: Reading the transcript
+
+    /// The session's preview opened, changed or closed: the preview cards on
+    /// screen take their presence again (a card drawn later reads it then).
+    public func previewChanged() {
+        for case let cell as HostCell<ToolLineView> in collection.visibleCells {
+            cell.row?.previewChanged()
+        }
+    }
 
     public func configure(_ transcript: SessionTranscript) {
         // Read again only when the hub's facts changed: a transcript is handed
