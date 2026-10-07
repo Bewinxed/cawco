@@ -288,6 +288,31 @@
   const ownsKeys = $derived(!!questions && claimants[0] === claim);
 
   /**
+   * Which question the digits answer, said where the eye is: a hairline
+   * rail on that question's lede, in the selection frame's ink. Every
+   * question's keycaps look alike, so with more than one question this is
+   * the one mark of where a digit lands. It moves as the digits do (an
+   * answer moves them on), gliding as the house highlight's selection pill
+   * does; with reduced motion it is simply there.
+   */
+  const ledes = $state<HTMLElement[]>([]);
+  let rail = $state<{ top: number; height: number } | null>(null);
+  $effect(() => {
+    const node = ledes[current];
+    if (!(node && ownsKeys && questions && questions.length > 1)) {
+      rail = null;
+      return;
+    }
+    const measure = () => {
+      rail = { top: node.offsetTop, height: node.offsetHeight };
+    };
+    measure();
+    const sizes = new ResizeObserver(measure);
+    sizes.observe(node);
+    return () => sizes.disconnect();
+  });
+
+  /**
    * The keys the card already advertises: a digit picks the option wearing that
    * keycap, Enter sends once every question has an answer, Escape dismisses.
    * They are inert while the reader is writing (`isTyping`) — which is what
@@ -398,10 +423,18 @@
 >
   {#if questions}
     {@render title(`Question from ${asker}`)}
-    <div class="body part" style:--part="1">
+    <div class="body part" style:--part="1" class:railed={questions.length > 1}>
+      {#if rail}
+        <span
+          aria-hidden="true"
+          class="rail"
+          style:block-size="{rail.height}px"
+          style:translate="0 {rail.top}px"
+        ></span>
+      {/if}
       {#each questions as q, qi (q.question)}
         {@const own = q.options.length}
-        <p class="lede">{q.question}</p>
+        <p class="lede" bind:this={ledes[qi]}>{q.question}</p>
         <div class="qopts">
           {#each q.options as opt, i (opt.label)}
             {@const live = ownsKeys && qi === current && i < 9}
@@ -570,10 +603,27 @@
     padding: var(--space-3) var(--space-3) var(--space-2);
   }
   .body {
+    position: relative;
     flex: 1 1 auto;
     min-block-size: 0;
     overflow-y: auto;
     overscroll-behavior: contain;
+  }
+  /* The live question's rail, on its lede's inline edge (`.railed .lede`,
+     below). */
+  .rail {
+    position: absolute;
+    inset-block-start: 0;
+    inset-inline-start: 0;
+    inline-size: 1px;
+    background: var(--brand-solid);
+    pointer-events: none;
+
+    @media (prefers-reduced-motion: no-preference) {
+      transition:
+        translate var(--dur-control) var(--ease-drawer),
+        block-size var(--dur-control) var(--ease-drawer);
+    }
   }
   .foot {
     flex: none;
@@ -612,8 +662,10 @@
     gap: var(--space-2);
     margin-block-end: var(--space-2);
   }
-  /* What asks, in the title's ink, at the title row's icon size: both of
-     the duotone's layers read. */
+  /* What asks, in the title's ink. Solar draws the question-circle's disc
+     at 20/24 of its box, so the box is --icon-lg for the disc itself to
+     stand at the title row's 16px icon size, its "?" large enough to read
+     over the duotone's half-ink layer. */
   .glyph {
     display: inline-grid;
     place-items: center;
@@ -621,8 +673,8 @@
     color: inherit;
 
     & :global(svg) {
-      inline-size: var(--icon-md);
-      block-size: var(--icon-md);
+      inline-size: var(--icon-lg);
+      block-size: var(--icon-lg);
     }
   }
   .title {
@@ -679,6 +731,11 @@
     color: var(--ink-strong);
     margin-block-end: var(--space-2);
     max-inline-size: 72ch;
+  }
+  /* Every lede of a several-question ask stands off the rail's edge by the
+     same step, railed or not, so nothing moves as the rail does. */
+  .railed .lede {
+    padding-inline-start: var(--space-2);
   }
   .cmd {
     font-family: var(--font-mono);

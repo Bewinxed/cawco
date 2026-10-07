@@ -22,6 +22,7 @@
    * chosen option carries `.sel`, and any freeform reply shows under the options.
    * Ported from the mock's `#q-card` (.hitl / .lede / .qopts / .kc).
    */
+  import { CLI_REJECTED } from "../question";
   import type { Message } from "../types";
   import { useLedger } from "./arrivals.svelte";
 
@@ -51,6 +52,16 @@
    */
   const failed = $derived(
     !(answered || dismissed) && message.metadata?.toolStatus === "error"
+  );
+  /**
+   * It was asked, and taken back before it was answered (the turn
+   * interrupted while it waited): the line "Question withdrawn" says so in
+   * the transcript, and the card says the same.
+   */
+  const withdrawn = $derived(
+    failed &&
+      typeof message.metadata?.toolResult === "string" &&
+      message.metadata.toolResult.startsWith(CLI_REJECTED)
   );
   const answers = $derived<UserAnswers>(
     result?.outcome === "answered" ? result.answers : {}
@@ -219,6 +230,8 @@
         <span class="pill done" in:pillSwap out:pillSwap>answered</span>
       {:else if dismissed}
         <span class="pill muted" in:pillSwap out:pillSwap>dismissed</span>
+      {:else if withdrawn}
+        <span class="pill muted" in:pillSwap out:pillSwap>withdrawn</span>
       {:else if failed}
         <span class="pill muted" in:pillSwap out:pillSwap>not asked</span>
       {:else}
