@@ -1,6 +1,7 @@
 import CawCoAPI
 import CawCoCore
 import CawCoDesign
+import CawCoMascot
 import OSLog
 public import UIKit
 
@@ -41,21 +42,30 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     private let collection: UICollectionView
     private var dataSource: UICollectionViewDiffableDataSource<Int, String>!
     private let env = RowEnv()
+    /// Every row's view, kept laid out for its item (RowStore).
+    private lazy var store = RowStore(env: env)
     private var items: [String: Item] = [:]
     private var prints: [String: String] = [:]
     private var order: [String] = []
     private var open = Set<String>()
     private var transcript: SessionTranscript?
 
-    // The hub's blocks, read once per revision.
+    // The hub's transcript, prepared off the main thread (TranscriptPrep) a
+    // generation at a time; what the list draws is the last one applied.
     private var revision = -1
+    private let prep = TranscriptPrep()
+    /// A preparation is running; `wanted` is the input to run next.
+    private var preparing = false
+    private var wanted: TranscriptPrep.Input?
+    /// The generation applied: its blocks, branches, queue and settled items.
+    private var prepared: Prepared?
     private var blocks: [Block] = []
-    /// Each block as last read, with the hub's value it was read from.
-    private var readBlocks: [String: (source: Components.Schemas.TranscriptBlock, block: Block)] = [:]
     private var branches: [String: Branch] = [:]
     private var queued: [Block] = []
-    private var rows: [Row] = []
+    private var rowCount = 0
     private var voices = Voices()
+    /// Caw's compaction mark is read ahead of the first compaction drawn.
+    private static var markWarmed = false
 
     // The live tail, paced (prompt-3: candidate 3, paced).
     private var splitter = MarkdownSplitter()
@@ -86,10 +96,6 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     /// from where the reader is to stand, out of sight until it is whole, and
     /// the rest (rows off the screen, which cost nothing) joins it at once.
     private var fed: Int? = 0
-    /// How many of the hub's blocks, counted from the newest, the list draws so far.
-    private var taken = 0
-    /// Blocks of history a frame adds.
-    private static let stretch = 80
     /// Whether the last commit added a row to a first screen.
     private var feeding = false
     /// The items the last commit drew from, for a first screen's next row.
@@ -218,11 +224,15 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         }
         paneState.onReturn = { [weak self] in self?.onReturnToFleet() }
         registerForTraitChanges([UITraitUserInterfaceStyle.self, UITraitPreferredContentSizeCategory.self]) { (view: TranscriptView, _: UITraitCollection) in
+            // The words are set in faces at this type size: rendered again,
+            // prepared again, every row drawn again.
             view.env.cache.clear()
-            view.env.heights = [:]
-            view.settled = nil
+            MarkdownCache.shared.clear()
+            view.store.clear()
             view.prints = [:]
             view.listedStamp = nil
+            Task { [prep = view.prep] in await prep.reset() }
+            view.request()
             view.dirty = true
         }
     }
@@ -230,19 +240,38 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     @available(*, unavailable)
     required init?(coder _: NSCoder) { fatalError("TranscriptView is built in code") }
 
+    /// The width a row stands at: the list less its section's inset (the
+    /// layout above); nil while the list has no width to give.
+    private var rowWidth: CGFloat? {
+        let width = Double(collection.bounds.width)
+        let inset = width <= 900 ? 2 * Space.space5 : Space.space7 + Space.space6
+        return width > inset ? CGFloat(width - inset) : nil
+    }
+
+    /// The view a row of `kind` is drawn in.
+    private static func rowType(_ kind: Item.Kind) -> any RowContent.Type {
+        switch kind {
+        case .piece: PieceView.self
+        case .user: UserTurnView.self
+        case .tool: ToolLineView.self
+        case .thinking: ThinkingView.self
+        case .system, .harness: SystemLineView.self
+        case .peer: PeerView.self
+        case .question: QuestionCardView.self
+        case .subagent: SubagentView.self
+        case .delegate: DelegateView.self
+        case .run: RunView.self
+        case .compaction: CompactionDividerView.self
+        case .livetool: LiveToolView.self
+        case .notice, .empty: NoticeView.self
+        }
+    }
+
     private func makeDataSource() {
         func registration<V: RowContent>(_: V.Type) -> UICollectionView.CellRegistration<HostCell<V>, String> {
             UICollectionView.CellRegistration<HostCell<V>, String> { [weak self] cell, _, id in
                 guard let self, let item = items[id] else { return }
-                cell.install(env: env)
-                // A row spans the list less its section's inset (the layout above).
-                let width = Double(collection.bounds.width)
-                let inset = width <= 900 ? 2 * Space.space5 : Space.space7 + Space.space6
-                let fit: CGFloat? = width > inset ? CGFloat(width - inset) : nil
-                (cell.row as? PieceView)?.fitWidth = fit
-                (cell.row as? UserTurnView)?.fitWidth = fit
-                cell.configure(item)
-                Pace.row()
+                cell.host(item, store: store, width: rowWidth)
             }
         }
         let piece = registration(PieceView.self), user = registration(UserTurnView.self), tool = registration(ToolLineView.self)
@@ -368,7 +397,9 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             Pace.watch()
         } else {
             // Off the screen, every delegate card this view drew has left it.
-            for cell in collection.visibleCells { (cell as? HostCell<DelegateView>)?.row.untrack() }
+            for cell in collection.visibleCells { (cell as? HostCell<DelegateView>)?.row?.untrack() }
+            // Nobody watches the tail of a pane off the screen (arrivals.svelte.ts).
+            arriving = [:]
         }
         joinTray()
     }
@@ -420,7 +451,11 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
 
     /// The first screen is whole and every block of history is in the list:
     /// what is left for a pane off screen is the session's own changes.
-    private var caughtUp: Bool { landed && taken >= blocks.count }
+    private var caughtUp: Bool { landed && current }
+
+    /// The generation applied is the transcript as it stands: nothing is
+    /// being prepared, and nothing is waiting to be.
+    private var current: Bool { prepared?.revision == revision && !preparing && wanted == nil }
 
     /// Panes that are off screen with changes they have not drawn.
     private static let owing = NSHashTable<TranscriptView>.weakObjects()
@@ -465,7 +500,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         let tray = DelegateTrayState.shared
         let id = env.sessionId
         // A report is brought into view once the history it may stand in is in the list.
-        if taken >= blocks.count, let want = tray.reveal[id] {
+        if current, let want = tray.reveal[id] {
             tray.reveal[id] = nil
             if let target = centred(want), abs(target - collection.contentOffset.y) > 0.5 {
                 pendingPosition = nil
@@ -525,6 +560,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         let columns = Columns.at(width: bounds.width)
         if columns != env.columns {
             env.columns = columns
+            store.clear()
             prints = [:]
             listedStamp = nil
             dirty = true
@@ -538,8 +574,9 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     /// The session's preview opened, changed or closed: the preview cards on
     /// screen take their presence again (a card drawn later reads it then).
     public func previewChanged() {
-        for case let cell as HostCell<ToolLineView> in collection.visibleCells {
-            cell.row?.previewChanged()
+        // A card on the screen takes it now; one kept off it, when it is next stood.
+        for (id, row) in store.held(ToolLineView.self) {
+            if row.window != nil { row.previewChanged() } else { store.stale(id) }
         }
     }
 
@@ -551,45 +588,16 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         env.sessionId = transcript.id
         joinTray()
         env.machineId = transcript.location?.machineId
+        var agent = env.agentName
         if let harness = transcript.facts?.harness ?? transcript.location?.harness {
-            env.agentName = ["claude": "Claude Code", "opencode": "opencode", "code": "opencode", "pi": "pi"][harness] ?? harness
+            agent = ["claude": "Claude Code", "opencode": "opencode", "code": "opencode", "pi": "pi"][harness] ?? harness
         }
-        if transcript.blockRevision != revision {
+        // A revision of the hub's blocks is prepared off the main thread and
+        // drawn when it is ready; until then the list draws the last one.
+        if transcript.blockRevision != revision || agent != env.agentName {
             revision = transcript.blockRevision
-            // A block is read once: a revision reads only the blocks it brought
-            // or changed, never the whole history again (every tool call of a
-            // long session was a read of all its blocks).
-            var kept: [String: (source: Components.Schemas.TranscriptBlock, block: Block)] = [:]
-            kept.reserveCapacity(readBlocks.count + 8)
-            func read(_ sources: [Components.Schemas.TranscriptBlock]) -> [Block] {
-                sources.compactMap { source in
-                    if let held = readBlocks[source.id], held.source == source {
-                        kept[source.id] = held
-                        return held.block
-                    }
-                    guard let block = Block(source) else { return nil }
-                    kept[source.id] = (source, block)
-                    return block
-                }
-            }
-            blocks = read(transcript.blocks)
-            var map: [String: Branch] = [:]
-            let streams = (try? JSONEncoder().encode(transcript.tail?.streams))
-                .flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] } ?? [:]
-            for page in transcript.branches {
-                let inner = read(page.value2.blocks)
-                let streaming = streams[page.value1.toolUseId] as? String ?? ""
-                if let branch = Branch(page, blocks: inner, streaming: streaming) { map[branch.toolUseId] = branch }
-            }
-            branches = map
-            queued = read(transcript.queued)
-            readBlocks = kept
-            // A replaced message's stand-in words go with it.
-            if !replacements.isEmpty {
-                let held = Set(blocks.map(\.id) + queued.map(\.id))
-                replacements = replacements.filter { held.contains($0.key) }
-            }
-            dirty = true
+            env.agentName = agent
+            request()
         }
         let tail = transcript.tail
         let next = tail?.streaming ?? ""
@@ -608,41 +616,63 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         dirty = true
     }
 
-    /// The rows the reader sees: settled first (rows.ts `drawnOf` — an
-    /// unanswered question is the composer's in every mode: no mode answers
-    /// a question for the reader, Bypass and Full Send included).
-    private func settledRows() -> [Row] {
-        // History joins the list a stretch a frame, newest first: a long
-        // session's older page set as Markdown in one go was 80 ms of a frame
-        // for rows far above the reader. A reader restored to a row is given
-        // all of it, so the row is there to stand at.
-        if taken < blocks.count {
-            let anchored = pendingPosition.map { !$0.following } ?? false
-            taken = anchored ? blocks.count : min(blocks.count, taken + Self.stretch)
-            if taken < blocks.count { dirty = true }
-        }
-        // The same blocks fold into the same rows: a long session's are folded
-        // when its blocks change, not on every frame its tail or its fleet moves.
-        let stamp = "\(revision)|\(taken)"
-        if let folded, folded.stamp == stamp {
-            voices = folded.voices
-            return folded.rows
-        }
-        let drawn = blocks.suffix(taken).filter { block in
-            !(Fold.isQuestion(block) && block.toolStatus == "pending")
-                && block.type != "send.ref" && block.type != "system.init"
-        }
-        var voices = Voices()
-        let rows = Fold.rows(drawn, branches: branches, voices: &voices)
-        self.voices = voices
-        folded = (stamp, rows, voices)
-        return rows
+    // MARK: Preparing
+
+    /// Asks for the transcript as it stands to be prepared (TranscriptPrep):
+    /// at once when nothing is being prepared, else when that finishes. Only
+    /// the newest ask runs; one in between is never prepared.
+    private func request() {
+        guard let transcript else { return }
+        let streams = (try? JSONEncoder().encode(transcript.tail?.streams))
+            .flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: String] } ?? [:]
+        wanted = TranscriptPrep.Input(revision: transcript.blockRevision, history: transcript.historyRevision,
+                                      blocks: transcript.blocks, branches: transcript.branches, queued: transcript.queued,
+                                      streams: streams, agentName: env.agentName, keys: keys)
+        pump()
     }
 
-    /// The settled rows as last folded, and what they were folded from.
-    private var folded: (stamp: String, rows: [Row], voices: Voices)?
-    /// The settled rows' items as last built, what they were built from, and
-    /// which of them read the fleet (`fleetPrint`).
+    private func pump() {
+        guard !preparing, let input = wanted else { return }
+        wanted = nil
+        preparing = true
+        let interval = signposter.beginInterval("prepare")
+        Task { [weak self, prep, signposter] in
+            let result = await prep.prepare(input)
+            signposter.endInterval("prepare", interval)
+            guard let self else { return }
+            preparing = false
+            adopt(result)
+            pump()
+        }
+    }
+
+    /// One prepared generation becomes what the list draws from: its blocks,
+    /// its rows' items, the floor the tail takes up. Applied in the next frame.
+    private func adopt(_ next: Prepared) {
+        prepared = next
+        blocks = next.blocks
+        branches = next.branches
+        queued = next.queued
+        rowCount = next.rowCount
+        voices = next.voices
+        settled = (stamp: "\(next.revision)|\(next.history)|\(keys.count)", items: next.items, rail: next.rail, fleet: next.fleet)
+        // Keys given and a fold begun while this generation was being prepared hold on it.
+        for (id, key) in keys where next.keys[id] == nil { rekey(id, as: key) }
+        if let folding { foldShut(folding) }
+        // A replaced message's stand-in words go with it.
+        if !replacements.isEmpty {
+            let held = Set(blocks.map(\.id) + queued.map(\.id))
+            replacements = replacements.filter { held.contains($0.key) }
+        }
+        // Caw's file is read now, while his row is still being laid out (compaction-mark.ts `warmCompactionMark`).
+        if next.compacts, !Self.markWarmed { Self.markWarmed = true; CawMark.warm(.compacted) }
+        dirty = true
+    }
+
+    /// The settled rows' items as applied, what they were prepared from, and
+    /// which of them read the fleet (`fleetPrint`). A landed answer's live key
+    /// and a reasoning block folding shut are put on them here, between
+    /// generations (`build`).
     private var settled: (stamp: String, items: [Item], rail: Bool, fleet: [Int])?
 
     private func factsValue(_ key: String) -> Any? {
@@ -660,7 +690,6 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
 
     private func build() -> [Item] {
         guard let transcript else { return [] }
-        rows = settledRows()
         let tail = transcript.tail
         let reasoning = (tail?.openBlock?.rawValue == "thinking" || tail?.thinkingClosing == true) && received.isEmpty
         let last = blocks.last
@@ -677,42 +706,31 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         // The live row's generation: a new one each time the tail opens again.
         if liveOn, !liveWasOn { generation += 1 }
         let liveKey = "live:\(generation)"
-        // A streamed answer that landed as its message keeps the live row's cells.
+        // A streamed answer that landed as its message keeps the live row's
+        // cells: its items take the live row's key now, and every preparation
+        // after this one builds them under it.
         if liveWasOn, !liveOn, !lastAnswer.isEmpty,
            let landed = blocks.last(where: { $0.type == "assistant" }),
            landed.content.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix(lastAnswer.trimmingCharacters(in: .whitespacesAndNewlines).prefix(200)),
            keys[landed.id] == nil {
-            keys[landed.id] = "live:\(generation)"
+            let key = "live:\(generation)"
+            keys[landed.id] = key
+            rekey(landed.id, as: key)
+            request()
         }
         // Reasoning the reader watched lands as its own row and folds shut there.
         if liveWasOn, reasoningEnded, !reasoning, let thought = blocks.last(where: { $0.type == "thinking" }), !known.contains(thought.id) {
             folding = thought.id
+            foldShut(thought.id)
         }
         reasoningEnded = reasoning
         liveWasOn = liveOn
         lastAnswer = liveOn ? received : lastAnswer
 
+        // The live tail's words are rendered here, on the frame's clock; the
+        // settled rows come prepared.
         var builder = Builder(agentName: env.agentName, cache: env.cache)
         builder.keys = keys
-        // Built when the rows, the landed answers' keys or the fold in hand
-        // change; a frame that only moves the tail takes them as they are.
-        let stamp = "\(folded?.stamp ?? "")|\(keys.count)|\(folding ?? "")|\(env.agentName)"
-        let rebuilt = settled?.stamp != stamp
-        if rebuilt {
-            var (items, rail) = builder.items(rows)
-            var fleet: [Int] = []
-            for i in items.indices {
-                if case let .thinking(r) = items[i].kind, r.key == "think:\(folding ?? "")" {
-                    items[i] = Item(id: items[i].id, top: items[i].top, kind: .thinking(.init(key: r.key, text: r.text, live: false, folding: true)),
-                                    print: items[i].print + "folding")
-                }
-                switch items[i].kind {
-                case .delegate, .run, .peer: fleet.append(i)
-                default: break
-                }
-            }
-            settled = (stamp, items, rail, fleet)
-        }
         var out = settled?.items ?? []
         var rail = settled?.rail ?? false
         // Read once a build: a fleet row is a large value, and going through
@@ -768,18 +786,38 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         out += queuedItems(false)
 
         if out.isEmpty {
-            out = [transcript.loading ? Item(id: "notice:loading", top: 0, kind: .notice("Loading transcript…"), print: "loading")
+            let loading = transcript.loading || prepared == nil
+            out = [loading ? Item(id: "notice:loading", top: 0, kind: .notice("Loading transcript…"), print: "loading")
                 : Item(id: "notice:empty", top: 0, kind: .empty, print: "empty")]
             settledCount = out.count
         }
-        // The Markdown this build did not draw from is let go (BlockCache
-        // `sweep`): turns that changed, lists that were closed, history that
-        // was compacted away.
-        if rebuilt {
-            let swept = env.cache.sweep()
-            if swept.dropped > 0 { Pace.swept(env.sessionId, held: swept.held, dropped: swept.dropped) }
-        }
         return out
+    }
+
+    /// A landed answer's settled items take the live row's key (rows.ts
+    /// `keepLive`): the cells that drew it streaming go on drawing it.
+    private func rekey(_ id: String, as key: String) {
+        guard var current = settled else { return }
+        for i in current.items.indices.reversed() where current.items[i].id.hasPrefix("\(id):") {
+            let item = current.items[i]
+            current.items[i] = Item(id: key + item.id.dropFirst(id.count), top: item.top, kind: item.kind, print: item.print)
+        }
+        current.stamp += "|\(key)"
+        settled = current
+    }
+
+    /// The reasoning block `id`, settled, arrives open and folds shut.
+    private func foldShut(_ id: String) {
+        guard var current = settled else { return }
+        for i in current.items.indices.reversed() {
+            guard case let .thinking(r) = current.items[i].kind, r.key == "think:\(id)" else { continue }
+            let item = current.items[i]
+            current.items[i] = Item(id: item.id, top: item.top, kind: .thinking(.init(key: r.key, text: r.text, live: false, folding: true)),
+                                    print: item.print + "folding")
+            break
+        }
+        current.stamp += "|fold:\(id)"
+        settled = current
     }
 
     /// What a delegate or run row reads off the fleet, so it redraws when that moves.
@@ -901,14 +939,14 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         // draws itself once (Caw on a divider) draws when the pane comes on screen.
         let shown = onScreen
         if shown, !wasOnScreen {
-            for cell in visible { (cell as? HostCell<CompactionDividerView>)?.row.cameOnScreen() }
+            for cell in visible { (cell as? HostCell<CompactionDividerView>)?.row?.cameOnScreen() }
         }
         wasOnScreen = shown
         let seen = collection.convert(visibleBox, to: nil)
         for cell in visible {
-            (cell as? HostCell<PieceView>)?.row.fade(now)
-            (cell as? HostCell<ThinkingView>)?.row.fade(now)
-            (cell as? HostCell<DelegateView>)?.row.track(in: seen)
+            (cell as? HostCell<PieceView>)?.row?.fade(now)
+            (cell as? HostCell<ThinkingView>)?.row?.fade(now)
+            (cell as? HostCell<DelegateView>)?.row?.track(in: seen)
         }
         honourTray()
         updateDock()
@@ -918,6 +956,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             drewThisFrame = false
             collection.layoutIfNeeded()
         }
+        if inSight { warm(since: now, frame: link.targetTimestamp - link.timestamp) }
         let took = CACurrentMediaTime() - now
         Pace.spent(took, in: env.sessionId, items: items.count, cells: collection.visibleCells.count)
     }
@@ -990,13 +1029,28 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             looked = built
         }
         listedStamp = fed == nil ? settled?.stamp : nil
-        collection.alpha = fed == nil || rows.isEmpty ? 1 : 0
-        // Rows that arrive while the reader watches are drawn arriving (Row.svelte).
-        let fresher = (quiet ? section.tail : section.settled + section.tail).filter { !known.contains($0) }
-        if env.watched {
-            let now = CACurrentMediaTime()
-            for (slot, id) in fresher.enumerated() {
-                arriving[id] = now + Double(min(slot, 3)) * Motion.durStagger
+        collection.alpha = fed == nil || rowCount == 0 ? 1 : 0
+        if !quiet { store.keep(items.keys) }
+        // A row is drawn arriving (Row.svelte; arrivals.svelte.ts, THE ARRIVAL
+        // RULE) only when it is a live arrival the reader watches: new to this
+        // view, brought by the live stream rather than a read of history (the
+        // first page, an older page, a read again), joining after every row
+        // the list held, while the reader stands at the tail. Older history
+        // joining in front, and a row scrolled back to, draw still: a row of
+        // history given a ticket stood blank wherever the reader first
+        // scrolled to it, then faded in.
+        let history = prepared?.history ?? 0
+        let live = history == readHistory
+        readHistory = history
+        if env.watched, live, following {
+            let order = quiet ? section.tail : section.settled + section.tail
+            let held = quiet ? Set(before.tail) : Set(before.settled).union(before.tail)
+            if quiet || !held.isEmpty {
+                let after = (order.lastIndex { held.contains($0) } ?? -1) + 1
+                let now = CACurrentMediaTime()
+                for (slot, id) in order[after...].filter({ !known.contains($0) }).enumerated() {
+                    arriving[id] = now + Double(min(slot, 3)) * Motion.durStagger
+                }
             }
         }
         known.formUnion(quiet ? section.tail : looked.map(\.id))
@@ -1031,8 +1085,12 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         listed = section
         drewThisFrame = true
         let follow = following
-        let grew = env.watched && section.settled.count + section.tail.count > before.settled.count + before.tail.count
-            && follow && !UIAccessibility.isReduceMotionEnabled
+        // A row or a few arriving live glide the list down to them. A catch-up
+        // (history read, or the backlog a reconnect delivers in one go) lands
+        // at the new foot in one step: gliding through it scrolled the reader
+        // through everything they missed.
+        let added = section.settled.count + section.tail.count - before.settled.count - before.tail.count
+        let grew = env.watched && live && (1 ... Self.glidesUpTo).contains(added) && follow && !UIAccessibility.isReduceMotionEnabled
         // With no row in common there is nothing to work a difference out from.
         let disjoint = quiet ? before.settled.isEmpty && Set(before.tail).isDisjoint(with: section.tail)
             : Set(before.settled).union(before.tail).isDisjoint(with: section.settled + section.tail)
@@ -1057,11 +1115,11 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
                 collection.contentOffset.y = frame.minY + anchor.into
             }
             if let id = folding, let index = dataSource.indexPath(for: id),
-               let cell = collection.cellForItem(at: index) as? HostCell<ThinkingView> {
+               let cell = collection.cellForItem(at: index) as? HostCell<ThinkingView>, let row = cell.row {
                 folding = nil
-                animate(cell.row, open: false, in: cell)
+                animate(row, open: false, in: cell)
             }
-            if !landed, fed == nil || rows.isEmpty, transcript?.loading == false { landed = true }
+            if !landed, fed == nil || rowCount == 0, transcript?.loading == false, prepared != nil { landed = true }
             guard follow else { return }
             if grew {
                 // The rows above make room on the place's clock rather than jumping.
@@ -1097,7 +1155,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     private func firstScreen(of all: [String]) -> [String] {
         guard let count = fed else { return all }
         // No rows yet (a page not read, an empty session): the notice stands alone.
-        guard !rows.isEmpty else { return all }
+        guard rowCount > 0 else { return all }
         let view = visibleBox.height
         let pivot = pendingPosition.flatMap { $0.following ? nil : $0.anchor }.flatMap { all.firstIndex(of: $0) }
         let reach = pivot.map { all.count - $0 } ?? all.count
@@ -1133,7 +1191,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         }
         animator.startAnimation(afterDelay: delay)
         // A compaction's wave draws in, and Caw comes in, on the same clock.
-        if !reduced { (cell as? HostCell<CompactionDividerView>)?.row.arrive(after: delay) }
+        if !reduced { (cell as? HostCell<CompactionDividerView>)?.row?.arrive(after: delay) }
     }
 
     public func collectionView(_: UICollectionView, didEndDisplaying cell: UICollectionViewCell, forItemAt _: IndexPath) {
@@ -1141,7 +1199,55 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         cell.contentView.alpha = 1
         cell.contentView.transform = .identity
         // A delegate's card off the screen is the card leaving (tray.svelte.ts `trayCard`).
-        (cell as? HostCell<DelegateView>)?.row.untrack()
+        (cell as? HostCell<DelegateView>)?.row?.untrack()
+    }
+
+    /// The reader's own scroll: they are not watching the tail, and every
+    /// arrival still waiting to be drawn draws still (arrivals.svelte.ts).
+    public func scrollViewWillBeginDragging(_: UIScrollView) {
+        arriving = [:]
+    }
+
+    // MARK: Rows before they are on the screen
+
+    /// The history read (SessionTranscript `historyRevision`) the last commit drew from.
+    private var readHistory = -1
+    /// The most rows a live arrival glides the list down to.
+    private static let glidesUpTo = 3
+    /// Where the list stood at the last frame, for the way it is moving.
+    private var lastOffset: CGFloat = 0
+    /// Rows either side of the screen kept built.
+    private static let reach = 16
+    /// What a frame gives to building rows before they are on the screen, at most.
+    private static let warmBudget = 0.004
+
+    /// Builds the rows just past either edge of the screen (RowStore `warm`)
+    /// with what the frame has left: the way the list is moving first, the
+    /// nearest first. A row then enters the screen built, measured and laid
+    /// out, and the frame it enters in only shows it. A frame that has
+    /// already taken its share builds nothing.
+    private func warm(since start: Double, frame: Double) {
+        let offset = collection.contentOffset.y
+        let up = offset < lastOffset - 0.5
+        let down = offset > lastOffset + 0.5
+        lastOffset = offset
+        guard landed, fed == nil, !collection.isHidden, let width = rowWidth else { return }
+        let budget = min(Self.warmBudget, frame * 0.4)
+        guard CACurrentMediaTime() - start < budget else { return }
+        let ids = listed.settled
+        let shown = collection.indexPathsForVisibleItems.filter { $0.section == 0 }.map(\.item)
+        guard let first = shown.min(), let last = shown.max(), last < ids.count else { return }
+        let above = Array(stride(from: first - 1, through: max(0, first - Self.reach), by: -1))
+        let below = Array(stride(from: last + 1, to: min(ids.count, last + 1 + Self.reach), by: 1))
+        let order = up ? above + below : down ? below + above
+            : (0 ..< max(above.count, below.count)).flatMap { i in
+                (i < above.count ? [above[i]] : []) + (i < below.count ? [below[i]] : [])
+            }
+        for index in order {
+            guard CACurrentMediaTime() - start < budget else { return }
+            guard let item = items[ids[index]] else { continue }
+            store.warm(Self.rowType(item.kind), item: item, width: width)
+        }
     }
 
     // MARK: A queued message in the composer
@@ -1154,12 +1260,12 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         if let replacement { replacements[id] = replacement }
         guard let index = dataSource.indexPath(for: id), let item = items[id],
               let cell = collection.cellForItem(at: index) as? HostCell<UserTurnView> else {
+            store.stale(id)
             dirty = true
             return
         }
         let change: @MainActor () -> Void = {
-            cell.configure(item)
-            cell.forget()
+            cell.redraw(item)
             cell.contentView.layoutIfNeeded()
             cell.invalidateIntrinsicContentSize()
             self.collection.layoutIfNeeded()
@@ -1176,9 +1282,9 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         guard replacements.removeValue(forKey: id) != nil else { return }
         if let index = dataSource.indexPath(for: id), let item = items[id],
            let cell = collection.cellForItem(at: index) as? HostCell<UserTurnView> {
-            cell.configure(item)
-            cell.forget()
-            cell.invalidateIntrinsicContentSize()
+            cell.redraw(item)
+        } else {
+            store.stale(id)
         }
         dirty = true
     }
@@ -1236,7 +1342,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         guard let hit = super.hitTest(point, with: event) else { return nil }
         guard hit === collection || hit is UICollectionViewCell || hit.superview is UICollectionViewCell else { return hit }
         for case let cell as HostCell<CompactionDividerView> in collection.visibleCells {
-            if let control = cell.row.control, cell.row.reach(in: self).contains(point) { return control }
+            if let row = cell.row, let control = row.control, row.reach(in: self).contains(point) { return control }
         }
         return hit
     }
@@ -1341,7 +1447,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     }
 
     private func updateDock() {
-        let rowsDrawn = !rows.isEmpty
+        let rowsDrawn = rowCount > 0
         latestButton.show(landed && farFromLatest && rowsDrawn)
         catchUp.show(transcript?.loading == true && rowsDrawn)
         compacting.show(isCompacting)

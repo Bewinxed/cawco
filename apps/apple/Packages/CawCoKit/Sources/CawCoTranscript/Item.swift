@@ -4,7 +4,7 @@ import Foundation
 /// One cell of the transcript list: a row, or one call of a run, or one
 /// block of a long message, with its margin above it (the row's own
 /// `margin-block-start`, since the web's rows never collapse their margins).
-struct Item {
+nonisolated struct Item: Sendable {
     let id: String
     var top: Double
     let kind: Kind
@@ -12,7 +12,7 @@ struct Item {
     /// unchanged is never configured again.
     var print: String
 
-    enum Kind {
+    enum Kind: Sendable {
         case piece(Piece)
         case user(UserTurn)
         case tool(Block)
@@ -32,7 +32,7 @@ struct Item {
     }
 
     /// One block of an assistant turn (MessageRow's `.turn`, LiveRow's answer).
-    struct Piece {
+    struct Piece: Sendable {
         let blocks: [MarkdownBlock]
         /// The speaker line, on the turn's first block when it is not grouped.
         let header: Header?
@@ -45,7 +45,7 @@ struct Item {
         var joinsBelow = false
     }
 
-    struct Header {
+    struct Header: Sendable {
         let name: String
         let clock: String?
         let note: String?
@@ -53,14 +53,14 @@ struct Item {
     }
 
     /// The reader's own turn (MessageRow `.turn.you`).
-    struct UserTurn {
+    struct UserTurn: Sendable {
         let block: Block
         let grouped: Bool
         let runsOn: Bool
     }
 
     /// A reasoning block (Thinking.svelte): settled, or the live tail's.
-    struct Reasoning {
+    struct Reasoning: Sendable {
         let key: String
         let text: String
         let live: Bool
@@ -69,14 +69,15 @@ struct Item {
     }
 }
 
-extension Item {
+nonisolated extension Item {
     /// The clock a turn's speaker line shows: 24-hour, hours and minutes.
     static func clock(_ date: Date?) -> String? {
         guard let date else { return nil }
         return clockFormat.string(from: date)
     }
 
-    private static let clockFormat: DateFormatter = {
+    /// DateFormatter is thread safe; this one is set up once and only read.
+    private nonisolated(unsafe) static let clockFormat: DateFormatter = {
         let format = DateFormatter()
         format.locale = .current
         format.setLocalizedDateFormatFromTemplate("HHmm")

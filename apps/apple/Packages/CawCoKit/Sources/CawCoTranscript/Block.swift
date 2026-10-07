@@ -1,11 +1,17 @@
 import CawCoAPI
 import CawCoCore
 import Foundation
+import Synchronization
 
 /// A hub block as the renderers read it: the generated block's fields, and
 /// its metadata as the plain JSON the web's renderers read (`Message` in
-/// apps/dashboard/src/lib/cawco/types.ts). Read once per block revision.
-struct Block {
+/// apps/dashboard/src/lib/cawco/types.ts). Read once per block revision,
+/// where the transcript is prepared (TranscriptPrep).
+///
+/// Sendable by construction: `meta` is JSONSerialization's reading of the
+/// hub's value (strings, numbers, arrays and dictionaries of them), taken
+/// once and never mutated.
+nonisolated struct Block: @unchecked Sendable {
     let id: String
     let type: String
     let content: String
@@ -61,16 +67,18 @@ struct Block {
 
     var date: Date? {
         guard let timestamp else { return nil }
-        if let read = Block.read[timestamp] { return read }
+        if let read = Block.read.withLock({ $0[timestamp] }) { return read }
         let date = Block.iso.date(from: timestamp) ?? Block.isoPlain.date(from: timestamp)
-        Block.read[timestamp] = date
+        Block.read.withLock { $0[timestamp] = date }
         return date
     }
 
     /// Timestamps already read, by their text: every build asks for every
-    /// turn's, and reading one is slow. Blocks are only read on the main actor.
-    private nonisolated(unsafe) static var read: [String: Date] = [:]
+    /// turn's, and reading one is slow. Read where the transcript is
+    /// prepared and where rows are drawn, so it is locked.
+    private static let read = Mutex<[String: Date]>([:])
 
+    /// ISO8601DateFormatter is thread safe; these are set up once and only read.
     private nonisolated(unsafe) static let iso: ISO8601DateFormatter = {
         let format = ISO8601DateFormatter()
         format.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
@@ -82,7 +90,7 @@ struct Block {
 
 /// A subagent's branch as the web's `SubagentState` holds it: the hub's
 /// branch, its blocks and the text it is streaming.
-struct Branch {
+nonisolated struct Branch: Sendable {
     let toolUseId: String
     let status: String
     let subagentType: String

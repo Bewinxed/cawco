@@ -2,6 +2,7 @@ import CawCoDesign
 import Highlightr
 import JavaScriptCore
 import Markdown
+import Synchronization
 import UIKit
 
 extension NSAttributedString.Key {
@@ -27,7 +28,11 @@ nonisolated enum ListDisc {
 /// One block of rendered Markdown, as the shared `Markdown` component draws it
 /// inside `.prose`: running text, a fence in its code well (OutputBlock), a
 /// table, a quote, a rule.
-struct MarkdownBlock {
+///
+/// Sendable by construction: `MarkdownRender` builds its attributed strings
+/// once, where the transcript is prepared, and nothing mutates them after;
+/// an NSAttributedString is safe to read from any thread.
+nonisolated struct MarkdownBlock: @unchecked Sendable {
     enum Kind {
         case text(NSAttributedString)
         case code(language: String?, text: String)
@@ -56,7 +61,7 @@ struct MarkdownBlock {
 /// prose-sm (with app.css's type over it) and the container's own rules over
 /// that. A document keeps prose-sm's rhythm; a turn, a tool's markdown and a
 /// reasoning step each put one gap of their own between blocks.
-struct ProseStyle {
+nonisolated struct ProseStyle: Sendable {
     var ink: UIColor = Palette.inkStrong
     var role: TypeRole = TypeScale.typeBody
     /// The running text's line height; nil keeps the role's.
@@ -98,32 +103,82 @@ struct ProseStyle {
     /// The window's width, which the fluid title size (`clamp(…vi…)`) of
     /// prose's h1 and h2 is resolved against; MessageBody sets it.
     var viewport: Double?
+    /// The style's name, which MarkdownCache keeps its renders under; a style
+    /// changed from a named one is a different style and is not kept.
+    var name: String?
 
     /// A turn's words (MessageBody.svelte): --space-3 between blocks and
     /// --space-5 over a heading, headings at the body size, code at the label
     /// size on the recess.
-    static let body = ProseStyle(codeSize: TypeScale.textLabel, codeSurface: Palette.surfaceRecess, codePad: Size.txCodeSpanPad)
+    static let body = ProseStyle(codeSize: TypeScale.textLabel, codeSurface: Palette.surfaceRecess, codePad: Size.txCodeSpanPad, name: "body")
     /// The reader's own words, in their well: code lifts to the raised surface.
-    static let well = ProseStyle(codeSize: TypeScale.textLabel, codeSurface: Palette.surfaceRaised, codePad: Size.txCodeSpanPad)
-    static let muted = ProseStyle(ink: Palette.inkMuted, codeSize: TypeScale.textLabel, codeSurface: Palette.surfaceRecess, codePad: Size.txCodeSpanPad)
+    static let well = ProseStyle(codeSize: TypeScale.textLabel, codeSurface: Palette.surfaceRaised, codePad: Size.txCodeSpanPad, name: "well")
+    static let muted = ProseStyle(ink: Palette.inkMuted, codeSize: TypeScale.textLabel, codeSurface: Palette.surfaceRecess,
+                                  codePad: Size.txCodeSpanPad, name: "muted")
     /// A reasoning step (thinking-step.svelte): muted, --space-1 above each
     /// block and nothing below, strong in the strong ink, no backticks.
     static let step = ProseStyle(ink: Palette.inkMuted, blockGap: Space.space1, flushBottoms: true, headingGap: Space.space1,
                                  headingSize: nil, paragraphGap: 0, itemParagraphGap: 0, strongInk: Palette.inkStrong, codeTicks: false,
-                                 wraps: true)
+                                 wraps: true, name: "step")
     /// ToolProse: a tool's markdown, --space-2 apart, h1 to h4 --space-4 down
     /// and at the label size, no backticks.
     static let tool = ProseStyle(blockGap: Space.space2, headingGap: Space.space4, headingGapThrough: 4,
-                                 headingSize: TypeScale.textLabel, paragraphGap: 0, itemParagraphGap: 0, codeTicks: false, wraps: true)
+                                 headingSize: TypeScale.textLabel, paragraphGap: 0, itemParagraphGap: 0, codeTicks: false, wraps: true,
+                                 name: "tool")
     /// A rendered document (the project page's docs card, a memory file):
     /// prose-sm as it stands, on its 24/14 line.
     static let document = ProseStyle(leading: TypeScale.leadingProseSm, blockGap: nil, headingGap: nil, headingSize: nil,
                                      paragraphGap: Size.proseSmBlock, listInset: Size.proseSmListInset,
                                      nestedListGap: Size.proseSmNestedList, nestedListAfter: Size.proseSmNestedList,
-                                     itemParagraphGap: Size.proseSmNestedList, wraps: true)
+                                     itemParagraphGap: Size.proseSmNestedList, wraps: true, name: "document")
 }
 
-enum MarkdownRender {
+/// Rendered Markdown by source, named style and viewport, shared by the
+/// transcript's preparation (off the main thread, TranscriptPrep) and the
+/// rows that draw it, so a row set up on the main thread reads its words
+/// rather than parsing them there. Bounded: past `limit` sources the oldest
+/// half goes.
+nonisolated final class MarkdownCache: Sendable {
+    static let shared = MarkdownCache()
+    static let limit = 2400
+
+    private struct Key: Hashable {
+        let source: String
+        let style: String
+        let viewport: Double?
+    }
+
+    private struct Held {
+        var blocks: [Key: [MarkdownBlock]] = [:]
+        var order: [Key] = []
+    }
+
+    private let held = Mutex(Held())
+
+    /// The blocks of `source` in `style`, rendered now where nobody has yet.
+    func blocks(_ source: String, style: ProseStyle) -> [MarkdownBlock] {
+        guard let name = style.name else { return MarkdownRender.blocks(source, style: style) }
+        let key = Key(source: source, style: name, viewport: style.viewport)
+        if let blocks = held.withLock({ $0.blocks[key] }) { return blocks }
+        let blocks = MarkdownRender.blocks(source, style: style)
+        held.withLock { held in
+            guard held.blocks[key] == nil else { return }
+            held.blocks[key] = blocks
+            held.order.append(key)
+            if held.order.count > Self.limit {
+                let gone = held.order.prefix(Self.limit / 2)
+                for key in gone { held.blocks[key] = nil }
+                held.order.removeFirst(gone.count)
+            }
+        }
+        return blocks
+    }
+
+    /// Forgets every render (a type size or a theme change).
+    func clear() { held.withLock { $0 = Held() } }
+}
+
+nonisolated enum MarkdownRender {
     /// The blocks of a source, top level first to last.
     static func blocks(_ source: String, style: ProseStyle = .body) -> [MarkdownBlock] {
         var out: [MarkdownBlock] = []

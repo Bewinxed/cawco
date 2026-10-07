@@ -112,7 +112,7 @@ final class FloatNote: UILabel {
 /// One block of an assistant turn: under its speaker line when it opens the
 /// turn, its clock floated into the first line when grouped. The live tail's
 /// block shows each chunk's words fading in.
-final class PieceView: UIView, RowContent {
+final class PieceView: UIView, RowContent, FitsWidth {
     private let env: RowEnv
     private let stack = UIStackView()
     private let who = WhoView()
@@ -120,7 +120,16 @@ final class PieceView: UIView, RowContent {
     private var blocks: [UIView] = []
     /// The width the row stands at in the list, which its blocks span
     /// (ProseView `fitWidth`); nil where the piece is drawn inside another row.
-    var fitWidth: CGFloat?
+    var fitWidth: CGFloat? {
+        didSet {
+            guard fitWidth != oldValue else { return }
+            for view in blocks {
+                (view as? ProseView)?.fitWidth = fitWidth
+                (view as? TableBlock)?.fitWidth = fitWidth
+                (view as? QuoteBlock)?.text.fitWidth = fitWidth.map { $0 - QuoteBlock.inset }
+            }
+        }
+    }
 
     init(env: RowEnv) {
         self.env = env
@@ -219,7 +228,7 @@ final class PieceView: UIView, RowContent {
 /// tap (composer-recall); a touch screen says so in its note. While its
 /// words are in the composer the bubble folds down to its tag ("Queued ·
 /// editing it below") on an empty well, and unfolds when they come back.
-final class UserTurnView: UIView, RowContent, UIGestureRecognizerDelegate {
+final class UserTurnView: UIView, RowContent, FitsWidth, UIGestureRecognizerDelegate {
     private let env: RowEnv
     private let who = WhoView()
     private let well = WellSurface()
@@ -237,8 +246,9 @@ final class UserTurnView: UIView, RowContent, UIGestureRecognizerDelegate {
     private var inner: [NSLayoutConstraint] = []
     private var block: Block?
     private var retried: String?
-    /// The width the row stands at in the list (ProseView `fitWidth`).
-    var fitWidth: CGFloat?
+    /// The width the row stands at in the list (ProseView `fitWidth`); its
+    /// words stand in the well, its padding either side of them.
+    var fitWidth: CGFloat? { didSet { body.fitWidth = fitWidth.map { $0 - 2 * Space.space2 } } }
 
     init(env: RowEnv) {
         self.env = env
@@ -319,8 +329,6 @@ final class UserTurnView: UIView, RowContent, UIGestureRecognizerDelegate {
         let floated = turn.grouped ? [note, clock].compactMap(\.self).joined(separator: " ") : nil
         float.set(floated?.isEmpty == false ? floated : nil)
         body.floatSize = float.isHidden ? .zero : FloatNote.size(floated ?? "")
-        // The words stand in the well, its padding either side of them.
-        body.fitWidth = fitWidth.map { $0 - 2 * Space.space2 }
         body.configure(env.replacement(block.id) ?? block.content, style: .well)
         let ghost = waiting && !taken ? Effect.ghostPresence : 1
         who.alpha = ghost

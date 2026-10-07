@@ -64,7 +64,6 @@ nonisolated final class ProseFragment: NSTextLayoutFragment {
 class ProseView: UITextView, NSTextLayoutManagerDelegate {
     /// A rect kept clear at the first line's end, for a grouped turn's clock.
     var floatSize: CGSize = .zero { didSet { if floatSize != oldValue { setNeedsLayout(); invalidateIntrinsicContentSize() } } }
-    private var fades: [(range: NSRange, at: Double, color: UIColor)] = []
     private let wrap: LineWrap.Container
     /// The layout manager holds its content manager weakly.
     private let content: NSTextContentStorage
@@ -133,29 +132,44 @@ class ProseView: UITextView, NSTextLayoutManagerDelegate {
     /// another width lets go of it.
     var fitWidth: CGFloat? { didSet { if fitWidth != oldValue { invalidateIntrinsicContentSize() } } }
 
-    /// The text's own height, as CSS keeps a block's: a text view rounds its
-    /// height up to a whole point, which over a run of blocks puts each a
-    /// fraction lower than the web's (a 16.2pt line took 17).
+    /// The width layout gave the view, where nobody said one beforehand
+    /// (`fitWidth`): its height is measured at that width from then on.
+    private var laidWidth: CGFloat?
+
+    /// The text's own height at the width it stands at, as CSS keeps a
+    /// block's (a text view rounds its height up to a whole point, which over
+    /// a run of blocks put each a fraction lower than the web's). The width is
+    /// `fitWidth`, else the one layout gave the view, else, before its first
+    /// layout, its max-content width: never a guess at no width. UITextView's
+    /// own intrinsic size is never asked: it laid the text out again at
+    /// whatever width the view had, which before its first layout was none
+    /// (a 554-character tool value measured 4,181pt tall in a 162pt view).
+    /// The text is laid out once, in its own container, and that layout is
+    /// the one it is drawn from.
     override var intrinsicContentSize: CGSize {
-        // At a width known beforehand the text is laid out once, in its own
-        // container, and that layout is the one it is then drawn from.
-        if let width = fitWidth, width > 0, floatSize == .zero, textStorage.length > 0, let manager = textLayoutManager {
-            if abs(textContainer.size.width - width) > 0.01 { textContainer.size = CGSize(width: width, height: 0) }
-            rewrap(at: width, measuring: true)
-            manager.ensureLayout(for: manager.documentRange)
-            fitted = manager.usageBoundsForTextContainer.height + textContainerInset.top + textContainerInset.bottom
-            return CGSize(width: UIView.noIntrinsicMetric, height: fitted)
+        let natural = fitWidth == nil ? naturalWidth : UIView.noIntrinsicMetric
+        let width = fitWidth ?? laidWidth ?? naturalWidth
+        guard width > 0, textStorage.length > 0, let manager = textLayoutManager else {
+            fitted = 0
+            return CGSize(width: natural, height: 0)
         }
-        let size = super.intrinsicContentSize
-        guard size.height != UIView.noIntrinsicMetric, textStorage.length > 0, let manager = textLayoutManager else { return size }
+        let inner = width - textContainerInset.left - textContainerInset.right
+        if abs(textContainer.size.width - inner) > 0.01 { textContainer.size = CGSize(width: inner, height: 0) }
+        exclude(at: width)
+        rewrap(at: inner, measuring: true)
         manager.ensureLayout(for: manager.documentRange)
-        let used = manager.usageBoundsForTextContainer.height + textContainerInset.top + textContainerInset.bottom
-        fitted = used
-        let width = size.width == UIView.noIntrinsicMetric ? size.width : naturalWidth
-        // Only the round-up is taken off: where the two disagree by a point or
-        // more, the container has not been laid out at this width yet.
-        let over = size.height - used
-        return CGSize(width: width, height: over > 0 && over < 1 ? used : size.height)
+        fitted = manager.usageBoundsForTextContainer.height + textContainerInset.top + textContainerInset.bottom
+        return CGSize(width: natural, height: fitted)
+    }
+
+    /// Keeps the float's rect clear at `width`; whether that changed the container.
+    @discardableResult
+    private func exclude(at width: CGFloat) -> Bool {
+        let clear = floatSize == .zero ? nil : CGRect(x: width - floatSize.width, y: 0, width: floatSize.width, height: floatSize.height)
+        guard clear != excluded else { return false }
+        excluded = clear
+        textContainer.exclusionPaths = clear.map { [UIBezierPath(rect: $0)] } ?? []
+        return true
     }
 
     /// The width the text asks for where its view is sized to it (a
@@ -191,15 +205,21 @@ class ProseView: UITextView, NSTextLayoutManagerDelegate {
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        let clear = floatSize == .zero ? nil : CGRect(x: bounds.width - floatSize.width, y: 0,
-                                                      width: floatSize.width, height: floatSize.height)
-        if clear != excluded {
-            excluded = clear
-            textContainer.exclusionPaths = clear.map { [UIBezierPath(rect: $0)] } ?? []
+        if let fit = fitWidth, bounds.width > 0, abs(bounds.width - fit) > 0.5 { fitWidth = nil }
+        // The width the text stands at, learnt from this pass: measured there
+        // from now on, and the pass that sizes the row asks again.
+        if fitWidth == nil, bounds.width > 0, abs(bounds.width - (laidWidth ?? -1)) > 0.5 {
+            laidWidth = bounds.width
             invalidateIntrinsicContentSize()
         }
-        if let fit = fitWidth, bounds.width > 0, abs(bounds.width - fit) > 0.5 { fitWidth = nil }
+        if exclude(at: bounds.width) { invalidateIntrinsicContentSize() }
         rewrap(at: bounds.width - textContainerInset.left - textContainerInset.right)
+        // Laid out at a height other than its own (it learnt its width after
+        // its row was measured): the row is measured again, once a text and width.
+        if bounds.width > 0, abs(intrinsicContentSize.height - bounds.height) > 1, remeasured.map({ $0 != (version, bounds.width) }) ?? true {
+            remeasured = (version, bounds.width)
+            remeasureRow()
+        }
         // The frame is snapped to whole pixels and can come out a fraction
         // shorter than the text (LineWrap.Container `size`): said once a text.
         if bounds.height > 0, fitted - bounds.height > 0.01, shortFor != version {
@@ -210,6 +230,8 @@ class ProseView: UITextView, NSTextLayoutManagerDelegate {
 
     /// The text's own height, as last measured for the view's size.
     private var fitted = 0.0
+    /// The text and width the row was last asked to measure again for.
+    private var remeasured: (Int, CGFloat)?
     /// The text version a short view was last logged for.
     private var shortFor = -1
     private static let log = Logger(subsystem: "dev.cawco.app", category: "Prose")
@@ -232,7 +254,8 @@ class ProseView: UITextView, NSTextLayoutManagerDelegate {
     }
 
     /// The text, replacing only what changed from the first differing paragraph
-    /// on, and fading the words it adds when `fading`.
+    /// on. When `fading`, what it adds is the cursor's latest stretch: it
+    /// joins the soft edge (`fade`).
     func show(_ next: NSAttributedString, fading: Bool) {
         let storage = textStorage
         let old = storage.string as NSString
@@ -250,31 +273,77 @@ class ProseView: UITextView, NSTextLayoutManagerDelegate {
         textChanged()
         guard fading, !UIAccessibility.isReduceMotionEnabled, new.length > old.length else { return }
         let now = CACurrentMediaTime()
-        new.enumerateSubstrings(in: NSRange(location: old.length, length: new.length - old.length),
-                                options: [.byWords, .substringNotRequired]) { _, word, _, _ in
-            let color = storage.attribute(.foregroundColor, at: word.location, effectiveRange: nil) as? UIColor ?? Palette.inkStrong
-            self.fades.append((word, now, color))
-        }
+        // The stretch was uncovered over the frame that drew it, not at its
+        // end: its characters are spread across that frame, so the edge is a
+        // ramp rather than a step a frame.
+        let from = max(uncoveredAt, now - Self.stretchSpan)
+        uncovered.append((NSRange(location: old.length, length: new.length - old.length), from, now))
+        uncoveredAt = now
     }
 
     func clear() {
-        fades = []
+        uncovered = []
         textStorage.setAttributedString(NSAttributedString())
         textChanged()
     }
 
-    /// One frame of the chunk fade: each new word's opacity on --dur-menu, --ease-out.
+    /// The streamed text's soft edge (prompt-3, pacing: "each word the cursor
+    /// uncovers fades in with opacity only, over --dur-menu, --ease-out"):
+    /// each stretch the cursor uncovered, with the moments its first and last
+    /// characters were uncovered. Every character fades in from its own
+    /// moment, so the newest words ramp from clear to full behind the cursor
+    /// over as many characters as it crosses in --dur-menu, and a word that
+    /// grows never pops. Drawn as TextKit rendering attributes: the colour is
+    /// painted, the text is never laid out again for it.
+    private var uncovered: [(range: NSRange, from: Double, to: Double)] = []
+    /// When the cursor last uncovered text here.
+    private var uncoveredAt = 0.0
+    /// The longest a stretch is spread over: a frame at the slowest rate the
+    /// display link runs at.
+    private static let stretchSpan = 1.0 / 30
+    /// Opacity steps the edge is painted in: finer than the eye tells apart,
+    /// coarse enough that a frame paints a run per step, not per character.
+    private static let steps = 24.0
+    /// The range the last frame of the edge painted, cleared before the next.
+    private var painted: NSRange?
+
+    /// One frame of the soft edge.
     func fade(_ now: Double) {
-        guard !fades.isEmpty, let manager = textLayoutManager, let content = manager.textContentManager else { return }
-        fades.removeAll { entry in
-            guard NSMaxRange(entry.range) <= textStorage.length,
-                  let start = content.location(content.documentRange.location, offsetBy: entry.range.location),
-                  let end = content.location(start, offsetBy: entry.range.length),
-                  let range = NSTextRange(location: start, end: end) else { return true }
-            let progress = min(1, (now - entry.at) / Motion.durMenu)
-            if progress >= 1 { manager.removeRenderingAttribute(.foregroundColor, for: range); return true }
-            manager.addRenderingAttribute(.foregroundColor, value: entry.color.withAlphaComponent(Motion.easeOut.value(at: progress)), for: range)
-            return false
+        guard painted != nil || !uncovered.isEmpty, let manager = textLayoutManager, let content = manager.textContentManager else { return }
+        let length = textStorage.length
+        func textRange(_ range: NSRange) -> NSTextRange? {
+            guard let start = content.location(content.documentRange.location, offsetBy: range.location),
+                  let end = content.location(start, offsetBy: range.length) else { return nil }
+            return NSTextRange(location: start, end: end)
+        }
+        if let painted, let range = textRange(NSIntersectionRange(painted, NSRange(location: 0, length: length))) {
+            manager.removeRenderingAttribute(.foregroundColor, for: range)
+        }
+        painted = nil
+        uncovered.removeAll { now - $0.to >= Motion.durMenu || $0.range.location >= length }
+        // Runs of one colour at one step, along the edge.
+        var runs: [(range: NSRange, color: UIColor)] = []
+        for stretch in uncovered {
+            let range = NSIntersectionRange(stretch.range, NSRange(location: 0, length: length))
+            guard range.length > 0 else { continue }
+            for i in range.location ..< NSMaxRange(range) {
+                let at = stretch.from + (stretch.to - stretch.from) * Double(i - stretch.range.location + 1) / Double(stretch.range.length)
+                let progress = min(1, max(0, (now - at) / Motion.durMenu))
+                guard progress < 1 else { continue }
+                let alpha = (Motion.easeOut.value(at: progress) * Self.steps).rounded(.down) / Self.steps
+                let ink = textStorage.attribute(.foregroundColor, at: i, effectiveRange: nil) as? UIColor ?? Palette.inkStrong
+                let color = ink.withAlphaComponent(alpha * ink.cgColor.alpha)
+                if let last = runs.last, NSMaxRange(last.range) == i, last.color == color {
+                    runs[runs.count - 1].range.length += 1
+                } else {
+                    runs.append((NSRange(location: i, length: 1), color))
+                }
+            }
+        }
+        for run in runs {
+            guard let range = textRange(run.range) else { continue }
+            manager.addRenderingAttribute(.foregroundColor, value: run.color, for: range)
+            painted = painted.map { NSUnionRange($0, run.range) } ?? run.range
         }
     }
 }
@@ -597,7 +666,7 @@ final class MessageBody: UIView {
     private var source: String?
     private var style = ProseStyle.body
     /// Kept clear at the first line's end (a grouped turn's floated clock).
-    var floatSize: CGSize = .zero { didSet { (stack.arrangedSubviews.first as? ProseView)?.floatSize = floatSize } }
+    var floatSize: CGSize = .zero { didSet { (views.first as? ProseView)?.floatSize = floatSize } }
 
     init() {
         super.init(frame: .zero)
@@ -649,8 +718,9 @@ final class MessageBody: UIView {
         rendered = viewport
         var style = style
         style.viewport = viewport
-        let blocks = MarkdownRender.blocks(source, style: style)
-        let views = stack.arrangedSubviews
+        // Rendered where the transcript was prepared (MarkdownCache), off
+        // the main thread; rendered here only for words it never saw.
+        let blocks = MarkdownCache.shared.blocks(source, style: style)
         let same = views.count == blocks.count && zip(views, blocks).allSatisfy { view, block in
             switch block.kind {
             case .text: view is ProseView
@@ -667,25 +737,33 @@ final class MessageBody: UIView {
                 }
             }
         } else {
-            views.forEach { $0.removeFromSuperview() }
-            for block in blocks { stack.addArrangedSubview(blockView(block)) }
+            // The block views are this view's own list, replaced whole: never
+            // the stack's live `arrangedSubviews`, which shrank under the loop
+            // that took them out (TestFlight 20261007.6: index 1 beyond bounds).
+            let old = views
+            views = blocks.map(blockView)
+            for view in old { view.removeFromSuperview() }
+            for view in views { stack.addArrangedSubview(view) }
         }
         for i in blocks.indices.dropFirst() {
-            stack.setCustomSpacing(MarkdownRender.gap(after: blocks[i - 1], before: blocks[i]), after: stack.arrangedSubviews[i - 1])
+            stack.setCustomSpacing(MarkdownRender.gap(after: blocks[i - 1], before: blocks[i]), after: views[i - 1])
         }
-        (stack.arrangedSubviews.first as? ProseView)?.floatSize = floatSize
-        for case let text as ProseView in stack.arrangedSubviews { text.fitWidth = fitWidth }
+        (views.first as? ProseView)?.floatSize = floatSize
+        for case let text as ProseView in views { text.fitWidth = fitWidth }
     }
+
+    /// The block views, in order: what the stack arranges.
+    private var views: [UIView] = []
 
     /// The width the words stand at, where their row knows it (ProseView `fitWidth`).
     var fitWidth: CGFloat? {
         didSet {
             guard fitWidth != oldValue else { return }
-            for case let text as ProseView in stack.arrangedSubviews { text.fitWidth = fitWidth }
+            for case let text as ProseView in views { text.fitWidth = fitWidth }
         }
     }
 
     func fade(_ now: Double) {
-        for case let view as ProseView in stack.arrangedSubviews { view.fade(now) }
+        for case let view as ProseView in views { view.fade(now) }
     }
 }

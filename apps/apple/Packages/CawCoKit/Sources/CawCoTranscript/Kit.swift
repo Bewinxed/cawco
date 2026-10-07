@@ -34,7 +34,7 @@ enum RailInk {
 }
 
 /// Text set in a type role, optionally at another size or in another face.
-enum Styled {
+nonisolated enum Styled {
     static func attributes(_ role: TypeRole, color: UIColor, size: Double? = nil, weight: UIFont.Weight? = nil,
                            leading: Double? = nil, mono: Bool = false, tabular: Bool = false,
                            lineBreak: NSLineBreakMode = .byTruncatingTail, textKit2: Bool = false) -> [NSAttributedString.Key: Any] {

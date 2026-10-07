@@ -22,6 +22,10 @@ public final class SessionTranscript {
     /// An answer, not a fault: retrying would ask the same question.
     public internal(set) var missing = false
     public internal(set) var blockRevision = 0
+    /// Bumped by every read of history (the newest page, an older page, a read
+    /// again); a change in blocks under the same value came on the live
+    /// stream (arrivals.svelte.ts: a history path replaces, a live path pushes).
+    public internal(set) var historyRevision = 0
     init(_ id: String) { self.id = id }
 }
 
@@ -132,27 +136,18 @@ public final class SessionsStore {
             guard let self else { return }
             do {
                 let page: Components.Schemas.TranscriptPage
-                switch try await client.getApiInstancesByIdTranscript(path: .init(id: id)) {
-                case let .ok(ok): page = try ok.body.json
-                case .notFound:
+                switch try await Self.page(client, id: id, before: nil) {
+                case let .read(read): page = read
+                case .missing:
                     guard !Task.isCancelled else { return }
                     transcript.loading = false
                     transcript.missing = true
                     return
-                case let .undocumented(statusCode, payload):
-                    var detail = ""
-                    if let body = payload.body { detail = try await String(collecting: body, upTo: 64_000) }
+                case let .away(machine):
                     // A 503 naming a machine is the hub saying that machine is not connected.
-                    if statusCode == 503, let away = payload.headerFields.first(where: { $0.name.canonicalName == "x-cawco-machine" })?.value {
-                        let host = hub.fleet.machines.first { $0.machineId == away }?.hostname ?? away
-                        throw Fault(ReadFault(reason: .offline, machineId: away,
-                                              message: "\(host) is offline — its stored transcript can't be read right now."))
-                    }
-                    throw Fault(ReadFault(reason: .failed, machineId: nil, message: detail.isEmpty ? "The hub answered \(statusCode)" : detail))
-                case let .conflict(answer): throw Fault(try await Self.failed(answer.body.plainText))
-                case let .internalServerError(answer): throw Fault(try await Self.failed(answer.body.plainText))
-                case let .gatewayTimeout(answer): throw Fault(try await Self.failed(answer.body.plainText))
-                case .unprocessableContent: throw Fault(ReadFault(reason: .failed, machineId: nil, message: "The hub refused the read"))
+                    let host = hub.fleet.machines.first { $0.machineId == machine }?.hostname ?? machine
+                    throw Fault(ReadFault(reason: .offline, machineId: machine,
+                                          message: "\(host) is offline — its stored transcript can't be read right now."))
                 }
                 guard !Task.isCancelled else { return }
                 // What this client was told about its own actions stays under what the hub holds.
@@ -165,6 +160,7 @@ public final class SessionsStore {
                 hub.tasks.refresh(id)
                 transcript.cursor = page.cursor
                 transcript.blockRevision += 1
+                transcript.historyRevision += 1
                 transcript.loading = false
                 // The history page and its seq are one atomic view of the hub.
                 // Resume after it, including events that arrived during the read.
@@ -181,9 +177,46 @@ public final class SessionsStore {
         }
     }
 
-    private struct Fault: Error { let fault: ReadFault; init(_ fault: ReadFault) { self.fault = fault } }
+    private struct Fault: Error, Sendable { let fault: ReadFault; init(_ fault: ReadFault) { self.fault = fault } }
 
-    private static func failed(_ body: HTTPBody) async throws -> ReadFault {
+    /// What a page read came back with.
+    private enum PageAnswer: Sendable {
+        case read(Components.Schemas.TranscriptPage)
+        /// The hub answered 404.
+        case missing
+        /// The machine holding the transcript is not connected (a 503 naming it).
+        case away(String)
+    }
+
+    /// One page of a transcript, fetched and decoded off the main thread:
+    /// the generated client's calls run on their caller's actor, and a long
+    /// session's page decoded there held the main thread while it opened.
+    /// `before`: the cursor of an older page (TRANSCRIPT_OLDER_PAGE, 250 rows).
+    @concurrent
+    private nonisolated static func page(_ client: Client, id: String, before: String?) async throws -> PageAnswer {
+        let output = if let before {
+            try await client.getApiInstancesByIdTranscript(path: .init(id: id), query: .init(limit: "250", before: before))
+        } else {
+            try await client.getApiInstancesByIdTranscript(path: .init(id: id))
+        }
+        switch output {
+        case let .ok(ok): return .read(try ok.body.json)
+        case .notFound: return .missing
+        case let .undocumented(statusCode, payload):
+            if statusCode == 503, let away = payload.headerFields.first(where: { $0.name.canonicalName == "x-cawco-machine" })?.value {
+                return .away(away)
+            }
+            var detail = ""
+            if let body = payload.body { detail = try await String(collecting: body, upTo: 64_000) }
+            throw Fault(ReadFault(reason: .failed, machineId: nil, message: detail.isEmpty ? "The hub answered \(statusCode)" : detail))
+        case let .conflict(answer): throw Fault(try await failed(answer.body.plainText))
+        case let .internalServerError(answer): throw Fault(try await failed(answer.body.plainText))
+        case let .gatewayTimeout(answer): throw Fault(try await failed(answer.body.plainText))
+        case .unprocessableContent: throw Fault(ReadFault(reason: .failed, machineId: nil, message: "The hub refused the read"))
+        }
+    }
+
+    private nonisolated static func failed(_ body: HTTPBody) async throws -> ReadFault {
         ReadFault(reason: .failed, machineId: nil, message: try await String(collecting: body, upTo: 64_000))
     }
 
@@ -193,16 +226,15 @@ public final class SessionsStore {
         transcript.loadingOlder = true
         defer { transcript.loadingOlder = false }
         while let before = transcript.cursor, !Task.isCancelled {
-            await Task.yield()
             // TRANSCRIPT_OLDER_PAGE (apps/dashboard/src/lib/config.ts): 250 rows a page behind the newest.
-            guard case let .ok(ok) = try? await client.getApiInstancesByIdTranscript(path: .init(id: transcript.id),
-                                                                                       query: .init(limit: "250", before: before)),
-                  let page = try? ok.body.json, transcript.cursor == before, !Task.isCancelled else { return }
+            guard case let .read(page) = try? await Self.page(client, id: transcript.id, before: before),
+                  transcript.cursor == before, !Task.isCancelled else { return }
             let held = Set(transcript.blocks.map(\.id))
             transcript.blocks.insert(contentsOf: page.blocks.filter { !held.contains($0.id) }, at: 0)
             transcript.branches.insert(contentsOf: page.branches, at: 0)
             transcript.cursor = page.cursor
             transcript.blockRevision += 1
+            transcript.historyRevision += 1
         }
     }
 

@@ -4,7 +4,7 @@ import UIKit
 
 /// A rail row's frame: the 2px rail at the rail edge, its content from the
 /// glyph column (app.css `.rail-row`).
-class RailRow: UIView {
+class RailRow: UIView, FitsWidth {
     let env: RowEnv
     let rail = UIView()
     let body = UIStackView()
@@ -12,6 +12,16 @@ class RailRow: UIView {
     private var railLead: NSLayoutConstraint!
     /// The rail's ink: the flat --rail, or a failure's --status-fail-ink.
     var railColor: UIColor = RailInk.rail { didSet { rail.backgroundColor = railColor } }
+
+    /// The width the row stands at in the list (RowStore): what its body's
+    /// text is laid out at, before layout says it.
+    var fitWidth: CGFloat? { didSet { if fitWidth != oldValue { widthChanged() } } }
+
+    /// The body's width: the row's, from the glyph column on.
+    var bodyWidth: CGFloat? { fitWidth.map { $0 - env.columns.glyph } }
+
+    /// The row stands at another width: what was laid out for the old one is again.
+    func widthChanged() {}
 
     required init(env: RowEnv) {
         self.env = env
@@ -127,6 +137,10 @@ final class ToolLineView: RailRow, RowContent, Disclosing {
         return reveal.toggle(open: open)
     }
 
+    override func widthChanged() {
+        if reveal.isOpen { fillBody(force: true) }
+    }
+
     private var block: Block?
 
     /// A `show_preview` card: full presence while the session's open preview
@@ -239,9 +253,9 @@ final class ToolLineView: RailRow, RowContent, Disclosing {
     /// The disclosed body, built only once the call is open (CollapsibleLazy).
     private func fillBody(force: Bool) {
         guard let block else { return }
-        let print = String(decoding: block.signature, as: UTF8.self)
-        guard force || bodyPrint != print else { return }
-        if bodyPrint == print { return }
+        // Built again only for another block or another width.
+        let print = String(decoding: block.signature, as: UTF8.self) + "\(bodyWidth ?? -1)"
+        guard bodyPrint != print else { return }
         bodyPrint = print
         opened.arrangedSubviews.forEach { $0.removeFromSuperview() }
         let d = ToolDescriptor.describe(block.toolName, input: block.toolInput, result: block.toolResult, status: block.toolStatus)
@@ -275,16 +289,19 @@ final class ToolLineView: RailRow, RowContent, Disclosing {
             offset = env.columns.hang
         case .skill where !failed:
             let prose = MessageBody()
+            offset = env.columns.hang
+            prose.fitWidth = bodyWidth.map { $0 - offset }
             prose.configure(ToolDescriptor.str(block.toolInput["args"]) ?? "", style: .tool)
             content = prose
-            offset = env.columns.hang
             margins = (Space.space1, Space.space3)
         default:
             var fields: [(String, String)] = d.expanded == .memory ? [] : block.toolInput.keys.sorted(by: Self.inputOrder(block)).map { key in
                 (key, Self.text(block.toolInput[key] as Any))
             }
             if let result { fields.append(("result", result.text)) }
-            content = FieldsView(fields, more: result?.more ?? 0)
+            // Its values are laid out at the width they stand at from the
+            // start: the well's, from the hang to the row's end.
+            content = FieldsView(fields, more: result?.more ?? 0, width: bodyWidth.map { $0 - offset })
         }
         let box = UIView()
         box.pin(content, insets: UIEdgeInsets(top: margins.top, left: offset, bottom: margins.bottom, right: 0))
@@ -359,7 +376,9 @@ enum PresentTools {
 /// A call's disclosed payload (ToolGroup `.fields`): each input field and the
 /// result, key over value, in a recessed well; a value past 300pt scrolls.
 final class FieldsView: UIView {
-    init(_ fields: [(String, String)], more: Int) {
+    /// `width`: the well's, where the row knows it; its values stand at that less its padding.
+    init(_ fields: [(String, String)], more: Int, width: CGFloat?) {
+        let inner = width.map { $0 - CGFloat(2 * Space.space3) }
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         backgroundColor = Palette.surfaceRecess
@@ -373,9 +392,12 @@ final class FieldsView: UIView {
             field.axis = .vertical
             field.spacing = Space.space1
             let k = WrapLabel()
+            k.fitWidth = inner
             k.attributedText = Styled.string(key, TypeScale.typeLabel, color: Palette.inkMuted, leading: TypeScale.leadingRoot)
             field.addArrangedSubview(k)
-            field.addArrangedSubview(CappedText(value))
+            let text = CappedText(value)
+            text.fitWidth = inner
+            field.addArrangedSubview(text)
             if i == fields.count - 1, more > 0 {
                 let note = WrapLabel()
                 note.attributedText = Styled.string("… \(more.formatted()) more chars", TypeScale.typeMeta, color: Palette.inkMuted)
@@ -391,32 +413,69 @@ final class FieldsView: UIView {
 }
 
 /// Mono text that wraps anywhere and scrolls past `--tx-field-cap`.
+///
+/// Its height is its own: the text's at its width, at most the cap, as an
+/// intrinsic size nothing compresses. It was the scroll view's frame held to
+/// its content by a constraint below required, which the layout broke
+/// whenever the row was measured short: the value, laid out and drawn,
+/// stood in a 0pt clip (a 584pt value in a 359×0 frame), its key bunched
+/// against the next, and the row's height left blank under them.
 final class CappedText: UIView {
-    init(_ text: String, cap: Double = Size.txFieldCap) {
+    private let scroll = UIScrollView()
+    private let text = ProseView()
+    private let cap: Double
+
+    init(_ value: String, cap: Double = Size.txFieldCap) {
+        self.cap = cap
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
-        let scroll = UIScrollView()
-        let view = ProseView()
-        view.attributedText = Styled.string(text, TypeScale.typeCode, color: Palette.inkStrong, size: TypeScale.textLabel,
+        text.attributedText = Styled.string(value, TypeScale.typeCode, color: Palette.inkStrong, size: TypeScale.textLabel,
                                             leading: TypeScale.leadingBody, mono: true, lineBreak: .byCharWrapping, textKit2: true)
-        view.translatesAutoresizingMaskIntoConstraints = false
+        text.translatesAutoresizingMaskIntoConstraints = false
         scroll.translatesAutoresizingMaskIntoConstraints = false
         pin(scroll)
-        scroll.addSubview(view)
-        let fit = scroll.frameLayoutGuide.heightAnchor.constraint(equalTo: scroll.contentLayoutGuide.heightAnchor)
-        fit.priority = .defaultHigh
+        scroll.addSubview(text)
         NSLayoutConstraint.activate([
-            view.leadingAnchor.constraint(equalTo: scroll.contentLayoutGuide.leadingAnchor),
-            view.trailingAnchor.constraint(equalTo: scroll.contentLayoutGuide.trailingAnchor),
-            view.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor),
-            view.bottomAnchor.constraint(equalTo: scroll.contentLayoutGuide.bottomAnchor),
-            view.widthAnchor.constraint(equalTo: scroll.frameLayoutGuide.widthAnchor),
-            fit, scroll.frameLayoutGuide.heightAnchor.constraint(lessThanOrEqualToConstant: cap),
+            text.leadingAnchor.constraint(equalTo: scroll.contentLayoutGuide.leadingAnchor),
+            text.trailingAnchor.constraint(equalTo: scroll.contentLayoutGuide.trailingAnchor),
+            text.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor),
+            text.bottomAnchor.constraint(equalTo: scroll.contentLayoutGuide.bottomAnchor),
+            text.widthAnchor.constraint(equalTo: scroll.frameLayoutGuide.widthAnchor),
         ])
+        setContentCompressionResistancePriority(.required, for: .vertical)
+        setContentHuggingPriority(.required, for: .vertical)
     }
 
     @available(*, unavailable)
     required init?(coder _: NSCoder) { fatalError("built in code") }
+
+    /// The width it stands at, where its row knows it.
+    var fitWidth: CGFloat? {
+        didSet {
+            guard fitWidth != oldValue else { return }
+            text.fitWidth = fitWidth
+            invalidateIntrinsicContentSize()
+        }
+    }
+
+    override var intrinsicContentSize: CGSize {
+        CGSize(width: UIView.noIntrinsicMetric, height: min(cap, text.intrinsicContentSize.height))
+    }
+
+    /// The width it was given is its text's: measured there, and asked
+    /// again; laid out at a height other than its own, its row is measured again.
+    override func layoutSubviews() {
+        if bounds.width > 0, fitWidth.map({ abs($0 - bounds.width) > 0.5 }) ?? true { fitWidth = bounds.width }
+        super.layoutSubviews()
+        let own = intrinsicContentSize.height
+        if bounds.width > 0, abs(own - bounds.height) > 1, remeasuredAt.map({ abs($0 - own) > 0.5 }) ?? true {
+            remeasuredAt = own
+            remeasureRow()
+        }
+    }
+
+    /// The height the row was last asked to measure it at again.
+    private var remeasuredAt: CGFloat?
 }
 
 /// A `show_preview` call (ToolGroup `.preview-tool`): the artifact's card,

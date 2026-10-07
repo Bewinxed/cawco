@@ -5,7 +5,7 @@ import Foundation
 /// call into the branch it spawned, a question, a delegate, a workflow run
 /// and harness plumbing into rows of their own. The live tail is not here;
 /// TranscriptView draws it after these rows.
-enum Row {
+nonisolated enum Row: Sendable {
     case single(key: String, block: Block, grouped: Bool)
     case tools(key: String, blocks: [Block])
     case question(key: String, block: Block)
@@ -27,7 +27,7 @@ enum Row {
 
 /// A compaction (rows.ts `compaction`): the boundary the harness reported and
 /// the summary it wrote, one row. The brief is nil until the summary arrives.
-struct Compaction: Equatable {
+nonisolated struct Compaction: Equatable, Sendable {
     let key: String
     let brief: String?
     let preTokens: Int?
@@ -42,16 +42,16 @@ struct Compaction: Equatable {
 }
 
 /// A harness-injected notification, parsed (rows.ts `HarnessNote`).
-struct HarnessNote {
+nonisolated struct HarnessNote: Sendable {
     let title: String
     let status: String
     let body: String
 }
 
-enum Voice { case you, says, acts, note, none }
+nonisolated enum Voice: Sendable { case you, says, acts, note, none }
 
 /// Who has the floor, row by row (rows.ts `Voices`).
-struct Voices {
+nonisolated struct Voices: Sendable {
     enum Speaker { case you, agent }
     var speaker: Speaker?
     var headed = false
@@ -79,7 +79,7 @@ struct Voices {
     }
 }
 
-enum Fold {
+nonisolated enum Fold {
     static let askUserQuestion = "AskUserQuestion"
 
     /// rows.ts `isHarnessNote`: harness plumbing wearing the reader's role.
@@ -150,7 +150,8 @@ enum Fold {
         return name == "run_workflow" || name.hasSuffix("_run_workflow")
     }
 
-    private static let runId = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/
+    /// A literal, compiled with the app: built where it is read, as a Regex is not Sendable.
+    private static var runId: Regex<Substring> { /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/ }
 
     /// rows.ts `startedRunOf`: the run a `run_workflow` call's result names.
     static func startedRun(_ block: Block) -> String? {

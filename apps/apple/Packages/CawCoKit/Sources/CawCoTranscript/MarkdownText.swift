@@ -59,7 +59,7 @@ struct MarkdownSplitter {
 
 /// Carried from the decided bake-off: unclosed syntax at the streaming edge
 /// never appears as literal Markdown. Fenced code is left untouched.
-enum PartialSyntax {
+nonisolated enum PartialSyntax {
     static func hide(_ source: String) -> String {
         var lines = source.components(separatedBy: "\n")
         let fence = lines.first?.trimmingCharacters(in: .whitespaces) ?? ""

@@ -1,13 +1,13 @@
 import CawCoDesign
-import CawCoMascot
 import Foundation
 
 /// Rows into the items the list draws (Transcript.svelte's row dispatch):
 /// an assistant turn split into its blocks, a run of calls into its calls,
 /// each item with its margin above it — a rail row abutting the rail row
 /// above it (`continued`), the reader's later messages abutting their well.
-@MainActor
-struct Builder {
+/// Runs where the transcript is prepared (TranscriptPrep), off the main
+/// thread, and for a delegate's inner transcript on it.
+nonisolated struct Builder {
     var agentName: String
     /// Rendered blocks by source, kept across builds: a settled block is parsed once.
     var cache: BlockCache
@@ -63,17 +63,12 @@ struct Builder {
             case let .harness(key, note):
                 items.append(Item(id: key, top: gap, kind: .harness(note, key: key), print: note.title + note.status + note.body))
             case let .compaction(key, compaction):
-                // A read holds a compaction: Caw's file is read now, while his row is
-                // still being laid out (compaction-mark.ts `warmCompactionMark`).
-                if !Self.warmed { Self.warmed = true; CawMark.warm(.compacted) }
                 items.append(Item(id: key, top: gap, kind: .compaction(compaction),
                                   print: "\(compaction.brief ?? "\u{0}")|\(compaction.facts)"))
             }
         }
         return (items, rail)
     }
-
-    private static var warmed = false
 
     static func print(_ block: Block) -> String { String(decoding: block.signature, as: UTF8.self) }
 
@@ -136,16 +131,17 @@ struct Builder {
     }
 }
 
-/// Settled Markdown, parsed once per source.
-@MainActor
-final class BlockCache {
+/// Settled Markdown, parsed once per source. Each instance belongs to one
+/// place (the preparation of a transcript, or the main thread's delegate
+/// rows): not shared, so not locked.
+nonisolated final class BlockCache {
     private var held: [String: [MarkdownBlock]] = [:]
     private var used = Set<String>()
 
     func blocks(_ source: String) -> [MarkdownBlock] {
         used.insert(source)
         if let blocks = held[source] { return blocks }
-        let blocks = MarkdownRender.blocks(source)
+        let blocks = MarkdownCache.shared.blocks(source, style: .body)
         held[source] = blocks
         return blocks
     }
