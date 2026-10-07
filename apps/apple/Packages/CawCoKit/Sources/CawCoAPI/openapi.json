@@ -17686,6 +17686,13 @@
               "type": "string"
             }
           },
+          "foundIn": {
+            "description": "The task it was found in (`found_in`); null when none.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "id": {
             "type": "string"
           },
@@ -17735,6 +17742,13 @@
               "null",
               "string"
             ]
+          },
+          "related": {
+            "description": "The tasks it is related to (`related`).",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
           "stage": {
             "type": "string"
@@ -17805,6 +17819,7 @@
           "after",
           "attempts",
           "blockedBy",
+          "foundIn",
           "id",
           "labels",
           "lastAttemptFailed",
@@ -17816,6 +17831,7 @@
           "problem",
           "queuedStart",
           "rank",
+          "related",
           "stage",
           "startProblem",
           "title",

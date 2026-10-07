@@ -405,6 +405,12 @@ export const projectTasks = sqliteTable(
       .notNull()
       .default([]),
     parent: text("parent"),
+    /** Tasks it is related to, and the task it was found in: the canvas's other edges. */
+    related: text("related", { mode: "json" })
+      .$type<string[]>()
+      .notNull()
+      .default([]),
+    foundIn: text("found_in"),
     rank: text("rank"),
     labels: text("labels", { mode: "json" })
       .$type<string[]>()

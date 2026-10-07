@@ -57,6 +57,16 @@
 }
 /* The canvas's attribution link sits in its corner, flush with the clip:
    its ring goes on its own box. */
+/* Svelte Flow's attribution on every graph canvas, in the meta role. */
+.svelte-flow__attribution {
+  font-size: var(--text-meta);
+  font-weight: var(--weight-body);
+}
+.svelte-flow__attribution a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+}
 .svelte-flow__attribution a:focus-visible {
   outline-offset: var(--focus-ring-inset);
 }

@@ -19,7 +19,7 @@
   import { workflowState } from "#lib/cawco/workflow-state.svelte.js";
   import FlowAutoFit from "#lib/components/features/flow/FlowAutoFit.svelte";
   import FlowZoomTracker from "#lib/components/features/flow/FlowZoomTracker.svelte";
-  import { FIT } from "#lib/components/features/flow/fit.js";
+  import { FIT, ZOOM } from "#lib/components/features/flow/fit.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component group
   import * as ContextMenu from "#lib/components/ui/context-menu/index.js";
   import { IconChat } from "#lib/icons.js";
@@ -178,8 +178,7 @@
             {edgeTypes}
             fitView
             fitViewOptions={FIT}
-            maxZoom={2}
-            minZoom={0.15}
+            {...ZOOM}
             nodesConnectable
             nodesDraggable={!pan}
             {nodeTypes}
@@ -272,14 +271,5 @@
   /* A handle is placed by its transform, so its press is colour, not scale. */
   .canvas :global(.svelte-flow__handle:active) {
     background: var(--brand-solid);
-  }
-  .canvas :global(.svelte-flow__attribution) {
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-  }
-  .canvas :global(.svelte-flow__attribution a) {
-    display: inline-flex;
-    align-items: center;
-    min-height: 24px;
   }
 </style>

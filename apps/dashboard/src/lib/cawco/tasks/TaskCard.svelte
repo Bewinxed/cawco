@@ -34,6 +34,7 @@
     kindOf,
     onopen,
     date = null,
+    movable = true,
   }: {
     task: TaskSummary;
     href: string;
@@ -42,6 +43,11 @@
     /** The kind of another task's stage, to say whether what it waits on has landed. */
     kindOf: (id: string) => StageKind | null | undefined;
     onopen: (id: string) => void;
+    /**
+     * A drag carries it to another column (the board). Off where a drag is
+     * the surface's own (the canvas pans).
+     */
+    movable?: boolean;
   } = $props();
 
   const flags = $derived(flagsOf(task));
@@ -83,7 +89,9 @@
   data-task={task.id}
   {href}
   onclick={open}
-  {@attach dragTask(() => ({ taskId: task.id, from: task.stage }))}
+  {@attach movable
+    ? dragTask(() => ({ taskId: task.id, from: task.stage }))
+    : undefined}
   {@attach land(() => key, { uniform: true })}
 >
   <span class="head">

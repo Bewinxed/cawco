@@ -16,16 +16,21 @@
     canRedo,
   }: {
     zoom: number;
-    pan: boolean;
-    onpan: () => void;
+    /**
+     * The pan / select switch, for a canvas that is edited; a canvas that
+     * is only read pans on any drag and has none.
+     */
+    pan?: boolean;
+    onpan?: () => void;
     /** The person zoomed with a button: the view is theirs. */
     onzoom: () => void;
     /** The person asked for the fit: the view is a fit again. */
     onfit: () => void;
+    /** Undo and redo, for a canvas that is edited; without them there are none. */
     undo?: () => void;
     redo?: () => void;
-    canUndo: boolean;
-    canRedo: boolean;
+    canUndo?: boolean;
+    canRedo?: boolean;
   } = $props();
   const { zoomIn, zoomOut, fitView } = useSvelteFlow();
   /** Zoom and fit glide to the new view: movement on screen, --dur-panel. */
@@ -58,9 +63,11 @@
   }}
 />
 <div class="tools wf">
-  <button aria-pressed={pan} class="wf-btn" onclick={onpan} type="button">
-    {pan ? "Pan" : "Select"}
-  </button>
+  {#if onpan}
+    <button aria-pressed={pan} class="wf-btn" onclick={onpan} type="button">
+      {pan ? "Pan" : "Select"}
+    </button>
+  {/if}
   <Tip label="Zoom out">
     {#snippet children(
       tip
@@ -106,37 +113,39 @@
       </button>
     {/snippet}
   </Tip>
-  <Tip label="Undo">
-    {#snippet children(
-      tip
-    )}
-      <button
-        {...tip}
-        aria-label="Undo"
-        class="wf-btn"
-        disabled={!canUndo}
-        onclick={undo}
-        type="button"
-      >
-        <IconReset class="size-4" />
-      </button>
-    {/snippet}
-  </Tip><Tip label="Redo">
-    {#snippet children(
-      tip
-    )}
-      <button
-        {...tip}
-        aria-label="Redo"
-        class="wf-btn"
-        disabled={!canRedo}
-        onclick={redo}
-        type="button"
-      >
-        <IconReset class="size-4 rotate-180" />
-      </button>
-    {/snippet}
-  </Tip>
+  {#if undo || redo}
+    <Tip label="Undo">
+      {#snippet children(
+        tip
+      )}
+        <button
+          {...tip}
+          aria-label="Undo"
+          class="wf-btn"
+          disabled={!canUndo}
+          onclick={undo}
+          type="button"
+        >
+          <IconReset class="size-4" />
+        </button>
+      {/snippet}
+    </Tip><Tip label="Redo">
+      {#snippet children(
+        tip
+      )}
+        <button
+          {...tip}
+          aria-label="Redo"
+          class="wf-btn"
+          disabled={!canRedo}
+          onclick={redo}
+          type="button"
+        >
+          <IconReset class="size-4 rotate-180" />
+        </button>
+      {/snippet}
+    </Tip>
+  {/if}
 </div>
 <style>
   .tools {

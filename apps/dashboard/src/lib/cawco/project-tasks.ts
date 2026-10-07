@@ -119,6 +119,8 @@ export interface AttemptStart {
 /** One task as a list shows it: the hub's index row. */
 export interface TaskSummary extends TaskFlags {
   after: string[];
+  /** The task it was found in (`found_in`); null when none. */
+  foundIn: string | null;
   id: string;
   kind: StageKind | null;
   labels: string[];
@@ -128,6 +130,8 @@ export interface TaskSummary extends TaskFlags {
   path: string;
   problem: string | null;
   rank: string | null;
+  /** The tasks it is related to (`related`). */
+  related: string[];
   stage: string;
   title: string;
   todos: { done: number; total: number };

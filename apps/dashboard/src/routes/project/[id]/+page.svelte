@@ -61,10 +61,12 @@
   import TaskSheet from "#lib/cawco/tasks/TaskSheet.svelte";
   import TaskTable from "#lib/cawco/tasks/TaskTable.svelte";
   import { threadHref } from "#lib/cawco/thread-tabs.js";
+  import { taskEdges } from "#lib/cawco/views/task-graph.js";
   import ViewA2ui from "#lib/cawco/views/ViewA2ui.svelte";
   import ViewCalendar, {
     calendarField,
   } from "#lib/cawco/views/ViewCalendar.svelte";
+  import ViewCanvas from "#lib/cawco/views/ViewCanvas.svelte";
   import ViewPipeline from "#lib/cawco/views/ViewPipeline.svelte";
   import { Alert, AlertDescription } from "#lib/components/ui/alert/index.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
@@ -255,6 +257,10 @@
     { value: "board", label: "Board", draft: false },
     { value: "table", label: "Table", draft: false },
     { value: "pipeline", label: "Pipeline", draft: false },
+    // The task graph, while the tasks draw one (an edge between two).
+    ...(taskEdges(tasks).length > 0
+      ? [{ value: "canvas", label: "Canvas", draft: false }]
+      : []),
     ...(dateField
       ? [{ value: "calendar", label: "Calendar", draft: false }]
       : []),
@@ -388,6 +394,8 @@
       needsYou: task.needsYou,
       after: task.after,
       parent: task.parent,
+      related: task.related,
+      foundIn: task.foundIn,
       labels: task.labels,
       rank: task.rank,
       type: task.type,
@@ -796,6 +804,13 @@
     </div>
   {:else if value === "pipeline"}
     <ViewPipeline stages={stageList} tasks={shownTasks} />
+  {:else if value === "canvas"}
+    <ViewCanvas
+      hrefOf={(id) => hrefOf(id)}
+      {kindOf}
+      onopen={openOne}
+      tasks={shownTasks}
+    />
   {:else if value === "calendar" && dateField && bound}
     <ViewCalendar field={dateField} onopen={openOne} tasks={bound.tasks} />
   {:else}
@@ -929,7 +944,13 @@
 
     <div
       aria-busy={cawco.hub === "unreachable" || awaiting || reading}
-      class={["pane", current !== "board" && !reading && "kit-edge-fade-block"]}
+      class={[
+        "pane",
+        current !== "board" &&
+          current !== "canvas" &&
+          !reading &&
+          "kit-edge-fade-block",
+      ]}
       data-view={reading ? "board" : current}
     >
       {#if reading}
@@ -1089,10 +1110,12 @@
     padding: 0 var(--space-6) 0 var(--space-7);
     overflow-y: auto;
   }
-  .pane[data-view="board"] {
+  /* The board and the canvas fill the pane and scroll (or pan) inside. */
+  .pane[data-view="board"],
+  .pane[data-view="canvas"] {
     overflow: hidden;
   }
-  .pane:not([data-view="board"]) {
+  .pane:not([data-view="board"], [data-view="canvas"]) {
     padding-block-end: var(--space-6);
   }
   .swap {
@@ -1129,8 +1152,13 @@
     min-block-size: 0;
   }
   .pane[data-view="board"] .swap,
-  .pane[data-view="board"] .current {
+  .pane[data-view="board"] .current,
+  .pane[data-view="canvas"] .swap,
+  .pane[data-view="canvas"] .current {
     flex: 1 1 auto;
+  }
+  .pane[data-view="canvas"] {
+    padding-block-end: var(--space-5);
   }
   .view-pane {
     display: flex;

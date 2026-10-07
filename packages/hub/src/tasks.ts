@@ -207,6 +207,8 @@ export interface TaskStore {
 /** One task as a list shows it: the index's row, and what its attempts and edges say. */
 export interface TaskSummary extends TaskFlags {
   after: string[];
+  /** The task it was found in (`found_in`); null when none. */
+  foundIn: string | null;
   id: string;
   /** The kind of its stage; null when its stage is not one of the project's. */
   kind: StageKind | null;
@@ -222,6 +224,8 @@ export interface TaskSummary extends TaskFlags {
   /** What in the file could not be read, or a stage the project lacks, in a sentence; null when all is well. */
   problem: string | null;
   rank: string | null;
+  /** The tasks it is related to (`related`). */
+  related: string[];
   stage: string;
   title: string;
   todos: { done: number; total: number };
@@ -541,6 +545,8 @@ const summaryOf = (
     type: row.type,
     after: row.after,
     parent: row.parent,
+    related: row.related,
+    foundIn: row.foundIn,
     rank: row.rank,
     labels: row.labels,
     todos: { done: row.todosDone, total: row.todosTotal },
@@ -890,6 +896,8 @@ export const createTasks = (store: TaskStore) => {
       type: parsed.fields.type,
       after: parsed.fields.after,
       parent: parsed.fields.parent,
+      related: parsed.fields.related,
+      foundIn: parsed.fields.foundIn,
       rank: parsed.fields.rank,
       labels: parsed.fields.labels,
       todosDone: parsed.todos.filter((todo) => todo.done).length,
