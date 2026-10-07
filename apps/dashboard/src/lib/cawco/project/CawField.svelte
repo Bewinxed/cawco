@@ -45,7 +45,7 @@
      * The send as a labelled primary (New project's `Start`), pending under
      * its own words; else the composer's icon send.
      */
-    action?: { label: string; pendingLabel: string };
+    action?: { label: string; pendingLabel: string; empty: string };
     /** Words that fly in land on the field under this key (motion/share). */
     lands?: string;
   } = $props();
@@ -57,7 +57,18 @@
 
   async function send() {
     const words = text.trim();
-    if (!words || sending) {
+    if (sending) {
+      return;
+    }
+    if (!words) {
+      // A labelled send is never dimmed: pressed with nothing to send, it
+      // says what it needs and puts the caret where the words go.
+      if (action) {
+        refused = action.empty;
+        form
+          ?.querySelector<HTMLTextAreaElement>("textarea:not([aria-hidden])")
+          ?.focus();
+      }
       return;
     }
     sending = true;
@@ -86,13 +97,16 @@
   }}
   bind:this={form}
 >
-  <div class="shell">
+  <div class="shell" class:labelled={action}>
     <div class="landing" {@attach land(() => lands, { uniform: true })}>
       <!-- svelte-ignore a11y_autofocus -->
       <Textarea
         aria-label={label}
         {autofocus}
         class="field"
+        oninput={() => {
+          refused = null;
+        }}
         onkeydown={(event) => {
           if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
             event.preventDefault();
@@ -107,7 +121,6 @@
     {#if action}
       <Button
         class="start pressable"
-        disabled={!text.trim()}
         failed={refused !== null}
         label={action.label}
         pending={sending}
@@ -144,6 +157,10 @@
     display: flex;
     align-items: flex-end;
     gap: var(--space-2);
+  }
+  /* A labelled send stands centred on the field as it grows. */
+  .shell.labelled {
+    align-items: center;
   }
   .landing {
     display: flex;

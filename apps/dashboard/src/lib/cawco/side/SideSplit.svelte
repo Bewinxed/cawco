@@ -41,6 +41,7 @@
     planOf,
     previewOf,
     visible,
+    active,
     phone,
     onselect,
     oncapture,
@@ -57,6 +58,12 @@
      * itself: a thread shows its project's lead's (his setup page).
      */
     previewOf?: string | null;
+    /**
+     * The conversation is its group's active tab. A phone's sheet is laid
+     * over the whole screen, outside the pane, so only the active tab's
+     * stands there; a neighbour the swipe strip keeps shown has none.
+     */
+    active: boolean;
     visible: boolean;
     /** Under 900px: the surface is a sheet, not a split. */
     phone: boolean;
@@ -134,7 +141,7 @@
   let fromRow = $state(false);
   let sheetMounted = $state(false);
   $effect(() => {
-    if (phone && open && visible) {
+    if (phone && open && visible && active) {
       sheetMounted = true;
       return;
     }
@@ -306,7 +313,7 @@
       {/if}
     </Resizable.Pane>
   </Resizable.PaneGroup>
-  {#if sheetMounted && phone && visible}
+  {#if sheetMounted && phone && visible && active}
     <SideSheet
       content={root}
       instanceId={previewId}

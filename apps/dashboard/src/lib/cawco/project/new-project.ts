@@ -3,6 +3,16 @@
  * what the person typed, and the name the project takes from it.
  */
 
+import type { Component } from "svelte";
+import {
+  IconChat,
+  IconPalette,
+  IconPenLine,
+  IconRocket,
+  IconSearch,
+  IconToolCode,
+} from "#lib/icons.js";
+
 /** A template New project offers: the hub's stages template of the same name (stages.ts). */
 export type TemplateName =
   | "code"
@@ -13,9 +23,11 @@ export type TemplateName =
   | "social";
 
 export interface TemplateCard {
-  /** What kind of work it is, in the code role. */
-  kind: string;
-  /** Its stages, first to last: the one meta line. */
+  /** The tile glyph's section hue. */
+  hue: string;
+  /** Its glyph on the card's icon tile (Solar duotone). */
+  icon: Component;
+  /** What its work runs through, in one sentence-case line. */
   meta: string;
   name: string;
   template: TemplateName;
@@ -24,39 +36,45 @@ export interface TemplateCard {
 export const TEMPLATE_CARDS: readonly TemplateCard[] = [
   {
     template: "code",
-    kind: "code",
+    icon: IconToolCode,
+    hue: "var(--hue-cyan-500)",
     name: "Code",
-    meta: "Ready → working → review → done",
+    meta: "Tasks worked on, reviewed by you, then landed",
   },
   {
     template: "launch",
-    kind: "knowledge",
+    icon: IconRocket,
+    hue: "var(--hue-orange-500)",
     name: "Launch campaign",
-    meta: "Plan → make → review → live",
+    meta: "Pieces planned, made, reviewed and sent live",
   },
   {
     template: "seo",
-    kind: "knowledge",
+    icon: IconSearch,
+    hue: "var(--hue-green-500)",
     name: "SEO program",
-    meta: "Topic → brief → draft → published",
+    meta: "Topics briefed, drafted, published and measured",
   },
   {
     template: "brand",
-    kind: "knowledge",
+    icon: IconPalette,
+    hue: "var(--hue-amber-500)",
     name: "Brand kit",
-    meta: "Source → extract → review → kit",
+    meta: "Voice, colour and type drawn from a source",
   },
   {
     template: "design",
-    kind: "design",
+    icon: IconPenLine,
+    hue: "var(--hue-cyan-400)",
     name: "Design",
-    meta: "Brief → explore → review → build",
+    meta: "Variants explored, one picked and built",
   },
   {
     template: "social",
-    kind: "social",
+    icon: IconChat,
+    hue: "var(--hue-green-600)",
     name: "Social",
-    meta: "Idea → draft → review → posted",
+    meta: "Posts drafted, reviewed, scheduled and measured",
   },
 ];
 

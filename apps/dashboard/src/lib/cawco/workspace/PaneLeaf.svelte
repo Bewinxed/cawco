@@ -398,6 +398,7 @@
           <TranscriptSkeleton />
         {:else if !browser}
           <SessionPane
+            active={isActive}
             browsing={ctx?.machine ?? null}
             browsingCwd={ctx?.cwd ?? ""}
             browsingHarness={ctx?.harness ?? "claude"}

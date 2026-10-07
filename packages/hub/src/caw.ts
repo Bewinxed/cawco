@@ -79,7 +79,12 @@ import {
   writeFolderFile,
 } from "./project-folder";
 import { setupEvent } from "./setup";
-import { readStages, type StagesTemplate } from "./stages";
+import {
+  readStages,
+  type StagesTemplate,
+  TEMPLATES,
+  templateText,
+} from "./stages";
 import type { TaskEvent, TaskView } from "./tasks";
 import type { Views } from "./views";
 
@@ -520,7 +525,7 @@ export const createCaw = ({
     }
     return online()
       ? null
-      : "No machine is online, so Caw cannot start. Bring a machine online.";
+      : "No machine is online, so Caw can't start. Bring a machine online, then write here.";
   };
 
   const message = (target: InstanceRow, content: string): void =>
@@ -554,7 +559,7 @@ export const createCaw = ({
       refuse(
         409,
         problemOf(project) ??
-          "No machine is online, so Caw cannot start. Bring a machine online."
+          "No machine is online, so Caw can't start. Bring a machine online, then write here."
       );
     const instanceId = crypto.randomUUID();
     cawDenied(project.cawHarness);
@@ -760,6 +765,53 @@ export const createCaw = ({
     return { row: made.thread, said: said(made.thread, made.message, false) };
   };
 
+  /**
+   * Wakes the project's Caw with its setup event. When Caw cannot start for
+   * a reason the thread already states (no machine online: the thread's
+   * composer says so), nothing is added; any other failure is noted in it.
+   * `machineOnline` tries again.
+   */
+  const wakeForSetup = (
+    project: ReturnType<typeof projectOf>,
+    threadId: string,
+    from: "prompt" | "offer",
+    template: StagesTemplate | null
+  ): void => {
+    wake(project.id, {
+      threadId,
+      text: setupEvent({
+        askFleet: !fleetChoicesSet(),
+        from,
+        projectName: project.name,
+        template,
+        threadId,
+      }),
+    }).catch((error: unknown) => {
+      if (error instanceof CawRefusal && error.status === 409) {
+        return;
+      }
+      noteIn(project.id, threadId, {
+        title: "Caw · could not start",
+        body: error instanceof Error ? error.message : String(error),
+      });
+    });
+  };
+
+  /** The template the project's stages.md is, word for word; null when it is its own or there is none. */
+  const templateOf = async (
+    projectId: string
+  ): Promise<StagesTemplate | null> => {
+    try {
+      const { content } = await readFolderFile(projectId, STAGES_FILE);
+      return TEMPLATES.find((name) => templateText(name) === content) ?? null;
+    } catch (error) {
+      if (error instanceof FolderRefusal && error.status === 404) {
+        return null;
+      }
+      throw error;
+    }
+  };
+
   /** The lead session `actor` is, when it is its project's lead. */
   const leadOf = (actor: InstanceRow | undefined) => {
     const projectId = actor?.projectId;
@@ -962,7 +1014,7 @@ export const createCaw = ({
       const made = db.createThread({
         id: crypto.randomUUID(),
         projectId,
-        title: "Setup",
+        title: `Set up ${project.name}`,
         setup: true,
         first: prompt
           ? {
@@ -977,23 +1029,55 @@ export const createCaw = ({
             },
       });
       said(made.thread, made.message, false);
-      const threadId = made.thread.id;
-      wake(projectId, {
-        threadId,
-        text: setupEvent({
-          askFleet: !fleetChoicesSet(),
-          from: prompt ? "prompt" : "offer",
-          projectName: project.name,
-          template: ask.template,
-          threadId,
-        }),
-      }).catch((error: unknown) => {
-        noteIn(projectId, threadId, {
-          title: "Caw · could not start",
-          body: error instanceof Error ? error.message : String(error),
-        });
-      });
+      wakeForSetup(
+        project,
+        made.thread.id,
+        prompt ? "prompt" : "offer",
+        ask.template
+      );
       return summaryOf(made.thread);
+    },
+
+    /**
+     * A machine came online: a project whose Setup thread Caw never answered
+     * (none was online when it was made, or his session went with its
+     * machine) is set up now.
+     */
+    machineOnline(): void {
+      for (const thread of db.allThreads()) {
+        const project = thread.setup ? db.project(thread.projectId) : undefined;
+        if (
+          !project?.caw ||
+          standing(project) ||
+          starting.has(project.id) ||
+          db.threadMessages(thread.id).some((each) => each.author === "caw")
+        ) {
+          continue;
+        }
+        const [first] = db.threadMessages(thread.id);
+        templateOf(project.id).then(
+          (template) =>
+            wakeForSetup(
+              project,
+              thread.id,
+              first?.author === "you" ? "prompt" : "offer",
+              template
+            ),
+          (error: unknown) =>
+            console.warn(
+              `[caw] ${project.name}: its setup was not retried: ${error instanceof Error ? error.message : String(error)}`
+            )
+        );
+      }
+    },
+
+    /** A machine went away: the turns its leads were in are over, so no thread of theirs reads `working`. */
+    machineGone(machineId: string): void {
+      for (const instanceId of [...turns.keys()]) {
+        if (row(instanceId)?.machineId === machineId) {
+          unfollow(instanceId);
+        }
+      }
     },
 
     /**

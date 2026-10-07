@@ -428,7 +428,7 @@ export const createProjectOffers = (deps: ProjectOffersDeps) => {
     },
 
     /**
-     * "Make project": the project from the session's machine and folder (or
+     * "Create project": the project from the session's machine and folder (or
      * the one that already has its repository), the session and its
      * delegates in it, and its open plan items as proposed tasks.
      */
@@ -522,7 +522,7 @@ export const PROJECT_FROM_SESSION = "project_from_session";
 
 /**
  * `project_from_session`, for a session you started: the same accept as the
- * dashboard's "Make project", on the calling session. Without `accept` it is
+ * dashboard's "Create project", on the calling session. Without `accept` it is
  * the listing's copy, which runs nothing.
  */
 export const projectFromSessionTool = (accept?: () => Promise<AcceptResult>) =>

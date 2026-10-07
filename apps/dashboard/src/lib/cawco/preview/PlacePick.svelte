@@ -66,12 +66,11 @@
 />
 
 <form
-  aria-label="Where its work happens"
-  class="place-pick material-panel"
+  aria-label="Pick a machine and folder"
+  class="place-pick"
   onsubmit={use}
   transition:appear
 >
-  <h2 class="text-body font-medium">Where its work happens</h2>
   <div class="flex flex-col gap-1">
     <span class="text-label text-muted-foreground" id="place-machine-label"
       >Machine</span
@@ -143,7 +142,8 @@
 
 <style>
   /* Docked over the foot of the well, as the pane's own error line is, and
-     as wide as the well allows. */
+     as wide as the well allows: opaque, so the page under it never reads
+     through (the page's own question names what is being picked). */
   .place-pick {
     position: absolute;
     inset-inline: var(--space-3);
@@ -155,7 +155,9 @@
     max-block-size: calc(100% - var(--space-6));
     overflow-y: auto;
     padding: var(--space-4);
+    border: 1px solid var(--border-hairline);
     border-radius: var(--radius-lg);
+    background: var(--surface-raised);
     box-shadow: var(--shadow-drawer);
   }
 </style>

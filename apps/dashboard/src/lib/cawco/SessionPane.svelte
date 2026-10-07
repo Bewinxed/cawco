@@ -79,6 +79,7 @@
     browsingCwd,
     browsingHarness,
     visible,
+    active,
     focused,
     serverTail = null,
 
@@ -98,6 +99,8 @@
     browsingCwd: string;
     browsingHarness: string;
     visible: boolean;
+    /** Its group's active tab (PaneHost). */
+    active: boolean;
     focused?: boolean;
     serverTail?: ServerTail | null;
   } = $props();
@@ -1056,6 +1059,7 @@
   {#if session}
     <SideSplit
       oncapture={(pick, shot) => draft.captured(pick, shot)}
+      {active}
       onescape={() => draft.closeSelectionEditor()}
       onselect={(selection) => draft.attach(selection)}
       {phone}
@@ -1090,7 +1094,7 @@
               <EmptyState
                 class={STATEFUL}
                 icon={IconChat}
-                line="The transcript was found and has no turns yet. Write the first message below."
+                line="Write the first message below."
                 title="Nothing has been said here yet"
               />
             </div>

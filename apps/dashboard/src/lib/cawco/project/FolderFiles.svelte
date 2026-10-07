@@ -133,9 +133,13 @@
     outline: var(--focus-ring-width) solid var(--focus-ring);
     outline-offset: 2px;
   }
+  /* As tall as the kit's close button and its inset (top-4, 30px), the
+     name centred on it and kept clear of it. */
   :global(.file-head) {
+    justify-content: center;
+    min-block-size: calc(2rem + 30px);
     border-block-end: 1px solid var(--border-hairline);
-    padding: var(--space-4) var(--space-5);
+    padding: 0 calc(2rem + 30px) 0 var(--space-5);
   }
   :global(.file-title) {
     font-family: var(--font-mono);

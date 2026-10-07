@@ -120,13 +120,17 @@
     <h1 class="title">What are we working on?</h1>
     <div class="field">
       <CawField
-        action={{ label: "Start", pendingLabel: "Starting…" }}
+        action={{
+          label: "Start",
+          pendingLabel: "Starting…",
+          empty: "Say what the project is, then Start.",
+        }}
         autofocus
         flies
         label="What are we working on?"
         lands={flights ? `starter:${flights}` : undefined}
         onsend={start}
-        placeholder="Set up a board for github.com/you/site"
+        placeholder="A repo, a launch, a brand…"
         bind:text={words}
       />
     </div>

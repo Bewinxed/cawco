@@ -910,10 +910,13 @@
             {/snippet}
           </Sidebar.MenuButton>
           {#if fleetCount}
+            <!-- A status count keeps its status pair whatever the row does:
+                 the kit's active and hover inks are for a plain count, and
+                 on the live fill the active one reads 3.3:1. -->
             <Sidebar.MenuBadge
               class={cawco.blockedCount > 0
-                ? "bg-[var(--status-attn-bg)] text-[var(--status-attn-ink)]"
-                : "bg-[var(--status-live-bg)] text-[var(--status-live-ink)]"}
+                ? "bg-[var(--status-attn-bg)] text-[var(--status-attn-ink)]!"
+                : "bg-[var(--status-live-bg)] text-[var(--status-live-ink)]!"}
               data-flip="pop box"
             >
               <TextMorph

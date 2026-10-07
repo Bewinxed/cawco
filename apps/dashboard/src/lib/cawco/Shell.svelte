@@ -49,6 +49,7 @@
   import ConfirmDialog from "./ConfirmDialog.svelte";
   import { cawco, hubSocketUrl, reconnectNow } from "./client.svelte";
   import { continuing } from "./continue.svelte";
+  import { instanceTitle } from "./home/home-state.svelte";
   import JumpPalette, { type JumpOpener } from "./JumpPalette.svelte";
   import MachinesButton from "./MachinesButton.svelte";
   import SessionSurface from "./SessionSurface.svelte";
@@ -667,19 +668,34 @@
   const badgeIn = badge(true);
   const badgeOut = badge(false);
 
-  /** Which section the bar names, for the readers who arrived by URL. */
+  /**
+   * What the bar names: the page's own name where it has one (a
+   * conversation's title, a project's name), else its section.
+   */
   const crumb = $derived.by(() => {
     // A path nothing answers is not a section: the bar says what happened.
     if (page.error) {
       return page.status === 404 ? "Not found" : "Error";
     }
-    const [section] = page.url.pathname.split("/").filter(Boolean);
+    const [section, id] = page.url.pathname
+      .split("/")
+      .filter(Boolean)
+      .map(decodeURIComponent);
     switch (section) {
       case undefined:
-      case "session":
         return "Fleet";
+      case "session": {
+        const row = id ? cawco.instanceIndex.byId.get(id) : undefined;
+        return (
+          (id ? cawco.threadOf(id)?.title : undefined) ??
+          (row ? instanceTitle(row) : "Fleet")
+        );
+      }
       case "project":
-        return "Project";
+        if (id === "new") {
+          return "New project";
+        }
+        return (id ? cawco.project(id)?.name : undefined) ?? "Project";
       case "config":
         return "Configure";
       default:

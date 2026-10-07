@@ -7662,7 +7662,7 @@ export const createServer = (
    * its folder on the hub. A new project's `template` is written as its
    * stages.md; made with Caw and given `setup`, it opens its Setup thread and
    * Caw is woken to set it up (caw.ts `setup`). The dashboard's "New
-   * project" and "Make project" and an accepted project offer all come here.
+   * project" and "Create project" and an accepted project offer all come here.
    */
   const createOrJoinProject = async (asked: {
     name: string;
@@ -11673,6 +11673,8 @@ export const createServer = (
               }
               registry.registerAgent(message.machineId, ws, ws.remoteAddress);
               sharesHubDisk.delete(message.machineId);
+              // A project Caw could not set up while no machine was online is set up now.
+              queueMicrotask(() => caw.machineOnline());
               workItems.discardUnfiled(message.machineId);
               // Checks a stopped hub left running on this machine run again
               // the moment it can run commands — waiting on nothing else the
@@ -13240,6 +13242,8 @@ export const createServer = (
           machineCustody.delete(machineId);
           addressProtocolMachines.delete(machineId);
           lifecycle.disconnect(machineId);
+          // Its leads' turns are over: their threads stop reading `working`.
+          caw.machineGone(machineId);
           db.reconcileInstances(machineId, []);
           publishInstances(machineId);
         },

@@ -99,12 +99,14 @@
       {:else if isThreadTab(id)}
         <!-- A thread with a project's Caw (ThreadPane). -->
         <ThreadPane
+          active={isActive}
           focused={isActive && leaf?.id === workspace.focusedLeafId}
           viewId={id}
           visible={shownPanes.get(id) ?? false}
         />
       {:else}
         <SessionPane
+          active={isActive}
           browsing={ctx?.machine ?? null}
           browsingCwd={ctx?.cwd ?? ""}
           browsingHarness={ctx?.harness ?? "claude"}

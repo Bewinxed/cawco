@@ -77,6 +77,13 @@
   const message = (error: unknown) =>
     error instanceof Error ? error.message : String(error);
 
+  /**
+   * Its places on machines: the line counts these (its folder on the hub is
+   * every project's, listed with them but not counted).
+   */
+  const checkouts = $derived(
+    project.places.filter((each) => each.kind !== "hub").length
+  );
   /** Its primary checkout; none while its one place is its folder on the hub. */
   const primary = $derived(checkoutOf(project));
   /** Where the project lives: its machine and folder (WORDS.md: place). */
@@ -193,10 +200,10 @@
             <OsMark class="os" os={machine.os} />
           {/if}
           <span class="place" title={place}><MorphText text={place} /></span>
-          {#if project.places.length > 1}
+          {#if checkouts > 1}
             <Popover.Root>
               <Popover.Trigger class="places press-tint"
-                >· {project.places.length} places</Popover.Trigger
+                >· {checkouts} places</Popover.Trigger
               >
               <Popover.Content align="start" class="w-80">
                 <ul class="place-list">

@@ -71,7 +71,7 @@
       disabled={pending !== null}
       failed={!!refused}
       icon={IconFolder}
-      label="Make project"
+      label="Create project"
       onclick={() => answer("accept")}
       pending={pending === "accept"}
       pendingLabel="Making project…"

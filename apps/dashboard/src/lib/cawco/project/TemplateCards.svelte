@@ -145,7 +145,7 @@
   });
 </script>
 
-<div class="templates" style:--rise="{rise}px">
+<div class="templates">
   <RadioGroup.Root
     aria-label="Template"
     class="cards"
@@ -174,12 +174,15 @@
         data-template={card.template}
         value={card.template}
       >
-        <code class="kind">{card.kind}</code>
+        {@const Icon = card.icon}
+        <span class="head">
+          <span class="tile" style:color={card.hue}><Icon /></span>
+          {#if fit === card.template && peek}
+            <span class="fits" transition:appear>Fits your prompt</span>
+          {/if}
+        </span>
         <span class="name">{card.name}</span>
         <span class="meta">{metaOf(card)}</span>
-        {#if fit === card.template && peek}
-          <span class="fits" transition:appear>Fits your prompt</span>
-        {/if}
       </RadioGroup.Item>
     {/each}
 
@@ -204,15 +207,17 @@
 </div>
 
 <style>
-  /* Room above the first row for Caw over its ledge line. */
+  /* Room above the first row for Caw: his rise over the ledge line takes
+     the gap above and the first lines of padding of a card in the row
+     above, never its words. */
   .templates {
-    padding-top: var(--rise);
+    padding-top: var(--space-8);
   }
   .templates :global(.cards) {
     position: relative;
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-    gap: var(--rise) var(--space-3);
+    gap: var(--space-8) var(--space-3);
   }
   @media (max-width: 639px) {
     .templates :global(.cards) {
@@ -255,10 +260,28 @@
     outline: var(--focus-ring-width) solid var(--focus-ring);
     outline-offset: -2px;
   }
-  .kind {
-    font-family: var(--font-mono);
-    font-size: var(--text-code);
-    color: var(--ink-muted);
+  /* Its head: the icon tile (DESIGN.md: the duotone glyph on a raised
+     26px tile, in its section hue), and the fit beside it. */
+  .head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-block-size: 26px;
+    margin-block-end: var(--space-2);
+  }
+  .tile {
+    display: inline-grid;
+    place-items: center;
+    flex: none;
+    inline-size: 26px;
+    block-size: 26px;
+    border-radius: var(--radius-sm);
+    background: var(--surface-raised);
+    box-shadow: var(--shadow-tile);
+  }
+  .tile :global(svg) {
+    inline-size: 16px;
+    block-size: 16px;
   }
   .name {
     font: var(--type-label);
@@ -269,9 +292,6 @@
     color: var(--ink-muted);
   }
   .fits {
-    position: absolute;
-    inset-block-start: var(--space-2);
-    inset-inline-start: var(--space-4);
     font: var(--type-label);
     color: var(--brand-ink);
   }

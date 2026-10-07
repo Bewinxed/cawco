@@ -39,8 +39,8 @@ export interface SetupAsk {
   threadId: string;
 }
 
-const fleetCards = `- \`fleet-delegates\`: "Delegates instead of subagents" — sessions hand work to CawCo's delegates rather than their harness's own subagents. Options \`on\` (recommended) and \`off\`.
-- \`fleet-todos\`: "CawCo's to-dos instead of each harness's list" — sessions keep their plan in CawCo rather than their harness's own list and plan mode. Options \`on\` (recommended) and \`off\`.
+const fleetCards = `- \`fleet-delegates\`: "Delegates instead of subagents" — sessions hand work to CawCo's delegates rather than their harness's own subagents. Options \`on\` labelled "Use delegates" (recommended) and \`off\` labelled "Keep subagents".
+- \`fleet-todos\`: "CawCo's to-dos instead of each harness's list" — sessions keep their plan in CawCo rather than their harness's own list and plan mode. Options \`on\` labelled "Use CawCo's to-dos" (recommended) and \`off\` labelled "Keep each harness's list".
 These two are the fleet's, asked once: say so on the cards.`;
 
 /** What Caw reads when a project is made for him to set up. */
@@ -56,10 +56,11 @@ export const setupEvent = (ask: SetupAsk): string => {
     `1. Load the decision-page skill and build one decision page named "${SETUP_PAGE}". You have no shell or file tools: write decisions/${SETUP_PAGE}/page.html into the project's folder with folder_write (start from the skill's kit/page.html; read it with your Read tool), then call page_show({ page: "${SETUP_PAGE}" }). Its cards, with exactly these ids:`,
     [
       ...(ask.askFleet ? [fleetCards] : []),
-      `- \`stages\`: the project's stages, from the ${template} template below, adjusted to their words. Show each stage's name in an editable text field and store the list with \`cawco.set("stages", [{ "name": …, "kind": … }, …])\` on every edit (kinds stay as the template has them).`,
-      `- \`delegates\`: the delegate types to set up, several picks (\`data-cawco-multiple\`), each option a type: ${types.map((type) => `\`${type}\``).join(", ")}${types.length > 1 ? ", all recommended" : ", recommended"}; add one only when their words call for it.`,
-      `- \`place\`: where its work happens — a machine and a folder. One button that calls \`cawco.pickPlace()\`: CawCo asks the person for the machine and folder and stores the pick under \`place\`. Show the picked folder from \`cawco.on("picks", …)\`.`,
+      `- \`stages\`: the project's stages, from the ${template} template below, adjusted to their words. Show each stage's name in an editable text field and store the list with \`cawco.set("stages", [{ "name": …, "kind": … }, …])\` on every edit (kinds stay as the template has them; show each kind in words: to do, active, waiting, you, done, dropped).`,
+      `- \`delegates\`: the delegate types to set up, several picks (\`data-cawco-multiple\`), each option a type with one line on the work it takes: ${types.map((type) => `\`${type}\``).join(", ")}${types.length > 1 ? ", all recommended" : ", recommended"}; add one only when their words call for it.`,
+      `- \`place\`: where its work happens — a machine and a folder. One button that calls \`cawco.pickPlace()\`: CawCo asks the person for the machine and folder and stores the pick under \`place\`. Once picked, the card names the machine and the folder, from \`cawco.on("picks", …)\`.`,
       "No routines, relays or other cards.",
+      'Write the page in CawCo\'s voice (WORDS.md): sentence case, no "I", options named for what they do (never Yes or No), no folder paths inside sentences.',
     ].join("\n"),
     `The ${template} template's stages.md:\n\n\`\`\`\n${templateText(template)}\`\`\``,
     `2. End your turn. When the person sends their picks you get one message; page_choices({ page: "${SETUP_PAGE}" }) has them in full. CawCo has then already applied the fleet's choices and added the place they picked; do not write those. Write, with folder_write: stages.md (the template's block with the stage names they kept; it must read cleanly, or folder_write refuses it with the reason), delegates/<type>.md for each type they picked (front matter: harness, model, effort, role, lands; the body is the type's brief, from their words), and AGENTS.md (what the project is and how its work is done, from their words).`,

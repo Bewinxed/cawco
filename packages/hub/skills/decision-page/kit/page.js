@@ -28,6 +28,20 @@
     }
   }
 
+  /* Each option's keycap, its digit in its card (DESIGN.md, option chips). */
+  for (const group of document.querySelectorAll("[data-cawco-choice]")) {
+    for (const [n, option] of [...group.querySelectorAll("[data-option]")].entries()) {
+      const label = option.querySelector("b") ?? option;
+      if (!label.querySelector(".dp-kc")) {
+        const cap = document.createElement("span");
+        cap.className = "dp-kc";
+        cap.setAttribute("aria-hidden", "true");
+        cap.textContent = String(n + 1);
+        label.prepend(cap);
+      }
+    }
+  }
+
   const choices = [...document.querySelectorAll("[data-cawco-choice]")].filter(
     (el) => el.querySelector("[data-option]") || el.hasAttribute("data-option")
   );

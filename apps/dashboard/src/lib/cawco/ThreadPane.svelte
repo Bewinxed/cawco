@@ -81,8 +81,15 @@
   let {
     viewId,
     visible,
+    active,
     focused = false,
-  }: { viewId: string; visible: boolean; focused?: boolean } = $props();
+  }: {
+    viewId: string;
+    visible: boolean;
+    /** Its group's active tab (PaneHost). */
+    active: boolean;
+    focused?: boolean;
+  } = $props();
 
   const threadId = $derived(threadIdOf(viewId));
   const thread = $derived(cawco.threadOf(viewId) ?? null);
@@ -563,6 +570,7 @@
   >
     <SideSplit
       oncapture={(pick, shot) => draft.captured(pick, shot)}
+      {active}
       onescape={() => draft.closeSelectionEditor()}
       onselect={(selection) => draft.attach(selection)}
       {phone}

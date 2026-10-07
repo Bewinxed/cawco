@@ -91,10 +91,17 @@
   /** Iframe src uses the base; the header shows the app's own path. */
   const url = $derived(previewBase);
   let displayPath = $state("");
+  /**
+   * A decision page names itself in its own heading, and it is served at the
+   * root of its own address: the header says what it is, with no path.
+   */
+  const decision = $derived(!!source && "page" in source);
   const title = $derived(
-    preview?.title ||
-      (connected && source ? previewPlace(source) : "Preview") ||
-      "Preview"
+    decision
+      ? "Decision page"
+      : preview?.title ||
+          (connected && source ? previewPlace(source) : "Preview") ||
+          "Preview"
   );
   const frameKey = $derived(`${preview?.revision}:${reload}`);
   // The old paint bridges navigation only until the replacement finishes loading.
@@ -524,7 +531,7 @@
       transition:appear
     >
       <PendingContent icon={IconSend} pending={sending} />
-      <span class="select-label">Send picks</span>
+      <span class="send-label">Send picks</span>
     </button>
   {/if}
   <button
@@ -569,7 +576,7 @@
   {closing}
   label="Preview"
   onclose={close}
-  subtitle={displayPath || (source ? previewPlace(source) : "")}
+  subtitle={decision ? "" : displayPath || (source ? previewPlace(source) : "")}
   {switcher}
   title={switcher && title === "Preview" ? undefined : title}
   bind:section

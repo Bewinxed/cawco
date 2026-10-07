@@ -216,7 +216,26 @@ a {
   outline-offset: 2px;
 }
 .dp-opt b {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
   font-weight: var(--weight-strong);
+}
+/* Each option's keycap: its digit in the card (page.js numbers them). */
+.dp-opt .dp-kc {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: var(--radius-xs);
+  background: var(--surface-recess);
+  color: var(--ink-strong);
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  font-weight: var(--weight-body);
+  line-height: 1;
 }
 .dp-opt span {
   font-size: var(--text-label);
@@ -226,18 +245,22 @@ a {
 .dp-opt .dp-tag {
   align-self: flex-start;
   font-size: var(--text-meta);
+  border: 1px solid var(--border-hairline);
   border-radius: var(--radius-xs);
   padding: 0 var(--space-1);
   margin-top: 2px;
-  background: var(--surface-recess);
-  color: var(--ink-strong);
+  color: var(--ink-muted);
 }
+/* A picked option (DESIGN.md, option chips): the coral edge, a recessed
+   fill and the keycap filled vermilion with a white digit; its words keep
+   their ink. */
 .dp-opt[data-cawco-picked] {
   border-color: var(--brand-solid);
-  background: var(--selected-bg);
+  background: var(--surface-recess);
 }
-.dp-opt[data-cawco-picked] b {
-  color: var(--selected-ink);
+.dp-opt[data-cawco-picked] .dp-kc {
+  background: var(--chip-chosen-bg);
+  color: var(--chip-chosen-ink);
 }
 @media (prefers-reduced-motion: reduce) {
   .dp-opt,
@@ -269,7 +292,7 @@ a {
   }
 }
 
-/* "I'm done picking": the one coral action on the page. */
+/* "Send picks": the one coral action on the page. */
 .dp-done {
   display: flex;
   justify-content: flex-end;

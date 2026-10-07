@@ -628,14 +628,18 @@
   const unreadStages = $derived(
     `stages.md in the project folder does not read: ${(stages?.problems ?? []).join(" ")} Tasks keep their stages meanwhile; fix the file and the board takes its columns from it.`
   );
-  /** The empty board with Caw: what he does, in this project's own stages. */
+  /** The empty board with Caw: what Caw does, in this project's own stages, named as the board names them. */
   const cawLine = $derived.by(() => {
     const named = stageList
       .filter((stage) => stage.kind !== "dropped")
-      .map((stage) => stageLabel(stage.name).toLowerCase());
+      .map((stage) => stageLabel(stage.name));
     const you = stageList.find((stage) => stage.kind === "you");
-    return `Tell Caw what to do and he files the tasks: ${named.join(", ")}.${
-      you ? ` One that waits on you shows in ${stageLabel(you.name)}.` : ""
+    const flow =
+      named.length > 1
+        ? `${named.slice(0, -1).join(", ")} and ${named.at(-1)}`
+        : (named[0] ?? "");
+    return `Tell Caw what to do: the tasks Caw files move through ${flow}.${
+      you ? ` One waiting on you shows in ${stageLabel(you.name)}.` : ""
     }`;
   });
   /**

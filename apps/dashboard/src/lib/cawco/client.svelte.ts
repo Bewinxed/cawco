@@ -4758,7 +4758,7 @@ async function readProjectOffers(): Promise<void> {
   }
 }
 
-/** What "Make project" did: the project, and the plan items it filed as proposed tasks. */
+/** What "Create project" did: the project, and the plan items it filed as proposed tasks. */
 export interface ProjectOfferAccepted {
   joined: boolean;
   project: { id: string; name: string };
@@ -4770,7 +4770,7 @@ export interface ProjectOfferAccepted {
 }
 
 /**
- * Answers a session's offer. "Make project" makes (or joins, by remote) the
+ * Answers a session's offer. "Create project" makes (or joins, by remote) the
  * project from the session's folder and moves the session and its delegates
  * into it; "Not now" is recorded, and the session is never offered again.
  */
