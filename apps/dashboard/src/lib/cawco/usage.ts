@@ -3,7 +3,12 @@
  * (design/usage-tracker.md). The summary and limits JSON shapes are core's
  * (`UsageSummary`, `UsageLimitsResponse`); this module reads them.
  */
-import type { LimitWindow, UsageSpend } from "@cawco/core";
+import type {
+  AgentRow,
+  ClaudeLimits,
+  LimitWindow,
+  UsageSpend,
+} from "@cawco/core";
 
 /**
  * The midnight `days` before the hub's today, in the hub's zone: the start
@@ -420,3 +425,50 @@ export const planName = (tier: string | null): string | null =>
         .replace(UNDERSCORE, " ")
         .replace(WORD_START, (c) => c.toUpperCase())
     : null;
+
+/**
+ * Why Claude's limits cannot be shown, and what fixes it: the one source of
+ * those words for the Usage page's Limits block and the usage strip, so the
+ * two say the same thing. `signIn` with a machine: logging in on it fixes it
+ * (MachineLogin); otherwise there is nothing to do but wait for a read.
+ */
+export interface LimitsGap {
+  machine: AgentRow | null;
+  reason: string;
+  signIn: boolean;
+}
+export function claudeGap(
+  readings: Readonly<Record<string, ClaudeLimits>>,
+  machines: readonly AgentRow[]
+): LimitsGap {
+  const [first] = Object.entries(readings);
+  if (!first) {
+    return {
+      machine: null,
+      reason: "No machine has reported a Claude reading yet.",
+      signIn: false,
+    };
+  }
+  const [machineId, reading] = first;
+  const machine = machines.find((m) => m.machineId === machineId) ?? null;
+  const host = machine?.hostname ?? "a removed machine";
+  if (reading.error === "not signed in") {
+    return {
+      machine,
+      reason: `Claude isn't signed in on ${host}.`,
+      signIn: true,
+    };
+  }
+  if (reading.error === "token expired") {
+    return {
+      machine,
+      reason: `The Claude login on ${host} has expired.`,
+      signIn: true,
+    };
+  }
+  return {
+    machine,
+    reason: `Anthropic didn't answer the limit read (${reading.error}). The next read is automatic.`,
+    signIn: false,
+  };
+}

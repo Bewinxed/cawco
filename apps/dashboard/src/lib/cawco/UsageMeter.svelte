@@ -23,18 +23,23 @@
   import type { ClaudeLimits } from "@cawco/core";
   import type { Component } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
+  import { Button } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Drawer from "#lib/components/ui/drawer/index.js";
+  import { EmptyState } from "#lib/components/ui/empty/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Popover from "#lib/components/ui/popover/index.js";
+  import { IconKey, IconUsage } from "#lib/icons.js";
   import { page } from "$app/state";
   import ClaudeIcon from "~icons/logos/claude-icon";
-  import { cawco } from "./client.svelte";
+  import { cawco, type Machine } from "./client.svelte";
   import type { HubRead } from "./hub-read";
+  import MachineLogin from "./MachineLogin.svelte";
   import { morph } from "./motion/morph.svelte";
   import OpenCodeLogo from "./OpenCodeLogo.svelte";
   import {
     about,
+    claudeGap,
     type LimitRow,
     limitRows,
     readAgo,
@@ -176,6 +181,19 @@
     // nothing is claimed absent yet.
     return cawco.usageLimitsRead ? "Sign in to see limits" : "Reading limits…";
   });
+
+  /**
+   * No limit can be shown once the read is in: the strip is the empty state
+   * (DESIGN.md "Empty"), what is missing, why, and the one action that fixes
+   * it, in the Usage page's words (usage.ts `claudeGap`).
+   */
+  const gap = $derived(
+    cells.length === 0 && cawco.usageLimitsRead
+      ? claudeGap(cawco.claudeLimits, cawco.machines)
+      : null
+  );
+  let loginFor = $state<Machine | null>(null);
+  let loginOpen = $state(false);
 
   /** The hub's word for a key or login the provider turned away. */
   const KEY_REFUSED = /^HTTP 40[13]\b/;
@@ -366,8 +384,29 @@
   </div>
 {/snippet}
 
-<div class="strip">
-  {#if touch.current}
+<div class="strip" class:gap={gap !== null}>
+  {#if gap}
+    <EmptyState icon={IconUsage} inline line={gap.reason} title="No limits">
+      {#snippet action()}
+        {#if gap.signIn && gap.machine}
+          {@const machine = gap.machine}
+          <Button
+            aria-label="Log in to Claude on {machine.hostname}"
+            icon={IconKey}
+            label="Log in"
+            onclick={() => {
+              loginFor = machine;
+              loginOpen = true;
+            }}
+            size="xs"
+            variant="outline"
+          />
+        {:else}
+          <Button href="/usage" label="Open Usage" size="xs" variant="link" />
+        {/if}
+      {/snippet}
+    </EmptyState>
+  {:else if touch.current}
     <!-- On touch every window rises in the house sheet, as a tab's details
          and a peek do; with a fine pointer it is a popover by the strip. -->
     <Drawer.Root>
@@ -404,6 +443,10 @@
   {/if}
 </div>
 
+{#if loginFor}
+  <MachineLogin machine={loginFor} bind:open={loginOpen} />
+{/if}
+
 <style>
   /* Its ground is the surface it stands on: the rail's by default, the
      phone home's where the home sets `--strip-ground`. A bar's pace tick is
@@ -415,6 +458,13 @@
     min-inline-size: 0;
     border-radius: var(--radius-sm);
     background: var(--row-paint);
+  }
+  /* Empty: the claim stands in the strip's 44px, its padding the row's. */
+  .strip.gap {
+    display: flex;
+    align-items: center;
+    min-block-size: 44px;
+    padding: var(--space-1) var(--space-2);
   }
   /* One control, 44px whatever it says. */
   :global(.strip-hit) {

@@ -20,6 +20,7 @@
   import MachineLogin from "../MachineLogin.svelte";
   import {
     capMoney,
+    claudeGap,
     fillState,
     firstToStop,
     type LimitRow,
@@ -46,15 +47,6 @@
   const spend = $derived(cawco.spend);
 
   type Row = LimitRow;
-
-  interface Unknown {
-    machine: Machine | null;
-    reason: string;
-    signIn: boolean;
-  }
-
-  const hostOf = (machineId: string): Machine | null =>
-    cawco.machines.find((m) => m.machineId === machineId) ?? null;
 
   const claude = $derived(speakingReading(cawco.claudeLimits));
   const go = $derived(speakingReading(cawco.openCodeGoLimits));
@@ -86,42 +78,10 @@
     };
   });
 
-  /** Why there is no Claude bar, and what to do about it. */
-  const claudeUnknown = $derived.by((): Unknown | null => {
-    if (claude) {
-      return null;
-    }
-    const [first] = Object.entries(cawco.claudeLimits);
-    if (!first) {
-      return {
-        machine: null,
-        reason: "No machine has reported a Claude reading yet.",
-        signIn: false,
-      };
-    }
-    const [machineId, reading] = first;
-    const machine = hostOf(machineId);
-    const host = machine?.hostname ?? "a removed machine";
-    if (reading.error === "not signed in") {
-      return {
-        machine,
-        reason: `Not signed in to Claude on ${host}.`,
-        signIn: true,
-      };
-    }
-    if (reading.error === "token expired") {
-      return {
-        machine,
-        reason: `The Claude login on ${host} has expired.`,
-        signIn: true,
-      };
-    }
-    return {
-      machine,
-      reason: `Anthropic did not answer the limit read (${reading.error}). The next read is automatic.`,
-      signIn: false,
-    };
-  });
+  /** Why there is no Claude bar, and what to do about it (usage.ts `claudeGap`). */
+  const claudeUnknown = $derived(
+    claude ? null : claudeGap(cawco.claudeLimits, cawco.machines)
+  );
 
   const providers = $derived(
     [claudeRows.length > 0, goRows.length > 0].filter(Boolean).length

@@ -780,6 +780,39 @@
   .kit-empty-action {
     margin-block-start: var(--space-2);
   }
+  /* The same claim in a strip's room: the mark, then what is missing and
+     why as one sentence on one line, the one action beside it while there
+     is room and under it when there is not (a long machine name), so the
+     sentence keeps its line rather than breaking beside the action. */
+  .kit-empty-inline {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-1) var(--space-2);
+    padding-block: 0;
+
+    & > [data-slot="empty-mark"] {
+      flex: none;
+      inline-size: 16px;
+      block-size: 16px;
+      margin-block-end: 0;
+    }
+    & .kit-empty-line {
+      flex: 1 1 auto;
+      min-inline-size: 0;
+      max-inline-size: none;
+      font: var(--type-meta);
+    }
+    & .kit-empty-title {
+      font: var(--type-meta);
+      font-weight: var(--weight-strong);
+      color: var(--ink-strong);
+    }
+    & .kit-empty-action {
+      flex: none;
+      margin-block-start: 0;
+    }
+  }
 
   /* Floating surfaces: popover, dropdown, select, context menu, toast. */
   .kit-pop {
