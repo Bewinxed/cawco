@@ -219,11 +219,13 @@
    * the canvases spill over the box unclipped and never take a pointer.
    *
    * With `ledge` he stands behind an edge: the slot is the part of his box
-   * above peek.riv's ledge line, so the line sits on the slot's bottom edge,
-   * and nothing of him draws below it. He comes in by peek.riv's own enter
-   * whatever the status, and holds its rest. Each change of `status` after
-   * that brings that status's file in the same box behind the same edge, by
-   * the same leave and enter as anywhere else.
+   * above peek.riv's ledge line, so the line sits on the slot's bottom edge.
+   * He comes in by peek.riv's own enter, which draws the wing tips that hang
+   * in front of the edge, so it is never clipped. Once it has entered he
+   * holds its rest while the status is `ready`; any other status's file
+   * takes over by the component's own leave and enter. The status files
+   * draw nothing below the line: their body is behind the edge. With less
+   * motion there is no peek: the status's file, behind the edge, fades in.
    *
    * With `still` each file holds his still once it has entered: the file's
    * `reducedMotion` is written for that Caw alone, as `stageCaw`'s rest does.
@@ -298,15 +300,26 @@
   const reducedMotion = $derived(!motionOk.current);
 
   /**
-   * The status his peek stands for: the one he was mounted with, behind a
-   * ledge, until another is asked for.
+   * His peek is on: his entrance behind a ledge, then his rest for as long
+   * as the place is `ready`. Off with less motion, and for good once a
+   * status other than `ready` is asked for after it has entered.
    */
-  let peekFor = untrack(() => (ledge ? status : undefined));
+  let peek = untrack(() => ledge && !reducedMotion);
+  /** The peek's enter has ended. */
+  let peeked = false;
   function fileFor(asked: CawStatus): CawFile {
-    if (asked !== peekFor) {
-      peekFor = undefined;
+    if (peek && peeked && asked !== "ready") {
+      peek = false;
     }
-    return peekFor === undefined ? asked : "peek";
+    return peek ? "peek" : asked;
+  }
+
+  /** The peek has entered: a status other than `ready` takes over now. */
+  function peekLanded() {
+    peeked = true;
+    if (present) {
+      ask(fileFor(status));
+    }
   }
 
   $effect(() => {
@@ -485,6 +498,9 @@
               caw?.trigger("entered")?.on(() => {
                 layer.landed = true;
                 reportEntered(layer);
+                if (layer.status === "peek") {
+                  peekLanded();
+                }
               });
               layer.rive = rive;
               show(layer, canvas);
@@ -560,10 +576,11 @@
   style:--left="{(-size * BOX.x) / BOX.side}px"
   style:--side="{size}px"
   style:--top="{(-size * BOX.y) / BOX.side}px"
-  class:ledge
 >
   {#each layers as layer (layer.id)}
-    <canvas class:shown={layer.shown} {@attach mount(layer)}></canvas>
+    <div class="layer" class:behind={ledge && layer.status !== "peek"}>
+      <canvas class:shown={layer.shown} {@attach mount(layer)}></canvas>
+    </div>
   {/each}
 </div>
 
@@ -575,9 +592,16 @@
     pointer-events: none;
     user-select: none;
   }
-  /* Behind the edge: his acting still reaches past the box above and to
-     the sides, and nothing of him draws below the slot's bottom. */
-  .ledge {
+  /* One per file, the slot's own box and never transformed, so a clip on it
+     holds its line while his canvas fades and scales inside. */
+  .layer {
+    position: absolute;
+    inset: 0;
+  }
+  /* A status file behind the edge: his acting still reaches past the box
+     above and to the sides, and nothing of him draws below the slot's
+     bottom. peek.riv draws its own wing tips in front of the edge. */
+  .behind {
     clip-path: inset(calc(var(--artboard) * -1) calc(var(--artboard) * -1) 0);
   }
   canvas {
