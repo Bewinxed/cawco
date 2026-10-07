@@ -1034,6 +1034,12 @@ export const CAWCO_ENV = {
   telegramAsrMode: "CAWCO_TELEGRAM_ASR_MODE",
   /** Where the hub's SQLite file lives, overriding the default data dir. */
   dbPath: "CAWCO_DB_PATH",
+  /**
+   * The session a shell belongs to, and its own credential: set in every
+   * session's shell, so `cawco tool` there acts as that session and no other.
+   */
+  instanceId: "CAWCO_INSTANCE_ID",
+  sessionCredential: "CAWCO_SESSION_CREDENTIAL",
   /** Which service manager the installer targets: `systemd`, `launchd`, … */
   serviceMode: "CAWCO_SERVICE_MODE",
 } as const;

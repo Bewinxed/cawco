@@ -52,6 +52,7 @@ import type {
 } from "@cawco/core";
 import {
   ASK_USER_QUESTION,
+  CAWCO_ENV,
   CONTROL_CONTEXT_USAGE,
   CONTROL_GET_TODOS,
   CONTROL_INTERRUPT,
@@ -664,6 +665,13 @@ const boundaryOf = (directory) => {
   return undefined;
 };
 const OUTPUT_LIMIT = 30000;
+const sessionHeld = (sessionID) => {
+  try { return JSON.parse(readFileSync(cawcoCredentials, "utf8"))[sessionID]; } catch { return undefined; }
+};
+const sessionEnv = (sessionID) => {
+  const held = sessionHeld(sessionID);
+  return held ? { ${JSON.stringify(CAWCO_ENV.instanceId)}: held.instanceId, ${JSON.stringify(CAWCO_ENV.sessionCredential)}: held.credential } : {};
+};
 const boundedBash = (held) => tool({
   description: "Runs a bash command inside this workspace's boundary, in the workspace's clone unless workdir says otherwise. The command can write only the clone, /tmp (the workspace's own), ~/.cache, ~/.bun and ~/.npm; it sees and signals only this workspace's processes, and cannot reach the service manager. Each call is a fresh shell. The output is stdout and stderr together, cut at 30000 characters.",
   args: {
@@ -674,7 +682,7 @@ const boundedBash = (held) => tool({
   },
   async execute(args, context) {
     const timeout = Math.min(args.timeout ?? 120000, 600000);
-    const child = spawn(held.exec, [args.command], { cwd: args.workdir ?? context.directory, detached: true, stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(held.exec, [args.command], { cwd: args.workdir ?? context.directory, env: { ...process.env, ...sessionEnv(context.sessionID) }, detached: true, stdio: ["ignore", "pipe", "pipe"] });
     let output = "";
     const take = (chunk) => { output += chunk.toString(); };
     child.stdout.on("data", take);
@@ -742,13 +750,18 @@ return ({
   },
   "tool.execute.before": async (input, output) => {
     if (input.tool.startsWith("cawco_")) {
-      let held = {};
-      try { held = JSON.parse(readFileSync(cawcoCredentials, "utf8")); } catch {}
-      const credential = held[input.sessionID];
+      const credential = sessionHeld(input.sessionID)?.credential;
       if (typeof credential !== "string" || !credential) {
         throw new Error("This OpenCode session holds no CawCo session credential, so it cannot call CawCo tools.");
       }
       output.args.__cawco = { credential };
+    }
+  },
+  // Every shell a session's tool opens acts as that session: \`cawco tool\`
+  // there sends its own credential. A shell no session opened gets none.
+  "shell.env": async (input, output) => {
+    if (input.sessionID) {
+      Object.assign(output.env, sessionEnv(input.sessionID));
     }
   },
 });
@@ -3582,7 +3595,7 @@ export class OpencodeSession implements HarnessSession {
     }
     await storeOpencodeCredential(
       this.#opencodeSessionId(),
-      credential,
+      { credential, instanceId: this.instanceId },
       this.#liveSessions()
     );
     await acknowledgeSessionCredential(credential);
@@ -3600,7 +3613,7 @@ export class OpencodeSession implements HarnessSession {
   async #verifyCredential(): Promise<void> {
     const credential = (await readOpencodeCredentials())[
       this.#opencodeSessionId()
-    ];
+    ]?.credential;
     if (!credential) {
       throw new Error("This OpenCode session holds no session credential.");
     }

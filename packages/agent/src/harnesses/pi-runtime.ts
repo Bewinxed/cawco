@@ -7,6 +7,7 @@ import type {
   SupportedCommands,
 } from "@cawco/core";
 import {
+  CAWCO_ENV,
   CONTROL_CONTEXT_USAGE,
   CONTROL_INTERRUPT,
   CONTROL_SET_MODEL,
@@ -327,6 +328,8 @@ class PiSession implements HarnessSession {
       }
       await this.#session.waitForIdle();
       this.#credential.value = credential;
+      // This host runs one session: its shells act as that session.
+      process.env[CAWCO_ENV.sessionCredential] = credential;
       await callDelegationTool(
         this.#ctx.instanceId,
         "list_sessions",
@@ -439,6 +442,7 @@ export async function startPiHost(
     manager = SessionManager.create(ctx.cwd);
   }
   const credential = { value: ctx.sessionCredential };
+  process.env[CAWCO_ENV.instanceId] = ctx.instanceId;
   const { session } = await createAgentSession({
     cwd: ctx.cwd,
     modelRuntime: runtime,

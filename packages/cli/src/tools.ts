@@ -12,11 +12,12 @@
  * the MCP server's own `Authorization: Bearer` header is: the hub takes no
  * call on a session's name alone.
  */
+import { CAWCO_ENV } from "@cawco/core";
 
-/** Where the CLI reads the session it acts as, and that session's credential. */
+/** Where the CLI reads the session it acts as, and that session's credential: every session's shell has both. */
 export const TOOL_ENV = {
-  instance: "CAWCO_INSTANCE_ID",
-  credential: "CAWCO_SESSION_CREDENTIAL",
+  instance: CAWCO_ENV.instanceId,
+  credential: CAWCO_ENV.sessionCredential,
 } as const;
 
 export class ToolError extends Error {}

@@ -47,6 +47,7 @@ import type {
 } from "@cawco/core";
 import {
   ASK_USER_QUESTION,
+  CAWCO_ENV,
   CLAUDE_CONVERSATION_GONE,
   CONTROL_READ_SESSION_CONTEXT,
   CONTROL_SET_EFFORT,
@@ -626,12 +627,19 @@ const scheduledWakeups = (input: unknown): number | undefined => {
  */
 const sessionEnv = (
   specEnv: Record<string, string | undefined> | undefined,
-  model: string | undefined
+  model: string | undefined,
+  ctx: HarnessContext
 ): Record<string, string | undefined> => ({
   ...process.env,
   CLAUDE_CHROME_CLASSIFIER_FLOOR: "0",
   ...specEnv,
   ...(model && { CAWCO_MODEL: model }),
+  // The session's shell acts as this session and no other: `cawco tool`
+  // there sends the credential its CawCo MCP sends.
+  [CAWCO_ENV.instanceId]: ctx.instanceId,
+  ...(ctx.sessionCredential
+    ? { [CAWCO_ENV.sessionCredential]: ctx.sessionCredential }
+    : {}),
 });
 
 /** Tools that put a question to the person: never answered for them, in any mode. */
@@ -950,7 +958,8 @@ class ClaudeSession implements HarnessSession {
         env: sessionEnv(
           (options as { env?: Record<string, string | undefined> } | undefined)
             ?.env,
-          model
+          model,
+          ctx
         ),
         // Left out entirely when nobody chose: the SDK's own default is the
         // model's, and writing a level here would put cawco's guess in its
