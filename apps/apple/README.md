@@ -51,14 +51,16 @@ file and regenerate.
 From the repository on obelisk:
 
 ```sh
-bash apps/apple/scripts/testflight.sh          # clean origin/main archive, upload and internal distribution
-bash apps/apple/scripts/testflight.sh --status # IN_BETA_GROUP <version> (<build>) or exit 1 with what is missing
+bash apps/apple/scripts/testflight.sh --notes notes.md   # clean origin/main archive, upload and internal distribution
+bash apps/apple/scripts/testflight.sh --status           # IN_BETA_GROUP <version> (<build>) or exit 1 with what is missing
+bash apps/apple/scripts/testflight.sh --set-notes <build> notes.md  # replace a shipped build's What to Test
 bash apps/apple/scripts/build-both.sh both --compile-only
 ```
 
 The upload owns `~/build/cawco-testflight` on the Mac and waits for other
 tracks' quiet windows. Build numbers come from App Store Connect: `yyyymmdd`,
-then `.2`, `.3`, and so on. Every upload waits for `VALID`, sets What to Test,
+then `.2`, `.3`, and so on. Every upload waits for `VALID`, sets What to Test
+to that build's own notes (written as `docs/releases/README.md` says),
 attaches the build to CawCo's Internal group and verifies group membership.
 The owner is the existing tester in Anbar's Internal group; Anbar is read only.
 

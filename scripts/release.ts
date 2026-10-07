@@ -38,8 +38,17 @@ if (
   (channel !== "stable" && channel !== "nightly")
 ) {
   throw new Error(
-    "Usage: bun scripts/release.ts --commit REF --channel stable|nightly --output /absolute/path [--tag vX.Y.Z] [--mac-host mac]"
+    "Usage: bun scripts/release.ts --commit REF --channel stable|nightly --output /absolute/path [--notes /absolute/notes.md (nightly, required)] [--tag vX.Y.Z] [--mac-host mac]"
   );
+}
+// A nightly's notes are written for the person updating; see docs/releases/README.md.
+const notesFile = argument("--notes");
+if (channel === "nightly" && !(notesFile && isAbsolute(notesFile))) {
+  throw new Error("Nightly builds need end-user notes: --notes <file>");
+}
+const nightlyNotes = notesFile ? await readFile(notesFile, "utf8") : undefined;
+if (channel === "nightly" && !nightlyNotes?.trim()) {
+  throw new Error("Nightly end-user release notes are empty");
 }
 if (Bun.version !== PINNED_BUN) {
   throw new Error(`Release pipeline requires Bun ${PINNED_BUN}`);
@@ -187,6 +196,8 @@ interface Request {
   /** This request, apart from any other for the same commit. */
   id: string;
   macHost: string;
+  /** A nightly's end-user notes, carried with the request so a queued one keeps its own. */
+  notes?: string;
   output: string;
   tag?: string;
 }
@@ -194,6 +205,7 @@ const request: Request = {
   id: crypto.randomUUID(),
   commit,
   channel,
+  notes: channel === "nightly" ? nightlyNotes : undefined,
   tag: argument("--tag"),
   macHost: argument("--mac-host") ?? "mac",
   output,
@@ -392,36 +404,17 @@ const versionAndNotes = async (
     }
     return { version: base, notes };
   }
+  if (!current.notes?.trim()) {
+    throw new Error("Nightly builds need end-user notes: --notes <file>");
+  }
   const count = await run(
     ["git", "rev-list", "--first-parent", "--count", current.commit],
     checkout,
     true
   );
-  const last = (await Bun.file(join(current.output, "release.json"))
-    .json()
-    .catch(() => undefined)) as ReleaseManifest | undefined;
-  const range =
-    last?.channel === "nightly"
-      ? `${last.commit}..${current.commit}`
-      : current.commit;
-  const notes = await run(
-    [
-      "git",
-      "log",
-      "--format=%s",
-      "--max-count=50",
-      range,
-      "--",
-      "packages",
-      "apps/dashboard",
-      "scripts/build-binary.ts",
-    ],
-    checkout,
-    true
-  );
   return {
     version: `${base}-nightly.${count}+${current.commit.slice(0, 12)}`,
-    notes,
+    notes: current.notes,
   };
 };
 

@@ -64,14 +64,24 @@ def plain(text):
     return "".join(char for char in text if char.isascii() or char in keep)
 
 
-def whats_new(version):
-    """The shipped version's own release notes, as TestFlight's what-to-know text."""
-    path = ROOT / "source/docs/releases" / f"{version}.md"
-    if path.exists():
-        bullets = [line[2:].strip() for line in path.read_text().splitlines() if line.strip().startswith(("- ", "* "))]
-        if bullets:
-            return plain(f"{version}\n" + "\n".join(bullets))
-    return plain(f"{version}\nCawCo {version} for iPhone and iPad. Connect to your hub to see the live fleet, sessions and transcripts.")
+def read_notes(path):
+    """A build's own end-user notes (docs/releases/README.md), read before any work starts."""
+    text = plain(pathlib.Path(path).read_text().strip())
+    if not text:
+        raise RuntimeError(f"Notes file {path} is empty")
+    return text
+
+
+def set_whats_new(build, notes):
+    """Writes the build's en-US What to Test and prints App Store Connect's answer."""
+    localizations = listed(f"/v1/builds/{build['id']}/betaBuildLocalizations")
+    english = next((row for row in localizations if row["attributes"]["locale"] == "en-US"), None)
+    if english is None:
+        answer = api("POST", "/v1/betaBuildLocalizations", {"data": {"type": "betaBuildLocalizations", "attributes": {"locale": "en-US", "whatsNew": notes}, "relationships": {"build": relationship("builds", build["id"])}}})
+    else:
+        answer = api("PATCH", f"/v1/betaBuildLocalizations/{english['id']}", {"data": {"type": "betaBuildLocalizations", "id": english["id"], "attributes": {"whatsNew": notes}}})
+    row = answer["data"]
+    print(f"WHATS_NEW {build['attributes']['version']} {row['id']} {row['attributes']['locale']}\n{row['attributes']['whatsNew']}")
 
 
 def status(app):
@@ -108,7 +118,7 @@ def await_build(app, number):
     raise RuntimeError(f"Build {number} not VALID after 30 minutes")
 
 
-def finish(app, build):
+def finish(app, build, notes):
     """Everything ship() does once a build is VALID: tester, notes, beta group."""
     internal = group(app)
     if internal is None:
@@ -118,14 +128,7 @@ def finish(app, build):
     members = listed(f"/v1/betaGroups/{internal['id']}/betaTesters?limit=200")
     if not any(t["attributes"]["email"] == owner["attributes"]["email"] for t in members):
         api("POST", "/v1/betaTesters", {"data": {"type": "betaTesters", "attributes": {key: owner["attributes"][key] for key in ["email", "firstName", "lastName"]}, "relationships": {"betaGroups": {"data": [{"type": "betaGroups", "id": internal["id"]}]}}}})
-    version = api("GET", f"/v1/builds/{build['id']}/preReleaseVersion")["data"]["attributes"]["version"]
-    localizations = listed(f"/v1/builds/{build['id']}/betaBuildLocalizations")
-    english = next((row for row in localizations if row["attributes"]["locale"] == "en-US"), None)
-    notes = whats_new(version)
-    if english is None:
-        api("POST", "/v1/betaBuildLocalizations", {"data": {"type": "betaBuildLocalizations", "attributes": {"locale": "en-US", "whatsNew": notes}, "relationships": {"build": relationship("builds", build["id"])}}})
-    elif not english["attributes"].get("whatsNew"):
-        api("PATCH", f"/v1/betaBuildLocalizations/{english['id']}", {"data": {"type": "betaBuildLocalizations", "id": english["id"], "attributes": {"whatsNew": notes}}})
+    set_whats_new(build, notes)
     api("POST", f"/v1/betaGroups/{internal['id']}/relationships/builds", {"data": [{"type": "builds", "id": build["id"]}]})
     print(f"APP_ID {app} GROUP_ID {internal['id']} BUILD_ID {build['id']}")
     status(app)
@@ -145,7 +148,8 @@ def signed(command, log):
             print(line)
 
 
-def ship(app):
+def ship(app, mode, notes):
+    """mode is "archive" (archive only), "upload-archive" (upload the kept archive) or "full"."""
     ROOT.mkdir(parents=True, exist_ok=True)
     lock = ROOT / ".upload-lock"
     lock.mkdir()  # Concurrent uploads must not reuse the same build number or archive.
@@ -157,7 +161,7 @@ def ship(app):
         source = ROOT / "source/apps/apple"
         archive = ROOT / "CawCo.xcarchive"
         derived = ROOT / "DerivedData"
-        existing = sys.argv[1:] == ["--upload-archive"]
+        existing = mode == "upload-archive"
         if existing:
             number = plistlib.loads((archive / "Info.plist").read_bytes())["ApplicationProperties"]["CFBundleVersion"]
             if number in used:
@@ -180,7 +184,7 @@ def ship(app):
             if kept.exists():
                 shutil.rmtree(kept)
             shutil.copytree(archive / "dSYMs", kept)
-        if sys.argv[1:] == ["--archive"]:
+        if mode == "archive":
             return
         options = ROOT / "ExportOptions.plist"
         options.write_bytes(plistlib.dumps({"method": "app-store-connect", "destination": "upload", "teamID": TEAM, "uploadSymbols": True, "signingStyle": "manual", "signingCertificate": "Apple Distribution", "manageAppVersionAndBuildNumber": False, "provisioningProfiles": {"dev.cawco.app": PROFILE}}))
@@ -193,24 +197,56 @@ def ship(app):
         issuer = next(v for k, v in identifiers.items() if k.endswith("ISSUER_ID"))
         signed(["xcodebuild", "-exportArchive", "-archivePath", str(archive), "-exportOptionsPlist", str(options), "-exportPath", str(ROOT / "export"), "-authenticationKeyPath", str(HOME / f".appstoreconnect/private_keys/AuthKey_{key_id}.p8"), "-authenticationKeyID", key_id, "-authenticationKeyIssuerID", issuer], ROOT / "upload.log")
         build = await_build(app, number)
-        finish(app, build)
+        finish(app, build, notes)
     finally:
         lock.rmdir()
 
 
+USAGE = "usage: testflight.py --notes <file> [--upload-archive] | --archive | --status | --attach <build> --notes <file> | --set-notes <build> <file>"
+
+
+def options(args):
+    """Splits `--notes <file>` off the arguments; the rest name the command."""
+    if "--notes" not in args:
+        return args, None
+    at = args.index("--notes")
+    if at + 1 >= len(args):
+        raise RuntimeError(USAGE)
+    return args[:at] + args[at + 2:], read_notes(args[at + 1])
+
+
+def needs(notes):
+    if notes is None:
+        raise RuntimeError("TestFlight builds need end-user notes: --notes <file>")
+    return notes
+
+
 try:
+    command, notes = options(sys.argv[1:])
+    # Every upload carries its own notes: refuse before touching App Store Connect.
+    if command in [[], ["--upload-archive"]] or command[:1] == ["--attach"]:
+        needs(notes)
     apps = listed("/v1/apps?filter[bundleId]=dev.cawco.app&limit=200")
-    if len(apps) != 1 and sys.argv[1:] != ["--archive"]:
+    if len(apps) != 1 and command != ["--archive"]:
         raise RuntimeError("MISSING CawCo app record (create CawCo, cawco-ios, en-US in App Store Connect)")
     app = apps[0]["id"] if apps else None
-    if sys.argv[1:] == ["--status"]:
+    if command == ["--status"]:
         status(app)
-    elif sys.argv[1:2] == ["--attach"]:
-        finish(app, await_build(app, sys.argv[2]))
-    elif not sys.argv[1:] or sys.argv[1:] in [["--archive"], ["--upload-archive"]]:
-        ship(app)
+    elif len(command) == 2 and command[0] == "--attach":
+        finish(app, await_build(app, command[1]), needs(notes))
+    elif len(command) == 3 and command[0] == "--set-notes":
+        build = next((b for b in builds(app) if b["attributes"]["version"] == command[1]), None)
+        if build is None:
+            raise RuntimeError(f"MISSING build {command[1]}")
+        set_whats_new(build, read_notes(command[2]))
+    elif command == []:
+        ship(app, "full", needs(notes))
+    elif command == ["--upload-archive"]:
+        ship(app, "upload-archive", needs(notes))
+    elif command == ["--archive"]:
+        ship(app, "archive", None)
     else:
-        raise RuntimeError("usage: testflight.py [--status | --attach <build>]")
+        raise RuntimeError(USAGE)
 except (RuntimeError, OSError, subprocess.CalledProcessError, StopIteration) as error:
     print(str(error), file=sys.stderr)
     sys.exit(1)
