@@ -95,7 +95,7 @@ enum RailModel {
         // A folder on a machine, as the lookups key it.
         var projectsAt: [String: [String]] = [:]
         for project in fleet.projects {
-            projectsAt["\(project.machineId)\u{0}\(project.cwd)", default: []].append(project.id)
+            for place in project.machinePlaces { projectsAt["\(place.machineId)\u{0}\(place.path)", default: []].append(project.id) }
         }
         let ids = Set(fleet.projects.map(\.id))
         /// The session a row's work belongs to: itself, or for a delegate the

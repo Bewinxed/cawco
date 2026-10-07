@@ -13,6 +13,7 @@ final class ProjectViewController: ObservedViewController {
     private let head = UIStackView()
     private let actions = UIStackView()
     private var startButton: UIButton!
+    private var quest: UIButton!
     /// One column: the docs, then the rail's cards under them.
     private let scroll = UIScrollView()
     private let page = UIStackView()
@@ -29,6 +30,10 @@ final class ProjectViewController: ObservedViewController {
     private let machineGlyph = GlyphView(.server, tint: Palette.inkMuted)
     private let machineName = KitLabel(TypeScale.typeLabel.withWeight(.regular), ink: Palette.inkMuted)
     private let presence = UIView()
+    /// Where the project lives (ProjectHead.svelte `place`): its primary checkout's folder and machine,
+    /// or "Its folder on the hub" while it has no checkout.
+    private let meta = UIStackView()
+    private let machineLine = UIStackView()
     private let sessions = UIStackView()
     private let liveRows = KeyedRows<LiveSessionRowView>(spacing: 6)
     private let storedRows = KeyedRows<StoredSessionRowView>(spacing: 6)
@@ -120,14 +125,16 @@ final class ProjectViewController: ObservedViewController {
         presence.layer.cornerRadius = 4
         presence.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([presence.widthAnchor.constraint(equalToConstant: 8), presence.heightAnchor.constraint(equalToConstant: 8)])
-        let machine = UIStackView(arrangedSubviews: [machineGlyph, machineName, presence])
+        let machine = machineLine
+        for part in [machineGlyph, machineName, presence] as [UIView] { machine.addArrangedSubview(part) }
         machine.spacing = 6
         machine.alignment = .center
         // The folder truncates (`truncate`); the machine keeps its name.
         folder.setContentCompressionResistancePriority(.defaultLow - 1, for: .horizontal)
         machineName.setContentCompressionResistancePriority(.required, for: .horizontal)
         machine.setContentCompressionResistancePriority(.required, for: .horizontal)
-        let meta = UIStackView(arrangedSubviews: [folder, machine])
+        meta.addArrangedSubview(folder)
+        meta.addArrangedSubview(machine)
         meta.spacing = Space.space3
         meta.alignment = .center
         let titles = UIStackView(arrangedSubviews: [name, meta])
@@ -143,19 +150,24 @@ final class ProjectViewController: ObservedViewController {
         // `class="text-muted-foreground"`.
         forget.configuration?.attributedTitle = AttributedString("Forget project…", attributes: AttributeContainer(TypeScale.typeButton.attributes(color: Palette.mutedForeground, tracking: -0.01)))
         // New session opens its popover from the button's end; Side quest starts one at once.
+        // With no checkout yet, New session is the New Session form, which asks for the machine and folder.
         startButton = KitButton.make("New session", variant: .action) { [weak self] in
             guard let self else { return }
+            guard context.hub.fleet.projects.first(where: { $0.id == projectId })?.primaryPlace != nil else {
+                context.startSession(nil, nil, projectId)
+                return
+            }
             KitPopover.present(ProjectStartController { [weak self] prompt in self?.start(scratch: false, prompt: prompt) },
                                from: startButton, in: self, align: .end)
         }
-        let quest = KitButton.make("Side quest", variant: .outline) { [weak self] in self?.start(scratch: true, prompt: nil) }
+        quest = KitButton.make("Side quest", variant: .outline) { [weak self] in self?.start(scratch: true, prompt: nil) }
         actions.addArrangedSubview(startButton)
         actions.addArrangedSubview(quest)
         actions.addArrangedSubview(forget)
         // `gap-2`.
         actions.spacing = 8
         actions.alignment = .center
-        for button in [startButton!, quest, forget] {
+        for button in [startButton!, quest!, forget] {
             button.setContentHuggingPriority(.required, for: .horizontal)
             button.setContentCompressionResistancePriority(.required, for: .horizontal)
         }
@@ -245,21 +257,26 @@ final class ProjectViewController: ObservedViewController {
         arrange()
         missing.isHidden = true
         name.text = project.name
-        folder.text = project.cwd
-        let machine = fleet.machines.first { $0.machineId == project.machineId }
+        // The folder line, the docs and the memory are the primary checkout's.
+        let home = project.primaryPlace
+        machineLine.isHidden = home == nil
+        // Side quest starts in the primary checkout at once: only a project with one offers it.
+        quest.isHidden = home == nil
+        folder.text = home?.path ?? "Its folder on the hub"
+        let machine = home.flatMap { place in fleet.machines.first { $0.machineId == place.machineId } }
         machineGlyph.glyph = Glyph.os(machine?.os ?? "")
-        machineName.text = machine.map { Naming.machineLabel($0.hostname) } ?? project.machineId
+        machineName.text = machine.map { Naming.machineLabel($0.hostname) } ?? home?.machineId
         let online = machine?.status == "online"
-        if context.hub.state == .connected { docsView.load(machineId: project.machineId, cwd: project.cwd, projectId: project.id) }
-        if context.hub.state == .connected {
-            memory.load(machineId: project.machineId, cwd: project.cwd, projectId: project.id, online: online,
-                        machineName: machine.map { Naming.machineLabel($0.hostname) } ?? project.machineId)
+        if let home, context.hub.state == .connected {
+            docsView.load(machineId: home.machineId, cwd: home.path, projectId: project.id)
+            memory.load(machineId: home.machineId, cwd: home.path, projectId: project.id, online: online,
+                        machineName: machine.map { Naming.machineLabel($0.hostname) } ?? home.machineId)
         }
         inventory.isHidden = machine == nil
         if let machine { inventory.configure(machines: [machine]) }
         presence.backgroundColor = online ? Palette.success : Palette.mutedForeground.withAlphaComponent(0.4)
 
-        showSessions(project, online: online)
+        showSessions(project)
     }
 
     // MARK: Sessions
@@ -267,7 +284,7 @@ final class ProjectViewController: ObservedViewController {
     /// The card's two lists answer separately and each shows when its own
     /// source has: the live sessions with the fleet's first read, the stored
     /// ones once the machine has listed them (or is not online to ask).
-    private func showSessions(_ project: ProjectRow, online: Bool) {
+    private func showSessions(_ project: ProjectRow) {
         let fleet = context.hub.fleet
         let home = context.home
         liveSkeleton.isHidden = fleet.fleetRead
@@ -276,9 +293,9 @@ final class ProjectViewController: ObservedViewController {
             for part in [storedSkeleton, storedRows, empty, moreRow] as [UIView] { part.isHidden = true }
             return
         }
-        // `liveIn`: started from this project, or running in its checkout, in the hub's own order.
-        let under = { (cwd: String?) in cwd == project.cwd || (cwd ?? "").hasPrefix(project.cwd + "/") }
-        let live = fleet.rows.filter { $0.isListed && ($0.projectId == project.id || ($0.machineId == project.machineId && under($0.cwd))) }
+        // `liveIn`: started from this project, or running in one of its places, in the hub's own order.
+        let live = fleet.rows.filter { $0.isListed && ($0.projectId == project.id || project.holds(machineId: $0.machineId, folder: $0.cwd)) }
+        let homePath = project.primaryPlace?.path
         let mounted = liveFollowed ? live : Array(live.prefix(liveMounted))
         // The path shows on a window 640pt wide or more (`sm:block`), where it is not the card's own.
         let wide = isWide
@@ -314,7 +331,7 @@ final class ProjectViewController: ObservedViewController {
                 dim: asleep || row.isStale,
                 quest: row.kind == "scratch",
                 leaf: row.canDelegate == false,
-                cwd: wide && !row.cwd.isEmpty && row.cwd != project.cwd ? row.cwd : nil,
+                cwd: wide && !row.cwd.isEmpty && row.cwd != homePath ? row.cwd : nil,
                 alarmed: row.isFailed || activity == .blocked,
                 done: plan?.done,
                 total: plan?.total,
@@ -331,9 +348,12 @@ final class ProjectViewController: ObservedViewController {
         keepClock(timing)
         if !liveFollowed { mountMore(of: live.count) }
 
-        // `storedIn`: what the machine recorded somewhere inside the checkout.
-        let stored = fleet.catalog(project.machineId).filter { ($0.cwd ?? "").isEmpty == false && under($0.cwd) }
-        let read = !online || fleet.catalogs[project.machineId] != nil
+        // `storedIn`: what each machine the project has a place on recorded somewhere inside one of them.
+        let machineIds = project.machinePlaces.map(\.machineId).reduce(into: [String]()) { if !$0.contains($1) { $0.append($1) } }
+        let stored = machineIds.flatMap { machineId in
+            fleet.catalog(machineId).filter { project.holds(machineId: machineId, folder: $0.cwd) }.map { (machineId: machineId, info: $0) }
+        }.sorted { $0.info.lastModified > $1.info.lastModified }
+        let read = machineIds.allSatisfy { id in fleet.machines.first { $0.machineId == id }?.status != "online" || fleet.catalogs[id] != nil }
         storedSkeleton.isHidden = read
         storedRows.isHidden = !read
         guard read else {
@@ -342,11 +362,13 @@ final class ProjectViewController: ObservedViewController {
             return
         }
         let shown = showMore ? stored : Array(stored.prefix(Self.storedFirst))
-        let machineId = project.machineId
-        let byKey = Dictionary(shown.map { ($0.sessionId, $0) }, uniquingKeysWith: { first, _ in first })
+        // Each stored session's machine, by its key: what opening it, carrying it and its menu ask the hub with.
+        let machineOf = Dictionary(shown.map { ($0.info.sessionId, $0.machineId) }, uniquingKeysWith: { first, _ in first })
+        let byKey = Dictionary(shown.map { ($0.info.sessionId, $0) }, uniquingKeysWith: { first, _ in first })
         // "Show more" opens its rows in place; the first answer just lands.
-        storedRows.set(shown.map(\.sessionId), animated: storedShown, in: scroll) { [weak self] key in
+        storedRows.set(shown.map(\.info.sessionId), animated: storedShown, in: scroll) { [weak self] key in
             let row = StoredSessionRowView()
+            guard let machineId = machineOf[key] else { return row }
             row.addAction(UIAction { [weak self] _ in
                 guard let self, let info = context.hub.fleet.catalog(machineId).first(where: { $0.sessionId == key }) else { return }
                 context.openSession(context.hub.fleet.conversationId(sessionKey: key, machineId: machineId, cwd: info.cwd))
@@ -357,16 +379,18 @@ final class ProjectViewController: ObservedViewController {
             }
             ContextMenuHost.attach(to: row) { [weak self] copy in
                 guard let self, let info = context.hub.fleet.catalog(machineId).first(where: { $0.sessionId == key }) else { return nil }
-                return SessionMenus.stored(machineId: machineId, info: info, context: context.sessionMenus, copy: copy)            }
+                return SessionMenus.stored(machineId: machineId, info: info, context: context.sessionMenus, copy: copy)
+            }
             return row
         }
         storedShown = true
-        for (key, info) in byKey {
+        for (key, entry) in byKey {
+            let (machineId, info) = entry
             storedRows.rows[key]?.configure(StoredRowModel(
                 id: key,
                 title: fleet.storedTitle(info, machineId: machineId),
                 place: (info.cwd ?? "").isEmpty ? machineId : info.cwd ?? machineId,
-                cwd: wide && info.cwd != project.cwd ? info.cwd : nil,
+                cwd: wide && info.cwd != homePath ? info.cwd : nil,
                 age: RailAge.ago(info.lastModified, now: home.now)
             ))
         }
@@ -472,10 +496,10 @@ final class ProjectViewController: ObservedViewController {
     /// "New session" and "Side quest": a session here on what the new-session
     /// form was last set to, opened in its tab as soon as the hub has it.
     private func start(scratch: Bool, prompt: String?) {
-        guard let project = context.hub.fleet.projects.first(where: { $0.id == projectId }) else { return }
+        guard let project = context.hub.fleet.projects.first(where: { $0.id == projectId }), let home = project.primaryPlace else { return }
         Task { @MainActor [weak self, context] in
             do {
-                let id = try await context.hub.spawnSession(machineId: project.machineId, cwd: project.cwd, projectId: project.id, prompt: prompt, scratch: scratch)
+                let id = try await context.hub.spawnSession(machineId: home.machineId, cwd: home.path, projectId: project.id, prompt: prompt, scratch: scratch)
                 context.openSession(id)
             } catch {
                 Toast.error(error.localizedDescription, in: self?.view)

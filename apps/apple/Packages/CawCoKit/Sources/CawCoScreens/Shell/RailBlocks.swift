@@ -26,7 +26,7 @@ final class ProjectBlock: UIStackView, UIContextMenuInteractionDelegate {
 
     init(project: ProjectRow) {
         self.project = project
-        mark = ProjectMarkView(cwd: project.cwd)
+        mark = ProjectMarkView(cwd: project.folder)
         super.init(frame: .zero)
         axis = .vertical
         name.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)

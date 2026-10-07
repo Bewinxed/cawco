@@ -73,7 +73,7 @@ struct JumpIndex {
         let leaf = { (path: String) in path.split(separator: "/").last.map(String.init) ?? path }
         var lists: [[JumpRow]] = [[], [], [], []]
         for project in fleet.projects {
-            lists[0].append(JumpRow(id: "project:\(project.id)", kind: .project, label: project.name, detail: project.cwd, target: .project(project.id)))
+            lists[0].append(JumpRow(id: "project:\(project.id)", kind: .project, label: project.name, detail: project.primaryPlace?.path ?? "", target: .project(project.id)))
         }
         for machine in fleet.machines where machine.status == "online" {
             lists[1].append(JumpRow(id: "machine:\(machine.machineId)", kind: .machine, label: machine.hostname,

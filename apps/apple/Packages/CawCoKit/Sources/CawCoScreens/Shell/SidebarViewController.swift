@@ -692,9 +692,8 @@ final class SidebarViewController: ObservedViewController {
                     }
                 } else if list.recent.isEmpty {
                     let start = block.emptyRow
-                    start.onTap = { [weak self] in
-                        self?.host?.startSession(machineId: list.project.machineId, cwd: list.project.cwd, projectId: list.project.id)
-                    }
+                    // The form resolves the project's machine and folder (Sidebar.svelte `newSession({ projectId })`).
+                    start.onTap = { [weak self] in self?.host?.startSession(machineId: nil, cwd: nil, projectId: list.project.id) }
                     sub.addArrangedSubview(start)
                 }
                 block.showSessions(true)
@@ -893,21 +892,21 @@ final class SidebarViewController: ObservedViewController {
     /// FolderMenu.svelte: what a project's row answers to on a right-click or long press.
     private func folderMenu(_ project: ProjectRow) -> UIMenu {
         let pinned = prefs.isPinned(project.id)
-        let chosen = prefs.chosenHue(project.cwd)
-        let current = prefs.hue(project.cwd)
+        let chosen = prefs.chosenHue(project.folder)
+        let current = prefs.hue(project.folder)
         var swatches: [UIMenuElement] = RailPrefs.identityHues.map { hue in
             UIAction(title: "Hue \(Int(hue))\(chosen == nil && current == hue ? " (automatic)" : "")", image: Self.swatch(hue), state: current == hue ? .on : .off) { [weak self] _ in
-                self?.prefs.setHue(project.cwd, hue)
+                self?.prefs.setHue(project.folder, hue)
             }
         }
         if chosen != nil {
-            swatches.insert(UIAction(title: "Auto") { [weak self] _ in self?.prefs.setHue(project.cwd, nil) }, at: 0)
+            swatches.insert(UIAction(title: "Auto") { [weak self] _ in self?.prefs.setHue(project.folder, nil) }, at: 0)
         }
         let colour = UIMenu(title: "Colour", options: .displayAsPalette, children: swatches)
         let open = UIAction(title: "Open project page", image: Glyph.external.image) { [weak self] _ in self?.host?.go(.project(project.id)) }
         var sections: [UIMenuElement] = [
             UIAction(title: "New session here", image: Glyph.plus.image) { [weak self] _ in
-                self?.host?.startSession(machineId: project.machineId, cwd: project.cwd, projectId: project.id)
+                self?.host?.startSession(machineId: nil, cwd: nil, projectId: project.id)
             },
             open,
             UIAction(title: pinned ? "Unpin from rail" : "Pin to rail", image: Glyph.pin.image) { [weak self] _ in

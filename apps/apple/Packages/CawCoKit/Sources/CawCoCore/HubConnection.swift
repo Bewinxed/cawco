@@ -363,11 +363,14 @@ public final class HubConnection {
     /// the hub's project list before the caller dismisses its form or menu.
     public func createProject(name: String, cwd: String, machineId: String) async throws -> Components.Schemas.PostApiProjects200 {
         let api = try self.api
-        let response = try await api.projects.create(.init(body: .json(.init(name: name, cwd: cwd, machineId: machineId))))
+        let response = try await api.projects.create(.init(body: .json(.init(name: name, machineId: machineId, cwd: cwd))))
         let created: Components.Schemas.PostApiProjects200
         switch response {
         case let .ok(ok):
             created = try ok.body.json
+        case let .badRequest(answer):
+            // The hub's own reason the project can't be made there (a folder it can't use, a name taken).
+            throw ControlError(message: try await String(collecting: answer.body.plainText, upTo: 64_000))
         case .unprocessableContent:
             throw ControlError(message: "Could not save this project — the hub answered 422. Try again.")
         case let .undocumented(statusCode, _):

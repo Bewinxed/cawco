@@ -57,8 +57,8 @@ final class WorkflowLaunchController: KitDialogController {
 
         let defaults = workflow.graph?.settings
         let project = defaults?.defaultProject.flatMap { id in hub.fleet.projects.first { $0.id == id } }
-        machineId = defaults?.defaultMachine ?? project?.machineId ?? ""
-        directory.text = project?.cwd ?? ""
+        machineId = defaults?.defaultMachine ?? project?.primaryPlace?.machineId ?? ""
+        directory.text = project?.checkout(on: machineId)?.path ?? ""
         supervisor = defaults?.defaultSupervisor?.delegateType ?? ""
 
         for field in workflow.fields {
@@ -190,9 +190,9 @@ final class WorkflowLaunchController: KitDialogController {
     /// Choosing a project sets its machine and its directory.
     private func choose(project id: String) {
         chosenProject = id
-        guard let project = hub.fleet.projects.first(where: { $0.id == id }) else { return }
-        machineId = project.machineId
-        directory.text = project.cwd
+        guard let home = hub.fleet.projects.first(where: { $0.id == id })?.primaryPlace else { return }
+        machineId = home.machineId
+        directory.text = home.path
         draw()
     }
 

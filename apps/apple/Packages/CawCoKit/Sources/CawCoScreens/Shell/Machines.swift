@@ -558,11 +558,12 @@ final class MachineMenu: NSObject, UIContextMenuInteractionDelegate {
         let hub = host.hub
         let count = { (n: Int, noun: String) in "\(n) \(noun)\(n == 1 ? "" : "s")" }
         let sessions = hub.fleet.rows.filter { $0.machineId == machine.machineId }.count
-        let projects = hub.fleet.projects.filter { $0.machineId == machine.machineId }.count
+        let projects = hub.fleet.projects.filter { $0.placed(on: machine.machineId) }.count
         let id = machine.machineId
         let dialog = ConfirmDialog(
             title: "Remove \(Naming.machineLabel(machine.hostname))?",
-            body: "Its \(count(sessions, "session")) and \(count(projects, "project")) are removed from the fleet. Its spend history stays. If its agent starts again, it rejoins the fleet.",
+            // MachineMenu.svelte: removing a machine takes its places from projects, never the projects.
+            body: "Its \(count(sessions, "session")) are removed from the fleet\(projects > 0 ? ", and \(count(projects, "project")) \(projects == 1 ? "loses its folders" : "lose their folders") on it; the projects stay" : ""). Its spend history stays. If its agent starts again, it rejoins the fleet.",
             confirmLabel: "Remove machine",
             pendingLabel: "Removing…",
             destructive: true
