@@ -5925,10 +5925,16 @@ export const createServer = (
 
   const pendingInstancePublishes = new Set<string>();
   let instancePublishScheduled = false;
+  /**
+   * A session's role, or a delegate type or toolset, may have moved what a
+   * live cawco connection lists: bound once the MCP server exists below.
+   */
+  let toolsMayHaveChanged = (): void => undefined;
   const publishInstances = (machineId: string): void => {
     // A session's model, project or harness can move under a live rule; every
     // move republishes, so this is the one place that has to drop the cache.
     ruleEngine.forgetFacts();
+    toolsMayHaveChanged();
     pendingInstancePublishes.add(machineId);
     if (instancePublishScheduled) {
       return;
@@ -6794,6 +6800,7 @@ export const createServer = (
   void resolvePlugins(db.unresolvedPlugins());
 
   const fanOutFleet = (): void => {
+    toolsMayHaveChanged();
     for (const machineId of registry.machineIds()) {
       const agent = registry.agent(machineId);
       if (!agent) {
@@ -7809,6 +7816,8 @@ export const createServer = (
     },
     knownCredential: (token) =>
       identities.resolve(`Bearer ${token}`) !== undefined,
+    toolListing: db.toolListing,
+    putToolListing: db.putToolListing,
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one in-process dispatcher replaces six relay routes, retaining their ordered ownership and settlement checks.
     forward: async (envelope, actor) => {
       // The MCP resolver supplies the caller separately, never from provenance
@@ -7932,6 +7941,7 @@ export const createServer = (
       }
     },
   });
+  ({ toolsMayHaveChanged } = delegationMcp);
 
   /**
    * What the hub holds in memory for sessions whose rows were just deleted —

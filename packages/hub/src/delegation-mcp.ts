@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { unwatchFile, watchFile } from "node:fs";
 import type { Envelope, InstanceRow, LandsMode } from "@cawco/core";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
@@ -34,6 +35,15 @@ const LONG_CALLS: Record<string, string> = {
   task_start: "Creating the attempt's workspace",
   start_session: "Waiting for the machine to start the session",
 };
+
+/** The listing every unbound connection shares: OpenCode's discovery, the superset. */
+const SHARED_DISCOVERY = "shared-discovery";
+
+/** How long a burst of changes waits before the lists are looked at. Our choice. */
+const LIST_DEBOUNCE_MS = 500;
+
+/** How often the lists are looked at anyway, for a change no event names. Our choice. */
+const LIST_SWEEP_MS = 30_000;
 
 /** What a session credential a call names reads as once it is replaced. */
 export const REDACTED_CREDENTIAL = "[cawco credential]";
@@ -76,6 +86,9 @@ export function createDelegationMcp(options: {
   credentialActor: (authorization: string | null) => InstanceRow | undefined;
   /** Whether `token` is a session credential the hub holds (by its hash). */
   knownCredential: (token: string) => boolean;
+  /** What a listing last answered `tools/list` with, as a hash (db `toolListing`). */
+  toolListing: (listing: string) => string | undefined;
+  putToolListing: (listing: string, toolsHash: string) => void;
   tools?: ToolFactory;
   /** Project tasks, for the `task_*` and `todo_write` tools; without it they are not offered. */
   tasks?: Tasks;
@@ -535,16 +548,79 @@ export function createDelegationMcp(options: {
     return result;
   };
 
-  /** Every request carries its own actor; no connection state outlives it. */
+  /** The row a connection's binding names, read fresh: its role can change. */
+  const boundRow = (binding: string | null) =>
+    binding ? options.instances().find((row) => row.id === binding) : undefined;
+
+  /** Whose list a connection is: its session's, or OpenCode's shared discovery's. */
+  const listingOf = (binding: string | null): string =>
+    binding ?? SHARED_DISCOVERY;
+
+  const hashOf = (listing: unknown): string =>
+    createHash("sha256").update(JSON.stringify(listing)).digest("hex");
+
+  /** The hash of what a connection bound to `binding` is listed now. */
+  const toolsHash = (binding: string | null): string =>
+    hashOf(toolsFor(boundRow(binding)).map(listed));
+
+  /**
+   * Each connection's open GET stream, where the client hears what the server
+   * says unasked; `told` is the tool list it was last told had changed, so a
+   * stream is told once per change.
+   */
+  const streams = new Set<{
+    binding: string | null;
+    server: Server;
+    told?: string;
+  }>();
+
+  /**
+   * THE NO-STALE-LIST RULE. Every open stream whose connection's tools differ
+   * from what it last listed is told `notifications/tools/list_changed`
+   * (MCP: servers that declare `listChanged` "SHOULD send a notification" when
+   * the list changes), once: after a hub start on a new build, a role change,
+   * a delegate type or toolset change. What each listing last listed outlives
+   * the hub, so a restart onto a new build still finds the difference.
+   */
+  const reconcileLists = () => {
+    for (const stream of streams) {
+      const listing = listingOf(stream.binding);
+      const last = options.toolListing(listing);
+      const now = toolsHash(stream.binding);
+      if (last === undefined || last === now || stream.told === now) {
+        continue;
+      }
+      stream.told = now;
+      console.info(
+        `[delegation-mcp] tools/list_changed -> ${listing}: its tools changed since it last listed them`
+      );
+      stream.server.sendToolListChanged().catch((error: unknown) => {
+        console.warn(
+          `[delegation-mcp] tools/list_changed to ${listing} failed: ${String(error)}`
+        );
+      });
+    }
+  };
+
+  let reconcileTimer: ReturnType<typeof setTimeout> | undefined;
+  /** Something a tool list depends on may have moved: one look, debounced. */
+  const toolsMayHaveChanged = () => {
+    clearTimeout(reconcileTimer);
+    reconcileTimer = setTimeout(reconcileLists, LIST_DEBOUNCE_MS);
+  };
+  // What no event names (a role toolset read on its own schedule) is found
+  // by the next sweep.
+  const sweep = setInterval(reconcileLists, LIST_SWEEP_MS);
+  sweep.unref?.();
+
+  /** Every request carries its own actor; no connection state outlives it but its GET stream. */
   const open = async (binding: string | null) => {
-    const bound = binding
-      ? options.instances().find((row) => row.id === binding)
-      : undefined;
+    const bound = boundRow(binding);
     const canDelegate = bound?.canDelegate ?? undefined;
     const server = new Server(
       { name: "cawco", version: "1.0.0" },
       {
-        capabilities: { tools: {} },
+        capabilities: { tools: { listChanged: true } },
         instructions: handoffInstructions({
           instanceId: binding ?? "",
           instanceById: options.instanceById,
@@ -562,9 +638,12 @@ export function createDelegationMcp(options: {
     });
     // A session's role is fixed across items/checks. Shared OpenCode discovery
     // lists the superset; each invocation resolves its actor and enforces role.
-    server.setRequestHandler(ListToolsRequestSchema, async () => ({
-      tools: toolsFor(bound).map(listed),
-    }));
+    server.setRequestHandler(ListToolsRequestSchema, () => {
+      // Read fresh, so a re-list after list_changed answers the new role.
+      const answered = toolsFor(boundRow(binding)).map(listed);
+      options.putToolListing(listingOf(binding), hashOf(answered));
+      return Promise.resolve({ tools: answered });
+    });
     server.setRequestHandler(CallToolRequestSchema, async (message, extra) => {
       const token = message.params._meta?.progressToken;
       let elapsed = 0;
@@ -654,6 +733,58 @@ export function createDelegationMcp(options: {
     return actor?.id ?? null;
   };
 
+  /**
+   * A connection's standalone GET stream (Streamable HTTP): what the server
+   * says unasked goes here. Its own server lives as long as the stream, is
+   * remembered while it does, and is looked at once at once: a client back
+   * after a hub restart onto a new build hears at once that its list moved.
+   */
+  const openStream = async (
+    binding: string | null,
+    request: Request
+  ): Promise<Response> => {
+    const { transport, server } = await open(binding);
+    const response = await transport.handleRequest(request);
+    if (!(response.ok && response.body)) {
+      await server.close();
+      return response;
+    }
+    const stream = { binding, server };
+    streams.add(stream);
+    console.info(`[delegation-mcp] stream open -> ${listingOf(binding)}`);
+    toolsMayHaveChanged();
+    const ended = async () => {
+      if (streams.delete(stream)) {
+        console.info(`[delegation-mcp] stream closed -> ${listingOf(binding)}`);
+        await server.close();
+      }
+    };
+    const reader = response.body.getReader();
+    return new Response(
+      new ReadableStream({
+        async pull(controller) {
+          try {
+            const { done, value } = await reader.read();
+            if (done) {
+              controller.close();
+              await ended();
+            } else {
+              controller.enqueue(value);
+            }
+          } catch (error) {
+            controller.error(error);
+            await ended();
+          }
+        },
+        async cancel(reason) {
+          await reader.cancel(reason);
+          await ended();
+        },
+      }),
+      { status: response.status, headers: response.headers }
+    );
+  };
+
   const handle = async (
     request: Request,
     parsedBody?: unknown
@@ -662,10 +793,13 @@ export function createDelegationMcp(options: {
     if (binding instanceof Response) {
       return binding;
     }
+    if (request.method === "GET") {
+      return await openStream(binding, request);
+    }
     if (request.method !== "POST") {
-      return new Response("CawCo MCP accepts POST requests only", {
+      return new Response("CawCo MCP accepts POST and GET requests only", {
         status: 405,
-        headers: { Allow: "POST" },
+        headers: { Allow: "POST, GET" },
       });
     }
     const { transport, server } = await open(binding);
@@ -714,6 +848,8 @@ export function createDelegationMcp(options: {
   const close = () => {
     unwatchFile(moduleUrl);
     unwatchFile(adminModuleUrl);
+    clearInterval(sweep);
+    clearTimeout(reconcileTimer);
   };
-  return { handle, call, list, close };
+  return { handle, call, list, close, toolsMayHaveChanged };
 }

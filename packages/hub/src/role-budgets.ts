@@ -73,6 +73,8 @@ export const measureRoles = (): RoleSize[] => {
     forward: () => Promise.resolve(),
     credentialActor: () => undefined,
     knownCredential: () => false,
+    toolListing: () => undefined,
+    putToolListing: () => undefined,
     // Only the definitions are read: nothing is called.
     tasks: {} as Tasks,
     projectFromSession: () => Promise.reject(new Error("measuring")),

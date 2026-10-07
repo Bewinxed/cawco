@@ -644,6 +644,18 @@ export const sessionIdentities = sqliteTable("session_identities", {
   error: text("error"),
 });
 
+/**
+ * What each cawco MCP listing last answered `tools/list` with, as a hash: a
+ * session's (by instance), or OpenCode's shared discovery's. A connection
+ * whose tools differ is told `notifications/tools/list_changed`, across a hub
+ * restart onto a new build too.
+ */
+export const mcpToolListings = sqliteTable("mcp_tool_listings", {
+  listing: text("listing").primaryKey(),
+  toolsHash: text("tools_hash").notNull(),
+  listedAt: timestamp("listed_at").notNull(),
+});
+
 /** Completion identity survives agent and hub restarts, independently of live custody. */
 export const completedTurns = sqliteTable(
   "completed_turns",

@@ -90,6 +90,7 @@ import {
   instances,
   marketplaces,
   mcpServers,
+  mcpToolListings,
   openrouterConnection,
   type PlaceKind,
   plugins,
@@ -854,6 +855,7 @@ export interface DbShape {
   }) => void;
   /** Files or refreshes rows of a project's task index, each by its file's path. */
   readonly putTaskIndex: (rows: TaskIndexRow[]) => void;
+  readonly putToolListing: (listing: string, toolsHash: string) => void;
   /** Upsert; a patch names only what it changes and the rest stays as it was. */
   readonly putToolPolicy: (
     id: string,
@@ -1173,6 +1175,8 @@ export interface DbShape {
     projectId: string,
     taskId: string
   ) => ThreadRow | undefined;
+  /** The hash of the tools a cawco MCP listing last answered, if it has. */
+  readonly toolListing: (listing: string) => string | undefined;
   readonly touchAgent: (machineId: string) => void;
   /** Files or moves a canvas onto the session showing it; a hash given becomes its page's. */
   readonly touchCanvas: (canvas: {
@@ -2131,6 +2135,19 @@ const make = (path: string): DbShape => {
           ...(row.title ? row : { ...row, title: row.derivedTitle }),
           ...(row.autopilot ? { autopilot: row.autopilot } : {}),
         })),
+    toolListing: (listing) =>
+      db
+        .select({ toolsHash: mcpToolListings.toolsHash })
+        .from(mcpToolListings)
+        .where(eq(mcpToolListings.listing, listing))
+        .get()?.toolsHash,
+    putToolListing: (listing, toolsHash) => {
+      const row = { listing, toolsHash, listedAt: new Date() };
+      db.insert(mcpToolListings)
+        .values(row)
+        .onConflictDoUpdate({ target: mcpToolListings.listing, set: row })
+        .run();
+    },
     sessionIdentity: (instanceId) =>
       db
         .select()
