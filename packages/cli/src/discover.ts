@@ -76,10 +76,23 @@ export const discoverHub = async ({
     ((): void => {
       // --verbose narration is opt-in; silently drop it when no logger was given.
     });
-  const port = Number(readEnv(CAWCO_ENV.hubPort) ?? CAWCO_HUB_PORT);
+  const namedPort = readEnv(CAWCO_ENV.hubPort);
+  const port = Number(namedPort ?? CAWCO_HUB_PORT);
 
+  /**
+   * The hub found. Only one a discovery rung found (mDNS, the tailnet,
+   * localhost) is remembered for the next run; one named outright — `--hub`,
+   * `CAWCO_HUB_URL`, or a port set in `CAWCO_HUB_PORT` — is used for this run
+   * and never saved, so pointing one command at a scratch hub does not move
+   * every later one there. The cached rung's hub is already what is saved.
+   */
   const settle = async (httpUrl: string, source: HubSource): Promise<Hub> => {
-    await writeConfig({ hubUrl: httpUrl });
+    const discovered =
+      (source === "mdns" || source === "tailscale" || source === "localhost") &&
+      namedPort === undefined;
+    if (discovered) {
+      await writeConfig({ hubUrl: httpUrl });
+    }
     return { httpUrl, wsUrl: toWsUrl(httpUrl), source };
   };
 

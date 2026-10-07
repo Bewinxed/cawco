@@ -108,7 +108,8 @@ Signing in
 
 Finding the hub, in order — the first that answers wins
   1. --hub, then ${CAWCO_ENV.hubUrl}
-  2. the last hub that answered, remembered in ${CONFIG_PATH}
+  2. the last hub steps 3-5 found, remembered in ${CONFIG_PATH} (a hub named
+     by --hub, ${CAWCO_ENV.hubUrl} or ${CAWCO_ENV.hubPort} is used for that run, never saved)
   3. mDNS on the local link (_${CAWCO_MDNS_TYPE}._tcp)
   4. online Tailscale peers, on ${CAWCO_ENV.hubPort} (default ${CAWCO_HUB_PORT})
   5. http://localhost:${CAWCO_HUB_PORT}
