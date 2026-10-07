@@ -180,35 +180,6 @@
     box-shadow: var(--shadow-overlay);
     font: var(--type-body);
   }
-  /* A toast stays in its stack. svelte-streamdown's expand overlay is a
-     global `[data-expanded='true'] { position: fixed; top: 16px; left: 16px;
-     width: calc(100vw - 32px); height: calc(100vh - 32px); z-index: … }`
-     (Streamdown.svelte), loaded on every page that renders markdown, and
-     sonner marks each toast of an expanded stack `data-expanded="true"`.
-     Sonner's own `position` and `z-index` match it in weight, so the sheet
-     loaded last won: on a conversation the toast was fixed to the viewport,
-     and a custom toast (the update notice, `data-styled="false"`, which
-     sonner gives no width) took the overlay's whole-viewport width, from the
-     bottom-left corner across the rail. Each property is restated here, one
-     selector heavier; the phone's full-width rule below is heavier still.
-     Sonner sets `top` and `left` only on the edge a toast is pinned to, so
-     the other edge is restated too: `top: 16px` squeezed a bottom toast, and
-     `left: 16px` pushed a right toast out past the stack's edge. */
-  :global([data-sonner-toaster] [data-sonner-toast]) {
-    position: absolute;
-    width: var(--width);
-    z-index: var(--z-index);
-  }
-  :global([data-sonner-toaster] [data-sonner-toast][data-y-position="bottom"]) {
-    top: auto;
-  }
-  :global([data-sonner-toaster] [data-sonner-toast][data-x-position="right"]) {
-    left: auto;
-  }
-  :global([data-sonner-toaster] [data-sonner-toast][data-x-position="center"]) {
-    left: 0;
-  }
-
   /* The toast's action and cancel buttons: the label role, an item's radius,
      and the press every control gives. */
   :global(

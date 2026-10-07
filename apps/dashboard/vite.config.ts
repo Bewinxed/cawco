@@ -218,9 +218,55 @@ const calendarThemeOff = (): Plugin => ({
   },
 });
 
+/**
+ * svelte-streamdown's fullscreen overlay is one global rule in its root
+ * component (Streamdown.svelte): `[data-expanded='true'] { position: fixed;
+ * top: 16px; left: 16px; width: calc(100vw - 32px); height: calc(100vh -
+ * 32px); z-index: 2147483647; margin: 0 }`. Its targets are its own two:
+ * the table wrapper (`data-streamdown-table`, flagged by useExpand) and a
+ * Mermaid diagram's container (the div inside `data-streamdown-mermaid`,
+ * flagged by panzoom). But the selector names any element in the page, and
+ * others carry the same flag: sonner marks every toast of an expanded stack
+ * with it, and Milkdown's code-block language button while its list is
+ * open. Each was fixed to the viewport, and whatever it does not set itself
+ * (an unstyled toast's width, the button's offsets) took the overlay's: the
+ * update notice spanned the viewport from the bottom-left, over the rail.
+ *
+ * The selector is confined to streamdown's own two targets here, where the
+ * rule enters the build, so it matches nothing else and every other element
+ * keeps its own cascade untouched. A counter-rule cannot do that: to win it
+ * must set a value, and `revert`/`revert-layer` from unlayered CSS drop the
+ * element's own author styles along with streamdown's; a cascade layer only
+ * outranks it where the element sets the same property. `:where()` holds the
+ * weight at the library's own (0,1,0). A release that changes the rule fails
+ * the build here instead of leaking again.
+ */
+const STREAMDOWN_ROOT =
+  /svelte-streamdown[\\/]dist[\\/]Streamdown\.svelte\?.*type=style/;
+const STREAMDOWN_OVERLAY = /\[data-expanded=(['"]?)true\1\](?=\s*\{)/g;
+const streamdownOverlayOwn = (): Plugin => ({
+  name: "cawco-streamdown-overlay-own",
+  transform(code, id) {
+    if (!STREAMDOWN_ROOT.test(id)) {
+      return null;
+    }
+    const found = code.match(STREAMDOWN_OVERLAY)?.length ?? 0;
+    if (found !== 1) {
+      throw new Error(
+        `svelte-streamdown's [data-expanded='true'] overlay rule was found ${found} times in ${id}, expected once: re-read Streamdown.svelte and update streamdownOverlayOwn`
+      );
+    }
+    return code.replace(
+      STREAMDOWN_OVERLAY,
+      ":where([data-streamdown-table], [data-streamdown-mermaid] > div)$&"
+    );
+  },
+});
+
 export default defineConfig({
   plugins: [
     calendarThemeOff(),
+    streamdownOverlayOwn(),
     hubProxy(),
     tailwindcss(),
     sveltekit({
@@ -270,7 +316,10 @@ export default defineConfig({
     assetsInlineLimit: (file) => INLINE_FACES.test(file) || undefined,
   },
   optimizeDeps: {
-    exclude: ["@xyflow/svelte"],
+    // svelte-streamdown is compiled like the app's own components, so its
+    // stylesheet passes through streamdownOverlayOwn in dev as in the build:
+    // prebundled, its styles are injected from the bundle's JS instead.
+    exclude: ["@xyflow/svelte", "svelte-streamdown"],
   },
   ssr: {
     // Both ship raw .svelte sources; dev SSR must compile them, not require them.
