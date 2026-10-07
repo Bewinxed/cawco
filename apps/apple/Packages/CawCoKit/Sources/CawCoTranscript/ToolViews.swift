@@ -281,9 +281,10 @@ final class ToolLineView: RailRow, RowContent, Disclosing {
             content = prose
             margins = (Space.space1, Space.space3)
         default:
-            // ToolGroup `.fields`: each input field in the order the call wrote
-            // it, then the result (a failed memory call: only its result).
-            var fields: [(String, String)] = d.renderer == .memory ? [] : block.toolInput.keys.sorted(by: Self.inputOrder(block)).map { key in
+            // ToolGroup `.fields`: each input field in the shared order
+            // (tool-presentation `fieldOrder`), then the result (a failed
+            // memory call: only its result).
+            var fields: [(String, String)] = d.renderer == .memory ? [] : ToolDescriptor.fieldOrder(block.toolInput.keys).map { key in
                 (key, ToolDescriptor.text(block.toolInput[key] as Any))
             }
             if let result { fields.append(("result", result.text)) }
@@ -294,14 +295,6 @@ final class ToolLineView: RailRow, RowContent, Disclosing {
         let box = UIView()
         box.pin(content, insets: UIEdgeInsets(top: margins.top, left: offset, bottom: margins.bottom, right: 0))
         opened.addArrangedSubview(box)
-    }
-
-    /// The input's keys in the order the call wrote them, as the web reads them.
-    private static func inputOrder(_ block: Block) -> (String, String) -> Bool {
-        let raw = String(decoding: block.signature, as: UTF8.self)
-        return { a, b in
-            (raw.range(of: "\"\(a)\"")?.lowerBound ?? raw.endIndex) < (raw.range(of: "\"\(b)\"")?.lowerBound ?? raw.endIndex)
-        }
     }
 
     private func configureShots(_ block: Block, renderer: ToolDescriptor.Renderer) {

@@ -13,6 +13,7 @@ import {
   LINE_CAP,
   MCP_NAME,
   type Piece,
+  PRIMARY_FIELDS,
   PRIMARY_MAX,
   PROSE_FIELD,
   REFUSAL_TAGS,
@@ -205,6 +206,7 @@ ${enumOf(
     static let lineCap = ${LINE_CAP}
     static let resultCap = ${RESULT_CAP}
     static let primaryMax = ${PRIMARY_MAX}
+    static let primaryFields: [String] = ${list(PRIMARY_FIELDS, str)}
     static let refusalTags = ${raw(REFUSAL_TAGS)}
     static let mcpName = ${raw(MCP_NAME)}
     static let proseField = ${str(PROSE_FIELD)}

@@ -318,6 +318,15 @@ nonisolated struct ToolDescriptor {
 
     // MARK: Bodies
 
+    /// The order a fields body lists a call's input in, the same on every
+    /// client (tool-presentation.ts `fieldOrder`): the primary fields in
+    /// their order, then the rest by name.
+    static func fieldOrder(_ keys: some Sequence<String>) -> [String] {
+        let primary = ToolPresentation.primaryFields
+        func rank(_ key: String) -> Int { primary.firstIndex(of: key) ?? primary.count }
+        return keys.sorted { a, b in rank(a) != rank(b) ? rank(a) < rank(b) : a < b }
+    }
+
     /// A fields body's value for any input value: a string as written, anything else as JSON.
     static func text(_ value: Any) -> String {
         if let string = value as? String { return string }

@@ -1267,10 +1267,26 @@ export function inputFields(raw: unknown): Field[] {
   if (!isRecord(raw)) {
     return [];
   }
-  return Object.entries(raw).map(([key, value]) => ({
+  return fieldOrder(Object.keys(raw)).map((key) => ({
     key,
-    text: asText(value),
+    text: asText(raw[key]),
   }));
+}
+
+/**
+ * The order a fields body lists a call's input in, the same on every client:
+ * the fields that name what the call is about ({@link PRIMARY_FIELDS}, in
+ * their order), then the rest by name. Not the order the call wrote them: a
+ * client that decodes JSON into a dictionary (the native app) never sees that.
+ */
+export function fieldOrder(keys: string[]): string[] {
+  const rank = (key: string): number => {
+    const at = PRIMARY_FIELDS.indexOf(key);
+    return at === -1 ? PRIMARY_FIELDS.length : at;
+  };
+  return [...keys].sort(
+    (a, b) => rank(a) - rank(b) || (a < b ? -1 : Number(a > b))
+  );
 }
 
 /** A result as a fields body shows it: its head, and how much of it is not shown. */

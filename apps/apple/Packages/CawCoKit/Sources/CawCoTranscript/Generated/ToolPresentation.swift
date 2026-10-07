@@ -134,6 +134,7 @@ nonisolated enum ToolPresentation {
     static let lineCap = 200
     static let resultCap = 20000
     static let primaryMax = 80
+    static let primaryFields: [String] = ["file_path", "path", "url", "query", "pattern", "command", "description"]
     static let refusalTags = #"</?tool_use_error>"#
     static let mcpName = #"^mcp__(.+?)__(.+)$"#
     static let proseField = "args"
