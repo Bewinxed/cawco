@@ -3,6 +3,11 @@ import type { PreviewElement, SendPayload } from "@cawco/core";
 export const NOTE_MAX = 500;
 
 export interface CapturedSelection {
+  /**
+   * The overlay's pick id while the element's screenshot is still being
+   * drawn; null once it has arrived or failed.
+   */
+  capturing: string | null;
   element: PreviewElement;
   note: string;
   png: string | null;

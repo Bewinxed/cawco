@@ -1,7 +1,7 @@
 <script lang="ts">
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import { IconClose, IconWindow } from "#lib/icons.js";
-  import { dur } from "../motion/curves.svelte";
+  import { appear, dur } from "../motion/curves.svelte";
   import { land } from "../motion/share.svelte";
   import {
     type PendingSelection,
@@ -38,8 +38,18 @@
     type="button"
     bind:this={anchor}
   >
+    <!-- The thumbnail's slot holds its size while the element is still being
+         drawn, and the screenshot fades into it when it lands. -->
     {#if selection.png}
-      <img alt="" src={`data:image/png;base64,${selection.png}`}>
+      <span class="thumb"
+        ><img
+          alt=""
+          src={`data:image/png;base64,${selection.png}`}
+          in:appear
+        ></span
+      >
+    {:else if selection.capturing}
+      <span class="thumb" data-capturing></span>
     {:else}
       <span class="mark"><IconWindow /></span>
     {/if}
@@ -97,13 +107,23 @@
     min-width: 0;
     text-align: left;
   }
-  img,
+  .thumb,
   .mark {
     width: 28px;
     height: 28px;
-    object-fit: contain;
     flex-shrink: 0;
     border-radius: var(--radius-xs);
+  }
+  .thumb {
+    display: block;
+    overflow: hidden;
+    background: var(--surface-recess);
+  }
+  img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
   }
   .mark {
     display: grid;

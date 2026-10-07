@@ -199,6 +199,21 @@ export class ComposerDraft {
     return "added";
   }
 
+  /** A note whose element screenshot is still on its way: Send waits for it. */
+  capturing = $derived(this.selections.some((s) => s.capturing !== null));
+
+  /**
+   * A picked element's screenshot arrived (or failed, `png` null) under the
+   * overlay's pick id; the note waiting on it takes it.
+   */
+  captured(pick: string, png: string | null): void {
+    const note = this.selections.find((s) => s.capturing === pick);
+    if (note) {
+      note.png = png;
+      note.capturing = null;
+    }
+  }
+
   /** The hub took these notes with a message; they leave the draft. */
   acceptSelections(selectionIds: string[]): void {
     this.selections = this.selections.filter(

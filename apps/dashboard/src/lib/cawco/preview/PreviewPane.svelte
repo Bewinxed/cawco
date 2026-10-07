@@ -33,6 +33,7 @@
     previewElement,
     previewError,
     previewMessageText,
+    previewPickId,
     previewPickPlace,
     previewPng,
     previewRpc,
@@ -43,6 +44,7 @@
   let {
     instanceId,
     onselect,
+    oncapture,
     onescape,
     switcher,
     sheet = false,
@@ -58,6 +60,8 @@
     onselect: (
       selection: CapturedSelection
     ) => "added" | "duplicate" | "full" | undefined;
+    /** A pick's screenshot arrived (null: it could not be drawn). */
+    oncapture: (pick: string, png: string | null) => void;
     onescape: () => boolean;
   } = $props();
   let iframe = $state<HTMLIFrameElement>();
@@ -341,15 +345,19 @@
           return;
         }
         const element = previewElement(message.element, location.origin);
-        if (element && iframe) {
+        const pick = previewPickId(message.id);
+        if (!(element && pick)) {
+          return;
+        }
+        if (iframe) {
           flyFrom(element.rect, selectionShare(element));
         }
         if (
           well &&
-          element &&
           onselect({
+            capturing: pick,
             element,
-            png: previewPng(message.png),
+            png: null,
             note: "",
             scale: Math.min(2, devicePixelRatio),
           }) === "full"
@@ -368,10 +376,18 @@
             }
           );
         }
+        break;
+      }
+      case "cawco:selected-png": {
+        const pick = previewPickId(message.id);
+        if (!pick) {
+          return;
+        }
         const error = previewError(message.error);
         if (error) {
           failure = frameError(error);
         }
+        oncapture(pick, error ? null : previewPng(message.png));
         break;
       }
       case "cawco:escape":

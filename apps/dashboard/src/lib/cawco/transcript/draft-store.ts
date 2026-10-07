@@ -117,7 +117,12 @@ export async function loadDraft(
       }))
     ),
     texts: record.texts,
-    selections: record.selections,
+    // The page that was drawing a note's screenshot went with the reload:
+    // nothing will answer it now, so the note stands without one.
+    selections: record.selections.map((selection) => ({
+      ...selection,
+      capturing: null,
+    })),
   };
 }
 

@@ -1081,6 +1081,22 @@
   let sendBlock = $state("");
   const sendNotice = $derived(sendError || sendBlock || draft.notice);
 
+  /** A send pressed while a note's screenshot was still on its way. */
+  let awaiting = $state<{
+    draft: ComposerDraft;
+    via: (text: string, extras: SendExtras, id: string) => void;
+  } | null>(null);
+  const pending = $derived(sending || awaiting?.draft === draft);
+  $effect(() => {
+    if (awaiting && awaiting.draft !== draft) {
+      // The composer moved to another conversation: that press was the other's.
+      awaiting = null;
+    } else if (awaiting && !draft.capturing) {
+      const { via } = awaiting;
+      untrack(() => submit(via));
+    }
+  });
+
   function submit(
     via: (text: string, extras: SendExtras, id: string) => void = onsubmit
   ): void {
@@ -1108,6 +1124,13 @@
       toast[intent.level](intent.message);
       return;
     }
+    // A picked element's screenshot is still being drawn: the press stands,
+    // pending, and the message goes with it the moment it arrives.
+    if (draft.capturing) {
+      awaiting = { draft, via };
+      return;
+    }
+    awaiting = null;
     // The text leaves the field for the one row it becomes (motion/share),
     // keyed by the id the message is sent under. The field is measured
     // before it redraws empty.
@@ -2450,21 +2473,21 @@
           <!-- Pending from the press until the hub takes the message: the glyph
            slot turns to the kit spinner and presses are swallowed. -->
           <button
-            aria-busy={sending || undefined}
-            aria-disabled={sending || held || undefined}
+            aria-busy={pending || undefined}
+            aria-disabled={pending || held || undefined}
             aria-label={stops ? "Stop the agent" : "Send message"}
             class="stop touch-hit pressable"
-            disabled={!(busy || sending || draft.hasContent || recall)}
-            onclick={whileIdle(() => sending, onaction)}
+            disabled={!(busy || pending || draft.hasContent || recall)}
+            onclick={whileIdle(() => pending, onaction)}
             type="button"
           >
             <!-- The one control that changes meaning mid-turn. `{#key}` re-creates
              the glyph on every flip, so BOTH directions of the swap animate in;
              the box it sits in is untouched, so send↔stop never moves or
              resizes under a thumb already travelling toward it. -->
-            {#key sending ? "wait" : stops}
+            {#key pending ? "wait" : stops}
               <span class="swap" out:glyphOut>
-                {#if sending}
+                {#if pending}
                   <Spinner aria-hidden="true" role="presentation" />
                 {:else if stops}
                   <IconStop />

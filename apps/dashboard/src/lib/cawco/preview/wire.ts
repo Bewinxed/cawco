@@ -71,6 +71,13 @@ export function previewPng(value: unknown): string | null {
     : null;
 }
 
+const PICK_ID = /^[a-z0-9-]{1,64}$/;
+
+/** The id the overlay sends a pick and, later, its screenshot under. */
+export function previewPickId(value: unknown): string | null {
+  return typeof value === "string" && PICK_ID.test(value) ? value : null;
+}
+
 export function previewError(value: unknown): string | null {
   return text(value, ERROR_MAX);
 }

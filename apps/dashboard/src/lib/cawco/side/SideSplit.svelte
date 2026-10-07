@@ -43,6 +43,7 @@
     visible,
     phone,
     onselect,
+    oncapture,
     onescape,
     share = $bindable(0),
     children,
@@ -62,6 +63,7 @@
     onselect: (
       selection: CapturedSelection
     ) => "added" | "duplicate" | "full" | undefined;
+    oncapture: (pick: string, png: string | null) => void;
     onescape: () => boolean;
     /** The surface's share of the width, in percent: 0 while closed or a sheet. */
     share?: number;
@@ -245,6 +247,7 @@
   {:else if previewOpen}
     <PreviewPane
       instanceId={previewId}
+      {oncapture}
       {onescape}
       {onselect}
       sheet={phone}

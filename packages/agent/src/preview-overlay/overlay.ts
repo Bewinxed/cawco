@@ -626,12 +626,20 @@ window.addEventListener(
 );
 
 let touchCaptured = false;
+let pickCount = 0;
 
+/**
+ * A pick goes out at once so its chip flies while the element is still
+ * being drawn; the screenshot follows under the same id when it is ready.
+ */
 async function selectAt(clientX: number, clientY: number) {
   const el = elementAt(clientX, clientY);
   if (el) {
-    const element = describe(el);
-    post("cawco:selected", { element, ...(await capture(el)) });
+    pickCount += 1;
+    const id = `${Date.now().toString(36)}-${pickCount}`;
+    post("cawco:selected", { id, element: describe(el) });
+    const { png, error } = await capture(el);
+    post("cawco:selected-png", error ? { id, error } : { id, png });
   }
 }
 
