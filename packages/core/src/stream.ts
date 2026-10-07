@@ -192,6 +192,12 @@ export interface IngestMark {
 export interface RegisterAckPayload {
   addressContract?: true;
   /**
+   * This hub process, random at its start: an agent that last saw another
+   * epoch knows the hub restarted since, and that every connection a harness
+   * held to it (OpenCode's MCP streams) went with it.
+   */
+  hubEpoch: string;
+  /**
    * Per instance id. ABSENT from a hub that predates this — which is not an
    * empty ledger: the difference is what stops an agent replaying a backlog
    * into a hub that never asked for one. Both readings land on the same safe

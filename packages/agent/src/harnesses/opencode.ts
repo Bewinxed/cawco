@@ -4845,6 +4845,40 @@ export class OpencodeHarness implements Harness {
    * to its own server alone, through the config it launches that server with,
    * and keeps the plugin in a cawco-owned directory named for its hub.
    */
+  /**
+   * The hub restarted: OpenCode's `cawco` MCP client gave its GET stream up
+   * after two retries (its StreamableHTTPClientTransport takes the MCP SDK's
+   * default `maxRetries: 2`), so it would never hear `tools/list_changed`
+   * again. Its server's own route makes it again, per directory
+   * (`POST /mcp/{name}/connect?directory=`, MCP.connect → createAndStore: a
+   * new client, initialized and listed, with a new stream), for every
+   * directory a live session of this agent runs in.
+   */
+  async hubRestarted(): Promise<void> {
+    const client = this.#client;
+    if (!client) {
+      return;
+    }
+    const directories = new Set(
+      [...this.#sessions.values()].map((session) => session.directory)
+    );
+    await Promise.all(
+      [...directories].map(async (directory) => {
+        const connected = await reached(
+          client.mcp.connect(
+            { name: "cawco", directory },
+            { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
+          )
+        ).catch((error: unknown) => ({ error }));
+        console.info(
+          connected.error
+            ? `[opencode] ${directory}: cawco MCP reconnect failed: ${errorText(connected.error)}`
+            : `[opencode] ${directory}: cawco MCP reconnected after a hub restart`
+        );
+      })
+    );
+  }
+
   async installDelegationTools(): Promise<void> {
     const source = buildHandoffPluginSource();
     if (await isMachineAgent()) {

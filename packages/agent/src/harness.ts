@@ -181,6 +181,13 @@ export interface Harness {
     tail?: number,
     whole?: boolean
   ): Promise<SessionMessage[]>;
+  /**
+   * The hub restarted since this harness's live sessions connected to it:
+   * whatever connection to the hub they hold that does not come back by
+   * itself is made again. Absent for a harness whose connections do.
+   */
+  // biome-ignore lint/style/useConsistentMethodSignatures: matches the other adapter methods
+  hubRestarted?(): Promise<void>;
   readonly kind: HarnessKind;
   /** The stored sessions this harness can resume. */
   // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance

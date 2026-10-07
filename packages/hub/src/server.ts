@@ -564,13 +564,16 @@ const ack = (envelope: Envelope): Envelope<{ ok: true }> => ({
  * starts reading, so what a child wrote while no agent was reading reaches
  * this hub exactly once.
  */
+/** This hub process, random at its start (RegisterAckPayload.hubEpoch). */
+const HUB_EPOCH = crypto.randomUUID();
+
 const registerAck = (
   envelope: Envelope,
   ingested: Record<string, IngestMark>
 ): Envelope<RegisterAckPayload> => ({
   verb: envelope.verb,
   machineId: envelope.machineId,
-  payload: { ok: true, ingested, addressContract: true },
+  payload: { ok: true, ingested, addressContract: true, hubEpoch: HUB_EPOCH },
 });
 
 /** Sent back as a frame, the only verb a dashboard renders. */

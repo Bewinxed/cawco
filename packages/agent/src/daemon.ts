@@ -1,4 +1,6 @@
+import { readFile, writeFile } from "node:fs/promises";
 import { arch, hostname, platform } from "node:os";
+import { dirname, join } from "node:path";
 import type {
   AuthState,
   BuildInfo,
@@ -480,6 +482,47 @@ const readCustody = async (
   }
 };
 
+/**
+ * Every register, once the sessions it took custody of are attached: when
+ * the hub is another process than the one this machine last registered with
+ * (its `hubEpoch`, kept on disk so a restarted agent still knows), the hub
+ * restarted, and each harness makes again the connections to it that do not
+ * come back by themselves ({@link Harness.hubRestarted}).
+ */
+const reconnectAfterHubRestart = async (
+  url: string,
+  ackPayload: unknown
+): Promise<void> => {
+  const epoch = (ackPayload as { hubEpoch?: unknown } | undefined)?.hubEpoch;
+  if (typeof epoch !== "string") {
+    return;
+  }
+  const file = join(
+    dirname(process.env.CAWCO_SESSIOND_ENDPOINT ?? sessiondEndpoint()),
+    `hub-epoch-${new URL(url).host.replaceAll(":", "_")}`
+  );
+  const last = await readFile(file, "utf8").catch(() => undefined);
+  if (last === epoch) {
+    return;
+  }
+  // No record is a hub this machine has not seen since this was kept: it
+  // reconnects too; with no live session that is nothing.
+  await writeFile(file, epoch);
+  await Promise.all(
+    harnesses().map((adapter) =>
+      adapter
+        .hubRestarted?.()
+        .catch((error: unknown) =>
+          Effect.runFork(
+            Effect.logWarning(
+              `${adapter.kind}: reconnecting to the restarted hub failed: ${String(error)}`
+            )
+          )
+        )
+    )
+  );
+};
+
 const readSessions = async () => {
   // Read before the catalog: listing OpenCode conversations may start a new
   // server, which must not be mistaken for one that survived this restart.
@@ -900,6 +943,8 @@ const attach = (
         for (const envelope of custodyWaiting.splice(0)) {
           supervisor.dispatch(envelope);
         }
+        // biome-ignore lint/complexity/noVoid: the harnesses' reconnects are theirs; registration never waits on them
+        void reconnectAfterHubRestart(url, ackPayload);
       };
       // biome-ignore lint/complexity/noVoid: each bounded attempt publishes readiness; no control reply waits for recovery.
       void (async () => {
