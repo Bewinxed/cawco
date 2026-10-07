@@ -2,12 +2,14 @@ import { realpath, stat } from "node:fs/promises";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import type { PreviewSource } from "@cawco/core";
 import {
+  injectOverlay,
+  OVERLAY_PATH,
+  overlayResponse,
   type PreviewSocket,
   previewWebSocket,
   proxyHeaders,
   upgradePreview,
 } from "@cawco/core/preview-proxy";
-import { embeddedFile, standalone } from "@cawco/core/runtime";
 import type { Server } from "bun";
 
 /**
@@ -20,55 +22,7 @@ const previews = new Map<
   { listener: Server<PreviewSocket>; source: PreviewSource }
 >();
 const LOOPBACK = new Set(["localhost", "127.0.0.1", "[::1]"]);
-const HEAD_OPEN = /<head(\s[^>]*)?\s*>/i;
-const HEAD_CLOSE = /<\/head\s*>/i;
-const BODY = /<\/body\s*>/i;
 const PREVIEW_PREFIX = /^\/preview\/[^/]+\/[^/]+\//;
-let overlay: Promise<string> | undefined;
-
-/**
- * The script the forwarder injects into every previewed page. Two deployment
- * shapes reach this code: a source checkout, where the overlay's TypeScript
- * sits beside this file and is bundled here on first request; and the packed
- * release, where `build-binary.ts` folded this file into `cli.js` and put a
- * prebuilt `preview-overlay.js` next to it, because the source and its
- * dependency are not shipped. The sibling wins when it is there.
- */
-async function buildOverlay(): Promise<string> {
-  if (standalone) {
-    return Bun.file(embeddedFile("preview/overlay.js")).text();
-  }
-  const prebuilt = Bun.file(new URL("./preview-overlay.js", import.meta.url));
-  if (await prebuilt.exists()) {
-    return await prebuilt.text();
-  }
-  const result = await Bun.build({
-    entrypoints: [
-      new URL("./preview-overlay/overlay.ts", import.meta.url).pathname,
-    ],
-    target: "browser",
-    minify: true,
-    format: "iife",
-  });
-  if (!result.success) {
-    throw new AggregateError(result.logs, "Preview overlay build failed");
-  }
-  return result.outputs[0].text();
-}
-
-/**
- * Built once per process and kept, unless the build fails — a missing source
- * file makes `Bun.build` throw rather than answer `success: false`, and a
- * rejected promise left in the cache would turn one bad request into every
- * request until restart. A failure clears the slot so the next one retries.
- */
-function loadOverlay(): Promise<string> {
-  overlay ??= buildOverlay().catch((error: unknown) => {
-    overlay = undefined;
-    throw error;
-  });
-  return overlay;
-}
 
 export function stopPreview({ instanceId }: { instanceId: string }): boolean {
   previews.get(instanceId)?.listener.stop(true);
@@ -118,7 +72,6 @@ export async function startPreview(options: {
   }
   const source: PreviewSource =
     port === undefined ? { dir: root as string } : { port };
-  const script = `<script src="/__cawco/overlay.js"></script>`;
   stopPreview({ instanceId });
   const listener = Bun.serve<PreviewSocket>({
     hostname: "0.0.0.0",
@@ -127,13 +80,8 @@ export async function startPreview(options: {
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: the two source modes converge here so header rewriting and HTML injection have one path.
     async fetch(request, server) {
       const url = new URL(request.url);
-      if (url.pathname === "/__cawco/overlay.js") {
-        return new Response(await loadOverlay(), {
-          headers: {
-            "content-type": "text/javascript",
-            "cache-control": "no-store",
-          },
-        });
+      if (url.pathname === OVERLAY_PATH) {
+        return overlayResponse();
       }
       let response: Response;
       if ("port" in source) {
@@ -240,18 +188,7 @@ export async function startPreview(options: {
         request.method !== "HEAD" &&
         response.body
       ) {
-        const html = await response.text();
-        // Inject as the first child of <head> so it executes before Vite's
-        // deferred /@vite/client module. Fall back to before </head> or </body>.
-        if (HEAD_OPEN.test(html)) {
-          body = html.replace(HEAD_OPEN, (match) => match + script);
-        } else if (HEAD_CLOSE.test(html)) {
-          body = html.replace(HEAD_CLOSE, (match) => script + match);
-        } else if (BODY.test(html)) {
-          body = html.replace(BODY, (match) => script + match);
-        } else {
-          body = html + script;
-        }
+        body = injectOverlay(await response.text());
         headers.delete("content-length");
         headers.delete("content-encoding");
       }

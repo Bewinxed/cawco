@@ -7,6 +7,9 @@ import { domToPng } from "modern-screenshot";
 const INSPECTOR_PATH = /^(.*):(\d+):(\d+)$/;
 const PNG_PREFIX = /^data:image\/png;base64,/;
 let selecting = false;
+/** The page as it was served, from the tag that loaded this script (core's `injectOverlay`). */
+const pageHash =
+  (document.currentScript as HTMLScriptElement | null)?.dataset.pageHash ?? "";
 
 /**
  * The `/preview/<id>/<revision>/` prefix this page lives under. Derived from the current
@@ -124,6 +127,246 @@ function ready() {
     title: document.title,
   });
 }
+
+/*
+ * The choices bridge (Projects spec §5.7). A page marks a choice in markup —
+ * `data-cawco-choice="hero"` on the element (or a container), `data-option="b"`
+ * on each option, `data-cawco-multiple` on the choice to allow several — or
+ * calls `cawco.choose`, `cawco.note`, `cawco.set` and `cawco.on("picks", …)`.
+ *
+ * Those sit on MCP Apps' messages (JSON-RPC 2.0 over postMessage, spec
+ * 2026-01-26), so the page talks to the pane as an MCP App view talks to its
+ * host: `ui/initialize` then `ui/notifications/initialized`; each change is a
+ * `ui/update-model-context` request whose `structuredContent` is one id's
+ * change (CawCo keeps every id rather than overwriting); the picks are read
+ * with `tools/call` → `read_choices` and arrive after every change as
+ * `ui/notifications/tool-result`; `ui/message` sends the picks to the session.
+ * The pane checks each message and stores it in the hub; the page hears the
+ * stored picks back, so nothing here shows a pick the hub has not kept. The
+ * bridge starts on first use, so a page without choices sends nothing.
+ */
+
+interface Pick {
+  at: string;
+  note: string | null;
+  options: string[];
+  pageHash: string;
+  value: unknown;
+}
+type Picks = Record<string, Pick>;
+
+let picks: Picks = {};
+let heard = false;
+const listeners = new Set<(current: Picks) => void>();
+
+let nextId = 1;
+const waiting = new Map<
+  number,
+  { resolve: (result: unknown) => void; reject: (error: Error) => void }
+>();
+
+function request(method: string, params: object): Promise<unknown> {
+  const id = nextId;
+  nextId += 1;
+  window.parent.postMessage(
+    { jsonrpc: "2.0", id, method, params },
+    location.origin
+  );
+  return new Promise((resolve, reject) => waiting.set(id, { resolve, reject }));
+}
+
+function notify(method: string, params: object) {
+  window.parent.postMessage(
+    { jsonrpc: "2.0", method, params },
+    location.origin
+  );
+}
+
+/** The host's answers and notifications; false when the message is not the bridge's. */
+function answered(data: unknown): boolean {
+  const message = data as {
+    jsonrpc?: unknown;
+    id?: unknown;
+    method?: unknown;
+    params?: { structuredContent?: { choices?: Picks } };
+    result?: unknown;
+    error?: { message?: unknown };
+  } | null;
+  if (message?.jsonrpc !== "2.0") {
+    return false;
+  }
+  if (message.method === "ui/notifications/tool-result") {
+    const choices = message.params?.structuredContent?.choices;
+    if (choices) {
+      heardPicks(choices);
+    }
+    return true;
+  }
+  const pending =
+    typeof message.id === "number" ? waiting.get(message.id) : undefined;
+  if (pending) {
+    waiting.delete(message.id as number);
+    if (message.error) {
+      pending.reject(new Error(String(message.error.message)));
+    } else {
+      pending.resolve(message.result);
+    }
+  }
+  return true;
+}
+
+/** A refusal the pane already showed the person; the page stays as stored. */
+const shownByPane = () => undefined;
+
+let bridge: Promise<void> | undefined;
+/** The handshake and the first read, once per page load. */
+function connect(): Promise<void> {
+  bridge ??= request("ui/initialize", {
+    protocolVersion: "2026-01-26",
+    appCapabilities: {},
+    clientInfo: { name: "cawco-preview", version: "1.0.0" },
+  })
+    .then(() => {
+      notify("ui/notifications/initialized", {});
+      return request("tools/call", { name: "read_choices", arguments: {} });
+    })
+    .then((result) => {
+      const read = result as
+        | { structuredContent?: { choices?: Picks } }
+        | undefined;
+      heardPicks(read?.structuredContent?.choices ?? {});
+    })
+    .catch((error: unknown) => {
+      // The next use tries the handshake again.
+      bridge = undefined;
+      throw error;
+    });
+  return bridge;
+}
+
+async function change(entry: {
+  choice: string;
+  options?: string[];
+  note?: string;
+  value?: unknown;
+}): Promise<void> {
+  await connect();
+  await request("ui/update-model-context", {
+    structuredContent: { ...entry, pageHash },
+  });
+}
+
+const choiceOf = (option: Element): Element | null =>
+  option.closest("[data-cawco-choice]");
+
+/** Marks each option in the page as picked or not, from the stored picks. */
+function reflect() {
+  for (const option of document.querySelectorAll("[data-option]")) {
+    const choice = choiceOf(option)?.getAttribute("data-cawco-choice");
+    const on =
+      !!choice &&
+      (picks[choice]?.options ?? []).includes(
+        option.getAttribute("data-option") ?? ""
+      );
+    option.toggleAttribute("data-cawco-picked", on);
+    if (option.localName === "button") {
+      option.setAttribute("aria-pressed", String(on));
+    }
+  }
+}
+
+function heardPicks(next: Picks) {
+  picks = next;
+  heard = true;
+  reflect();
+  for (const listener of listeners) {
+    listener(picks);
+  }
+}
+
+function choose(
+  choice: string,
+  option: string | string[] | null
+): Promise<void> {
+  let options: string[] = [];
+  if (Array.isArray(option)) {
+    options = option;
+  } else if (option !== null) {
+    options = [option];
+  }
+  return change({ choice, options });
+}
+
+window.addEventListener(
+  "click",
+  (event) => {
+    if (selecting || !(event.target instanceof Element)) {
+      return;
+    }
+    const option = event.target.closest("[data-option]");
+    const holder = option && choiceOf(option);
+    const choice = holder?.getAttribute("data-cawco-choice");
+    const value = option?.getAttribute("data-option");
+    if (!(holder && choice && value)) {
+      return;
+    }
+    const current = picks[choice]?.options ?? [];
+    if (holder.hasAttribute("data-cawco-multiple")) {
+      choose(
+        choice,
+        current.includes(value)
+          ? current.filter((picked) => picked !== value)
+          : [...current, value]
+      ).catch(shownByPane);
+    } else {
+      choose(choice, current.includes(value) ? null : value).catch(shownByPane);
+    }
+  },
+  true
+);
+
+declare global {
+  interface Window {
+    cawco: {
+      choose: (
+        choice: string,
+        option: string | string[] | null
+      ) => Promise<void>;
+      note: (choice: string, text: string) => Promise<void>;
+      set: (key: string, value: unknown) => Promise<void>;
+      /** Sends the picks to the session as one message, with `text` added when given. */
+      send: (text?: string) => Promise<void>;
+      on: (event: "picks", listener: (picks: Picks) => void) => () => void;
+    };
+  }
+}
+
+Object.defineProperty(window, "cawco", {
+  value: Object.freeze({
+    choose,
+    note: (choice: string, text: string) => change({ choice, note: text }),
+    set: (key: string, value: unknown) => change({ choice: key, value }),
+    send: async (text = "") => {
+      await connect();
+      await request("ui/message", {
+        role: "user",
+        content: { type: "text", text },
+      });
+    },
+    on: (event: "picks", listener: (current: Picks) => void) => {
+      if (event !== "picks") {
+        throw new Error(`cawco.on: unknown event ${event}`);
+      }
+      listeners.add(listener);
+      if (heard) {
+        listener(picks);
+      } else {
+        connect().catch(shownByPane);
+      }
+      return () => listeners.delete(listener);
+    },
+  }),
+});
 
 function navigated() {
   post("cawco:navigated", {
@@ -442,8 +685,15 @@ window.addEventListener("message", async (event) => {
     return;
   }
   const message = event.data;
+  if (answered(message)) {
+    return;
+  }
   if (message?.type === "cawco:hello") {
     ready();
+    // Markup choices show their stored picks as soon as the pane is there.
+    if (document.querySelector("[data-cawco-choice]")) {
+      connect().catch(shownByPane);
+    }
   } else if (message?.type === "cawco:mode") {
     mode(message.mode === "select");
   } else if (message?.type === "cawco:capture") {

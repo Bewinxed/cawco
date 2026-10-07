@@ -1,0 +1,300 @@
+/* A decision page's shell and card recipes, on CawCo's tokens (tokens.css,
+   generated from design/tokens/cawco.tokens.json). No literal colours: every
+   value here is a token or a size the recipes share. Coral means "you, act
+   here"; status colours mean status. */
+:root {
+  color-scheme: light dark;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  background: var(--surface-page);
+  color: var(--ink-strong);
+  font-family: var(--font-sans);
+  font-size: var(--text-body);
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+h1,
+h2,
+h3 {
+  margin: 0;
+  line-height: 1.2;
+  font-weight: var(--weight-strong);
+  text-wrap: balance;
+}
+p {
+  margin: 0;
+}
+code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+a {
+  color: var(--link-ink);
+}
+
+/* Caw, light and dark: always a pair, the page shows the right one. */
+.caw-d {
+  display: none;
+}
+@media (prefers-color-scheme: dark) {
+  .caw-l {
+    display: none;
+  }
+  .caw-d {
+    display: inline;
+  }
+}
+
+.dp {
+  max-width: 920px;
+  margin: 0 auto;
+  padding: var(--space-6) var(--space-4) calc(var(--space-8) * 2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+/* The hero: Caw, what is being decided, and the progress. */
+.dp-hero {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--space-4);
+  align-items: center;
+}
+.dp-hero h1 {
+  font-size: var(--text-title);
+}
+.dp-hero p {
+  color: var(--ink-muted);
+  max-width: 62ch;
+  margin-top: var(--space-1);
+}
+.dp-meter {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-1);
+  color: var(--ink-muted);
+  font-size: var(--text-label);
+  font-variant-numeric: tabular-nums;
+}
+.dp-meter b {
+  color: var(--ink-strong);
+  font-size: var(--text-title);
+}
+.dp-bar {
+  width: 120px;
+  height: 4px;
+  border-radius: var(--radius-xs);
+  background: var(--surface-recess);
+  overflow: hidden;
+}
+.dp-bar i {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--brand-solid);
+  transition: width var(--dur-control) var(--ease-out);
+}
+.dp-offline {
+  color: var(--status-attn-ink);
+  background: var(--status-attn-bg);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+}
+@media (max-width: 640px) {
+  .dp-hero {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .dp-meter {
+    grid-column: 1 / -1;
+    align-items: flex-start;
+  }
+}
+
+/* A decision card: the question, one line of why, how it would look, the options, a note. */
+.dp-card {
+  background: var(--surface-raised);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-raised);
+  padding: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+  scroll-margin-top: var(--space-4);
+}
+.dp-card > header {
+  display: flex;
+  gap: var(--space-3);
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+.dp-card h2 {
+  font-size: var(--text-title);
+  flex: 1 1 240px;
+}
+.dp-state {
+  font-size: var(--text-meta);
+  color: var(--ink-muted);
+}
+.dp-state.on {
+  color: var(--brand-ink);
+}
+.dp-why {
+  color: var(--ink-muted);
+  max-width: 72ch;
+}
+.dp-show {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: start;
+}
+.dp-show.solo {
+  grid-template-columns: minmax(0, 1fr);
+}
+@media (max-width: 900px) {
+  .dp-show {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.dp-pane {
+  margin: 0;
+  background: var(--surface-recess);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.dp-pane > figcaption {
+  font-size: var(--text-meta);
+  color: var(--ink-muted);
+  font-weight: var(--weight-strong);
+}
+
+/* Options: every [data-option] inside a [data-cawco-choice]. The bridge sets
+   data-cawco-picked and aria-pressed on the ones the hub keeps as picked. */
+.dp-opts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: var(--space-2);
+}
+.dp-opt {
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  background: var(--surface-page);
+  color: var(--ink-strong);
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3) var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  transition:
+    border-color var(--dur-control) var(--ease-out),
+    background-color var(--dur-control) var(--ease-out),
+    transform var(--dur-control) var(--ease-out);
+}
+.dp-opt:hover {
+  border-color: var(--ink-muted);
+}
+.dp-opt:active {
+  transform: scale(0.985);
+}
+.dp-opt:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+.dp-opt b {
+  font-weight: var(--weight-strong);
+}
+.dp-opt span {
+  font-size: var(--text-label);
+  color: var(--ink-muted);
+  line-height: 1.4;
+}
+.dp-opt .dp-tag {
+  align-self: flex-start;
+  font-size: var(--text-meta);
+  border-radius: var(--radius-xs);
+  padding: 0 var(--space-1);
+  margin-top: 2px;
+  background: var(--surface-recess);
+  color: var(--ink-strong);
+}
+.dp-opt[data-cawco-picked] {
+  border-color: var(--brand-solid);
+  background: var(--selected-bg);
+}
+.dp-opt[data-cawco-picked] b {
+  color: var(--selected-ink);
+}
+@media (prefers-reduced-motion: reduce) {
+  .dp-opt,
+  .dp-bar i {
+    transition: none;
+  }
+}
+
+.dp-note {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  color: var(--ink-muted);
+  font-size: var(--text-label);
+}
+.dp-note textarea {
+  font: inherit;
+  color: var(--ink-strong);
+  background: var(--surface-page);
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  resize: vertical;
+  min-height: 2.6em;
+}
+@media (pointer: coarse) {
+  .dp-note textarea {
+    font-size: 16px;
+  }
+}
+
+/* "I'm done picking": the one coral action on the page. */
+.dp-done {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  align-items: center;
+  color: var(--ink-muted);
+}
+.dp-send {
+  font: inherit;
+  font-weight: var(--weight-strong);
+  cursor: pointer;
+  border: 0;
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-4);
+  background: var(--action-solid);
+  color: var(--on-action);
+}
+.dp-send:hover {
+  background: var(--action-hover);
+}
+.dp-send:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.dp-send:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}

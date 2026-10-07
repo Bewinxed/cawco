@@ -872,7 +872,69 @@ export type FramePayload =
 
 export const CAWCO_HUB_PORT = 3456;
 
-export type PreviewSource = { port: number } | { dir: string };
+/**
+ * What a preview shows: a dev server or a folder on the session's machine, or
+ * a decision page in a project's hub folder (`decisions/<page>/index.html`),
+ * which the hub serves itself.
+ */
+export type PreviewSource =
+  | { port: number }
+  | { dir: string }
+  | { project: string; page: string };
+
+/**
+ * One id's entry in a canvas's choices (Projects spec §5.7): the options
+ * picked for a choice, the person's note on it, or a value the page `set`.
+ * `pageHash` is the page the person was looking at when it last changed, so
+ * a pick made on an earlier revision can be told apart.
+ */
+export interface ChoiceEntry {
+  at: string;
+  note: string | null;
+  /** Options picked, in the order picked; empty when cleared. */
+  options: string[];
+  pageHash: string;
+  /** What `cawco.set` stored under this id; null when nothing was set. */
+  value: unknown;
+}
+
+/**
+ * The bridge's bounds, the same at both ends: the pane checks what the page
+ * posts (wire.ts) and the hub checks what the pane sends. An id is refused
+ * past its bound, never cut, since a cut id would be another id.
+ */
+export const CHOICE_LIMITS = {
+  /** A choice's id, or a key `cawco.set` writes. */
+  id: 200,
+  option: 200,
+  /** Options one multiple choice can hold at once. */
+  options: 50,
+  note: 2000,
+  /** A set value, as JSON. */
+  value: 2000,
+  /** Ids one canvas keeps. */
+  perCanvas: 500,
+} as const;
+/** An id or option: no control characters, no spaces at either end. */
+export const CHOICE_ID = /^[^\s\p{Cc}](?:[^\p{Cc}]*[^\s\p{Cc}])?$/u;
+export const PAGE_HASH = /^[0-9a-f]{64}$/;
+
+/** One change the page asks for: exactly one of options, note or value. */
+export type ChoiceChange = { choice: string; pageHash: string } & (
+  | { options: string[] }
+  | { note: string }
+  | { value: unknown }
+);
+
+/** A canvas's choices: what the pane hands the page, and `read_choices` reads. */
+export interface CanvasChoices {
+  canvas: string;
+  choices: Record<string, ChoiceEntry>;
+  /** The page's hash when it was last shown with the bridge. */
+  pageHash: string | null;
+  /** When the person last sent their picks to the session. */
+  sentAt: string | null;
+}
 
 export interface PreviewElement {
   classes: string[];

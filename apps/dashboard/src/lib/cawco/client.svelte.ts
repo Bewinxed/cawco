@@ -7,6 +7,8 @@ import type {
   AgentRow,
   AvailableCommand,
   BuildInfo,
+  CanvasChoices,
+  ChoiceChange,
   ClaudeLimits,
   CommandKind,
   ContinuationJob,
@@ -26,7 +28,6 @@ import type {
   PermissionMode,
   PermissionResult,
   PermissionUpdate,
-  PreviewSource,
   ProjectOfferSummary,
   SendPayload,
   SendRecord,
@@ -87,6 +88,7 @@ import {
 } from "./links";
 import { unpickedMode } from "./permission-modes";
 import { type PendingSelection, selectionExtras } from "./preview/selection";
+import type { PreviewAsk } from "./preview/source";
 import { placedOn, projectsFor } from "./projects";
 import { type ReloadHold, reloadForProtocol } from "./protocol-reload";
 import { checkServedBuild } from "./served-build.svelte";
@@ -4308,7 +4310,7 @@ export function revealPreview(instanceId: string): void {
 
 export async function openPreview(
   instanceId: string,
-  source: PreviewSource
+  source: PreviewAsk
 ): Promise<void> {
   const response = await fetch(
     `/api/instances/${encodeURIComponent(instanceId)}/preview`,
@@ -4322,6 +4324,57 @@ export async function openPreview(
     throw new Error(await response.text());
   }
   handleFrame(await response.json());
+}
+
+/** The choices a session's open preview keeps (Projects spec §5.7). */
+export async function previewChoices(
+  instanceId: string
+): Promise<CanvasChoices> {
+  const response = await fetch(
+    `/api/instances/${encodeURIComponent(instanceId)}/preview/choices`
+  );
+  if (!response.ok) {
+    throw new Error(await response.text());
+  }
+  return response.json();
+}
+
+/** Stores one change the page asked for; answers the canvas's choices as the hub now keeps them. */
+export async function changePreviewChoice(
+  instanceId: string,
+  change: ChoiceChange
+): Promise<CanvasChoices> {
+  const response = await fetch(
+    `/api/instances/${encodeURIComponent(instanceId)}/preview/choices`,
+    {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(change),
+    }
+  );
+  if (!response.ok) {
+    throw new Error(await response.text());
+  }
+  return response.json();
+}
+
+/** Sends the person's picks to the session, as one message; a page's own words go below them. */
+export async function sendPreviewChoices(
+  instanceId: string,
+  text?: string
+): Promise<CanvasChoices> {
+  const response = await fetch(
+    `/api/instances/${encodeURIComponent(instanceId)}/preview/choices/send`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(text ? { text } : {}),
+    }
+  );
+  if (!response.ok) {
+    throw new Error(await response.text());
+  }
+  return response.json();
 }
 
 export async function closePreview(instanceId: string): Promise<void> {

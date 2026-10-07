@@ -66,11 +66,14 @@ import {
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import { migrate } from "drizzle-orm/bun-sqlite/migrator";
 import { Context, Effect, Layer } from "effect";
+import { bundledSkills } from "../bundled-skills";
 import { DB_PATH } from "../config";
 import { workflowSkill } from "../workflows/skills";
 import {
   agents,
   apnsCredentials,
+  canvasChoices,
+  canvases,
   capabilityUsageDaily,
   claudeContextWindows,
   completedTurns,
@@ -174,6 +177,9 @@ export type ApnsCredentialsRow = typeof apnsCredentials.$inferSelect;
 /** A device the iOS app registered for pushes. */
 export type PushDeviceRow = typeof pushDevices.$inferSelect;
 export type ProjectOfferRow = typeof projectOffers.$inferSelect;
+/** Where a preview's choices are kept (choices.ts). */
+export type CanvasRow = typeof canvases.$inferSelect;
+export type CanvasChoiceRow = typeof canvasChoices.$inferSelect;
 export type ContinuationRow = typeof continuations.$inferSelect;
 export type WorkflowRow = typeof workflows.$inferSelect;
 export type WorkflowRunRow = typeof workflowRuns.$inferSelect;
@@ -300,6 +306,8 @@ export interface DbShape {
   ) => void;
   /** Records ownership before sending a create; a restart discards anything still unfiled. */
   readonly beginWorkspaceCreate: (id: string, machineId: string) => void;
+  readonly canvas: (id: string) => CanvasRow | undefined;
+  readonly canvasChoices: (canvasId: string) => CanvasChoiceRow[];
   /** Whether nothing has been counted yet — the backfill's cue. */
   readonly capabilityUsageEmpty: () => boolean;
   /** Every usage row on or after `day` (`YYYY-MM-DD`). */
@@ -464,6 +472,8 @@ export interface DbShape {
     reason: string,
     at: number
   ) => void;
+  /** The canvas a session showed last, for `read_choices` after its preview closed. */
+  readonly latestCanvasOf: (instanceId: string) => CanvasRow | undefined;
   /** Keys a send to the id its harness stores it under. */
   readonly linkSend: (uuid: string, harnessId: string) => void;
   /**
@@ -548,6 +558,7 @@ export interface DbShape {
    * from is history, and history survives a restart. Only reachability is reset.
    */
   readonly markAllAgentsOffline: () => void;
+  readonly markCanvasSent: (id: string, at: Date) => void;
   /**
    * The daemon has spoken about one session — its `init` frame naming the SDK
    * conversation. That is first-hand word that a process exists, so a row still
@@ -745,6 +756,8 @@ export interface DbShape {
     /** What APNs said to the last push for a device: taken (no error) or refused with a reason. */
     readonly noteResult: (token: string, error: string | null) => void;
   };
+  /** Writes one id's entry whole, and the canvas's page hash with it, in one transaction. */
+  readonly putCanvasChoice: (row: CanvasChoiceRow) => void;
   readonly putCredential: (id: string, blob: Record<string, unknown>) => void;
   /** Upsert of one definition's file; the hash and the size are read off it. */
   readonly putFleetAgent: (agent: {
@@ -1120,6 +1133,12 @@ export interface DbShape {
   /** Every row of a project's task index, in id order. */
   readonly taskIndex: (projectId: string) => TaskIndexRow[];
   readonly touchAgent: (machineId: string) => void;
+  /** Files or moves a canvas onto the session showing it; a hash given becomes its page's. */
+  readonly touchCanvas: (canvas: {
+    id: string;
+    instanceId: string;
+    pageHash?: string;
+  }) => CanvasRow;
   /**
    * The session moved. This is the only write anywhere that means it: every
    * other `updatedAt` on the table is a status change, which is the hub
@@ -3105,6 +3124,23 @@ const make = (path: string): DbShape => {
               }
               return skill;
             }),
+          // CawCo's own; a fleet skill of the same name, on or off, is the operator's word on it.
+          ...(() => {
+            const named = new Set(
+              db
+                .select({ name: skills.name })
+                .from(skills)
+                .all()
+                .map(({ name }) => name)
+            );
+            return bundledSkills()
+              .filter((skill) => !named.has(skill.name))
+              .map((skill) =>
+                held("skills", skill.name, skill.hash)
+                  ? { name: skill.name, hash: skill.hash }
+                  : skill
+              );
+          })(),
         ],
         // Only the rows a resolve filled in. A plugin the hub could not fetch is
         // simply absent here, and the daemon installs it the old way — which is
@@ -3767,6 +3803,58 @@ const make = (path: string): DbShape => {
     },
     setProjectRemote: (id, remote) => {
       db.update(projects).set({ remote }).where(eq(projects.id, id)).run();
+    },
+    canvas: (id) => db.select().from(canvases).where(eq(canvases.id, id)).get(),
+    canvasChoices: (canvasId) =>
+      db
+        .select()
+        .from(canvasChoices)
+        .where(eq(canvasChoices.canvasId, canvasId))
+        .orderBy(asc(canvasChoices.choice))
+        .all(),
+    latestCanvasOf: (instanceId) =>
+      db
+        .select()
+        .from(canvases)
+        .where(eq(canvases.instanceId, instanceId))
+        .orderBy(desc(canvases.updatedAt))
+        .limit(1)
+        .get(),
+    touchCanvas: ({ id, instanceId, pageHash }) => {
+      const updatedAt = new Date();
+      return db
+        .insert(canvases)
+        .values({ id, instanceId, pageHash: pageHash ?? null, updatedAt })
+        .onConflictDoUpdate({
+          target: canvases.id,
+          set: { instanceId, updatedAt, ...(pageHash ? { pageHash } : {}) },
+        })
+        .returning()
+        .get();
+    },
+    putCanvasChoice: (row) => {
+      db.transaction((tx) => {
+        tx.insert(canvasChoices)
+          .values(row)
+          .onConflictDoUpdate({
+            target: [canvasChoices.canvasId, canvasChoices.choice],
+            set: {
+              options: row.options,
+              note: row.note,
+              value: row.value,
+              pageHash: row.pageHash,
+              updatedAt: row.updatedAt,
+            },
+          })
+          .run();
+        tx.update(canvases)
+          .set({ pageHash: row.pageHash, updatedAt: row.updatedAt })
+          .where(eq(canvases.id, row.canvasId))
+          .run();
+      });
+    },
+    markCanvasSent: (id, at) => {
+      db.update(canvases).set({ sentAt: at }).where(eq(canvases.id, id)).run();
     },
     projectOffer: (instanceId) =>
       db

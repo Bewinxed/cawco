@@ -12,7 +12,7 @@
     "dev": "vite dev",
     "preview": "vite preview",
     "tab-icon": "bun scripts/tab-icon-art.ts",
-    "tokens": "bun scripts/build-tokens.ts && biome format --write src/lib/tokens/tokens.css ../apple/Packages/CawCoKit/Sources/CawCoDesign/Resources",
+    "tokens": "bun scripts/build-tokens.ts && biome format --write src/lib/tokens/tokens.css ../../packages/hub/skills/decision-page/kit/tokens.css ../apple/Packages/CawCoKit/Sources/CawCoDesign/Resources",
     "typecheck": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json"
   },
   "overrides": {

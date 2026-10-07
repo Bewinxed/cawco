@@ -10,6 +10,7 @@ import {
   handoffActions,
   SPAWNING_TOOLS,
 } from "./delegation-actions";
+import { DECISION_PAGE } from "./preview-choices";
 import { budgetParameter, groupParameter, ownsParameter } from "./task-tools";
 import {
   SESSION_TITLE_DESCRIPTION,
@@ -979,25 +980,69 @@ export function handoffTools(deps: HandoffDeps) {
         'the user will look at; the user asked to "see", "look at", "show me", or "how does it look"; ' +
         "you are about to say a UI change is done. Pass `port` for a running dev server, or `dir` for a directory " +
         "with an index.html. The operator gets the page inline beside your transcript and can click any element " +
-        "to send you exact file:line feedback with notes — use that to edit precisely what they pointed at.",
+        "to send you exact file:line feedback with notes — use that to edit precisely what they pointed at. " +
+        "A decision page (the decision-page skill) goes in your project's folder: pass `page` (its name) with `dir` " +
+        "(the folder holding its built, self-contained index.html) to publish it to decisions/<page>/index.html and show it, " +
+        "or `page` alone to show the one already there. Publishing the same page again keeps the person's picks for every choice id it still has.",
       {
         port: z.number().int().min(1).max(65_535).optional(),
         dir: z.string().startsWith("/").optional(),
+        page: z
+          .string()
+          .regex(DECISION_PAGE)
+          .optional()
+          .describe(
+            "A decision page's name, like onboarding: lowercase letters, digits and dashes."
+          ),
       },
-      async ({ port, dir }) => {
-        if ((port === undefined) === (dir === undefined)) {
-          throw new Error("Pass exactly one of port or dir.");
+      async ({ port, dir, page }) => {
+        if (page !== undefined && port !== undefined) {
+          throw new Error("A page is shown from a folder, not a port.");
+        }
+        if (
+          page === undefined &&
+          (port === undefined) === (dir === undefined)
+        ) {
+          throw new Error("Pass exactly one of port or dir, or a page.");
+        }
+        let source: Parameters<typeof actions.showPreview>[0] = {
+          dir: dir as string,
+        };
+        if (page !== undefined) {
+          source = { page, dir };
+        } else if (port !== undefined) {
+          source = { port };
         }
         return {
           content: [
-            {
-              type: "text" as const,
-              text: await actions.showPreview(
-                port === undefined ? { dir: dir as string } : { port }
-              ),
-            },
+            { type: "text" as const, text: await actions.showPreview(source) },
           ],
         };
+      }
+    ),
+    tool(
+      "read_choices",
+      "Read the person's picks, notes and values on the preview you show (or showed last): what a page recorded through " +
+        "CawCo's bridge (`data-cawco-choice`/`data-option`, `cawco.choose`, `cawco.note`, `cawco.set`). Each entry carries the " +
+        "hash of the page it was made on; one made on an earlier revision of the page says so. Pass `page` to read a decision " +
+        "page in your project's folder instead. When the person sends their picks you get one message; this reads them any time.",
+      {
+        page: z
+          .string()
+          .regex(DECISION_PAGE)
+          .optional()
+          .describe("A decision page's name in your project's folder."),
+      },
+      async ({ page }) => ({
+        content: [
+          { type: "text" as const, text: await actions.readChoices(page) },
+        ],
+      }),
+      {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
       }
     ),
   ];

@@ -193,6 +193,7 @@ export async function buildBinary(options: {
   }
   const assets = [
     ...(await filesUnder(join(ROOT, "packages/hub/drizzle"), "drizzle")),
+    ...(await filesUnder(join(ROOT, "packages/hub/skills"), "skills")),
     ...(await filesUnder(
       join(ROOT, "apps/dashboard/build/client"),
       "dashboard/client"

@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Page title</title>
+<style>{{KIT_CSS}}</style>
+<!-- The next line loads DialKit: keep it only when a card uses dials (RECIPES.md, "Dials"); it adds about 330 KiB. -->
+{{DIALS}}
+</head>
+<body>
+<main class="dp">
+  <header class="dp-hero">
+    <span><img class="caw-l" src="caw/light-ready.webp" alt="Caw" width="72" height="72"><img class="caw-d" src="caw/dark-ready.webp" alt="" width="72" height="72"></span>
+    <div>
+      <h1>What is being decided</h1>
+      <p>One sentence: why these decisions, and what happens with the picks.</p>
+    </div>
+    <div class="dp-meter" aria-live="polite"><span><b data-dp-count>0</b> of <span data-dp-total>0</span> picked</span><span class="dp-bar"><i data-dp-fill></i></span></div>
+  </header>
+  <p class="dp-offline" data-dp-offline hidden>Picks are kept only when CawCo shows this page: open it with show_preview.</p>
+
+  <!-- One card per decision: RECIPES.md. Ids are forever; a revision keeps every pick whose id it still has. -->
+  <article class="dp-card" id="example">
+    <header><h2>The question, in plain words?</h2><span class="dp-state" data-dp-state="example">Not picked</span></header>
+    <p class="dp-why">Today: what happens now, in one line.</p>
+    <div class="dp-opts" data-cawco-choice="example" role="group" aria-label="The question">
+      <button class="dp-opt" type="button" data-option="keep"><b>Keep it as it is</b><span>What that means.</span></button>
+      <button class="dp-opt" type="button" data-option="change"><b>Change it</b><span>What that means.</span><span class="dp-tag">Recommended</span></button>
+    </div>
+    <label class="dp-note">Note<textarea data-dp-note="example" rows="1" placeholder="Anything to add"></textarea></label>
+  </article>
+
+  <footer class="dp-done"><span data-dp-sent></span><button class="dp-send" type="button" data-dp-send>I'm done picking</button></footer>
+</main>
+<script>{{KIT_JS}}</script>
+</body>
+</html>

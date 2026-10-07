@@ -25,6 +25,8 @@ const SOURCE = "../../design/tokens/cawco.tokens.json";
 const OUT_DIR = "src/lib/tokens/";
 const OUT_FILE = "tokens.css";
 const APPLE_DIR = "../apple/Packages/CawCoKit/Sources/CawCoDesign/";
+/** The decision-page skill CawCo ships (packages/hub/src/bundled-skills.ts): its pages wear the same tokens. */
+const SKILL_DIR = "../../packages/hub/skills/decision-page/";
 const EXT = "dev.cawco";
 
 const MEDIA = {
@@ -117,6 +119,11 @@ const sd = new StyleDictionary({
       transforms: ["name/css-leaf"],
       buildPath: OUT_DIR,
       files: [{ destination: OUT_FILE, format: "css/cawco-theme" }],
+    },
+    skill: {
+      transforms: ["name/css-leaf"],
+      buildPath: SKILL_DIR,
+      files: [{ destination: "kit/tokens.css", format: "css/cawco-theme" }],
     },
     apple: {
       transforms: ["name/css-leaf"],

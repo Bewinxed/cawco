@@ -1,5 +1,4 @@
 <script lang="ts">
-  import type { PreviewSource } from "@cawco/core";
   import { getContext, untrack } from "svelte";
   import { SvelteSet } from "svelte/reactivity";
   import { toast } from "svelte-sonner";
@@ -11,7 +10,12 @@
   import { fleetMcpServers } from "#lib/cawco/fleet-mcp.svelte.js";
   import { mcpServerHost } from "#lib/cawco/mcp.js";
   import { dur, easeOut, motionOk } from "#lib/cawco/motion/curves.svelte.js";
-  import { previewSourceKey } from "#lib/cawco/preview/source.js";
+  import {
+    type PreviewAsk,
+    previewPlace,
+    previewSourceKey,
+    reopenAsk,
+  } from "#lib/cawco/preview/source.js";
   import DiffView from "#lib/components/features/DiffView.svelte";
   import {
     describeTool,
@@ -154,12 +158,12 @@
   const opening = new SvelteSet<string>();
   const openFailed = new SvelteSet<string>();
 
-  async function openArtifact(m: Message, input: PreviewSource) {
+  async function openArtifact(m: Message, input: PreviewAsk) {
     const key = callId(m);
     opening.add(key);
     openFailed.delete(key);
     try {
-      await openPreview(m.instanceId, input);
+      await openPreview(m.instanceId, reopenAsk(input));
       revealPreview(m.instanceId);
     } catch (error) {
       openFailed.add(key);
@@ -307,14 +311,12 @@
    */
   function sameSource(
     preview: (typeof cawco.previews)[string] | undefined,
-    wanted: PreviewSource
+    wanted: PreviewAsk
   ): boolean {
-    if (!preview?.source) {
-      return false;
-    }
-    return "port" in wanted
-      ? "port" in preview.source && preview.source.port === wanted.port
-      : "dir" in preview.source && preview.source.dir === wanted.dir;
+    return (
+      !!preview?.source &&
+      previewSourceKey(preview.source) === previewSourceKey(wanted)
+    );
   }
 </script>
 
@@ -402,7 +404,7 @@
       {#snippet children()}
         <div class="row" data-call={m.toolCallId} class:err={failed}>
           {#if SHOW_PREVIEW_TOOLS.has(m.metadata?.toolName ?? "")}
-            {@const input = m.metadata?.toolInput as PreviewSource}
+            {@const input = m.metadata?.toolInput as PreviewAsk}
             {@const current = cawco.previews[m.instanceId]}
             {@const preview = sameSource(current, input) ? current : undefined}
             {@const opened = preview?.state === "open"}
@@ -446,8 +448,7 @@
                       pendingLabel="Opening…"
                     /></span
                   ><span class="artifact-path"
-                    >{preview?.path ||
-                      ("dir" in input ? pathLeaf(input.dir) : "")}</span
+                    >{preview?.path || previewPlace(input)}</span
                   ></span
                 >
               </button>

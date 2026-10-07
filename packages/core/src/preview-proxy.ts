@@ -1,4 +1,84 @@
 import type { Server, WebSocketHandler } from "bun";
+import { embeddedFile, standalone } from "./runtime";
+
+/** Where every previewed page loads the overlay from, on its own origin. */
+export const OVERLAY_PATH = "/__cawco/overlay.js";
+const HEAD_OPEN = /<head(\s[^>]*)?\s*>/i;
+const HEAD_CLOSE = /<\/head\s*>/i;
+const BODY = /<\/body\s*>/i;
+let overlay: Promise<string> | undefined;
+
+/**
+ * The script injected into every previewed page, by a daemon for a session's
+ * dev server or folder and by the hub for a project's decision page. The
+ * standalone binary carries it prebuilt (`build-binary.ts`); a source
+ * checkout bundles the agent's overlay on first request.
+ */
+async function buildOverlay(): Promise<string> {
+  if (standalone) {
+    return Bun.file(embeddedFile("preview/overlay.js")).text();
+  }
+  const result = await Bun.build({
+    entrypoints: [
+      new URL("../../agent/src/preview-overlay/overlay.ts", import.meta.url)
+        .pathname,
+    ],
+    target: "browser",
+    minify: true,
+    format: "iife",
+  });
+  if (!result.success) {
+    throw new AggregateError(result.logs, "Preview overlay build failed");
+  }
+  return result.outputs[0].text();
+}
+
+/**
+ * Built once per process and kept, unless the build fails — a missing source
+ * file makes `Bun.build` throw rather than answer `success: false`, and a
+ * rejected promise left in the cache would turn one bad request into every
+ * request until restart. A failure clears the slot so the next one retries.
+ */
+export function loadOverlay(): Promise<string> {
+  overlay ??= buildOverlay().catch((error: unknown) => {
+    overlay = undefined;
+    throw error;
+  });
+  return overlay;
+}
+
+/** The overlay as a response to {@link OVERLAY_PATH}. */
+export async function overlayResponse(): Promise<Response> {
+  return new Response(await loadOverlay(), {
+    headers: {
+      "content-type": "text/javascript",
+      "cache-control": "no-store",
+    },
+  });
+}
+
+/** A page's identity for the choices bridge: sha256 of the HTML as it was served, before injection. */
+export const pageHash = (html: string): string =>
+  new Bun.CryptoHasher("sha256").update(html).digest("hex");
+
+/**
+ * The page with the overlay's script tag in it, carrying the page's hash.
+ * First child of <head>, so it runs before Vite's deferred `/@vite/client`
+ * module; else before </head> or </body>; else at the end.
+ */
+export function injectOverlay(html: string): string {
+  const script = `<script src="${OVERLAY_PATH}" data-page-hash="${pageHash(html)}"></script>`;
+  if (HEAD_OPEN.test(html)) {
+    return html.replace(HEAD_OPEN, (match) => match + script);
+  }
+  if (HEAD_CLOSE.test(html)) {
+    return html.replace(HEAD_CLOSE, (match) => script + match);
+  }
+  if (BODY.test(html)) {
+    return html.replace(BODY, (match) => script + match);
+  }
+  return html + script;
+}
 
 // The DOM ambient declaration hides Bun's headers-and-protocols overload.
 const ProxyWebSocket = WebSocket as typeof WebSocket & {

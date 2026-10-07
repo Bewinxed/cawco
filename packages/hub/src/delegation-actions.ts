@@ -10,6 +10,7 @@
  * `customTools`), and this file is the body they share.
  */
 import type {
+  CanvasChoices,
   DelegateType,
   Envelope,
   GeneratedImage,
@@ -560,6 +561,8 @@ export interface HandoffActions {
   // biome-ignore lint/style/useConsistentMethodSignatures: implemented below; property-style would change parameter variance against that implementation
   listSessions(): Promise<string>;
   readonly listWorkflows: () => Promise<unknown>;
+  /** The person's choices on the session's preview, or on a decision page of its project. */
+  readonly readChoices: (page?: string) => Promise<string>;
   /** A window into one result of a run this session supervises. */
   readonly readWorkflow: (
     runId: string,
@@ -589,7 +592,12 @@ export interface HandoffActions {
   ) => Promise<string>;
   /** Names this session; refused, in the hub's words, once the owner has named it. */
   readonly setTitle: (title: string) => Promise<string>;
-  readonly showPreview: (source: PreviewSource) => Promise<string>;
+  /** A dev server or folder; or a decision page in the session's project folder, published from `dir` first when given. */
+  readonly showPreview: (
+    source:
+      | Exclude<PreviewSource, { project: string }>
+      | { page: string; dir?: string }
+  ) => Promise<string>;
   // biome-ignore lint/style/useConsistentMethodSignatures: implemented below; property-style would change parameter variance against that implementation
   startSession(
     cwd: string,
@@ -1022,7 +1030,30 @@ export const handoffActions = ({
     if (!response.ok) {
       throw new Error(await response.text());
     }
+    if ("page" in source) {
+      return `Decision page decisions/${source.page}/ ${source.dir ? "published to your project's folder and " : ""}opened beside the transcript. The person's picks come back with read_choices, and as one message when they send them.`;
+    }
     return `Preview opened beside the transcript: ${"port" in source ? `localhost:${source.port}` : source.dir}`;
+  },
+  async readChoices(page) {
+    const query = page ? `?${new URLSearchParams({ page })}` : "";
+    const response = await fetch(
+      `${hubHttpUrl()}/api/instances/${encodeURIComponent(instanceId)}/preview/choices${query}`
+    );
+    if (!response.ok) {
+      throw new Error(await response.text());
+    }
+    const state = (await response.json()) as CanvasChoices;
+    return JSON.stringify({
+      ...state,
+      choices: Object.entries(state.choices).map(([id, entry]) => ({
+        id,
+        ...entry,
+        ...(state.pageHash && entry.pageHash !== state.pageHash
+          ? { earlierRevision: true }
+          : {}),
+      })),
+    });
   },
   async listDelegateTypes() {
     const types = await fetchDelegateTypes((message) => {

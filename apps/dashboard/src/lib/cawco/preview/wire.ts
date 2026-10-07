@@ -1,4 +1,10 @@
-import type { PreviewElement } from "@cawco/core";
+import {
+  CHOICE_ID,
+  CHOICE_LIMITS,
+  type ChoiceChange,
+  PAGE_HASH,
+  type PreviewElement,
+} from "@cawco/core";
 
 /**
  * What the pane accepts from the previewed page. The overlay is ours, but it
@@ -109,6 +115,116 @@ function box(
   return x === null || y === null || width === null || height === null
     ? null
     : { x, y, width, height };
+}
+
+/**
+ * The MCP Apps methods the choices bridge answers (spec 2026-01-26): the
+ * handshake, a health check, `tools/call` (read_choices only), a change
+ * (`ui/update-model-context`) and a send (`ui/message`).
+ */
+const RPC_METHODS = new Set([
+  "ui/initialize",
+  "ui/notifications/initialized",
+  "ping",
+  "tools/call",
+  "ui/update-model-context",
+  "ui/message",
+]);
+const RPC_ID_MAX = 100;
+
+export interface PreviewRpc {
+  /** Absent for a notification. */
+  id?: number | string;
+  method: string;
+  params: Record<string, unknown>;
+}
+
+/** A JSON-RPC message from the page the bridge answers, or null. */
+export function previewRpc(value: unknown): PreviewRpc | null {
+  const raw = record(value);
+  if (
+    raw?.jsonrpc !== "2.0" ||
+    typeof raw.method !== "string" ||
+    !RPC_METHODS.has(raw.method)
+  ) {
+    return null;
+  }
+  const { id } = raw;
+  const validId =
+    id === undefined ||
+    (typeof id === "number" && Number.isSafeInteger(id)) ||
+    (typeof id === "string" && id.length <= RPC_ID_MAX);
+  if (!validId) {
+    return null;
+  }
+  return {
+    ...(id === undefined ? {} : { id: id as number | string }),
+    method: raw.method,
+    params: record(raw.params) ?? {},
+  };
+}
+
+/** The text of a `ui/message` request, cut like a note; null when its shape is wrong. */
+export function previewMessageText(
+  params: Record<string, unknown>
+): string | null {
+  const content = record(params.content);
+  return params.role === "user" && content?.type === "text"
+    ? text(content.text, CHOICE_LIMITS.note)
+    : null;
+}
+
+/** The served page's hash, as the overlay read it off its own script tag. */
+export function previewPageHash(value: unknown): string | null {
+  return typeof value === "string" && PAGE_HASH.test(value) ? value : null;
+}
+
+const choiceId = (value: unknown, max: number): string | null =>
+  typeof value === "string" && value.length <= max && CHOICE_ID.test(value)
+    ? value
+    : null;
+
+/**
+ * A change the page asked the bridge for (`cawco.choose`, `note`, `set`, or a
+ * click on a `data-option`), or null when its shape is wrong. Ids are refused
+ * past their bound rather than cut; a note is cut like any other text here.
+ */
+export function previewChoice(value: unknown): ChoiceChange | null {
+  const raw = record(value);
+  const choice = choiceId(raw?.choice, CHOICE_LIMITS.id);
+  const pageHash = previewPageHash(raw?.pageHash);
+  if (!(raw && choice && pageHash)) {
+    return null;
+  }
+  const fields = ["options", "note", "value"].filter((key) => key in raw);
+  if (fields.length !== 1) {
+    return null;
+  }
+  if (Array.isArray(raw.options)) {
+    const options = raw.options.map((option) =>
+      choiceId(option, CHOICE_LIMITS.option)
+    );
+    return options.length <= CHOICE_LIMITS.options &&
+      options.every((option) => option !== null)
+      ? { choice, pageHash, options: [...new Set(options as string[])] }
+      : null;
+  }
+  if ("note" in raw) {
+    const note = text(raw.note, CHOICE_LIMITS.note);
+    return note === null ? null : { choice, pageHash, note };
+  }
+  if (!("value" in raw)) {
+    return null;
+  }
+  let json: string | undefined;
+  try {
+    json = JSON.stringify(raw.value);
+  } catch {
+    return null;
+  }
+  return json !== undefined && json.length <= CHOICE_LIMITS.value
+    ? { choice, pageHash, value: JSON.parse(json) as unknown }
+    : null;
 }
 
 /** A selected element as the pane will hold it, or null when the shape is wrong. */

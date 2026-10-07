@@ -1,3 +1,4 @@
+import { posix } from "node:path";
 import { generateCodeChallenge, generateCodeVerifier } from "@cawco/auth";
 import type {
   AgentBusyReport,
@@ -203,10 +204,21 @@ import {
 import { resolveMarketplacePlugins } from "./plugins";
 import { previewFrame, previewTargets } from "./preview";
 import {
+  canvasId,
+  DECISION_PAGE,
+  previewChoicesRoutes,
+} from "./preview-choices";
+import {
   makeProjectDelegateTypes,
   projectDelegateTypesRoutes,
 } from "./project-delegate-types";
-import { projectFolderRoutes, trashProjectFolder } from "./project-folder";
+import {
+  FolderRefusal,
+  projectFolderRoutes,
+  readFolderFile,
+  trashProjectFolder,
+  writeFolderFile,
+} from "./project-folder";
 import { createProjectOffers, projectOfferRoutes } from "./project-offers";
 import {
   foldPlacedStates,
@@ -3656,6 +3668,9 @@ export const createServer = (
     }
     previewTargets.delete(instanceId);
     publishPreview(instanceId, "closed", target.source, target.revision);
+    if ("project" in target.source) {
+      return closed;
+    }
     const answer = await callAgent(
       target.machineId,
       PREVIEW_STOP,
@@ -3688,6 +3703,17 @@ export const createServer = (
     | { ok: false; code: 409 | 500 | 503 | 504; error: string }
   > => {
     const generation = nextPreviewGeneration(instanceId);
+    // The preview's canvas moves to the session now showing it.
+    db.touchCanvas({ id: canvasId(machineId, source), instanceId });
+    if ("project" in source) {
+      // A decision page is served from the hub's own folder (preview.ts).
+      const revision = crypto.randomUUID();
+      previewTargets.set(instanceId, { machineId, source, revision });
+      return {
+        ok: true,
+        frame: publishPreview(instanceId, "open", source, revision),
+      };
+    }
     const stopLate = () =>
       callAgent(
         machineId,
@@ -3743,6 +3769,92 @@ export const createServer = (
   };
 
   /**
+   * A decision page to show (Projects spec §5.8): `decisions/<page>/` in the
+   * session's project folder. With `dir`, the session's own built page,
+   * `<dir>/index.html` on its machine, is committed there first, by the
+   * session; a revision is another commit at the same place, so the canvas
+   * and its picks stay.
+   */
+  interface PageRefusal {
+    code: 400 | 404 | 409 | 413 | 503 | 504;
+    refused: string;
+  }
+
+  /** Whether the project's folder already holds the page. */
+  const pageInFolder = async (
+    projectId: string,
+    path: string
+  ): Promise<PageRefusal | undefined> => {
+    try {
+      await readFolderFile(projectId, path);
+      return undefined;
+    } catch (error) {
+      if (!(error instanceof FolderRefusal)) {
+        throw error;
+      }
+      return error.status === 404
+        ? {
+            code: 404,
+            refused: `${path} is not in the project's folder yet; pass dir to publish it.`,
+          }
+        : { code: 409, refused: error.message };
+    }
+  };
+
+  /** Reads `<dir>/index.html` off the session's machine and commits it at `path`, by the session. */
+  const copyPageIn = async (
+    row: InstanceRow,
+    projectId: string,
+    path: string,
+    dir: string
+  ): Promise<PageRefusal | undefined> => {
+    const agent = registry.agent(row.machineId);
+    if (!agent) {
+      return { code: 503, refused: "Machine is not connected" };
+    }
+    const file = posix.join(dir, "index.html");
+    const read = await callFs(row.machineId, agent, { op: "read", path: file });
+    if (read === "timeout") {
+      return { code: 504, refused: "Machine did not answer" };
+    }
+    if (!read.ok) {
+      return { code: 404, refused: read.error ?? `${file} could not be read.` };
+    }
+    try {
+      await writeFolderFile(projectId, path, read.result as string, {
+        author: { name: row.title || leaf(row.cwd) },
+        message: `decisions: ${path.split("/")[1]}`,
+      });
+      return undefined;
+    } catch (error) {
+      if (!(error instanceof FolderRefusal)) {
+        throw error;
+      }
+      return { code: error.status === 413 ? 413 : 400, refused: error.message };
+    }
+  };
+
+  const publishDecisionPage = async (
+    row: InstanceRow,
+    page: string,
+    dir?: string
+  ): Promise<{ project: string; page: string } | PageRefusal> => {
+    if (!row.projectId) {
+      return {
+        code: 409,
+        refused:
+          "This session belongs to no project, so it has no folder for decision pages.",
+      };
+    }
+    const path = `decisions/${page}/index.html`;
+    const refusal =
+      dir === undefined
+        ? await pageInFolder(row.projectId, path)
+        : await copyPageIn(row, row.projectId, path, dir);
+    return refusal ?? { project: row.projectId, page };
+  };
+
+  /**
    * Machines whose previews this hub process has an account of. The first
    * register from one after the hub starts is the only time a listener it
    * reports without a target is the hub's own lost memory; after that, such a
@@ -3769,7 +3881,7 @@ export const createServer = (
       serving.map((listener) => [listener.instanceId, listener])
     );
     for (const [instanceId, target] of previewTargets) {
-      if (target.machineId !== machineId) {
+      if (target.machineId !== machineId || "project" in target.source) {
         continue;
       }
       const listener = listeners.get(instanceId);
@@ -7860,6 +7972,29 @@ export const createServer = (
         )
       )
       .use(taskRoutes(tasks))
+      .use(
+        previewChoicesRoutes({
+          db,
+          instance: (id) => db.getInstancesByIds([id])[0],
+          deliver: (instance, content) => {
+            deliverSend({
+              verb: "send",
+              machineId: instance.machineId,
+              instanceId: instance.id,
+              payload: {
+                instanceId: instance.id,
+                message: {
+                  type: "user",
+                  uuid: crypto.randomUUID(),
+                  message: { role: "user", content },
+                  parent_tool_use_id: null,
+                  origin: { kind: "human" },
+                },
+              },
+            });
+          },
+        })
+      )
       .use(pushRoutes(db, push))
       .use(projectOfferRoutes(projectOffers, YOU_ACTOR))
       .use(dispatchRoutes(dispatcher))
@@ -8306,23 +8441,42 @@ export const createServer = (
           body: t.Object({
             port: t.Optional(t.Integer({ minimum: 1, maximum: 65_535 })),
             dir: t.Optional(t.String({ minLength: 1, pattern: "^/" })),
+            /** A decision page in the session's project folder, `decisions/<page>/`; with `dir`, that folder's index.html is published there first. */
+            page: t.Optional(t.String({ pattern: DECISION_PAGE.source })),
           }),
         },
         async ({ params, body, status }) => {
-          if ((body.port === undefined) === (body.dir === undefined)) {
-            return status(400, "Pass exactly one of port or dir.");
+          if (
+            body.page === undefined &&
+            (body.port === undefined) === (body.dir === undefined)
+          ) {
+            return status(400, "Pass exactly one of port or dir, or a page.");
+          }
+          if (body.page !== undefined && body.port !== undefined) {
+            return status(400, "A page is shown from a folder, not a port.");
           }
           const [row] = db.getInstancesByIds([params.id]);
           if (!row) {
             return status(404, "Session not found.");
           }
-          const started = await openPreview(
-            row.id,
-            row.machineId,
-            body.port === undefined
-              ? { dir: body.dir as string }
-              : { port: body.port }
-          );
+          let source: PreviewSource;
+          if (body.page === undefined) {
+            source =
+              body.port === undefined
+                ? { dir: body.dir as string }
+                : { port: body.port };
+          } else {
+            const published = await publishDecisionPage(
+              row,
+              body.page,
+              body.dir
+            );
+            if ("refused" in published) {
+              return status(published.code, published.refused);
+            }
+            source = published;
+          }
+          const started = await openPreview(row.id, row.machineId, source);
           return started.ok
             ? started.frame
             : status(started.code, started.error);
@@ -12379,7 +12533,11 @@ export const createServer = (
           // starts one again (see `reconcilePreviews`). Nothing is published;
           // the panes keep the page they have until that "open" reloads them.
           for (const [instanceId, target] of previewTargets) {
-            if (target.machineId === machineId) {
+            // A decision page is the hub's own; no machine serves it.
+            if (
+              target.machineId === machineId &&
+              !("project" in target.source)
+            ) {
               nextPreviewGeneration(instanceId);
               previewTargets.set(instanceId, {
                 machineId,

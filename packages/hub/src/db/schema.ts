@@ -1626,3 +1626,37 @@ export const projectOffers = sqliteTable("project_offers", {
   /** The project accepting made or joined. */
   projectId: text("project_id"),
 });
+
+/**
+ * A canvas (Projects spec §5.7): where a preview's choices are kept. Its id is
+ * the preview's place, not the page's hash — `decisions:<project>/<page>` for
+ * a decision page in a project's hub folder, `dir:<machine>:<path>` or
+ * `port:<machine>:<port>` for a session's own preview — so a revised page
+ * keeps every pick whose id it still carries.
+ */
+export const canvases = sqliteTable("canvases", {
+  id: text("id").primaryKey(),
+  /** The session that last showed it: the one a send goes to. */
+  instanceId: text("instance_id").notNull(),
+  /** The page's hash when the bridge last heard from it. */
+  pageHash: text("page_hash"),
+  /** When the person last sent their picks to the session. */
+  sentAt: timestamp("sent_at"),
+  updatedAt: timestamp("updated_at").notNull(),
+});
+
+/** One id's pick, note or value on a canvas (`ChoiceEntry`). */
+export const canvasChoices = sqliteTable(
+  "canvas_choices",
+  {
+    canvasId: text("canvas_id").notNull(),
+    choice: text("choice").notNull(),
+    options: text("options", { mode: "json" }).$type<string[]>().notNull(),
+    note: text("note"),
+    value: text("value", { mode: "json" }).$type<unknown>(),
+    /** The page the person was looking at when this last changed. */
+    pageHash: text("page_hash").notNull(),
+    updatedAt: timestamp("updated_at").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.canvasId, table.choice] })]
+);

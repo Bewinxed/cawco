@@ -1,4 +1,6 @@
 <script lang="ts">
+  import type { CanvasChoices } from "@cawco/core";
+  import { toast } from "svelte-sonner";
   import { Button } from "#lib/components/ui/button/index.js";
   import PendingContent, {
     whileIdle,
@@ -8,16 +10,27 @@
     IconCursor,
     IconExternalLink,
     IconRefresh,
+    IconSend,
   } from "#lib/icons.js";
-  import { cawco, closePreview } from "../client.svelte";
+  import {
+    cawco,
+    changePreviewChoice,
+    closePreview,
+    previewChoices,
+    sendPreviewChoices,
+  } from "../client.svelte";
   import { appear, dur } from "../motion/curves.svelte";
   import { closeInto, depart } from "../motion/share.svelte";
   import { type CapturedSelection, selectionShare } from "./selection";
-  import { previewSourceKey } from "./source";
+  import { previewPlace, previewSourceKey } from "./source";
   import {
+    type PreviewRpc,
+    previewChoice,
     previewElement,
     previewError,
+    previewMessageText,
     previewPng,
+    previewRpc,
     previewTitle,
     previewUrl,
   } from "./wire";
@@ -57,9 +70,7 @@
   let displayPath = $state("");
   const title = $derived(
     preview?.title ||
-      (connected && source && "dir" in source
-        ? source.dir.split("/").filter(Boolean).at(-1)
-        : "Preview") ||
+      (connected && source ? previewPlace(source) : "Preview") ||
       "Preview"
   );
   const frameKey = $derived(`${preview?.revision}:${reload}`);
@@ -95,10 +106,107 @@
       connected = false;
       loaded = false;
       captured = false;
+      // A page's choices are what its own bridge reads; a page without one shows no send.
+      choices = null;
     }
   });
   function post(message: object) {
     iframe?.contentWindow?.postMessage(message, location.origin);
+  }
+
+  /*
+   * The choices bridge's host side (Projects spec §5.7): the page speaks MCP
+   * Apps' JSON-RPC (wire.ts `previewRpc`), and this answers from the hub's
+   * store. A change is shown to the page only once the hub has kept it, as
+   * a fresh `read_choices` result.
+   */
+  let choices = $state<CanvasChoices | null>(null);
+  /** Picks the session has not heard yet: what Send picks would send. */
+  const unsent = $derived(
+    !!choices &&
+      Object.values(choices.choices).some(
+        (entry) => !choices?.sentAt || entry.at > choices.sentAt
+      )
+  );
+  let sending = $state(false);
+  const toolResult = (state: CanvasChoices) => ({
+    content: [{ type: "text", text: JSON.stringify(state) }],
+    structuredContent: state,
+  });
+  function heard(state: CanvasChoices) {
+    choices = state;
+    post({
+      jsonrpc: "2.0",
+      method: "ui/notifications/tool-result",
+      params: toolResult(state),
+    });
+  }
+  async function send(text?: string) {
+    sending = true;
+    try {
+      heard(await sendPreviewChoices(instanceId, text));
+    } finally {
+      sending = false;
+    }
+  }
+  async function answer(rpc: PreviewRpc) {
+    const reply = (result: object) =>
+      rpc.id !== undefined && post({ jsonrpc: "2.0", id: rpc.id, result });
+    const refuse = (code: number, message: string) =>
+      rpc.id !== undefined &&
+      post({ jsonrpc: "2.0", id: rpc.id, error: { code, message } });
+    try {
+      switch (rpc.method) {
+        case "ui/initialize":
+          reply({
+            protocolVersion: "2026-01-26",
+            hostInfo: { name: "cawco", version: "1.0.0" },
+            hostCapabilities: { serverTools: {} },
+            hostContext: { platform: "web" },
+          });
+          break;
+        case "ping":
+          reply({});
+          break;
+        case "tools/call": {
+          if (rpc.params.name !== "read_choices") {
+            refuse(-32_601, "A preview can call read_choices only.");
+            break;
+          }
+          // The fetched object, not the $state proxy: a proxy cannot be posted.
+          const state = await previewChoices(instanceId);
+          choices = state;
+          reply(toolResult(state));
+          break;
+        }
+        case "ui/update-model-context": {
+          const change = previewChoice(rpc.params.structuredContent);
+          if (!change) {
+            refuse(-32_602, "That change is not a choice the bridge keeps.");
+            break;
+          }
+          heard(await changePreviewChoice(instanceId, change));
+          reply({});
+          break;
+        }
+        case "ui/message": {
+          const text = previewMessageText(rpc.params);
+          if (text === null) {
+            refuse(-32_602, "A message is a user's text.");
+            break;
+          }
+          await send(text);
+          reply({});
+          break;
+        }
+        default:
+          break;
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      refuse(-32_000, message);
+      toast.error(message);
+    }
   }
   function announce() {
     connected = false;
@@ -131,6 +239,11 @@
       event.source !== iframe?.contentWindow ||
       event.origin !== location.origin
     ) {
+      return;
+    }
+    const rpc = previewRpc(event.data);
+    if (rpc) {
+      answer(rpc);
       return;
     }
     const message = event.data;
@@ -321,12 +434,26 @@
     <div class="identity">
       <span class="title">{title}</span
       ><span class="path"
-        >{displayPath ||
-          (source && "dir" in source
-            ? source.dir.split("/").filter(Boolean).at(-1)
-            : "")}</span
+        >{displayPath || (source ? previewPlace(source) : "")}</span
       >
     </div>
+    {#if unsent || sending}
+      <button
+        aria-busy={sending || undefined}
+        aria-disabled={sending || undefined}
+        class="touch-hit"
+        onclick={whileIdle(
+          () => sending,
+          () => send().catch((error: Error) => toast.error(error.message))
+        )}
+        title="Send picks"
+        type="button"
+        transition:appear
+      >
+        <PendingContent icon={IconSend} pending={sending} />
+        <span class="select-label">Send picks</span>
+      </button>
+    {/if}
     <button
       aria-pressed={selecting}
       class="touch-hit"
