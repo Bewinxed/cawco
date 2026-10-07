@@ -36,6 +36,7 @@
 import {
   CAW_DENIED_TOOLS,
   CAWCO_COMPONENT_NAMES,
+  type CanvasChoices,
   type CawHarness,
   type CawView,
   type Envelope,
@@ -66,6 +67,7 @@ import type {
   ThreadRow,
   WorkItemRow,
 } from "./db";
+import { DECISION_PAGE } from "./preview-choices";
 import type { Caps } from "./project-caps";
 import { readProjectTypes } from "./project-delegate-types";
 import {
@@ -249,7 +251,7 @@ const refuse = (code: 400 | 403 | 404 | 409, message: string): never => {
 const briefOf = (projectName: string): string =>
   [
     `You are Caw, the lead of the project “${projectName}” in CawCo.`,
-    "You have the project's board (task_read, task_create, task_update, task_link, task_start, task_retry, todo_write), its threads (thread_read, thread_reply), its views (view_draft), its folder on the hub (folder_list, folder_read, folder_write: stages.md, delegates/, AGENTS.md, decisions/), decision pages (show_preview with a page, read_choices), delegate with the tools that steer the project's work (handoff, answer_delegate, stop_delegate, interrupt_delegate, set_item_checks), and send_to_user. You have no edit or shell tools: work that changes the project's code becomes a task or a delegate.",
+    "You have the project's board (task_read, task_create, task_update, task_link, task_start, task_retry, todo_write), its threads (thread_read, thread_reply), its views (view_draft), its folder on the hub (folder_read, folder_write: stages.md, delegates/, AGENTS.md, decisions/), decision pages (page_show, page_choices), delegate with the tools that steer the project's work (handoff, answer_delegate, stop_delegate, interrupt_delegate, set_item_checks), and send_to_user. You have no edit or shell tools: work that changes the project's code becomes a task or a delegate.",
     "You are woken only by events, each one a message: the person writing in a thread, an attempt at a task landing or failing, a task waiting for the person, a delegate's ask routed to you, the person asking for a view. Handle the event, then end your turn. Nothing wakes you on a timer.",
     "When the person writes in a thread, answer in that thread with thread_reply; the person does not see what you say outside it. Name the tasks a reply is about in its `tasks`. Code coordinates, models judge, the person decides: permissions, merges, configuration and public actions are theirs, so ask in the thread (AskUserQuestion lands there).",
     "A view-request event is the person asking for a view of the project's tasks: answer it with view_draft, then say in that thread what you drafted; the person keeps or discards it.",
@@ -296,6 +298,23 @@ export interface CawDeps {
   ) => Promise<{ machineId: string; cwd: string } | undefined>;
   /** Whether a machine is connected now; without one, whether any is. */
   readonly online: (machineId?: string) => boolean;
+  /**
+   * Decision pages in the project's folder, for Caw's `page_show` and
+   * `page_choices` (server.ts): built and shown beside his threads, and
+   * the picks made on one. A refusal throws its sentence.
+   */
+  readonly pages: {
+    show: (lead: InstanceRow, page: string) => Promise<void>;
+    choices: (
+      lead: InstanceRow,
+      page: string
+    ) => Omit<CanvasChoices, "choices"> & {
+      choices: (CanvasChoices["choices"][string] & {
+        id: string;
+        earlierRevision?: true;
+      })[];
+    };
+  };
   /** Tells every open dashboard a thread changed (the ledger's broadcast). */
   readonly publish: (frame: ThreadUpsertFrame | ThreadMessageFrame) => void;
   /** Delivers one message to a session through the hub's one send path. */
@@ -322,6 +341,7 @@ export const createCaw = ({
   spawn,
   task,
   views,
+  pages,
 }: CawDeps) => {
   /** Lead sessions being started now, by project: one start per project at a time. */
   const starting = new Map<string, Promise<InstanceRow>>();
@@ -1190,7 +1210,7 @@ export const createCaw = ({
       return [
         tool(
           "thread_read",
-          "Read your project's threads: your conversations with the person. Without `thread`: every thread, newest first, with its last message. With `thread`: that thread's messages, oldest first.",
+          "Read your threads with the person: all, newest first with each last message; or one `thread`'s messages, oldest first.",
           { thread: z.string().optional() },
           ({ thread }) => {
             const projectId = mine();
@@ -1210,21 +1230,19 @@ export const createCaw = ({
         ),
         tool(
           "thread_reply",
-          "Answer the person in a thread. This is the only way the person reads what you say: your words outside it are not shown to them.",
+          "Answer the person in a thread: they read only what you say here.",
           {
-            thread: z.string().describe("The thread's id, from its message."),
-            body: z.string().trim().min(1).describe("What you say, markdown."),
+            thread: z.string().describe("Its id."),
+            body: z.string().trim().min(1).describe("Markdown."),
             tasks: z
               .array(z.string().regex(TASK_ID))
               .optional()
-              .describe("Tasks the reply is about (tsk-12): shown as cards."),
+              .describe("Its tasks (tsk-12), shown as cards."),
             files: z
               .array(z.string().min(1))
               .max(FILES_MAX)
               .optional()
-              .describe(
-                "Files of the project's folder you wrote (stages.md, delegates/writer.md): shown as chips the person opens."
-              ),
+              .describe("Folder files you wrote."),
           },
           async ({ thread, body, tasks, files }) => {
             const projectId = mine();
@@ -1244,37 +1262,37 @@ export const createCaw = ({
           }
         ),
         tool(
-          "folder_list",
-          "List your project's folder on the hub: its stages.md, delegates/, AGENTS.md, decisions/ and task files. `path` lists one folder inside it; `recursive` everything under it.",
-          {
-            path: z.string().optional(),
-            recursive: z.boolean().optional(),
-          },
-          async ({ path, recursive }) =>
-            ok(
-              await folderCall(() => listFolder(mine(), path ?? "", recursive))
-            )
-        ),
-        tool(
           "folder_read",
-          "Read one text file of your project's folder on the hub, whole.",
-          { path: z.string().min(1) },
-          async ({ path }) =>
-            ok(await folderCall(() => readFolderFile(mine(), path)))
+          "Read a file, or list a folder (no path: the root), of your project's folder on the hub.",
+          { path: z.string().optional() },
+          async ({ path }) => {
+            const projectId = mine();
+            return ok(
+              await folderCall(() =>
+                readFolderFile(projectId, path ?? "").catch(
+                  (error: unknown) => {
+                    // No path, or a folder: its listing.
+                    if (
+                      error instanceof FolderRefusal &&
+                      (error.status === 400 || error.status === 409)
+                    ) {
+                      return listFolder(projectId, path ?? "");
+                    }
+                    throw error;
+                  }
+                )
+              )
+            );
+          }
         ),
         tool(
           "folder_write",
-          "Write one text file of your project's folder on the hub, committed by Caw: stages.md (refused with its problems unless it reads cleanly), delegates/<type>.md (a delegate type; its problems come back), AGENTS.md, decisions/<page>/page.html. Its folders are made as needed.",
+          "Write a text file to your project's folder on the hub, as a commit. stages.md must read cleanly.",
           {
             path: z.string().min(1),
             content: z.string().max(FOLDER_FILE_LIMIT),
-            message: z
-              .string()
-              .max(200)
-              .optional()
-              .describe("The commit message; Add/Update <path> when left out."),
           },
-          async ({ path, content, message: commitMessage }) => {
+          async ({ path, content }) => {
             const projectId = mine();
             const rel = await folderCall(() => folderPath(path));
             if (rel === STAGES_FILE) {
@@ -1288,7 +1306,6 @@ export const createCaw = ({
             const written = await folderCall(() =>
               writeFolderFile(projectId, rel, content, {
                 author: { name: "Caw" },
-                ...(commitMessage ? { message: commitMessage } : {}),
               })
             );
             folderChanged(projectId);
@@ -1308,6 +1325,27 @@ export const createCaw = ({
                   }
                 : {}),
             });
+          }
+        ),
+        tool(
+          "page_show",
+          "Build decisions/<page>/page.html and show it beside your threads.",
+          { page: z.string().regex(DECISION_PAGE) },
+          async ({ page }) => {
+            mine();
+            await pages.show(actor as InstanceRow, page);
+            return ok({ ok: true, page });
+          }
+        ),
+        tool(
+          "page_choices",
+          "The picks on a decision page.",
+          { page: z.string() },
+          ({ page }) => {
+            mine();
+            return Promise.resolve(
+              ok(pages.choices(actor as InstanceRow, page))
+            );
           }
         ),
         tool(

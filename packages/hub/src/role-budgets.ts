@@ -89,6 +89,12 @@ export const measureRoles = (): RoleSize[] => {
         fleetChoicesSet: () => false,
         folderChanged: () => undefined,
         leadHome: () => Promise.resolve(undefined),
+        pages: {
+          show: () => Promise.reject(new Error("measuring")),
+          choices: () => {
+            throw new Error("measuring");
+          },
+        },
         online: () => false,
         publish: () => undefined,
         send: () => undefined,

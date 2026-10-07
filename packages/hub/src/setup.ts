@@ -53,7 +53,7 @@ export const setupEvent = (ask: SetupAsk): string => {
         ? ", and their words are the first message of the Setup thread"
         : " from a session's offer, noted in the Setup thread"
     } (thread ${ask.threadId}). ${ask.template ? `They picked the ${ask.template} template.` : "They picked no template; start from the code template unless their words say otherwise."} Set the project up with them.`,
-    `1. Load the decision-page skill and build one decision page named "${SETUP_PAGE}". You have no shell or file tools: write decisions/${SETUP_PAGE}/page.html into the project's folder with folder_write (start from the skill's kit/page.html; read it with your Read tool), then call show_preview({ page: "${SETUP_PAGE}" }). Its cards, with exactly these ids:`,
+    `1. Load the decision-page skill and build one decision page named "${SETUP_PAGE}". You have no shell or file tools: write decisions/${SETUP_PAGE}/page.html into the project's folder with folder_write (start from the skill's kit/page.html; read it with your Read tool), then call page_show({ page: "${SETUP_PAGE}" }). Its cards, with exactly these ids:`,
     [
       ...(ask.askFleet ? [fleetCards] : []),
       `- \`stages\`: the project's stages, from the ${template} template below, adjusted to their words. Show each stage's name in an editable text field and store the list with \`cawco.set("stages", [{ "name": …, "kind": … }, …])\` on every edit (kinds stay as the template has them).`,
@@ -62,7 +62,7 @@ export const setupEvent = (ask: SetupAsk): string => {
       "No routines, relays or other cards.",
     ].join("\n"),
     `The ${template} template's stages.md:\n\n\`\`\`\n${templateText(template)}\`\`\``,
-    `2. End your turn. When the person sends their picks you get one message; read_choices({ page: "${SETUP_PAGE}" }) has them in full. CawCo has then already applied the fleet's choices and added the place they picked; do not write those. Write, with folder_write: stages.md (the template's block with the stage names they kept; it must read cleanly, or folder_write refuses it with the reason), delegates/<type>.md for each type they picked (front matter: harness, model, effort, role, lands; the body is the type's brief, from their words), and AGENTS.md (what the project is and how its work is done, from their words).`,
+    `2. End your turn. When the person sends their picks you get one message; page_choices({ page: "${SETUP_PAGE}" }) has them in full. CawCo has then already applied the fleet's choices and added the place they picked; do not write those. Write, with folder_write: stages.md (the template's block with the stage names they kept; it must read cleanly, or folder_write refuses it with the reason), delegates/<type>.md for each type they picked (front matter: harness, model, effort, role, lands; the body is the type's brief, from their words), and AGENTS.md (what the project is and how its work is done, from their words).`,
     `3. Answer in thread ${ask.threadId} with thread_reply: one or two sentences on what you set up, with every file you wrote in \`files\`. The person opens the board from there.`,
   ].join("\n\n");
 };

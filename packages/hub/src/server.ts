@@ -218,6 +218,7 @@ import { createPlans, planRoutes } from "./plans";
 import { resolveMarketplacePlugins } from "./plugins";
 import { previewFrame, previewTargets } from "./preview";
 import {
+  canvasChoices,
   canvasId,
   DECISION_PAGE,
   previewChoicesRoutes,
@@ -8031,6 +8032,45 @@ export const createServer = (
         ? onlineMachines().length > 0
         : Boolean(registry.agent(machineId)),
     leadHome,
+    pages: {
+      show: async (session, page) => {
+        const published = await publishDecisionPage(session, page);
+        if ("refused" in published) {
+          throw new Error(published.refused);
+        }
+        const started = await openPreview(
+          session.id,
+          session.machineId,
+          published
+        );
+        if (!started.ok) {
+          throw new Error(started.error);
+        }
+      },
+      choices: (session, page) => {
+        const canvas = session.projectId
+          ? db.canvas(canvasId("", { project: session.projectId, page }))
+          : undefined;
+        if (!canvas) {
+          throw new Error(
+            `Nobody has picked anything on decisions/${page} yet.`
+          );
+        }
+        // As read_choices answers a session: each entry with its id, and
+        // whether it was picked on an earlier revision of the page.
+        const state = canvasChoices(db, canvas);
+        return {
+          ...state,
+          choices: Object.entries(state.choices).map(([id, entry]) => ({
+            id,
+            ...entry,
+            ...(state.pageHash && entry.pageHash !== state.pageHash
+              ? { earlierRevision: true }
+              : {}),
+          })),
+        };
+      },
+    },
     folderChanged: (projectId) => tasks.touched(projectId),
     fleetChoicesSet: () => Boolean(db.getSupervisorConfig()?.choicesSetAt),
     // Thread rows and messages reach every dashboard on the ledger, as sessions do.

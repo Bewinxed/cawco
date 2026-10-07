@@ -1000,16 +1000,11 @@ export function handoffTools(deps: HandoffDeps) {
     ),
     tool(
       "show_preview",
-      "Show a running page beside this session's transcript so the operator sees your work. " +
-        "Call it when: you started or found a dev server; you wrote or changed an HTML/CSS/Svelte/React/Vue file " +
-        'the user will look at; the user asked to "see", "look at", "show me", or "how does it look"; ' +
-        "you are about to say a UI change is done. Pass `port` for a running dev server, or `dir` for a directory " +
-        "with an index.html. The operator gets the page inline beside your transcript and can click any element " +
-        "to send you exact file:line feedback with notes — use that to edit precisely what they pointed at. " +
-        "A decision page (the decision-page skill) goes in your project's folder: pass `page` (its name) with `dir` " +
-        "(your work folder holding its page.html) and the hub builds it into decisions/<page>/index.html and shows it; " +
-        "`page` alone builds the page.html in the project folder's decisions/<page>/, or shows the page already published there. " +
-        "Publishing the same page again keeps the person's picks for every choice id it still has.",
+      "Show a page beside your transcript so the operator sees your work: when you start a dev server, change a page " +
+        "they will look at, they ask to see it, or before you say a UI change is done. `port` for a dev server, `dir` for a " +
+        "folder with an index.html. They can click any element to send you its file:line with a note. A decision page " +
+        "(decision-page skill): `page` with `dir` (your folder with its page.html), or `page` alone (decisions/<page>/page.html " +
+        "in the project folder, or the page already there); the hub builds and shows it, keeping picks for ids it still has.",
       {
         port: z.number().int().min(1).max(65_535).optional(),
         dir: z.string().startsWith("/").optional(),
@@ -1048,10 +1043,8 @@ export function handoffTools(deps: HandoffDeps) {
     ),
     tool(
       "read_choices",
-      "Read the person's picks, notes and values on the preview you show (or showed last): what a page recorded through " +
-        "CawCo's bridge (`data-cawco-choice`/`data-option`, `cawco.choose`, `cawco.note`, `cawco.set`). Each entry carries the " +
-        "hash of the page it was made on; one made on an earlier revision of the page says so. Pass `page` to read a decision " +
-        "page in your project's folder instead. When the person sends their picks you get one message; this reads them any time.",
+      "Read the picks, notes and values the person made on the preview you show (or showed last), each with the hash of the " +
+        "page it was made on; `page` reads a decision page in your project's folder. Sent picks also arrive as one message.",
       {
         page: z
           .string()
