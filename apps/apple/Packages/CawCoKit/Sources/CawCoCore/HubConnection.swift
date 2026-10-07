@@ -64,9 +64,14 @@ public final class HubConnection {
     @ObservationIgnored private var waiters: [String: CheckedContinuation<OpenAPIValueContainer?, any Error>] = [:]
     private let log = Logger(subsystem: "dev.cawco.app", category: "Hub")
 
+    /// The hub this app keeps, the one every window connects to.
+    public static var keptAddress: URL? {
+        UserDefaults.standard.string(forKey: addressKey).flatMap(address(from:))
+    }
+
     public init() {
         needs = NeedsYouStore(ledger: ledger)
-        address = UserDefaults.standard.string(forKey: Self.addressKey).flatMap(Self.address(from:))
+        address = Self.keptAddress
         ledger.send = { [weak self] data in
             guard let self, socket == .connected, let live else {
                 return "Not connected to the hub. Check that it is running, then try again."
@@ -108,6 +113,10 @@ public final class HubConnection {
 
     /// Keeps `address` as the hub and connects to it.
     public func connect(to address: URL) {
+        if let old = self.address, old != address {
+            // The hub this device leaves stops pushing to it.
+            PushRegistry.shared.leave(old)
+        }
         self.address = address
         UserDefaults.standard.set(address.absoluteString, forKey: Self.addressKey)
         resetFleet()
@@ -208,6 +217,7 @@ public final class HubConnection {
         outage = false
         sessions.reconnected()
         readFleet(after: .seconds(1))
+        if let address { PushRegistry.shared.connected(to: address) }
     }
 
     private func closed() {

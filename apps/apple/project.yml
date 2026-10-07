@@ -54,11 +54,31 @@ targets:
         # file have different Team IDs") and the Mac app cannot launch at all.
         # Revisit together with the team signing above.
         ENABLE_HARDENED_RUNTIME[sdk=macosx*]: NO
+        # Push Notifications (PRD §5.5 "iOS app"): `entitlements` below goes to
+        # iPhone and iPad builds only. The Mac app is signed ad hoc ("-"), and an
+        # ad-hoc build carrying aps-environment is refused at launch, so on the
+        # Mac push does not start until the Mac app gets team signing.
+        "CODE_SIGN_ENTITLEMENTS[sdk=macosx*]": ""
+        # Xcode builds talk to APNs' sandbox; TestFlight and the App Store to production.
+        APS_ENVIRONMENT: development
       configs:
+        # Profiles carrying Push Notifications (made 2026-10-07 when the App ID
+        # got the capability; that invalidated "CawCo App Store 20261005").
+        # Automatic signing over the App Store Connect key made no push profile.
+        Debug:
+          "CODE_SIGN_STYLE[sdk=iphoneos*]": Manual
+          "CODE_SIGN_IDENTITY[sdk=iphoneos*]": Apple Development
+          "PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*]": CawCo Development 20261007
         Release:
+          APS_ENVIRONMENT: production
           "CODE_SIGN_STYLE[sdk=iphoneos*]": Manual
           "CODE_SIGN_IDENTITY[sdk=iphoneos*]": Apple Distribution
-          "PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*]": CawCo App Store 20261005
+          "PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*]": CawCo App Store 20261007
+    entitlements:
+      path: CawCo/CawCo.entitlements
+      properties:
+        # Alerts only: no `remote-notification` background mode, no silent pushes.
+        aps-environment: $(APS_ENVIRONMENT)
     info:
       path: CawCo/Info.plist
       properties:

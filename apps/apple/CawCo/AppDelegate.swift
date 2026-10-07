@@ -1,7 +1,9 @@
+import CawCoCore
 import CawCoScreens
 import CawCoDesign
 import OSLog
 import UIKit
+import UserNotifications
 
 /// The app: scene-based from the start (the 27 SDKs launch nothing else).
 /// Every window is a scene, and `SceneDelegate` builds each one's interface.
@@ -20,7 +22,28 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
     func application(_: UIApplication, didFinishLaunchingWithOptions _: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         UINavigationBar.appearance().titleTextAttributes = [.font: TypeScale.typeTitle.font, .foregroundColor: Palette.inkStrong]
         NotificationCenter.default.addObserver(self, selector: #selector(sceneWillConnect(_:)), name: UIScene.willConnectNotification, object: nil)
+        // Pushes: the delegate is set before launch ends, so a tap that
+        // launched the app and a lock-screen Approve both reach it.
+        UNUserNotificationCenter.current().delegate = self
+        #if DEBUG
+        PushRegistry.shared.launch(environment: .sandbox)
+        #else
+        PushRegistry.shared.launch(environment: .production)
+        #endif
+        NotificationCenter.default.addObserver(self, selector: #selector(becameActive), name: UIApplication.didBecomeActiveNotification, object: nil)
         return true
+    }
+
+    func application(_: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        PushRegistry.shared.adopt(deviceToken: deviceToken)
+    }
+
+    func application(_: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: any Error) {
+        PushRegistry.shared.failedToRegister(error)
+    }
+
+    @objc private func becameActive() {
+        Task { await PushRegistry.shared.becameActive() }
     }
 
     @objc private func sceneWillConnect(_ note: Notification) {
@@ -127,6 +150,52 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
     @objc private func splitDown() { board?.run(.splitDown) }
 }
 
+/// Tap or Open opens what the push names; Approve answers in the background.
+/// The system may call this off the main thread, so it reads the response
+/// where it is called and hops to the main actor with what it read.
+extension AppDelegate: UNUserNotificationCenterDelegate {
+    nonisolated func userNotificationCenter(_: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
+        let note = PushNote(response)
+        switch note.action {
+        case PushCategories.approve:
+            await PushApproval.approve(note)
+        case UNNotificationDefaultActionIdentifier, PushCategories.open:
+            await PushTaps.deliver(note, to: nil)
+        default:
+            break
+        }
+    }
+}
+
+/// Each tapped push is routed once, to the window in front; one that lands
+/// before any window exists waits for the first.
+@MainActor
+enum PushTaps {
+    private static var seen: Set<String> = []
+    private static var waiting: PushRoute?
+
+    static func deliver(_ note: PushNote, to root: RootViewController?) {
+        guard seen.insert(note.key).inserted else { return }
+        Logger(subsystem: "dev.cawco.app", category: "Push").notice("open \(note.kind ?? "unknown", privacy: .public) push \(note.id, privacy: .public)")
+        if let root = root ?? front {
+            root.open(note.route)
+        } else {
+            waiting = note.route
+        }
+    }
+
+    static func take() -> PushRoute? {
+        defer { waiting = nil }
+        return waiting
+    }
+
+    private static var front: RootViewController? {
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        let scene = scenes.first { $0.activationState == .foregroundActive } ?? scenes.first { $0.activationState == .foregroundInactive } ?? scenes.first
+        return scene?.keyWindow?.rootViewController as? RootViewController ?? scene?.windows.first?.rootViewController as? RootViewController
+    }
+}
+
 /// One window: the root controller, which holds that window's connection to the hub.
 final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     var window: UIWindow?
@@ -140,7 +209,13 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         }
         let activity = options.userActivities.first ?? session.stateRestorationActivity
         open(scene, sessionId: activity?.userInfo?["sessionId"] as? String, boardTab: activity?.userInfo?["boardTab"] as? String)
-        if let activity { (window?.rootViewController as? RootViewController)?.restore(activity) }
+        let root = window?.rootViewController as? RootViewController
+        if let activity { root?.restore(activity) }
+        // Launched cold by a tapped push: it opens the same way a warm tap does.
+        if let response = options.notificationResponse, PushNote(response).action != UNNotificationDismissActionIdentifier {
+            PushTaps.deliver(PushNote(response), to: root)
+        }
+        if let route = PushTaps.take() { root?.open(route) }
     }
 
     /// Builds the scene's window: its root controller and its own hub connection.

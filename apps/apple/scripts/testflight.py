@@ -13,7 +13,7 @@ import urllib.parse
 
 HOME = pathlib.Path.home()
 ROOT = HOME / "build/cawco-testflight"
-PROFILE = "CawCo App Store 20261005"
+PROFILE = "CawCo App Store 20261007"
 TEAM = "FN5LJSPX2R"
 
 

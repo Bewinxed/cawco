@@ -1,6 +1,7 @@
 # Written by `xcodegen generate` from project.yml.
 /CawCo.xcodeproj
 /CawCo/Info.plist
+/CawCo/CawCo.entitlements
 # SwiftPM and Xcode build state.
 .build/
 .swiftpm/

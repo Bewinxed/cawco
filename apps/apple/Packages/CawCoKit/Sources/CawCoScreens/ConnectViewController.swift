@@ -33,6 +33,13 @@ final class ConnectViewController: ObservedViewController, UITextFieldDelegate {
     private let searching = UIStackView()
     private let noWifi = KitLabel(TypeScale.typeBody, ink: Palette.inkMuted, lines: 0)
     private var connectButton: UIButton!
+    // The hub sheet's push settings (PRD §5.5): iOS's word, and Quiet as the hub answered it.
+    private let notifications = UIStackView()
+    private let notificationsOff = KitLabel(TypeScale.typeBody, ink: Palette.inkMuted, lines: 0)
+    private let quietRow = UIStackView()
+    private let quietHint = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
+    private let quietSwitch = UISwitch()
+    private let pushProblem = KitLabel(TypeScale.typeMeta, ink: Palette.statusFailInk, lines: 0)
     /// Caw on this screen; when the screen goes, Root lets him fade out over the next one.
     private(set) var caw: CawView?
     private var shownFound: [HubDiscovery.Found] = []
@@ -154,6 +161,9 @@ final class ConnectViewController: ObservedViewController, UITextFieldDelegate {
             self?.connect()
         }
         column.addArrangedSubview(connectButton)
+        if mode == .change {
+            column.addArrangedSubview(notificationsSection())
+        }
         fieldChanged()
 
         scroll.alwaysBounceVertical = false
@@ -210,7 +220,50 @@ final class ConnectViewController: ObservedViewController, UITextFieldDelegate {
         discovery.stop()
     }
 
+    private func notificationsSection() -> UIView {
+        let head = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
+        head.text = "Notifications"
+        head.accessibilityTraits = .header
+        notificationsOff.text = "Notifications are off in iOS Settings."
+        let label = KitLabel(TypeScale.typeBody, ink: Palette.inkStrong)
+        label.text = "Quiet"
+        let words = UIStackView(arrangedSubviews: [label, quietHint])
+        words.axis = .vertical
+        words.spacing = Space.space1
+        quietSwitch.onTintColor = Palette.inkStrong
+        quietSwitch.accessibilityLabel = "Quiet"
+        quietSwitch.addAction(UIAction { [weak self] _ in
+            guard let self else { return }
+            PushRegistry.shared.setQuiet(quietSwitch.isOn)
+        }, for: .valueChanged)
+        quietRow.addArrangedSubview(words)
+        quietRow.addArrangedSubview(quietSwitch)
+        quietRow.alignment = .center
+        quietRow.spacing = Space.space3
+        notifications.axis = .vertical
+        notifications.spacing = Space.space2
+        for view in [head, notificationsOff, quietRow, pushProblem] { notifications.addArrangedSubview(view) }
+        return notifications
+    }
+
+    /// The hub's answer is what the switch shows; it moves only when the hub said so.
+    private func refreshNotifications() {
+        guard mode == .change else { return }
+        let push = PushRegistry.shared
+        notificationsOff.isHidden = push.authorization != .denied
+        quietRow.isHidden = !push.allowed || push.quiet == nil
+        if let quiet = push.quiet {
+            quietSwitch.setOn(quiet, animated: true)
+            quietHint.text = quiet ? "Sent nothing." : "Gets what needs you."
+        }
+        quietSwitch.isEnabled = !push.quietSending
+        pushProblem.text = push.problem
+        pushProblem.isHidden = push.problem == nil || !push.allowed
+        notifications.isHidden = notificationsOff.isHidden && quietRow.isHidden && pushProblem.isHidden
+    }
+
     override func refreshContent() {
+        refreshNotifications()
         // A hub that was never entered has no state to say.
         status.isHidden = hub.address == nil
         status.configure(hub: hub, ready: false)

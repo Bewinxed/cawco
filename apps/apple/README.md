@@ -63,7 +63,9 @@ attaches the build to CawCo's Internal group and verifies group membership.
 The owner is the existing tester in Anbar's Internal group; Anbar is read only.
 
 Team: `FN5LJSPX2R`. Bundle resource: `BS3NP7UWF9` (`dev.cawco.app`).
-Profile: `CawCo App Store 20261005` (`KGL5Q5DZ6A`). App record: `6819139448`.
+Profiles, both with Push Notifications: `CawCo App Store 20261007` (`LFH2XA4YZV`) for
+Release and `CawCo Development 20261007` (`54V4ZHHULX`, the owner's iPhone) for Debug
+device builds. App record: `6819139448`.
 Internal group: `e873c55b-558a-4473-a2ae-a2bdb9780c49`.
 First distributed build: `0.1.0 (20261005)`, build ID
 `ba7a23c2-da64-45d0-b27a-aa3a19124ed2`, `VALID`, attached on 2026-10-05.

@@ -1,5 +1,5 @@
 public import UIKit
-import CawCoCore
+public import CawCoCore
 import CawCoDesign
 import CawCoMascot
 import OSLog
@@ -63,6 +63,25 @@ public final class RootViewController: ObservedViewController {
             board.openSession(id)
             if let initialValues { board.selected?.restoreValues(initialValues); self.initialValues = nil }
         }
+        // After the first full read, `/api/pending` included: an ask's
+        // session opens with its card in view, never an empty pane.
+        if read, let route = pushRoute {
+            pushRoute = nil
+            switch route {
+            case let .session(id): board.openSession(id)
+            case let .project(id): board.go(.project(id))
+            case .board: board.go(.fleet)
+            }
+        }
+    }
+
+    /// Where a tapped push opens, waiting for the fleet's first read.
+    private var pushRoute: PushRoute?
+
+    /// Opens what a tapped push names (PushNote.route).
+    public func open(_ route: PushRoute) {
+        pushRoute = route
+        requestRefresh()
     }
 
     // MARK: Commands (the menu bar and the keyboard)
