@@ -51,7 +51,19 @@ public enum CawStatus: String, CaseIterable, Sendable {
 /// The view's bounds hold Caw's still: the largest centred square in them is the files' still
 /// box. His acting reaches past that box, so he draws past the bounds there; nothing here clips
 /// him, and he never takes touches from what lies under him.
+///
+/// With `ledge` he stands behind an edge (Caw.svelte's `ledge`): the view is his box's width and
+/// the part of it above peek.riv's ledge line (`ledgeLine` of the width tall), so the line sits
+/// on the view's bottom edge. He comes in by peek.riv's own enter, which draws the wing tips that
+/// hang in front of the edge, so it is never clipped. Once it has entered he holds its rest while
+/// the status is `ready`; any other status's file takes over by the same leave and enter as
+/// anywhere else. The status files draw nothing below the line: their body is behind the edge.
+/// Under Reduce Motion there is no peek: the status's file, behind the edge, fades in.
 public final class CawView: UIView {
+    /// Where the ledge runs across peek.riv's 512 still box, as a share of its side, from the
+    /// top (assets/mascot/loops/rests.json, `peek.ledgeLine`).
+    public static let ledgeLine = 0.5684
+
     public var status: CawStatus {
         didSet {
             if status != oldValue, present {
@@ -78,17 +90,28 @@ public final class CawView: UIView {
     public var onEntered: (() -> Void)?
     public var onGone: (() -> Void)?
 
+    /// He peeks over an edge at the view's bottom; status files are clipped below it.
+    public let ledge: Bool
+    /// His peek is on: his entrance behind the ledge, then its rest for as long as the status is
+    /// `ready`. Off under Reduce Motion, and for good once another status is asked for after it
+    /// has entered.
+    private var peek: Bool
+    /// The peek's enter has ended.
+    private var peeked = false
+
     /// The Caw on screen.
     private var shown: CawLayer?
-    /// The file being read for a first appearance or a change, and the status it is for.
-    private var loading: (status: CawStatus, task: Task<Void, Never>)?
+    /// The file being read for a first appearance or a change, and the file it is.
+    private var loading: (file: CawFile, task: Task<Void, Never>)?
     private var fade: UIViewPropertyAnimator?
     /// The Caw on screen is fading out: whatever is asked for next comes in once he has gone.
     private var leaving = false
     private var entered = false
 
-    public init(status: CawStatus) {
+    public init(status: CawStatus, ledge: Bool = false) {
         self.status = status
+        self.ledge = ledge
+        peek = ledge && !UIAccessibility.isReduceMotionEnabled
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         isUserInteractionEnabled = false
@@ -137,26 +160,35 @@ public final class CawView: UIView {
     private var dark: Bool { traitCollection.userInterfaceStyle == .dark }
     private var reducedMotion: Bool { UIAccessibility.isReduceMotionEnabled }
 
-    /// Brings `status` on. The first Caw is simply the file for it. A Caw on screen showing
-    /// another status fades out, and the new status's file comes in once he has gone; under
-    /// Reduce Motion the new one fades in over him.
+    /// The file for `status` now: the peek while it holds, else the status's own.
+    private var wanted: CawFile {
+        if peek, peeked, status != .ready {
+            peek = false
+        }
+        return peek ? .peek : .status(status)
+    }
+
+    /// Brings the wanted file on. The first Caw is simply that file. A Caw on screen showing
+    /// another file fades out, and the new file comes in once he has gone; under Reduce Motion
+    /// the new one fades in over him.
     private func ask() {
         guard window != nil else {
             return
         }
+        let file = wanted
         guard let shown else {
-            load(status)
+            load(file)
             return
         }
         if reducedMotion {
-            if shown.status == status {
+            if shown.file == file {
                 cancelLoading()
             } else {
-                load(status)
+                load(file)
             }
             return
         }
-        if !leaving, shown.status != status {
+        if !leaving, shown.file != file {
             fadeOut(shown)
         }
     }
@@ -176,16 +208,17 @@ public final class CawView: UIView {
 
     /// `layer`'s Caw goes: he holds the drawing he is on and fades out over `Motion.durFade`,
     /// shrinking to `Motion.leaveScale`, from wherever a fade in had brought him; under Reduce
-    /// Motion the fade alone, taking a Caw he was fading across with him. Then the status asked
+    /// Motion the fade alone, taking a Caw he was fading across with him. Then the file asked
     /// for comes in afresh, or with `present` off the place is left empty (`gone`).
     private func fadeOut(_ layer: CawLayer) {
-        CawContract.log.info("Caw \(layer.status.rawValue, privacy: .public) leaves")
+        CawContract.log.info("Caw \(layer.file.name, privacy: .public) leaves")
         leaving = true
         fade?.stopAnimation(true)
         layer.view.isPaused = true
         let scale = reducedMotion ? 1 : Motion.leaveScale
-        let animator = Motion.easeOut.animator(Motion.durFade) { [self] in
-            for view in subviews {
+        let drawn = cawViews
+        let animator = Motion.easeOut.animator(Motion.durFade) {
+            for view in drawn {
                 view.alpha = 0
                 view.transform = CGAffineTransform(scaleX: scale, y: scale)
             }
@@ -197,14 +230,17 @@ public final class CawView: UIView {
         animator.startAnimation()
     }
 
+    /// Every Caw drawn here, inside its holder.
+    private var cawViews: [UIView] { subviews.flatMap(\.subviews) }
+
     private func cancelLoading() {
         loading?.task.cancel()
         loading = nil
     }
 
-    /// Reads `status`'s file and starts its Caw. A newer status cancels this one while it loads.
-    private func load(_ status: CawStatus) {
-        if loading?.status == status {
+    /// Reads `file` and starts its Caw. A newer file cancels this one while it loads.
+    private func load(_ file: CawFile) {
+        if loading?.file == file {
             return
         }
         cancelLoading()
@@ -215,9 +251,9 @@ public final class CawView: UIView {
             }
             let incoming: CawLayer
             do {
-                incoming = try await CawLayer.load(status, dark: dark, reducedMotion: reducedMotion)
+                incoming = try await CawLayer.load(file, dark: dark, reducedMotion: reducedMotion)
             } catch {
-                CawContract.log.error("Caw \(status.rawValue, privacy: .public) did not load: \(String(describing: error), privacy: .public)")
+                CawContract.log.error("Caw \(file.name, privacy: .public) did not load: \(String(describing: error), privacy: .public)")
                 loading = nil
                 if shown == nil {
                     reportEntered()
@@ -230,7 +266,7 @@ public final class CawView: UIView {
             loading = nil
             start(incoming, asked: asked)
         }
-        loading = (status, task)
+        loading = (file, task)
     }
 
     /// Puts `incoming` on screen, its file begun: his drawn enter is playing, and the file says
@@ -239,21 +275,24 @@ public final class CawView: UIView {
     /// still and the view fades in over `Motion.durFade`, across the Caw below.
     private func start(_ incoming: CawLayer, asked: ContinuousClock.Instant) {
         let below = shown
+        let peeking = incoming.file == .peek
         incoming.hearEntered { [weak self] in
             self?.reportEntered()
+            if peeking { self?.peekLanded() }
         }
-        addSubview(incoming.view)
+        clip(incoming)
+        addSubview(incoming.holder)
         shown = incoming
         setNeedsLayout()
         layoutIfNeeded()
-        CawContract.log.info("Caw \(incoming.status.rawValue, privacy: .public) starts \((ContinuousClock.now - asked).milliseconds, format: .fixed(precision: 1)) ms after it was asked for")
+        CawContract.log.info("Caw \(incoming.file.name, privacy: .public) starts \((ContinuousClock.now - asked).milliseconds, format: .fixed(precision: 1)) ms after it was asked for")
         fade?.stopAnimation(true)
         // A fade across that this one cut short left its own Caw below: that one goes now.
-        for view in subviews where view !== incoming.view && view !== below?.view {
-            view.removeFromSuperview()
+        for holder in subviews where holder !== incoming.holder && holder !== below?.holder {
+            holder.removeFromSuperview()
         }
         if incoming.enters, !reducedMotion {
-            below?.view.removeFromSuperview()
+            below?.holder.removeFromSuperview()
             return
         }
         let scale = reducedMotion ? 1 : Motion.leaveScale
@@ -264,11 +303,32 @@ public final class CawView: UIView {
             incoming.view.transform = .identity
         }
         animator.addCompletion { [weak self] _ in
-            below?.view.removeFromSuperview()
+            below?.holder.removeFromSuperview()
             self?.reportEntered()
         }
         fade = animator
         animator.startAnimation()
+    }
+
+    /// The peek has entered: a status other than `ready` takes over now.
+    private func peekLanded() {
+        peeked = true
+        if present {
+            ask()
+        }
+    }
+
+    /// A status file behind the ledge: his acting still reaches past the box above and to the
+    /// sides, and nothing of him draws below the view's bottom. The peek draws its own wing tips
+    /// in front of the edge, and is not clipped.
+    private func clip(_ layer: CawLayer) {
+        guard ledge, layer.file != .peek else {
+            layer.holder.layer.mask = nil
+            return
+        }
+        let mask = CALayer()
+        mask.backgroundColor = UIColor.black.cgColor
+        layer.holder.layer.mask = mask
     }
 
     private func reportEntered() {
@@ -280,17 +340,17 @@ public final class CawView: UIView {
         onEntered?()
     }
 
-    /// `layer` has faded out. With `present` on, the status asked for comes in afresh.
+    /// `layer` has faded out. With `present` on, the file asked for comes in afresh.
     private func gone(_ layer: CawLayer) {
         guard shown === layer else {
             return
         }
-        for view in subviews {
-            view.removeFromSuperview()
+        for holder in subviews {
+            holder.removeFromSuperview()
         }
         shown = nil
         leaving = false
-        CawContract.log.info("Caw \(layer.status.rawValue, privacy: .public) gone")
+        CawContract.log.info("Caw \(layer.file.name, privacy: .public) gone")
         if present {
             ask()
         } else {
@@ -306,23 +366,32 @@ public final class CawView: UIView {
         }
     }
 
-    /// The still box fills the largest centred square of the bounds; the artboard around the
-    /// box spills past them. Rive fits the artboard into its view with `.contain`, and that view
-    /// has the artboard's aspect, so the artboard scales by exactly side / 512.
+    /// The still box fills the largest centred square of the bounds (with `ledge`, the bounds'
+    /// width, its top on theirs, so the ledge line falls on their bottom); the artboard around
+    /// the box spills past them. Rive fits the artboard into its view with `.contain`, and that
+    /// view has the artboard's aspect, so the artboard scales by exactly side / 512. Each holder
+    /// is the view's own box, untransformed; its mask runs far past it on three sides and stops
+    /// at its bottom.
     override public func layoutSubviews() {
         super.layoutSubviews()
-        let side = min(bounds.width, bounds.height)
+        let side = ledge ? bounds.width : min(bounds.width, bounds.height)
         let scale = side / CawGeometry.stillBox.width
+        let boxTop = ledge ? bounds.minY : bounds.midY - side / 2
         let frame = CGRect(
             x: bounds.midX - side / 2 - CawGeometry.stillBox.minX * scale,
-            y: bounds.midY - side / 2 - CawGeometry.stillBox.minY * scale,
+            y: boxTop - CawGeometry.stillBox.minY * scale,
             width: CawGeometry.artboard.width * scale,
             height: CawGeometry.artboard.height * scale
         )
-        // By bounds and centre: a Caw fading out is scaled, and a frame is undefined then.
-        for view in subviews {
-            view.bounds = CGRect(origin: .zero, size: frame.size)
-            view.center = CGPoint(x: frame.midX, y: frame.midY)
+        let reach = frame.width
+        for holder in subviews {
+            holder.frame = bounds
+            holder.layer.mask?.frame = CGRect(x: -reach, y: -reach, width: bounds.width + reach * 2, height: bounds.height + reach)
+            // By bounds and centre: a Caw fading out is scaled, and a frame is undefined then.
+            for view in holder.subviews {
+                view.bounds = CGRect(origin: .zero, size: frame.size)
+                view.center = CGPoint(x: frame.midX, y: frame.midY)
+            }
         }
     }
 }
@@ -491,31 +560,54 @@ public final class CawWaiting: UIViewController {
     }
 }
 
-/// One status's Caw: its Rive view and the `Caw` instance bound to its state machine, kept
-/// together so the instance lives exactly as long as the view that draws it.
+/// What a Caw is drawn from: a status's file, or `peek`, his ledge peek (peek.riv: his drawn
+/// enter peering over an edge, resting on its landing).
+enum CawFile: Hashable, Sendable {
+    case status(CawStatus)
+    case peek
+
+    var name: String {
+        switch self {
+        case let .status(status): status.rawValue
+        case .peek: "peek"
+        }
+    }
+}
+
+/// One file's Caw: its Rive view, the `Caw` instance bound to its state machine, and the
+/// slot-sized holder it sits in, kept together so the instance lives exactly as long as the view
+/// that draws it. The holder is never transformed, so a clip on it holds its line while the Caw
+/// fades and scales inside.
 @MainActor
 final class CawLayer {
-    let status: CawStatus
+    let file: CawFile
     let view: RiveUIView
+    let holder = UIView()
     let caw: ViewModelInstance
     /// The file's `enters`: it carries a drawn enter, and says `entered` at its end.
     let enters: Bool
     private var hearing: Task<Void, Never>?
 
-    private init(status: CawStatus, view: RiveUIView, caw: ViewModelInstance, enters: Bool) {
-        self.status = status
+    private init(file: CawFile, view: RiveUIView, caw: ViewModelInstance, enters: Bool) {
+        self.file = file
         self.view = view
         self.caw = caw
         self.enters = enters
+        holder.isUserInteractionEnabled = false
+        holder.addSubview(view)
     }
 
     isolated deinit {
         hearing?.cancel()
     }
 
-    /// `fit` is how the artboard stands in the view: contained by default; a mark gives its own.
     static func load(_ status: CawStatus, dark: Bool, reducedMotion: Bool, fit: Fit? = nil) async throws -> CawLayer {
-        let file = try await CawFiles.file(for: status)
+        try await load(.status(status), dark: dark, reducedMotion: reducedMotion, fit: fit)
+    }
+
+    /// `fit` is how the artboard stands in the view: contained by default; a mark gives its own.
+    static func load(_ source: CawFile, dark: Bool, reducedMotion: Bool, fit: Fit? = nil) async throws -> CawLayer {
+        let file = try await CawFiles.file(for: source)
         let artboard = try await file.createArtboard(CawContract.artboard)
         let stateMachine = try await artboard.createStateMachine(CawContract.stateMachine)
         // Retained in the layer and bound explicitly: the view writes to this instance for its lifetime.
@@ -528,7 +620,7 @@ final class CawLayer {
         view.isUserInteractionEnabled = false
         view.isAccessibilityElement = false
         view.backgroundColor = .clear
-        return try await CawLayer(status: status, view: view, caw: caw, enters: caw.value(of: CawContract.enters))
+        return try await CawLayer(file: source, view: view, caw: caw, enters: caw.value(of: CawContract.enters))
     }
 
     /// Hears the file's `entered`: the end of his drawn enter.
@@ -577,24 +669,24 @@ enum CawContract {
 @MainActor
 enum CawFiles {
     private static var worker: Worker?
-    private static var bytes: [CawStatus: Data] = [:]
+    private static var bytes: [CawFile: Data] = [:]
 
-    static func file(for status: CawStatus) async throws -> File {
-        try await File(source: .data(cachedBytes(status)), worker: shared())
+    static func file(for source: CawFile) async throws -> File {
+        try await File(source: .data(cachedBytes(source)), worker: shared())
     }
 
     /// Reads `status`'s bytes and starts the Worker ahead of the first Caw that needs them.
     static func warm(_ status: CawStatus) async throws {
-        _ = try await cachedBytes(status)
+        _ = try await cachedBytes(.status(status))
         _ = try await shared()
     }
 
-    private static func cachedBytes(_ status: CawStatus) async throws -> Data {
-        if let cached = bytes[status] {
+    private static func cachedBytes(_ source: CawFile) async throws -> Data {
+        if let cached = bytes[source] {
             return cached
         }
-        let data = try await read(status)
-        bytes[status] = data
+        let data = try await read(source.name)
+        bytes[source] = data
         return data
     }
 
@@ -612,9 +704,9 @@ enum CawFiles {
     }
 
     @concurrent
-    private nonisolated static func read(_ status: CawStatus) async throws -> Data {
-        guard let url = Bundle.module.url(forResource: status.rawValue, withExtension: "riv", subdirectory: "caw") else {
-            throw CawFileError.missing(status.rawValue)
+    private nonisolated static func read(_ name: String) async throws -> Data {
+        guard let url = Bundle.module.url(forResource: name, withExtension: "riv", subdirectory: "caw") else {
+            throw CawFileError.missing(name)
         }
         return try Data(contentsOf: url)
     }
