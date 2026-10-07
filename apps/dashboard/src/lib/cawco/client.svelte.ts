@@ -31,6 +31,7 @@ import type {
   PermissionResult,
   PermissionUpdate,
   ProjectOfferSummary,
+  ProjectSpend,
   ProjectView,
   SendPayload,
   SendRecord,
@@ -98,7 +99,7 @@ import { unpickedMode } from "./permission-modes";
 import { type PendingSelection, selectionExtras } from "./preview/selection";
 import type { PreviewAsk } from "./preview/source";
 import { send as askHub, json } from "./project-tasks";
-import { placedOn, projectsFor } from "./projects";
+import { placedOn } from "./projects";
 import { type ReloadHold, reloadForProtocol } from "./protocol-reload";
 import { checkServedBuild } from "./served-build.svelte";
 import { spawnDefaults } from "./spawnPrefs.svelte";
@@ -135,7 +136,6 @@ import { warmCompactionMark } from "./transcript/compaction-mark";
 import { errorMessage, localUserMessage } from "./transcript/local";
 import { routedToParent } from "./transcript/present";
 import { holdsCompaction } from "./transcript/rows";
-import { topsIn } from "./tree";
 import type { DelegateAskEvent, Message } from "./types";
 import { updates } from "./updates/updates.svelte";
 import {
@@ -4681,6 +4681,17 @@ export async function requestView(
 export const viewData = (projectId: string): Promise<ViewData> =>
   askHub(`${projectPath(projectId)}/view-data`);
 
+/** What a project has spent: today, this month, its Caw's share, each attempt and thread. */
+export const projectSpend = (projectId: string): Promise<ProjectSpend> =>
+  askHub(`${projectPath(projectId)}/spend`);
+
+/** Sets what an attempt at the project's tasks may spend; null clears it. */
+export const setProjectBudget = (
+  projectId: string,
+  budget: ProjectSpend["budget"]
+): Promise<unknown> =>
+  askHub(`${projectPath(projectId)}/dispatch`, json("PATCH", { budget }));
+
 /** Forgets the project; the sessions started from it stay, just unattached. */
 export async function deleteProject(id: string): Promise<void> {
   const response = await fetch(`/api/projects/${id}`, { method: "DELETE" });
@@ -5951,40 +5962,6 @@ export const cawco = {
   /** A thread's messages, oldest first, once {@link readThread} read it; null before. */
   threadMessagesOf: (threadId: string): ThreadMessage[] | null =>
     state.threadMessages[threadId] ?? null,
-  /** Sessions a project owns: started from it, or running in its checkout.
-   *  Failed ones stay listed here too — same board rule as the sidebar. A
-   *  delegate is the project's when the session at the top of its chain of
-   *  parents is (tree.ts `topsIn`), whatever machine and folder it runs on
-   *  itself: the rail's rule (Sidebar `listed`). */
-  liveIn: (project: ProjectRow): InstanceRow[] => {
-    const topOf = topsIn(instanceIndex.byId);
-    return instances.filter((row) => {
-      if (!isListed(row)) {
-        return false;
-      }
-      const top = topOf(row);
-      return projectsFor(state.projects, top).some(
-        (held) => held.id === project.id
-      );
-    });
-  },
-  /** Stored sessions the SDK recorded somewhere inside the project's checkout. */
-  storedIn: (project: ProjectRow): NeutralSessionInfo[] =>
-    (catalog[project.machineId] ?? []).filter(
-      (info) =>
-        listedInHistory(info) &&
-        info.cwd &&
-        projectsFor(
-          state.projects,
-          instanceForSession(instanceIndex, info.sessionId, {
-            machineId: project.machineId,
-            cwd: info.cwd,
-          }) ?? {
-            machineId: project.machineId,
-            cwd: info.cwd,
-          }
-        ).some((held) => held.id === project.id)
-    ),
   session: (instanceId: string): SessionState | null =>
     state.sessions[instanceId] ?? null,
   /**
@@ -6079,6 +6056,20 @@ export const cawco = {
       return pulse.activity;
     }
     return target ? activityOf(target) : "idle";
+  },
+  /**
+   * Whether the session's own main loop is in a turn, its delegates and
+   * subagents aside: what a project's Caw is doing himself, where
+   * `activityOf` counts a lead as working while any attempt it parents runs.
+   * The same sources as `activityOf`: an open session's frames, else the
+   * daemon's pulse.
+   */
+  busyOf: (instanceId: string): boolean => {
+    const target = state.sessions[instanceId];
+    if (target && isSubscribed(instanceId)) {
+      return target.busy;
+    }
+    return state.pulses[instanceId]?.busy ?? false;
   },
   currentToolOf: (
     instanceId: string

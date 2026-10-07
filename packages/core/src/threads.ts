@@ -79,7 +79,10 @@ export interface EventThreadMessage extends ThreadMessageBase {
   author: "event";
   /** What happened, opened like a fold; absent when the title says it all. */
   body?: string;
-  /** One line: source, time and what, like "Routine · 08:55 · 3 new GitHub issues". */
+  /**
+   * One line: source and what, like "Routine · 3 new GitHub issues". The
+   * time is not in it: a reader draws `createdAt` in their own time zone.
+   */
   noteTitle: string;
 }
 
@@ -92,6 +95,45 @@ export type ThreadMessage =
 export interface ThreadRead {
   messages: ThreadMessage[];
   thread: ThreadSummary;
+}
+
+/**
+ * What a project has spent, as `GET /api/projects/:id/spend` answers it: the
+ * usage its sessions' machines reported, in dollars, read now. Days and
+ * months are the hub's own (its zone, as every "today" CawCo shows).
+ */
+export interface ProjectSpend {
+  /** Every attempt at a task, newest activity first: its sessions' spend summed. */
+  attempts: {
+    /** How many attempts the task has had. */
+    attempts: number;
+    /** When its newest attempt was made or ended, ms epoch. */
+    lastAt: number;
+    /** Its newest attempt's state (`done`, `failed`, `running`…). */
+    state: string;
+    taskId: string;
+    title: string;
+    /** The delegate type its newest attempt ran, if one was named. */
+    type: string | null;
+    usd: number;
+  }[];
+  /** What an attempt may spend where its task says nothing; null: no limit. */
+  budget: { minutes?: number; turns?: number; usd?: number } | null;
+  /** The project's Caw (lead) sessions alone. */
+  caw: { monthUsd: number; todayUsd: number };
+  /** The first of this month, ms epoch. */
+  monthStart: number;
+  monthUsd: number;
+  /**
+   * Each thread with how many times it woke Caw (your messages and events in
+   * it), newest first. A thread has no dollars of its own: one lead session
+   * answers every thread, and its usage is not reported per turn.
+   */
+  threads: { id: string; lastAt: number; title: string; wakes: number }[];
+  /** Midnight today, ms epoch. */
+  todayStart: number;
+  /** Every session of the project. */
+  todayUsd: number;
 }
 
 /** Your message as the hub took it: the thread (new or moved) and the message. */

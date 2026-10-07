@@ -201,8 +201,26 @@ const hubProxy = (): Plugin => ({
 });
 
 // `/ws` is left to `server.proxy`, and HMR's upgrade to Vite.
+/**
+ * Event Calendar's own palette (`src/styles/theme.css`) is not loaded: the
+ * calendar view imports the library's layout stylesheet, and its first
+ * line, the import of its theme, is taken out before Vite inlines the rest.
+ * The project's tokens fill the `--ec-*` variables instead (PRD §5.2: the
+ * libraries' themes are not loaded; our components carry DESIGN.md).
+ */
+const EC_INDEX = /@event-calendar[\\/]core[\\/]src[\\/]styles[\\/]index\.css$/;
+const EC_THEME_IMPORT = /@import\s+["']\.\/theme\.css["'];?/;
+const calendarThemeOff = (): Plugin => ({
+  name: "cawco-calendar-theme-off",
+  enforce: "pre",
+  transform(code, id) {
+    return EC_INDEX.test(id) ? code.replace(EC_THEME_IMPORT, "") : null;
+  },
+});
+
 export default defineConfig({
   plugins: [
+    calendarThemeOff(),
     hubProxy(),
     tailwindcss(),
     sveltekit({

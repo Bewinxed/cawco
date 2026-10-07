@@ -2,10 +2,13 @@
   /**
    * The table view: the same tasks as a ledger — title, stage, labels, to-dos
    * and when the file last changed — in stage order, then the board's own
-   * order inside a stage. The header is the ledger's band; a row is the
-   * task's link, and opens its drawer in place. Under 640px each row becomes
-   * the board's two-line card: the title, then stage · to-dos · age.
+   * order inside a stage. The rows and columns are TanStack Table's (PRD
+   * §5.2); the markup is the ledger's. The header is the ledger's band; a
+   * row is the task's link, and opens its drawer in place. Under 640px each
+   * row becomes the board's two-line card: the title, then stage · to-dos ·
+   * age.
    */
+  import { createTable, tableFeatures } from "@tanstack/svelte-table";
   import {
     KIND_LABEL,
     type Stage,
@@ -46,6 +49,44 @@
       .map(({ task }) => task)
   );
 
+  const features = tableFeatures({});
+  /** The ledger's columns, by id; each cell is drawn below by its id. */
+  const columns = [
+    {
+      id: "title",
+      header: "Task",
+      accessorFn: (task: TaskSummary) => task.title,
+    },
+    {
+      id: "stage",
+      header: "Stage",
+      accessorFn: (task: TaskSummary) => task.stage,
+    },
+    {
+      id: "labels",
+      header: "Labels",
+      accessorFn: (task: TaskSummary) => task.labels,
+    },
+    {
+      id: "todos",
+      header: "To-dos",
+      accessorFn: (task: TaskSummary) => task.todos,
+    },
+    {
+      id: "age",
+      header: "Updated",
+      accessorFn: (task: TaskSummary) => task.updatedAt,
+    },
+  ];
+  const table = createTable({
+    features,
+    columns,
+    getRowId: (task: TaskSummary) => task.id,
+    get data() {
+      return rows;
+    },
+  });
+
   /** Re-read once a minute, so an age does not go stale on an open page. */
   let now = $state(Date.now());
   $effect(() => {
@@ -73,67 +114,71 @@
 <div class="ledger">
   <Table.Root class="tasks table-fixed" ghostRows="tbody tr">
     <Table.Header>
-      <Table.Row class="band border-0">
-        <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-        <Table.Head class="col-title" scope="col">Task</Table.Head>
-        <Table.Head class="col-stage" scope="col">Stage</Table.Head>
-        <Table.Head class="col-labels" scope="col">Labels</Table.Head>
-        <Table.Head class="col-todos" scope="col">To-dos</Table.Head>
-        <Table.Head class="col-age" scope="col">Updated</Table.Head>
-        <!-- biome-ignore-end lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-      </Table.Row>
+      {#each table.getHeaderGroups() as group (group.id)}
+        <Table.Row class="band border-0">
+          {#each group.headers as header (header.id)}
+            <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
+            <Table.Head class="col-{header.column.id}" scope="col"
+              >{header.column.columnDef.header}</Table.Head
+            >
+          {/each}
+        </Table.Row>
+      {/each}
     </Table.Header>
     <Table.Body>
-      {#each rows as task (task.id)}
+      {#each table.getRowModel().rows as row (row.id)}
+        {@const task = row.original}
         <Table.Row class="row" data-task={task.id}>
-          <Table.Cell class="col-title">
-            <a
-              class="title focus-inset"
-              href={hrefOf(task.id)}
-              onclick={(event) => open(event, task.id)}
-            >
-              <span class="id">{task.id}</span>
-              <span class="name">{task.title}</span>
-            </a>
-          </Table.Cell>
-          <Table.Cell class="col-stage">
-            <span class="stage" data-kind={task.kind ?? "none"}>
-              {#if task.kind === "you"}
-                <IconNeedsYou aria-hidden="true" />
+          {#each row.getAllCells() as cell (cell.id)}
+            <Table.Cell class="col-{cell.column.id}">
+              {#if cell.column.id === "title"}
+                <a
+                  class="title focus-inset"
+                  href={hrefOf(task.id)}
+                  onclick={(event) => open(event, task.id)}
+                >
+                  <span class="id">{task.id}</span>
+                  <span class="name">{task.title}</span>
+                </a>
+              {:else if cell.column.id === "stage"}
+                <span class="stage" data-kind={task.kind ?? "none"}>
+                  {#if task.kind === "you"}
+                    <IconNeedsYou aria-hidden="true" />
+                  {/if}
+                  <span class="stage-name">{stageLabel(task.stage)}</span>
+                  {#if task.kind}
+                    <span class="kind">{KIND_LABEL[task.kind]}</span>
+                  {/if}
+                </span>
+              {:else if cell.column.id === "labels"}
+                <span class="labels">
+                  {#each task.labels as label (label)}
+                    <Badge variant="secondary">{label}</Badge>
+                  {/each}
+                </span>
+              {:else if cell.column.id === "todos"}
+                {#if task.todos.total > 0}
+                  <span class="todos">
+                    <TaskRing
+                      done={task.todos.done}
+                      size="sm"
+                      total={task.todos.total}
+                    />
+                    <span class="num"
+                      >{task.todos.done}/{task.todos.total}</span
+                    >
+                  </span>
+                {/if}
+              {:else}
+                <time
+                  class="num"
+                  datetime={new Date(task.updatedAt).toISOString()}
+                  title={new Date(task.updatedAt).toLocaleString()}
+                  >{formatAgeShort(task.updatedAt, now)}</time
+                >
               {/if}
-              <span class="stage-name">{stageLabel(task.stage)}</span>
-              {#if task.kind}
-                <span class="kind">{KIND_LABEL[task.kind]}</span>
-              {/if}
-            </span>
-          </Table.Cell>
-          <Table.Cell class="col-labels">
-            <span class="labels">
-              {#each task.labels as label (label)}
-                <Badge variant="secondary">{label}</Badge>
-              {/each}
-            </span>
-          </Table.Cell>
-          <Table.Cell class="col-todos">
-            {#if task.todos.total > 0}
-              <span class="todos">
-                <TaskRing
-                  done={task.todos.done}
-                  size="sm"
-                  total={task.todos.total}
-                />
-                <span class="num">{task.todos.done}/{task.todos.total}</span>
-              </span>
-            {/if}
-          </Table.Cell>
-          <Table.Cell class="col-age">
-            <time
-              class="num"
-              datetime={new Date(task.updatedAt).toISOString()}
-              title={new Date(task.updatedAt).toLocaleString()}
-              >{formatAgeShort(task.updatedAt, now)}</time
-            >
-          </Table.Cell>
+            </Table.Cell>
+          {/each}
         </Table.Row>
       {/each}
     </Table.Body>

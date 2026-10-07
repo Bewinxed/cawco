@@ -3,6 +3,8 @@
    * One task on the board: its id, its title, and only what it has to say
    * past that — an attempt running or failed, what it waits on, its to-dos.
    * A task with nothing to say is two lines (The Idle Has No Fill Rule).
+   * Its footer speaks only of live state: an attempt working or trying
+   * again, a wait on you, or the date it is set for.
    *
    * The card is a link to the task (`?task=tsk-12`), so it opens in a new
    * tab and is shared like one; a plain click opens the drawer in place. It
@@ -10,6 +12,7 @@
    * a card that changes column travels there from where it was drawn.
    */
   import { land, waiting } from "#lib/cawco/motion/share.svelte.js";
+  import { isRetry } from "#lib/cawco/project/caw-lead.svelte.js";
   import {
     flagsOf,
     type StageKind,
@@ -17,12 +20,7 @@
   } from "#lib/cawco/project-tasks.js";
   import TaskRing from "#lib/cawco/TaskRing.svelte";
   import { Badge } from "#lib/components/ui/badge/index.js";
-  import {
-    IconError,
-    IconLock,
-    IconWarningTriangle,
-    IconWorking,
-  } from "#lib/icons.js";
+  import { IconError, IconLock, IconWarningTriangle } from "#lib/icons.js";
   import { dragTask } from "./board-dnd.svelte.js";
 
   let {
@@ -30,15 +28,19 @@
     href,
     kindOf,
     onopen,
+    date = null,
   }: {
     task: TaskSummary;
     href: string;
+    /** The date the task's file sets it for, said short ("Thu 09:30"). */
+    date?: string | null;
     /** The kind of another task's stage, to say whether what it waits on has landed. */
     kindOf: (id: string) => StageKind | null | undefined;
     onopen: (id: string) => void;
   } = $props();
 
   const flags = $derived(flagsOf(task));
+  const retry = $derived(isRetry(task));
   /**
    * What it waits on that has not landed: the hub's word when it gives one,
    * else its `after` edges whose task is not in a done stage.
@@ -87,12 +89,7 @@
         <span class="sr-only">{task.problem}</span>
       </span>
     {/if}
-    {#if flags.live}
-      <Badge class="ml-auto" variant="live">
-        <IconWorking aria-hidden="true" />
-        Working
-      </Badge>
-    {:else if flags.failed}
+    {#if flags.failed && !flags.live}
       <Badge class="ml-auto" variant="fail">
         <IconError aria-hidden="true" />
         Failed
@@ -100,6 +97,23 @@
     {/if}
   </span>
   <span class="title">{task.title}</span>
+  {#if flags.live || task.kind === "you" || date}
+    <span class="live-foot">
+      {#if flags.live}
+        <span aria-hidden="true" class="dot live"></span>
+        {#if retry}
+          <span>retrying · attempt {task.attempts.length}</span>
+        {:else}
+          <span>{task.type ?? "attempt"} working</span>
+        {/if}
+      {:else if task.kind === "you"}
+        <span aria-hidden="true" class="dot attn"></span>
+        <span>waiting on you</span>
+      {:else if date}
+        <span class="when num">{date}</span>
+      {/if}
+    </span>
+  {/if}
   {#if task.todos.total > 0 || waitsOn.length > 0 || task.labels.length > 0}
     <span class="foot">
       {#if task.todos.total > 0}
@@ -194,6 +208,34 @@
     margin-block-start: var(--space-1);
     font: var(--type-meta);
     color: var(--ink-muted);
+  }
+  .live-foot {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    font: var(--type-meta);
+    color: var(--ink-muted);
+  }
+  .dot {
+    flex: none;
+    inline-size: 6px;
+    block-size: 6px;
+    border-radius: var(--radius-pill);
+  }
+  .dot.live {
+    background: var(--status-live-glyph);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .dot.live {
+      animation: pulse var(--breath) var(--ease-in-out) infinite;
+    }
+  }
+  .dot.attn {
+    background: var(--status-attn-glyph);
+  }
+  .when {
+    font-family: var(--font-mono);
+    font-variant-ligatures: none;
   }
   .todos,
   .after {

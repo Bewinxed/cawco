@@ -42,6 +42,7 @@ import {
   type InstanceRow,
   type PermissionRequestFrame,
   type PermissionResult,
+  type ProjectSpend,
   questionsOf,
   type SendPayload,
   type SpawnPayload,
@@ -155,9 +156,6 @@ const titleFrom = (body: string): string => {
     : line;
 };
 
-/** The hub's time of day, `08:55`: an event note's middle part. */
-const clock = (at = new Date()): string => at.toTimeString().slice(0, 5);
-
 /** An attempt's end, in the word an event note reads. */
 const ENDED: Record<string, string> = {
   done: "landed",
@@ -203,6 +201,7 @@ export interface CawDeps {
     | "leadSpendUsd"
     | "newestThread"
     | "project"
+    | "projectSpend"
     | "projectThreads"
     | "setProjectCaw"
     | "thread"
@@ -641,6 +640,44 @@ export const createCaw = ({
     wake,
     view,
 
+    /**
+     * What the project has spent: today and this month in the hub's zone,
+     * its Caw's share, each task's attempts and each thread's wakes.
+     */
+    spend(projectId: string): ProjectSpend {
+      const project = projectOf(projectId);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const month = new Date(today);
+      month.setDate(1);
+      const todayStart = today.getTime();
+      const monthStart = month.getTime();
+      const spent = db.projectSpend(projectId, { todayStart, monthStart });
+      const byTask = new Map<string, ProjectSpend["attempts"][number]>();
+      for (const item of spent.items) {
+        const held = byTask.get(item.taskId);
+        byTask.set(item.taskId, {
+          taskId: item.taskId,
+          title: item.title,
+          type: item.type,
+          state: item.state,
+          lastAt: item.at,
+          attempts: (held?.attempts ?? 0) + 1,
+          usd: (held?.usd ?? 0) + item.usd,
+        });
+      }
+      return {
+        todayStart,
+        monthStart,
+        todayUsd: spent.todayUsd,
+        monthUsd: spent.monthUsd,
+        caw: spent.caw,
+        budget: project.budget ?? null,
+        threads: spent.threads,
+        attempts: [...byTask.values()].sort((a, b) => b.lastAt - a.lastAt),
+      };
+    },
+
     /** Turns Caw on or off, or moves it to another harness; a lead it had is ended. */
     configure(
       projectId: string,
@@ -745,7 +782,7 @@ export const createCaw = ({
               text: `${waiting.id} “${waiting.title}” now waits for the person in ${waiting.stage}.`,
               threadId: db.threadOfTask(projectId, waiting.id)?.id,
               note: {
-                title: `Task · ${clock()} · ${waiting.id} waits for you in ${waiting.stage}`,
+                title: `Task · ${waiting.id} waits for you in ${waiting.stage}`,
                 body: waiting.title,
               },
             });
@@ -773,7 +810,7 @@ export const createCaw = ({
         text: `The attempt at ${item.taskId} (“${item.title}”) ended ${item.state}.${report ? `\n\n${report.slice(0, 2000)}` : ""}`,
         threadId: db.threadOfTask(project.id, item.taskId)?.id,
         note: {
-          title: `Attempt · ${clock()} · ${item.taskId} ${ENDED[item.state] ?? item.state}`,
+          title: `Attempt · ${item.taskId} ${ENDED[item.state] ?? item.state}`,
           body: report.slice(0, 2000),
         },
       };
@@ -941,7 +978,7 @@ export const createCaw = ({
             noteIn(
               projectId,
               actor ? turns.get(actor.id)?.threadId : undefined,
-              { title: `View · ${clock()} · Caw drafted “${drafted.name}”` }
+              { title: `View · Caw drafted “${drafted.name}”` }
             );
             return ok({ ok: true, view: drafted.name, draft: true });
           }
@@ -988,6 +1025,13 @@ export const cawRoutes = (caw: Caw) =>
         }
       }
     )
+    .get("/api/projects/:id/spend", ({ params }) => {
+      try {
+        return caw.spend(params.id);
+      } catch (error) {
+        return answer(error);
+      }
+    })
     .get("/api/threads", () => caw.allThreads())
     .get("/api/projects/:id/threads", ({ params }) => {
       try {

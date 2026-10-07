@@ -21,6 +21,7 @@
   import { TextMorph } from "torph/svelte";
   import cawcoIcon from "#lib/assets/brand/cawco-icon.png";
   import { Button } from "#lib/components/ui/button/index.js";
+  import CawLoopSwitcher from "#lib/components/ui/CawLoopSwitcher.svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
@@ -1153,6 +1154,7 @@
       </Tip>
       <ThemeSwitcher />
       <SoundSwitcher />
+      <CawLoopSwitcher />
     </div>
   </Sidebar.Footer>
   <SessionHover within={railEl} />

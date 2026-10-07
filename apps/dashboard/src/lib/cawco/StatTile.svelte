@@ -3,23 +3,28 @@
    * A card holding a recessed well, and the well holds one figure: the label
    * over the value in the KPI role, with its unit on the value's line (the
    * plan's 280×90 tile). The unit sits after the value, so it coming and
-   * going never moves the figure or the tile's height.
+   * going never moves the figure or the tile's height. `action` is a
+   * control the figure is changed with (the budget's Set budget).
    */
+  import type { Snippet } from "svelte";
   import { TextMorph } from "torph/svelte";
   import { CURVE, morphMs } from "#lib/cawco/motion/curves.svelte.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Card from "#lib/components/ui/card/index.js";
 
   interface Props {
+    action?: Snippet;
     label: string;
+    /** A status pair the figure takes (a drawn view's tile); none by default. */
+    tone?: "neutral" | "live" | "attn" | "done" | "fail";
     unit?: string;
     value: string | number;
   }
 
-  let { label, value, unit }: Props = $props();
+  let { label, value, unit, action, tone = "neutral" }: Props = $props();
 </script>
 
-<Card.Root class="st-card">
+<Card.Root class="st-card" data-tone={tone}>
   <div class="st-well">
     <span class="st-label">{label}</span>
     <span class="st-figure">
@@ -37,6 +42,9 @@
         {/key}
       {/if}
     </span>
+    {#if action}
+      <span class="st-action">{@render action()}</span>
+    {/if}
   </div>
 </Card.Root>
 
@@ -85,6 +93,21 @@
     min-height: 1lh;
     font: var(--type-kpi);
     color: var(--ink-stat);
+  }
+  :global(.st-card[data-tone="live"] .st-value) {
+    color: var(--status-live-ink);
+  }
+  :global(.st-card[data-tone="attn"] .st-value) {
+    color: var(--status-attn-ink);
+  }
+  :global(.st-card[data-tone="done"] .st-value) {
+    color: var(--status-done-ink);
+  }
+  :global(.st-card[data-tone="fail"] .st-value) {
+    color: var(--status-fail-ink);
+  }
+  .st-action {
+    display: flex;
   }
   .st-unit {
     font: var(--type-meta);

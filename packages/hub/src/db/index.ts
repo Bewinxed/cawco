@@ -761,6 +761,28 @@ export interface DbShape {
   /** A session's "make this a project" offer, answered or not (project-offers.ts). */
   readonly projectOffer: (instanceId: string) => ProjectOfferRow | undefined;
   /**
+   * A project's spend since `todayStart` and `monthStart`, all of it and its
+   * Caw's; each attempt at a task with its session's spend (oldest first);
+   * each thread with how many messages in it woke Caw (newest first).
+   */
+  readonly projectSpend: (
+    projectId: string,
+    since: { monthStart: number; todayStart: number }
+  ) => {
+    caw: { monthUsd: number; todayUsd: number };
+    items: {
+      at: number;
+      state: string;
+      taskId: string;
+      title: string;
+      type: string | null;
+      usd: number;
+    }[];
+    monthUsd: number;
+    threads: { id: string; lastAt: number; title: string; wakes: number }[];
+    todayUsd: number;
+  };
+  /**
    * Projects whose remote is not known yet, each with a checkout on
    * `machineId` to read it from.
    */
@@ -3961,6 +3983,85 @@ const make = (path: string): DbShape => {
           and(eq(instances.projectId, projectId), eq(instances.role, "lead"))
         )
         .get()?.usd ?? 0,
+    projectSpend: (projectId, { todayStart, monthStart }) => {
+      const cost = (when: ReturnType<typeof sql>) =>
+        sql<number>`coalesce(sum(case when ${when} then ${usageBuckets.costUsd} else 0 end), 0)`;
+      const lead = sql`${instances.role} = 'lead'`;
+      const totals = db
+        .select({
+          today: cost(sql`${usageBuckets.start} >= ${todayStart}`),
+          month: cost(sql`${usageBuckets.start} >= ${monthStart}`),
+          cawToday: cost(
+            sql`${lead} and ${usageBuckets.start} >= ${todayStart}`
+          ),
+          cawMonth: cost(
+            sql`${lead} and ${usageBuckets.start} >= ${monthStart}`
+          ),
+        })
+        .from(usageBuckets)
+        .innerJoin(instances, eq(instances.sessionId, usageBuckets.sessionId))
+        .where(eq(instances.projectId, projectId))
+        .get();
+      // Each attempt with what its session cost: joined and summed per item,
+      // so every column is the query's own (a correlated sub-select renders
+      // its columns unqualified and mistakes one table's id for another's).
+      const items = db
+        .select({
+          taskId: workItems.taskId,
+          title: workItems.title,
+          type: workItems.type,
+          state: workItems.state,
+          createdAt: workItems.createdAt,
+          endedAt: workItems.endedAt,
+          usd: sql<number>`coalesce(sum(${usageBuckets.costUsd}), 0)`,
+        })
+        .from(workItems)
+        .leftJoin(instances, eq(instances.id, workItems.instanceId))
+        .leftJoin(usageBuckets, eq(usageBuckets.sessionId, instances.sessionId))
+        .where(
+          and(eq(workItems.projectId, projectId), isNotNull(workItems.taskId))
+        )
+        .groupBy(workItems.id)
+        .orderBy(asc(workItems.createdAt))
+        .all();
+      // Each thread with how many of its messages woke Caw: yours and events.
+      const wakes = db
+        .select({
+          id: projectThreads.id,
+          title: projectThreads.title,
+          lastAt: projectThreads.updatedAt,
+          wakes: sql<number>`count(${threadMessages.id})`,
+        })
+        .from(projectThreads)
+        .leftJoin(
+          threadMessages,
+          and(
+            eq(threadMessages.threadId, projectThreads.id),
+            ne(threadMessages.author, "caw")
+          )
+        )
+        .where(eq(projectThreads.projectId, projectId))
+        .groupBy(projectThreads.id)
+        .orderBy(desc(projectThreads.updatedAt))
+        .all();
+      return {
+        todayUsd: totals?.today ?? 0,
+        monthUsd: totals?.month ?? 0,
+        caw: {
+          todayUsd: totals?.cawToday ?? 0,
+          monthUsd: totals?.cawMonth ?? 0,
+        },
+        items: items.map((item) => ({
+          ...item,
+          taskId: item.taskId as string,
+          at: (item.endedAt ?? item.createdAt).getTime(),
+        })),
+        threads: wakes.map((row) => ({
+          ...row,
+          lastAt: row.lastAt.getTime(),
+        })),
+      };
+    },
     projectThreads: (projectId) => {
       const rows = db
         .select()

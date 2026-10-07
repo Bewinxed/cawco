@@ -4388,6 +4388,83 @@
         }
       }
     },
+    "/api/projects/{id}/spend": {
+      "get": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiProjectsByIdSpend",
+        "responses": {
+          "200": {
+            "description": "getApiProjectsByIdSpend 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectSpend"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "getApiProjectsByIdSpend 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "getApiProjectsByIdSpend 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "getApiProjectsByIdSpend 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "getApiProjectsByIdSpend 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "getApiProjectsByIdSpend 502",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/threads": {
       "get": {
         "operationId": "getApiThreads",
@@ -18158,6 +18235,140 @@
         ],
         "type": "string"
       },
+      "ProjectSpend": {
+        "description": "What a project has spent, as `GET /api/projects/:id/spend` answers it: the\nusage its sessions' machines reported, in dollars, read now. Days and\nmonths are the hub's own (its zone, as every \"today\" CawCo shows).",
+        "type": "object",
+        "properties": {
+          "attempts": {
+            "description": "Every attempt at a task, newest activity first: its sessions' spend summed.",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "attempts": {
+                  "description": "How many attempts the task has had.",
+                  "type": "number"
+                },
+                "lastAt": {
+                  "description": "When its newest attempt was made or ended, ms epoch.",
+                  "type": "number"
+                },
+                "state": {
+                  "description": "Its newest attempt's state (`done`, `failed`, `running`…).",
+                  "type": "string"
+                },
+                "taskId": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "type": {
+                  "description": "The delegate type its newest attempt ran, if one was named.",
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "usd": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "attempts",
+                "lastAt",
+                "state",
+                "taskId",
+                "title",
+                "type",
+                "usd"
+              ]
+            }
+          },
+          "budget": {
+            "description": "What an attempt may spend where its task says nothing; null: no limit.",
+            "type": "object",
+            "properties": {
+              "minutes": {
+                "type": "number"
+              },
+              "turns": {
+                "type": "number"
+              },
+              "usd": {
+                "type": "number"
+              }
+            }
+          },
+          "caw": {
+            "description": "The project's Caw (lead) sessions alone.",
+            "type": "object",
+            "properties": {
+              "monthUsd": {
+                "type": "number"
+              },
+              "todayUsd": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "monthUsd",
+              "todayUsd"
+            ]
+          },
+          "monthStart": {
+            "description": "The first of this month, ms epoch.",
+            "type": "number"
+          },
+          "monthUsd": {
+            "type": "number"
+          },
+          "threads": {
+            "description": "Each thread with how many times it woke Caw (your messages and events in\nit), newest first. A thread has no dollars of its own: one lead session\nanswers every thread, and its usage is not reported per turn.",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "lastAt": {
+                  "type": "number"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "wakes": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "id",
+                "lastAt",
+                "title",
+                "wakes"
+              ]
+            }
+          },
+          "todayStart": {
+            "description": "Midnight today, ms epoch.",
+            "type": "number"
+          },
+          "todayUsd": {
+            "description": "Every session of the project.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "attempts",
+          "caw",
+          "monthStart",
+          "monthUsd",
+          "threads",
+          "todayStart",
+          "todayUsd"
+        ]
+      },
       "ThreadSummary": {
         "description": "A thread as the project's list and the `thread.upsert` frame carry it.",
         "type": "object",
@@ -18411,7 +18622,7 @@
             "type": "string"
           },
           "noteTitle": {
-            "description": "One line: source, time and what, like \"Routine · 08:55 · 3 new GitHub issues\".",
+            "description": "One line: source and what, like \"Routine · 3 new GitHub issues\". The\ntime is not in it: a reader draws `createdAt` in their own time zone.",
             "type": "string"
           },
           "createdAt": {

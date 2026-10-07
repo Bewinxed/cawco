@@ -1,1125 +1,1109 @@
 <script lang="ts">
-  import { machineLabel } from "@cawco/core";
   /**
-   * The project home (NEW.md §1, north star 4): what this is and what is
-   * happening — read from the repo's own files, never from a store of
-   * CawCo's own.
+   * The project's views (design §2, PRD §5.2): the head with Caw as the
+   * lead's face, then the view strip and the view. Board, Table and
+   * Pipeline always; Calendar when a task carries a date; then each view
+   * kept in `views/`, then each Caw drafted, marked `draft`, with Keep and
+   * Discard over it. The tasks are the hub's: every change is a commit, so
+   * the page shows what the hub answered and reads the list again after
+   * each of its own writes, on a reconnect, and when the tab comes back.
+   *
+   * The view and the open task live in the URL (`?view=`, `?task=`), so a
+   * link opens the same. Needs you is a filter, not a stage: the tasks whose
+   * stage is of kind `you`.
    */
-  import { flushSync, tick, untrack } from "svelte";
-  import { MediaQuery } from "svelte/reactivity";
+  import type { ProjectView, ViewData } from "@cawco/core";
+  import { untrack } from "svelte";
+  import type { TransitionConfig } from "svelte/transition";
   import { toast } from "svelte-sonner";
-  import type { InstanceRow, ProjectRow } from "#lib/cawco/client.svelte.js";
   import {
     cawco,
-    deleteProject,
-    machineFs,
-    spawnSession,
+    discardView,
+    keepView,
+    requestView,
+    startThread,
+    threadsOf,
+    viewData,
+    viewsOf,
   } from "#lib/cawco/client.svelte.js";
-  import { type Doc, readDocs } from "#lib/cawco/docs.js";
-  import ErrorText from "#lib/cawco/ErrorText.svelte";
-  import LiveSessionRow from "#lib/cawco/LiveSessionRow.svelte";
-  import { conversationHref } from "#lib/cawco/links.js";
-  import MachineInventory from "#lib/cawco/MachineInventory.svelte";
+  import Caw from "#lib/cawco/home/Caw.svelte";
+  import type { HubRead } from "#lib/cawco/hub-read.js";
   import {
     crossIn,
     crossOut,
-    dur,
-    ease,
+    motionOk,
   } from "#lib/cawco/motion/curves.svelte.js";
-  import { echoBeat } from "#lib/cawco/motion/echo.svelte.js";
-  import { fold } from "#lib/cawco/motion/fold.svelte.js";
-  import { route } from "#lib/cawco/motion/route.svelte.js";
-  import { reflow } from "#lib/cawco/motion/rows.svelte.js";
-  import { handOver, land } from "#lib/cawco/motion/share.svelte.js";
-  import OsMark from "#lib/cawco/OsMark.svelte";
-  import { unpickedMode } from "#lib/cawco/permission-modes.js";
-  import StoredSessionRow from "#lib/cawco/StoredSessionRow.svelte";
-  import { rememberSpawn, spawnPrefs } from "#lib/cawco/spawnPrefs.svelte.js";
-  import TasksCard from "#lib/cawco/tasks/TasksCard.svelte";
-  import MemoryCard from "#lib/components/features/MemoryCard.svelte";
+  import { ListSwap } from "#lib/cawco/motion/list-swap.svelte.js";
+  import { depart } from "#lib/cawco/motion/share.svelte.js";
+  import CawField from "#lib/cawco/project/CawField.svelte";
+  import { CawLead } from "#lib/cawco/project/caw-lead.svelte.js";
+  import ProjectHead from "#lib/cawco/project/ProjectHead.svelte";
+  import {
+    createTask,
+    firstTodoStage,
+    listTasks,
+    movesFrom,
+    moveTask,
+    readStages,
+    type StageKind,
+    type StagesView,
+    stageLabel,
+    type TaskList,
+    type TaskSummary,
+    type TaskView,
+  } from "#lib/cawco/project-tasks.js";
+  import NewTaskForm from "#lib/cawco/tasks/NewTaskForm.svelte";
+  import StagesControl from "#lib/cawco/tasks/StagesControl.svelte";
+  import TaskBoard from "#lib/cawco/tasks/TaskBoard.svelte";
+  import TaskSheet from "#lib/cawco/tasks/TaskSheet.svelte";
+  import TaskTable from "#lib/cawco/tasks/TaskTable.svelte";
+  import ViewA2ui from "#lib/cawco/views/ViewA2ui.svelte";
+  import ViewCalendar, {
+    calendarField,
+  } from "#lib/cawco/views/ViewCalendar.svelte";
+  import ViewPipeline from "#lib/cawco/views/ViewPipeline.svelte";
   import { Alert, AlertDescription } from "#lib/components/ui/alert/index.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
-  import * as AlertDialog from "#lib/components/ui/alert-dialog/index.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
-  import { Card } from "#lib/components/ui/card/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
-  import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
-  import { Input } from "#lib/components/ui/input/index.js";
-  import { Markdown } from "#lib/components/ui/markdown/index.js";
+  import {
+    TabItem,
+    Tabs,
+    TabsList,
+  } from "#lib/components/ui/fluid-tabs/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Popover from "#lib/components/ui/popover/index.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
-  import * as Select from "#lib/components/ui/select/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
-  import * as Tabs from "#lib/components/ui/tabs/index.js";
-  import { Textarea } from "#lib/components/ui/textarea/index.js";
-  import { IconChat, IconDocument } from "#lib/icons.js";
+  import {
+    IconNeedsYou,
+    IconPlus,
+    IconSparkles,
+    IconToolTodo,
+  } from "#lib/icons.js";
+  import { browser } from "$app/env";
   import { goto } from "$app/navigation";
   import type { PageData } from "./$types";
 
   let { data }: { data: PageData } = $props();
 
-  const project = $derived<ProjectRow | null>(
+  const project = $derived(
     (data.project && cawco.project(data.project.id)) ?? data.project
   );
   const machine = $derived(
     cawco.machines.find((row) => row.machineId === project?.machineId) ??
       data.machine
   );
+  const projectId = $derived(data.project?.id ?? "");
 
-  /** Null until the checkout has answered what markdown it holds. */
-  let docs = $state<Doc[] | null>(null);
-  let open = $state<Doc | null>(null);
-  let content = $state("");
-  /** The document whose content is on screen: the open one, once it is read. */
-  let shown = $state<string | null>(null);
-  let draft = $state<string | null>(null);
-  let docsError = $state<string | null>(null);
-  let docError = $state<string | null>(null);
-  let saving = $state(false);
-
-  /**
-   * Nothing on this page says "empty" before the machine has answered: until
-   * the docs list and the first document are read, the card stands at the
-   * size it will have, as a skeleton, and the text cross-fades into it.
-   */
-  const docsRead = $derived(
-    docs !== null && (docs.length === 0 || shown !== null)
-  );
-
-  /**
-   * 24 lines of `prose-sm`, whose line box is exactly 1.5rem — so the clamp
-   * lands between lines instead of through one. What is left over fades under
-   * the card's edge until "Read more" lifts it.
-   */
-  const COLLAPSED_DOC = "calc(1.5rem * 24)";
-  /**
-   * The reading pane's height: the clamp and its Read more row. Every view
-   * but the editor stands at least this tall — the skeleton, a short file, a
-   * checkout with no markdown — so what a file turns out to hold never moves
-   * the page under it; a longer one opens past it only when asked.
-   */
-  const PANE = "calc(1.5rem * 24 + 2.25rem)";
-  const COLLAPSED_LINES = 36;
-  let docBody = $state<HTMLElement | null>(null);
-  /** The card's body: what it shows changes, and its height follows. */
-  let bodyBox = $state<HTMLElement | null>(null);
-  let expanded = $state(false);
-  let clipped = $state(false);
-  let showMore = $state(false);
-  let forgetOpen = $state(false);
-  let forgetting = $state(false);
-  /** The last forget went through (a failed one leaves the dialog open). */
-  let forgotten = $state(false);
-  let spawnOpen = $state(false);
-  let spawnPrompt = $state("");
-
-  /**
-   * At xl the docs run down a column beside the reader; below, across it.
-   * The layout is the stylesheet's (so the server draws it right); this is
-   * only which arrow keys walk the tabs.
-   */
-  const docsColumn = new MediaQuery("(min-width: 1280px)");
-
-  /** What the card's body shows: its skeleton, a document, or its editor. */
-  const view = $derived.by(() => {
-    if (docsError) {
-      return "unlisted";
-    }
-    if (docs?.length === 0) {
-      return "none";
-    }
-    if (shown === null) {
-      return "reading";
-    }
-    return `${shown}:${draft === null ? "read" : "edit"}`;
-  });
-  /** What the docs row and the card's header say when there is no doc to open. */
-  const docsStatus = $derived(
-    docsError ? "Could not list the docs" : "No markdown yet"
-  );
-
+  /** A refused read, as a sentence with its status for support. */
+  const refusal = (read: HubRead<unknown>): string | null =>
+    read.ok ? null : `${read.detail} (${read.status}).`;
   const message = (error: unknown) =>
     error instanceof Error ? error.message : String(error);
 
-  /**
-   * Change what the card's body shows: the two views cross-fade (crossIn /
-   * crossOut) while the body's height moves from the one it is drawn at to
-   * the new one's, over --dur-panel on --ease-in-out.
-   */
-  async function reshape(change: () => void) {
-    const from = bodyBox?.getBoundingClientRect().height;
-    change();
-    await tick();
-    if (bodyBox && from !== undefined) {
-      fold(
-        bodyBox,
-        true,
-        { ms: dur("--dur-panel"), easing: ease("--ease-in-out") },
-        from
-      );
-    }
-  }
+  // --- the tasks: what the hub answered, from the load and each re-read ------
 
-  let loadedFor = "";
+  let list = $derived<TaskList | null>(data.tasks.ok ? data.tasks.value : null);
+  let listProblem = $derived(refusal(data.tasks));
+  let stages = $derived<StagesView | null>(
+    data.stages.ok ? data.stages.value : null
+  );
+  let stagesProblem = $derived(refusal(data.stages));
+  let openTask = $derived<string | null>(data.task);
+  let needsOnly = $state(false);
+  let adding = $state(false);
+  /** Moves the hub has not answered yet: the card already stands in its new column. */
+  let moving = $state<Record<string, string>>({});
 
-  $effect(() => {
-    const current = project;
-    const ready = cawco.status === "connected";
-    if (!(current && ready) || loadedFor === current.id) {
-      return;
-    }
-    loadedFor = current.id;
-    untrack(() => {
-      liveMounted = LIVE_FIRST;
-      liveFirst = null;
-      rowsWatched = false;
-      liveFollowed = false;
-      // biome-ignore lint/complexity/noVoid: fire-and-forget — each load manages its own state, independent of the other
-      void loadDocs(current);
-      // biome-ignore lint/complexity/noVoid: fire-and-forget — each load manages its own state, independent of the other
-      void loadClaude(current);
-    });
-  });
+  const stageList = $derived(stages?.stages ?? []);
+  const kindByStage = $derived(
+    new Map(stageList.map((stage) => [stage.name, stage.kind]))
+  );
+  /** The list with each pending move shown where it is going. */
+  const tasks = $derived<TaskSummary[]>(
+    (list?.tasks ?? []).map((task) => {
+      const stage = moving[task.id];
+      if (stage === undefined) {
+        return task;
+      }
+      const kind = kindByStage.get(stage) ?? null;
+      return { ...task, stage, kind, needsYou: kind === "you" };
+    })
+  );
+  const kindById = $derived(new Map(tasks.map((task) => [task.id, task.kind])));
+  const needsYou = $derived(tasks.filter((task) => task.kind === "you"));
+  /** The filter holds only while something needs you. */
+  const filtering = $derived(needsOnly && needsYou.length > 0);
+  const shownTasks = $derived(filtering ? needsYou : tasks);
+  const shownStages = $derived(
+    filtering ? stageList.filter((stage) => stage.kind === "you") : stageList
+  );
+  const newIn = $derived(firstTodoStage(stageList)?.name);
+  const empty = $derived(list !== null && list.tasks.length === 0);
 
-  async function loadDocs(target: ProjectRow) {
-    docs = null;
-    open = null;
-    shown = null;
-    draft = null;
-    docsError = null;
+  const allowedFrom = (stage: string): Set<string> =>
+    stages ? movesFrom(stages, stage) : new Set();
+  const kindOf = (id: string): StageKind | null | undefined => kindById.get(id);
+
+  // --- Caw, the views and the data they bind to ------------------------------
+
+  const lead = new CawLead(
+    () => projectId,
+    () => tasks
+  );
+  const leadOn = $derived(lead.view?.on === true);
+
+  /** The project's views, kept then drafted, once read. */
+  let views = $state<ProjectView[]>([]);
+  let viewsRead = $state(false);
+  let viewsProblem = $state<string | null>(null);
+  /** What views bind to: the tasks with their dates, from the hub. */
+  let bound = $state<ViewData | null>(null);
+
+  async function readViews() {
+    const id = projectId;
     try {
-      const listed = await readDocs(target.machineId, target.cwd);
-      docs = listed;
-      if (listed.length > 0) {
-        await openDoc(listed[0]);
+      const read = await viewsOf(id);
+      if (id === projectId) {
+        views = read;
+        viewsProblem = null;
       }
     } catch (error) {
-      docsError = message(error);
-    }
-  }
-
-  async function openDoc(doc: Doc) {
-    if (!project) {
-      return;
-    }
-    open = doc;
-    docError = null;
-    if (draft !== null) {
-      await reshape(() => {
-        draft = null;
-      });
-    }
-    // The document on screen stays until the next one is read, then the two
-    // cross-fade: no blank card between them.
-    let next = "";
-    try {
-      next = await machineFs<string>(project.machineId, "read", doc.path);
-    } catch (error) {
-      if (open?.path === doc.path) {
-        docError = message(error);
-      }
-    }
-    if (open?.path !== doc.path) {
-      return;
-    }
-    // A document arrives clamped, with its Read more, as the skeleton stood;
-    // one shorter than the clamp gives the row back once it is measured.
-    await reshape(() => {
-      content = next;
-      shown = doc.path;
-      expanded = false;
-      clipped = true;
-    });
-  }
-
-  async function save() {
-    if (!(project && open) || draft === null) {
-      return;
-    }
-    const text = draft;
-    saving = true;
-    docError = null;
-    try {
-      await machineFs(project.machineId, "write", open.path, text);
-      await reshape(() => {
-        content = text;
-        draft = null;
-      });
-    } catch (error) {
-      docError = message(error);
+      viewsProblem = message(error);
     } finally {
-      saving = false;
+      viewsRead = true;
     }
   }
 
-  /**
-   * Read more lifts the clamp and Show less puts it back: the body folds from
-   * the height it is drawn at, 240ms open and --dur-exit shut.
-   */
-  function toggleExpanded() {
-    const node = docBody;
-    if (!node) {
+  async function readBound() {
+    const id = projectId;
+    try {
+      const read = await viewData(id);
+      if (id === projectId) {
+        bound = read;
+      }
+    } catch {
+      // Calendar and the views wait for the next read; the board stands.
+    }
+  }
+
+  /** The date field the calendar places tasks by; null: no Calendar tab. */
+  const dateField = $derived(
+    calendarField(
+      bound?.tasks ?? [],
+      stages?.views.find((each) => each.name === "calendar")?.by ?? null
+    )
+  );
+  const dateById = $derived(
+    new Map(
+      (bound?.tasks ?? []).flatMap((task) => {
+        const at = dateField ? task.dates[dateField] : undefined;
+        return at === undefined ? [] : [[task.id, at] as const];
+      })
+    )
+  );
+  const SHORT_DATE = new Intl.DateTimeFormat(undefined, {
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  /** A task set for a date says when, short, while it is still to come. */
+  const dateOf = (id: string): string | null => {
+    const at = dateById.get(id);
+    const kind = kindById.get(id);
+    return at !== undefined && kind !== "done" && kind !== "dropped"
+      ? SHORT_DATE.format(at)
+      : null;
+  };
+
+  // --- the strip ----------------------------------------------------------------
+
+  interface StripTab {
+    draft: boolean;
+    label: string;
+    value: string;
+  }
+  const viewLabel = (name: string): string => stageLabel(name);
+  const tabs = $derived<StripTab[]>([
+    { value: "board", label: "Board", draft: false },
+    { value: "table", label: "Table", draft: false },
+    { value: "pipeline", label: "Pipeline", draft: false },
+    ...(dateField
+      ? [{ value: "calendar", label: "Calendar", draft: false }]
+      : []),
+    ...views.map((view) => ({
+      value: `view:${view.name}`,
+      label: viewLabel(view.name),
+      draft: view.draft,
+    })),
+  ]);
+  let tab = $derived(data.view);
+  /** The view on screen: the one asked for once it exists, the board meanwhile. */
+  const current = $derived(
+    tabs.some((each) => each.value === tab) ? tab : "board"
+  );
+  /** A view the URL names is still being read: its place holds a skeleton. */
+  const awaiting = $derived(
+    tab.startsWith("view:") && !viewsRead && current !== tab
+  );
+
+  /** The view and the open task in the URL, so a link opens the same. */
+  function hrefOf(id: string | null, as: string = current): string {
+    const query = new URLSearchParams();
+    if (as !== "board") {
+      query.set("view", as);
+    }
+    if (id) {
+      query.set("task", id);
+    }
+    const search = query.toString();
+    return `/project/${projectId}${search ? `?${search}` : ""}`;
+  }
+
+  function remember() {
+    if (!browser) {
       return;
     }
-    const from = node.getBoundingClientRect().height;
-    const opening = !expanded;
-    expanded = opening;
-    flushSync();
-    if (!opening) {
-      node.scrollTop = 0;
+    try {
+      goto(hrefOf(openTask), { shallow: true, replace: true });
+    } catch {
+      // Before the router is ready the URL is already right.
     }
-    fold(
-      node,
-      true,
-      { ms: opening ? 240 : dur("--dur-exit"), easing: ease("--ease-out") },
-      from
-    );
   }
 
   /**
-   * Only a document with more to show earns a "Read more". Measured against
-   * the clamp rather than the box, so a fold in flight never changes the
-   * answer, and on every resize of the text, so markdown that paints late is
-   * measured once it has.
+   * The panes swap as the New session dialog's lists do (motion/list-swap,
+   * its keyframes and timings): the view on screen leaves over the pane's
+   * top and the next comes in once it has gone. The pane is the viewport's
+   * height whatever it shows, so there is no height to follow: a morph()
+   * here would tween a box whose children (a board that fills it, a
+   * calendar sized to it) resize with it, and its observer would chase its
+   * own tween (a ResizeObserver loop). What leaves is the view itself, held by its outro as
+   * the hover panel holds its old content (HoverPanel `swapOut`): a view is
+   * never mounted a second time to be animated out, so a board, a calendar
+   * or a drawn view leaves as it stood and is torn down once, after.
    */
-  function overClamp(node: HTMLElement): boolean {
-    const rem = Number.parseFloat(
-      getComputedStyle(document.documentElement).fontSize
-    );
-    return node.scrollHeight > COLLAPSED_LINES * rem + 4;
+  const swap = new ListSwap<never>();
+  function leave(node: HTMLElement): TransitionConfig {
+    node.style.position = "absolute";
+    node.style.inset = "0 0 auto";
+    node.style.pointerEvents = "none";
+    node.inert = true;
+    node.setAttribute("aria-hidden", "true");
+    node.style.animation = swap.leaveAnim(0);
+    return { duration: motionOk.current ? ListSwap.leaveEnd(0) : 0 };
+  }
+  /** What the pane shows: a view, or the wait for one the URL names. */
+  const shown = $derived(awaiting ? "awaiting" : current);
+  function choose(next: string) {
+    if (next === current) {
+      return;
+    }
+    const order = tabs.map((each) => each.value);
+    swap.swap([], order.indexOf(next) > order.indexOf(current) ? 1 : -1);
+    tab = next;
+    remember();
   }
 
-  function measureClip(node: HTMLElement) {
-    const measure = () => {
-      clipped = overClamp(node);
+  function openOne(id: string) {
+    openTask = id;
+    remember();
+  }
+
+  // --- the hub's writes ---------------------------------------------------------
+
+  async function refresh() {
+    const id = projectId;
+    const [read, readStagesNow] = await Promise.allSettled([
+      listTasks(id),
+      readStages(id),
+    ]);
+    if (id !== projectId) {
+      return;
+    }
+    if (read.status === "fulfilled") {
+      list = read.value;
+      listProblem = null;
+    } else {
+      listProblem = message(read.reason);
+    }
+    if (readStagesNow.status === "fulfilled") {
+      stages = readStagesNow.value;
+      stagesProblem = null;
+    } else {
+      stagesProblem = message(readStagesNow.reason);
+    }
+    // biome-ignore lint/complexity/noVoid: the re-read sets its own state
+    void readBound();
+  }
+
+  /** A task the hub just wrote, put into the list until the list is read again. */
+  function patch(task: TaskView) {
+    if (!list) {
+      return;
+    }
+    const row: TaskSummary = {
+      ...(list.tasks.find((each) => each.id === task.id) ?? {
+        problem: null,
+        rank: task.rank,
+        type: task.type,
+      }),
+      id: task.id,
+      number: task.number,
+      path: task.path,
+      title: task.title,
+      stage: task.stage,
+      kind: task.kind,
+      needsYou: task.needsYou,
+      after: task.after,
+      parent: task.parent,
+      labels: task.labels,
+      rank: task.rank,
+      type: task.type,
+      todos: {
+        done: task.todos.filter((todo) => todo.done).length,
+        total: task.todos.length,
+      },
+      updatedAt: Date.now(),
+      attempts: task.attempts,
+      blockedBy: task.blockedBy,
+      lastAttemptFailed: task.lastAttemptFailed,
+      liveAttempt: task.liveAttempt,
+      queuedStart: task.queuedStart,
+      startProblem: task.startProblem,
     };
-    const sizes = new ResizeObserver(measure);
-    for (const child of node.children) {
-      sizes.observe(child);
-    }
-    return () => sizes.disconnect();
+    const known = list.tasks.some((each) => each.id === task.id);
+    list = {
+      ...list,
+      tasks: known
+        ? list.tasks.map((each) => (each.id === task.id ? row : each))
+        : [...list.tasks, row],
+    };
   }
 
-  let claude = $state<string | null>(null);
-  /** CLAUDE.md has been read, or has answered that it is not there. */
-  let claudeRead = $state(false);
-  let claudeEditing = $state(false);
-  let claudeError = $state<string | null>(null);
+  function changed(task: TaskView) {
+    patch(task);
+    // biome-ignore lint/complexity/noVoid: the re-read sets its own state
+    void refresh();
+  }
 
-  const claudePath = $derived(project ? `${project.cwd}/CLAUDE.md` : "");
-  const claudeOnline = $derived(machine?.status === "online");
+  /** The card for `id` takes off from where it is drawn, to land in its new column. */
+  function lift(id: string, source?: HTMLElement) {
+    const card =
+      source ??
+      document.querySelector<HTMLElement>(`[data-share="task:${id}"]`);
+    if (card) {
+      depart(card);
+    }
+  }
 
-  async function loadClaude(target: ProjectRow) {
-    claude = null;
-    claudeRead = false;
-    claudeEditing = false;
-    claudeError = null;
+  /**
+   * A move, shown at once and asked of the hub. A refusal puts the card back
+   * where it was, and the hub's sentence (which names the moves that are
+   * open) is thrown to whoever asked.
+   */
+  async function move(
+    id: string,
+    stage: string,
+    source?: HTMLElement
+  ): Promise<TaskView> {
+    lift(id, source);
+    moving = { ...moving, [id]: stage };
     try {
-      claude = await machineFs<string>(
-        target.machineId,
-        "read",
-        `${target.cwd}/CLAUDE.md`
-      );
+      const task = await moveTask(projectId, id, stage);
+      patch(task);
+      return task;
     } catch (error) {
-      if (!message(error).includes("does not exist")) {
-        claudeError = message(error);
-      }
+      lift(id);
+      throw error;
     } finally {
-      claudeRead = true;
+      const { [id]: _, ...rest } = moving;
+      moving = rest;
+      // biome-ignore lint/complexity/noVoid: the re-read sets its own state
+      void refresh();
     }
   }
 
-  async function saveClaude(text: string): Promise<boolean> {
-    if (!project) {
-      return false;
-    }
-    claudeError = null;
-    try {
-      await machineFs(project.machineId, "write", claudePath, text);
-      claude = text;
-      // CLAUDE.md is in the docs nav too; the viewer must not go on showing
-      // what the rail just replaced.
-      if (open?.path === claudePath) {
-        content = text;
-      }
-      return true;
-    } catch (error) {
-      claudeError = message(error);
-      return false;
-    }
-  }
-
-  /** What each kind of place is called on its badge (WORDS.md: place, workspace). */
-  const PLACE_KIND = {
-    checkout: "checkout",
-    workspace: "workspace",
-    hub: "hub folder",
-  } as const;
-
-  const live = $derived(project ? cawco.liveIn(project) : []);
-  const stored = $derived(project ? cawco.storedIn(project) : []);
-  /**
-   * The rail's two lists answer separately, and each shows when its own
-   * source has: the live sessions with the fleet's first read, the stored
-   * ones once the machine has listed them (or is not online to ask).
-   */
-  const liveRead = $derived(cawco.fleetRead);
-
-  /**
-   * The live list mounts a screenful at once and the rest a chunk a frame. A
-   * checkout with hundreds of live sessions (cockpit has 363) otherwise held
-   * its first row back for the whole list's mount, ~300ms of it. Every row
-   * still renders; the ones past the first screenful follow a frame or two
-   * later, below the fold, where nothing on screen is under them.
-   *
-   * While it mounts, the list is the sessions that were live when the fleet
-   * answered (each row's own data stays current); a session that starts or
-   * stops in those few hundred ms is taken in once it is whole. Then the
-   * list's reflow is attached, and a frame later the list follows the live
-   * set: what arrived or left meanwhile opens or closes in place, and from
-   * then on every change does, instead of pushing the rows under it.
-   */
-  const LIVE_FIRST = 24;
-  const LIVE_STEP = 32;
-  let liveMounted = $state(LIVE_FIRST);
-  let liveFirst = $state.raw<InstanceRow[] | null>(null);
-  let rowsWatched = $state(false);
-  let liveFollowed = $state(false);
-  $effect(() => {
-    if (liveRead && liveFirst === null) {
-      liveFirst = untrack(() => live);
-    }
-  });
-  $effect(() => {
-    if (liveFirst === null || liveFollowed) {
-      return;
-    }
-    if (liveMounted < liveFirst.length) {
-      const frame = requestAnimationFrame(() => {
-        liveMounted += LIVE_STEP;
-      });
-      return () => cancelAnimationFrame(frame);
-    }
-    if (!rowsWatched) {
-      rowsWatched = true;
-      return;
-    }
-    const frame = requestAnimationFrame(() => {
-      liveFollowed = true;
+  function drop(id: string, stage: string, source: HTMLElement) {
+    move(id, stage, source).catch((error: unknown) => {
+      toast.error(message(error));
     });
-    return () => cancelAnimationFrame(frame);
-  });
-  const liveById = $derived(new Map(live.map((row) => [row.id, row])));
-  const liveShown = $derived(
-    liveFollowed
-      ? live
-      : (liveFirst ?? [])
-          .slice(0, liveMounted)
-          .map((row) => liveById.get(row.id) ?? row)
-  );
-  const storedRead = $derived(
-    project !== null &&
-      cawco.fleetRead &&
-      (machine?.status !== "online" || cawco.catalogRead(project.machineId))
-  );
-  /** Indices for skeleton rows: `{#each}` wants something to walk. */
-  const count = (n: number) => Array.from({ length: n }, (_, i) => i);
-  const SESSION_SKELETON = 8;
-  /** Stored sessions shown before "Show more". */
-  const STORED_FIRST = 8;
-  /** The rows "Show more" adds open in place through the list's reflow. */
-  const storedShown = $derived(
-    showMore ? stored : stored.slice(0, STORED_FIRST)
-  );
+  }
 
-  async function startSession(scratch: boolean) {
-    if (!project) {
-      return;
+  /** The project has stages of its own now; tasks the set lacks are named. */
+  function applied(next: StagesView, stranded: string[]) {
+    stages = next;
+    if (stranded.length > 0) {
+      const one = stranded.length === 1;
+      toast(
+        `${stranded.join(", ")} ${one ? "is in a stage" : "are in stages"} the new set lacks; ${one ? "it stands" : "they stand"} in Other stages until moved.`
+      );
     }
-    const remembered = spawnPrefs.permissionMode;
-    const mod = spawnPrefs.model;
-    // This start has no pickers of its own — it runs on what the new-session
-    // form was last set to, effort included, since the level was chosen against
-    // that same model. Full Send is the exception: with no form its warning is
-    // never read, so this start runs on Bypass, and the form keeps Full Send.
-    const perm = unpickedMode(remembered);
-    const level = spawnPrefs.effort;
-    const prompt = spawnPrompt.trim() || undefined;
-    // The page leaves for the session only once the hub has taken the spawn;
-    // one it refuses stays here, with the hub's reason.
-    let instanceId: string;
+    // biome-ignore lint/complexity/noVoid: the re-read sets its own state
+    void refresh();
+  }
+
+  async function create(title: string, stage: string) {
+    const task = await createTask(projectId, { title, stage });
+    changed(task);
+  }
+
+  // --- drafts --------------------------------------------------------------------
+
+  let keeping = $state<string | null>(null);
+  let discarding = $state<string | null>(null);
+
+  /** Keep: the draft becomes a kept view where its tab stands. */
+  async function keep(name: string) {
+    keeping = name;
     try {
-      instanceId = await spawnSession({
-        machineId: project.machineId,
-        cwd: project.cwd,
-        projectId: project.id,
-        permissionMode: perm,
-        harness: spawnPrefs.harness,
-        model: mod,
-        effort: level ?? undefined,
-        prompt,
-        scratch: scratch ? {} : undefined,
-      });
+      const kept = await keepView(projectId, name);
+      views = views.map((view) => (view.name === name ? kept : view));
     } catch (error) {
       toast.error(message(error));
-      return;
+    } finally {
+      keeping = null;
     }
-    rememberSpawn({
-      harness: spawnPrefs.harness,
-      model: mod,
-      permissionMode: remembered,
-      effort: level,
-    });
-    // The button that started it departed as `session:new`; the tab to land
-    // it is this session's.
-    handOver("session:new", `session:${instanceId}`);
-    spawnPrompt = "";
-    spawnOpen = false;
-    // biome-ignore lint/complexity/noVoid: fire-and-forget navigation after the spawn already succeeded
-    void goto(conversationHref(instanceId, cawco.instanceIndex));
   }
 
-  async function forget() {
-    if (!project) {
+  /** Discard: the draft goes, and the board comes back. */
+  async function discard(name: string) {
+    discarding = name;
+    try {
+      await discardView(projectId, name);
+      choose("board");
+      views = views.filter((view) => view.name !== name);
+    } catch (error) {
+      toast.error(message(error));
+    } finally {
+      discarding = null;
+    }
+  }
+
+  // --- Ask Caw for a view -------------------------------------------------------
+
+  let askOpen = $state(false);
+  let askAnchor = $state<HTMLElement | null>(null);
+  function ask(anchor: HTMLElement) {
+    askAnchor = anchor;
+    askOpen = true;
+  }
+
+  // --- what keeps the page live -------------------------------------------------
+
+  // On arrival and on every reconnect: Caw, the views and their data, and the
+  // tasks the hub may have moved while the socket was down.
+  let readFor = "";
+  $effect(() => {
+    const live = cawco.status === "connected";
+    const id = projectId;
+    if (!(live && id)) {
+      readFor = "";
       return;
     }
-    forgetting = true;
-    forgotten = false;
-    try {
-      await deleteProject(project.id);
-      forgotten = true;
-      forgetOpen = false;
-    } finally {
-      forgetting = false;
+    if (readFor === id) {
+      return;
     }
-    // Back to the spoke the project was opened from; the project's row folds
-    // out of the sidebar as its list drops it, and the dead page is not left
-    // behind in the history.
-    await goto(route.spoke, { replace: true });
-  }
+    readFor = id;
+    untrack(() => {
+      lead.read();
+      readViews();
+      readBound();
+      if (list) {
+        refresh();
+      }
+    });
+  });
+
+  // Another hand may have changed the tasks while the tab was away.
+  $effect(() => {
+    const back = () => {
+      if (document.visibilityState === "visible") {
+        // biome-ignore lint/complexity/noVoid: the re-read sets its own state
+        void refresh();
+      }
+    };
+    document.addEventListener("visibilitychange", back);
+    return () => document.removeEventListener("visibilitychange", back);
+  });
+
+  // Caw drafts a view in a thread; when a thread of the project moves, the
+  // views are read again, so a new draft arrives as a tab.
+  const threadsMoved = $derived(
+    Math.max(0, ...threadsOf(projectId).map((thread) => thread.lastAt))
+  );
+  let threadsSeen = 0;
+  $effect(() => {
+    const at = threadsMoved;
+    if (threadsSeen === 0) {
+      threadsSeen = at || 1;
+      return;
+    }
+    if (at > threadsSeen) {
+      threadsSeen = at;
+      untrack(() => readViews());
+    }
+  });
+
+  // A task that lands in a done stage: Caw says so for two breaths.
+  let kindsSeen: Map<string, StageKind | null> | null = null;
+  $effect(() => {
+    const now = new Map(
+      (list?.tasks ?? []).map((task) => [task.id, task.kind])
+    );
+    if (kindsSeen) {
+      for (const [id, kind] of now) {
+        const was = kindsSeen.get(id);
+        if (kind === "done" && was !== undefined && was !== "done") {
+          untrack(() => lead.land(id));
+        }
+      }
+    }
+    kindsSeen = now;
+  });
+
+  // --- what the page says --------------------------------------------------------
+
+  const unreadLine = $derived(
+    `The tasks for ${project?.name ?? "this project"} could not be read: ${
+      listProblem ?? "the hub did not answer."
+    } Nothing was changed.`
+  );
+  const unreadStages = $derived(
+    `stages.md in the project folder does not read: ${(stages?.problems ?? []).join(" ")} Tasks keep their stages meanwhile; fix the file and the board takes its columns from it.`
+  );
+  /** The empty board with Caw: what he does, in this project's own stages. */
+  const cawLine = $derived.by(() => {
+    const named = stageList
+      .filter((stage) => stage.kind !== "dropped")
+      .map((stage) => stageLabel(stage.name).toLowerCase());
+    const you = stageList.find((stage) => stage.kind === "you");
+    return `Tell Caw what to do and he files the tasks: ${named.join(", ")}.${
+      you ? ` One that waits on you shows in ${stageLabel(you.name)}.` : ""
+    }`;
+  });
+  /** Something stands after the tabs: the hairline marks where it starts. */
+  const trailing = $derived(
+    needsYou.length > 0 ||
+      stages?.source === "template" ||
+      (list !== null && !empty) ||
+      leadOn
+  );
+  /** Caw stands over the empty board while the lead is on; elsewhere he sits in the head. */
+  const standing = $derived(empty && leadOn && !current.startsWith("view:"));
 </script>
 
 <svelte:head>
   <title>{project?.name ?? "Project"} &middot; CawCo</title>
 </svelte:head>
 
-{#snippet skeletonRows(
-  rows: number
+{#snippet pane(
+  value: string
 )}
-  {#each count(rows) as i (i)}
-    <div class="flex min-h-9 items-center gap-3 px-4 py-1.5">
-      <Skeleton class="size-5 shrink-0 rounded-[var(--radius-xs)]" />
-      <Skeleton class="h-3 max-w-40 flex-1" />
-      <Skeleton class="ml-auto h-3 w-10 shrink-0" />
+  {#if value.startsWith("view:")}
+    {@const view = views.find((each) => `view:${each.name}` === value)}
+    {#if view && bound}
+      <div class="view-pane">
+        {#if view.draft}
+          <div class="draft-bar" out:crossOut>
+            <Badge variant="secondary">draft</Badge>
+            <span class="draft-line"
+              >Caw drafted the {viewLabel(view.name)} view</span
+            >
+            <span class="grow"></span>
+            <Button
+              label="Keep"
+              onclick={() => keep(view.name)}
+              pending={keeping === view.name}
+              pendingLabel="Keeping…"
+              size="sm"
+              variant="outline"
+            />
+            <Button
+              label="Discard"
+              onclick={() => discard(view.name)}
+              pending={discarding === view.name}
+              pendingLabel="Discarding…"
+              size="sm"
+              variant="ghost"
+            />
+          </div>
+        {/if}
+        <ViewA2ui
+          data={bound}
+          hrefOf={(id) => hrefOf(id)}
+          {kindOf}
+          onopen={openOne}
+          stages={stageList}
+          {tasks}
+          {view}
+        />
+      </div>
+    {:else}
+      <Skeleton class="h-64 w-full rounded-[var(--radius-lg)]" />
+    {/if}
+  {:else if !list}
+    <div class="state">
+      <EmptyState
+        icon={IconToolTodo}
+        line={unreadLine}
+        title="Tasks are not available"
+      >
+        {#snippet action()}
+          <Button onclick={refresh} variant="outline">Retry</Button>
+        {/snippet}
+      </EmptyState>
     </div>
-  {/each}
+  {:else if empty}
+    {#if !lead.view}
+      <Skeleton class="h-48 w-full max-w-xl rounded-[var(--radius-lg)]" />
+    {:else if leadOn}
+      <div class="state caw-empty">
+        <EmptyState line={cawLine} title="Nothing on the board yet">
+          {#snippet mark()}
+            <div class="caw-80" data-share="caw:{projectId}">
+              <Caw size={80} status="ready" />
+            </div>
+          {/snippet}
+          {#snippet action()}
+            <CawField
+              label="Message the project"
+              onsend={async (text) => {
+                await startThread(projectId, text);
+              }}
+              placeholder="Message the project…"
+            />
+          {/snippet}
+        </EmptyState>
+      </div>
+    {:else}
+      <div class="state">
+        <EmptyState
+          icon={IconToolTodo}
+          line="Add a task, or turn Caw on to plan it with him."
+          title="Nothing on the board yet"
+        >
+          {#snippet action()}
+            <div class="first">
+              <NewTaskForm
+                oncreate={create}
+                primary
+                stage={newIn ?? ""}
+                stages={stageList}
+                bind:open={adding}
+              />
+            </div>
+          {/snippet}
+        </EmptyState>
+      </div>
+    {/if}
+  {:else if value === "board"}
+    <TaskBoard
+      {allowedFrom}
+      {dateOf}
+      hrefOf={(id) => hrefOf(id)}
+      {kindOf}
+      {newIn}
+      oncreate={create}
+      onmove={drop}
+      onopen={openOne}
+      stages={shownStages}
+      tasks={shownTasks}
+      bind:adding
+    />
+  {:else if value === "table"}
+    <div class="table-wrap">
+      {#if adding}
+        <div class="table-new">
+          <NewTaskForm
+            oncreate={create}
+            stage={newIn ?? ""}
+            stages={stageList}
+            bind:open={adding}
+          />
+        </div>
+      {/if}
+      <TaskTable
+        hrefOf={(id) => hrefOf(id)}
+        onopen={openOne}
+        stages={stageList}
+        tasks={shownTasks}
+      />
+    </div>
+  {:else if value === "pipeline"}
+    <ViewPipeline stages={stageList} tasks={shownTasks} />
+  {:else if value === "calendar" && dateField && bound}
+    <ViewCalendar field={dateField} onopen={openOne} tasks={bound.tasks} />
+  {:else}
+    <Skeleton class="h-64 w-full rounded-[var(--radius-lg)]" />
+  {/if}
 {/snippet}
 
 {#if !project}
-  <div class="flex flex-1 items-center justify-center">
-    <p class="text-body text-muted-foreground">No such project.</p>
+  <div class="flex flex-1 items-center justify-center p-6">
+    <p class="text-body text-muted-foreground">
+      No such project. It may have been removed; pick another from the rail.
+    </p>
   </div>
 {:else}
-  <div class="flex h-full flex-1 flex-col overflow-hidden">
-    <!-- Header -->
-    <header class="flex flex-wrap items-center gap-x-4 gap-y-2 px-6 pt-6 pb-4">
-      <div class="flex min-w-0 flex-1 flex-col gap-1">
-        <h1 class="text-title">{project.name}</h1>
-        <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
-          <span class="truncate font-mono text-label text-muted-foreground"
-            >{project.cwd}</span
-          >
-          {#if machine}
-            <span class="flex items-center gap-1.5">
-              <OsMark class="size-4 text-muted-foreground" os={machine.os} />
-              <span class="text-label text-muted-foreground">
-                {machineLabel(machine.hostname)}
-              </span>
-              <span
-                class="size-2 shrink-0 rounded-full transition-[background-color] duration-(--dur-panel) ease-(--ease-out) {machine.status ===
-                "online"
-                  ? "bg-success"
-                  : "bg-muted-foreground/40"}"
-                title={machine.status}
-              ></span>
-            </span>
-          {:else if !cawco.fleetRead}
-            <Skeleton class="h-4 w-32" />
-          {/if}
-        </div>
-      </div>
-      <div class="flex shrink-0 items-center gap-2">
-        <Popover.Root bind:open={spawnOpen}>
-          <Popover.Trigger>
-            {#snippet child({
-              props,
-            })}
-              <Button {...props} class="pressable">New session</Button>
-            {/snippet}
-          </Popover.Trigger>
-          <Popover.Content align="end" class="w-80 p-0">
-            <form
-              class="flex flex-col gap-3 p-4"
-              onsubmit={(e) => {
-                e.preventDefault();
-                startSession(false);
-              }}
-            >
-              <!-- biome-ignore lint/a11y/noLabelWithoutControl: the <Input> component renders a native input as its only child; Biome can't see through the component boundary -->
-              <label
-                class="flex flex-col gap-1 text-meta text-muted-foreground"
-              >
-                First prompt (optional)
-                <Input
-                  autocomplete="off"
-                  class="text-label"
-                  placeholder="What should this session do?"
-                  spellcheck="false"
-                  bind:value={spawnPrompt}
-                />
-              </label>
-              <div class="flex items-center justify-end gap-2">
-                <!-- The session each start opens lands in its tab from the
-                     button that started it. -->
-                <Button
-                  data-share="session:new"
-                  data-share-ttl="8000"
-                  onclick={() => startSession(false)}
-                  size="sm"
-                  type="button"
-                  variant="ghost"
-                >
-                  Start empty
-                </Button>
-                <Button
-                  data-share="session:new"
-                  data-share-ttl="8000"
-                  size="sm"
-                  type="submit"
-                  >Start</Button
-                >
-              </div>
-            </form>
-          </Popover.Content>
-        </Popover.Root>
-        <Button
-          class="pressable"
-          data-share="session:new"
-          data-share-ttl="8000"
-          onclick={() => startSession(true)}
-          variant="outline"
-        >
-          Side quest
-        </Button>
-        <AlertDialog.Root bind:open={forgetOpen}>
-          <AlertDialog.Trigger>
-            {#snippet child({
-              props,
-            })}
-              <Button
-                {...props}
-                class="text-muted-foreground"
-                data-share="forget:{project.id}"
-                variant="ghost"
-              >
-                Forget project&hellip;
-              </Button>
-            {/snippet}
-          </AlertDialog.Trigger>
-          <!-- Opens out of the button that asked for it. -->
-          <AlertDialog.Content
-            {@attach land(() => `forget:${project?.id}`, { uniform: true })}
-          >
-            <AlertDialog.Header>
-              <AlertDialog.Title>Forget {project.name}?</AlertDialog.Title>
-              <AlertDialog.Description>
-                The grouping is removed. The checkout and its sessions stay on
-                disk.
-              </AlertDialog.Description>
-            </AlertDialog.Header>
-            <AlertDialog.Footer>
-              <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-              <AlertDialog.Action>
-                {#snippet child({
-                  props,
-                })}
-                  <Button
-                    {...props}
-                    failed={!forgotten}
-                    label="Forget"
-                    onclick={forget}
-                    pending={forgetting}
-                    pendingLabel="Forgetting…"
-                  />
-                {/snippet}
-              </AlertDialog.Action>
-            </AlertDialog.Footer>
-          </AlertDialog.Content>
-        </AlertDialog.Root>
-      </div>
-    </header>
+  <div class="project-page">
+    <ProjectHead
+      {lead}
+      {machine}
+      onask={leadOn ? ask : null}
+      onnewtask={() => {
+        choose("board");
+        adding = true;
+      }}
+      {project}
+      seated={!standing}
+    />
 
-    <!-- Body: columns at >=768 -->
+    {#if leadOn && lead.view?.problem}
+      <Alert class="notice" variant="warning">
+        <AlertDescription>{lead.view.problem}</AlertDescription>
+      </Alert>
+    {/if}
+    {#if stages && stages.problems.length > 0}
+      <Alert class="notice" variant="warning">
+        <AlertDescription>{unreadStages}</AlertDescription>
+      </Alert>
+    {:else if stagesProblem}
+      <Alert class="notice" variant="warning">
+        <AlertDescription>
+          The project's stages could not be read: {stagesProblem}
+        </AlertDescription>
+      </Alert>
+    {/if}
+    {#if list && list.problems.length > 0}
+      <Alert class="notice" variant="warning">
+        <AlertDescription>{list.problems.join(" ")}</AlertDescription>
+      </Alert>
+    {/if}
+    {#if viewsProblem}
+      <Alert class="notice" variant="warning">
+        <AlertDescription
+          >The project's views could not be read:
+          {viewsProblem}</AlertDescription
+        >
+      </Alert>
+    {/if}
+
+    <div class="strip">
+      <Tabs onValueChange={choose} value={current}>
+        <TabsList aria-label="Views" scrollable>
+          {#each tabs as each (each.value)}
+            <TabItem
+              href={hrefOf(null, each.value)}
+              label={each.label}
+              value={each.value}
+            >
+              {#snippet trail()}
+                {#if each.draft}
+                  <Badge class="draft-badge" variant="secondary">draft</Badge>
+                {/if}
+              {/snippet}
+            </TabItem>
+          {/each}
+        </TabsList>
+      </Tabs>
+      {#if trailing}
+        <span aria-hidden="true" class="rule"></span>
+      {/if}
+      <div class="trail">
+        {#if needsYou.length > 0}
+          <button
+            aria-pressed={filtering}
+            class="needs pressable"
+            onclick={() => {
+              needsOnly = !filtering;
+            }}
+            type="button"
+            in:crossIn
+            out:crossOut
+          >
+            <IconNeedsYou aria-hidden="true" />
+            Needs you
+            <span class="num">{needsYou.length}</span>
+          </button>
+        {/if}
+        {#if stages?.source === "template"}
+          <span class="wide"
+            ><StagesControl onapplied={applied} {projectId} /></span
+          >
+        {/if}
+        {#if list && !empty}
+          <Button
+            class="wide pressable"
+            onclick={() => {
+              if (current !== "table") {
+                choose("board");
+              }
+              adding = true;
+            }}
+            size="sm"
+            variant="outline"
+          >
+            <IconPlus />
+            New task
+          </Button>
+        {/if}
+        {#if leadOn}
+          <Button
+            class="wide pressable"
+            onclick={(event) => ask(event.currentTarget as HTMLElement)}
+            size="sm"
+            variant="ghost"
+          >
+            <IconSparkles />
+            Ask Caw for a view
+          </Button>
+        {/if}
+      </div>
+    </div>
+
     <div
-      class="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 pb-6 lg:flex-row lg:gap-6 lg:overflow-hidden"
+      aria-busy={cawco.hub === "unreachable" || awaiting}
+      class="pane"
+      data-view={current}
     >
-      <!-- Main column: docs -->
-      <!-- p/-m 1px: at lg+ this column is the scrollport, and a card flush with
-           its edge would lose the ring-1 it draws outside its border box. -->
-      <div
-        class="flex min-w-0 flex-1 flex-col gap-4 lg:-m-px lg:overflow-y-auto lg:p-px"
-      >
-        <!-- Phone: the docs are a Select. From 768: the kit's segmented
-             control, across the reader, and down a column beside it at xl.
-             With no doc to open, the same shape says why. -->
-        <Tabs.Root
-          class="min-h-0 flex-1 gap-4 xl:flex-row xl:data-[orientation=horizontal]:flex-row"
-          onValueChange={(val) => {
-            const doc = docs?.find((d) => d.path === val);
-            if (doc) {
-              // biome-ignore lint/complexity/noVoid: fire-and-forget — openDoc manages its own loading state
-              void openDoc(doc);
-            }
-          }}
-          orientation={docsColumn.current ? "vertical" : "horizontal"}
-          value={open?.path ?? ""}
-        >
-          <div class="block md:hidden">
-            {#if docs?.length}
-              <Select.Root
-                onValueChange={(val) => {
-                  const doc = docs?.find((d) => d.path === val);
-                  if (doc) {
-                    // biome-ignore lint/complexity/noVoid: fire-and-forget — openDoc manages its own loading state
-                    void openDoc(doc);
-                  }
-                }}
-                type="single"
-                value={open?.path ?? ""}
-              >
-                <Select.Trigger
-                  class="w-full font-mono text-label"
-                  press="tint"
-                >
-                  {open?.name ?? "Select a document"}
-                </Select.Trigger>
-                <Select.Content>
-                  {#each docs as doc (doc.path)}
-                    <Select.Item class="font-mono text-label" value={doc.path}
-                      >{doc.name}</Select.Item
-                    >
-                  {/each}
-                </Select.Content>
-              </Select.Root>
-            {:else if docs || docsError}
-              <p class="flex h-9 items-center text-label text-muted-foreground">
-                {docsStatus}
-              </p>
-            {:else}
-              <Skeleton class="h-9 w-full rounded-md" />
-            {/if}
-          </div>
-
+      <div class="swap">
+        {#key shown}
           <div
-            class="hidden shrink-0 items-start overflow-x-auto md:flex xl:w-48 xl:overflow-x-visible"
+            class="current"
+            style="animation:{swap.rowAnim(0, ListSwap.leaveEnd(0))}"
+            out:leave
           >
-            {#if docs?.length}
-              <Tabs.List
-                aria-label="Project docs"
-                class="xl:flex xl:w-full xl:flex-col xl:items-stretch"
-              >
-                {#each docs as doc (doc.path)}
-                  <Tabs.Trigger
-                    class="min-w-0 flex-none font-mono xl:justify-start"
-                    title={doc.name}
-                    value={doc.path}
-                  >
-                    <span class="truncate">{doc.name}</span>
-                  </Tabs.Trigger>
-                {/each}
-              </Tabs.List>
-            {:else if docs || docsError}
-              <p class="flex h-9 items-center text-label text-muted-foreground">
-                {docsStatus}
-              </p>
+            {#if shown === "awaiting"}
+              <Skeleton class="h-64 w-full rounded-[var(--radius-lg)]" />
             {:else}
-              <div
-                aria-hidden="true"
-                class="kit-segmented xl:flex xl:w-full xl:flex-col xl:items-stretch"
-              >
-                {#each count(5) as i (i)}
-                  <Skeleton class="h-[30px] w-24 xl:w-full" />
-                {/each}
-              </div>
+              {@render pane(shown)}
             {/if}
           </div>
-
-          <div class="flex min-w-0 flex-1 flex-col">
-            <Card
-              aria-busy={!docsRead}
-              class="gap-0 rounded-[var(--radius-lg)] py-0 shadow-md"
-            >
-              <header
-                class="flex min-h-[calc(30px+var(--space-2)*2)] items-center gap-[var(--space-3)] px-[var(--space-4)] py-[var(--space-2)]"
-              >
-                {#if open && docsRead}
-                  <span
-                    class="min-w-0 truncate font-mono text-label text-muted-foreground"
-                    >{open.name}</span
-                  >
-                {:else if docsError}
-                  <span
-                    class="min-w-0 truncate text-label text-muted-foreground"
-                    >Docs</span
-                  >
-                {:else if docs?.length === 0}
-                  <span
-                    class="min-w-0 truncate font-mono text-label text-muted-foreground"
-                    >README.md — not in this checkout</span
-                  >
-                {:else}
-                  <Skeleton class="h-3.5 w-32" />
-                {/if}
-                {#if docError}
-                  <ErrorText
-                    class="text-label text-error"
-                    message={docError}
-                    title="Error with {open?.name ?? "the document"}"
-                  />
-                {/if}
-                {#if docs === null && !docsError}
-                  <Skeleton class="ml-auto h-[30px] w-[50px] shrink-0" />
-                {:else if !open}
-                  <!-- No doc to edit. -->
-                {:else if !docsRead}
-                  <Skeleton class="ml-auto h-[30px] w-[50px] shrink-0" />
-                {:else if draft === null}
-                  <Button
-                    class="ml-auto shrink-0"
-                    onclick={() =>
-                      reshape(() => {
-                        draft = content;
-                      })}
-                    size="sm"
-                    variant="outline"
-                  >
-                    Edit
-                  </Button>
-                {:else}
-                  <Button
-                    class="ml-auto shrink-0"
-                    onclick={() =>
-                      reshape(() => {
-                        draft = null;
-                      })}
-                    size="sm"
-                    variant="ghost"
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    class="shrink-0"
-                    failed={docError !== null}
-                    label="Save"
-                    onclick={save}
-                    pending={saving}
-                    pendingLabel="Saving…"
-                    size="sm"
-                    variant="outline"
-                  />
-                {/if}
-              </header>
-              <div class="relative border-t border-border" bind:this={bodyBox}>
-                {#key view}
-                  <div
-                    class="min-w-0"
-                    style:min-height={draft === null ? PANE : null}
-                    in:crossIn
-                    out:crossOut
-                  >
-                    {#if docsError}
-                      <div
-                        class="px-[var(--space-6)] py-[var(--space-4)] md:px-[var(--space-7)]"
-                      >
-                        <Alert variant="warning">
-                          <AlertDescription>{docsError}</AlertDescription>
-                        </Alert>
-                      </div>
-                    {:else if docs?.length === 0}
-                      <EmptyState
-                        class="px-[var(--space-6)] md:px-[var(--space-7)]"
-                        icon={IconDocument}
-                        line="Add a README.md at the top of the checkout and it shows up here."
-                        title="No markdown yet"
-                      />
-                    {:else if shown === null}
-                      <!-- The size the document will stand at, clamped,
-                             with the row its Read more takes. -->
-                      <div
-                        aria-hidden="true"
-                        class="flex flex-col gap-3 overflow-hidden px-[var(--space-6)] py-[var(--space-4)] md:px-[var(--space-7)]"
-                        style:height={COLLAPSED_DOC}
-                      >
-                        <Skeleton class="mb-3 h-6 w-2/5" />
-                        {#each count(3) as block (block)}
-                          <Skeleton class="h-3.5 w-full max-w-[72ch]" />
-                          <Skeleton class="h-3.5 w-full max-w-[72ch]" />
-                          <Skeleton class="h-3.5 w-11/12 max-w-[72ch]" />
-                          <Skeleton class="mb-5 h-3.5 w-3/5" />
-                        {/each}
-                      </div>
-                      <div class="min-h-9"></div>
-                    {:else if draft === null}
-                      <!-- Read to a line boundary and stop: the collapsed
-                             height is a whole number of prose lines, and the
-                             last one fades out rather than being sliced
-                             through by the card's edge. -->
-                      <div class="relative">
-                        <div
-                          class="overflow-y-auto px-[var(--space-6)] py-[var(--space-4)] md:px-[var(--space-7)]"
-                          bind:this={docBody}
-                          style:max-height={expanded ? "70vh" : COLLAPSED_DOC}
-                          {@attach measureClip}
-                        >
-                          <div
-                            class="prose prose-sm dark:prose-invert max-w-[72ch]"
-                          >
-                            <Markdown source={content} />
-                          </div>
-                        </div>
-                        {#if !expanded && clipped}
-                          <div
-                            class="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-linear-to-b from-transparent to-card"
-                          ></div>
-                        {/if}
-                      </div>
-                      {#if clipped || expanded}
-                        <button
-                          class="press-tint flex min-h-9 w-full items-center justify-center rounded-b-[var(--radius-lg)] text-label
-                              transition-colors hover:bg-accent hover:text-foreground"
-                          onclick={toggleExpanded}
-                          type="button"
-                        >
-                          {expanded ? "Show less" : "Read more"}
-                        </button>
-                      {/if}
-                    {:else}
-                      <Textarea
-                        aria-label={open?.name}
-                        class="h-[60vh] min-h-0 rounded-none border-0 bg-transparent px-[var(--space-6)] py-[var(--space-4)] font-mono text-[length:var(--text-label)] text-foreground md:px-[var(--space-7)]"
-                        spellcheck="false"
-                        bind:value={draft}
-                      />
-                    {/if}
-                  </div>
-                {/key}
-              </div>
-            </Card>
-          </div>
-        </Tabs.Root>
+        {/key}
       </div>
-
-      <!-- Right rail (320-380px on lg; stacked on mobile) -->
-      <!-- p/-m 1px for the same reason as the docs column: this rail is the
-           scrollport at lg+, and it holds the CLAUDE.md MemoryCard. -->
-      <aside
-        class="mt-6 flex w-full shrink-0 flex-col gap-4 lg:-m-px lg:mt-0 lg:w-[340px] lg:overflow-y-auto lg:p-px xl:w-[360px]"
-      >
-        <!-- Sized cards first, the open-ended list last. What the rail
-             holds above the sessions is one size from the first frame (the
-             machine comes with the page; CLAUDE.md is two lines in every
-             state), and the sessions, whose count only the machine knows,
-             grow into the space below them, where nothing stands to be
-             pushed. -->
-        <!-- Tasks: read with the page, so the card is its size from the
-             first frame; the tasks themselves are a page of their own. -->
-        <TasksCard projectId={project.id} tasks={data.tasks} />
-        <!-- CLAUDE.md. The file itself reads in the docs viewer beside this,
-         which is where a 360px rail cannot compete — so the rail only says
-         it is there and opens the editor. One reader on screen. -->
-        <MemoryCard
-          content={claude}
-          emptyText={claudeOnline
-            ? "No CLAUDE.md in this project — click to create it."
-            : `No machine online — ${machine ? machineLabel(machine.hostname) : project.machineId} has to be up to read this file.`}
-          loading={!claudeRead}
-          path="CLAUDE.md"
-          save={claudeOnline ? saveClaude : undefined}
-          summary="Project memory — every session started here reads it."
-          bind:editing={claudeEditing}
-        >
-          {#snippet meta()}
-            {#if claudeError}
-              <ErrorText
-                class="text-label text-error"
-                message={claudeError}
-                title="Error with CLAUDE.md"
-              />
-            {/if}
-          {/snippet}
-          {#snippet footer()}
-            {#if claudeEditing}
-              <p
-                class="border-t border-border px-4 py-2 text-label text-muted-foreground"
-              >
-                This file is the repo's own — commit it to share it. Git is its
-                sync; CawCo does not replicate it.
-              </p>
-            {/if}
-          {/snippet}
-        </MemoryCard>
-
-        <!-- Places: where the project's files are, on every machine. The
-             primary place, the folder the header names, comes first. They
-             arrive with the project, so the card is its size from the first
-             frame. -->
-        {#if project.places.length > 0}
-          <Card class="gap-0 rounded-[var(--radius-lg)] py-0 shadow-md">
-            <header class="px-[var(--space-4)] py-[var(--space-3)]">
-              <h2 class="text-title">Places</h2>
-            </header>
-            <ul
-              class="flex flex-col gap-1.5 px-[var(--space-3)] pb-[var(--space-3)]"
-            >
-              {#each project.places as place (place.id)}
-                {@const host = cawco.machines.find(
-                  (row) => row.machineId === place.machineId
-                )}
-                {@const online = host?.status === "online"}
-                <li class="flex min-h-9 items-center gap-3 px-4 py-1.5">
-                  <OsMark
-                    class="size-4 text-muted-foreground"
-                    os={host?.os ?? ""}
-                  />
-                  <span class="flex min-w-0 flex-1 flex-col gap-0.5">
-                    <span class="flex min-w-0 items-center gap-1.5">
-                      <span class="truncate text-label">
-                        {host ? machineLabel(host.hostname) : place.machineId}
-                      </span>
-                      <span
-                        class="size-2 shrink-0 rounded-full transition-[background-color] duration-(--dur-panel) ease-(--ease-out) {online
-                          ? "bg-success"
-                          : "bg-muted-foreground/40"}"
-                        title={host?.status ?? "offline"}
-                      ></span>
-                      <span class="sr-only"
-                        >{online ? "online" : "offline"}</span
-                      >
-                    </span>
-                    <!-- Gives up from the left: the leaf tells two checkouts
-                         apart. -->
-                    <span
-                      class="truncate font-mono text-label text-muted-foreground [direction:rtl]"
-                      title={place.path}
-                      ><bdi>{place.path}</bdi></span
-                    >
-                  </span>
-                  <Badge class="shrink-0" variant="secondary">
-                    {PLACE_KIND[place.kind]}
-                  </Badge>
-                </li>
-              {/each}
-            </ul>
-          </Card>
-        {/if}
-
-        <!-- Machine inventory -->
-        {#if project && machine}
-          <MachineInventory
-            kind="mcp"
-            machines={machine ? [machine] : []}
-            taken={[]}
-          />
-        {/if}
-        <!-- Sessions -->
-        <Card
-          aria-busy={!storedRead}
-          class="gap-0 rounded-[var(--radius-lg)] py-0 shadow-md"
-        >
-          <header class="px-[var(--space-4)] py-[var(--space-3)]">
-            <h2 class="text-title">Sessions</h2>
-          </header>
-          <!-- Its working sessions echo in turn, top to bottom, as the
-               sidebar's do (motion/echo): a mark's echo runs only on its
-               list's beat, and without one a working row drew nothing. -->
-          <div
-            class="flex flex-col gap-1.5 px-[var(--space-3)] pb-[var(--space-3)]"
-            {@attach highlight({ rows: "a" })}
-            {@attach echoBeat()}
-            {@attach rowsWatched && reflow()}
-          >
-            <!-- Each answer takes the place of the skeleton that stood for it:
-                 a branch arrives after the one it replaces, so the leaving
-                 skeleton is pinned where it stood (crossOut) and nothing
-                 already drawn moves. -->
-            {#if liveRead}
-              <div class="flex flex-col gap-1.5" in:crossIn>
-                <!-- Sessions start and stop all day: a row that arrives or
-                     leaves opens or closes in place and the rows after it
-                     slide (motion/rows), as the sidebar's do. -->
-                {#each liveShown as instance (instance.id)}
-                  <div data-flip>
-                    <LiveSessionRow groupCwd={project.cwd} {instance} />
-                  </div>
-                {/each}
-                {#if storedRead}
-                  <div class="flex flex-col gap-1.5" in:crossIn>
-                    {#each storedShown as info (info.sessionId)}
-                      <div data-flip>
-                        <StoredSessionRow
-                          groupCwd={project.cwd}
-                          {info}
-                          machineId={project.machineId}
-                        />
-                      </div>
-                    {:else}
-                      {#if live.length === 0}
-                        <EmptyState
-                          class="px-1"
-                          icon={IconChat}
-                          line="Nothing is running in this project, and nothing has been recorded."
-                          title="No sessions yet"
-                        />
-                      {/if}
-                    {/each}
-                  </div>
-                  {#if !showMore && stored.length > STORED_FIRST}
-                    <Button
-                      class="self-start text-muted-foreground"
-                      onclick={() => {
-                        showMore = true;
-                      }}
-                      size="sm"
-                      variant="ghost"
-                    >
-                      Show {stored.length - STORED_FIRST} more
-                    </Button>
-                  {/if}
-                {:else}
-                  <div
-                    aria-hidden="true"
-                    class="flex flex-col gap-1.5"
-                    out:crossOut
-                  >
-                    {@render skeletonRows(SESSION_SKELETON)}
-                  </div>
-                {/if}
-              </div>
-            {:else}
-              <div
-                aria-hidden="true"
-                class="flex flex-col gap-1.5"
-                out:crossOut
-              >
-                {@render skeletonRows(SESSION_SKELETON)}
-              </div>
-            {/if}
-          </div>
-        </Card>
-      </aside>
     </div>
   </div>
+
+  <Popover.Root bind:open={askOpen}>
+    <Popover.Content
+      align="end"
+      class="w-96"
+      customAnchor={askAnchor}
+      side="bottom"
+    >
+      <CawField
+        autofocus
+        label="Ask Caw for a view"
+        onsend={async (text) => {
+          await requestView(projectId, text);
+          askOpen = false;
+        }}
+        placeholder="A view of what is scheduled this week…"
+      />
+    </Popover.Content>
+  </Popover.Root>
+
+  {#if stages}
+    <TaskSheet
+      {allowedFrom}
+      onchanged={changed}
+      onmove={(id, stage) => move(id, stage)}
+      {projectId}
+      {stages}
+      {tasks}
+      bind:taskId={
+        () => openTask,
+        (id) => {
+    openTask = id;
+    remember();
+  }
+      }
+    />
+  {/if}
 {/if}
+
+<style>
+  .project-page {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    block-size: 100%;
+    min-block-size: 0;
+    overflow: hidden;
+  }
+  .project-page :global(.notice) {
+    inline-size: auto;
+    margin: 0 var(--space-6) var(--space-3) var(--space-7);
+  }
+  .strip {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    min-inline-size: 0;
+    padding: 0 var(--space-6) var(--space-4) var(--space-7);
+  }
+  .strip > :global([data-slot="tabs"]) {
+    display: flex;
+    flex: 0 1 auto;
+    min-inline-size: 0;
+  }
+  .strip :global(.draft-badge) {
+    margin-inline-start: calc(var(--space-1) * -1);
+  }
+  .rule {
+    flex: none;
+    inline-size: 1px;
+    block-size: var(--c-btn-h-sm);
+    background: var(--border-hairline);
+  }
+  .trail {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: var(--space-2);
+  }
+  /* Needs you, as the needs-you tile is: a real button, chosen in the
+     needs-you tint, never coral (that is where you act). */
+  .needs {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    block-size: var(--c-btn-h-sm);
+    padding-inline: var(--space-3);
+    border: 1px solid var(--border-control);
+    border-radius: var(--radius-md);
+    background: var(--surface-raised);
+    font: var(--type-label);
+    color: var(--ink-strong);
+    transition:
+      background-color var(--dur-control) var(--ease-out),
+      color var(--dur-control) var(--ease-out),
+      border-color var(--dur-control) var(--ease-out);
+  }
+  .needs :global(svg) {
+    inline-size: var(--icon-md);
+    block-size: var(--icon-md);
+    color: var(--status-attn-glyph);
+  }
+  .needs .num {
+    color: var(--ink-muted);
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .needs:hover {
+      background: var(--surface-hover);
+    }
+  }
+  .needs[aria-pressed="true"] {
+    border-color: transparent;
+    background: var(--status-attn-bg);
+    color: var(--status-attn-ink);
+  }
+  .needs[aria-pressed="true"] :global(svg),
+  .needs[aria-pressed="true"] .num {
+    color: var(--status-attn-ink);
+  }
+  .pane {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-block-size: 0;
+    padding: 0 var(--space-6) 0 var(--space-7);
+    overflow-y: auto;
+  }
+  .pane[data-view="board"] {
+    overflow: hidden;
+  }
+  .pane:not([data-view="board"]) {
+    padding-block-end: var(--space-6);
+  }
+  .swap {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    min-block-size: 0;
+  }
+  .current {
+    display: flex;
+    flex-direction: column;
+    min-block-size: 0;
+  }
+  .pane[data-view="board"] .swap,
+  .pane[data-view="board"] .current {
+    flex: 1 1 auto;
+  }
+  .view-pane {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+  .draft-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2) var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-lg);
+    background: var(--surface-band);
+    box-shadow: inset 0 0 0 1px var(--border-hairline);
+  }
+  .draft-line {
+    font: var(--type-label);
+    color: var(--ink-strong);
+  }
+  .grow {
+    flex: 1 1 auto;
+  }
+  .state {
+    max-inline-size: 72ch;
+  }
+  .caw-empty {
+    margin-inline: auto;
+    max-inline-size: 36rem;
+  }
+  .caw-empty :global(.kit-empty) {
+    align-items: center;
+    text-align: center;
+  }
+  .caw-empty :global(.kit-empty-action) {
+    align-self: stretch;
+  }
+  .caw-80 {
+    display: grid;
+    place-items: center;
+    margin-block-end: var(--space-3);
+  }
+  .first {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: var(--space-2);
+  }
+  .table-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+  .table-new {
+    max-inline-size: 36rem;
+    padding: var(--space-3);
+    border-radius: var(--radius-lg);
+    background: var(--surface-raised);
+    box-shadow: var(--shadow-tile);
+  }
+  @media (max-width: 899px) {
+    .strip,
+    .pane {
+      padding-inline: var(--space-5);
+    }
+    .project-page :global(.notice) {
+      margin-inline: var(--space-5);
+    }
+  }
+  /* New task and Ask Caw for a view move into the head's ⋯ on a phone. */
+  @media (max-width: 639px) {
+    .trail :global(.wide) {
+      display: none;
+    }
+  }
+</style>

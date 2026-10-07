@@ -1,7 +1,7 @@
 import { error } from "@sveltejs/kit";
 import type { Machine, ProjectRow } from "#lib/cawco/client.svelte.js";
 import { type HubFailure, readHub } from "#lib/cawco/hub-read.js";
-import type { TaskList } from "#lib/cawco/project-tasks.js";
+import type { StagesView, TaskList } from "#lib/cawco/project-tasks.js";
 import type { PageLoad } from "./$types";
 
 /** The error page's line for a read the page cannot stand without. */
@@ -12,23 +12,21 @@ const refused = (what: string, failure: HubFailure): never =>
   );
 
 /**
- * The project, and the machine it lives on, are read through the hub proxy
- * rather than the app socket, so the page renders on the server and a shared
- * link opens straight into it — with the machine's chip and inventory drawn
- * from the first frame instead of arriving under the rail's other cards.
- *
- * The page is the project: a read the hub refused is the page's error, with
- * the hub's own words, never "No such project" or a machine that seems away.
+ * The project's views: the project and its machine, its tasks and stages,
+ * read through the hub proxy so the page renders on the server and a shared
+ * link opens straight onto its board. The project is the page and a refused
+ * read of it is the page's error; the tasks and stages are carried as they
+ * ended, so a refusal is said where the board would be, never drawn as an
+ * empty board. `?view=` names the view (the board when absent) and
+ * `?task=` the task whose sheet is open.
  */
-export const load: PageLoad = async ({ fetch, params }) => {
-  const [projects, machines, tasks] = await Promise.all([
+export const load: PageLoad = async ({ fetch, params, url }) => {
+  const base = `/api/projects/${encodeURIComponent(params.id)}`;
+  const [projects, machines, tasks, stages] = await Promise.all([
     readHub<ProjectRow[]>(fetch, "/api/projects"),
     readHub<Machine[]>(fetch, "/api/agents"),
-    // The rail's Tasks card: a refusal is said on the card, not the page's.
-    readHub<TaskList>(
-      fetch,
-      `/api/projects/${encodeURIComponent(params.id)}/tasks`
-    ),
+    readHub<TaskList>(fetch, `${base}/tasks`),
+    readHub<StagesView>(fetch, `${base}/stages`),
   ]);
   if (!projects.ok) {
     return refused("the projects", projects);
@@ -41,5 +39,12 @@ export const load: PageLoad = async ({ fetch, params }) => {
     ? (machines.value.find((row) => row.machineId === project.machineId) ??
       null)
     : null;
-  return { project, machine, tasks };
+  return {
+    project,
+    machine,
+    tasks,
+    stages,
+    view: url.searchParams.get("view") ?? "board",
+    task: url.searchParams.get("task"),
+  };
 };

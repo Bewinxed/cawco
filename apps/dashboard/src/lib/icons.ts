@@ -104,6 +104,8 @@ export { default as IconToolNotebook } from "~icons/solar/notebook-bold-duotone"
 export { default as IconFileLog } from "~icons/solar/notes-bold-duotone";
 /** Solar's own spelling. The `palette-*` cut is a board; this one is the palette. */
 export { default as IconPalette } from "~icons/solar/pallete-2-bold-duotone";
+/** Caw holds still while his lead works (the sidebar's motion switch). */
+export { default as IconPause } from "~icons/solar/pause-bold-duotone";
 export { default as IconToolEdit } from "~icons/solar/pen-2-bold-duotone";
 export {
   default as IconPenLine,
