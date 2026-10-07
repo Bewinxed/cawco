@@ -290,10 +290,79 @@ export const projects = sqliteTable("projects", {
    * `overBudget`). Null: no default.
    */
   budget: text("budget", { mode: "json" }).$type<WorkBudget>(),
+  /**
+   * Caw as the project's lead (§5.3, §5.6): when on, a lead session on
+   * `caw_harness` (caw.ts), started on the project's first event and woken
+   * only by events, never by a timer. Off: nothing for the project wakes a
+   * model. On for a project made through Caw; off for every project made
+   * before there was a choice.
+   */
+  caw: integer("caw", { mode: "boolean" }).notNull().default(false),
+  /** The harness Caw's lead session runs on: claude or opencode (pi cannot deny tools). */
+  cawHarness: text("caw_harness")
+    .$type<"claude" | "opencode">()
+    .notNull()
+    .default("claude"),
+  /** The model Caw runs; null leaves it to the harness. */
+  cawModel: text("caw_model"),
   createdAt: timestamp("created_at")
     .notNull()
     .$defaultFn(() => new Date()),
 });
+
+/**
+ * A conversation with Caw in a project (WORDS.md: thread). Your messages
+ * reach the project's lead as events while Caw is on (caw.ts); Caw answers
+ * with `thread_reply`.
+ */
+export const projectThreads = sqliteTable(
+  "project_threads",
+  {
+    id: text("id").primaryKey(),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    createdAt: timestamp("created_at")
+      .notNull()
+      .$defaultFn(() => new Date()),
+    /** When its newest message was written. */
+    updatedAt: timestamp("updated_at")
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (table) => [index("project_threads_project").on(table.projectId)]
+);
+
+/**
+ * Whether a message of yours reached Caw: `off` (Caw was off, so nothing
+ * read it), `sent`, or `failed` (with why). Null on Caw's own messages.
+ */
+export type ThreadDelivery = "off" | "sent" | "failed";
+
+/** One message in a thread, yours or Caw's. */
+export const projectThreadMessages = sqliteTable(
+  "project_thread_messages",
+  {
+    id: text("id").primaryKey(),
+    threadId: text("thread_id")
+      .notNull()
+      .references(() => projectThreads.id, { onDelete: "cascade" }),
+    author: text("author").$type<"you" | "caw">().notNull(),
+    body: text("body").notNull(),
+    /** The lead session that wrote it; null on yours. */
+    instanceId: text("instance_id"),
+    delivery: text("delivery").$type<ThreadDelivery>(),
+    /** Why it did not reach Caw, when `delivery` is `failed`. */
+    deliveryError: text("delivery_error"),
+    createdAt: timestamp("created_at")
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (table) => [
+    index("project_thread_messages_thread").on(table.threadId, table.createdAt),
+  ]
+);
 
 /**
  * What a work item may spend before the hub stops it: dollars (the usage its
@@ -612,6 +681,14 @@ export const instances = sqliteTable("instances", {
    * a delegate from before work items existed.
    */
   workItemId: text("work_item_id"),
+  /**
+   * The toolset the hub gives the session on its `cawco` server (§5.3,
+   * roles.ts), where its kind of session does not say it: `lead` for Caw's
+   * lead session, `web-facing` for a delegate whose type says so, `overseer`
+   * for fleet-watch triage. Null: worker (a session you started) or delegate,
+   * read off the row.
+   */
+  role: text("role").$type<import("@cawco/core").SessionRole>(),
 });
 
 /** Only hashes reach disk; installing a replacement does not revoke a live credential before ACK. */

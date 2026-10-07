@@ -51,6 +51,7 @@ import type {
   SessionEndIntent,
   SessionMessage,
   SessionPulse,
+  SessionRole,
   SessionTooling,
   SkillFile,
   SpawnPayload,
@@ -149,6 +150,7 @@ import {
 import { Elysia, t, ValidationError } from "elysia";
 import { websocket } from "elysia/websocket";
 import { createBinaryUpdates } from "./binary-updates";
+import { cawRoutes, createCaw } from "./caw";
 import { DB_PATH, HUB_VERSION, SPAWN_START_TIMEOUT_MS } from "./config";
 import {
   type ContinuationSource,
@@ -218,6 +220,7 @@ import {
 import { placePath, readRemote } from "./projects";
 import { createPush, pushRoutes } from "./push";
 import { type HubSocket, type RegistryShape, toDashboard } from "./registry";
+import { roleDeniedTools } from "./roles";
 import { RuleEngine } from "./rules";
 import { createSessionIdentities } from "./session-identity";
 import { createSessionLifecycle } from "./session-lifecycle";
@@ -235,6 +238,7 @@ import {
   YOU_ACTOR,
 } from "./tasks";
 import { dashboardUrl, type TelegramBridge } from "./telegram";
+import { createThreads, threadRoutes } from "./threads";
 import {
   createTranscripts,
   type HistoryRead,
@@ -2963,6 +2967,23 @@ export const createServer = (
    * inside the boundary or refuses to start it. Any other spawn passes as is.
    */
   const identities = createSessionIdentities(db);
+  /**
+   * A role's denials ride every spawn of its session, its first and each
+   * revive or restore after it: Caw's lead never gets edit or shell tools.
+   */
+  const withRoleDenials = (
+    asked: SpawnPayload,
+    role: SessionRole | null | undefined,
+    harness: HarnessKind
+  ): SpawnPayload => {
+    const denied = roleDeniedTools(role, harness);
+    return denied.length > 0
+      ? {
+          ...asked,
+          denyTools: [...new Set([...(asked.denyTools ?? []), ...denied])],
+        }
+      : asked;
+  };
   const bounded = (
     payload: SpawnPayload,
     knownRow?: InstanceRow
@@ -2990,7 +3011,7 @@ export const createServer = (
         ? identities.mint(payload.instanceId)
         : undefined;
     return {
-      ...asked,
+      ...withRoleDenials(asked, row?.role, harness as HarnessKind),
       ...(owned?.scratchWorktree
         ? { scratchWorktree: owned.scratchWorktree }
         : {}),
@@ -4138,7 +4159,8 @@ export const createServer = (
     machineId: string,
     asked: SpawnPayload,
     kind: InstanceKind,
-    fallbackMode?: string
+    fallbackMode?: string,
+    role?: SessionRole
   ): Promise<void> => {
     const agent = registry.agent(machineId);
     if (!agent) {
@@ -4165,6 +4187,7 @@ export const createServer = (
       kind,
       permissionMode: settled.permissionMode,
       model: payload.model,
+      ...(role ? { role } : {}),
     });
     publishInstances(machineId);
     const reply = await awaitReply(
@@ -7287,6 +7310,7 @@ export const createServer = (
       queueMicrotask(() => {
         dispatcher.itemEnded(item);
         push.itemEnded(item);
+        caw.itemEnded(item);
       }),
     command: runOnMachine,
     inTurn: (row) => row.status === "running" && !!pulses.get(row.id)?.busy,
@@ -7519,6 +7543,60 @@ export const createServer = (
   });
   tasks.listen(dispatcher.taskChanged);
   tasks.listen(push.taskChanged);
+  // Caw as a project's lead: a lead session started on the project's first
+  // event and woken only by events (caw.ts); threads are what you say to it.
+  const caw = createCaw({
+    db,
+    tasks,
+    online: (machineId) => Boolean(registry.agent(machineId)),
+    start: (machineId, payload) =>
+      spawnFromHub(machineId, payload, "mainline", undefined, "lead"),
+    send: (row, content, origin) => {
+      try {
+        const record = deliverSend({
+          verb: "send",
+          machineId: row.machineId,
+          instanceId: row.id,
+          payload: {
+            instanceId: row.id,
+            message: {
+              type: "user",
+              uuid: crypto.randomUUID(),
+              message: { role: "user", content },
+              parent_tool_use_id: null,
+              origin,
+            },
+          },
+        } satisfies Envelope<SendPayload>);
+        return record.state === "failed"
+          ? (record.reason ?? "the message did not reach Caw")
+          : undefined;
+      } catch (error) {
+        return error instanceof Error ? error.message : String(error);
+      }
+    },
+    stop: (instanceId) => endSession(instanceId, "stop"),
+  });
+  tasks.listen(caw.taskChanged);
+  const threads = createThreads({
+    db,
+    wake: caw.wake,
+    publish: (projectId, message) =>
+      registry.broadcast({
+        verb: "frames",
+        machineId: "",
+        instanceId: "",
+        payload: {
+          kind: "thread_message",
+          instanceId: "",
+          projectId,
+          message: {
+            ...message,
+            createdAt: message.createdAt.getTime(),
+          },
+        } satisfies FramePayload,
+      }),
+  });
   // "Make this a project": offered once to a plain session that outgrew
   // itself, at a turn's end or a delegate's spawn (project-offers.ts).
   const projectOffers = createProjectOffers({
@@ -7562,6 +7640,7 @@ export const createServer = (
       dispatcher.retryAttempt(projectId, ref, parent),
     projectFromSession: (actor) =>
       projectOffers.accept(actor.id, sessionActor(actor)),
+    threads,
     instances: () => withKeepAlive(db.listInstances()),
     instanceById: (id) => db.getInstancesByIds([id])[0],
     ledBy: (id, leadId) => workItems.ledBy(id, leadId),
@@ -7863,6 +7942,8 @@ export const createServer = (
       .use(pushRoutes(db, push))
       .use(projectOfferRoutes(projectOffers, YOU_ACTOR))
       .use(dispatchRoutes(dispatcher))
+      .use(cawRoutes(caw))
+      .use(threadRoutes(threads))
       .use(
         joinRoutes({
           online: (machineId) => Boolean(registry.agent(machineId)),
@@ -10432,12 +10513,22 @@ export const createServer = (
             name: t.String(),
             cwd: t.String(),
             machineId: t.String(),
+            // Made with Caw (onboarding): Caw leads it from its first event.
+            caw: t.Optional(t.Boolean()),
           }),
         },
         async ({ body }) => {
-          const { project, place, placeAdded } =
-            await createOrJoinProject(body);
-          return { ...project, place, placeAdded };
+          const { caw: withCaw, ...asked } = body;
+          const made = await createOrJoinProject(asked);
+          // Only a project this made; one it joined keeps its own setting.
+          const project =
+            withCaw && !made.joined
+              ? (() => {
+                  db.setProjectCaw(made.project.id, { caw: true });
+                  return db.project(made.project.id) ?? made.project;
+                })()
+              : made.project;
+          return { ...project, place: made.place, placeAdded: made.placeAdded };
         }
       )
       .delete("/api/projects/:id", async ({ params }) => {

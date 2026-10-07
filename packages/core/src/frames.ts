@@ -228,6 +228,30 @@ export interface ProjectOfferSummary {
   reason: ProjectOfferReason;
 }
 
+/** One message in a project's thread with Caw, as every dashboard hears it. */
+export interface ThreadMessage {
+  author: "you" | "caw";
+  body: string;
+  /** ms epoch. */
+  createdAt: number;
+  /** Whether yours reached Caw: `off`, `sent`, `failed`; null while on its way, and on Caw's. */
+  delivery: "off" | "sent" | "failed" | null;
+  deliveryError: string | null;
+  id: string;
+  /** The lead session that wrote it; null on yours. */
+  instanceId: string | null;
+  threadId: string;
+}
+
+export interface ThreadMessageFrame {
+  /** Unused: a thread is a project's, not a session's. */
+  instanceId: string;
+  /** Hub-originated: a message written in one of a project's threads, or its delivery settling. */
+  kind: "thread_message";
+  message: ThreadMessage;
+  projectId: string;
+}
+
 export interface ProjectOfferFrame {
   instanceId: string;
   /** Hub-originated: the session's standing offer, or null once it was answered. */

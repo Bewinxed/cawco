@@ -1278,8 +1278,14 @@ export const createDispatcher = ({
       projectId: string,
       change: DispatchChange
     ): Promise<DispatchView> {
-      projectOf(projectId);
+      const project = projectOf(projectId);
       const { leadInstanceId, maxAttempts, reviewLimit } = change;
+      if (leadInstanceId && project.caw) {
+        refuse(
+          409,
+          "Caw leads this project. Turn Caw off to name a session you started as its lead."
+        );
+      }
       if (leadInstanceId) {
         const lead = instance(leadInstanceId);
         const unfit = parentProblem(lead, projectId, leadInstanceId);

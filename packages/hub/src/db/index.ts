@@ -26,6 +26,7 @@ import type {
   RuleStats,
   SessionEffort,
   SessionEndIntent,
+  SessionRole,
   SessionTooling,
   SkillFile,
   SupervisorEvent,
@@ -61,6 +62,7 @@ import {
   ne,
   notInArray,
   or,
+  type SQL,
   sql,
 } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/bun-sqlite";
@@ -94,6 +96,8 @@ import {
   projectPlaces,
   projects,
   projectTasks,
+  projectThreadMessages,
+  projectThreads,
   pushDevices,
   queuedTaskStarts,
   queuedWorkItems,
@@ -104,6 +108,7 @@ import {
   skills,
   supervisorConfig,
   supervisorEvents,
+  type ThreadDelivery,
   type Tracker,
   tools,
   usageBuckets,
@@ -173,6 +178,15 @@ export type TaskIndexRow = typeof projectTasks.$inferSelect;
 export type ApnsCredentialsRow = typeof apnsCredentials.$inferSelect;
 /** A device the iOS app registered for pushes. */
 export type PushDeviceRow = typeof pushDevices.$inferSelect;
+/** A conversation with Caw in a project. */
+export type ThreadRow = typeof projectThreads.$inferSelect;
+/** One message in a thread. */
+export type ThreadMessageRow = typeof projectThreadMessages.$inferSelect;
+/** A thread as a project's list shows it: its newest message and how many it has. */
+export type ThreadSummaryRow = ThreadRow & {
+  count: number;
+  last: ThreadMessageRow | null;
+};
 export type ProjectOfferRow = typeof projectOffers.$inferSelect;
 export type ContinuationRow = typeof continuations.$inferSelect;
 export type WorkflowRow = typeof workflows.$inferSelect;
@@ -288,6 +302,10 @@ export interface DbShape {
     path: string;
     kind: PlaceKind;
   }) => { place: PlaceRow; added: boolean };
+  /** Files a message and moves its thread's `updatedAt`. */
+  readonly addThreadMessage: (
+    message: typeof projectThreadMessages.$inferInsert
+  ) => ThreadMessageRow;
   /** A machine's last-known tool status by id; empty for one that never reported. */
   readonly agentAddressContract: (machineId: string) => boolean;
   readonly agentHarnesses: (machineId: string) => HarnessReport[] | undefined;
@@ -306,6 +324,11 @@ export interface DbShape {
   readonly capabilityUsageSince: (
     day: string
   ) => (typeof capabilityUsageDaily.$inferSelect)[];
+  /**
+   * What every lead session the project has had spent: the usage buckets
+   * their machines reported, as work-item budgets read them.
+   */
+  readonly cawSpendUsd: (projectId: string) => number;
   /** Claims one harness completion before any turn-end side effect. */
   readonly claimCompletedTurn: (
     instanceId: string,
@@ -332,6 +355,11 @@ export interface DbShape {
     cwd: string;
     remote: string | null;
   }) => ProjectRow;
+  readonly createThread: (thread: {
+    id: string;
+    projectId: string;
+    title: string;
+  }) => ThreadRow;
   /** Files a work item as the hub accepted it. */
   readonly createWorkItem: (item: typeof workItems.$inferInsert) => WorkItemRow;
   /** Files a workspace whose checkout its machine has just made. */
@@ -660,6 +688,8 @@ export interface DbShape {
     workflowStepId?: string;
     /** The work item the session runs; set once, at its spawn. */
     workItemId?: string;
+    /** The role the hub gives it (roles.ts); absent leaves the column alone. */
+    role?: SessionRole;
   }) => void;
   /** The offers nobody has answered yet. */
   readonly openProjectOffers: () => ProjectOfferRow[];
@@ -704,6 +734,7 @@ export interface DbShape {
       model?: string;
       workItemId?: string;
       parentInstanceId?: string;
+      role?: SessionRole;
     }
   ) => PublicInstanceRow | undefined;
   /** A project with its places, or undefined for an id the hub does not hold. */
@@ -724,6 +755,9 @@ export interface DbShape {
   readonly projectsWithoutRemote: (
     machineId: string
   ) => { projectId: string; path: string }[];
+  readonly projectThread: (id: string) => ThreadRow | undefined;
+  /** A project's threads, newest message first, each with its newest message and count. */
+  readonly projectThreads: (projectId: string) => ThreadSummaryRow[];
   /** The iOS app's pushes (push.ts): credentials, one row, and the devices that registered. */
   readonly push: {
     readonly credentials: () => ApnsCredentialsRow | undefined;
@@ -1039,6 +1073,11 @@ export interface DbShape {
   ) => void;
   /** Store (or replace) the OpenRouter key from a completed PKCE exchange. */
   readonly setOpenRouterConnection: (apiKey: string) => void;
+  /** Caw as the project's lead: on or off, and what it runs on (caw.ts). */
+  readonly setProjectCaw: (
+    id: string,
+    change: Partial<Pick<ProjectRow, "caw" | "cawHarness" | "cawModel">>
+  ) => void;
   /** The project's dispatch settings: its lead, whether it dispatches, its caps. */
   readonly setProjectDispatch: (
     id: string,
@@ -1060,6 +1099,11 @@ export interface DbShape {
   readonly setProjectTracker: (id: string, tracker: Tracker) => void;
   /** Turn composer suggestions on or off. Only meaningful while connected. */
   readonly setSuggestWhileTyping: (enabled: boolean) => void;
+  readonly setThreadDelivery: (
+    id: string,
+    delivery: ThreadDelivery,
+    error?: string | null
+  ) => ThreadMessageRow | undefined;
   /** Closes it. An ask this hub never recorded is nothing to close. */
   readonly settleDelegateAsk: (
     requestId: string,
@@ -1119,6 +1163,8 @@ export interface DbShape {
   readonly takeOwedSpawn: (id: string) => boolean;
   /** Every row of a project's task index, in id order. */
   readonly taskIndex: (projectId: string) => TaskIndexRow[];
+  /** A thread's messages, oldest first. */
+  readonly threadMessages: (threadId: string) => ThreadMessageRow[];
   readonly touchAgent: (machineId: string) => void;
   /**
    * The session moved. This is the only write anywhere that means it: every
@@ -1444,6 +1490,25 @@ export const hashHookMaterial = (hook: {
       hook.script ?? null,
     ])
   );
+
+/** A project's threads and their messages, as the project goes. */
+const dropThreads = (
+  tx: Pick<ReturnType<typeof drizzle>, "delete" | "select">,
+  which: SQL | undefined
+): void => {
+  const ids = tx
+    .select({ id: projectThreads.id })
+    .from(projectThreads)
+    .where(which)
+    .all()
+    .map((row) => row.id);
+  if (ids.length > 0) {
+    tx.delete(projectThreadMessages)
+      .where(inArray(projectThreadMessages.threadId, ids))
+      .run();
+    tx.delete(projectThreads).where(inArray(projectThreads.id, ids)).run();
+  }
+};
 
 const make = (path: string): DbShape => {
   mkdirSync(dirname(path), { recursive: true });
@@ -2378,6 +2443,7 @@ const make = (path: string): DbShape => {
       workflowRunId,
       workflowStepId,
       workItemId,
+      role,
       // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: opens (or reuses) the one live row for a conversation across every optional field a spawn can carry — see the "one conversation, one live row" invariant below.
     }) => {
       const now = new Date();
@@ -2449,6 +2515,7 @@ const make = (path: string): DbShape => {
           workflowRunId,
           workflowStepId,
           workItemId,
+          role,
           // `starting`, not `running` — this row is written when a spawn is
           // *issued*, and issuing a spawn is not evidence that a process exists.
           // Writing `running` here is the original sin behind the 178-vs-42
@@ -2473,6 +2540,7 @@ const make = (path: string): DbShape => {
             ...(canDelegate === undefined ? {} : { canDelegate }),
             ...(workflowRunId ? { workflowRunId } : {}),
             ...(workflowStepId ? { workflowStepId } : {}),
+            ...(role ? { role } : {}),
             // `updatedAt` deliberately absent: a restore or relaunch re-issues
             // an existing session, so its last-activity time is whatever it
             // already was; stamping it here dated every restored session to the
@@ -3817,6 +3885,93 @@ const make = (path: string): DbShape => {
         db.update(projects).set(change).where(eq(projects.id, id)).run();
       }
     },
+    setProjectCaw: (id, change) => {
+      if (Object.keys(change).length > 0) {
+        db.update(projects).set(change).where(eq(projects.id, id)).run();
+      }
+    },
+    cawSpendUsd: (projectId) =>
+      db
+        .select({
+          usd: sql<number>`coalesce(sum(${usageBuckets.costUsd}), 0)`,
+        })
+        .from(usageBuckets)
+        .where(
+          inArray(
+            usageBuckets.sessionId,
+            db
+              .select({ sessionId: instances.sessionId })
+              .from(instances)
+              .where(
+                and(
+                  eq(instances.projectId, projectId),
+                  eq(instances.role, "lead"),
+                  isNotNull(instances.sessionId)
+                )
+              )
+          )
+        )
+        .get()?.usd ?? 0,
+    projectThreads: (projectId) => {
+      const threads = db
+        .select()
+        .from(projectThreads)
+        .where(eq(projectThreads.projectId, projectId))
+        .orderBy(desc(projectThreads.updatedAt), desc(projectThreads.id))
+        .all();
+      return threads.map((thread) => {
+        const last = db
+          .select()
+          .from(projectThreadMessages)
+          .where(eq(projectThreadMessages.threadId, thread.id))
+          .orderBy(
+            desc(projectThreadMessages.createdAt),
+            desc(projectThreadMessages.id)
+          )
+          .get();
+        const count =
+          db
+            .select({ count: sql<number>`count(*)` })
+            .from(projectThreadMessages)
+            .where(eq(projectThreadMessages.threadId, thread.id))
+            .get()?.count ?? 0;
+        return { ...thread, last: last ?? null, count };
+      });
+    },
+    projectThread: (id) =>
+      db.select().from(projectThreads).where(eq(projectThreads.id, id)).get(),
+    threadMessages: (threadId) =>
+      db
+        .select()
+        .from(projectThreadMessages)
+        .where(eq(projectThreadMessages.threadId, threadId))
+        .orderBy(
+          asc(projectThreadMessages.createdAt),
+          asc(projectThreadMessages.id)
+        )
+        .all(),
+    createThread: (thread) =>
+      db.insert(projectThreads).values(thread).returning().get(),
+    addThreadMessage: (message) =>
+      db.transaction((tx) => {
+        const added = tx
+          .insert(projectThreadMessages)
+          .values(message)
+          .returning()
+          .get();
+        tx.update(projectThreads)
+          .set({ updatedAt: added.createdAt })
+          .where(eq(projectThreads.id, added.threadId))
+          .run();
+        return added;
+      }),
+    setThreadDelivery: (id, delivery, error = null) =>
+      db
+        .update(projectThreadMessages)
+        .set({ delivery, deliveryError: error })
+        .where(eq(projectThreadMessages.id, id))
+        .returning()
+        .get(),
     projectAttempts: (projectId) =>
       db
         .select()
@@ -4049,6 +4204,7 @@ const make = (path: string): DbShape => {
           tx.delete(queuedTaskStarts)
             .where(inArray(queuedTaskStarts.projectId, gone))
             .run();
+          dropThreads(tx, inArray(projectThreads.projectId, gone));
           tx.delete(projects).where(inArray(projects.id, gone)).run();
         }
         tx.delete(usageLimits)
@@ -4069,6 +4225,7 @@ const make = (path: string): DbShape => {
         tx.delete(queuedTaskStarts)
           .where(eq(queuedTaskStarts.projectId, id))
           .run();
+        dropThreads(tx, eq(projectThreads.projectId, id));
         tx.delete(projects).where(eq(projects.id, id)).run();
       });
     },

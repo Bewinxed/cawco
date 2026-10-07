@@ -17,8 +17,10 @@ import {
   projectFromSessionTool,
 } from "./project-offers";
 import { admitToolCall } from "./restart-holds";
-import { MAINLINE_TASK_TOOLS, TASK_TOOLS, taskTools } from "./task-tools";
+import { roleHas, roleOf, roleRefusal } from "./roles";
+import { TASK_TOOLS, taskTools } from "./task-tools";
 import type { Tasks } from "./tasks";
+import { THREAD_TOOLS, type Threads, threadTools } from "./threads";
 
 type ToolFactory = typeof handoffTools;
 
@@ -34,20 +36,19 @@ const LONG_CALLS: Record<string, string> = {
 
 declare const __CAWCO_RELEASE__: boolean | undefined;
 
+/** What the lead's `cawco` server says about itself. */
+const LEAD_INSTRUCTIONS =
+  "You are Caw, this project's lead. Your cawco tools are the board's: task_read, task_create, task_update, task_link, task_start, task_retry and todo_write; the project's work items' (handoff, answer_delegate, interrupt_delegate, stop_delegate, set_item_checks); and its threads' (thread_list, thread_read, thread_reply). Claude names them mcp__cawco__<tool>; OpenCode cawco_<tool>. You have no edit or shell tools: work that changes files is a task, started with task_start.";
+
 /**
- * Fleet administration (the `manage_*` tools) belongs to the sessions the
- * operator started. A delegate, a work item, a workflow step or a leaf session
- * never sees those tools listed and is refused if it names one: a session that
- * read a poisoned page must not be one call away from a hook on every machine.
- * The hub's REST API stays reachable on the network (PRODUCT.md's perimeter);
- * this removes the path an agent is handed, not the wall.
+ * Each session's tools are its role's (roles.ts): listed only to it, and a
+ * call resolves its caller first and is refused for a tool its role lacks.
+ * Fleet administration (the `manage_*` tools) is no session's but the
+ * overseer's: a session that read a poisoned page must not be one call away
+ * from a hook on every machine. The hub's REST API stays reachable on the
+ * network (PRODUCT.md's perimeter); this removes the path an agent is
+ * handed, not the wall.
  */
-const administers = (actor: InstanceRow | undefined): boolean =>
-  !!actor &&
-  !actor.parentInstanceId &&
-  !actor.workItemId &&
-  !actor.workflowStepId &&
-  actor.canDelegate !== false;
 
 export function createDelegationMcp(options: {
   instances: () => InstanceRow[];
@@ -77,6 +78,8 @@ export function createDelegationMcp(options: {
   ) => Promise<AttemptStart>;
   /** Makes the calling session a project, for `project_from_session` (project-offers.ts). */
   projectFromSession?: (actor: InstanceRow) => Promise<AcceptResult>;
+  /** A project's threads, for the lead's `thread_*` tools; without it they are not offered. */
+  threads?: Threads;
 }) {
   let tools = options.tools ?? handoffTools;
   let admin = adminTools();
@@ -124,39 +127,37 @@ export function createDelegationMcp(options: {
   const landsOf = (actor: InstanceRow | undefined): LandsMode | undefined =>
     actor?.workItemId ? options.workItemLands?.(actor.workItemId) : undefined;
 
-  const describe = (
-    canDelegate?: boolean,
-    workflowStepId?: string,
-    workItem?: boolean,
-    withAdmin = true,
-    lands?: LandsMode
-  ) => [
-    ...tools({
-      instanceId: "",
-      instanceById: options.instanceById,
-      cwd: "",
-      canDelegate,
-      lands,
-      workItem,
-      workflowStepId,
-      workflowRunId: workflowStepId ? "" : undefined,
-      emit: () => {
-        throw new Error("Discovery cannot execute tools");
-      },
-    }),
-    ...(withAdmin ? admin : []),
-    // The same split as the admin tools: filing and changing tasks is for the
-    // sessions the operator started; every session reads and writes to-dos.
-    ...(options.tasks
-      ? taskTools(undefined).filter(
-          (tool) => withAdmin || !MAINLINE_TASK_TOOLS.has(tool.name)
-        )
-      : []),
-    // Making a session a project is for the sessions the operator started.
-    ...(options.projectFromSession && withAdmin
-      ? [projectFromSessionTool()]
-      : []),
-  ];
+  /**
+   * The tools a session is listed: its role's (roles.ts). Without a session
+   * (OpenCode's shared discovery) every tool, the superset; the call
+   * enforces. A session the hub no longer has is listed a delegate's.
+   */
+  const describe = (actor: InstanceRow | undefined, superset: boolean) => {
+    const all = [
+      ...tools({
+        instanceId: "",
+        instanceById: options.instanceById,
+        cwd: "",
+        canDelegate: superset ? undefined : (actor?.canDelegate ?? undefined),
+        lands: landsOf(actor),
+        workItem: superset || !!actor?.parentInstanceId,
+        workflowStepId: actor?.workflowStepId ?? undefined,
+        workflowRunId: actor?.workflowStepId ? "" : undefined,
+        emit: () => {
+          throw new Error("Discovery cannot execute tools");
+        },
+      }),
+      ...admin,
+      ...(options.tasks ? taskTools(undefined) : []),
+      ...(options.projectFromSession ? [projectFromSessionTool()] : []),
+      ...(options.threads ? threadTools(undefined) : []),
+    ];
+    if (superset) {
+      return all;
+    }
+    const role = actor ? roleOf(actor) : "delegate";
+    return all.filter((tool) => roleHas(role, tool.name));
+  };
 
   // Temporary until Phase 2's per-session credentials replace this resolver.
   // PRODUCT.md trusts the network perimeter; here malformed/unknown identities
@@ -228,17 +229,11 @@ export function createDelegationMcp(options: {
     return candidates[0];
   };
 
-  /** A `manage_*` call, run only for a session that {@link administers}. */
+  /** A `manage_*` call, for a caller whose role has it (resolved and checked in {@link answer}). */
   const administer = async (
-    actor: InstanceRow,
     name: string,
     input: Record<string, unknown>
   ): Promise<CallToolResult> => {
-    if (!administers(actor)) {
-      throw new Error(
-        `${name} isn't available here: only sessions you started can change fleet settings, and this one is a delegate, work item or workflow step. Hand the change to the session that started it.`
-      );
-    }
     const entry = admin.find((tool) => tool.name === name);
     if (!entry) {
       throw new Error(`Unknown tool ${name}`);
@@ -246,18 +241,14 @@ export function createDelegationMcp(options: {
     return (await entry.handler(input)) as CallToolResult;
   };
 
-  /** A task tool, for its caller's project; the ones that change tasks only for a session that {@link administers}. */
+  /** A task tool, for its caller's project; its role decided whether it may (in {@link answer}). */
   const taskCall = async (
     actor: InstanceRow,
     name: string,
     input: Record<string, unknown>
   ): Promise<CallToolResult> => {
-    const mainline = administers(actor);
-    if (MAINLINE_TASK_TOOLS.has(name) && !mainline) {
-      throw new Error(
-        `${name} isn't available here: only sessions you started file, change or start tasks, and this one is a delegate, work item or workflow step. Propose the change to the session that started it, with handoff.`
-      );
-    }
+    const role = roleOf(actor);
+    const mainline = role === "worker" || role === "lead";
     const entry =
       options.tasks &&
       taskTools({
@@ -276,63 +267,64 @@ export function createDelegationMcp(options: {
     return (await entry.handler(input)) as CallToolResult;
   };
 
-  /**
-   * The tools that act on the fleet rather than on a session: the delegate-type
-   * catalog, which anyone may read without an actor, and the `manage_*` tools,
-   * which resolve their caller first. Undefined for every other tool.
-   */
-  const fleetCall = async (
-    binding: string | null,
+  /** A thread tool, for the lead's own project. */
+  const threadCall = async (
+    actor: InstanceRow,
     name: string,
-    args: Record<string, unknown>,
-    input: Record<string, unknown>,
-    authorization?: string
-  ): Promise<CallToolResult | undefined> => {
-    if (name === "list_delegate_types") {
-      // Anyone may read it; a caller the bridge can name reads its project's
-      // catalog, where the project's own types shadow the fleet's.
-      let projectId: string | undefined;
-      try {
-        projectId =
-          actorOf(binding, args, authorization).projectId ?? undefined;
-      } catch {
-        projectId = undefined;
-      }
-      const entry = tools({
-        instanceId: "",
-        instanceById: options.instanceById,
-        cwd: "",
-        projectId,
-        emit: () => {
-          throw new Error("Reading the catalog emits nothing");
-        },
-      }).find((tool) => tool.name === name);
-      if (!entry) {
-        throw new Error(`Unknown tool ${name}`);
-      }
-      return (await entry.handler(input)) as CallToolResult;
+    input: Record<string, unknown>
+  ): Promise<CallToolResult> => {
+    const entry =
+      options.threads &&
+      threadTools({ actor, threads: options.threads }).find(
+        (tool) => tool.name === name
+      );
+    if (!entry) {
+      throw new Error(`Unknown tool ${name}`);
     }
-    if (!adminNames.has(name)) {
-      // Making the caller a project is the one fleet change a session asks for itself.
-      return await projectCall(binding, name, args, input, authorization);
-    }
-    return await administer(actorOf(binding, args, authorization), name, input);
+    return (await entry.handler(input)) as CallToolResult;
   };
 
-  /** `project_from_session`, for a session you started and in no project yet; undefined for every other tool. */
-  const projectCall = async (
+  /**
+   * The delegate-type catalog, which anyone may read without an actor; a
+   * caller the bridge can name reads its project's catalog, where the
+   * project's own types shadow the fleet's.
+   */
+  const catalogCall = async (
     binding: string | null,
     name: string,
     args: Record<string, unknown>,
     input: Record<string, unknown>,
     authorization?: string
-  ): Promise<CallToolResult | undefined> => {
-    const make = options.projectFromSession;
-    if (!make || name !== PROJECT_FROM_SESSION) {
-      return undefined;
+  ): Promise<CallToolResult> => {
+    let projectId: string | undefined;
+    try {
+      projectId = actorOf(binding, args, authorization).projectId ?? undefined;
+    } catch {
+      projectId = undefined;
     }
-    const actor = actorOf(binding, args, authorization);
-    if (!(administers(actor) && mayMakeProject(actor))) {
+    const entry = tools({
+      instanceId: "",
+      instanceById: options.instanceById,
+      cwd: "",
+      projectId,
+      emit: () => {
+        throw new Error("Reading the catalog emits nothing");
+      },
+    }).find((tool) => tool.name === name);
+    if (!entry) {
+      throw new Error(`Unknown tool ${name}`);
+    }
+    return (await entry.handler(input)) as CallToolResult;
+  };
+
+  /** `project_from_session`, for a session you started and in no project yet. */
+  const projectCall = async (
+    actor: InstanceRow,
+    name: string,
+    input: Record<string, unknown>
+  ): Promise<CallToolResult> => {
+    const make = options.projectFromSession;
+    if (!(make && mayMakeProject(actor))) {
       throw new Error(
         `${name} isn't available here: only a session you started, in no project yet, can be made a project.`
       );
@@ -363,6 +355,76 @@ export function createDelegationMcp(options: {
     }
   };
 
+  /**
+   * A tool the hub answers itself, for a caller its role allows: the admin,
+   * project, task and thread tools. Undefined for a session tool.
+   */
+  const hubCall = async (
+    actor: InstanceRow,
+    name: string,
+    input: Record<string, unknown>
+  ): Promise<CallToolResult | undefined> => {
+    if (adminNames.has(name)) {
+      return await administer(name, input);
+    }
+    if (name === PROJECT_FROM_SESSION) {
+      return await projectCall(actor, name, input);
+    }
+    if (options.tasks && TASK_TOOLS.has(name)) {
+      return await taskCall(actor, name, input);
+    }
+    if (options.threads && THREAD_TOOLS.has(name)) {
+      return await threadCall(actor, name, input);
+    }
+    return undefined;
+  };
+
+  /** A session's own tool: run as its caller, with what it emits relayed after. */
+  const sessionCall = async (
+    actor: InstanceRow,
+    name: string,
+    input: Record<string, unknown>,
+    authorization?: string
+  ): Promise<CallToolResult> => {
+    const emitted: Envelope[] = [];
+    const entry = tools({
+      instanceId: actor.id,
+      instanceById: options.instanceById,
+      authorization,
+      cwd: actor.cwd,
+      harness: actor.harness as "claude" | "opencode" | "pi",
+      canDelegate: actor.canDelegate ?? undefined,
+      lands: landsOf(actor),
+      ledBy: (id) => options.ledBy?.(id, actor.id) ?? false,
+      workItem: !!actor.parentInstanceId,
+      workflowStepId: actor.workflowStepId ?? undefined,
+      workflowRunId: actor.workflowRunId ?? undefined,
+      projectId: actor.projectId ?? undefined,
+      emit: (envelope) => emitted.push(envelope),
+    }).find((tool) => tool.name === name);
+    if (!entry) {
+      throw new Error(`Tool ${name} is unavailable to this session`);
+    }
+    const result = (await entry.handler(input)) as CallToolResult;
+    for (const envelope of emitted) {
+      // biome-ignore lint/performance/noAwaitInLoops: spawn must finish before its first send is relayed
+      await options.forward(envelope, actor);
+    }
+    // Keep routing metadata recoverable in stored transcripts even when a harness drops structuredContent.
+    if (result.structuredContent) {
+      result.content = [
+        {
+          type: "text",
+          text: JSON.stringify({
+            ...result.structuredContent,
+            text: result.content,
+          }),
+        },
+      ];
+    }
+    return result;
+  };
+
   const answer = async (
     binding: string | null,
     name: string,
@@ -372,55 +434,21 @@ export function createDelegationMcp(options: {
     try {
       // Routing context belongs to the bridge, not to a tool's input schema.
       const { __cawco: _context, ...input } = args;
-      const fleet = await fleetCall(binding, name, args, input, authorization);
-      if (fleet) {
-        return fleet;
+      if (name === "list_delegate_types") {
+        return await catalogCall(binding, name, args, input, authorization);
       }
-      if (options.tasks && TASK_TOOLS.has(name)) {
-        return await taskCall(
-          actorOf(binding, args, authorization),
-          name,
-          input
-        );
-      }
+      // The caller first, then its role: a tool outside the role is refused
+      // before anything runs.
       const actor = actorOf(binding, args, authorization);
-      const emitted: Envelope[] = [];
-      const entry = tools({
-        instanceId: actor.id,
-        instanceById: options.instanceById,
-        authorization,
-        cwd: actor.cwd,
-        harness: actor.harness as "claude" | "opencode" | "pi",
-        canDelegate: actor.canDelegate ?? undefined,
-        lands: landsOf(actor),
-        ledBy: (id) => options.ledBy?.(id, actor.id) ?? false,
-        workItem: !!actor.parentInstanceId,
-        workflowStepId: actor.workflowStepId ?? undefined,
-        workflowRunId: actor.workflowRunId ?? undefined,
-        projectId: actor.projectId ?? undefined,
-        emit: (envelope) => emitted.push(envelope),
-      }).find((tool) => tool.name === name);
-      if (!entry) {
-        throw new Error(`Tool ${name} is unavailable to this session`);
+      const refused = roleRefusal(roleOf(actor), name);
+      if (refused) {
+        throw new Error(refused);
       }
-      const result = (await entry.handler(input)) as CallToolResult;
-      for (const envelope of emitted) {
-        // biome-ignore lint/performance/noAwaitInLoops: spawn must finish before its first send is relayed
-        await options.forward(envelope, actor);
+      const hubTool = await hubCall(actor, name, input);
+      if (hubTool) {
+        return hubTool;
       }
-      // Keep routing metadata recoverable in stored transcripts even when a harness drops structuredContent.
-      if (result.structuredContent) {
-        result.content = [
-          {
-            type: "text",
-            text: JSON.stringify({
-              ...result.structuredContent,
-              text: result.content,
-            }),
-          },
-        ];
-      }
-      return result;
+      return await sessionCall(actor, name, input, authorization);
     } catch (error) {
       return {
         isError: true,
@@ -444,14 +472,21 @@ export function createDelegationMcp(options: {
       { name: "cawco", version: "1.0.0" },
       {
         capabilities: { tools: {} },
-        instructions: handoffInstructions({
-          instanceId: binding ?? "",
-          instanceById: options.instanceById,
-          cwd: bound?.cwd ?? "",
-          harness: bound?.harness as "claude" | "opencode" | "pi" | undefined,
-          canDelegate,
-          emit: () => undefined,
-        }),
+        instructions:
+          bound && roleOf(bound) === "lead"
+            ? LEAD_INSTRUCTIONS
+            : handoffInstructions({
+                instanceId: binding ?? "",
+                instanceById: options.instanceById,
+                cwd: bound?.cwd ?? "",
+                harness: bound?.harness as
+                  | "claude"
+                  | "opencode"
+                  | "pi"
+                  | undefined,
+                canDelegate,
+                emit: () => undefined,
+              }),
       }
     );
     const transport = new WebStandardStreamableHTTPServerTransport({
@@ -462,18 +497,14 @@ export function createDelegationMcp(options: {
     // Delegate role is fixed across items/checks. Shared OpenCode discovery
     // lists the superset; each invocation resolves its actor and enforces role.
     server.setRequestHandler(ListToolsRequestSchema, async () => ({
-      tools: describe(
-        canDelegate,
-        bound?.workflowStepId ?? undefined,
-        binding === null || !!bound?.parentInstanceId,
-        binding === null || administers(bound),
-        landsOf(bound)
-      ).map(({ name, description, inputSchema, ...entry }) => ({
-        name,
-        description,
-        inputSchema: inputSchema as { type: "object" },
-        ...("annotations" in entry ? { annotations: entry.annotations } : {}),
-      })),
+      tools: describe(bound, binding === null).map(
+        ({ name, description, inputSchema, ...entry }) => ({
+          name,
+          description,
+          inputSchema: inputSchema as { type: "object" },
+          ...("annotations" in entry ? { annotations: entry.annotations } : {}),
+        })
+      ),
     }));
     server.setRequestHandler(CallToolRequestSchema, async (message, extra) => {
       const token = message.params._meta?.progressToken;
@@ -601,18 +632,14 @@ export function createDelegationMcp(options: {
       ? options.instances().find((row) => row.id === instanceId)
       : undefined;
     return {
-      tools: describe(
-        actor?.canDelegate ?? undefined,
-        actor?.workflowStepId ?? undefined,
-        instanceId === undefined || !!actor?.parentInstanceId,
-        instanceId === undefined || administers(actor),
-        landsOf(actor)
-      ).map(({ name, description, inputSchema, ...entry }) => ({
-        name,
-        description,
-        inputSchema,
-        ...("annotations" in entry ? { annotations: entry.annotations } : {}),
-      })),
+      tools: describe(actor, instanceId === undefined).map(
+        ({ name, description, inputSchema, ...entry }) => ({
+          name,
+          description,
+          inputSchema,
+          ...("annotations" in entry ? { annotations: entry.annotations } : {}),
+        })
+      ),
     };
   };
   const close = () => {

@@ -4038,6 +4038,477 @@
         }
       }
     },
+    "/api/projects/{id}/caw": {
+      "get": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiProjectsByIdCaw",
+        "responses": {
+          "200": {
+            "description": "getApiProjectsByIdCaw 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CawView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "getApiProjectsByIdCaw 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "getApiProjectsByIdCaw 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "getApiProjectsByIdCaw 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "getApiProjectsByIdCaw 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "on": {
+                    "type": "boolean"
+                  },
+                  "harness": {
+                    "type": "string",
+                    "enum": [
+                      "claude",
+                      "opencode"
+                    ]
+                  },
+                  "model": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "patchApiProjectsByIdCaw",
+        "responses": {
+          "200": {
+            "description": "patchApiProjectsByIdCaw 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CawView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "patchApiProjectsByIdCaw 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "patchApiProjectsByIdCaw 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "patchApiProjectsByIdCaw 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "patchApiProjectsByIdCaw 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "patchApiProjectsByIdCaw 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/threads": {
+      "get": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiProjectsByIdThreads",
+        "responses": {
+          "200": {
+            "description": "getApiProjectsByIdThreads 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiProjectsByIdThreads200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "getApiProjectsByIdThreads 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "getApiProjectsByIdThreads 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "getApiProjectsByIdThreads 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "body": {
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "body"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiProjectsByIdThreads",
+        "responses": {
+          "200": {
+            "description": "postApiProjectsByIdThreads 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiProjectsByIdThreads200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiProjectsByIdThreads 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiProjectsByIdThreads 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiProjectsByIdThreads 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "postApiProjectsByIdThreads 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/threads/{threadId}": {
+      "get": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "threadId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiProjectsByIdThreadsByThreadId",
+        "responses": {
+          "200": {
+            "description": "getApiProjectsByIdThreadsByThreadId 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiProjectsByIdThreadsByThreadId200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "getApiProjectsByIdThreadsByThreadId 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "getApiProjectsByIdThreadsByThreadId 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "getApiProjectsByIdThreadsByThreadId 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/threads/{threadId}/messages": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "threadId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "body": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "body"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiProjectsByIdThreadsByThreadIdMessages",
+        "responses": {
+          "200": {
+            "description": "postApiProjectsByIdThreadsByThreadIdMessages 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiProjectsByIdThreadsByThreadIdMessages200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiProjectsByIdThreadsByThreadIdMessages 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiProjectsByIdThreadsByThreadIdMessages 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiProjectsByIdThreadsByThreadIdMessages 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "postApiProjectsByIdThreadsByThreadIdMessages 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/join": {
       "get": {
         "operationId": "getApiJoin",
@@ -9694,6 +10165,9 @@
                   },
                   "machineId": {
                     "type": "string"
+                  },
+                  "caw": {
+                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -10479,6 +10953,253 @@
         },
         "required": [
           "ok"
+        ]
+      },
+      "getApiProjectsByIdThreads200": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/ThreadSummaryRow"
+        }
+      },
+      "postApiProjectsByIdThreads200": {
+        "type": "object",
+        "properties": {
+          "thread": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "createdAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "title": {
+                "type": "string"
+              },
+              "projectId": {
+                "type": "string"
+              },
+              "updatedAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            },
+            "required": [
+              "createdAt",
+              "id",
+              "projectId",
+              "title",
+              "updatedAt"
+            ]
+          },
+          "message": {
+            "type": "object",
+            "properties": {
+              "body": {
+                "type": "string"
+              },
+              "id": {
+                "type": "string"
+              },
+              "createdAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "instanceId": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "threadId": {
+                "type": "string"
+              },
+              "author": {
+                "enum": [
+                  "caw",
+                  "you"
+                ],
+                "type": "string"
+              },
+              "delivery": {
+                "enum": [
+                  "failed",
+                  "off",
+                  "sent"
+                ],
+                "type": "string"
+              },
+              "deliveryError": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              }
+            },
+            "required": [
+              "author",
+              "body",
+              "createdAt",
+              "deliveryError",
+              "id",
+              "instanceId",
+              "threadId"
+            ]
+          }
+        },
+        "required": [
+          "message",
+          "thread"
+        ]
+      },
+      "getApiProjectsByIdThreadsByThreadId200": {
+        "type": "object",
+        "properties": {
+          "thread": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "createdAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "title": {
+                "type": "string"
+              },
+              "projectId": {
+                "type": "string"
+              },
+              "updatedAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            },
+            "required": [
+              "createdAt",
+              "id",
+              "projectId",
+              "title",
+              "updatedAt"
+            ]
+          },
+          "messages": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "body": {
+                  "type": "string"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "createdAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "instanceId": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "threadId": {
+                  "type": "string"
+                },
+                "author": {
+                  "enum": [
+                    "caw",
+                    "you"
+                  ],
+                  "type": "string"
+                },
+                "delivery": {
+                  "enum": [
+                    "failed",
+                    "off",
+                    "sent"
+                  ],
+                  "type": "string"
+                },
+                "deliveryError": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                }
+              },
+              "required": [
+                "author",
+                "body",
+                "createdAt",
+                "deliveryError",
+                "id",
+                "instanceId",
+                "threadId"
+              ]
+            }
+          }
+        },
+        "required": [
+          "messages",
+          "thread"
+        ]
+      },
+      "postApiProjectsByIdThreadsByThreadIdMessages200": {
+        "type": "object",
+        "properties": {
+          "body": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "instanceId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "author": {
+            "enum": [
+              "caw",
+              "you"
+            ],
+            "type": "string"
+          },
+          "delivery": {
+            "enum": [
+              "failed",
+              "off",
+              "sent"
+            ],
+            "type": "string"
+          },
+          "deliveryError": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "author",
+          "body",
+          "createdAt",
+          "deliveryError",
+          "id",
+          "instanceId",
+          "threadId"
         ]
       },
       "getApiBinaryUpdatesMachines200": {
@@ -11656,6 +12377,16 @@
                   "null",
                   "string"
                 ]
+              },
+              "role": {
+                "enum": [
+                  "delegate",
+                  "lead",
+                  "overseer",
+                  "web-facing",
+                  "worker"
+                ],
+                "type": "string"
               }
             },
             "required": [
@@ -11889,6 +12620,16 @@
                     "null",
                     "string"
                   ]
+                },
+                "role": {
+                  "enum": [
+                    "delegate",
+                    "lead",
+                    "overseer",
+                    "web-facing",
+                    "worker"
+                  ],
+                  "type": "string"
                 },
                 "runningDelegates": {
                   "type": "number"
@@ -13119,6 +13860,22 @@
             "budget": {
               "$ref": "#/components/schemas/WorkBudget"
             },
+            "caw": {
+              "type": "boolean"
+            },
+            "cawHarness": {
+              "enum": [
+                "claude",
+                "opencode"
+              ],
+              "type": "string"
+            },
+            "cawModel": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
             "places": {
               "type": "array",
               "items": {
@@ -13156,6 +13913,9 @@
             }
           },
           "required": [
+            "caw",
+            "cawHarness",
+            "cawModel",
             "createdAt",
             "cwd",
             "dispatch",
@@ -13256,6 +14016,22 @@
           "budget": {
             "$ref": "#/components/schemas/WorkBudget"
           },
+          "caw": {
+            "type": "boolean"
+          },
+          "cawHarness": {
+            "enum": [
+              "claude",
+              "opencode"
+            ],
+            "type": "string"
+          },
+          "cawModel": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "places": {
             "type": "array",
             "items": {
@@ -13293,6 +14069,9 @@
           }
         },
         "required": [
+          "caw",
+          "cawHarness",
+          "cawModel",
           "createdAt",
           "cwd",
           "dispatch",
@@ -13405,6 +14184,22 @@
           "budget": {
             "$ref": "#/components/schemas/WorkBudget"
           },
+          "caw": {
+            "type": "boolean"
+          },
+          "cawHarness": {
+            "enum": [
+              "claude",
+              "opencode"
+            ],
+            "type": "string"
+          },
+          "cawModel": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "places": {
             "type": "array",
             "items": {
@@ -13442,6 +14237,9 @@
           }
         },
         "required": [
+          "caw",
+          "cawHarness",
+          "cawModel",
           "createdAt",
           "cwd",
           "dispatch",
@@ -14318,6 +15116,9 @@
             "$ref": "#/components/schemas/ProjectOfferFrame"
           },
           {
+            "$ref": "#/components/schemas/ThreadMessageFrame"
+          },
+          {
             "$ref": "#/components/schemas/DelegateEventFrame"
           },
           {
@@ -14355,6 +15156,7 @@
             "pulse": "#/components/schemas/PulseFrame",
             "work_item": "#/components/schemas/WorkItemFrame",
             "project_offer": "#/components/schemas/ProjectOfferFrame",
+            "thread_message": "#/components/schemas/ThreadMessageFrame",
             "delegate_event": "#/components/schemas/DelegateEventFrame",
             "supervisor_event": "#/components/schemas/SupervisorEventFrame",
             "supervisor_status": "#/components/schemas/SupervisorStatusFrame",
@@ -16628,6 +17430,161 @@
           "type",
           "workItemId",
           "workspaceId"
+        ]
+      },
+      "CawView": {
+        "description": "A project's Caw, as the dashboard reads it.",
+        "type": "object",
+        "properties": {
+          "harness": {
+            "$ref": "#/components/schemas/CawHarness"
+          },
+          "instanceId": {
+            "description": "The lead session Caw runs now; null before its first event, and while off.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "model": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "on": {
+            "type": "boolean"
+          },
+          "spentUsd": {
+            "description": "Dollars every lead session of the project has spent, from its machines' usage reports.",
+            "type": "number"
+          },
+          "status": {
+            "description": "The lead session's status; null without one.",
+            "enum": [
+              "discarded",
+              "error",
+              "running",
+              "sleeping",
+              "starting",
+              "stopped",
+              "unknown"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "harness",
+          "instanceId",
+          "model",
+          "on",
+          "spentUsd"
+        ]
+      },
+      "CawHarness": {
+        "enum": [
+          "claude",
+          "opencode"
+        ],
+        "type": "string"
+      },
+      "ThreadSummaryRow": {
+        "description": "A thread as a project's list shows it: its newest message and how many it has.",
+        "allOf": [
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "createdAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "title": {
+                "type": "string"
+              },
+              "projectId": {
+                "type": "string"
+              },
+              "updatedAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            },
+            "required": [
+              "createdAt",
+              "id",
+              "projectId",
+              "title",
+              "updatedAt"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "count": {
+                "type": "number"
+              },
+              "last": {
+                "type": "object",
+                "properties": {
+                  "body": {
+                    "type": "string"
+                  },
+                  "id": {
+                    "type": "string"
+                  },
+                  "createdAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "instanceId": {
+                    "type": [
+                      "null",
+                      "string"
+                    ]
+                  },
+                  "threadId": {
+                    "type": "string"
+                  },
+                  "author": {
+                    "enum": [
+                      "caw",
+                      "you"
+                    ],
+                    "type": "string"
+                  },
+                  "delivery": {
+                    "enum": [
+                      "failed",
+                      "off",
+                      "sent"
+                    ],
+                    "type": "string"
+                  },
+                  "deliveryError": {
+                    "type": [
+                      "null",
+                      "string"
+                    ]
+                  }
+                },
+                "required": [
+                  "author",
+                  "body",
+                  "createdAt",
+                  "deliveryError",
+                  "id",
+                  "instanceId",
+                  "threadId"
+                ]
+              }
+            },
+            "required": [
+              "count"
+            ]
+          }
         ]
       },
       "JoinInfo": {
@@ -23578,6 +24535,17 @@
               "string"
             ]
           },
+          "role": {
+            "description": "The role the hub gave the session where its kind does not say it: `lead`\nfor Caw, `web-facing`, `overseer`. Null on a worker or a delegate.",
+            "enum": [
+              "delegate",
+              "lead",
+              "overseer",
+              "web-facing",
+              "worker"
+            ],
+            "type": "string"
+          },
           "runningDelegates": {
             "description": "Hub-derived count of live delegated work items, including descendants and checks.",
             "type": "number"
@@ -24391,6 +25359,91 @@
         "required": [
           "instanceId",
           "kind"
+        ]
+      },
+      "ThreadMessageFrame": {
+        "type": "object",
+        "properties": {
+          "instanceId": {
+            "description": "Unused: a thread is a project's, not a session's.",
+            "type": "string"
+          },
+          "kind": {
+            "description": "Hub-originated: a message written in one of a project's threads, or its delivery settling.",
+            "type": "string",
+            "enum": [
+              "thread_message"
+            ]
+          },
+          "message": {
+            "$ref": "#/components/schemas/ThreadMessage"
+          },
+          "projectId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "instanceId",
+          "kind",
+          "message",
+          "projectId"
+        ]
+      },
+      "ThreadMessage": {
+        "description": "One message in a project's thread with Caw, as every dashboard hears it.",
+        "type": "object",
+        "properties": {
+          "author": {
+            "enum": [
+              "caw",
+              "you"
+            ],
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "createdAt": {
+            "description": "ms epoch.",
+            "type": "number"
+          },
+          "delivery": {
+            "description": "Whether yours reached Caw: `off`, `sent`, `failed`; null while on its way, and on Caw's.",
+            "enum": [
+              "failed",
+              "off",
+              "sent"
+            ],
+            "type": "string"
+          },
+          "deliveryError": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "instanceId": {
+            "description": "The lead session that wrote it; null on yours.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "threadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "author",
+          "body",
+          "createdAt",
+          "deliveryError",
+          "id",
+          "instanceId",
+          "threadId"
         ]
       },
       "DelegateEventFrame": {

@@ -587,6 +587,20 @@ export interface SessionTooling {
   tools: string[];
 }
 
+/**
+ * The toolset a session is given on the `cawco` MCP server (Projects spec
+ * §5.3): `worker`, a session you started; `delegate`, a session another one
+ * delegated (a work item or a workflow step); `lead`, Caw leading a project;
+ * `overseer`, fleet-watch triage; `web-facing`, a session that reads the
+ * outside world and so has no posting or admin tools.
+ */
+export type SessionRole =
+  | "worker"
+  | "delegate"
+  | "lead"
+  | "overseer"
+  | "web-facing";
+
 export interface InstanceRow {
   /**
    * The supervisor's standing autopilot for this session, set from the
@@ -639,6 +653,11 @@ export interface InstanceRow {
   permissionMode?: string | null;
   /** Set when the session was started from a project page. */
   projectId?: string | null;
+  /**
+   * The role the hub gave the session where its kind does not say it: `lead`
+   * for Caw, `web-facing`, `overseer`. Null on a worker or a delegate.
+   */
+  role?: SessionRole | null;
   /** Hub-derived count of live delegated work items, including descendants and checks. */
   runningDelegates?: number;
   /**
@@ -864,6 +883,7 @@ export type FramePayload =
   | import("./frames").PulseFrame
   | import("./frames").WorkItemFrame
   | import("./frames").ProjectOfferFrame
+  | import("./frames").ThreadMessageFrame
   | import("./frames").DelegateEventFrame
   | import("./frames").SupervisorEventFrame
   | import("./frames").SupervisorStatusFrame

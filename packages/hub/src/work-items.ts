@@ -2011,6 +2011,15 @@ export const createWorkItems = ({
         // read off its row as it stands after the workspace was cut.
         unwatchedMode(db.getInstancesByIds([parent.id])[0]?.permissionMode)
       );
+      // A type that reads the outside world runs web-facing (roles.ts): no
+      // posting, spawning or admin tools. Filed before its session can call
+      // anything, as the spawn only asked its machine. Only this narrowing is
+      // taken from a type; a type cannot make a delegate a lead.
+      if (
+        (settings.type as { role?: string } | undefined)?.role === "web-facing"
+      ) {
+        db.patchInstance(instanceId, { role: "web-facing" });
+      }
       send(
         messageOf(
           instanceId,
