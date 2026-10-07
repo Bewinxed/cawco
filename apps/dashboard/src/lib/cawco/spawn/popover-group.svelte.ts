@@ -36,10 +36,25 @@ export class PopoverGroup {
       this.members = this.members.filter((item) => item !== member);
     };
   }
+
+  /**
+   * `member` is opening: every other open member closes first. Members can
+   * keep their open state in different places (the dialog's chips in one,
+   * the model row's tool chips in another), and the surface shows only one.
+   */
+  opening(member: PopoverMember) {
+    for (const other of this.members) {
+      if (other !== member && other.open) {
+        other.onchange(false);
+      }
+    }
+  }
 }
 
 const KEY = Symbol("ns-popover-group");
 
 export const providePopoverGroup = () => setContext(KEY, new PopoverGroup());
+
+/** The group around this component, when there is one. */
 
 export const popoverGroup = () => getContext<PopoverGroup | undefined>(KEY);

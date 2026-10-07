@@ -64,6 +64,7 @@
   import { conversationHref } from "../links";
   import { loadModelWindows, models } from "../models.svelte";
   import { unfold } from "../motion/fold.svelte";
+  import { morph } from "../motion/morph.svelte";
   import { handOver } from "../motion/share.svelte";
   import {
     fallbackMode,
@@ -115,7 +116,20 @@
   const REPO = /^[\w.-]+\/[\w.-]+$/;
   /** Where this tab keeps the first prompt across a reload. */
   const KEPT_PROMPT = "cawco:new-session-prompt";
+  const mobile = new MediaQuery("(max-width: 640px)");
   let card = $state<HTMLElement | null>(null);
+  /**
+   * The card tweens to its new height when its body changes, as every dialog
+   * does (DESIGN.md, Dialog; ui/dialog's content): it renders its own
+   * content, so it takes the same `morph()` here. The sheet on a phone is the
+   * kit drawer's and is left to it.
+   */
+  const resize = morph();
+  $effect(() => {
+    if (card && !mobile.current) {
+      return resize(card);
+    }
+  });
   let editor = $state<HTMLDivElement>();
   /**
    * A location set with Enter or "Use this folder": its popover closes and
@@ -143,7 +157,6 @@
     selection?.addRange(caret);
     return true;
   }
-  const mobile = new MediaQuery("(max-width: 640px)");
   let opener: HTMLElement | null = null;
   let submission = 0;
   let prompt = $state("");
@@ -1133,25 +1146,28 @@
     inert={busy}
     onscroll={bodyScroll}
   >
-    <h2>New Session</h2>
-    <section class="sec prompt-sec" style="--delay:0ms">
-      <SectionHeader
-        hue="var(--hue-blue-500)"
-        icon={Chat}
-        label={continueFrom ? "Next step (optional)" : "First prompt"}
-      />
-      <div class="fai-comb"></div>
-      <div class="composer field-shell">
-        <PromptEditor
-          lead={sourceChip}
-          {menuItems}
-          onleadremove={onexitcontinue}
-          onsubmit={start}
-          bind:element={editor}
-          bind:value={prompt}
+    <!-- One popover surface for every chip in the form: the composer's and
+         the chosen model's effort and permission chips glide between each
+         other. -->
+    <NsPopoverGroup>
+      <h2>New Session</h2>
+      <section class="sec prompt-sec" style="--delay:0ms">
+        <SectionHeader
+          hue="var(--hue-blue-500)"
+          icon={Chat}
+          label={continueFrom ? "Next step (optional)" : "First prompt"}
         />
-        <div class="chips">
-          <NsPopoverGroup>
+        <div class="fai-comb"></div>
+        <div class="composer field-shell">
+          <PromptEditor
+            lead={sourceChip}
+            {menuItems}
+            onleadremove={onexitcontinue}
+            onsubmit={start}
+            bind:element={editor}
+            bind:value={prompt}
+          />
+          <div class="chips">
             <MachinesChip
               machines={machineItems}
               onchange={(value) => {
@@ -1217,84 +1233,84 @@
               }}
               open={popover === "lifetime"}
             />
-          </NsPopoverGroup>
+          </div>
         </div>
-      </div>
-      <p
-        aria-live="polite"
-        class="reading"
-        title={reading}
-        class:informational={locationInformational}
-      >
-        {reading || "\u00a0"}
-      </p>
-    </section>
-    <div class="fai-comb comb-gap"></div>
-    <div class="stack">
-      {#if continueFrom}
-        <p aria-live="polite" class="sizing" in:unfold|global out:unfold>
-          {estimate
-            ? `Current context ${tokens(estimate.liveContextTokens)} → ${tokens(estimate.summariseInputTokens)} to summarise`
-            : "Reading the session's context…"}
+        <p
+          aria-live="polite"
+          class="reading"
+          title={reading}
+          class:informational={locationInformational}
+        >
+          {reading || "\u00a0"}
         </p>
-      {/if}
-      <div class="models" class:pair={Boolean(continueFrom)}>
+      </section>
+      <div class="fai-comb comb-gap"></div>
+      <div class="stack">
         {#if continueFrom}
-          <div class="sec" style="--delay:60ms">
+          <p aria-live="polite" class="sizing" in:unfold|global out:unfold>
+            {estimate
+              ? `Current context ${tokens(estimate.liveContextTokens)} → ${tokens(estimate.summariseInputTokens)} to summarise`
+              : "Reading the session's context…"}
+          </p>
+        {/if}
+        <div class="models" class:pair={Boolean(continueFrom)}>
+          {#if continueFrom}
+            <div class="sec" style="--delay:60ms">
+              <ModelSection
+                harness={summarizerHarness}
+                installed={installedHarnesses}
+                label="Summarise with"
+                {machineIds}
+                machineName={machine?.hostname ?? machineId}
+                model={summarizerModel}
+                onharness={(value) => {
+                  summarizerHarness = value;
+                  summarizerModel = "";
+                }}
+                onmodel={(id) => {
+                  summarizerModel = id;
+                }}
+                unavailable={summarizerRefusal}
+              />
+            </div>
+          {/if}
+          <div class="sec" style="--delay:80ms">
             <ModelSection
-              harness={summarizerHarness}
+              {harness}
               installed={installedHarnesses}
-              label="Summarise with"
+              label={continueFrom ? "Continue on" : "Model"}
               {machineIds}
               machineName={machine?.hostname ?? machineId}
-              model={summarizerModel}
-              onharness={(value) => {
-                summarizerHarness = value;
-                summarizerModel = "";
-              }}
+              {model}
+              onharness={chooseHarness}
               onmodel={(id) => {
-                summarizerModel = id;
+                model = id;
+                effort = null;
               }}
-              unavailable={summarizerRefusal}
+              tools={{
+                efforts,
+                effort: effortShown,
+                effortOff:
+                  report?.capabilities.effort === false
+                    ? effortNotExposed(harness)
+                    : null,
+                oneffort: (level) => {
+                  effort = level;
+                },
+                harness,
+                modes,
+                permission: permissionMode,
+                onpermission: (value) => {
+                  permissionMode = value;
+                  fullSendCarried = false;
+                },
+              }}
+              unavailable={continueFrom ? targetRefusal : undefined}
             />
           </div>
-        {/if}
-        <div class="sec" style="--delay:80ms">
-          <ModelSection
-            {harness}
-            installed={installedHarnesses}
-            label={continueFrom ? "Continue on" : "Model"}
-            {machineIds}
-            machineName={machine?.hostname ?? machineId}
-            {model}
-            onharness={chooseHarness}
-            onmodel={(id) => {
-              model = id;
-              effort = null;
-            }}
-            tools={{
-              efforts,
-              effort: effortShown,
-              effortOff:
-                report?.capabilities.effort === false
-                  ? effortNotExposed(harness)
-                  : null,
-              oneffort: (level) => {
-                effort = level;
-              },
-              harness,
-              modes,
-              permission: permissionMode,
-              onpermission: (value) => {
-                permissionMode = value;
-                fullSendCarried = false;
-              },
-            }}
-            unavailable={continueFrom ? targetRefusal : undefined}
-          />
         </div>
       </div>
-    </div>
+    </NsPopoverGroup>
   </div>
   <!-- Full Send in the form, however it got there, stands outside the body's
        scroll, beside Start: it is in view whenever the form can start. -->

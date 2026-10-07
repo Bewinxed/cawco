@@ -9,7 +9,7 @@
   import type { Snippet } from "svelte";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
-  import { popoverGroup } from "./popover-group.svelte";
+  import { type PopoverMember, popoverGroup } from "./popover-group.svelte";
 
   let {
     id,
@@ -57,49 +57,55 @@
 
   /**
    * Inside an NsPopoverGroup this is only a trigger: the group owns the one
-   * surface and renders this popover's content on it when it is open.
+   * surface and renders this popover's content on it when it is open. One
+   * anchored to a caret (the `@` / `/` menu) has no trigger to glide to and
+   * keeps its own surface.
    */
-  const group = popoverGroup();
+  const around = popoverGroup();
+  const group = $derived(trigger ? around : undefined);
   let triggerEl = $state<HTMLElement | null>(null);
-  if (group) {
-    $effect(() =>
-      group.add({
-        get align() {
-          return align;
-        },
-        get children() {
-          return children;
-        },
-        get gap() {
-          return gap;
-        },
-        get id() {
-          return id;
-        },
-        get label() {
-          return label;
-        },
-        onchange: (value) => onchange(value),
-        get rows() {
-          return rows;
-        },
-        get onclosefocus() {
-          return onclosefocus;
-        },
-        get open() {
-          return open;
-        },
-        get trapFocus() {
-          return trapFocus;
-        },
-        get trigger() {
-          return triggerEl;
-        },
-        get width() {
-          return width;
-        },
-      })
-    );
+  const member: PopoverMember = {
+    get align() {
+      return align;
+    },
+    get children() {
+      return children;
+    },
+    get gap() {
+      return gap;
+    },
+    get id() {
+      return id;
+    },
+    get label() {
+      return label;
+    },
+    onchange: (value) => onchange(value),
+    get rows() {
+      return rows;
+    },
+    get onclosefocus() {
+      return onclosefocus;
+    },
+    get open() {
+      return open;
+    },
+    get trapFocus() {
+      return trapFocus;
+    },
+    get trigger() {
+      return triggerEl;
+    },
+    get width() {
+      return width;
+    },
+  };
+  $effect(() => group?.add(member));
+  function toggle() {
+    if (!open) {
+      group?.opening(member);
+    }
+    onchange(!open);
   }
 </script>
 
@@ -113,7 +119,7 @@
       class="touch-hit {triggerClass}"
       data-state={open ? "open" : "closed"}
       {id}
-      onclick={() => onchange(!open)}
+      onclick={toggle}
       style={triggerStyle}
       type="button"
       bind:this={triggerEl}
