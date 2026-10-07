@@ -3,6 +3,7 @@
     Toaster as Sonner,
     type ToasterProps as SonnerProps,
   } from "svelte-sonner";
+  import { navSheet } from "#lib/cawco/motion/clock.svelte.js";
   import { dur } from "#lib/cawco/motion/curves.svelte.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import {
@@ -120,7 +121,7 @@
      under it showed through, and its text and buttons read as painted over
      the toast even though the toast was on top and taking the taps. -->
 <div class="toast-home" bind:this={home}>
-  <div class="toast-layer" bind:this={layer}>
+  <div class="toast-layer" bind:this={layer} class:under-nav={navSheet.open}>
     <Sonner
       class="toaster group"
       style="--normal-bg: var(--surface-raised); --normal-text: var(--ink-strong); --normal-border: var(--border-control);"
@@ -163,6 +164,13 @@
   .toast-layer :global([data-sonner-toast]) {
     pointer-events: auto;
   }
+  /* Navigation stays above a toast. While the burger's sheet is open (its
+     scrim and panel stand at 50), the layer goes under the scrim: a toast
+     arriving then waits dimmed in the content area, and the sheet that
+     covers it on a phone or a narrow tablet is never painted over. */
+  .toast-layer.under-nav {
+    z-index: 49;
+  }
 
   /* The kit's floating surface, over sonner's own box. One attribute more
      specific than sonner's `[data-sonner-toast][data-styled=true]`, so the
@@ -172,16 +180,25 @@
     box-shadow: var(--shadow-overlay);
     font: var(--type-body);
   }
-  /* A toast's free edges stay free. svelte-streamdown's expand overlay is a
+  /* A toast stays in its stack. svelte-streamdown's expand overlay is a
      global `[data-expanded='true'] { position: fixed; top: 16px; left: 16px;
-     … }` (Streamdown.svelte), loaded on every page that renders markdown,
-     and sonner marks each toast of an expanded stack `data-expanded="true"`.
-     Sonner restates position, width, height and z-index more specifically,
-     but sets `top` and `left` only on the edge a toast is pinned to, so the
-     overlay's 16px won on the other: a bottom toast was held between
-     `top: 16px` and `bottom: 0`, squeezed to the stack's height less 16px
-     with its text spilling past both edges, and `left: 16px` pushed it 16px
-     out past the stack's right edge. */
+     width: calc(100vw - 32px); height: calc(100vh - 32px); z-index: … }`
+     (Streamdown.svelte), loaded on every page that renders markdown, and
+     sonner marks each toast of an expanded stack `data-expanded="true"`.
+     Sonner's own `position` and `z-index` match it in weight, so the sheet
+     loaded last won: on a conversation the toast was fixed to the viewport,
+     and a custom toast (the update notice, `data-styled="false"`, which
+     sonner gives no width) took the overlay's whole-viewport width, from the
+     bottom-left corner across the rail. Each property is restated here, one
+     selector heavier; the phone's full-width rule below is heavier still.
+     Sonner sets `top` and `left` only on the edge a toast is pinned to, so
+     the other edge is restated too: `top: 16px` squeezed a bottom toast, and
+     `left: 16px` pushed a right toast out past the stack's edge. */
+  :global([data-sonner-toaster] [data-sonner-toast]) {
+    position: absolute;
+    width: var(--width);
+    z-index: var(--z-index);
+  }
   :global([data-sonner-toaster] [data-sonner-toast][data-y-position="bottom"]) {
     top: auto;
   }
