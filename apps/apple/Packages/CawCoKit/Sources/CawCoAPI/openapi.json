@@ -18881,11 +18881,11 @@
         "type": "string"
       },
       "ProjectSpend": {
-        "description": "What a project has spent, as `GET /api/projects/:id/spend` answers it: the\nusage its sessions' machines reported, in dollars, read now. Days and\nmonths are the hub's own (its zone, as every \"today\" CawCo shows).",
+        "description": "What a project has spent, as `GET /api/projects/:id/spend` answers it, in\ndollars, read now. Each part has one source: its Caw's turns as they were\nbooked (each turn's cost, from its result), its attempts' and other\nsessions' usage as their machines reported it (a lead's sessions are not\ncounted twice). The parts add up: `monthUsd` is Caw's month, every\nattempt's month and the others' month; Caw's month is its threads' month\nand the turns no thread woke. Days and months are the hub's own (its\nzone, as every \"today\" CawCo shows). What a project's cap counts.",
         "type": "object",
         "properties": {
           "attempts": {
-            "description": "Every attempt at a task, newest activity first: its sessions' spend summed.",
+            "description": "Every task attempted this month, newest activity first: its attempts' month summed.",
             "type": "array",
             "items": {
               "type": "object",
@@ -18950,7 +18950,38 @@
             "$ref": "#/components/schemas/ProjectCap"
           },
           "caw": {
-            "description": "The project's Caw (lead) sessions alone.",
+            "description": "The project's Caw: its booked turns; `unthreadedMonthUsd`, this month's no thread woke.",
+            "type": "object",
+            "properties": {
+              "monthUsd": {
+                "type": "number"
+              },
+              "todayUsd": {
+                "type": "number"
+              },
+              "unthreadedMonthUsd": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "monthUsd",
+              "todayUsd",
+              "unthreadedMonthUsd"
+            ]
+          },
+          "fleetOnCap": {
+            "$ref": "#/components/schemas/OnCap",
+            "description": "What reaching a cap does when the project sets nothing: the fleet's default."
+          },
+          "monthStart": {
+            "description": "The first of this month, ms epoch.",
+            "type": "number"
+          },
+          "monthUsd": {
+            "type": "number"
+          },
+          "others": {
+            "description": "Every session of the project that is neither its Caw nor an attempt.",
             "type": "object",
             "properties": {
               "monthUsd": {
@@ -18965,19 +18996,8 @@
               "todayUsd"
             ]
           },
-          "fleetOnCap": {
-            "$ref": "#/components/schemas/OnCap",
-            "description": "What reaching a cap does when the project sets nothing: the fleet's default."
-          },
-          "monthStart": {
-            "description": "The first of this month, ms epoch.",
-            "type": "number"
-          },
-          "monthUsd": {
-            "type": "number"
-          },
           "threads": {
-            "description": "Each thread, newest first, with how many times it woke Caw (your\nmessages and events in it) and what the turns it woke cost: each\nturn's share of the lead session's cumulative cost, booked to the\nthread that woke it.",
+            "description": "Each thread that moved this month, newest first: how many times it\nwoke Caw this month (your messages and events) and what those turns\ncost (each turn's cost, booked to the thread that woke it).",
             "type": "array",
             "items": {
               "type": "object",
@@ -19022,6 +19042,7 @@
           "fleetOnCap",
           "monthStart",
           "monthUsd",
+          "others",
           "threads",
           "todayStart",
           "todayUsd"

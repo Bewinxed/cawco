@@ -126,7 +126,7 @@
   const ON_CAP_LABEL: Record<OnCap, string> = {
     pause: "Pause dispatch",
     quiet: "Stop waking Caw",
-    both: "Pause dispatch and stop waking Caw",
+    both: "Pause both",
   };
   /** The cap, as the hub keeps it live (`project.cap`), else as the spend read had it. */
   const cap = $derived(
@@ -146,19 +146,18 @@
     }
     return share > 70 ? ("attn" as const) : ("neutral" as const);
   });
-  /** What reaching it does, and whether that is the fleet's default. */
+  /**
+   * What reaching it does, in a word: the fleet's default, or the project's
+   * own choice. Only with a budget: without one nothing is reached.
+   */
   const onCapLine = $derived.by(() => {
-    const onCap = cap?.onCap ?? spend?.fleetOnCap;
-    if (!onCap) {
+    if (!cap) {
       return "";
     }
-    const inherited = cap ? cap.inherited : true;
-    return `At the budget: ${ON_CAP_LABEL[onCap].toLowerCase()}${inherited ? " · fleet default" : ""}`;
+    return cap.inherited ? "Fleet default" : ON_CAP_LABEL[cap.onCap];
   });
 
-  const fleetDefault = $derived(
-    spend ? ON_CAP_LABEL[spend.fleetOnCap].toLowerCase() : ""
-  );
+  const fleetDefault = $derived(spend ? ON_CAP_LABEL[spend.fleetOnCap] : "");
 
   let capOpen = $state(false);
   let capAmount = $state("");
@@ -238,7 +237,7 @@
         label="Budget"
         tone={capTone}
         unit={cap ? `this ${cap.period} · ${share}%` : undefined}
-        value={cap ? `${usd(cap.spentUsd)} / ${usd(cap.usd)}` : "No limit"}
+        value={cap ? `${usd(cap.spentUsd)} / ${usd(cap.usd)}` : "No budget"}
       >
         {#snippet action()}
           {#if onCapLine}
@@ -297,7 +296,7 @@
                     bind:value={capOnCap}
                   >
                     <NativeSelectOption value=""
-                      >Fleet default ({fleetDefault})</NativeSelectOption
+                      >Fleet default · {fleetDefault}</NativeSelectOption
                     >
                     <NativeSelectOption value="pause"
                       >{ON_CAP_LABEL.pause}</NativeSelectOption
@@ -405,10 +404,15 @@
       </StatTile>
     </div>
 
-    {#if spend.threads.length > 0 || spend.attempts.length > 0}
+    {#if spend.monthUsd > 0 ||
+      spend.threads.length > 0 ||
+      spend.attempts.length > 0}
+      <!-- This month's ledger: Caw's threads (and his turns no thread
+           woke), the attempts, every other session, and their total, which
+           is the This month tile. -->
       <div class="ledger">
         <Table.Root class="table-fixed">
-          {#if spend.threads.length > 0}
+          {#if spend.threads.length > 0 || spend.caw.unthreadedMonthUsd > 0}
             <Table.Header>
               <Table.Row class="band border-0">
                 <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th> -->
@@ -437,6 +441,18 @@
                   >
                 </Table.Row>
               {/each}
+              {#if spend.caw.unthreadedMonthUsd > 0}
+                <Table.Row class="row">
+                  <Table.Cell class="col-name"
+                    ><span class="name plain">Not in a thread</span></Table.Cell
+                  >
+                  <Table.Cell class="col-count"></Table.Cell>
+                  <Table.Cell class="col-usd num"
+                    >{usd(spend.caw.unthreadedMonthUsd)}</Table.Cell
+                  >
+                  <Table.Cell class="col-last"></Table.Cell>
+                </Table.Row>
+              {/if}
             </Table.Body>
           {/if}
           {#if spend.attempts.length > 0}
@@ -480,6 +496,28 @@
               {/each}
             </Table.Body>
           {/if}
+          <Table.Body>
+            {#if spend.others.monthUsd > 0}
+              <Table.Row class="row">
+                <Table.Cell class="col-name"
+                  ><span class="name plain">Other sessions</span></Table.Cell
+                >
+                <Table.Cell class="col-count"></Table.Cell>
+                <Table.Cell class="col-usd num"
+                  >{usd(spend.others.monthUsd)}</Table.Cell
+                >
+                <Table.Cell class="col-last"></Table.Cell>
+              </Table.Row>
+            {/if}
+            <Table.Row class="row total">
+              <Table.Cell class="col-name"
+                ><span class="name plain">This month</span></Table.Cell
+              >
+              <Table.Cell class="col-count"></Table.Cell>
+              <Table.Cell class="col-usd num">{usd(spend.monthUsd)}</Table.Cell>
+              <Table.Cell class="col-last"></Table.Cell>
+            </Table.Row>
+          </Table.Body>
         </Table.Root>
       </div>
     {:else}
@@ -496,10 +534,20 @@
     flex-direction: column;
     gap: var(--space-group);
   }
+  /* Two to a row on a phone, as many as fit on a desk; each tile's label
+     on one top line, whatever its figure or its control below. */
   .tiles {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 9.5rem), 1fr));
     gap: var(--space-3);
+  }
+  .ledger :global(tr.total td) {
+    border-block-end: 0;
+    color: var(--ink-strong);
+    font-weight: var(--weight-strong);
+  }
+  .name.plain::after {
+    content: none;
   }
   .on-cap {
     flex: 1 1 100%;

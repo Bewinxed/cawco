@@ -1094,7 +1094,11 @@
 {#snippet parkedPrompts()}
   {#each parked as request (request.requestId)}
     <div class="parked" data-flip out:settleInto={request.toolUseId}>
-      <Prompt onanswer={(result) => onanswer(request, result)} {request} />
+      <Prompt
+        asker={agentName}
+        onanswer={(result) => onanswer(request, result)}
+        {request}
+      />
     </div>
   {/each}
   <!-- The quiet one: an offer, standing under the asks that block work. -->

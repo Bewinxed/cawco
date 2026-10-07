@@ -1788,10 +1788,30 @@ export const projectThreads = sqliteTable(
     createdAt: timestamp("created_at").notNull(),
     /** When its newest message was added. */
     updatedAt: timestamp("updated_at").notNull(),
-    /** Dollars Caw's turns that this thread woke have cost. */
-    spendUsd: real("spend_usd").notNull().default(0),
   },
   (table) => [index("project_threads_project").on(table.projectId)]
+);
+
+/**
+ * What each of a project's Caw turns cost, booked as the turn's result came
+ * in (caw.ts `turnCost`): the one source of Caw's dollars, so a period's
+ * total, each thread's share and the turns no thread woke always add up.
+ */
+export const cawTurns = sqliteTable(
+  "caw_turns",
+  {
+    id: text("id").primaryKey(),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    /** The thread that woke the turn; null when none did. */
+    threadId: text("thread_id").references(() => projectThreads.id, {
+      onDelete: "set null",
+    }),
+    usd: real("usd").notNull(),
+    at: timestamp("at").notNull(),
+  },
+  (table) => [index("caw_turns_project_at").on(table.projectId, table.at)]
 );
 
 /**

@@ -57,7 +57,7 @@
   .st-card {
     display: flex;
     flex-direction: column;
-    justify-content: center;
+    justify-content: flex-start;
     gap: var(--space-2);
     block-size: 100%;
     min-block-size: var(--c-stat-h);

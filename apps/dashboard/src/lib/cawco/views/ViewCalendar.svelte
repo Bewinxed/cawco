@@ -197,8 +197,10 @@
     align-items: center;
     min-inline-size: 0;
   }
-  .view-calendar :global(.ec-event.chip .ec-event-time) {
-    margin: 0;
+  /* In the week's grid the chip's place is its time: the title has the
+     whole line. The list keeps the time, in its own column. */
+  .view-calendar :global(.ec-time-grid .ec-event.chip .ec-event-time) {
+    display: none;
   }
   .view-calendar :global(.ec-event.chip .ec-event-title) {
     min-inline-size: 0;
@@ -220,7 +222,8 @@
   }
   .view-calendar :global(.ec-list .ec-event.chip) {
     min-block-size: var(--c-btn-h-lg);
-    border-radius: 0;
+    margin-inline: var(--space-2);
+    border-radius: var(--radius-xs);
   }
   .view-calendar :global(.ec-event-time) {
     font-family: var(--font-mono);

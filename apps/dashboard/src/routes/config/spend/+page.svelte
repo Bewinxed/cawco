@@ -6,10 +6,7 @@
    */
   import type { OnCap } from "@cawco/core";
   import { onMount } from "svelte";
-  import {
-    setSpendSettings,
-    spendSettings,
-  } from "#lib/cawco/client.svelte.js";
+  import { setSpendSettings, spendSettings } from "#lib/cawco/client.svelte.js";
   import Field from "#lib/cawco/config/Field.svelte";
   import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";
@@ -17,7 +14,6 @@
     NativeSelect,
     NativeSelectOption,
   } from "#lib/components/ui/native-select/index.js";
-  import { SectionHeader } from "#lib/components/ui/section-header/index.js";
 
   const section = sectionOf("spend");
 
@@ -36,7 +32,7 @@
     },
     {
       value: "both",
-      label: "Both",
+      label: "Pause both",
       means: "No new attempt starts, and Caw is not woken.",
     },
   ];
@@ -48,7 +44,7 @@
   onMount(() => {
     spendSettings().then(
       (read) => {
-        onCap = read.onCap;
+        ({ onCap } = read);
       },
       (error: unknown) => {
         problem = `Could not read the spend settings — ${error instanceof Error ? error.message : String(error)}.`;
@@ -61,7 +57,7 @@
     onCap = next;
     refused = undefined;
     try {
-      onCap = (await setSpendSettings(next)).onCap;
+      ({ onCap } = await setSpendSettings(next));
     } catch (error) {
       onCap = was;
       refused = error instanceof Error ? error.message : String(error);
@@ -78,18 +74,16 @@
   title={section.label}
 >
   <div class="group">
-    <SectionHeader
-      hue={section.hue}
-      icon={section.icon}
-      label="When a project reaches its budget"
-    />
     <p class="note">
-      A project's budget is what it may spend in a day or a month, its Caw and
-      its attempts together; it is set on the project's Usage page. Reaching
-      it does this, unless the project says otherwise. The next day or month
-      starts it clear.
+      A project's budget is what it may spend in a day or a month, set on its
+      Usage page. Each project follows this unless it sets its own.
     </p>
-    <Field hint={means} id="spend-on-cap" label="Default" problem={refused}>
+    <Field
+      hint={means}
+      id="spend-on-cap"
+      label="When a project reaches its budget"
+      problem={refused}
+    >
       <NativeSelect
         class="w-full max-w-sm"
         id="spend-on-cap"
@@ -98,7 +92,9 @@
         value={onCap ?? ""}
       >
         {#each ON_CAP as each (each.value)}
-          <NativeSelectOption value={each.value}>{each.label}</NativeSelectOption>
+          <NativeSelectOption value={each.value}
+            >{each.label}</NativeSelectOption
+          >
         {/each}
       </NativeSelect>
     </Field>

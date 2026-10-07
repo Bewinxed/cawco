@@ -95,6 +95,18 @@
       }
     });
   });
+  // A tail that does not land within the wait's grace (a machine that is
+  // away, a read that fails) releases the hold: the card takes its own
+  // content's size rather than standing at the last one's, empty.
+  $effect(() => {
+    if (!held) {
+      return;
+    }
+    const release = setTimeout(() => {
+      held = null;
+    }, dur("--dur-wait-grace"));
+    return () => clearTimeout(release);
+  });
 
   const releases = new Map<string, ReturnType<typeof setTimeout>>();
   $effect(() => {

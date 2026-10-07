@@ -11,7 +11,6 @@
    */
   import { createTable, tableFeatures } from "@tanstack/svelte-table";
   import {
-    KIND_LABEL,
     type Stage,
     stageLabel,
     type TaskSummary,
@@ -165,9 +164,6 @@
                     <IconNeedsYou aria-hidden="true" />
                   {/if}
                   <span class="stage-name">{stageLabel(task.stage)}</span>
-                  {#if task.kind}
-                    <span class="kind">{KIND_LABEL[task.kind]}</span>
-                  {/if}
                 </span>
               {:else if cell.column.id === "labels"}
                 <span class="labels">
@@ -302,15 +298,6 @@
   }
   .stage-name {
     font: var(--type-label);
-  }
-  /* A stage's kind is a word of stages.md, set as code. */
-  .kind {
-    font: var(--type-code);
-    font-variant-ligatures: none;
-    color: var(--ink-subtle);
-  }
-  .stage[data-kind="you"] .kind {
-    color: var(--status-attn-ink);
   }
   .labels {
     display: flex;

@@ -634,12 +634,22 @@
       you ? ` One that waits on you shows in ${stageLabel(you.name)}.` : ""
     }`;
   });
+  /**
+   * New task stands in the strip whenever there is no form for it on the
+   * board: a board with tasks, and an empty one Caw's field stands over
+   * (an empty board with the lead off holds the form itself).
+   */
+  const strippedNewTask = $derived(list !== null && (!empty || leadOn));
   /** Something stands after the tabs: the hairline marks where it starts. */
-  const trailing = $derived(
-    needsYou.length > 0 || (list !== null && !empty) || leadOn
+  const trailing = $derived(needsYou.length > 0 || strippedNewTask || leadOn);
+  /**
+   * Caw stands over the empty board while the lead is on; elsewhere he sits
+   * in the head, and the board is drawn — its columns and the new task's
+   * form — once a task is being added by hand.
+   */
+  const standing = $derived(
+    empty && leadOn && !adding && !current.startsWith("view:")
   );
-  /** Caw stands over the empty board while the lead is on; elsewhere he sits in the head. */
-  const standing = $derived(empty && leadOn && !current.startsWith("view:"));
 
   /**
    * When he sits down (the first task landed, or the view moved off the
@@ -727,7 +737,7 @@
         {/snippet}
       </EmptyState>
     </div>
-  {:else if empty}
+  {:else if empty && !adding}
     {#if !lead.view}
       <Skeleton class="h-48 w-full max-w-xl rounded-[var(--radius-lg)]" />
     {:else if leadOn}
@@ -893,7 +903,13 @@
         </TabsList>
       </Tabs>
       {#if trailing}
-        <span aria-hidden="true" class="rule"></span>
+        <!-- Under 640px New task and Ask Caw are in the head's ⋯: the rule
+             stands only while Needs you follows it there. -->
+        <span
+          aria-hidden="true"
+          class="rule"
+          class:wide={needsYou.length === 0}
+        ></span>
       {/if}
       <div class="trail">
         {#if needsYou.length > 0}
@@ -912,7 +928,7 @@
             <span class="num">{needsYou.length}</span>
           </button>
         {/if}
-        {#if list && !empty}
+        {#if strippedNewTask}
           <Button
             class="wide pressable"
             onclick={() => {
@@ -1057,8 +1073,9 @@
     flex: 0 1 auto;
     min-inline-size: 0;
   }
+  /* The tag stands after the view's name, never over it. */
   .strip :global(.draft-badge) {
-    margin-inline-start: calc(var(--space-1) * -1);
+    margin-inline-start: var(--space-1);
   }
   .rule {
     flex: none;
@@ -1234,7 +1251,8 @@
   }
   /* New task and Ask Caw for a view move into the head's ⋯ on a phone. */
   @media (max-width: 639px) {
-    .trail :global(.wide) {
+    .trail :global(.wide),
+    .rule.wide {
       display: none;
     }
   }

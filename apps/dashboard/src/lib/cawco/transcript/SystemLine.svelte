@@ -281,7 +281,12 @@
     color: var(--ink-muted);
   }
   /* An event that woke a project's Caw is code: its line stands in a 1px
-     dashed box in the control edge (design §1, SystemLine). */
+     dashed box in the control edge (design §1, SystemLine), and the box is
+     its one marker — no rail beside it, the box on the row's own edge. */
+  .note[data-code] {
+    padding-inline-start: 0;
+    background: none;
+  }
   .note[data-code] .hline,
   .note[data-code] :global(.ftrig) {
     padding: 0 var(--space-2);

@@ -100,6 +100,12 @@
   .ledger :global(tr.band) {
     background: var(--surface-band);
   }
+  /* A column keeps its words on one line; a table wider than its place
+     scrolls sideways in its container (Table.Root), never clips. */
+  .ledger :global(th),
+  .ledger :global(td) {
+    white-space: nowrap;
+  }
   .ledger :global(tr.band th) {
     block-size: var(--c-toolbar-ctl);
     padding-inline: var(--space-3);

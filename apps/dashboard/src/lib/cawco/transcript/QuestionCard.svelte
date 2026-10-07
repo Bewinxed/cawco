@@ -25,7 +25,14 @@
   import type { Message } from "../types";
   import { useLedger } from "./arrivals.svelte";
 
-  let { message }: { message: Message } = $props();
+  let {
+    message,
+    asker = "the agent",
+  }: {
+    message: Message;
+    /** Who asked, as the conversation names its agent ("Caw" in a thread). */
+    asker?: string;
+  } = $props();
 
   const input = $derived(
     (message.metadata?.toolInput ?? {}) as Record<string, unknown>
@@ -190,7 +197,7 @@
      on it (Row's arrival). `data-call`: where the parked prompt it was
      settles into (transcript/settle.ts). -->
 <section
-  aria-label="Question from the agent"
+  aria-label="Question from {asker}"
   class="hitl"
   data-call={message.toolCallId}
   data-frame
@@ -208,7 +215,7 @@
         <span class="mark attn" in:pillSwap out:pillSwap><IconAsk /></span>
       {/if}
     </span>
-    Question from the agent
+    Question from {asker}
     <span class="state">
       {#if answered}
         <span class="pill done" in:pillSwap out:pillSwap>answered</span>

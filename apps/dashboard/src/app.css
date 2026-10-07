@@ -446,18 +446,28 @@
     animation: kit-edge-fade linear both;
     animation-timeline: scroll(self block);
   }
+  /* The fade's length: a phone's narrow view keeps it short, so it reads
+     as an edge, not a band across the content. */
+  .kit-edge-fade,
+  .kit-edge-fade-block {
+    --fade-len: 40px;
+
+    @media (max-width: 639px) {
+      --fade-len: 16px;
+    }
+  }
   @keyframes kit-edge-fade {
     0% {
       --fade-start: 0px;
-      --fade-end: 40px;
+      --fade-end: var(--fade-len);
     }
     6%,
     94% {
-      --fade-start: 40px;
-      --fade-end: 40px;
+      --fade-start: var(--fade-len);
+      --fade-end: var(--fade-len);
     }
     100% {
-      --fade-start: 40px;
+      --fade-start: var(--fade-len);
       --fade-end: 0px;
     }
   }

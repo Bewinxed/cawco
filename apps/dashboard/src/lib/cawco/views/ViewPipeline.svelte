@@ -14,6 +14,7 @@
     type TaskSummary,
   } from "#lib/cawco/project-tasks.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
+  import { IconNeedsYou } from "#lib/icons.js";
 
   let {
     stages,
@@ -41,7 +42,12 @@
   {@const count = counts.get(stage.name) ?? 0}
   <li>
     <div class="row" data-kind={stage.kind}>
-      <span class="name">{stageLabel(stage.name)}</span>
+      <span class="name">
+        {#if stage.kind === "you"}
+          <IconNeedsYou aria-hidden="true" />
+        {/if}
+        <span class="label">{stageLabel(stage.name)}</span>
+      </span>
       <span class="kind">{KIND_LABEL[stage.kind]}</span>
       <span aria-hidden="true" class="track">
         <span class="bar" style:inline-size="{(count / most) * 100}%"></span>
@@ -98,10 +104,23 @@
     text-align: start;
   }
   .name {
-    overflow: hidden;
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    min-inline-size: 0;
     font: var(--type-label);
+  }
+  .label {
+    overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  /* Waiting on you: the needs-you glyph, as the Table and the board say it. */
+  .name :global(svg) {
+    flex: none;
+    inline-size: var(--icon-sm);
+    block-size: var(--icon-sm);
+    color: var(--status-attn-glyph);
   }
   /* A stage's kind is a word of stages.md, set as code. */
   .kind {

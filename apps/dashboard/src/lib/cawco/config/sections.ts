@@ -16,6 +16,8 @@ import {
 
 /** One entry of the Configure rail: where it lives and what it is for. */
 export interface ConfigSection {
+  /** It lists rows the rail counts beside its name; a setting has no count. */
+  counted: boolean;
   group: string;
   hue: string;
   icon: Component;
@@ -42,6 +44,7 @@ export type SectionSlug =
 export const SECTIONS: ConfigSection[] = [
   {
     slug: "rules",
+    counted: true,
     group: "Automation",
     label: "Rules",
     purpose: "What CawCo answers when a session says something",
@@ -50,6 +53,7 @@ export const SECTIONS: ConfigSection[] = [
   },
   {
     slug: "hooks",
+    counted: true,
     group: "Automation",
     label: "Hooks",
     purpose: "Scripts each machine runs at a session's lifecycle events",
@@ -58,6 +62,7 @@ export const SECTIONS: ConfigSection[] = [
   },
   {
     slug: "delegate-types",
+    counted: true,
     group: "Agents",
     label: "Delegate types",
     purpose: "Presets a session's delegate call picks from",
@@ -66,6 +71,7 @@ export const SECTIONS: ConfigSection[] = [
   },
   {
     slug: "subagents",
+    counted: true,
     group: "Agents",
     label: "Subagents",
     purpose: "Agent files written to ~/.claude/agents on every machine",
@@ -74,6 +80,7 @@ export const SECTIONS: ConfigSection[] = [
   },
   {
     slug: "cli-tools",
+    counted: true,
     group: "Tools",
     label: "Command-line tools",
     purpose: "CLIs each machine must have",
@@ -82,6 +89,7 @@ export const SECTIONS: ConfigSection[] = [
   },
   {
     slug: "mcp",
+    counted: true,
     group: "Tools",
     label: "MCP servers",
     purpose: "Servers written to every machine",
@@ -90,6 +98,7 @@ export const SECTIONS: ConfigSection[] = [
   },
   {
     slug: "skills",
+    counted: true,
     group: "Tools",
     label: "Skills & plugins",
     purpose: "Skills, plugins and marketplaces",
@@ -98,6 +107,7 @@ export const SECTIONS: ConfigSection[] = [
   },
   {
     slug: "memory",
+    counted: true,
     group: "Memory",
     label: "Memory files",
     purpose: "CLAUDE.md and the model documents",
@@ -106,6 +116,7 @@ export const SECTIONS: ConfigSection[] = [
   },
   {
     slug: "models",
+    counted: false,
     group: "Hub",
     label: "Models CawCo uses",
     purpose: "OpenRouter and the supervisor server",
@@ -114,14 +125,16 @@ export const SECTIONS: ConfigSection[] = [
   },
   {
     slug: "spend",
+    counted: false,
     group: "Hub",
     label: "Spend",
-    purpose: "What a project's budget does once it is reached",
+    purpose: "Project budgets",
     icon: IconDollar,
     hue: "var(--hue-amber-500)",
   },
   {
     slug: "phone",
+    counted: false,
     group: "Hub",
     label: "Phone",
     purpose: "Pushes to the CawCo app when something needs you",
@@ -130,6 +143,7 @@ export const SECTIONS: ConfigSection[] = [
   },
   {
     slug: "updates",
+    counted: false,
     group: "Hub",
     label: "Updates",
     purpose: "The builds your machines run, and when they install them",

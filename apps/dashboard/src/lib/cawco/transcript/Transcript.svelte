@@ -2794,7 +2794,7 @@
       return "Agent needs your permission";
     }
     if (rows.at(-1)?.kind === "question") {
-      return "Question from the agent";
+      return `Question from ${agentName}`;
     }
     return "";
   });
@@ -2931,7 +2931,7 @@
             {:else if row.kind === "tools"}
               <ToolGroup messages={row.messages} />
             {:else if row.kind === "question"}
-              <QuestionCard message={row.message} />
+              <QuestionCard asker={agentName} message={row.message} />
             {:else if row.kind === "harness"}
               <SystemLine
                 disclosed={disclosureAt(session.instanceId, row.key)}

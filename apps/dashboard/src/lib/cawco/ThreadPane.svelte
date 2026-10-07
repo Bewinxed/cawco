@@ -42,7 +42,7 @@
     startThread,
     submitCommand,
   } from "./client.svelte";
-  import Caw, { LEDGE_LINE } from "./home/Caw.svelte";
+  import Caw, { CAW_HEADROOM, LEDGE_LINE } from "./home/Caw.svelte";
   import CawFace from "./home/CawFace.svelte";
   import {
     listTasks,
@@ -373,7 +373,8 @@
   let offHeight = $state(0);
   /**
    * Room at the transcript's foot for what stands over it: the composer and
-   * Caw's rise above the pill (the part of his slot over the ledge line).
+   * Caw's rise above the pill (his slot over the ledge line, and the
+   * artboard above it his acting may reach).
    * A parked question card stands over the foot and moves nothing, as in a
    * session: the owner, on a parked card, "it shouldn't push the transcript
    * up" (a7443251).
@@ -382,7 +383,9 @@
     if (!leadOn) {
       return view ? `${offHeight}px` : "0px";
     }
-    const rise = seatSize * LEDGE_LINE;
+    // His slot above the pill, and what his acting may draw above it, in
+    // every status: a working Caw reaches higher than his still.
+    const rise = seatSize * (LEDGE_LINE + CAW_HEADROOM);
     return `var(--c-composer-panel) + var(--c-tray-row) + ${rise}px`;
   });
   const offLine = $derived(
@@ -422,12 +425,9 @@
 
 {#snippet parkedPrompts()}
   {#each asks as ask (ask.request.requestId)}
-    <div
-      class="parked"
-      data-flip
-      out:settleInto={ask.request.toolUseId}
-    >
+    <div class="parked" data-flip out:settleInto={ask.request.toolUseId}>
       <Prompt
+        asker="Caw"
         onanswer={(result) => onanswer(ask, result)}
         request={ask.request}
       />

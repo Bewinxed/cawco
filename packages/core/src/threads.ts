@@ -143,12 +143,17 @@ export const capHolds = (
 ): boolean => cap?.reached === true && now < cap.resetsAt;
 
 /**
- * What a project has spent, as `GET /api/projects/:id/spend` answers it: the
- * usage its sessions' machines reported, in dollars, read now. Days and
- * months are the hub's own (its zone, as every "today" CawCo shows).
+ * What a project has spent, as `GET /api/projects/:id/spend` answers it, in
+ * dollars, read now. Each part has one source: its Caw's turns as they were
+ * booked (each turn's cost, from its result), its attempts' and other
+ * sessions' usage as their machines reported it (a lead's sessions are not
+ * counted twice). The parts add up: `monthUsd` is Caw's month, every
+ * attempt's month and the others' month; Caw's month is its threads' month
+ * and the turns no thread woke. Days and months are the hub's own (its
+ * zone, as every "today" CawCo shows). What a project's cap counts.
  */
 export interface ProjectSpend {
-  /** Every attempt at a task, newest activity first: its sessions' spend summed. */
+  /** Every task attempted this month, newest activity first: its attempts' month summed. */
   attempts: {
     /** How many attempts the task has had. */
     attempts: number;
@@ -166,18 +171,19 @@ export interface ProjectSpend {
   budget: { minutes?: number; turns?: number; usd?: number } | null;
   /** The project's spend cap; null: it has none, and no limit. */
   cap: ProjectCap | null;
-  /** The project's Caw (lead) sessions alone. */
-  caw: { monthUsd: number; todayUsd: number };
+  /** The project's Caw: its booked turns; `unthreadedMonthUsd`, this month's no thread woke. */
+  caw: { monthUsd: number; todayUsd: number; unthreadedMonthUsd: number };
   /** What reaching a cap does when the project sets nothing: the fleet's default. */
   fleetOnCap: OnCap;
   /** The first of this month, ms epoch. */
   monthStart: number;
   monthUsd: number;
+  /** Every session of the project that is neither its Caw nor an attempt. */
+  others: { monthUsd: number; todayUsd: number };
   /**
-   * Each thread, newest first, with how many times it woke Caw (your
-   * messages and events in it) and what the turns it woke cost: each
-   * turn's share of the lead session's cumulative cost, booked to the
-   * thread that woke it.
+   * Each thread that moved this month, newest first: how many times it
+   * woke Caw this month (your messages and events) and what those turns
+   * cost (each turn's cost, booked to the thread that woke it).
    */
   threads: {
     id: string;

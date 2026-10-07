@@ -880,9 +880,11 @@
     <Sidebar.Group class={GROUP}>
       <Sidebar.Menu aria-label="Places" class={MENU} {@attach highlight(PILL)}>
         <Sidebar.MenuItem>
+          <!-- The board is the place while it is on screen; with a
+               conversation open, its row is the one selection. -->
           <Sidebar.MenuButton
             class={NAV_ROW}
-            isActive={path.startsWith("/session")}
+            isActive={path.startsWith("/session") && activeSession === null}
           >
             {#snippet child({
               props,

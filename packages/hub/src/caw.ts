@@ -215,10 +215,10 @@ export interface CawDeps {
     DbShape,
     | "addThreadMessage"
     | "allThreads"
-    | "addThreadSpend"
+    | "bookCawTurn"
     | "createThread"
     | "getInstancesByIds"
-    | "leadSpendUsd"
+    | "cawSpentSince"
     | "newestThread"
     | "project"
     | "projectSpend"
@@ -588,7 +588,7 @@ export const createCaw = ({
       model: project.cawModel,
       leadInstanceId: project.leadInstanceId,
       problem: problemOf(project),
-      spendUsd: db.leadSpendUsd(projectId),
+      spendUsd: db.cawSpentSince(projectId, 0),
     };
   };
 
@@ -722,11 +722,17 @@ export const createCaw = ({
         todayUsd: spent.todayUsd,
         monthUsd: spent.monthUsd,
         caw: spent.caw,
+        others: spent.others,
         budget: project.budget ?? null,
         cap: caps.capOf(project),
         fleetOnCap: db.spendOnCap(),
-        threads: spent.threads,
-        attempts: [...byTask.values()].sort((a, b) => b.lastAt - a.lastAt),
+        // This month's ledger: what moved this month, and nothing else.
+        threads: spent.threads.filter(
+          (thread) => thread.usd > 0 || thread.wakes > 0
+        ),
+        attempts: [...byTask.values()]
+          .filter((attempt) => attempt.usd > 0 || attempt.lastAt >= monthStart)
+          .sort((a, b) => b.lastAt - a.lastAt),
       };
     },
 
@@ -1018,8 +1024,12 @@ export const createCaw = ({
       const threadId =
         turns.get(instanceId)?.threadId ?? answered.get(instanceId);
       answered.delete(instanceId);
-      if (threadId && spent > 0) {
-        db.addThreadSpend(threadId, spent);
+      if (spent > 0) {
+        db.bookCawTurn({
+          projectId: project.id,
+          threadId: threadId ?? null,
+          usd: spent,
+        });
       }
     },
 

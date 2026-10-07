@@ -103,9 +103,7 @@
                   ></span
                 >
               {/if}
-              {#if section.slug !== "models" &&
-                section.slug !== "phone" &&
-                section.slug !== "updates"}
+              {#if section.counted}
                 <!-- The figure is its own element, not the dash's text
                      rewritten: it arrives in place rather than moving in. -->
                 {#if count === null}

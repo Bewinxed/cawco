@@ -247,14 +247,21 @@
 </div>
 
 <style>
+  /* The pages' one gutter: the ledger's asymmetric pair (DESIGN.md), as
+     the project page stands on it, the column from that edge. */
   .page {
     flex: 1 1 auto;
     overflow-y: auto;
-    padding: var(--space-6);
+    padding: var(--space-6) var(--space-6) var(--space-6) var(--space-7);
     min-width: 0;
   }
+  @media (max-width: 899px) {
+    .page {
+      padding-inline: var(--space-5);
+    }
+  }
   .col {
-    margin: 0 auto;
+    margin: 0;
     max-width: 1100px;
     display: flex;
     flex-direction: column;
@@ -299,7 +306,7 @@
      only change what follows them, so they stand after the Limits block. */
   @media (max-width: 639px) {
     .page {
-      padding: var(--space-4) var(--space-3);
+      padding: var(--space-4) var(--space-5);
     }
     .top {
       display: contents;

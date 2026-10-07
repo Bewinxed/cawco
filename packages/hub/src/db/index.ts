@@ -77,6 +77,7 @@ import {
   canvasChoices,
   canvases,
   capabilityUsageDaily,
+  cawTurns,
   claudeContextWindows,
   completedTurns,
   continuations,
@@ -317,8 +318,6 @@ export interface DbShape {
         >
       >
   ) => { thread: ThreadRow; message: ThreadMessageRow };
-  /** Adds what a Caw turn the thread woke cost to the thread's spend. */
-  readonly addThreadSpend: (threadId: string, usd: number) => void;
   /** A machine's last-known tool status by id; empty for one that never reported. */
   readonly agentAddressContract: (machineId: string) => boolean;
   readonly agentHarnesses: (machineId: string) => HarnessReport[] | undefined;
@@ -333,6 +332,13 @@ export interface DbShape {
   ) => void;
   /** Records ownership before sending a create; a restart discards anything still unfiled. */
   readonly beginWorkspaceCreate: (id: string, machineId: string) => void;
+  /** Adds what a Caw turn the thread woke cost to the thread's spend. */
+  /** Books what one Caw turn cost, to the thread that woke it (null: none did). */
+  readonly bookCawTurn: (turn: {
+    projectId: string;
+    threadId: string | null;
+    usd: number;
+  }) => void;
   readonly canvas: (id: string) => CanvasRow | undefined;
   readonly canvasChoices: (canvasId: string) => CanvasChoiceRow[];
   /** Whether nothing has been counted yet — the backfill's cue. */
@@ -341,6 +347,9 @@ export interface DbShape {
   readonly capabilityUsageSince: (
     day: string
   ) => (typeof capabilityUsageDaily.$inferSelect)[];
+  /** Dollars a project's Caw sessions have spent, from the usage their machines report. */
+  /** Dollars the project's Caw turns have cost since `since` (ms epoch). */
+  readonly cawSpentSince: (projectId: string, since: number) => number;
   /** Claims one harness completion before any turn-end side effect. */
   readonly claimCompletedTurn: (
     instanceId: string,
@@ -511,8 +520,6 @@ export interface DbShape {
   ) => void;
   /** The canvas a session showed last, for `read_choices` after its preview closed. */
   readonly latestCanvasOf: (instanceId: string) => CanvasRow | undefined;
-  /** Dollars a project's Caw sessions have spent, from the usage their machines report. */
-  readonly leadSpendUsd: (projectId: string) => number;
   /** Keys a send to the id its harness stores it under. */
   readonly linkSend: (uuid: string, harnessId: string) => void;
   /**
@@ -780,11 +787,18 @@ export interface DbShape {
    * Caw's; each attempt at a task with its session's spend (oldest first);
    * each thread with how many messages in it woke Caw (newest first).
    */
+  /**
+   * The project's spend over today and this month, each part from its one
+   * source: Caw's booked turns (by thread, and those no thread woke), every
+   * attempt's session and every other session from the usage it reported.
+   * The parts add up to the totals.
+   */
   readonly projectSpend: (
     projectId: string,
     since: { monthStart: number; todayStart: number }
   ) => {
-    caw: { monthUsd: number; todayUsd: number };
+    caw: { monthUsd: number; todayUsd: number; unthreadedMonthUsd: number };
+    others: { monthUsd: number; todayUsd: number };
     items: {
       at: number;
       state: string;
@@ -803,7 +817,10 @@ export interface DbShape {
     }[];
     todayUsd: number;
   };
-  /** Dollars every session of the project has cost since `since` (ms epoch). */
+  /**
+   * Dollars the project has cost since `since` (ms epoch): its Caw's booked
+   * turns and every other session's reported usage. What its cap counts.
+   */
   readonly projectSpentSince: (projectId: string, since: number) => number;
   /**
    * Projects whose remote is not known yet, each with a checkout on
@@ -1595,6 +1612,15 @@ const make = (path: string): DbShape => {
     ...publicColumns
   } = getTableColumns(instances);
   const { tooling: _tooling, ...boardColumns } = publicColumns;
+  /** Dollars the project's booked Caw turns cost since `since` (ms epoch). */
+  const cawSince = (projectId: string, since: number): number =>
+    db
+      .select({ usd: sql<number>`coalesce(sum(${cawTurns.usd}), 0)` })
+      .from(cawTurns)
+      .where(
+        and(eq(cawTurns.projectId, projectId), sql`${cawTurns.at} >= ${since}`)
+      )
+      .get()?.usd ?? 0;
   const listedInstances = () =>
     and(
       eq(instances.machineRemoved, false),
@@ -4077,7 +4103,8 @@ const make = (path: string): DbShape => {
         .where(eq(spendSettings.id, "spend"))
         .get()?.onCap ?? "both",
     projectSpentSince: (projectId, since) =>
-      db
+      cawSince(projectId, since) +
+      (db
         .select({
           usd: sql<number>`coalesce(sum(${usageBuckets.costUsd}), 0)`,
         })
@@ -4086,49 +4113,35 @@ const make = (path: string): DbShape => {
         .where(
           and(
             eq(instances.projectId, projectId),
+            sql`coalesce(${instances.role}, '') <> 'lead'`,
             sql`${usageBuckets.start} >= ${since}`
           )
         )
-        .get()?.usd ?? 0,
-    addThreadSpend: (threadId, usd) => {
-      db.update(projectThreads)
-        .set({ spendUsd: sql`${projectThreads.spendUsd} + ${usd}` })
-        .where(eq(projectThreads.id, threadId))
+        .get()?.usd ?? 0),
+    bookCawTurn: ({ projectId, threadId, usd }) => {
+      db.insert(cawTurns)
+        .values({
+          id: crypto.randomUUID(),
+          projectId,
+          threadId,
+          usd,
+          at: new Date(),
+        })
         .run();
     },
-    leadSpendUsd: (projectId) =>
-      db
-        .select({
-          usd: sql<number>`coalesce(sum(${usageBuckets.costUsd}), 0)`,
-        })
-        .from(usageBuckets)
-        .innerJoin(instances, eq(instances.sessionId, usageBuckets.sessionId))
-        .where(
-          and(eq(instances.projectId, projectId), eq(instances.role, "lead"))
-        )
-        .get()?.usd ?? 0,
+    cawSpentSince: (projectId, since) => cawSince(projectId, since),
     projectSpend: (projectId, { todayStart, monthStart }) => {
-      const cost = (when: ReturnType<typeof sql>) =>
-        sql<number>`coalesce(sum(case when ${when} then ${usageBuckets.costUsd} else 0 end), 0)`;
-      const lead = sql`${instances.role} = 'lead'`;
-      const totals = db
+      // Caw: his booked turns.
+      const caw = db
         .select({
-          today: cost(sql`${usageBuckets.start} >= ${todayStart}`),
-          month: cost(sql`${usageBuckets.start} >= ${monthStart}`),
-          cawToday: cost(
-            sql`${lead} and ${usageBuckets.start} >= ${todayStart}`
-          ),
-          cawMonth: cost(
-            sql`${lead} and ${usageBuckets.start} >= ${monthStart}`
-          ),
+          today: sql<number>`coalesce(sum(case when ${cawTurns.at} >= ${todayStart} then ${cawTurns.usd} else 0 end), 0)`,
+          month: sql<number>`coalesce(sum(case when ${cawTurns.at} >= ${monthStart} then ${cawTurns.usd} else 0 end), 0)`,
+          unthreaded: sql<number>`coalesce(sum(case when ${cawTurns.at} >= ${monthStart} and ${cawTurns.threadId} is null then ${cawTurns.usd} else 0 end), 0)`,
         })
-        .from(usageBuckets)
-        .innerJoin(instances, eq(instances.sessionId, usageBuckets.sessionId))
-        .where(eq(instances.projectId, projectId))
+        .from(cawTurns)
+        .where(eq(cawTurns.projectId, projectId))
         .get();
-      // Each attempt with what its session cost: joined and summed per item,
-      // so every column is the query's own (a correlated sub-select renders
-      // its columns unqualified and mistakes one table's id for another's).
+      // Each attempt with what its session reported this month.
       const items = db
         .select({
           taskId: workItems.taskId,
@@ -4137,7 +4150,9 @@ const make = (path: string): DbShape => {
           state: workItems.state,
           createdAt: workItems.createdAt,
           endedAt: workItems.endedAt,
-          usd: sql<number>`coalesce(sum(${usageBuckets.costUsd}), 0)`,
+          instanceId: workItems.instanceId,
+          today: sql<number>`coalesce(sum(case when ${usageBuckets.start} >= ${todayStart} then ${usageBuckets.costUsd} else 0 end), 0)`,
+          usd: sql<number>`coalesce(sum(case when ${usageBuckets.start} >= ${monthStart} then ${usageBuckets.costUsd} else 0 end), 0)`,
         })
         .from(workItems)
         .leftJoin(instances, eq(instances.id, workItems.instanceId))
@@ -4148,40 +4163,108 @@ const make = (path: string): DbShape => {
         .groupBy(workItems.id)
         .orderBy(asc(workItems.createdAt))
         .all();
-      // Each thread with how many of its messages woke Caw: yours and events.
-      const wakes = db
+      // Every other session of the project (not a lead, not an attempt).
+      const attemptSessions = items.flatMap((item) =>
+        item.instanceId ? [item.instanceId] : []
+      );
+      const others = db
+        .select({
+          today: sql<number>`coalesce(sum(case when ${usageBuckets.start} >= ${todayStart} then ${usageBuckets.costUsd} else 0 end), 0)`,
+          month: sql<number>`coalesce(sum(case when ${usageBuckets.start} >= ${monthStart} then ${usageBuckets.costUsd} else 0 end), 0)`,
+        })
+        .from(usageBuckets)
+        .innerJoin(instances, eq(instances.sessionId, usageBuckets.sessionId))
+        .where(
+          and(
+            eq(instances.projectId, projectId),
+            sql`coalesce(${instances.role}, '') <> 'lead'`,
+            attemptSessions.length > 0
+              ? notInArray(instances.id, attemptSessions)
+              : undefined
+          )
+        )
+        .get();
+      // Each thread: the turns it woke this month, and how often it woke Caw
+      // (yours and events). Grouped per thread and merged here: a correlated
+      // sub-select renders its columns unqualified and binds `id` to the
+      // inner table's own.
+      const turnsBy = new Map(
+        db
+          .select({
+            threadId: cawTurns.threadId,
+            usd: sql<number>`coalesce(sum(${cawTurns.usd}), 0)`,
+          })
+          .from(cawTurns)
+          .where(
+            and(
+              eq(cawTurns.projectId, projectId),
+              isNotNull(cawTurns.threadId),
+              sql`${cawTurns.at} >= ${monthStart}`
+            )
+          )
+          .groupBy(cawTurns.threadId)
+          .all()
+          .map((row) => [row.threadId as string, row.usd])
+      );
+      const wakesBy = new Map(
+        db
+          .select({
+            threadId: threadMessages.threadId,
+            wakes: sql<number>`count(*)`,
+          })
+          .from(threadMessages)
+          .innerJoin(
+            projectThreads,
+            eq(projectThreads.id, threadMessages.threadId)
+          )
+          .where(
+            and(
+              eq(projectThreads.projectId, projectId),
+              ne(threadMessages.author, "caw"),
+              sql`${threadMessages.createdAt} >= ${monthStart}`
+            )
+          )
+          .groupBy(threadMessages.threadId)
+          .all()
+          .map((row) => [row.threadId, row.wakes])
+      );
+      const threads = db
         .select({
           id: projectThreads.id,
           title: projectThreads.title,
           lastAt: projectThreads.updatedAt,
-          usd: projectThreads.spendUsd,
-          wakes: sql<number>`count(${threadMessages.id})`,
         })
         .from(projectThreads)
-        .leftJoin(
-          threadMessages,
-          and(
-            eq(threadMessages.threadId, projectThreads.id),
-            ne(threadMessages.author, "caw")
-          )
-        )
         .where(eq(projectThreads.projectId, projectId))
-        .groupBy(projectThreads.id)
         .orderBy(desc(projectThreads.updatedAt))
-        .all();
+        .all()
+        .map((row) => ({
+          ...row,
+          usd: turnsBy.get(row.id) ?? 0,
+          wakes: wakesBy.get(row.id) ?? 0,
+        }));
+      const attemptsToday = items.reduce((sum, item) => sum + item.today, 0);
+      const attemptsMonth = items.reduce((sum, item) => sum + item.usd, 0);
+      const cawToday = caw?.today ?? 0;
+      const cawMonth = caw?.month ?? 0;
       return {
-        todayUsd: totals?.today ?? 0,
-        monthUsd: totals?.month ?? 0,
+        todayUsd: cawToday + attemptsToday + (others?.today ?? 0),
+        monthUsd: cawMonth + attemptsMonth + (others?.month ?? 0),
         caw: {
-          todayUsd: totals?.cawToday ?? 0,
-          monthUsd: totals?.cawMonth ?? 0,
+          todayUsd: cawToday,
+          monthUsd: cawMonth,
+          unthreadedMonthUsd: caw?.unthreaded ?? 0,
         },
+        others: { todayUsd: others?.today ?? 0, monthUsd: others?.month ?? 0 },
         items: items.map((item) => ({
-          ...item,
           taskId: item.taskId as string,
+          title: item.title,
+          type: item.type,
+          state: item.state,
+          usd: item.usd,
           at: (item.endedAt ?? item.createdAt).getTime(),
         })),
-        threads: wakes.map((row) => ({
+        threads: threads.map((row) => ({
           ...row,
           lastAt: row.lastAt.getTime(),
         })),

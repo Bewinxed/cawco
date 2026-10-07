@@ -48,8 +48,11 @@
   let {
     request,
     onanswer,
+    asker = "the agent",
   }: {
     request: PendingPermission;
+    /** Who asks, as the conversation names its agent ("Caw" in a thread). */
+    asker?: string;
     /**
      * Submits this card's answer and hands back the id of the command it went
      * out as — what the wait line reads its stage from. `null` when nothing
@@ -289,7 +292,7 @@
 {/snippet}
 
 <section
-  aria-label={questions ? "Question from the agent" : "Permission request"}
+  aria-label={questions ? `Question from ${asker}` : "Permission request"}
   class="hitl"
   class:arriving={arriving}
 >

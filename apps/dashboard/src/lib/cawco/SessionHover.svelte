@@ -382,7 +382,7 @@
             </p>
           {/if}
           {#if spent !== undefined}
-            <p class="spent num">{money(spent)} spent</p>
+            <p class="spent num">{money(spent)} this month</p>
           {/if}
         {:else if runId}
           <!-- A workflow run's card: its steps under it, then the live tail of

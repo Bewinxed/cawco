@@ -51,9 +51,9 @@
   });
   /** What a cap holds back, as the card's line says it. */
   const HOLDS = {
-    pause: "No attempt starts",
-    quiet: "Caw is not woken",
-    both: "No attempt starts and Caw is not woken",
+    pause: "attempts paused",
+    quiet: "Caw paused",
+    both: "attempts and Caw paused",
   } as const;
   /** A permission answered on the card, under the `answer` choice. */
   const answerable = $derived(
@@ -131,8 +131,7 @@
   <p class="ask">
     {#if item.kind === "cap"}
       {usd(item.cap.spentUsd)}
-      of {usd(item.cap.usd)} this {item.cap.period}.
-      {HOLDS[item.cap.onCap]}.
+      of {usd(item.cap.usd)} this {item.cap.period} · {HOLDS[item.cap.onCap]}
     {:else}
       {item.kind === "run" ? "Waiting on your answer" : item.ask}
     {/if}

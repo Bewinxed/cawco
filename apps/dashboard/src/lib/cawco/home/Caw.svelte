@@ -88,6 +88,12 @@
   /** The files' 592 px artboard and the 512 px still box in it, at (43, 40). */
   const ARTBOARD = 592;
   const BOX = { x: 43, y: 40, side: 512 };
+  /**
+   * How far his acting can reach above his still's box, as a share of its
+   * side: the artboard's top, where a status file may draw (a working
+   * flourish, a raised wing).
+   */
+  export const CAW_HEADROOM = BOX.y / BOX.side;
 
   /**
    * The file's `pixel` for a Caw whose still box spans `devicePixels`: one
