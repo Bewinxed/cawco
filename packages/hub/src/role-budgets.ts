@@ -72,6 +72,7 @@ export const measureRoles = (): RoleSize[] => {
     instanceById: (id) => rows.find((row) => row.id === id),
     forward: () => Promise.resolve(),
     credentialActor: () => undefined,
+    knownCredential: () => false,
     // Only the definitions are read: nothing is called.
     tasks: {} as Tasks,
     projectFromSession: () => Promise.reject(new Error("measuring")),

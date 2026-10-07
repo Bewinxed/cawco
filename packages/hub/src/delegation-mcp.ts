@@ -35,6 +35,16 @@ const LONG_CALLS: Record<string, string> = {
   start_session: "Waiting for the machine to start the session",
 };
 
+/** What a session credential a call names reads as once it is replaced. */
+export const REDACTED_CREDENTIAL = "[cawco credential]";
+
+/**
+ * A token with a session credential's shape (32 random bytes, base64url:
+ * session-identity.ts), standing on its own in the text around it.
+ */
+const CREDENTIAL_TOKEN =
+  /(?<![A-Za-z0-9_-])[A-Za-z0-9_-]{43}(?![A-Za-z0-9_-])/g;
+
 /** What an admin write's progress heartbeat says while the person decides. */
 const ASKING = "Waiting for the person to approve this fleet-settings change";
 
@@ -64,6 +74,8 @@ export function createDelegationMcp(options: {
   ledBy?: (instanceId: string, leadId: string) => boolean;
   forward: (envelope: Envelope, actor: InstanceRow) => Promise<void>;
   credentialActor: (authorization: string | null) => InstanceRow | undefined;
+  /** Whether `token` is a session credential the hub holds (by its hash). */
+  knownCredential: (token: string) => boolean;
   tools?: ToolFactory;
   /** Project tasks, for the `task_*` and `todo_write` tools; without it they are not offered. */
   tasks?: Tasks;
@@ -198,6 +210,36 @@ export function createDelegationMcp(options: {
       throw new Error("__cawco carries no session credential");
     }
     return credential;
+  };
+
+  /**
+   * `value` with every token shaped like a session credential that hashes to
+   * one the hub holds replaced by {@link REDACTED_CREDENTIAL}, at any depth.
+   */
+  const scrubCredentials = <T>(value: T): { value: T; redacted: number } => {
+    let redacted = 0;
+    const scrub = (node: unknown): unknown => {
+      if (typeof node === "string") {
+        return node.replace(CREDENTIAL_TOKEN, (token) => {
+          if (!options.knownCredential(token)) {
+            return token;
+          }
+          redacted += 1;
+          return REDACTED_CREDENTIAL;
+        });
+      }
+      if (Array.isArray(node)) {
+        return node.map(scrub);
+      }
+      if (node !== null && typeof node === "object") {
+        return Object.fromEntries(
+          Object.entries(node).map(([key, child]) => [key, scrub(child)])
+        );
+      }
+      return node;
+    };
+    const scrubbed = scrub(value) as T;
+    return { value: scrubbed, redacted };
   };
 
   /**
@@ -400,7 +442,10 @@ export function createDelegationMcp(options: {
   ): Promise<CallToolResult> => {
     try {
       // Routing context belongs to the bridge, not to a tool's input schema.
-      const { __cawco: _context, ...input } = args;
+      const { __cawco: _context, ...asked } = args;
+      // No session credential a call names is stored or passed on: every
+      // tool, by MCP or the REST door, runs on arguments with it replaced.
+      const { value: input, redacted } = scrubCredentials(asked);
       const catalog = await catalogCall(
         binding,
         name,
@@ -409,9 +454,19 @@ export function createDelegationMcp(options: {
         authorization
       );
       if (catalog) {
+        if (redacted > 0) {
+          console.warn(
+            `[delegation] ${binding ?? "an unbound caller"} passed a session credential to ${name}; it was replaced before the call ran`
+          );
+        }
         return catalog;
       }
       const actor = actorOf(binding, args, authorization);
+      if (redacted > 0) {
+        console.warn(
+          `[delegation] ${actor.id} passed a session credential to ${name}; it was replaced before the call ran`
+        );
+      }
       // The one place a role holds: what it does not list, it cannot call.
       const role = roleOf(actor);
       if (!allows(role, name)) {

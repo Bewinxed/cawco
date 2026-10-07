@@ -7807,6 +7807,8 @@ export const createServer = (
         ? db.getInstancesByIds([identity.instanceId])[0]
         : undefined;
     },
+    knownCredential: (token) =>
+      identities.resolve(`Bearer ${token}`) !== undefined,
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one in-process dispatcher replaces six relay routes, retaining their ordered ownership and settlement checks.
     forward: async (envelope, actor) => {
       // The MCP resolver supplies the caller separately, never from provenance
