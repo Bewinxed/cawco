@@ -41,11 +41,18 @@ export const delegationMcp = (instanceId: string, credential?: string) => ({
   timeout: DELEGATION_CALL_TIMEOUT_MS,
 });
 
-export async function delegationTools(instanceId?: string) {
+/**
+ * The CawCo tools a session lists. `lister: "pi"` says this is the session's
+ * own listing (pi's host), which the hub remembers so it can tell the session
+ * when its list changes; a listing for anyone else is just read.
+ */
+export async function delegationTools(instanceId?: string, lister?: "pi") {
+  const query = new URLSearchParams({
+    ...(instanceId ? { instanceId } : {}),
+    ...(lister ? { lister } : {}),
+  }).toString();
   const response = await fetch(
-    harnessMcpUrl(
-      `/api/delegation/tools${instanceId ? `?instanceId=${encodeURIComponent(instanceId)}` : ""}`
-    ),
+    harnessMcpUrl(`/api/delegation/tools${query ? `?${query}` : ""}`),
     {
       signal: AbortSignal.timeout(5000),
     }

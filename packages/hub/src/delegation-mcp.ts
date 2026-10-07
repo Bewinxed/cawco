@@ -89,6 +89,8 @@ export function createDelegationMcp(options: {
   /** What a listing last answered `tools/list` with, as a hash (db `toolListing`). */
   toolListing: (listing: string) => string | undefined;
   putToolListing: (listing: string, toolsHash: string) => void;
+  /** Tells a pi session's machine that the session's CawCo tool list changed. */
+  refreshTools: (row: InstanceRow) => void;
   tools?: ToolFactory;
   /** Project tasks, for the `task_*` and `todo_write` tools; without it they are not offered. */
   tasks?: Tasks;
@@ -600,7 +602,26 @@ export function createDelegationMcp(options: {
         );
       });
     }
+    // A pi session lists over REST, from its own host, and hears through its
+    // machine: the same check, the same once per change.
+    for (const row of options.instances()) {
+      if (row.harness !== "pi" || row.status !== "running") {
+        continue;
+      }
+      const last = options.toolListing(row.id);
+      const now = toolsHash(row.id);
+      if (last === undefined || last === now || hostTold.get(row.id) === now) {
+        continue;
+      }
+      hostTold.set(row.id, now);
+      console.info(
+        `[delegation-mcp] tools changed -> ${row.id} (pi): its host lists them again`
+      );
+      options.refreshTools(row);
+    }
   };
+  /** The list each pi session's host was last told to fetch again. */
+  const hostTold = new Map<string, string>();
 
   let reconcileTimer: ReturnType<typeof setTimeout> | undefined;
   /** Something a tool list depends on may have moved: one look, debounced. */
@@ -836,14 +857,19 @@ export function createDelegationMcp(options: {
     );
   };
   /** What a session is listed, for the REST door (`cawco tools`); without one, the superset. */
-  const list = (instanceId?: string) => {
+  /** `own`: the session's own harness listing it (pi's host), remembered like a `tools/list`. */
+  const list = (instanceId?: string, own = false) => {
     const actor = instanceId
       ? options.instances().find((row) => row.id === instanceId)
       : undefined;
     if (instanceId !== undefined && !actor) {
       throw new Error(`No session ${instanceId} on this hub.`);
     }
-    return { tools: toolsFor(actor).map(listed) };
+    const answered = toolsFor(actor).map(listed);
+    if (own && actor) {
+      options.putToolListing(actor.id, hashOf(answered));
+    }
+    return { tools: answered };
   };
   const close = () => {
     unwatchFile(moduleUrl);

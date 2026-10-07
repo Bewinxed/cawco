@@ -74,6 +74,7 @@ export const measureRoles = (): RoleSize[] => {
     credentialActor: () => undefined,
     knownCredential: () => false,
     toolListing: () => undefined,
+    refreshTools: () => undefined,
     putToolListing: () => undefined,
     // Only the definitions are read: nothing is called.
     tasks: {} as Tasks,

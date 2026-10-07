@@ -40,6 +40,12 @@ export const INSTALL_SESSION_CREDENTIAL = "installSessionCredential";
  * the hub acknowledges it. The session is not published when it cannot.
  */
 export const VERIFY_SESSION_CREDENTIAL = "verifySessionCredential";
+/**
+ * The hub's word that a session's CawCo tool list changed, for a harness that
+ * lists its CawCo tools itself rather than over MCP (pi): it lists them again
+ * and replaces them for its next turn.
+ */
+export const CONTROL_REFRESH_CAWCO_TOOLS = "refreshCawcoTools";
 export const LIVE_CREDENTIAL_ENROLLMENT_REFUSAL =
   "Live enrollment refused: this session has other dynamic MCP servers, so installing would restart them. It enrolls on its next fresh start.";
 

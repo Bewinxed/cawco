@@ -86,6 +86,7 @@ import {
   CONTROL_LIST_SESSIONS,
   CONTROL_MODEL_CATALOG,
   CONTROL_READ_SESSION_CONTEXT,
+  CONTROL_REFRESH_CAWCO_TOOLS,
   CONTROL_RELOAD_SKILLS,
   CONTROL_RUN_COMMAND,
   CONTROL_SEARCH_TRANSCRIPTS,
@@ -7818,6 +7819,34 @@ export const createServer = (
       identities.resolve(`Bearer ${token}`) !== undefined,
     toolListing: db.toolListing,
     putToolListing: db.putToolListing,
+    refreshTools: (row) => {
+      const agent = registry.agent(row.machineId);
+      if (!agent) {
+        return;
+      }
+      const requestId = crypto.randomUUID();
+      // biome-ignore lint/complexity/noVoid: the host's refresh is the session's; the hub only logs how it went
+      void awaitReply(row.machineId, requestId, 60_000, () =>
+        agent.send({
+          verb: "control",
+          machineId: row.machineId,
+          instanceId: row.id,
+          requestId,
+          payload: {
+            instanceId: row.id,
+            requestId,
+            method: CONTROL_REFRESH_CAWCO_TOOLS,
+            args: [],
+          },
+        } satisfies Envelope<ControlPayload>)
+      ).then((reply) => {
+        if (reply === "timeout" || !reply.ok) {
+          console.warn(
+            `[delegation-mcp] ${row.id} (pi) did not refresh its tools: ${reply === "timeout" ? "no answer" : (reply.error ?? "refused")}`
+          );
+        }
+      });
+    },
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one in-process dispatcher replaces six relay routes, retaining their ordered ownership and settlement checks.
     forward: async (envelope, actor) => {
       // The MCP resolver supplies the caller separately, never from provenance
@@ -8270,9 +8299,15 @@ export const createServer = (
         "/api/delegation/tools",
         {
           ...hidden,
-          query: t.Object({ instanceId: t.Optional(t.String()) }),
+          query: t.Object({
+            instanceId: t.Optional(t.String()),
+            // pi's host listing its own session's tools: remembered, so the
+            // session hears when its list changes.
+            lister: t.Optional(t.Literal("pi")),
+          }),
         },
-        ({ query }) => delegationMcp.list(query.instanceId)
+        ({ query }) =>
+          delegationMcp.list(query.instanceId, query.lister === "pi")
       )
       // Preparation only: enforcement is a separate cutover after every live row ACKs.
       .get(

@@ -10,6 +10,7 @@ import {
   CAWCO_ENV,
   CONTROL_CONTEXT_USAGE,
   CONTROL_INTERRUPT,
+  CONTROL_REFRESH_CAWCO_TOOLS,
   CONTROL_SET_MODEL,
   CONTROL_SUPPORTED_COMMANDS,
   CONTROL_SUPPORTED_MODELS,
@@ -23,8 +24,13 @@ import {
   createAgentSession,
   createBashToolDefinition,
   createLocalBashOperations,
+  DefaultResourceLoader,
   defineTool,
+  type ExtensionAPI,
+  type ExtensionFactory,
+  getAgentDir,
   SessionManager,
+  SettingsManager,
   type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 import { type Boundary, boundaryCommand } from "../boundary";
@@ -57,7 +63,7 @@ const piHandoffTools = async (
   instanceId: string,
   credential: { value?: string }
 ): Promise<ToolDefinition[]> =>
-  (await delegationTools(instanceId)).map((tool) =>
+  (await delegationTools(instanceId, "pi")).map((tool) =>
     defineTool({
       name: tool.name,
       label: tool.name,
@@ -68,12 +74,67 @@ const piHandoffTools = async (
     })
   );
 
+/**
+ * The session's CawCo tools, registered through pi's own extension API so
+ * they can be replaced on the live session: `pi.registerTool` stores a tool
+ * by name and refreshes the session's registry (`runtime.refreshTools()`,
+ * extensions/loader.js), and pi "appends tool and prompt changes before the
+ * next model request" (docs/extensions.md). A tool the hub no longer lists is
+ * re-registered hidden, pi's way to withdraw one: "tools cannot be
+ * unregistered".
+ */
+class CawcoTools {
+  #api: ExtensionAPI | undefined;
+  readonly #registered = new Map<string, ToolDefinition>();
+  readonly #instanceId: string;
+  readonly #credential: { value?: string };
+
+  constructor(instanceId: string, credential: { value?: string }) {
+    this.#instanceId = instanceId;
+    this.#credential = credential;
+  }
+
+  /** The inline extension: holds pi's API and registers the first list. */
+  extension(first: ToolDefinition[]): ExtensionFactory {
+    return (pi) => {
+      this.#api = pi;
+      this.#register(first);
+    };
+  }
+
+  #register(tools: ToolDefinition[]): void {
+    const api = this.#api;
+    if (!api) {
+      throw new Error("pi has not loaded the CawCo tools extension.");
+    }
+    const listed = new Set(tools.map((tool) => tool.name));
+    for (const tool of tools) {
+      api.registerTool(tool);
+      this.#registered.set(tool.name, tool);
+    }
+    for (const [name, tool] of this.#registered) {
+      if (!listed.has(name)) {
+        api.registerTool({ ...tool, exposure: "hidden" });
+        this.#registered.delete(name);
+      }
+    }
+  }
+
+  /** Lists the session's CawCo tools again and replaces them for its next turn. */
+  async refresh(): Promise<number> {
+    const tools = await piHandoffTools(this.#instanceId, this.#credential);
+    this.#register(tools);
+    return tools.length;
+  }
+}
+
 class PiSession implements HarnessSession {
   readonly harness = "pi" as const;
   sessionId: string | null = null;
   readonly #ctx: HarnessContext;
   readonly #session: AgentSession;
   readonly #credential: { value?: string };
+  readonly #tools: CawcoTools;
   #busy = false;
   readonly #unread: string[] = [];
   #reading: string | undefined;
@@ -99,11 +160,13 @@ class PiSession implements HarnessSession {
   constructor(
     ctx: HarnessContext,
     session: AgentSession,
-    credential: { value?: string }
+    credential: { value?: string },
+    tools: CawcoTools
   ) {
     this.#ctx = ctx;
     this.#session = session;
     this.#credential = credential;
+    this.#tools = tools;
     this.sessionId = session.sessionId;
     session.subscribe((event) => this.#handle(event));
     ctx.session(session.sessionId);
@@ -354,6 +417,11 @@ class PiSession implements HarnessSession {
       return undefined;
     }
     switch (method) {
+      case CONTROL_REFRESH_CAWCO_TOOLS: {
+        const count = await this.#tools.refresh();
+        console.error(`[pi] cawco tools refreshed: ${count} listed`);
+        return { listed: count };
+      }
       case CONTROL_INTERRUPT:
         await this.#session.abort();
         return undefined;
@@ -443,15 +511,30 @@ export async function startPiHost(
   }
   const credential = { value: ctx.sessionCredential };
   process.env[CAWCO_ENV.instanceId] = ctx.instanceId;
+  // The SDK's own default loader (sdk.js: `new DefaultResourceLoader({ cwd,
+  // agentDir, settingsManager })`), plus the CawCo tools as an inline
+  // extension, so the hub can have them replaced on the live session.
+  const tools = new CawcoTools(ctx.instanceId, credential);
+  const agentDir = getAgentDir();
+  const settingsManager = SettingsManager.create(ctx.cwd, agentDir);
+  const resourceLoader = new DefaultResourceLoader({
+    cwd: ctx.cwd,
+    agentDir,
+    settingsManager,
+    extensionFactories: [
+      tools.extension(await piHandoffTools(ctx.instanceId, credential)),
+    ],
+  });
+  await resourceLoader.reload();
   const { session } = await createAgentSession({
     cwd: ctx.cwd,
+    agentDir,
     modelRuntime: runtime,
     ...(model ? { model } : {}),
     sessionManager: manager,
-    customTools: [
-      ...(await piHandoffTools(ctx.instanceId, credential)),
-      ...(ctx.boundary ? [boundedBash(ctx.cwd, ctx.boundary)] : []),
-    ],
+    settingsManager,
+    resourceLoader,
+    customTools: ctx.boundary ? [boundedBash(ctx.cwd, ctx.boundary)] : [],
   });
-  return new PiSession(ctx, session, credential);
+  return new PiSession(ctx, session, credential, tools);
 }
