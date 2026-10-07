@@ -14,7 +14,8 @@
 // apps fade him away (README, Contract). The peek (PEEK, not a status) is built the same way: a
 // rest whose enter is the ledge clip peer-over.
 // A drawing's first shape is its black silhouette, which also carries the cream rim as a stroke
-// drawn under the fill; the colour scheme keys that stroke's colour.
+// drawn under the fill; the colour scheme keys that stroke's colour, and the `Caw` view model's
+// `pixel` its width (build.mjs binds it).
 //
 // Three state-machine layers, each driven by the `Caw` view model:
 //   Variant — plays his enter, firing `entered` at its end. Then a status that waits plays its
@@ -126,32 +127,37 @@ const FPS = 24;
  * outer half, 14 x 0.37947 = 5.31 artboard px, is the rim.
  */
 const IVORY = "F4F0E6";
-/** The rim as light mode draws it: the same stroke, fully transparent (the stills have none). */
+/**
+ * The rim's width in artboard px where his box is drawn large: the kit's. Where it is drawn
+ * small the rim is one device pixel instead, whichever is wider: build.mjs binds every rim
+ * stroke's thickness to the `Caw` view model's `pixel` (one device pixel in these units, which
+ * the apps set from the size they draw him at) through a converter that holds it at this width
+ * from below and doubles it, the stroke being centred on the silhouette.
+ */
+export const KIT_RIM = 14 * 0.379_471_228_615_863_13;
+/**
+ * The rim as light mode draws it: the same stroke, fully transparent (the stills have none). Its
+ * stored thickness is the kit's, which a runtime that never sets `pixel` keeps.
+ */
 const RIM_LIGHT = {
   color: `#00${IVORY}`,
-  thickness: 2 * 14 * 0.379_471_228_615_863_13,
+  thickness: 2 * KIT_RIM,
   join: "round",
 };
 const RIM_DARK_COLOR = `#FF${IVORY}`;
-/** The rim's width in artboard px: the kit's, unless a status's look names its own. */
-const KIT_RIM = 14 * 0.379_471_228_615_863_13;
-/** One device pixel of a 1x screen, in artboard px, where the stills' 512 box is drawn at 18 CSS px. */
-const PIXEL_AT_18 = 512 / 18;
 /** trace.py's inks as the drawings carry them: the note's cream, and his yellow. */
 const INK = { cream: "#fbf4e5", yellow: "#f2cc6b" };
 /**
  * How a status is drawn where the kit's defaults do not carry it. A status not named here is
  * drawn as the kit says, and its file's bytes do not depend on this table.
  *
- * `compacted` is the only Caw drawn at 18 CSS px, beside a word. The kit's 5.31 px rim is
- * 0.19 CSS px there (measured 1.60:1 against the dark page at 1x): his black head was lost on the
- * dark page. His rim is one whole device pixel of a 1x screen instead. His cream note measured
- * 1.0:1 against the light page, so it is filled with his yellow ink, the butter note the owner
- * picked ("I choose butter"). It has no line of its own: the silhouette the rim is grown from
- * includes the note, so on the dark page one rim runs round head and note.
+ * `compacted`'s cream note measured 1.0:1 against the light page, so it is filled with his
+ * yellow ink, the butter note the owner picked ("I choose butter"). It has no line of its own:
+ * the silhouette the rim is grown from includes the note, so on the dark page one rim runs round
+ * head and note.
  */
 const LOOK = {
-  compacted: { rim: PIXEL_AT_18, note: INK.yellow },
+  compacted: { note: INK.yellow },
 };
 /**
  * The drawings are placed on the stills' 512 px box, but the acting leaves it. The artboard is
@@ -187,16 +193,15 @@ function merge(id, parent, shapes, paint) {
  * base is its silhouette, filled black; it also carries the cream rim as a stroke that build.mjs
  * draws under the fill (`strokeUnder`), so the silhouette is stored once. An empty drawing (the
  * page an enter starts on) has no shapes and no base. `look` is the status's entry in LOOK:
- * its rim's width, and the ink its note is filled with in place of the traced cream.
+ * the ink its note is filled with in place of the traced cream.
  */
 function drawing(id, svg, look = {}) {
   const body = importSvg(readFileSync(svg, "utf8"), { idPrefix: `${id}-` });
   // Fill order is ink order in the SVG: the black silhouette first, each ink above it.
   const inks = [...new Set(body.shapes.map((s) => s.fill.color))];
-  const rim = { ...RIM_LIGHT, thickness: 2 * (look.rim ?? KIT_RIM) };
   const paint = (color, k) => {
     if (k === 0) {
-      return { fill: { color }, stroke: rim, strokeUnder: true };
+      return { fill: { color }, stroke: RIM_LIGHT, strokeUnder: true };
     }
     if (color === INK.cream && look.note) {
       return { fill: { color: look.note } };

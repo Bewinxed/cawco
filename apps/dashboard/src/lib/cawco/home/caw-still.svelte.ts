@@ -7,33 +7,14 @@
  * nobody shows), kept, and copied by every place that shows it.
  */
 import { theme } from "#lib/theme.svelte.js";
-import { browser } from "$app/env";
 import { type CawBox, type CawFile, stageCaw } from "./Caw.svelte";
+import { deviceRatio } from "./device-ratio.svelte";
 
 /**
  * How far the picture reaches past his still's box on each side, in CSS px:
  * his dark rim sits a pixel outside the box.
  */
 export const CAW_STILL_BLEED = 2;
-
-/**
- * The window's device pixel ratio, followed. A zoom changes it with the
- * viewport's size; a move to another display changes it alone, and the
- * resolution query that matched the old ratio says so once.
- */
-let ratio = $state(1);
-function follow(): void {
-  ratio = devicePixelRatio;
-  matchMedia(`(resolution: ${ratio}dppx)`).addEventListener("change", follow, {
-    once: true,
-  });
-}
-if (browser) {
-  follow();
-  addEventListener("resize", () => {
-    ratio = devicePixelRatio;
-  });
-}
 
 /** Each look's picture once it is drawn, and its drawing while it is on its way. */
 const pictures = new Map<string, HTMLCanvasElement>();
@@ -60,7 +41,7 @@ export interface CawStill {
 export function cawStill(status: CawFile, px: number): CawStill {
   const dark = theme.resolved === "dark";
   const span = px + 2 * CAW_STILL_BLEED;
-  const backing = Math.round(span * ratio);
+  const backing = Math.round(span * deviceRatio.current);
   const scale = backing / span;
   const box = {
     x: CAW_STILL_BLEED * scale,

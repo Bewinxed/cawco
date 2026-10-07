@@ -1,8 +1,9 @@
 // Proves each of Caw's Rive files (assets/mascot/caw/<status>.riv and peek.riv) on Rive's official
 // runtime (@rive-app/canvas-advanced, WASM) in headless Chromium: its `Caw` view model drives its
 // state machine, his enter plays once and fires `entered` on his still, `dark` puts the cream rim
-// on, its variants take turns without repeating one, every drawing stays on screen two frames or
-// more, reduced motion holds its still, and it loads and instances within the 100 ms budget.
+// on, `pixel` sets that rim's width and nothing else, its variants take turns without repeating
+// one, every drawing stays on screen two frames or more, reduced motion holds its still, and it
+// loads and instances within the 100 ms budget.
 //
 // The expected pictures come from the file itself: each loop's own animations (the loop, a scheme,
 // a motion state) are applied directly, without the state machine, and every slot of every loop is
@@ -18,7 +19,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright-core";
-import { enterOf, FILES, fileName, RESTS } from "./scene.mjs";
+import { enterOf, FILES, fileName, KIT_RIM, RESTS } from "./scene.mjs";
 
 const ADVANCE_S = 0.5;
 const SIZE = 512;
@@ -33,6 +34,15 @@ const WATCH_LOOPS = 5;
 const BUDGET_MS = 100;
 const TIMING_RUNS = 6;
 const CHROMIUM_DIR = /^chromium-\d+$/;
+/**
+ * `pixel` values the rim is proven at: unset, half the kit's rim (held at the kit's), and one
+ * device pixel where his box is drawn at 18 px on a 2x and on a 1x screen (512 / 36, 512 / 18).
+ */
+const RIM_PIXELS = [0, KIT_RIM / 2, 512 / 36, 512 / 18];
+/** The artboard's 592 px drawn on the proof's 512 px canvas. */
+const CANVAS_PER_ARTBOARD = 512 / 592;
+/** How far the rim's measured reach may be from `pixel`, in canvas px: a pixel's half-width each side. */
+const RIM_TOLERANCE = 1;
 const LOOP_STATE = /^loop_(.+)$/;
 
 const args = {};
@@ -273,6 +283,62 @@ window.run = async (b64, job) => {
     m.delete();
     a.delete();
   }
+  // \`pixel\` sizes the rim: his still, held, on a fresh state machine per value, in dark and in
+  // light. The rim's reach in canvas px: how far its pixels (half covered or more in dark, less
+  // than half in light) lie from his body's (half covered or more in light), the 99th
+  // percentile, so the outline's straight and convex runs, where the rim is its full width,
+  // decide it and its concave notches, where it overlaps itself, do not.
+  {
+    const render = (pixel, dark) => {
+      const a = file.artboardByName("Caw");
+      const m = new rive.StateMachineInstance(a.stateMachineByName("CawStates"), a);
+      const v = file.defaultArtboardViewModel(a).instanceByName("Default");
+      m.bindViewModelInstance(v);
+      v.boolean("dark").value = dark;
+      v.boolean("reducedMotion").value = true;
+      v.number("pixel").value = pixel;
+      for (let k = 0; k < 60; k++) m.advanceAndApply(1 / 60);
+      renderer.clear();
+      renderer.save();
+      renderer.align(rive.Fit.contain, rive.Alignment.center, { minX: 0, minY: 0, maxX: job.size, maxY: job.size }, a.bounds);
+      a.draw(renderer);
+      renderer.restore();
+      rive.resolveAnimationFrame();
+      const data = ctx.getImageData(0, 0, job.size, job.size).data;
+      m.delete();
+      a.delete();
+      return data;
+    };
+    const n = job.size;
+    report.rim = job.pixels.map((pixel) => {
+      const dark = render(pixel, true);
+      const light = render(pixel, false);
+      const body = (i) => light[i * 4 + 3] >= 128;
+      const reach = Math.ceil(pixel * job.canvasPerArtboard) + 4;
+      const distances = [];
+      for (let y = 0; y < n; y++) {
+        for (let x = 0; x < n; x++) {
+          const i = y * n + x;
+          if (body(i) || dark[i * 4 + 3] < 128) continue;
+          let nearest = Infinity;
+          for (let dy = -reach; dy <= reach; dy++) {
+            const yy = y + dy;
+            if (yy < 0 || yy >= n) continue;
+            for (let dx = -reach; dx <= reach; dx++) {
+              const xx = x + dx;
+              if (xx < 0 || xx >= n) continue;
+              const d = dx * dx + dy * dy;
+              if (d < nearest && body(yy * n + xx)) nearest = d;
+            }
+          }
+          distances.push(Math.sqrt(nearest));
+        }
+      }
+      distances.sort((p, q) => p - q);
+      const width = distances[Math.floor(0.99 * (distances.length - 1))] ?? 0;
+      return { pixel, dark: digest(dark), light: digest(light), width };
+    });
+  }
   return report;
 };
 window.ready = true;
@@ -352,6 +418,8 @@ async function run(bytes, loops, enterFrames) {
     enterFrames,
     loops,
     steps: STEPS,
+    pixels: RIM_PIXELS,
+    canvasPerArtboard: CANVAS_PER_ARTBOARD,
   };
   const report = await page.evaluate(
     ([b64, j]) => window.run(b64, j),
@@ -408,6 +476,7 @@ const totals = {
   enter: 0,
   plain: 0,
   there: 0,
+  rim: 0,
 };
 const failures = [];
 for (const status of FILES) {
@@ -451,6 +520,7 @@ for (const status of FILES) {
         ["dark", "boolean"],
         ["entered", "trigger"],
         ["enters", "boolean"],
+        ["pixel", "number"],
       ])
   ) {
     fail(
@@ -621,6 +691,33 @@ for (const status of FILES) {
       `reduced motion shows ${new Set(reduced.frames).size} distinct frames`
     );
   }
+  // `pixel` sizes the dark rim and nothing else: light is the same picture at every value; unset
+  // and below the kit's rim it is the kit's (the picture the scheme steps matched); above it the
+  // rim reaches `pixel` out from his body on the canvas, within RIM_TOLERANCE.
+  const [unset, below, ...sized] = now.rim;
+  const kitDark = now.expected.find(
+    (e) => e.loop === stillOf && e.slot === 0 && e.dark
+  ).frame;
+  const rimFaults = [
+    new Set(now.rim.map((r) => r.light)).size === 1
+      ? null
+      : "light changes with pixel",
+    unset.dark === kitDark ? null : "unset pixel does not draw the kit's rim",
+    below.dark === unset.dark
+      ? null
+      : "pixel under the kit's rim is not held at it",
+    ...sized.map((r) => {
+      const want = r.pixel * CANVAS_PER_ARTBOARD;
+      return Math.abs(r.width - want) <= RIM_TOLERANCE
+        ? null
+        : `pixel ${r.pixel.toFixed(2)} draws a ${r.width.toFixed(2)} px rim, not ${want.toFixed(2)}`;
+    }),
+  ].filter(Boolean);
+  for (const f of rimFaults) {
+    fail(f);
+  }
+  totals.rim += rimFaults.length === 0 ? 1 : 0;
+  const rimLine = `rim ${sized.map((r) => `${r.width.toFixed(1)}/${(r.pixel * CANVAS_PER_ARTBOARD).toFixed(1)}`).join(", ")} px`;
   const steady = [...now.timings.slice(1)].sort((a, b) => a - b);
   const median = steady[Math.floor(steady.length / 2)];
   if (median > BUDGET_MS) {
@@ -631,7 +728,7 @@ for (const status of FILES) {
   console.log(
     `${name}.riv ${(bytes.length / 1e6).toFixed(2)} MB: load+instance ${median.toFixed(0)} ms (cold ${now.timings[0].toFixed(0)}); ` +
       `scheme/reduced steps ${matched}/${STEPS.length}; on twos ${twos}/${loops.length} loops; ` +
-      `reducedMotion ${held ? "holds still" : "MOVES"}; rotation ${rotation}; ${arrival} — ${ok ? "ok" : "FAIL"}`
+      `reducedMotion ${held ? "holds still" : "MOVES"}; rotation ${rotation}; ${arrival}; ${rimLine} — ${ok ? "ok" : "FAIL"}`
   );
 }
 await browser.close();
@@ -643,6 +740,7 @@ console.log(`stills rest: ${totals.rested}/${totals.stills}`);
 console.log(`reducedMotion holds still: ${totals.held}/${totals.files}`);
 console.log(`drawn enters play and land: ${totals.enter}/${totals.drawn}`);
 console.log(`no drawn enter, simply there: ${totals.there}/${totals.plain}`);
+console.log(`pixel sizes the dark rim: ${totals.rim}/${totals.files}`);
 console.log(`files proven: ${totals.ok}/${totals.files}`);
 if (failures.length === 0 && totals.ok === FILES.length) {
   console.log("Caw view model drives the state machine in every file");

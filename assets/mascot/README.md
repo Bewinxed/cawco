@@ -27,15 +27,22 @@ that is all they do with him.
   drawing is traced from that picture (`trace_still.py`) into `loops/compacted/body-00.svg`,
   and the note is an ink of its own, cream, that only he carries (`rests.json` names it under
   `inks`). He comes in once by `compacted-enter` (he rises from below with a long strip of
-  paper and folds it into the note) and then rests. He is the
-  one Caw drawn at 18 px, so he has a look of his own (`LOOK` in `scene.mjs`; no other file's
-  bytes depend on it): his dark rim is one whole device pixel of a 1x screen at 18 CSS px,
-  512 / 18 = 28.4 artboard px, where the kit's 5.31 is 0.19 CSS px and measured 1.60:1 against
-  the dark page; and his note, traced in cream (1.0:1 against the light page), is filled with
-  his yellow ink instead, the butter note the owner picked ("I choose butter"). It has no line
-  of its own: the rim is grown from the whole silhouette, note included, so on the dark page
-  one rim runs round head and note. Its edge measures 2.0:1 against the light page and 9.4:1
-  (1x) and 7.4:1 (2x) against the dark page.
+  paper and folds it into the note) and then rests. He has a look of his own (`LOOK` in
+  `scene.mjs`; no other file's bytes depend on it): his note, traced in cream (1.0:1 against
+  the light page), is filled with his yellow ink instead, the butter note the owner picked ("I
+  choose butter"). It has no line of its own: the rim is grown from the whole silhouette, note
+  included, so on the dark page one rim runs round head and note. Its edge measures 2.0:1
+  against the light page.
+- **The dark rim is at least one device pixel wide wherever he is drawn.** The kit's rim, 5.31
+  artboard px, is a share of his size: at 18 CSS px it is 0.19 px, and at 14 to 48 px on a 1x
+  screen (34 px on a 2x) it measured 0.11 to 0.41 device px, with a tenth or more of the first
+  ring of pixels round his body bare page (1.0:1), so his near-black body read as an outline
+  on the near-black page. So every file's rim is as wide as `pixel`, one device pixel in the
+  still box's units, which the app sets from the size it draws him at, or the kit's where that
+  is wider (his box past 96 device px). Measured with `node measure-rim.mjs` on the dark page,
+  every file at 14, 18, 34, 48 and 80 CSS px, 1x and 2x: 98% to 100% of that ring at 3:1 or more
+  and its tenth percentile 5.8:1 or more, as the compacted Caw's one-pixel rim measured (100%,
+  7.9:1 at 18 px).
 - `sleeping` is what Caw shows when nothing is going on: no session working anywhere on the
   fleet and nothing needing the operator (owner: "it should have a 'sleeping' look too"). The
   drawing is the nod in the owner's idle-nod-off take, eyes closed and head dropped
@@ -68,6 +75,7 @@ that is all they do with him.
 | `dark` | boolean | app | the colour scheme; on, the cream rim |
 | `entered` | trigger | file | his drawn enter has ended and he is on his still |
 | `enters` | boolean | file | on in a file that carries a drawn enter; apps read it, never write it |
+| `pixel` | number | app | one device pixel in the 512 still box's units: 512 ÷ (the side the app gives his box, in CSS px or points, × the display's device pixel ratio or scale); the dark rim is this wide, or the kit's 5.31 where that is wider. Set again when the size or the ratio changes. Unset (0), the rim is the kit's |
 
 When Caw must leave, or must show a different status, the old Caw is gone within 200 ms from any
 drawing, and a new status begins with its enter (owner: "A status that shows five seconds late
@@ -82,6 +90,8 @@ fade it in.
 
 How the apps drive it (one code path each: the dashboard's `Caw.svelte`, Apple's `CawView`):
 
+- **Size.** Set `pixel` from the side given his box and the display's ratio before his first
+  frame, and again whenever either changes.
 - **Appearing.** Load the status's file; it starts on its own. With `enters` on, his enter
   plays and `entered` ends it. With `enters` off the app fades him in over `motion.dur-pop` on
   `motion.ease-out`, opacity 0 to 1 and scale from `motion.leave-scale` to 1, and that fade's
@@ -125,8 +135,11 @@ main thread). Run `bun run tab-icon` again after `node build.mjs` changes either
 and move the boxes in `tab-icon-shots.ts` if a retraced loop moves his head.
 
 The state machine has no inputs. `Caw` has one instance, `Default` (every boolean off but
-`enters` in a file with a drawn enter), and the artboard points at `Caw`, so a runtime that
-auto-binds gets that instance.
+`enters` in a file with a drawn enter, `pixel` 0), and the artboard points at `Caw`, so a
+runtime that auto-binds gets that instance. The rim's width is not a state: every rim stroke's
+thickness is data-bound to `pixel` through the file's one converter, a range mapper that holds
+it at the kit's from below and doubles it (the stroke is centred on the silhouette), so a
+live Caw and a still drawn with `stageCaw` take the same width from the same property.
 
 ## Building and proving them
 
@@ -177,7 +190,8 @@ them (the editor cannot import `.riv` files). From `assets/mascot/scripts` (`bun
   `writeRiv` write each scene; rive-mcp-server has no view-model authoring, so `build.mjs`
   inserts those objects into its object list before writing, in the shapes Rive's own exports use
   (rive-runtime's importers in `src/file.cpp`): the `Caw` view model with its default instance
-  after the Backboard, `viewModelId` and `defaultStateMachineId` on the artboard, on every
+  after the Backboard, then the rim's range-mapper converter, a data bind from `pixel` right
+  after every rim stroke, `viewModelId` and `defaultStateMachineId` on the artboard, on every
   conditioned transition a view-model condition whose data bind reads `Caw`'s boolean, and
   after a state or transition that fires, a `StateMachineFireTrigger` on `Caw`'s trigger. It
   fails if any state-machine input is left.
@@ -196,6 +210,9 @@ them (the editor cannot import `.riv` files). From `assets/mascot/scripts` (`bun
   - a resting file (`ready`, `sleeping`, `compacted`, `peek`) must show its one drawing, in the
     scheme `dark` selects, and nothing else, with motion on or reduced;
   - `enters` reads on exactly in the files with a drawn enter;
+  - `pixel` sets the dark rim's width and nothing else: light renders the same at every value;
+    unset, or under the kit's 5.31, the rim is the kit's; at 512 / 36 and 512 / 18 its reach
+    from his body (99th percentile) is `pixel` within one canvas pixel;
   - on a fresh state machine, a file with a drawn enter shows the enter's drawings in order,
     each two frames or more, and lands on his still with `entered`, after as long as the enter
     lasts; a file with none shows a first drawing (its rest, or a loop's) on its first frame
@@ -204,8 +221,14 @@ them (the editor cannot import `.riv` files). From `assets/mascot/scripts` (`bun
   The runtime's clocks and entropy are pinned so the random turns repeat across two runs. It
   prints one line per file (the peek's names its ledge line), the totals (`loops animate: 7/7`,
   `stills rest: 4/4`, `reducedMotion holds still: 11/11`, `drawn enters play and land: 5/5`,
-  `no drawn enter, simply there: 6/6`, `files proven: 11/11`) and, on success, `Caw view model
-  drives the state machine in every file`.
+  `no drawn enter, simply there: 6/6`, `pixel sizes the dark rim: 11/11`, `files proven: 11/11`)
+  and, on success, `Caw view model drives the state machine in every file`.
+- `node measure-rim.mjs [--sizes 14,18,34,48,80] [--light]` measures the dark rim as the apps
+  draw him: each file's still framed as `cawStill` frames it, at each size, 1x and 2x, on the
+  dark page, with `pixel` set as the apps set it. Per picture: the rim's mean width in device
+  px, the share of the first ring of pixels round his body at 3:1 or more against the page,
+  and that ring's tenth-percentile contrast. `--light` adds a digest of each light picture, to
+  show a change left light alone.
 
 ## What the files hold today
 
@@ -222,7 +245,8 @@ reused rather than traced again.
   comes one of the others (the loop states are flagged Random), so the same loop never plays
   twice in a row; a resting status sits on `rest`.
 - **Scheme** layer: `dark` fades in the thin cream rim the owner picked (Ivory #F4F0E6, the kit's
-  dark-rim-cream recipe: 5.31 px at the stills' scale) around every drawing over 200 ms. The rim
+  dark-rim-cream recipe: 5.31 px at the stills' scale, or one device pixel where that is wider,
+  by `pixel`) around every drawing over 200 ms. The rim
   is the silhouette's own stroke, drawn under its fill, so it costs no extra shapes. Light and
   dark share every drawing, so switching mid-loop never jumps. The kit has no light-mode line:
   light Caw has none, as in the stills.

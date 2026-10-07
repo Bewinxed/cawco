@@ -12,7 +12,9 @@
 //                    DataBindContext (the property's path), TransitionPropertyViewModelComparator,
 //                    TransitionValueBooleanComparator.
 // It also draws each drawing's rim stroke under its fill and keys the rim's colour per scheme,
-// which the writer cannot express (drawStrokesUnder, writeStrokeKeys).
+// which the writer cannot express (drawStrokesUnder, writeStrokeKeys), and binds each rim's
+// thickness to `pixel` through a DataConverterRangeMapper written after the view model
+// (RIM_CONVERTER, rimBind): a DataBindContext right after the Stroke it targets.
 //
 // usage: node build.mjs [outDir]
 //   Without an argument it writes ../caw/ and the apps' copies, CawCoMascot's Resources/caw/ and
@@ -27,7 +29,7 @@ import {
   parseColor,
   writeRiv,
 } from "rive-mcp-server/dist/rivWriter.js";
-import { enterOf, FILES, fileName, statusScene } from "./scene.mjs";
+import { enterOf, FILES, fileName, KIT_RIM, statusScene } from "./scene.mjs";
 
 const outDirs = process.argv[2]
   ? [process.argv[2]]
@@ -52,6 +54,9 @@ const PROPERTIES = [
   { name: "entered", type: "trigger" },
   // Read by the apps, never written: on in a file that carries a drawn enter.
   { name: "enters", type: "boolean" },
+  // Set by the apps from the size they draw him at: one device pixel in the still box's units,
+  // 512 / the device pixels his box spans. The rim is that wide, or the kit's where that is wider.
+  { name: "pixel", type: "number" },
 ];
 /** Each property type's view-model objects and, for the ones transitions read, its condition's. */
 const TYPES = {
@@ -72,6 +77,34 @@ const TYPES = {
   trigger: {
     property: "ViewModelPropertyTrigger",
     value: { type: "ViewModelInstanceTrigger", props: { propertyValue: 0 } },
+  },
+  number: {
+    property: "ViewModelPropertyNumber",
+    value: { type: "ViewModelInstanceNumber", props: { propertyValue: 0 } },
+  },
+};
+/** Stroke.thickness's property key (rive-mcp-server vendor/rive-defs/defs.json). */
+const STROKE_THICKNESS_KEY = 47;
+/** KeyFrame interpolation: 1 is linear (0, hold, would snap a range mapper to its ends). */
+const LINEAR = 1;
+/** DataConverterRangeMapperFlags::ClampLower (rive-runtime animation/data_converter_range_mapper_flags.hpp). */
+const CLAMP_LOWER = 1;
+/**
+ * The rim's converter, the file's only one (converter id 0): `pixel` in, stroke thickness out.
+ * Below the kit's rim it holds at the kit's (ClampLower); from there it is linear with slope 2,
+ * because the stroke is centred on the silhouette and only its outer half shows. The upper end
+ * is a second point on that line, not a limit.
+ */
+const RIM_CONVERTER = {
+  type: "DataConverterRangeMapper",
+  props: {
+    name: "rim",
+    interpolationType: LINEAR,
+    flags: CLAMP_LOWER,
+    minInput: KIT_RIM,
+    maxInput: 512,
+    minOutput: 2 * KIT_RIM,
+    maxOutput: 1024,
   },
 };
 /** Rive's TransitionConditionOp: equal 0, notEqual 1. */
@@ -121,7 +154,24 @@ function viewModelObjects(status) {
           : {}),
       },
     })),
+    RIM_CONVERTER,
   ];
+}
+
+/**
+ * Binds the stroke just written to `pixel` through the rim's converter: a DataBindContext's
+ * target is the object before it in the file (rive-runtime file.cpp), and it is not one of the
+ * artboard's objects, so no index after it moves.
+ */
+function rimBind() {
+  return {
+    type: "DataBindContext",
+    props: {
+      propertyKey: STROKE_THICKNESS_KEY,
+      converterId: 0,
+      sourcePathIds: pathIds([VIEW_MODEL.index, propertyOf("pixel").index]),
+    },
+  };
 }
 
 /** A property's index in `Caw` and its type's objects. */
@@ -188,12 +238,14 @@ function emittedTransitions({ transitions, states }) {
  * Moves each named shape's stroke ahead of its fill. Rive draws a shape's paints in file order,
  * so the stroke then draws under the fill and only its outer half shows: a rim around the shape.
  * The writer emits Fill, its SolidColor, Stroke, its SolidColor; parent ids are artboard-local
- * indices, so the two colours are re-parented. Returns each shape's stroke-colour id.
+ * indices, so the two colours are re-parented. Returns each shape's stroke-colour id, and the
+ * strokes themselves: the rims, whose width `pixel` sets.
  */
 function drawStrokesUnder(scene, names) {
   const artboard = scene.findIndex((o) => o.type === "Artboard");
   const local = (i) => i - artboard;
   const colourIds = new Map();
+  const strokes = new Set();
   for (let i = artboard; i < scene.length; i += 1) {
     const shape = scene[i];
     if (shape.type !== "Shape" || !names.has(shape.props.name)) {
@@ -224,8 +276,9 @@ function drawStrokesUnder(scene, names) {
       { ...fillColour, props: { ...fillColour.props, parentId: local(f + 2) } }
     );
     colourIds.set(shape.props.name, local(f + 1));
+    strokes.add(stroke);
   }
-  return colourIds;
+  return { colourIds, strokes };
 }
 
 /** Writes each animation's stroke-colour keys right after it (the writer keys fill colours only). */
@@ -285,12 +338,27 @@ function build(status) {
   const spec = statusScene(status);
   const strokeKeys = liftStrokeKeys(spec);
   const { objects, warnings } = buildScene(spec);
-  const strokeColour = drawStrokesUnder(
+  const rims = drawStrokesUnder(
     objects,
     new Set(spec.shapes.filter((s) => s.strokeUnder).map((s) => s.id))
   );
-  writeStrokeKeys(objects, strokeKeys, strokeColour);
-  const result = complete(objects, spec.stateMachine.layers, status);
+  writeStrokeKeys(objects, strokeKeys, rims.colourIds);
+  const result = complete(
+    objects,
+    spec.stateMachine.layers,
+    status,
+    rims.strokes
+  );
+  const binds = result.filter(
+    (o) =>
+      o.type === "DataBindContext" &&
+      o.props.propertyKey === STROKE_THICKNESS_KEY
+  ).length;
+  if (binds !== rims.strokes.size) {
+    throw new Error(
+      `${status}.riv: ${binds} rim binds for ${rims.strokes.size} rims`
+    );
+  }
   const inputs = result.filter((o) => INPUT_TYPE.test(o.type)).length;
   if (inputs !== 0) {
     throw new Error(
@@ -302,10 +370,10 @@ function build(status) {
 
 /**
  * The writer's objects with what it can't author put in: the view model after the Backboard, the
- * artboard's view model and default state machine, Random flags and weights, and each
- * transition's view-model condition.
+ * artboard's view model and default state machine, Random flags and weights, each
+ * transition's view-model condition, and each rim's bind to `pixel`.
  */
-function complete(objects, layers, status) {
+function complete(objects, layers, status, rims) {
   const result = [];
   /** The layer being written: its spec, its states seen so far, and its spec transitions not yet
    * matched to an emitted StateTransition. */
@@ -330,6 +398,9 @@ function complete(objects, layers, status) {
       object.props.defaultStateMachineId = 0;
     }
     result.push(object);
+    if (rims.has(object)) {
+      result.push(rimBind());
+    }
     if (state?.fire) {
       result.push(...fireObjects(state.fire));
     }

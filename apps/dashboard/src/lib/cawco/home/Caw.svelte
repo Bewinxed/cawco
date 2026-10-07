@@ -89,6 +89,15 @@
   const ARTBOARD = 592;
   const BOX = { x: 43, y: 40, side: 512 };
 
+  /**
+   * The file's `pixel` for a Caw whose still box spans `devicePixels`: one
+   * device pixel in the box's units, so his dark rim is a whole device pixel
+   * wide at any size (the file keeps the kit's rim where that is wider).
+   */
+  function pixelFor(devicePixels: number): number {
+    return BOX.side / devicePixels;
+  }
+
   /** Where his still's box goes on a canvas, in that canvas's own pixels. */
   export interface CawBox {
     side: number;
@@ -135,6 +144,8 @@
     const caw = file.defaultArtboardViewModel(artboard).defaultInstance();
     machine.bindViewModelInstance(caw);
     caw.boolean("dark").value = dark;
+    // `box` is in the canvas's own pixels, the device's.
+    caw.number("pixel").value = pixelFor(box.side);
     const entered = caw.trigger("entered");
     const renderer = rive.makeRenderer(canvas);
     // Counted on the page's own timeline: how many are alive is a mark's
@@ -238,6 +249,7 @@
     numberOf,
   } from "#lib/cawco/motion/curves.svelte.js";
   import { theme } from "#lib/theme.svelte.js";
+  import { deviceRatio } from "./device-ratio.svelte";
 
   let {
     status,
@@ -328,8 +340,9 @@
     untrack(() => (here ? ask(fileFor(asked)) : leave()));
   });
 
-  // Every live Caw follows the scheme and the motion setting, and `still`
-  // once he has landed; their state machines do the rest.
+  // Every live Caw follows the scheme, the motion setting, his drawn size
+  // (the rim's `pixel`), and `still` once he has landed; their state
+  // machines do the rest.
   $effect(() => {
     for (const layer of layers) {
       if (layer.rive) {
@@ -338,9 +351,38 @@
     }
   });
 
+  /**
+   * The canvas's backing, in device pixels: the artboard's CSS side at the
+   * window's ratio. Sized from `size`, not from the canvas's rect as Rive's
+   * own resize does: his fade in scales the canvas, and a backing measured
+   * mid-fade came out 5% small (53 px for a 56 px canvas at 1x), blurring
+   * him and thinning the one-pixel rim `pixel` asks for.
+   */
+  const backing = $derived(
+    Math.round(((size * ARTBOARD) / BOX.side) * deviceRatio.current)
+  );
+
+  function sizeBacking(rive: Rive, canvas: HTMLCanvasElement) {
+    canvas.width = backing;
+    canvas.height = backing;
+    rive.resizeToCanvas();
+  }
+
+  // A zoom, another display or another size: the canvases' backing follows.
+  $effect(() => {
+    const side = backing;
+    for (const layer of untrack(() => layers)) {
+      if (layer.rive && layer.canvas && layer.canvas.width !== side) {
+        sizeBacking(layer.rive, layer.canvas);
+      }
+    }
+  });
+
   function valuesFor(layer: Layer) {
     return {
       dark,
+      // His box's side on the backing: the artboard's less the room round it.
+      pixel: pixelFor((backing * BOX.side) / ARTBOARD),
       reducedMotion: reducedMotion || (still && layer.landed),
     };
   }
@@ -435,7 +477,7 @@
 
   function write(
     rive: Rive,
-    values: { dark: boolean; reducedMotion: boolean }
+    values: { dark: boolean; pixel: number; reducedMotion: boolean }
   ) {
     const caw = rive.viewModelInstance;
     if (!caw) {
@@ -443,11 +485,15 @@
     }
     const darkProperty = caw.boolean("dark");
     const motionProperty = caw.boolean("reducedMotion");
+    const pixelProperty = caw.number("pixel");
     if (darkProperty) {
       darkProperty.value = values.dark;
     }
     if (motionProperty) {
       motionProperty.value = values.reducedMotion;
+    }
+    if (pixelProperty) {
+      pixelProperty.value = values.pixel;
     }
   }
 
@@ -491,7 +537,7 @@
               if (gone || !rive) {
                 return;
               }
-              rive.resizeDrawingSurfaceToCanvas();
+              sizeBacking(rive, canvas);
               const caw = rive.viewModelInstance;
               layer.landed = !(caw?.boolean("enters")?.value ?? false);
               write(rive, valuesFor(layer));
