@@ -299,10 +299,10 @@
    * The panes swap as the New session dialog's lists do (motion/list-swap,
    * its keyframes and timings): the view on screen leaves over the pane's
    * top and the next comes in once it has gone. The pane is the viewport's
-   * height whatever it shows, so there is no height to follow: a morph()
-   * here would tween a box whose children (a board that fills it, a
-   * calendar sized to it) resize with it, and its observer would chase its
-   * own tween (a ResizeObserver loop). What leaves is the view itself, held by its outro as
+   * height whatever it shows, so there is no height to follow: its children
+   * (a board that fills it, a calendar sized to it) take their size from
+   * it, and a morph() here would have nothing of theirs to tween to. What
+   * leaves is the view itself, held by its outro as
    * the hover panel holds its old content (HoverPanel `swapOut`): a view is
    * never mounted a second time to be animated out, so a board, a calendar
    * or a drawn view leaves as it stood and is torn down once, after.

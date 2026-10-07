@@ -158,10 +158,10 @@
     {/if}
     <div class="txt">
       <h1 class="title">{project.name}</h1>
-      <!-- Words change by TextMorph. The line has no box of its own to grow
-           and nothing stands after it on its row, so its width is not
-           tweened: morph() would hold the ellipsized words at their size
-           mid-frame and chase its own change (a ResizeObserver loop). -->
+      <!-- Words change by TextMorph. The line is one ellipsized line as wide
+           as its column, with nothing standing after it on its row: its box
+           neither grows nor narrows, so there is no size for morph() to
+           tween. -->
       <p class="line">
         {#if words?.kind === "ask"}
           <a class="ask" href="/session/thread:{words.threadId}"
