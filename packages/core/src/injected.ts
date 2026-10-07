@@ -102,7 +102,7 @@ export const withLandingLine = (
 ): string => afterMarker(text, hubLandLine(base, landing));
 
 /**
- * The opening of a side quest the daemon started in a fresh git worktree of
+ * The opening of a spin-off the daemon started in a fresh git worktree of
  * `cwd`, cut from `base` (none for a repository with no remote, which has
  * nowhere to land), with the line that says so right after any hand-off
  * marker.

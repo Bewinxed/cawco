@@ -6,7 +6,7 @@
  * {@link NeutralMessage} frames, parks permission requests under a `requestId`,
  * and answers the machine-scoped session catalog. The supervisor
  * ({@link ./session SessionSupervisor}) is harness-agnostic — it owns the git
- * worktrees, side-quest bookkeeping, busy tracking and the routing, and defers
+ * worktrees, spin-off bookkeeping, busy tracking and the routing, and defers
  * to whichever {@link Harness} a spawn names.
  *
  * Adding a harness: implement {@link Harness}, register it in

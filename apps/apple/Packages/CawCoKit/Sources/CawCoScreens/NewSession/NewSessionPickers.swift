@@ -355,7 +355,7 @@ final class NsField: UIView {
 final class LifetimePopover: NsPopoverController {
     static let options: [(ephemeral: Bool, name: String, desc: String, glyph: Glyph, hue: UIColor)] = [
         (false, "Persistent", "Stays on the board after its task, to pick up again.", .database, Palette.hueBlue500),
-        (true, "Ephemeral", "A side quest: ends and clears itself when the task is done.", .fire, Palette.hueOrange500),
+        (true, "Ephemeral", "A spin-off: ends and clears itself when the task is done.", .fire, Palette.hueOrange500),
     ]
 
     private let ephemeral: Bool

@@ -6,7 +6,7 @@
    * places` when it has more, which lists them — and Caw's words take its
    * place only while he has something to say: what his session is doing,
    * his question as a link to its thread, a task that landed. Then New
-   * session, Side quest, and `⋯` holding Pick stages (while the code
+   * session, Spin off, and `⋯` holding Pick stages (while the code
    * stages stand in), Spend and Forget (and, under 640px, New task and Ask
    * Caw for a view).
    *
@@ -300,7 +300,7 @@
         onclick={() => startSession(true)}
         variant="outline"
       >
-        Side quest
+        Spin off
       </Button>
     {/if}
     <DropdownMenu.Root>

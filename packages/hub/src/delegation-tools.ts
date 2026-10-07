@@ -471,12 +471,12 @@ export function handoffTools(deps: HandoffDeps) {
             "The opening instruction. Write it as a full brief: the new session cannot see this conversation."
           ),
         title: sessionTitle(),
-        sideQuest: z
+        spinOff: z
           .boolean()
           .optional()
           .describe(
-            "A detour from this session's work. It appears nested under this session in the " +
-              "sidebar and shares its directory. Default false."
+            "A spin-off: a detour from this session's work, nested under this session in the " +
+              "sidebar and sharing its directory. Default false."
           ),
         type: z
           .string()
@@ -510,14 +510,14 @@ export function handoffTools(deps: HandoffDeps) {
         cwd,
         prompt,
         title,
-        sideQuest,
+        spinOff,
         type,
         model,
         permissionMode,
         machine,
       }) => {
         const result = await actions.startSession(cwd, prompt, title, {
-          sideQuest,
+          spinOff,
           type,
           model,
           permissionMode,

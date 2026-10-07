@@ -16434,7 +16434,7 @@
         }
       },
       "SpawnPayload": {
-        "description": "`spawn`: start a session on a harness. `harness` chooses the adapter (absent\nmeans `claude`, for every caller written before harnesses existed); `options`\nrides through to that adapter verbatim — only the callbacks the agent must own\nitself (`canUseTool`/permission hooks, abort) are filled in on arrival, since\nfunctions do not survive the wire. `resume` is the harness-neutral way to\nre-open or fork a stored session; `persistSession: false` asks for a session\nthat is never stored (a side quest's transcript).",
+        "description": "`spawn`: start a session on a harness. `harness` chooses the adapter (absent\nmeans `claude`, for every caller written before harnesses existed); `options`\nrides through to that adapter verbatim — only the callbacks the agent must own\nitself (`canUseTool`/permission hooks, abort) are filled in on arrival, since\nfunctions do not survive the wire. `resume` is the harness-neutral way to\nre-open or fork a stored session; `persistSession: false` asks for a session\nthat is never stored (a spin-off's transcript).",
         "type": "object",
         "properties": {
           "bootstrap": {
@@ -16607,7 +16607,7 @@
             "type": "string"
           },
           "scratch": {
-            "description": "A side quest (NEW.md §1): throwaway work. `worktree` runs the session in a\ndetached git worktree of `baseCwd` (the spawn's `cwd` when absent) so the\nexperiment cannot touch the checkout the mainline session is using.",
+            "description": "A spin-off (NEW.md §1): throwaway work. `worktree` runs the session in a\ndetached git worktree of `baseCwd` (the spawn's `cwd` when absent) so the\nexperiment cannot touch the checkout the mainline session is using.",
             "type": "object",
             "properties": {
               "worktree": {
@@ -16680,7 +16680,7 @@
             "type": "string"
           },
           "discard": {
-            "description": "Explicitly abort unadopted custody too, then tear down side-quest resources.",
+            "description": "Explicitly abort unadopted custody too, then tear down spin-off resources.",
             "type": "boolean"
           },
           "from": {
@@ -27765,7 +27765,7 @@
             "$ref": "#/components/schemas/KeepAlive"
           },
           "kind": {
-            "description": "`scratch` for a side quest; absent from a hub that predates the column.",
+            "description": "`scratch` for a spin-off; absent from a hub that predates the column.",
             "type": "string"
           },
           "lastError": {
@@ -27941,7 +27941,7 @@
         ]
       },
       "InstanceStatus": {
-        "description": "What a session row is doing, right now, as the hub last heard it.\n\n- `starting` — a spawn went out and hasn't been confirmed live yet.\n- `running` — the owning daemon currently lists the instance.\n- `sleeping` — no live process, but resumable: the harness has a session id\n  to pick back up from. This is what a daemon restart or a quiet drop used\n  to report as `error` with {@link RESTART_RESUMABLE} in `lastError`; that\n  encoding conflated \"gone but fine\" with a real failure, so `sleeping` rows\n  carry `lastError: null` — nothing went wrong, there's just nothing running.\n- `stopped` — deliberate: the operator (or a `stop` call) ended it.\n- `error` — an actual failure. `lastError` is required here, and this is\n  where {@link RESTART_LOST} still lands: a restart with nothing to resume\n  from is a real loss, not a nap.\n- `unknown` — the machine that owns this row can't currently be reached, so\n  the hub can't say which of the above is true.\n- `discarded` — a side quest torn down on purpose; gone for good.",
+        "description": "What a session row is doing, right now, as the hub last heard it.\n\n- `starting` — a spawn went out and hasn't been confirmed live yet.\n- `running` — the owning daemon currently lists the instance.\n- `sleeping` — no live process, but resumable: the harness has a session id\n  to pick back up from. This is what a daemon restart or a quiet drop used\n  to report as `error` with {@link RESTART_RESUMABLE} in `lastError`; that\n  encoding conflated \"gone but fine\" with a real failure, so `sleeping` rows\n  carry `lastError: null` — nothing went wrong, there's just nothing running.\n- `stopped` — deliberate: the operator (or a `stop` call) ended it.\n- `error` — an actual failure. `lastError` is required here, and this is\n  where {@link RESTART_LOST} still lands: a restart with nothing to resume\n  from is a real loss, not a nap.\n- `unknown` — the machine that owns this row can't currently be reached, so\n  the hub can't say which of the above is true.\n- `discarded` — a spin-off torn down on purpose; gone for good.",
         "enum": [
           "discarded",
           "error",

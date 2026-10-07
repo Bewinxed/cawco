@@ -23,7 +23,7 @@ struct SessionMenuContext {
 
 @MainActor
 enum SessionMenus {
-    /// A live (hub-held) session. Keep and Discard only on a side quest; Fork
+    /// A live (hub-held) session. Keep and Discard only on a spin-off; Fork
     /// needs a conversation and its machine, Stop a live process. `onArchive`
     /// where it is listed as finished.
     static func live(_ row: InstanceRow, context: SessionMenuContext, onArchive: (() -> Void)? = nil,
@@ -101,9 +101,9 @@ enum SessionMenus {
                 },
                 UIAction(title: "Discard", image: Glyph.trash.image, attributes: .destructive) { _ in
                     context.presenter().present(ConfirmDialog(
-                        title: "Discard this side quest?",
+                        title: "Discard this spin-off?",
                         body: "The session stops, and whatever the spawn created for it — its worktree, its transcript — goes with it, for good.",
-                        confirmLabel: "Discard side quest", pendingLabel: "Discarding…", destructive: true
+                        confirmLabel: "Discard spin-off", pendingLabel: "Discarding…", destructive: true
                     ) {
                         try await hub.stopSession(instanceId: id, machineId: row.machineId, discard: true)
                     }, animated: true)

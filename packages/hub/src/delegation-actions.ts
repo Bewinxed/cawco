@@ -637,7 +637,7 @@ export interface HandoffActions {
     prompt: string,
     title: string,
     options: {
-      sideQuest?: boolean;
+      spinOff?: boolean;
       /** A delegate type; `medium` (work-items' DEFAULT_DELEGATE_TYPE) when omitted. */
       type?: string;
       /** Overrides the type's model. */
@@ -1118,7 +1118,7 @@ export const handoffActions = ({
           peer.host,
           peer.row.model ?? "default model",
           ageOf(peer.row.updatedAt),
-          ...(peer.row.kind === "scratch" ? ["side quest"] : []),
+          ...(peer.row.kind === "scratch" ? ["spin-off"] : []),
           ...(peer.row.parentInstanceId === instanceId
             ? ["your delegate"]
             : []),
@@ -1207,7 +1207,7 @@ export const handoffActions = ({
     workdir: string,
     prompt: string,
     title: string,
-    { sideQuest = false, type: typeName, model: modelName, machine, ...opts }
+    { spinOff = false, type: typeName, model: modelName, machine, ...opts }
   ): Promise<HandoffResult> {
     // Named: that machine, which must be online. Unnamed: "" is the caller's
     // own, which the hub's forwarder fills in.
@@ -1244,7 +1244,7 @@ export const handoffActions = ({
         ...(type?.effort ? { effort: type.effort } : {}),
         ...(type?.skills?.length ? { skills: type.skills } : {}),
         ...(typeName ? namedTypeSettings(type, projectId) : {}),
-        ...(sideQuest ? { scratch: { baseCwd: workdir } } : {}),
+        ...(spinOff ? { scratch: { baseCwd: workdir } } : {}),
         // The machine answers it once the session is in place, or with why it
         // is not; the hub holds the relay until then, so a failed spawn is this
         // tool's error rather than a "Started" for a session that never was.
@@ -1277,7 +1277,7 @@ export const handoffActions = ({
       id,
       title,
       text:
-        `Started "${title}" (${leafOf(workdir)})${sideQuest ? " as a side quest" : ""}${on} in ${workdir}, ` +
+        `Started "${title}" (${leafOf(workdir)})${spinOff ? " as a spin-off" : ""}${on} in ${workdir}, ` +
         `on ${harness} ${model}${type?.effort ? ` at ${type.effort} effort` : ""}${type ? ` (type '${type.name}')` : ""}, ` +
         `in ${opts.permissionMode ?? "this session's own"} permission mode where its harness has modes. ` +
         "It is in the sidebar now and the user can open its transcript. " +

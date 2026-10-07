@@ -1524,7 +1524,7 @@ const hasAttachments = (payload: unknown): boolean =>
   Array.isArray((payload as { attachments?: unknown }).attachments) &&
   (payload as { attachments: unknown[] }).attachments.length > 0;
 
-/** `stop { discard: true }`: the side quest is being thrown away, not paused. */
+/** `stop { discard: true }`: the spin-off is being thrown away, not paused. */
 const peekDiscard = (payload: unknown): boolean =>
   typeof payload === "object" &&
   payload !== null &&

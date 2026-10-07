@@ -765,7 +765,7 @@ export interface DbShape {
   /** Keeps a start the machine could not be sent yet, on the row already written for it. */
   readonly oweSpawn: (id: string, envelope: string, at: number) => void;
   /**
-   * The fields a dashboard may move on a live row: "Keep" — a side quest that
+   * The fields a dashboard may move on a live row: "Keep" — a spin-off that
    * earned its place stops being treated as scratch — and the model and
    * permission mode the session confirmed (its effort is the agent's reading,
    * {@link DbShape.noteInstanceEffort}). Also where a
@@ -2803,7 +2803,7 @@ const make = (path: string): DbShape => {
         .run();
     },
     failInstance: (id, error) => {
-      // A side quest that was thrown away stays thrown away: its teardown can
+      // A spin-off that was thrown away stays thrown away: its teardown can
       // fail long after the session did, and it is not coming back as a row.
       db.update(instances)
         .set({ status: "error", lastError: error, updatedAt: new Date() })
@@ -3945,7 +3945,7 @@ const make = (path: string): DbShape => {
             ...(machineCapabilities ? { machineCapabilities } : {}),
           })
         ),
-    // A discarded side quest is gone for good, and a row that has not moved in a
+    // A discarded spin-off is gone for good, and a row that has not moved in a
     // day is history no rail has a use for — a running one stays whatever its
     // age, and so does a sleeping one: it is a conversation the fleet can pick
     // back up, and the tab strip's SSR load has to find it or the session it

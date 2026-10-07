@@ -16,7 +16,7 @@ struct LiveRowModel: Equatable {
     var place: String
     /// Asleep or unreachable: the mark steps back.
     var dim: Bool
-    var quest: Bool
+    var spinOff: Bool
     var leaf: Bool
     /// The path, where it is not the card's own and the page is wide enough.
     var cwd: String?
@@ -34,13 +34,13 @@ struct LiveRowModel: Equatable {
 }
 
 /// One live session: its mark with the state's rim, its title, a side
-/// quest's and a leaf's badge, where it runs, and at the row's end how far
+/// spin-off's and a leaf's badge, where it runs, and at the row's end how far
 /// its plan has got or how long it has been on this step; under it, while it
 /// works, the tool it is in.
 final class LiveSessionRowView: RailRow, UIToolTipInteractionDelegate {
     private let mark = SessionMarkView(tile: 20)
     private let title = KitLabel(TypeScale.typeLabel, ink: Palette.foreground)
-    private let quest = KitBadge("side quest", variant: .secondary)
+    private let spinOff = KitBadge("spin-off", variant: .secondary)
     private let leaf = KitBadge("leaf", variant: .outline)
     private let path = KitLabel(TypeScale.typeCode.with(points: TypeScale.typeLabel.points), ink: Palette.mutedForeground)
     private let ring = TaskRingView(size: .sm)
@@ -69,14 +69,14 @@ final class LiveSessionRowView: RailRow, UIToolTipInteractionDelegate {
         meter.alignment = .center
         meter.setContentHuggingPriority(.required, for: .horizontal)
         meter.setContentCompressionResistancePriority(.required, for: .horizontal)
-        for badge in [quest, leaf] {
+        for badge in [spinOff, leaf] {
             badge.setContentCompressionResistancePriority(.required, for: .horizontal)
             badge.setContentHuggingPriority(.required, for: .horizontal)
         }
         let rest = UIView()
         rest.setContentHuggingPriority(.init(1), for: .horizontal)
         // `gap-3` between what the row says; the meter stands at its end (`ml-auto`), a gap clear of it.
-        let says = UIStackView(arrangedSubviews: [mark, title, quest, leaf, path])
+        let says = UIStackView(arrangedSubviews: [mark, title, spinOff, leaf, path])
         says.spacing = Space.space3
         says.alignment = .center
         let first = UIStackView(arrangedSubviews: [says, rest, meter])
@@ -131,7 +131,7 @@ final class LiveSessionRowView: RailRow, UIToolTipInteractionDelegate {
         title.text = next.title.split(whereSeparator: \.isWhitespace).joined(separator: " ")
         mark.configure(id: next.id, place: next.place, status: next.status)
         mark.alpha = next.dim ? 0.6 : 1
-        quest.isHidden = !next.quest
+        spinOff.isHidden = !next.spinOff
         leaf.isHidden = !next.leaf
         path.isHidden = next.cwd == nil
         path.text = next.cwd

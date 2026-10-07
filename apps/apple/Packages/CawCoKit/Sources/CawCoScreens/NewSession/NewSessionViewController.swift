@@ -36,7 +36,7 @@ public struct SessionDraft: Sendable {
     var permissionMode: String
     var model: String
     var effort: String?
-    var sideQuest: Bool
+    var spinOff: Bool
     var repo: String?
     var projectId: String?
     var summarizerHarness: String
@@ -84,7 +84,7 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
     private var projectId: String?
     /// The reader set the place themselves (the web's `editing`): a seeded location is no longer locked.
     private var overridden = false
-    private var sideQuest = false
+    private var spinOff = false
     private var busy = false
     private var error = ""
     private var unreadable = false
@@ -214,7 +214,7 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
             machinesTouched = true
             cwd = restore.baseCwd
             model = restore.usedModel
-            sideQuest = restore.sideQuest
+            spinOff = restore.spinOff
             overridden = restore.baseCwd != continuing?.cwd || restore.machineIds.first != continuing?.machineId
             lastMachine = restore.machineIds.first ?? ""
         }
@@ -843,7 +843,7 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
             locationChip.accessibilityValue = path.isEmpty ? "No folder" : path
         }
 
-        let lifetime = LifetimePopover.options[sideQuest ? 1 : 0]
+        let lifetime = LifetimePopover.options[spinOff ? 1 : 0]
         lifetimeChip.show(lifetime.glyph.image, tint: lifetime.hue, label: lifetime.name)
         chips.setNeedsLayout()
 
@@ -1026,8 +1026,8 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
             }
             made = location
         case .lifetime:
-            made = LifetimePopover(ephemeral: sideQuest) { [weak self] value in
-                self?.sideQuest = value
+            made = LifetimePopover(ephemeral: spinOff) { [weak self] value in
+                self?.spinOff = value
                 self?.closePopover()
                 self?.requestRefresh()
             }
@@ -1078,7 +1078,7 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
         let id = submission
         let draft = SessionDraft(
             machineIds: machineIds, baseCwd: path, cwd: workdir, prompt: prompt, harness: harness, permissionMode: permissionMode, model: model,
-            effort: effort, sideQuest: sideQuest, repo: repo?.trimmingCharacters(in: .whitespaces), projectId: projectId,
+            effort: effort, spinOff: spinOff, repo: repo?.trimmingCharacters(in: .whitespaces), projectId: projectId,
             summarizerHarness: summarizerHarness, summarizerModel: summarizerSelected?.id ?? summarizerModel, usedModel: selected?.id ?? model
         )
         let sendsMode = !modeless
@@ -1152,7 +1152,7 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
         let model = Self.shown(draft)
         if !model.isEmpty { payload.model = model }
         if let effort = draft.effort { payload.effort = try Self.wire(effort) }
-        if draft.sideQuest { payload.scratch = .init(worktree: false, baseCwd: draft.cwd) }
+        if draft.spinOff { payload.scratch = .init(worktree: false, baseCwd: draft.cwd) }
         if let repo = draft.repo { payload.bootstrap = .init(repo: repo, baseDir: draft.baseCwd) }
         payload.projectId = attached(target, draft)
         // The form's own choices stand; `explicit` only names what a harness needs named.
@@ -1184,7 +1184,7 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
                 harness: try Self.wire(draft.harness), model: draft.usedModel, machineId: target, cwd: draft.cwd,
                 effort: try draft.effort.map(Self.wire),
                 permissionMode: sendsMode ? try Self.wire(draft.permissionMode) : nil,
-                scratch: draft.sideQuest ? .init(worktree: false, baseCwd: draft.cwd) : nil,
+                scratch: draft.spinOff ? .init(worktree: false, baseCwd: draft.cwd) : nil,
                 bootstrap: draft.repo.map { .init(repo: $0, baseDir: draft.baseCwd) },
                 projectId: attached(target, draft)
             ),

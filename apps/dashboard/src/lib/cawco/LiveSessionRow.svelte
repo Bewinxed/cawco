@@ -38,7 +38,7 @@
   const failed = $derived(isFailed(instance));
   /** The hub can't reach this row's machine — distinct from idle and asleep. */
   const stale = $derived(isStale(instance));
-  const quest = $derived(instance.kind === "scratch");
+  const spinOff = $derived(instance.kind === "scratch");
   /**
    * No state word on screen: "Working" and "Needs you" are long, and in a
    * pill they shoved the title into an ellipsis on every row of a card of
@@ -49,7 +49,7 @@
   const status = $derived(sessionStatus(instance));
 
   // What the session is about, not where it runs: the SDK's own title for the
-  // transcript this instance is writing. A quest is tagged out of the catalog,
+  // transcript this instance is writing. A spin-off is tagged out of the catalog,
   // and a session that has not spoken yet is not in it either, so both land on
   // the fallback with the path beside them to say the rest.
   // Read only — the board sweeps the fleet's ledgers once on arrival and the
@@ -175,10 +175,10 @@
           ><span class="sr-only">{statusWord(instance, status)}: </span>
           {title}</span
         >
-        <!-- A quest is named beside its title rather than glyphed in front of it:
+        <!-- A spin-off is named beside its title rather than glyphed in front of it:
            the lead slot belongs to state, and the titles keep their column. -->
-        {#if quest}
-          <Badge class="shrink-0" variant="secondary">side quest</Badge>
+        {#if spinOff}
+          <Badge class="shrink-0" variant="secondary">spin-off</Badge>
         {/if}
         <!-- A leaf delegate cannot fan out: the operator reads at a glance that
            nothing will ever nest beneath this row. -->

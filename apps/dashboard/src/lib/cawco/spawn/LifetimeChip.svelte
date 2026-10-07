@@ -32,7 +32,7 @@
     {
       ephemeral: true,
       name: "Ephemeral",
-      desc: "A side quest: ends and clears itself when the task is done.",
+      desc: "A spin-off: ends and clears itself when the task is done.",
       icon: Fire,
       hue: "var(--hue-orange-500)",
     },

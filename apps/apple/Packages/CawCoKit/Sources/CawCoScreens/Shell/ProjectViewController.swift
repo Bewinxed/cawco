@@ -13,7 +13,7 @@ final class ProjectViewController: ObservedViewController {
     private let head = UIStackView()
     private let actions = UIStackView()
     private var startButton: UIButton!
-    private var quest: UIButton!
+    private var spinOff: UIButton!
     /// One column: the docs, then the rail's cards under them.
     private let scroll = UIScrollView()
     private let page = UIStackView()
@@ -149,7 +149,7 @@ final class ProjectViewController: ObservedViewController {
         }
         // `class="text-muted-foreground"`.
         forget.configuration?.attributedTitle = AttributedString("Forget project…", attributes: AttributeContainer(TypeScale.typeButton.attributes(color: Palette.mutedForeground, tracking: -0.01)))
-        // New session opens its popover from the button's end; Side quest starts one at once.
+        // New session opens its popover from the button's end; Spin off starts one at once.
         // With no checkout yet, New session is the New Session form, which asks for the machine and folder.
         startButton = KitButton.make("New session", variant: .action) { [weak self] in
             guard let self else { return }
@@ -160,14 +160,14 @@ final class ProjectViewController: ObservedViewController {
             KitPopover.present(ProjectStartController { [weak self] prompt in self?.start(scratch: false, prompt: prompt) },
                                from: startButton, in: self, align: .end)
         }
-        quest = KitButton.make("Side quest", variant: .outline) { [weak self] in self?.start(scratch: true, prompt: nil) }
+        spinOff = KitButton.make("Spin off", variant: .outline) { [weak self] in self?.start(scratch: true, prompt: nil) }
         actions.addArrangedSubview(startButton)
-        actions.addArrangedSubview(quest)
+        actions.addArrangedSubview(spinOff)
         actions.addArrangedSubview(forget)
         // `gap-2`.
         actions.spacing = 8
         actions.alignment = .center
-        for button in [startButton!, quest!, forget] {
+        for button in [startButton!, spinOff!, forget] {
             button.setContentHuggingPriority(.required, for: .horizontal)
             button.setContentCompressionResistancePriority(.required, for: .horizontal)
         }
@@ -260,8 +260,8 @@ final class ProjectViewController: ObservedViewController {
         // The folder line, the docs and the memory are the primary checkout's.
         let home = project.primaryPlace
         machineLine.isHidden = home == nil
-        // Side quest starts in the primary checkout at once: only a project with one offers it.
-        quest.isHidden = home == nil
+        // Spin off starts in the primary checkout at once: only a project with one offers it.
+        spinOff.isHidden = home == nil
         folder.text = home?.path ?? "Its folder on the hub"
         let machine = home.flatMap { place in fleet.machines.first { $0.machineId == place.machineId } }
         machineGlyph.glyph = Glyph.os(machine?.os ?? "")
@@ -332,7 +332,7 @@ final class ProjectViewController: ObservedViewController {
                 word: row.status == .stopped ? "Stopped" : status.word,
                 place: row.cwd.isEmpty ? row.machineId : row.cwd,
                 dim: asleep || row.isStale,
-                quest: row.kind == "scratch",
+                spinOff: row.kind == "scratch",
                 leaf: row.canDelegate == false,
                 cwd: wide && !row.cwd.isEmpty && row.cwd != homePath ? row.cwd : nil,
                 alarmed: row.isFailed || activity == .blocked,
@@ -499,7 +499,7 @@ final class ProjectViewController: ObservedViewController {
 
     // MARK: Starts
 
-    /// "New session" and "Side quest": a session here on what the new-session
+    /// "New session" and "Spin off": a session here on what the new-session
     /// form was last set to, opened in its tab as soon as the hub has it.
     private func start(scratch: Bool, prompt: String?) {
         guard let project = context.hub.fleet.projects.first(where: { $0.id == projectId }), let home = project.primaryPlace else { return }

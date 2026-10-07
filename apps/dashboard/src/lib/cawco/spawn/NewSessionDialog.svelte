@@ -177,7 +177,7 @@
   let fullSendCarried = $state(false);
   let projectId = $state<string>();
   let editing = $state(false);
-  let sideQuest = $state(false);
+  let spinOff = $state(false);
   let busy = $state(false);
   let error = $state("");
   let unreadable = $state(false);
@@ -539,7 +539,7 @@
       prompt = sessionStorage.getItem(KEPT_PROMPT) ?? "";
       repo = undefined;
       editing = false;
-      sideQuest = false;
+      spinOff = false;
       busy = false;
       error = "";
       popover = null;
@@ -554,7 +554,7 @@
         machinesTouched = true;
         cwd = restore.baseCwd;
         model = restore.usedModel;
-        sideQuest = restore.scratch !== undefined;
+        spinOff = restore.scratch !== undefined;
         editing =
           restore.baseCwd !== continueFrom.cwd ||
           restore.machineIds[0] !== continueFrom.machineId;
@@ -920,7 +920,7 @@
       permissionMode,
       model,
       effort,
-      scratch: sideQuest ? { worktree: false, baseCwd: workdir } : undefined,
+      scratch: spinOff ? { worktree: false, baseCwd: workdir } : undefined,
       repo: repo?.trim(),
       projectId,
       summarizer: {
@@ -1225,12 +1225,12 @@
               repo={repo ?? ""}
             />
             <LifetimeChip
-              ephemeral={sideQuest}
+              ephemeral={spinOff}
               onchange={(value) => {
                 popover = value ? "lifetime" : null;
               }}
               onlifetime={(value) => {
-                sideQuest = value;
+                spinOff = value;
               }}
               open={popover === "lifetime"}
             />

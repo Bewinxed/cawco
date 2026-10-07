@@ -2,7 +2,7 @@
   /**
    * Right-click (long-press on touch, the menu key on a focused row) on a
    * session, wherever one is listed: the rail, a project's page, the Fleet
-   * board. Keep and Discard are what a side quest is waiting on, so they only
+   * board. Keep and Discard are what a spin-off is waiting on, so they only
    * appear on one (NEW.md §1). Fork and Stop decide as the peek header's menu
    * does: Fork needs a conversation and its machine, Stop a live process.
    *
@@ -164,9 +164,9 @@
 
   async function askDiscard() {
     await confirm({
-      title: "Discard this side quest?",
+      title: "Discard this spin-off?",
       body: "The session stops, and whatever the spawn created for it — its worktree, its transcript — goes with it, for good.",
-      confirmLabel: "Discard side quest",
+      confirmLabel: "Discard spin-off",
       destructive: true,
       pendingLabel: "Discarding…",
       run: () => discardSession(instance.id, instance.machineId),

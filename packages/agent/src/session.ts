@@ -1,7 +1,7 @@
 /**
  * Owns every live session on this machine — across every harness — and pumps
  * their neutral frames at the hub. Harness-agnostic: the git worktrees, side
- * quests, busy tracking, bootstrap clone and the routing live here; the actual
+ * spin-offs, busy tracking, bootstrap clone and the routing live here; the actual
  * sessions are {@link HarnessSession}s produced by the adapters in
  * `./harnesses`. Nothing here interprets a harness's own event — frames go out
  * as neutral messages, with the harness's `raw` event riding along.
@@ -216,7 +216,7 @@ const isDirectory = async (path: string): Promise<boolean> => {
   return info?.isDirectory() ?? false;
 };
 
-/** The checkout a side quest ran in, kept until the quest is discarded. */
+/** The checkout a spin-off ran in, kept until the spin-off is discarded. */
 interface Worktree {
   /**
    * The requested cwd and the default branch it was cut from (none for a
@@ -231,10 +231,10 @@ interface Worktree {
 }
 
 /**
- * A side quest's transcript, kept out of the catalogs the rails read. The tag
+ * A spin-off's transcript, kept out of the catalogs the rails read. The tag
  * is the whole test there, so the harness that owns the session applies it.
  */
-interface Quest {
+interface SpinOff {
   dir: string;
   harness: HarnessKind;
   sessionId?: string;
@@ -569,8 +569,8 @@ export class SessionSupervisor {
   readonly #adopting = new Map<string, Promise<void>>();
   /** Outlives its session: a discard can arrive after the query already ended. */
   readonly #worktrees = new Map<string, Worktree>();
-  /** Side quests running here, by instance — for the same reason, same lifetime. */
-  readonly #quests = new Map<string, Quest>();
+  /** Spin-offs running here, by instance — for the same reason, same lifetime. */
+  readonly #spinOffs = new Map<string, SpinOff>();
   /** One chain per instance, so envelopes about it are handled in arrival order. */
   readonly #queues = new Map<string, Promise<void>>();
   /** The sessions with a turn in flight — from the `send` that starts one until the turn ends. */
@@ -1641,7 +1641,7 @@ export class SessionSupervisor {
           return;
         }
       }
-      // A relaunch stays in the checkout the side quest has been working in.
+      // A relaunch stays in the checkout the spin-off has been working in.
       const cut = this.#worktrees.get(instanceId);
       if (cut) {
         workdir = cut.dir;
@@ -1652,16 +1652,16 @@ export class SessionSupervisor {
         );
       }
 
-      // Each spawn says for itself whether this is a side quest, so a relaunch
+      // Each spawn says for itself whether this is a spin-off, so a relaunch
       // of one that has since been kept stops being tagged as scratch.
       if (scratch) {
-        this.#quests.set(instanceId, {
-          ...this.#quests.get(instanceId),
+        this.#spinOffs.set(instanceId, {
+          ...this.#spinOffs.get(instanceId),
           dir: workdir,
           harness: adapter.kind,
         });
       } else {
-        this.#quests.delete(instanceId);
+        this.#spinOffs.delete(instanceId);
       }
 
       // A spawn for an instance already running is a relaunch: replace the
@@ -2364,48 +2364,48 @@ export class SessionSupervisor {
     return { attached, failed };
   }
 
-  /** The harness session a side quest turned out to be writing, from its init frame. */
+  /** The harness session a spin-off turned out to be writing, from its init frame. */
   #noteQuestSession(
     instanceId: string,
     sessionId: string,
     harness: HarnessKind
   ): void {
-    const quest = this.#quests.get(instanceId);
-    if (!quest || quest.sessionId === sessionId) {
+    const spinOff = this.#spinOffs.get(instanceId);
+    if (!spinOff || spinOff.sessionId === sessionId) {
       return;
     }
-    quest.sessionId = sessionId;
-    quest.harness = harness;
-    quest.tagged = false;
+    spinOff.sessionId = sessionId;
+    spinOff.harness = harness;
+    spinOff.tagged = false;
   }
 
   /**
-   * Keeps a side quest out of the catalogs the rails read. Applied at the end of
+   * Keeps a spin-off out of the catalogs the rails read. Applied at the end of
    * the first turn rather than at init, because until the session has said
    * something there may be no transcript for a tag to live on. Fire-and-forget,
    * tried again next turn if it does not land.
    */
   #tagQuest(instanceId: string, adapter: Harness): void {
-    const quest = this.#quests.get(instanceId);
-    if (!quest?.sessionId || quest.tagged) {
+    const spinOff = this.#spinOffs.get(instanceId);
+    if (!spinOff?.sessionId || spinOff.tagged) {
       return;
     }
-    const { sessionId, dir } = quest;
-    quest.tagged = true;
+    const { sessionId, dir } = spinOff;
+    spinOff.tagged = true;
     // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — #tagQuest itself is synchronous and does not wait on the tag landing
     void adapter
       .tagSession(sessionId, CAWCO_SCRATCH_TAG, dir)
       .catch((error: unknown) => {
-        quest.tagged = false;
-        warn(`could not tag side quest ${sessionId}: ${error}`);
+        spinOff.tagged = false;
+        warn(`could not tag spin-off ${sessionId}: ${error}`);
       });
   }
 
   /** A session whose tag someone has just set by hand is no longer ours to set. */
   #closeTagging(sessionId: unknown): void {
-    for (const quest of this.#quests.values()) {
-      if (quest.sessionId === sessionId) {
-        quest.tagged = true;
+    for (const spinOff of this.#spinOffs.values()) {
+      if (spinOff.sessionId === sessionId) {
+        spinOff.tagged = true;
       }
     }
   }
@@ -2689,8 +2689,8 @@ export class SessionSupervisor {
           this.#worktrees.set(instanceId, scratchWorktree);
         }
         await this.#removeWorktree(instanceId);
-        if (!this.#quests.has(instanceId) && sessionId && cwd) {
-          this.#quests.set(instanceId, {
+        if (!this.#spinOffs.has(instanceId) && sessionId && cwd) {
+          this.#spinOffs.set(instanceId, {
             dir: cwd,
             sessionId,
             harness: harness ?? "claude",
@@ -2897,17 +2897,17 @@ export class SessionSupervisor {
     await rm(this.#worktreeRecord(instanceId), { force: true });
   }
 
-  /** Discarding a side quest throws its transcript away too. */
+  /** Discarding a spin-off throws its transcript away too. */
   async #removeQuestSession(instanceId: string): Promise<void> {
-    const quest = this.#quests.get(instanceId);
-    if (!quest?.sessionId) {
+    const spinOff = this.#spinOffs.get(instanceId);
+    if (!spinOff?.sessionId) {
       return;
     }
-    const adapter = harnessOf(quest.harness);
-    if (await adapter?.getSessionInfo(quest.sessionId, quest.dir)) {
-      await adapter?.deleteSession(quest.sessionId, quest.dir);
+    const adapter = harnessOf(spinOff.harness);
+    if (await adapter?.getSessionInfo(spinOff.sessionId, spinOff.dir)) {
+      await adapter?.deleteSession(spinOff.sessionId, spinOff.dir);
     }
-    this.#quests.delete(instanceId);
+    this.#spinOffs.delete(instanceId);
   }
 
   async #fs(payload: FsPayload): Promise<void> {

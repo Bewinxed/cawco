@@ -448,7 +448,7 @@ public final class FleetStore {
         return pulseCell(id).turnSince
     }
 
-    /// The stored sessions a machine lists, side quests left out.
+    /// The stored sessions a machine lists, spin-offs left out.
     public func catalog(_ machineId: String) -> [StoredSession] {
         (catalogs[machineId] ?? []).filter { $0.tag != "cawco-scratch" }
     }

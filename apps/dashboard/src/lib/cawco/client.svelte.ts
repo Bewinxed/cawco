@@ -298,9 +298,9 @@ export const isResumable = (row: InstanceRow): boolean =>
 export const isFailed = (row: InstanceRow): boolean => row.status === "error";
 
 /**
- * A side quest is history nobody asked for until they keep it, and the agent
+ * A spin-off is history nobody asked for until they keep it, and the agent
  * tags its SDK session on the way out to say so. The tag is the whole test —
- * the directory a session ran in says nothing about whether it was a quest.
+ * the directory a session ran in says nothing about whether it was a spin-off.
  */
 const listedInHistory = (info: NeutralSessionInfo): boolean =>
   info.tag !== CAWCO_SCRATCH_TAG;
@@ -510,7 +510,7 @@ export interface SessionState {
   records: Record<string, SendRecord>;
   /** Started again in place for a mode it could not switch into; ends at the next init. */
   relaunching: boolean;
-  /** A side quest (NEW.md §1) — kept visually apart until it is kept or discarded. */
+  /** A spin-off (NEW.md §1) — kept visually apart until it is kept or discarded. */
   scratch: boolean;
   /**
    * The session's own word on what it is doing: `compacting` while it rewrites
@@ -4248,7 +4248,7 @@ export async function spawnSession({
 }
 
 /**
- * Branches a side quest off a session (NEW.md §1): the same context carried into
+ * Branches a spin-off off a session (NEW.md §1): the same context carried into
  * a new SDK session, kept apart from mainline work until it is kept or
  * discarded. The hub reads the conversation it branches into the new view's
  * transcript. A fork the hub refuses throws the hub's reason ({@link start}).
@@ -4454,7 +4454,7 @@ export function stopSession(instanceId: string, machineId: string): void {
 }
 
 /**
- * Throws a side quest away: the session stops and the agent tears down whatever
+ * Throws a spin-off away: the session stops and the agent tears down whatever
  * the spawn created for it. Resolves once the agent confirms the teardown, so a
  * worktree that could not be removed is reported rather than silently left.
  */
@@ -4477,7 +4477,7 @@ export async function discardSession(
 }
 
 /**
- * Promotes a side quest to mainline work: the UI stops setting it apart, and
+ * Promotes a spin-off to mainline work: the UI stops setting it apart, and
  * the tag that kept its transcript out of the machine's catalog comes off, so
  * the session joins the history it was being hidden from.
  */
@@ -5780,7 +5780,7 @@ function effortToResend(
  * session into it — and so is `fullSend`, which runs the CLI in bypass. A
  * session that wants either from another mode is started again in place:
  * same instance id, same hub row, its own SDK session resumed, so the new
- * process reads the whole conversation back. A side quest relaunches the same
+ * process reads the whole conversation back. A spin-off relaunches the same
  * way; the agent keeps it in the checkout it was already working in.
  */
 export async function relaunchSession(
@@ -5802,7 +5802,7 @@ export async function relaunchSession(
     cwd: target.cwd,
     harness: target.harness,
     resume: { sessionKey },
-    // A relaunch is a spawn like any other, so it has to say what it is: a quest
+    // A relaunch is a spawn like any other, so it has to say what it is: a spin-off
     // that stayed silent about it would come back as mainline work, untagged.
     scratch: target.scratch ? {} : undefined,
     permissionMode,
@@ -6313,11 +6313,11 @@ export const cawco = {
   },
   /** The thread a `thread:` id names, when this browser has it. */
   threadOf,
-  /** Side quests across the fleet — kept in their own section, not per machine. */
+  /** Spin-offs across the fleet — kept in their own section, not per machine. */
   get scratchInstances(): InstanceRow[] {
     return instances.filter((row) => isListed(row) && row.kind === "scratch");
   },
-  /** Stored sessions on one machine, minus the side quests hiding among them. */
+  /** Stored sessions on one machine, minus the spin-offs hiding among them. */
   catalogOf: (machineId: string): NeutralSessionInfo[] =>
     (catalog[machineId] ?? []).filter(listedInHistory),
   /** Whether {@link catalogOf} has anything, asked without building it: it stops at the first. */

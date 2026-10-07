@@ -587,7 +587,7 @@ export const instances = sqliteTable("instances", {
    */
   seenAt: timestamp("seen_at"),
   /**
-   * `scratch`: a side quest (NEW.md §1), shown apart from mainline work.
+   * `scratch`: a spin-off (NEW.md §1), shown apart from mainline work.
    * `summariser`: a continuation's internal worker, never on the board.
    */
   kind: text("kind")

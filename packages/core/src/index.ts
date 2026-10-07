@@ -106,7 +106,7 @@ export interface Envelope<T = unknown> {
  * itself (`canUseTool`/permission hooks, abort) are filled in on arrival, since
  * functions do not survive the wire. `resume` is the harness-neutral way to
  * re-open or fork a stored session; `persistSession: false` asks for a session
- * that is never stored (a side quest's transcript).
+ * that is never stored (a spin-off's transcript).
  */
 export interface SpawnPayload {
   /**
@@ -202,7 +202,7 @@ export interface SpawnPayload {
    */
   role?: import("./delegate-types").SessionRole;
   /**
-   * A side quest (NEW.md §1): throwaway work. `worktree` runs the session in a
+   * A spin-off (NEW.md §1): throwaway work. `worktree` runs the session in a
    * detached git worktree of `baseCwd` (the spawn's `cwd` when absent) so the
    * experiment cannot touch the checkout the mainline session is using.
    */
@@ -346,7 +346,7 @@ export interface StopPayload {
   /** Addresses claimed by other rows; only unclaimed server runners make a legacy read ambiguous. */
   claimedSessionIds?: string[];
   cwd?: string;
-  /** Explicitly abort unadopted custody too, then tear down side-quest resources. */
+  /** Explicitly abort unadopted custody too, then tear down spin-off resources. */
   discard?: boolean;
   /** The instance a fleet-originated stop claims as its caller; the hub honours the call only when the target is that instance's own delegate. */
   from?: string;
@@ -570,7 +570,7 @@ export const AGENT_BUSY = "agentBusy";
  *   from is a real loss, not a nap.
  * - `unknown` — the machine that owns this row can't currently be reached, so
  *   the hub can't say which of the above is true.
- * - `discarded` — a side quest torn down on purpose; gone for good.
+ * - `discarded` — a spin-off torn down on purpose; gone for good.
  */
 export type InstanceStatus =
   | "starting"
@@ -648,7 +648,7 @@ export interface InstanceRow {
   held?: { since: number; reason: string };
   id: string;
   keepAlive?: KeepAlive;
-  /** `scratch` for a side quest; absent from a hub that predates the column. */
+  /** `scratch` for a spin-off; absent from a hub that predates the column. */
   kind?: string;
   /** What killed the session, on a row the agent reported as `error`. */
   lastError?: string | null;
@@ -1014,8 +1014,8 @@ export const PREVIEW_START = "previewStart";
 export const PREVIEW_STOP = "previewStop";
 
 /**
- * The session tag a side quest's transcript carries (NEW.md §1). The agent
- * applies it when the session names itself and clears it when the quest is
+ * The session tag a spin-off's transcript carries (NEW.md §1). The agent
+ * applies it when the session names itself and clears it when the spin-off is
  * kept; the catalogs the rails read hide what wears it.
  */
 export const CAWCO_SCRATCH_TAG = "cawco-scratch";
