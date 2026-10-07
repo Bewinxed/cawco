@@ -19,6 +19,12 @@ public final class PagingScrollView: UIScrollView, UIScrollViewDelegate {
     private var reducing = false
 
     public var active: Bool { moving || isTracking || isDragging || isDecelerating }
+    /// The pages are moving: dragged, coasting, or settling on a page chosen.
+    public var paging: Bool { moving || isDragging || isDecelerating }
+    private static let live = NSHashTable<PagingScrollView>.weakObjects()
+    /// A pager somewhere is moving. Work for what is off the screen waits for
+    /// it: the frames a swipe runs in are the swipe's.
+    public static var anyPaging: Bool { live.allObjects.contains { $0.paging } }
     public var length: Double { axis == .horizontal ? bounds.width : bounds.height }
     public var position: Double { length > 0 ? (axis == .horizontal ? contentOffset.x : contentOffset.y) / length : 0 }
     public static let slope = 0.7
@@ -39,6 +45,7 @@ public final class PagingScrollView: UIScrollView, UIScrollViewDelegate {
         panGestureRecognizer.minimumNumberOfTouches = touches
         panGestureRecognizer.maximumNumberOfTouches = touches
         panGestureRecognizer.allowedScrollTypesMask = .all
+        Self.live.add(self)
     }
 
     @available(*, unavailable)
@@ -79,7 +86,12 @@ public final class PagingScrollView: UIScrollView, UIScrollViewDelegate {
     }
 
     private func begin() {
-        if !moving { serial += 1; moving = true; onBegin(); trace("began") }
+        guard !moving else { return }
+        serial += 1
+        moving = true
+        SwipeMeter.begin("\(traceName) \(serial)", frame: 1 / Double(window?.screen.maximumFramesPerSecond ?? 60))
+        onBegin()
+        trace("began")
     }
 
     private func land() {
@@ -88,6 +100,7 @@ public final class PagingScrollView: UIScrollView, UIScrollViewDelegate {
         let page = min(count - 1, max(0, Int(position.rounded())))
         trace("landed")
         onLand(page)
+        SwipeMeter.end(page: page)
     }
 
     public func scrollViewWillBeginDragging(_ scrollView: UIScrollView) { begin() }

@@ -388,6 +388,10 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         return !sequence(first: self as UIView, next: { $0.superview }).contains { $0.isHidden }
     }
 
+    /// The first screen is whole and every block of history is in the list:
+    /// what is left for a pane off screen is the session's own changes.
+    private var caughtUp: Bool { landed && taken >= blocks.count }
+
     /// Panes that are off screen with changes they have not drawn.
     private static let owing = NSHashTable<TranscriptView>.weakObjects()
     private static var watchingOwing = false
@@ -832,17 +836,28 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             }
         }
         if received.isEmpty, !currentTail.isEmpty { currentTail = "" }
-        // A pane beside the one being read keeps what it has until it comes on
-        // screen: a long session's every change is a frame's worth of work, and
-        // it was taken out of the reply the reader was watching stream. Its
-        // first screen is still built where it stands, so it is there to come to.
-        // What it owes is drawn before the first frame it shows in (`drawOwed`).
+        // A pane beside the one being read catches up where it stands, its
+        // first screen and then its history a stretch a frame, so the swipe
+        // that brings it into view finds it whole. Never in a frame a pager
+        // moves in: that frame is the swipe's, and the pane holds what it has.
+        // Caught up, it keeps what it has until it comes on screen: a long
+        // session's every change is a frame's worth of work, and it was taken
+        // out of the reply the reader was watching stream. What it owes is
+        // drawn before the first frame it shows in (`drawOwed`).
+        let inSight = inView
+        let yielding = !inSight && PagingScrollView.anyPaging
         if dirty {
-            if inView || !landed { dirty = false; commit() } else { Self.owing.add(self); Self.watchOwing() }
+            if inSight || (!caughtUp && !yielding && Pace.taken < Self.budget / 2) {
+                dirty = false
+                commit()
+            } else if caughtUp || yielding {
+                Self.owing.add(self)
+                Self.watchOwing()
+            }
         }
         // A first screen takes a row at a time for as long as the frame has
         // time for one: rows cost anything from a millisecond to a frame's worth.
-        while feeding, CACurrentMediaTime() - now < Self.budget / 2 {
+        while feeding, !yielding, CACurrentMediaTime() - now < Self.budget / 2 {
             collection.layoutIfNeeded()
             commit(fresh: false)
         }

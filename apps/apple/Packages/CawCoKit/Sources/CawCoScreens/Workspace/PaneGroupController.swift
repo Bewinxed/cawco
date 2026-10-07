@@ -1,5 +1,6 @@
 import CawCoCore
 import CawCoDesign
+import OSLog
 import UIKit
 
 /// One group (workspace/PaneLeaf.svelte): its strip of tabs, and a slot per
@@ -8,11 +9,11 @@ import UIKit
 /// split, a move or a change of layout rearranges views without rebuilding
 /// a transcript.
 ///
-/// The showing tab mounts first; the rest mount in the background, nearest
-/// first, one at a time, once the strip has been left alone for 800ms
-/// (120ms where the group swipes) and 300ms apart. Where the group swipes,
-/// the two neighbours are painted parked either side and a finger drags the
-/// panes 1:1 (UIKit paging); a tab chosen any other way lands on the same
+/// The tab in front and its two neighbours are mounted the moment it is in
+/// front, never during a swipe; a tab further away is a row in the strip.
+/// Where the group swipes, the two neighbours are painted parked either side
+/// and a finger drags the panes 1:1 (UIKit paging), the chosen sheet in the
+/// strip following the pages; a tab chosen any other way lands on the same
 /// settle. Elsewhere the arriving transcript glides 40pt in from the side
 /// of the tab it came from and fades up from 0.4 over 260ms on the drawer
 /// curve. A hairline rail down the leading edge marks the group the
@@ -29,7 +30,7 @@ final class PaneGroupController: UIViewController, UIDropInteractionDelegate {
     private let preview = UIView()
     private var slots: [String: UIView] = [:]
     private var mounted: [String] = []
-    private var queue: DispatchWorkItem?
+    private var releasing: DispatchWorkItem?
     private var shownId: String?
     private var shownTabs: [String] = []
     private var dock: ComposerDock!
@@ -170,19 +171,15 @@ final class PaneGroupController: UIViewController, UIDropInteractionDelegate {
         view.addGestureRecognizer(tap)
         stack.traceName = "sessions:\(leafId)"
         stack.isScrollEnabled = swipeable
-        stack.onBegin = { [weak self] in
-            guard let self else { return }
-            dock.held = true
-            if let at = activeIndex {
-                for i in max(0, at - 1)...min(shownTabs.count - 1, at + 1) where !mounted.contains(shownTabs[i]) { mount(shownTabs[i]) }
-            }
-        }
+        stack.onBegin = { [weak self] in self?.dock.held = true }
         stack.onScroll = { [weak self] position in self?.pagingMoved(position) }
         stack.onLand = { [weak self] page in
             guard let self, shownTabs.indices.contains(page) else { return }
-            strip.ride(toward: nil, fraction: 0)
             dock.held = false
             let id = shownTabs[page]
+            // Where the group swipes, the pages drew the sheet's way over and
+            // it stands where they brought it: the switch is not drawn again.
+            if swipeable { strip.settle(on: id) } else { strip.ride(toward: nil, fraction: 0) }
             if leaf?.active != id {
                 flip = id
                 workspace.activate(id, in: leafId)
@@ -237,7 +234,8 @@ final class PaneGroupController: UIViewController, UIDropInteractionDelegate {
         }
         dock.bind(panes.binding(for: to), direction: animated ? direction : 0, landing: landing)
         shareChanged()
-        scheduleBackground()
+        mountNeighbours()
+        releaseLeavers()
     }
 
     private func tab(for id: String) -> PaneTab {
@@ -261,7 +259,10 @@ final class PaneGroupController: UIViewController, UIDropInteractionDelegate {
 
     // MARK: Panes
 
+    private static let log = Logger(subsystem: "dev.cawco.app", category: "Pane")
+
     private func mount(_ id: String) {
+        Self.log.info("mount \(id.prefix(8), privacy: .public) \(self.stack.active ? "during a swipe" : "at rest", privacy: .public)")
         mounted.append(id)
         let slot = UIView()
         slot.clipsToBounds = true
@@ -309,7 +310,6 @@ final class PaneGroupController: UIViewController, UIDropInteractionDelegate {
         unmount(id)
     }
 
-    /// The other open conversations mount nearest first, one at a time.
     /// What this group keeps live: the tab in front and the ones either side
     /// of it, which a swipe can land on. Every other tab is a row in the
     /// strip, named from the fleet, with no transcript read and no stream:
@@ -319,37 +319,47 @@ final class PaneGroupController: UIViewController, UIDropInteractionDelegate {
         return Set(leaf.tabs[max(0, at - 1)...min(leaf.tabs.count - 1, at + 1)])
     }
 
-    /// After a switch settles: a tab that left the window is released (its
-    /// subscription ends, its draft and scroll are kept for its return), then
-    /// the neighbours not mounted yet are, nearest first, before a swipe can
-    /// reach them.
-    private func scheduleBackground() {
-        queue?.cancel()
-        guard let leaf, let here = leaf.active, let at = leaf.tabs.firstIndex(of: here) else { return }
-        let window = window
-        let leaving = mounted.filter { !window.contains($0) }
-        let waiting = leaf.tabs.filter { window.contains($0) && $0 != here && !mounted.contains($0) }
-            .sorted { abs((leaf.tabs.firstIndex(of: $0) ?? 0) - at) < abs((leaf.tabs.firstIndex(of: $1) ?? 0) - at) }
-        guard !leaving.isEmpty || !waiting.isEmpty else { return }
+    /// The tab in front's neighbours, mounted as it comes to the front (a
+    /// launch, a tap, a swipe's landing), while the reader is still on it:
+    /// their transcripts are read and their history caught up off screen,
+    /// so a swipe only ever brings in a pane that stands ready. They mount
+    /// once the switch's motion has been drawn (a landing's last frame, the
+    /// 40pt glide), so no frame of it is held for them, and never under a
+    /// moving finger: a swipe that starts first lands, and its landing mounts
+    /// them. Refreshes in the meantime do not put them off.
+    private func mountNeighbours() {
+        guard !neighboursQueued else { return }
+        neighboursQueued = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + (swipeable ? 0.05 : 0.3)) { [weak self] in
+            guard let self else { return }
+            neighboursQueued = false
+            guard !stack.paging else { return }
+            let window = window
+            for id in leaf?.tabs ?? [] where window.contains(id) && !mounted.contains(id) { mount(id) }
+        }
+    }
+
+    private var neighboursQueued = false
+
+    /// A tab that left the window is released once the switch that moved it
+    /// out has been drawn (its subscription ends; its draft and scroll are
+    /// kept for its return). Refreshes in the meantime do not put it off.
+    private func releaseLeavers() {
+        guard releasing == nil, mounted.contains(where: { !window.contains($0) }) else { return }
         let work = DispatchWorkItem { [weak self] in
-            guard let self, !stack.active else { return }
-            for id in leaving where !self.window.contains(id) {
+            guard let self else { return }
+            releasing = nil
+            // Nothing leaves under a moving finger: it goes once the pages are still.
+            guard !stack.active else { return releaseLeavers() }
+            let window = window
+            for id in mounted where !window.contains(id) {
                 unmount(id)
                 panes.release(id)
             }
-            if let next = waiting.first, self.window.contains(next), !mounted.contains(next) { mount(next) }
-            scheduleBackground(after: 0.3)
         }
-        queue = work
+        releasing = work
         // Past the switch's own motion, so nothing leaves while it is drawn.
         DispatchQueue.main.asyncAfter(deadline: .now() + (swipeable ? 0.3 : 0.8), execute: work)
-    }
-
-    private func scheduleBackground(after gap: TimeInterval) {
-        queue?.cancel()
-        let work = DispatchWorkItem { [weak self] in self?.scheduleBackground() }
-        queue = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + gap, execute: work)
     }
 
     /// Every slot at its place: the active one in front; where the group
@@ -402,7 +412,6 @@ final class PaneGroupController: UIViewController, UIDropInteractionDelegate {
     private func pagingMoved(_ position: Double) {
         guard stack.active, let from = activeIndex, !shownTabs.isEmpty else { return }
         let target = position > Double(from) ? Int(position.rounded(.up)) : Int(position.rounded(.down))
-        for i in [Int(position.rounded(.down)), Int(position.rounded(.up))] where shownTabs.indices.contains(i) && !mounted.contains(shownTabs[i]) { mount(shownTabs[i]) }
         for (id, slot) in slots {
             if let at = shownTabs.firstIndex(of: id) { slot.isHidden = abs(Double(at) - position) > 1 }
         }

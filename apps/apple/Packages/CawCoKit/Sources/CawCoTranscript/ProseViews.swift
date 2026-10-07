@@ -151,11 +151,31 @@ class ProseView: UITextView, NSTextLayoutManagerDelegate {
         manager.ensureLayout(for: manager.documentRange)
         let used = manager.usageBoundsForTextContainer.height + textContainerInset.top + textContainerInset.bottom
         fitted = used
+        let width = size.width == UIView.noIntrinsicMetric ? size.width : naturalWidth
         // Only the round-up is taken off: where the two disagree by a point or
         // more, the container has not been laid out at this width yet.
         let over = size.height - used
-        return over > 0 && over < 1 ? CGSize(width: size.width, height: used) : size
+        return CGSize(width: width, height: over > 0 && over < 1 ? used : size.height)
     }
+
+    /// The width the text asks for where its view is sized to it (a
+    /// `.leading` column, a line of a rail): its widest paragraph on one
+    /// line, CSS's max-content, which the view's container then holds to
+    /// the room it has. Never the width its own lines were wrapped to: a
+    /// pretty paragraph wrapped at one width asked for another, was wrapped
+    /// there and asked for the first again, and the layout pass that sized it
+    /// never ended (a failed send's reason held the main thread for good).
+    private var naturalWidth: CGFloat {
+        if let natural, natural.version == version { return natural.width }
+        let bounds = textStorage.boundingRect(with: CGSize(width: CGFloat.greatestFiniteMagnitude, height: .greatestFiniteMagnitude),
+                                              options: [.usesLineFragmentOrigin], context: nil)
+        let width = ceil(bounds.width) + textContainerInset.left + textContainerInset.right
+        natural = (version, width)
+        return width
+    }
+
+    /// `naturalWidth`, for the text version it was measured for.
+    private var natural: (version: Int, width: CGFloat)?
 
     nonisolated func textLayoutManager(_: NSTextLayoutManager, textLayoutFragmentFor location: any NSTextLocation,
                                        in textElement: NSTextElement) -> NSTextLayoutFragment {

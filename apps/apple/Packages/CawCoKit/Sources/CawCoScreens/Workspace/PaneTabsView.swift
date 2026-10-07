@@ -145,8 +145,9 @@ final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteraction
             for id in added { views[id]?.grow() }
         }
         choose(from: previous, to: next, animated: !still)
-        // A new tab, or a new choice by any route (a tap, a swipe landing): the strip shows it.
-        if !added.isEmpty || previous != next { reveal(added.last ?? next, animated: !still) }
+        // A new tab, or a new choice by any route (a tap, a swipe landing): the
+        // strip shows it. Its first fill, every tab new, shows the chosen one.
+        if !added.isEmpty || previous != next { reveal(added.count == ids.count ? next : (added.last ?? next), animated: !still) }
     }
 
     /// The one way a tab is brought into the strip: all of it, with the strip's edge room, scrolled only as far as it takes.
@@ -260,6 +261,21 @@ final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteraction
                 view.ride(size: nil, anchoredRight: false)
             }
         }
+    }
+
+    /// The pages came to rest on `id`. When they brought the sheet there, it
+    /// stands where it is and `id` is chosen with nothing drawn again: the
+    /// switch was the swipe. Otherwise the sheet goes back to rest, and the
+    /// switch, if any, is drawn when the strip is told of it (`configure`).
+    func settle(on id: String) {
+        defer { approached = nil }
+        guard approached == id, views[id] != nil else {
+            ride(toward: nil, fraction: 0)
+            return
+        }
+        active = id
+        for (tab, view) in views { view.setChosen(tab == id, wipe: nil) }
+        accessibilityValue = views[id]?.accessibilityLabel
     }
 
     // MARK: Drop caret
@@ -533,12 +549,14 @@ final class TabView: UIView {
         chosen = next
         (row.arrangedSubviews.first)?.accessibilityTraits = next ? [.button, .selected] : .button
         details.isUserInteractionEnabled = !(tab?.isRun ?? false)
-        // The chevron's slot is kept on every tab; it shows on the chosen one.
+        // The chevron's slot is kept on every tab; it shows on the chosen one,
+        // popping in or out when the choice moves, and is simply set otherwise.
         let still = UIAccessibility.isReduceMotionEnabled
-        Motion.easeOut.animator(Motion.durControl) {
+        let chevron: @MainActor @Sendable () -> Void = {
             self.details.alpha = next ? 1 : 0
             self.details.transform = next || still ? .identity : CGAffineTransform(scaleX: Motion.popScale, y: Motion.popScale)
-        }.startAnimation()
+        }
+        if was != next { Motion.easeOut.animator(Motion.durControl, animations: chevron).startAnimation() } else { chevron() }
         paint()
         guard was != next || wipe == nil else { return }
         CATransaction.begin()
