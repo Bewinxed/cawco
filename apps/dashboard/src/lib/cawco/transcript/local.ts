@@ -1,8 +1,9 @@
 /**
  * The rows only this tab draws: a message it is sending, before the hub has
- * it, and a failure it saw. Everything else in a transcript is the hub's.
+ * it, a failure it saw, and an ask it saw withdrawn. Everything else in a
+ * transcript is the hub's.
  */
-import type { SendPayload } from "@cawco/core";
+import { questionsOf, type SendPayload } from "@cawco/core";
 import { newId } from "../id";
 import type { Message } from "../types";
 
@@ -40,6 +41,28 @@ export function localUserMessage(
           })),
         }
       : undefined,
+  };
+}
+
+/**
+ * The quiet line an ask leaves when it is withdrawn before it is answered
+ * (the turn interrupted, the session gone): the composer it grew folds back,
+ * and this says why it went.
+ */
+export function withdrawnNote(
+  instanceId: string,
+  request: { toolName: string; input: unknown }
+): Message {
+  const question = questionsOf(
+    request.toolName,
+    (request.input ?? {}) as Record<string, unknown>
+  );
+  return {
+    id: newId(),
+    instanceId,
+    type: "ui.system_note",
+    content: question ? "Question withdrawn" : "Permission request withdrawn",
+    timestamp: new Date().toISOString(),
   };
 }
 

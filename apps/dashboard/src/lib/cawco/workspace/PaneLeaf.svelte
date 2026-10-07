@@ -420,6 +420,7 @@
     <div class="dock" style:width="{bound.transcriptShare * 100}%">
       <Composer
         agentName={bound.agentName}
+        ask={bound.ask}
         busy={bound.busy}
         commands={bound.commands}
         delegatesOf={bound.delegatesOf}

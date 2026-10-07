@@ -6,7 +6,7 @@
  * swipe changes the transcript, and the box being typed in stays exactly
  * where it is, focus and keyboard with it. So a pane draws no composer; it
  * publishes what its composer would have been given — its draft, its send,
- * its parked prompts, its controls — under its id, and its group
+ * its parked ask, its controls — under its id, and its group
  * (`PaneLeaf`) draws one composer over whichever id is its active tab.
  */
 import type { AvailableCommand } from "@cawco/core";
@@ -14,13 +14,19 @@ import type { Snippet } from "svelte";
 import { SvelteMap } from "svelte/reactivity";
 import type { SendExtras } from "../client.svelte";
 import type { SuggestCandidate } from "../suggest.svelte";
-import type { ComposerFoot, Mention } from "../transcript/Composer.svelte";
+import type {
+  ComposerAsk,
+  ComposerFoot,
+  Mention,
+} from "../transcript/Composer.svelte";
 import type { ComposerDraft } from "../transcript/composer-draft.svelte";
 
 /** Everything the composer takes from the conversation it is writing to. */
 export interface ComposerBinding {
   /** The agent answering here, by name, for what the composer says about it. */
   readonly agentName: string;
+  /** The first ask parked here, which the composer grows into; null with none. */
+  readonly ask: ComposerAsk | null;
   readonly busy: boolean;
   readonly commands: AvailableCommand[];
   /** The session whose delegates the composer's tray shows. */
@@ -43,7 +49,8 @@ export interface ComposerBinding {
   /** The plan's ring, which opens it beside the conversation; none without a plan. */
   readonly planRing?: Snippet;
   readonly previewPhone: boolean;
-  prompts: Snippet;
+  /** What stands on the tray row above the composer: an offer to the reader. */
+  prompts?: Snippet;
   /** The conversation whose sent messages the composer recalls. */
   readonly recallOf: string;
   /** Why the last send failed; empty when it did not. */

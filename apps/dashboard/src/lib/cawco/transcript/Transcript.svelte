@@ -2976,12 +2976,13 @@
       {/snippet}
     </Virtualizer>
   </div>
-  <!-- Room past the end for the cards parked on the composer, which stand
-       over the transcript's foot and never push it (owner, a7443251: "it
+  <!-- Room past the end for what rises past the composer (the ask it grows
+       into, an offer on its tray row), which stands over the transcript's
+       foot and never pushes it (owner, a7443251: "it
        shouldn't push the transcript up"). It moves nothing where the reader
        is: the tail's pin follows the list and the rows, not this, so the
        view holds still as a card parks, and the reader can scroll on to the
-       last row, clear above the card. -->
+       last row, clear above it. -->
   <div aria-hidden="true" class="parked-room"></div>
   <!-- Floating above the composer column, at zero height in the flow, so
        nothing here coming or going moves a row: the catch-up, from the switch
@@ -3132,7 +3133,8 @@
   /* Where it rests is the pane's to say (`--latest-inset`): a thread keeps
      the room Caw's rise takes above its composer, empty but for him at its
      leading corner, and the pill stands there, over nothing a reader is
-     reading. Elsewhere it stands at the top of the composer's clearance.
+     reading. Elsewhere it stands at the top of the composer's clearance,
+     and over what rises past it (`--parked-room`): never under an ask.
      A sticky child's inset is measured inside the scroller's padding box,
      so an inset is net of the foot's padding (the clearance). */
   .parked-room {
@@ -3147,7 +3149,8 @@
       --latest-inset,
       calc(
         max(calc(var(--space-8) * 3), var(--composer-clearance, 0px)) -
-        var(--space-4)
+        var(--space-4) +
+        var(--parked-room, 0px)
       )
     );
     block-size: 0;

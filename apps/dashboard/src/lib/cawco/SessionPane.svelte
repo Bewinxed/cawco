@@ -2,8 +2,8 @@
   import type { PermissionResult } from "@cawco/core";
   /**
    * One conversation, whole: the identity header, the transcript (Chat) or its
-   * graph (Flow), and the floating composer with any parked permission or
-   * question stacked above it. Held per open tab by the session layout, so its
+   * graph (Flow), and the floating composer, grown into any parked permission
+   * or question. Held per open tab by the session layout, so its
    * scroll offset and half-typed message survive a switch — nothing here
    * unmounts on navigation.
    *
@@ -52,7 +52,10 @@
   import SideSplit from "./side/SideSplit.svelte";
   import { clip, type SuggestCandidate, suggestions } from "./suggest.svelte";
   import { inLists, threadIdOf } from "./thread-tabs";
-  import Composer, { type Mention } from "./transcript/Composer.svelte";
+  import Composer, {
+    type ComposerAsk,
+    type Mention,
+  } from "./transcript/Composer.svelte";
   import { ComposerDraft } from "./transcript/composer-draft.svelte";
   import {
     type DraftContent,
@@ -61,9 +64,7 @@
   } from "./transcript/draft-store";
   import FootFade from "./transcript/FootFade.svelte";
   import ProjectOffer from "./transcript/ProjectOffer.svelte";
-  import Prompt from "./transcript/Prompt.svelte";
   import { parkedAsks } from "./transcript/present";
-  import { settleInto } from "./transcript/settle";
   import Transcript from "./transcript/Transcript.svelte";
   import TranscriptSkeleton from "./transcript/TranscriptSkeleton.svelte";
   import {
@@ -116,7 +117,7 @@
   let previewShare = $state(0);
   const phone = $derived(paneWidth > 0 && paneWidth < 900);
   let side = $state<ReturnType<typeof SideSplit>>();
-  /** The parked cards' height: the transcript keeps that much room past its end. */
+  /** How far what stands on the composer rises past it: the transcript keeps that much room past its end. */
   let parkedRoom = $state(0);
   /** The session's plan has something to show: its ring opens it (SideSplit). */
   const plan = $derived(cawco.planOf(viewId));
@@ -697,6 +698,18 @@
   const parked = $derived<PendingPermission[]>(
     parkedAsks(session?.pending ?? [])
   );
+  /** The first of them, which the composer grows into: one ask at a time. */
+  const firstAsk = $derived.by((): ComposerAsk | null => {
+    const [request] = parked;
+    return request
+      ? {
+          request,
+          asker: agentName,
+          more: parked.length - 1,
+          onanswer: (result) => onanswer(request, result),
+        }
+      : null;
+  });
 
   /** "Make this a project", when the hub offered it to this session. */
   const projectOffer = $derived(cawco.projectOfferOf(viewId));
@@ -891,7 +904,7 @@
    * suggestion row on that where the surface suggests (app.css
    * `--c-composer-panel`, `--c-tray-row`, `--c-suggest-room`). Everything
    * else the composer holds — a longer draft, attachments, a failed send's
-   * line, the parked cards — stands over the transcript's foot and moves no
+   * line, the ask it grows into — stands over the transcript's foot and moves no
    * row. A conversation that cannot be written to has no composer.
    *
    * CSS, from this conversation's own state, not a measurement: it holds
@@ -953,7 +966,10 @@
     oninterruptsend,
     onmenu: refreshMenu,
     onstop,
-    prompts: parkedPrompts,
+    prompts: offer,
+    get ask() {
+      return firstAsk;
+    },
     leading: autopilot,
     onfoot: (next) => {
       parkedRoom = next.parked;
@@ -994,23 +1010,9 @@
   <AutopilotToggle instance={instanceRow} instanceId={viewId} />
 {/snippet}
 
-<!-- A parked ask is drawn here only: the transcript leaves out the row of the
-     call it gates until it is answered, and the card then settles into that
-     row (transcript/settle.ts). -->
-{#snippet parkedPrompts()}
-  <!-- One ask at a time: each in full took most of a phone. The next one
-       stands up when this one settles into its row. -->
-  {#each parked.slice(0, 1) as request (request.requestId)}
-    <div class="parked" data-flip out:settleInto={request.toolUseId}>
-      <Prompt
-        asker={agentName}
-        more={parked.length - 1}
-        onanswer={(result) => onanswer(request, result)}
-        {request}
-      />
-    </div>
-  {/each}
-  <!-- The quiet one: an offer, standing under the asks that block work. -->
+<!-- The quiet one: an offer, standing on the composer's tray row. A parked
+     ask is not drawn here: the composer grows into it (`ask`). -->
+{#snippet offer()}
   {#if projectOffer}
     <div class="parked" data-flip>
       <ProjectOffer offer={projectOffer} />
@@ -1133,6 +1135,7 @@
         {:else if writable && !browser}
           <Composer
             {agentName}
+            ask={firstAsk}
             busy={session.busy}
             {commands}
             delegatesOf={viewId}
@@ -1145,7 +1148,7 @@
             {onsubmit}
             paneVisible={visible}
             previewPhone={phone}
-            prompts={parkedPrompts}
+            prompts={offer}
             recallOf={viewId}
             sendError={sendFailure}
             {sending}

@@ -1951,7 +1951,8 @@ export class SessionSupervisor {
         this.#openAsks.set(request.requestId, body);
         this.sink(body);
       },
-      permissionResolved: (requestId) => this.#settleAsk(instanceId, requestId),
+      permissionResolved: (requestId, outcome) =>
+        this.#settleAsk(instanceId, requestId, outcome),
       busy: (active) => {
         if (active) {
           this.#busy.add(instanceId);

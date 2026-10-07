@@ -18,19 +18,24 @@
   } from "@cawco/core";
   import { questionsOf } from "@cawco/core";
   /**
-   * The one human-in-the-loop surface, floating above the composer: a permission
-   * gate (a measurably-symmetric Approve / Deny pair, with scope-widening kept
-   * apart) or a question (selectable answers plus free text). Both settle their
-   * parked tool call by handing the answer up, where it goes out as one tracked
-   * command whose stages this card's wait line reads. Ported from the mock's
-   * `.hitl`.
+   * The one human-in-the-loop surface, held in the composer's grown shape
+   * (Composer, grown.ts): a permission gate (a measurably-symmetric Approve /
+   * Deny pair, with scope-widening kept apart) or a question (selectable
+   * answers, and the field's line for an answer of the reader's own). Both
+   * settle their parked tool call by handing the answer up, where it goes out
+   * as one tracked command whose stages this card's wait line reads.
+   *
+   * The composer draws the surface: this is what stands in it. Its title,
+   * its body and its foot come up out of a slight blur one after the other
+   * as the shape grows (`shown`), and sink back as it folds.
    */
-  import { onMount, untrack } from "svelte";
+  import { onMount, tick } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
+  import { Kbd } from "#lib/components/ui/kbd/index.js";
   import {
+    IconAsk,
     IconCheck,
     IconClose,
-    IconNeedsYou,
     IconShield,
     IconTick,
   } from "#lib/icons.js";
@@ -43,17 +48,19 @@
   } from "../client.svelte";
   import { permissionSummary, suggestedRule } from "../permission-summary";
   import { questionAnswer } from "../question";
-  import { watchedSessions } from "./arrivals.svelte";
 
   let {
     request,
     onanswer,
     asker = "the agent",
-    more = 0,
+    place = null,
+    shown = false,
   }: {
     request: PendingPermission;
-    /** How many more asks wait behind this one: only one card stands parked. */
-    more?: number;
+    /** Where this ask stands among the ones waiting ("2 of 3"); none when it is alone. */
+    place?: { at: number; of: number } | null;
+    /** Whether what stands in the shape is up: the shape has grown to hold it. */
+    shown?: boolean;
     /** Who asks, as the conversation names its agent ("Caw" in a thread). */
     asker?: string;
     /**
@@ -122,6 +129,11 @@
       // with the same digit rather than only by picking something else.
       const chosen = answers[q.question] === label;
       answers = { ...answers, [q.question]: chosen ? "" : label };
+      // A picked option is the answer: the field's own goes back to waiting.
+      if (otherAt === index) {
+        otherAt = null;
+        otherField?.blur();
+      }
       if (!chosen) {
         advance();
       }
@@ -142,6 +154,76 @@
     return Array.isArray(value) ? value.includes(label) : value === label;
   };
 
+  /**
+   * An answer of the reader's own, written on the field's line: the
+   * composer's field is the free answer while a question stands in it. It
+   * answers the question it was opened for (`otherAt`); what was written
+   * for each question is kept, so going back to it finds it there.
+   */
+  let otherAt = $state<number | null>(null);
+  let others = $state<Record<string, string>>({});
+  let otherField = $state<HTMLInputElement>();
+
+  /** Whether a question's answer is the reader's own words. */
+  const otherPicked = (q: UserQuestion): boolean => {
+    const own = others[q.question]?.trim();
+    return !!own && isSelected(q.question, own);
+  };
+
+  /** The field's words become the answer, in place of what they were before. */
+  function writeOther(text: string): void {
+    const q = otherAt === null ? undefined : questions?.[otherAt];
+    if (!q) {
+      return;
+    }
+    const was = others[q.question]?.trim() ?? "";
+    const own = text.trim();
+    others = { ...others, [q.question]: text };
+    if (!q.multiSelect) {
+      answers = { ...answers, [q.question]: own };
+      return;
+    }
+    const list = asList(answers[q.question]).filter((l) => l !== was);
+    answers = { ...answers, [q.question]: own ? [...list, own] : list };
+  }
+
+  /** "Other": the field's line opens for this question's own answer. */
+  async function openOther(index: number): Promise<void> {
+    const q = questions?.[index];
+    if (!(q && answerable)) {
+      return;
+    }
+    current = index;
+    otherAt = index;
+    // Back to words already written: they are the answer again.
+    writeOther(others[q.question] ?? "");
+    await tick();
+    otherField?.focus();
+  }
+
+  /** The keys the field's line answers: Enter sends or moves on, Esc puts it down. */
+  function otherKey(event: KeyboardEvent): void {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      otherAt = null;
+      otherField?.blur();
+      return;
+    }
+    if (event.key !== "Enter" || event.shiftKey || event.isComposing) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    if (allAnswered) {
+      submitQuestion();
+      return;
+    }
+    otherAt = null;
+    otherField?.blur();
+    advance();
+  }
+
   // A permission blocks the turn that asked it, so its answer must land exactly
   // once and only when it can reach the daemon that asked. `pressed` latches
   // the card the instant it is answered — a double-tap, or an Enter after a
@@ -154,19 +236,6 @@
   let pressed = $state<Choice | null>(null);
   const connected = $derived(cawco.hub === "connected");
   const answerable = $derived(pressed === null && connected);
-
-  /**
-   * The card arrives — settles in — only when it comes in while the reader is
-   * watching its session: the same rule every transcript row follows. A card
-   * that was already waiting when the page opened, or that came in on a
-   * hidden page or behind another pane, is simply there.
-   */
-  const arriving = untrack(
-    () =>
-      watchedSessions.has(request.instanceId) &&
-      typeof document !== "undefined" &&
-      !document.hidden
-  );
 
   /**
    * The command this card's answer went out as. The card reads its OWN id
@@ -240,7 +309,15 @@
       return;
     }
     if (event.key >= "1" && event.key <= "9") {
-      const option = questions?.[current]?.options[Number(event.key) - 1];
+      const options = questions?.[current]?.options ?? [];
+      const at = Number(event.key) - 1;
+      // The keycap after the last option is the reader's own answer.
+      if (at === options.length) {
+        event.preventDefault();
+        openOther(current);
+        return;
+      }
+      const option = options[at];
       if (!option) {
         return;
       }
@@ -255,7 +332,7 @@
   }
 
   function submitQuestion(): void {
-    if (!answerable) {
+    if (!(answerable && allAnswered)) {
       return;
     }
     pressed = "answer";
@@ -294,174 +371,244 @@
   {/if}
 {/snippet}
 
-<!-- The asks waiting behind this one, said on it: they come one at a time. -->
-{#snippet waiting()}
-  {#if more > 0}
-    <span class="more num">+{more} more</span>
-  {/if}
+<!-- The title: what asks, and who, with where it stands among the asks
+     waiting when there are several ("2 of 3"): they come one at a time. -->
+{#snippet title(
+  text: string
+)}
+  <h2 class="part" style:--part="0">
+    <span aria-hidden="true" class="glyph">
+      {#if questions}
+        <IconAsk />
+      {:else}
+        <IconShield />
+      {/if}
+    </span>
+    <span class="title">{text}</span>
+    {#if place && place.of > 1}
+      <Kbd class="place num">{place.at} of {place.of}</Kbd>
+    {/if}
+  </h2>
 {/snippet}
 
 <section
   aria-label={questions ? `Question from ${asker}` : "Permission request"}
   class="hitl"
-  class:arriving={arriving}
+  class:shown={shown}
 >
   {#if questions}
-    <h2>
-      <span class="pill attn"><IconNeedsYou />needs you</span>Question from
-      {asker}
-      {@render waiting()}
-    </h2>
-    {#each questions as q, qi (q.question)}
-      <p class="lede">{q.question}</p>
-      <div class="qopts">
-        {#each q.options as opt, i (opt.label)}
-          {@const live = ownsKeys && qi === current && i < 9}
-          <button
-            aria-keyshortcuts={live ? String(i + 1) : undefined}
-            aria-pressed={isSelected(q.question, opt.label)}
-            class="touch-hit"
-            onclick={() => toggle(qi, opt.label)}
-            type="button"
-            class:sel={isSelected(q.question, opt.label)}
-          >
-            <span class="kc" class:dim={!live}>{i + 1}</span
-            ><span>{opt.label}</span>
-          </button>
-        {/each}
-      </div>
-    {/each}
-    <div class="qact">
-      <Button
-        class={primary}
-        disabled={disabledOf("answer") || (pressed === null && !allAnswered)}
-        failed={failedOf("answer")}
-        icon={IconCheck}
-        label="Answer"
-        onclick={submitQuestion}
-        pending={pendingOf("answer")}
-        pendingLabel="Answering…"
-      />
-      <Button
-        class={dismiss}
-        disabled={disabledOf("deny")}
-        failed={failedOf("deny")}
-        label="Dismiss"
-        onclick={() => answer("deny")}
-        pending={pendingOf("deny")}
-        pendingLabel="Dismissing…"
-        variant="outline"
-      />
+    {@render title(`Question from ${asker}`)}
+    <div class="body part" style:--part="1">
+      {#each questions as q, qi (q.question)}
+        {@const own = q.options.length}
+        <p class="lede">{q.question}</p>
+        <div class="qopts">
+          {#each q.options as opt, i (opt.label)}
+            {@const live = ownsKeys && qi === current && i < 9}
+            <button
+              aria-keyshortcuts={live ? String(i + 1) : undefined}
+              aria-pressed={isSelected(q.question, opt.label)}
+              class="touch-hit"
+              onclick={() => toggle(qi, opt.label)}
+              type="button"
+              class:sel={isSelected(q.question, opt.label)}
+            >
+              <span class="kc" class:dim={!live}>{i + 1}</span
+              ><span>{opt.label}</span>
+            </button>
+          {/each}
+          <!-- The reader's own answer, written on the field's line. -->
+          {#if own < 9}
+            {@const live = ownsKeys && qi === current}
+            <button
+              aria-keyshortcuts={live ? String(own + 1) : undefined}
+              aria-pressed={otherPicked(q) || otherAt === qi}
+              class="touch-hit"
+              onclick={() => openOther(qi)}
+              type="button"
+              class:sel={otherPicked(q) || otherAt === qi}
+            >
+              <span class="kc" class:dim={!live}>{own + 1}</span
+              ><span>Other</span>
+            </button>
+          {/if}
+        </div>
+      {/each}
     </div>
-    {@render wait()}
-  {:else}
-    <h2>
-      <span class="pill attn"><IconNeedsYou />needs you</span>Permission —
-      {request.toolName}
-      {@render waiting()}
-    </h2>
-    <p class="lede">{summary}</p>
-    {#if command}
-      <div class="cmd">{command}</div>
-    {/if}
-    <!-- The disclosed payload: a summary line is not enough to grant on — an
-         Edit/Write/WebFetch shows one sentence and hides the file, the diff, the
-         URL it is actually about. Every field of the tool input is here, one
-         disclosure away, so the grant is informed. -->
-    <details class="disclose">
-      <summary>What this touches</summary>
-      <div class="fields">
-        {#each Object.entries(input) as [key, value]}
-          {@const text =
-            typeof value === "string" ? value : JSON.stringify(value, null, 2)}
-          <div class="field">
-            <span class="k">{key}</span>
-            <pre class="v">{text}</pre>
-          </div>
-        {/each}
-      </div>
-    </details>
-    <div class="choice">
-      <Button
-        class={grant}
-        disabled={disabledOf("allow")}
-        failed={failedOf("allow")}
-        icon={IconTick}
-        label="Approve"
-        onclick={() => answer("allow")}
-        pending={pendingOf("allow")}
-        pendingLabel="Approving…"
-        variant="secondary"
-      />
-      <Button
-        class={refuse}
-        disabled={disabledOf("deny")}
-        failed={failedOf("deny")}
-        icon={IconClose}
-        label="Deny"
-        onclick={() => answer("deny")}
-        pending={pendingOf("deny")}
-        pendingLabel="Denying…"
-        variant="secondary"
-      />
-    </div>
-    {@render wait()}
-    {#if rule}
-      <div class="widen">
-        <p>
-          This would allow <span class="mono">{rule.full}</span> for
-          {rule.scope}
-          — a wider grant than the request above.
-        </p>
-        <!-- A standing grant must read as consequential: the kit's grant
-             (warning tint, warning ink, a real edge). -->
+    <div class="foot part" style:--part="2">
+      <div class="qact">
         <Button
-          class={btnBase}
-          disabled={disabledOf("always")}
-          failed={failedOf("always")}
-          icon={IconShield}
-          label="Always allow {rule.short}"
-          onclick={() => answer("always")}
-          pending={pendingOf("always")}
-          pendingLabel="Allowing…"
-          variant="grant"
+          class={primary}
+          disabled={disabledOf("answer") || (pressed === null && !allAnswered)}
+          failed={failedOf("answer")}
+          icon={IconCheck}
+          label="Answer"
+          onclick={submitQuestion}
+          pending={pendingOf("answer")}
+          pendingLabel="Answering…"
+        />
+        <Button
+          class={dismiss}
+          disabled={disabledOf("deny")}
+          failed={failedOf("deny")}
+          label="Dismiss"
+          onclick={() => answer("deny")}
+          pending={pendingOf("deny")}
+          pendingLabel="Dismissing…"
+          variant="outline"
         />
       </div>
-    {/if}
+      {@render wait()}
+    </div>
+  {:else}
+    {@render title(`Permission — ${request.toolName}`)}
+    <div class="body part" style:--part="1">
+      <p class="lede">{summary}</p>
+      {#if command}
+        <div class="cmd">{command}</div>
+      {/if}
+      <!-- The disclosed payload: a summary line is not enough to grant on — an
+           Edit/Write/WebFetch shows one sentence and hides the file, the diff, the
+           URL it is actually about. Every field of the tool input is here, one
+           disclosure away, so the grant is informed. -->
+      <details class="disclose">
+        <summary>What this touches</summary>
+        <div class="fields">
+          {#each Object.entries(input) as [key, value]}
+            {@const text =
+              typeof value === "string"
+                ? value
+                : JSON.stringify(value, null, 2)}
+            <div class="field">
+              <span class="k">{key}</span>
+              <pre class="v">{text}</pre>
+            </div>
+          {/each}
+        </div>
+      </details>
+    </div>
+    <div class="foot part" style:--part="2">
+      <div class="choice">
+        <Button
+          class={grant}
+          disabled={disabledOf("allow")}
+          failed={failedOf("allow")}
+          icon={IconTick}
+          label="Approve"
+          onclick={() => answer("allow")}
+          pending={pendingOf("allow")}
+          pendingLabel="Approving…"
+          variant="secondary"
+        />
+        <Button
+          class={refuse}
+          disabled={disabledOf("deny")}
+          failed={failedOf("deny")}
+          icon={IconClose}
+          label="Deny"
+          onclick={() => answer("deny")}
+          pending={pendingOf("deny")}
+          pendingLabel="Denying…"
+          variant="secondary"
+        />
+      </div>
+      {@render wait()}
+      {#if rule}
+        <div class="widen">
+          <p>
+            This would allow <span class="mono">{rule.full}</span> for
+            {rule.scope}
+            — a wider grant than the request above.
+          </p>
+          <!-- A standing grant must read as consequential: the kit's grant
+             (warning tint, warning ink, a real edge). -->
+          <Button
+            class={btnBase}
+            disabled={disabledOf("always")}
+            failed={failedOf("always")}
+            icon={IconShield}
+            label="Always allow {rule.short}"
+            onclick={() => answer("always")}
+            pending={pendingOf("always")}
+            pendingLabel="Allowing…"
+            variant="grant"
+          />
+        </div>
+      {/if}
+    </div>
   {/if}
 </section>
 
+<!-- The composer's field, while a question stands in it: the reader's own
+     answer to the question it was opened for, on the field's own line
+     (Composer places it there; the draft keeps the field meanwhile). -->
+{#if questions}
+  {@const at = otherAt}
+  <input
+    aria-label={at === null
+      ? "Your own answer"
+      : `Your own answer to: ${questions[at]?.question ?? ""}`}
+    class="other"
+    disabled={!answerable}
+    onfocus={() => {
+      if (otherAt === null) {
+        openOther(current);
+      }
+    }}
+    oninput={(event) => writeOther(event.currentTarget.value)}
+    onkeydown={otherKey}
+    placeholder="Or write your own answer"
+    type="text"
+    value={at === null ? "" : (others[questions[at]?.question ?? ""] ?? "")}
+    bind:this={otherField}
+    class:shown={shown}
+  >
+{/if}
+
 <style>
-  /* The focal moment: the card arrives with ONE settle and is then completely
-     still. No pulse, no attention loop — the arrival is the whole signal, and a
-     card that keeps moving after it has landed is asking twice. Two
-     --dur-control, so it moves with the scale if the scale moves. `backwards`
-     holds the from-frame before the first tick, so the card never flashes at
-     full opacity for a frame before it settles. */
-  @keyframes hitl-settle {
-    from {
-      opacity: 0;
-      translate: 0 8px;
-    }
-  }
+  /* The grown shape is the surface (Composer draws it): the card is what
+     stands in it, its title on top, its foot on the pill's top edge, and a
+     long ask scrolls between the two. As tall as the room over the pill
+     allows (`--ask-max`, the composer's). */
   .hitl {
-    border: 1px solid var(--border-control);
-    border-radius: var(--radius-lg);
-    background: var(--surface-raised);
-    padding: var(--space-3);
-    box-shadow: var(--shadow-hairline, var(--shadow-tile));
+    display: flex;
+    flex-direction: column;
+    max-block-size: var(--ask-max, none);
+    padding: var(--space-3) var(--space-3) var(--space-2);
+  }
+  .body {
+    flex: 1 1 auto;
+    min-block-size: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  .foot {
+    flex: none;
+    padding-block-start: var(--space-1);
+  }
+  /* The title, the body and the foot come up with the shape, out of a
+     slight blur, one after the other (the queued edit's row, Composer), and
+     sink back together as it folds. */
+  .part {
+    opacity: 0;
+    filter: blur(4px);
+    transition:
+      opacity var(--dur-fade) var(--ease-out),
+      filter var(--dur-fade) var(--ease-out);
 
     @media (prefers-reduced-motion: no-preference) {
-      &.arriving {
-        animation: hitl-settle calc(var(--dur-control) * 2) var(--ease-out)
-          backwards;
-      }
+      translate: 0 var(--pop-rise);
+      transition:
+        opacity var(--dur-fade) var(--ease-out),
+        translate var(--dur-panel) var(--ease-drawer),
+        filter var(--dur-fade) var(--ease-out);
     }
   }
-  .more {
-    margin-inline-start: auto;
-    font: var(--type-meta);
-    color: var(--ink-muted);
+  .shown .part {
+    opacity: 1;
+    translate: none;
+    filter: none;
+    transition-delay: calc(var(--part) * var(--dur-stagger));
   }
   h2 {
     font-size: var(--text-label);
@@ -471,23 +618,54 @@
     gap: var(--space-2);
     margin-block-end: var(--space-2);
   }
-  .pill {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-1);
-    block-size: 20px;
-    padding-block: 0;
-    padding-inline: var(--space-2);
-    border-radius: var(--radius-pill);
-    font-size: var(--text-label);
-    font-weight: var(--weight-strong);
-    background: var(--status-attn-bg);
+  /* What asks, in the attention hue: a person is holding this up. */
+  .glyph {
+    display: inline-grid;
+    place-items: center;
+    flex: none;
     color: var(--status-attn-ink);
+
+    & :global(svg) {
+      inline-size: var(--icon-md);
+      block-size: var(--icon-md);
+    }
   }
-  .pill :global(svg) {
-    inline-size: 12px;
-    block-size: 12px;
-    flex: 0 0 auto;
+  .title {
+    min-inline-size: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  h2 :global(.place) {
+    margin-inline-start: auto;
+  }
+  /* The field's line, while a question stands in the composer: set as the
+     field sets its text, on the field's own box (Composer's
+     `--ask-line-*`, off the panel's foot). */
+  .other {
+    position: absolute;
+    inset-inline-start: var(--ask-line-left, 0px);
+    inset-block-end: calc(var(--ask-line-bottom, 0px) - var(--ask-base, 0px));
+    inline-size: var(--ask-line-width, 100%);
+    block-size: var(--c-composer-field);
+    padding: 0;
+    border: 0;
+    outline: none;
+    background: transparent;
+    font-family: var(--font-body);
+    font-size: 16px;
+    line-height: var(--leading-ui);
+    color: var(--ink-strong);
+    text-overflow: ellipsis;
+    opacity: 0;
+    transition: opacity var(--dur-fade) var(--ease-out);
+
+    &.shown {
+      opacity: 1;
+    }
+    &::placeholder {
+      color: var(--ink-muted);
+    }
   }
   .wait {
     margin-block-start: var(--space-2);

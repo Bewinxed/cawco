@@ -536,9 +536,9 @@ const settledOf = (messages: Message[]): Message[] => {
 
 /**
  * The messages the transcript draws: the settled ones, less every call whose
- * ask is parked on the composer. The card is that call until it is answered,
- * so the call takes no room here while it waits, and its row arrives as the
- * card settles into it.
+ * ask is parked on the composer. The composer, grown into the ask, is that
+ * call until it is answered, so the call takes no room here while it waits,
+ * and its row arrives as the composer folds back.
  *
  * A question is the composer's from the moment it is asked, not from the
  * moment its ask lands: its call reaches the transcript a frame or two before

@@ -139,7 +139,11 @@ import {
 } from "./tasks.svelte";
 import { inLists, isThreadTab, threadIdOf, threadRowOf } from "./thread-tabs";
 import { warmCompactionMark } from "./transcript/compaction-mark";
-import { errorMessage, localUserMessage } from "./transcript/local";
+import {
+  errorMessage,
+  localUserMessage,
+  withdrawnNote,
+} from "./transcript/local";
 import { routedToParent } from "./transcript/present";
 import { holdsCompaction } from "./transcript/rows";
 import type { DelegateAskEvent, Message } from "./types";
@@ -760,6 +764,13 @@ const state = $state({
    * representation, so the moment it was raised is kept beside it here.
    */
   runAskRaisedAt: {} as Record<string, number>,
+  /**
+   * The line that says an ask was withdrawn before it was answered (the
+   * turn interrupted, the session gone), keyed by its request id. A
+   * session's transcript draws it as a note; a thread, whose asks are its
+   * lead's, reads it from here.
+   */
+  withdrawnAsks: {} as Record<string, Message>,
   /**
    * The socket's first full `instances` frame has landed: the hub's own
    * now-state (pulses) for every session is in, so "nothing is working" can
@@ -2273,10 +2284,18 @@ function handleFrame(frame: FramePayload): void {
   if (frame.kind === "permission_settled") {
     // The hub's word that the ask is over, whoever settled it: the card goes.
     const target = state.sessions[frame.instanceId];
-    if (target?.pending.some((p) => p.requestId === frame.requestId)) {
+    const parked = target?.pending.find((p) => p.requestId === frame.requestId);
+    if (target && parked) {
       target.pending = target.pending.filter(
         (p) => p.requestId !== frame.requestId
       );
+      // Withdrawn, not answered: the composer folds back, and the
+      // transcript says why the ask is gone.
+      if (frame.outcome === "cancelled") {
+        const note = withdrawnNote(frame.instanceId, parked);
+        state.withdrawnAsks[frame.requestId] = note;
+        addNote(target, note);
+      }
       trackWorking(target);
     }
     return;
@@ -6446,6 +6465,9 @@ export const cawco = {
   /** When the hub parked a waiting workflow run's question, ms epoch. */
   runAskRaisedAt: (runId: string): number | undefined =>
     state.runAskRaisedAt[runId],
+  /** The line saying an ask was withdrawn unanswered; none for one answered or still waiting. */
+  withdrawnAsk: (requestId: string): Message | undefined =>
+    state.withdrawnAsks[requestId],
   /**
    * The ledger stats the fleet table shows per session — turns, context %, cost.
    * Only populated for a session this browser has state for (subscribed / a turn

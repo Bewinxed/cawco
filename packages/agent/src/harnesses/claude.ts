@@ -1040,13 +1040,13 @@ class ClaudeSession implements HarnessSession {
             }
             this.#permissions.set(requestId, resolve);
             // The CLI withdrew the ask (an interrupt mid-ask): nobody can
-            // answer it any more, and the hub hears so.
+            // answer it any more, and the hub hears it was withdrawn.
             signal.addEventListener(
               "abort",
               () => {
                 if (this.#permissions.delete(requestId)) {
                   this.#openQuestions.delete(requestId);
-                  ctx.permissionResolved?.(requestId);
+                  ctx.permissionResolved?.(requestId, "cancelled");
                 }
               },
               { once: true }

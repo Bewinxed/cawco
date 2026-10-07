@@ -23,6 +23,11 @@
  *
  * Every size is measured once, before it is made (`measureShape`); a frame
  * only writes.
+ *
+ * A parked ask grows the same shape to hold its card (Composer): its sides
+ * rise straight (`taper: false`), since nothing in it leans back, and its
+ * top is solid to the edge (`fade: false`), since its first line is the
+ * ask's title, not an oldest row going out of sight.
  */
 import { easeDrawer, motionOk } from "../motion/curves.svelte";
 
@@ -74,6 +79,8 @@ export class GrownShape {
   readonly #edge: SVGStopElement;
   readonly #bands: HTMLDivElement[] = [];
   readonly #clips = new Map<HTMLElement, () => ClipBox>();
+  readonly #taper: boolean;
+  readonly #fade: boolean;
   #frame = 0;
   #done: (() => void) | null = null;
 
@@ -81,14 +88,22 @@ export class GrownShape {
     host: HTMLElement,
     size: ShapeSize,
     ext: number,
-    { frosted }: { frosted: boolean }
+    {
+      frosted,
+      taper = true,
+      fade = true,
+    }: { frosted: boolean; taper?: boolean; fade?: boolean }
   ) {
     this.#size = size;
     this.ext = ext;
+    this.#taper = taper;
+    this.#fade = fade;
+    // The frosted bands are the faded top's; a solid top has none.
+    const clear = fade ? "stop-opacity: 0" : "";
     made += 1;
     const fill = `grown-fill-${made}`;
     const edge = `grown-edge-${made}`;
-    if (frosted) {
+    if (frosted && fade) {
       for (const [i, px] of BLURS.entries()) {
         const band = document.createElement("div");
         band.className = "grown-band";
@@ -113,12 +128,12 @@ export class GrownShape {
     // what stands in it. Only the top of the grown part fades.
     this.#halo.innerHTML = `<svg><defs>
       <linearGradient id="${fill}" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" style="stop-color: var(--surface-raised); stop-opacity: 0"/>
+        <stop offset="0" style="stop-color: var(--surface-raised); ${clear}"/>
         <stop offset="0.2" style="stop-color: var(--surface-raised)"/>
         <stop offset="1" style="stop-color: var(--surface-raised)"/>
       </linearGradient>
       <linearGradient id="${edge}" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0.04" style="stop-color: var(--border-control); stop-opacity: 0"/>
+        <stop offset="${fade ? 0.04 : 0}" style="stop-color: var(--border-control); ${clear}"/>
         <stop offset="0.32" style="stop-color: var(--border-control)"/>
         <stop offset="1" style="stop-color: var(--border-control)"/>
       </linearGradient>
@@ -143,6 +158,9 @@ export class GrownShape {
 
   /** How far the shoulders curve in, grown: as far as the top row shrinks. */
   taper(ext = this.ext): number {
+    if (!this.#taper) {
+      return 0;
+    }
     const { row, w, headroom } = this.#size;
     return (SHRINK * (Math.max(0, (ext - headroom) / row) + 0.5) * w) / 2;
   }
@@ -208,8 +226,16 @@ export class GrownShape {
     this.#path.setAttribute("d", d);
     // Behind every row it is solid; only the grown top fades, where the
     // oldest row is fading already.
-    this.#mid.setAttribute("offset", String(Math.min(24, up * 0.25) / height));
-    this.#edge.setAttribute("offset", String(Math.min(40, up * 0.4) / height));
+    if (this.#fade) {
+      this.#mid.setAttribute(
+        "offset",
+        String(Math.min(24, up * 0.25) / height)
+      );
+      this.#edge.setAttribute(
+        "offset",
+        String(Math.min(40, up * 0.4) / height)
+      );
+    }
     for (const [el, box] of this.#clips) {
       el.style.clipPath = this.#cut(height, box());
     }

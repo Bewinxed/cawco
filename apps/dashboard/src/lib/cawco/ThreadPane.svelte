@@ -5,8 +5,9 @@
    * Transcript draws it, and the group's one composer lent to it. Your
    * words are your turns in the reader's well; Caw's are his turns, his
    * still on the speaker line, the tasks they are about as cards under
-   * them; what woke him is a code line. His question waits on the composer
-   * as the parked Prompt and, answered, settles into its QuestionCard row.
+   * them; what woke him is a code line. His question is the composer while
+   * it waits (it grows into it) and, answered, is drawn as its QuestionCard
+   * row; withdrawn, a quiet line says so.
    *
    * Caw sits on the composer: his ledge peek over the pill's top-leading
    * corner, then the thread's status, clipped at the pill's edge. With the
@@ -63,11 +64,9 @@
   import TaskCard from "./tasks/TaskCard.svelte";
   import TaskSheet from "./tasks/TaskSheet.svelte";
   import { newThreadProjectOf, threadIdOf, threadTabId } from "./thread-tabs";
-  import type { ComposerFoot } from "./transcript/Composer.svelte";
+  import type { ComposerAsk, ComposerFoot } from "./transcript/Composer.svelte";
   import { ComposerDraft } from "./transcript/composer-draft.svelte";
   import FootFade from "./transcript/FootFade.svelte";
-  import Prompt from "./transcript/Prompt.svelte";
-  import { settleInto } from "./transcript/settle";
   import Transcript from "./transcript/Transcript.svelte";
   import TranscriptSkeleton from "./transcript/TranscriptSkeleton.svelte";
   import { CAW_EVENT, setVoice } from "./transcript/voice";
@@ -194,6 +193,13 @@
   );
   $effect.pre(() => {
     const blocks = (messages ?? []).map(blockOf);
+    // A withdrawn question's line stands after what was said before it went.
+    for (const note of withdrawn) {
+      const at = blocks.findLastIndex(
+        (block) => (block.timestamp ?? "") <= (note.timestamp ?? "")
+      );
+      blocks.splice(at + 1, 0, note);
+    }
     session.blocks = blocks;
     session.messages = blocks;
     session.initialized = messages !== null;
@@ -279,6 +285,41 @@
       result,
     });
   }
+  /** The first of them, which the composer grows into: one at a time. */
+  const firstAsk = $derived.by((): ComposerAsk | null => {
+    const [first] = asks;
+    return first
+      ? {
+          request: first.request,
+          asker: "Caw",
+          more: asks.length - 1,
+          onanswer: (result) => onanswer(first, result),
+        }
+      : null;
+  });
+
+  /**
+   * His questions withdrawn before they were answered (his turn
+   * interrupted): each leaves its quiet line in the thread, where it was
+   * asked. They are his session's asks, so the line is read from the store
+   * as one leaves.
+   */
+  let withdrawn = $state<Message[]>([]);
+  let waitingOn = new Set<string>();
+  $effect(() => {
+    const now = new Set(asks.map((ask) => ask.request.requestId));
+    untrack(() => {
+      const gone = [...waitingOn].filter((id) => !now.has(id));
+      const lines = gone.flatMap((id) => {
+        const note = cawco.withdrawnAsk(id);
+        return note ? [{ ...note, instanceId: viewId }] : [];
+      });
+      if (lines.length > 0) {
+        withdrawn = [...withdrawn, ...lines];
+      }
+      waitingOn = now;
+    });
+  });
 
   // --- the tasks his turns are about -------------------------------------------
 
@@ -406,7 +447,9 @@
     },
     onmenu: () => undefined,
     onstop,
-    prompts: parkedPrompts,
+    get ask() {
+      return firstAsk;
+    },
     perch,
     onfoot: (next) => {
       foot = next;
@@ -448,9 +491,9 @@
    * Room at the transcript's foot for what stands over it: the composer and
    * Caw's rise above the pill (his slot over the ledge line, and the
    * artboard above it his acting may reach).
-   * A parked question card stands over the foot and moves nothing, as in a
-   * session: the owner, on a parked card, "it shouldn't push the transcript
-   * up" (a7443251).
+   * The composer grown into a question stands over the foot and moves
+   * nothing, as in a session: the owner, on a parked card, "it shouldn't
+   * push the transcript up" (a7443251).
    */
   const composerRoom = $derived.by(() => {
     if (!leadOn) {
@@ -512,21 +555,6 @@
       />
     </div>
   {/if}
-{/snippet}
-
-{#snippet parkedPrompts()}
-  <!-- One ask at a time: each in full took most of a phone. The next one
-       stands up when this one settles into its row. -->
-  {#each asks.slice(0, 1) as ask (ask.request.requestId)}
-    <div class="parked" data-flip out:settleInto={ask.request.toolUseId}>
-      <Prompt
-        asker="Caw"
-        more={asks.length - 1}
-        onanswer={(result) => onanswer(ask, result)}
-        request={ask.request}
-      />
-    </div>
-  {/each}
 {/snippet}
 
 {#snippet planRing()}
@@ -742,10 +770,6 @@
     margin: var(--space-3) 0 0;
     padding: 0;
     list-style: none;
-  }
-  .parked {
-    display: flex;
-    flex-direction: column;
   }
   .board-link {
     margin-block-start: var(--space-3);

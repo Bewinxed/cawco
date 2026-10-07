@@ -1,14 +1,32 @@
 <script lang="ts" module>
+  import type { PermissionResult } from "@cawco/core";
+  import type { PendingPermission } from "../client.svelte";
+
   /**
    * What a composer stands over the transcript's foot, in px: `stack`, the
-   * panel with the tray row and the parked cards on it; `perch`, how far Caw
-   * perched on the pill rises over its top (0 with no perch); `parked`, the
-   * parked cards alone (0 with none).
+   * panel with the tray row and what stands on it, or the grown ask when it
+   * reaches higher; `perch`, how far Caw perched on the pill rises over its
+   * top (0 with no perch, or while an ask has it stepped aside); `parked`,
+   * what stands higher than the panel and its tray row (0 with nothing).
    */
   export interface ComposerFoot {
     parked: number;
     perch: number;
     stack: number;
+  }
+
+  /**
+   * The ask a conversation has parked on its composer, the first of those
+   * waiting: the composer grows into it until it is answered or withdrawn.
+   */
+  export interface ComposerAsk {
+    /** Who asks, as the conversation names its agent ("Caw" in a thread). */
+    asker: string;
+    /** How many more asks wait behind this one. */
+    more: number;
+    /** Submits its answer; the id of the command it went out as (Prompt). */
+    onanswer: (result: PermissionResult) => string | null;
+    request: PendingPermission;
   }
 
   /** Something `@` can name: another session, a thread with Caw, or a machine. */
@@ -26,8 +44,8 @@
   import type { AvailableCommand } from "@cawco/core";
   /**
    * The floating composer — a lifted shell holding the text input, the attach
-   * and send controls, with any inline permission / question prompts stacked
-   * above it in a box of their own. Home, this input and Stop are the surface's fixed anchors; the
+   * and send controls. A parked permission or question is the composer
+   * itself while it waits: it grows up into the ask. Home, this input and Stop are the surface's fixed anchors; the
    * action button is a single box that sends when idle and interrupts while a
    * turn is in flight. Ported from the mock's `.composer` / `.cin`.
    *
@@ -95,7 +113,7 @@
   import { stand } from "./composer-presence.svelte";
   import DelegateTray from "./DelegateTray.svelte";
   import DocThumb from "./DocThumb.svelte";
-  import { GrownShape, measureShape } from "./grown";
+  import { GrownShape, type LineBox, measureShape } from "./grown";
   import {
     asBubble,
     asField,
@@ -112,6 +130,7 @@
     watchReplace,
     writesTo,
   } from "./lift.svelte";
+  import Prompt from "./Prompt.svelte";
   import RecallWheel from "./RecallWheel.svelte";
   import { sentByReader } from "./recall";
   import { opensTurn } from "./rows";
@@ -133,6 +152,7 @@
     onmenu,
     onstop,
     prompts,
+    ask = null,
     leading,
     perch,
     planRing,
@@ -192,7 +212,10 @@
     /** Fired when the `/` menu opens, so the session can be re-asked what it has. */
     onmenu?: () => void;
     onstop: () => void;
+    /** What stands on the tray row, above the composer: an offer, never an ask. */
     prompts?: Snippet;
+    /** The ask parked on this conversation, which the composer grows into; none with none. */
+    ask?: ComposerAsk | null;
     /** Controls rendered before the attach button in the composer row. */
     leading?: Snippet;
     /**
@@ -265,16 +288,16 @@
   const presence = {};
   $effect(() => {
     if (paneVisible) {
-      return stand(presence, panel + lift + stack);
+      return stand(presence, standing);
     }
   });
   // What stands over the transcript's foot, told to the pane it is lent to
   // (its fade and its "Jump to latest" rest on it).
   $effect(() => {
     onfoot?.({
-      stack: panel + lift + stack,
-      perch: perch ? perchHeight : 0,
-      parked: stack,
+      stack: standing,
+      perch: perch && !askRaised ? perchHeight : 0,
+      parked: standing - panel - lift,
     });
   });
   let fileInput = $state<HTMLInputElement>();
@@ -1266,6 +1289,10 @@
   const stops = $derived(busy && !draft.lifted);
 
   function onaction(): void {
+    // The ask holds the composer: Stop still withdraws it, nothing is sent.
+    if (askOpen && !busy) {
+      return;
+    }
     if (held) {
       submit();
       return;
@@ -1319,7 +1346,7 @@
    * start, so in a draft it still moves the caret, as a shell's does.
    */
   function startsRecall(): boolean {
-    if (!(recallOf && field) || recall || draft.lifted) {
+    if (!(recallOf && field) || recall || draft.lifted || askOpen) {
       return false;
     }
     const { selectionStart: from, selectionEnd: to } = field;
@@ -1343,7 +1370,8 @@
     if (
       !(recallOf && field && shell && pill && historyButton) ||
       recall ||
-      draft.lifted
+      draft.lifted ||
+      askOpen
     ) {
       return;
     }
@@ -1404,7 +1432,7 @@
 
   /** The history button: the wheel, or back from it; or keep a queued edit. */
   function onhistory(): void {
-    if (swallowClick) {
+    if (swallowClick || askOpen) {
       return;
     }
     if (recall) {
@@ -1508,6 +1536,7 @@
       !recallOf ||
       recall ||
       draft.lifted ||
+      askOpen ||
       document.activeElement === field
     ) {
       return;
@@ -1670,7 +1699,7 @@
   }
 
   async function liftQueued(message: Message): Promise<void> {
-    if (!(field && recallOf) || draft.lifted || recall) {
+    if (!(field && recallOf) || draft.lifted || recall || askOpen) {
       return;
     }
     // Both ends first, then the change: one layout.
@@ -1945,6 +1974,259 @@
     editShape = null;
   });
 
+  /*
+   * A parked ask (a permission, a question) is the composer itself while it
+   * waits. The composer grows up out of its history button into the ask's
+   * card: the shape the recall wheel and a queued edit grow (grown.ts), its
+   * sides straight and its top solid, since an ask has no rows leaning back
+   * and no oldest row fading out. What stands over the pill (the delegate
+   * tray, the plan's ring, the suggestion chips, an offer, a perch) steps
+   * aside while it is up, so nothing covers it. History stays down; the
+   * draft stays in the field, unseen and untouched, and the field's line is
+   * a question's own answer. Answered, dismissed or withdrawn, the ask folds
+   * back into the pill and the draft and its attachments are as they were;
+   * the next ask waiting takes its place in the grown shape without folding,
+   * its parts staggering in again.
+   */
+  /** The ask the shape holds: it trails `ask` while one changes into the next. */
+  let drawnAsk = $state<ComposerAsk | null>(null);
+  /** The composer is an ask, from its growth until its fold has landed. */
+  const askOpen = $derived(!!drawnAsk);
+  /** Grown, or growing, into an ask: what stands over the pill steps aside. */
+  let askRaised = $state(false);
+  /** Whether what stands in the shape is up. */
+  let askShown = $state(false);
+  /**
+   * The grown shape's measures, read before it was made: the pill under it,
+   * how far over it it reaches, the room it has there, the field's line.
+   */
+  let askBox = $state<{
+    base: number;
+    ext: number;
+    max: number;
+    line: LineBox;
+  } | null>(null);
+  let askPanel = $state<HTMLElement>();
+  let dockEl = $state<HTMLElement>();
+  let askShape: GrownShape | null = null;
+  /** The asks answered here since the first of a run came up ("2 of 3"). */
+  let askRun = $state(0);
+  /** Whose asks the run counts: a switch to another conversation starts anew. */
+  let askDraft: ComposerDraft | null = null;
+  /** The newest change of ask; an older one still landing leaves it be. */
+  let askTurn = 0;
+  /** The field had the keys when the ask came up: it has them back after. */
+  let askRefocus = false;
+  const askId = $derived(ask?.request.requestId ?? null);
+  const askPlace = $derived(
+    ask && drawnAsk?.request.requestId === ask.request.requestId
+      ? { at: askRun + 1, of: askRun + 1 + ask.more }
+      : null
+  );
+
+  /** The room over the pill the ask can stand in, under the pane's top. */
+  function askRoom(): number {
+    if (!(dockEl && shell)) {
+      return 0;
+    }
+    const gap = Number.parseFloat(
+      getComputedStyle(shell).getPropertyValue("--space-8")
+    );
+    const { top } = dockEl.getBoundingClientRect();
+    return Math.max(0, shell.getBoundingClientRect().top - top - gap);
+  }
+
+  /** The shape takes the card's height, from wherever it is drawn. */
+  function fitAsk(ms: number, force = false): void {
+    if (!(askShape && askPanel && askBox)) {
+      return;
+    }
+    const ext = askPanel.offsetHeight;
+    if (!force && Math.abs(ext - askBox.ext) < 0.5) {
+      return;
+    }
+    askBox.ext = ext;
+    askShape.morphTo(1, ext, ms);
+  }
+
+  async function growAsk(next: ComposerAsk, turn: number): Promise<void> {
+    if (!(shell && pill && field)) {
+      return;
+    }
+    // Every size first, before anything is written: one layout per growth.
+    const { size, line } = measureShape(
+      shell,
+      pill,
+      historyButton ?? field,
+      field
+    );
+    const max = askRoom();
+    // What else grows out of the pill puts itself away: the ask has it.
+    if (recall) {
+      recall = null;
+      reopen = false;
+      wheeling = false;
+    }
+    if (draft.lifted) {
+      giveBack();
+    }
+    if (document.activeElement === field) {
+      askRefocus = true;
+      field.blur();
+    }
+    askDraft = draft;
+    askRun = 0;
+    askBox = { base: size.base, ext: 0, max, line };
+    drawnAsk = next;
+    askRaised = true;
+    await tick();
+    if (turn !== askTurn || !askPanel) {
+      return;
+    }
+    const ext = askPanel.offsetHeight;
+    askBox.ext = ext;
+    const shape = new GrownShape(shell, size, ext, {
+      frosted: false,
+      taper: false,
+      fade: false,
+    });
+    askShape = shape;
+    // The card comes up from inside the shape, never above its edge.
+    shape.clip(askPanel, () => ({
+      left: 0,
+      bottom: askBox?.base ?? 0,
+      height: askBox?.ext ?? 0,
+    }));
+    shape.morphTo(1, ext, dur("--dur-grow"));
+    // Partway up, once there is room for it.
+    setTimeout(
+      () => {
+        if (turn === askTurn) {
+          askShown = true;
+        }
+      },
+      motionOk.current ? dur("--dur-control") : 0
+    );
+  }
+
+  /** The next ask waiting takes the shape's place, grown: no fold between. */
+  async function switchAsk(next: ComposerAsk, turn: number): Promise<void> {
+    const same = drawnAsk?.request.requestId === next.request.requestId;
+    askRaised = true;
+    if (!same) {
+      askRun = askDraft === draft ? askRun + 1 : 0;
+      askDraft = draft;
+      askShown = false;
+      if (motionOk.current) {
+        await new Promise((done) => setTimeout(done, dur("--dur-exit")));
+      }
+      if (turn !== askTurn) {
+        return;
+      }
+      drawnAsk = next;
+      await tick();
+      if (turn !== askTurn) {
+        return;
+      }
+    }
+    if (askBox) {
+      askBox.max = askRoom();
+    }
+    fitAsk(dur("--dur-fade"), true);
+    askShown = true;
+  }
+
+  /** Answered, dismissed or withdrawn: back into the pill. */
+  async function foldAsk(turn: number): Promise<void> {
+    askShown = false;
+    askRaised = false;
+    const shape = askShape;
+    if (shape) {
+      await shape.morphTo(0, shape.ext, dur("--dur-grow-exit"));
+    }
+    if (turn !== askTurn) {
+      return;
+    }
+    shape?.remove();
+    askShape = null;
+    drawnAsk = null;
+    askBox = null;
+    askRun = 0;
+    if (askRefocus) {
+      askRefocus = false;
+      field?.focus();
+    }
+  }
+
+  $effect(() => {
+    const id = askId;
+    if (!(shell && pill && field)) {
+      return;
+    }
+    untrack(() => {
+      const drawn = drawnAsk?.request.requestId ?? null;
+      if (id === drawn && (id === null || askRaised)) {
+        return;
+      }
+      askTurn += 1;
+      if (!ask) {
+        foldAsk(askTurn);
+      } else if (drawnAsk) {
+        switchAsk(ask, askTurn);
+      } else {
+        growAsk(ask, askTurn);
+      }
+    });
+  });
+
+  // The card grows (a disclosure opened, a refusal said under its buttons)
+  // and the window resizes: the shape follows.
+  $effect(() => {
+    const node = askPanel;
+    if (!node) {
+      return;
+    }
+    const sizes = new ResizeObserver(() => {
+      if (askRaised) {
+        fitAsk(dur("--dur-fade"));
+      }
+    });
+    sizes.observe(node);
+    const room = () => {
+      if (askBox) {
+        askBox.max = askRoom();
+      }
+    };
+    window.addEventListener("resize", room);
+    return () => {
+      sizes.disconnect();
+      window.removeEventListener("resize", room);
+    };
+  });
+
+  // The pill folds a long draft as the field lets the keys go: the shape
+  // and its card stay on its top edge.
+  $effect(() => {
+    const node = pill;
+    if (!(node && askBox)) {
+      return;
+    }
+    const sizes = new ResizeObserver(([entry]) => {
+      const base = entry.borderBoxSize[0].blockSize;
+      if (askShape && askBox && Math.abs(base - askBox.base) > 0.5) {
+        askBox.base = base;
+        askShape.base = base;
+      }
+    });
+    sizes.observe(node, { box: "border-box" });
+    return () => sizes.disconnect();
+  });
+
+  $effect(() => () => {
+    askShape?.remove();
+    askShape = null;
+  });
+
   /** Whose queued sends this harness calls queued, for the wheel's rows. */
   const queuedWord = $derived(
     recalled?.harness === "claude" ? "Queued" : undefined
@@ -2082,6 +2364,11 @@
     };
   }
 
+  /** How high the grown ask stands over the composer's foot; 0 with none up. */
+  const askRise = $derived(askRaised && askBox ? askBox.base + askBox.ext : 0);
+  /** What the composer stands over the transcript's foot, all told. */
+  const standing = $derived(Math.max(panel + lift + stack, askRise));
+
   const removeImage = (i: number) => {
     draft.images = draft.images.filter((_, n) => n !== i);
   };
@@ -2091,14 +2378,14 @@
 </script>
 
 <!-- The dock is one column from the top of the pane down to the composer's
-     resting place: the parked prompts fill it and the panel stands at its
-     foot. Parked prompts stand in their own column on top of the composer,
-     so a card arriving or leaving never moves the composer itself. The
-     column stands its cards on its bottom edge: it stays where it is while
-     cards come and go, so the list moves the way every list does
-     (motion/rows.svelte.ts) — a card arriving is uncovered as the cards
-     above it slide up to make its room, a card leaving closes as they slide
-     back down.
+     resting place: what stands on the tray row (an offer) fills it and the
+     panel stands at its foot, so a card arriving or leaving never moves the
+     composer itself. The column stands its cards on its bottom edge: it
+     stays where it is while cards come and go, so the list moves the way
+     every list does (motion/rows.svelte.ts) — a card arriving is uncovered
+     as the cards above it slide up to make its room, a card leaving closes
+     as they slide back down. A parked ask is not one of them: the composer
+     grows into it, and the column and the tray row step aside meanwhile.
      The column's foot is the panel's top by layout, not by a measured
      height: placed from `panel`, the column resized inside the very
      ResizeObserver pass that measured the panel, a box the pass could no
@@ -2108,18 +2395,20 @@
 <div
   class="dock"
   data-keeps-draft
+  bind:this={dockEl}
   style:--perch-rise={perch && perchHeight ? `${perchHeight}px` : null}
+  class:asking={askRaised}
 >
   {#if prompts}
-    <div class="prompts" {@attach reflow()}>
+    <div class="prompts" inert={askRaised} {@attach reflow()}>
       <div class="stack" bind:clientHeight={stack}>{@render prompts()}</div>
     </div>
   {/if}
   <!-- The row standing on the composer, outside its box: the delegate
        tray's fixed row, and the suggestion chips standing on it (out of
        flow). Both rows are kept clear at every transcript's foot (app.css
-       `--c-tray-row`, `--c-suggest-room`). Prompts stand on top of both. -->
-  <div class="lift" bind:clientHeight={lift}>
+       `--c-tray-row`, `--c-suggest-room`). An offer stands on top of both. -->
+  <div class="lift" inert={askRaised} bind:clientHeight={lift}>
     {#if suggest && suggestions.enabled}
       <!-- Keyed by conversation: the ranking is of one chat's words, and the
            shared phone composer must not carry it into the next chat. -->
@@ -2280,6 +2569,32 @@
           </Button>
         </div>
       {/if}
+      {#if drawnAsk && askBox}
+        <!-- The ask the composer has grown into, on the pill's top edge and
+             cut to the shape as it grows and folds; a question's own answer
+             is written on the field's line under it. -->
+        <div
+          class="ask"
+          inert={!askShown}
+          bind:this={askPanel}
+          style:--ask-base="{askBox.base}px"
+          style:--ask-line-bottom="{askBox.line.bottom}px"
+          style:--ask-line-left="{askBox.line.left}px"
+          style:--ask-line-width="{askBox.line.width}px"
+          style:--ask-max="{askBox.max}px"
+          style:bottom="{askBox.base}px"
+        >
+          {#key drawnAsk.request.requestId}
+            <Prompt
+              asker={drawnAsk.asker}
+              onanswer={drawnAsk.onanswer}
+              place={askPlace}
+              request={drawnAsk.request}
+              shown={askShown}
+            />
+          {/key}
+        </div>
+      {/if}
       <!-- With the keyboard down a touch screen's pill is a control to hold
          (the wheel comes up under it); the field being typed in keeps its
          touches. -->
@@ -2293,7 +2608,8 @@
         onsubmit={(e) => e.preventDefault()}
         ontouchend={onholdnative}
         bind:this={pill}
-        class:grown={!!edit}
+        class:asking={askOpen}
+        class:grown={!!edit || askOpen}
         class:wheeling={wheeling}
       >
         {#if perch}
@@ -2361,7 +2677,7 @@
 
         <!-- A label, so the pill's padding above and below the 34px field
          focuses it: its touch area is the field's. -->
-        <label class="field touch-hit" class:folded>
+        <label class="field touch-hit" inert={askOpen} class:folded>
           <textarea
             aria-activedescendant={recall ? recallActive : activeDescendant}
             aria-autocomplete="list"
@@ -2448,6 +2764,7 @@
           <button
             aria-label="Attach a file or image"
             class="att-btn touch-hit"
+            disabled={askOpen}
             onclick={() => fileInput?.click()}
             type="button"
           >
@@ -2463,6 +2780,7 @@
                 ? "Keep your queued message as it was"
                 : "Show what you sent here"}
               class="history-btn touch-hit"
+              disabled={askOpen}
               onclick={onhistory}
               type="button"
               bind:this={historyButton}
@@ -2505,6 +2823,9 @@
 
 <style>
   .dock {
+    /* What steps aside while an ask holds the composer comes back at once
+       and fades in (`.dock.asking`, below). */
+    --step-aside: opacity var(--dur-fade) var(--ease-out), visibility 0s;
     position: absolute;
     inset: 0 0 calc(var(--space-4) + env(safe-area-inset-bottom));
     z-index: 20;
@@ -2536,6 +2857,7 @@
     flex-direction: column;
     justify-content: flex-end;
     pointer-events: none;
+    transition: var(--step-aside);
   }
   /* The delegate tray's row, on the composer's width and left edge. It is
      the positioned box the suggestion chips stand on. */
@@ -2544,6 +2866,7 @@
     flex: none;
     width: var(--c-composer-w);
     pointer-events: none;
+    transition: var(--step-aside);
   }
   /* One conversation's tray over the next while they cross-fade, in a column
      the composer's width: an auto column grew to the chips' own width. The
@@ -2609,6 +2932,7 @@
     inset-block-end: 100%;
     inset-inline-start: var(--space-3);
     pointer-events: none;
+    transition: var(--step-aside);
   }
   /* A parked card keeps the composer's whole row (Prompt: the answer row
      needs its width) and stands above what peeks over the pill, never over
@@ -3174,15 +3498,45 @@
     }
   }
 
-  /* The wheel's rows stand in the field's place: its own text, caret and
-     hint are clear meanwhile. */
+  /* The wheel's rows stand in the field's place, and a question's own
+     answer stands on its line: its own text, caret and hint are clear
+     meanwhile. */
   .wheeling textarea,
-  .wheeling textarea::placeholder {
+  .wheeling textarea::placeholder,
+  .asking textarea,
+  .asking textarea::placeholder {
     color: transparent;
     caret-color: transparent;
   }
-  .wheeling .more {
+  .wheeling .more,
+  .asking .more {
     visibility: hidden;
+  }
+  /* While an ask holds the composer, history and attach wait. */
+  .att-btn:disabled,
+  .history-btn:disabled {
+    opacity: 0.55;
+    cursor: default;
+    pointer-events: none;
+  }
+
+  /* While the composer is grown into an ask, what stands over the pill
+     steps aside: the offer column, the tray row with its chips and the
+     plan's ring, and a perch. They fade out and are gone, and come back
+     the same way (`--step-aside`) as the ask folds. */
+  .dock.asking :is(.prompts, .lift, .perch) {
+    opacity: 0;
+    visibility: hidden;
+    transition:
+      opacity var(--dur-fade) var(--ease-out),
+      visibility 0s linear var(--dur-fade);
+  }
+  /* The ask's card, on the pill's top edge across the composer's width:
+     over the pill, as the wheel's rows and the editing row are. */
+  .ask {
+    position: absolute;
+    z-index: 3;
+    inset-inline: 0;
   }
 
   /* The grown shape and its frosted fade (grown.ts), made as it grows:

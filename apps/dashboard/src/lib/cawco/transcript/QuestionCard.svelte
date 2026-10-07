@@ -194,12 +194,10 @@
 </script>
 
 <!-- `data-frame`: the card's surface is its frame, opened before what is
-     on it (Row's arrival). `data-call`: where the parked prompt it was
-     settles into (transcript/settle.ts). -->
+     on it (Row's arrival). -->
 <section
   aria-label="Question from {asker}"
   class="hitl"
-  data-call={message.toolCallId}
   data-frame
   bind:this={section}
 >

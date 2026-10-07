@@ -75,9 +75,16 @@ export interface HarnessContext {
     /** The tool call the ask gates: its `tool_use` id, which names its transcript row. */
     toolUseId?: string;
   }): void;
-  /** A gate was answered elsewhere, or by the adapter's own policy. */
+  /**
+   * A gate was answered elsewhere, or by the adapter's own policy; or, with
+   * `cancelled`, withdrawn by the harness before anyone answered it (an
+   * interrupt mid-ask).
+   */
   // biome-ignore lint/style/useConsistentMethodSignatures: matches the context callbacks
-  permissionResolved?(requestId: string): void;
+  permissionResolved?(
+    requestId: string,
+    outcome?: "answered" | "cancelled"
+  ): void;
   /** Server-session work waits for durable hub storage of its address. */
   // biome-ignore lint/style/useConsistentMethodSignatures: matches context callbacks
   recordSessionAddress?(sessionId: string): Promise<void>;
