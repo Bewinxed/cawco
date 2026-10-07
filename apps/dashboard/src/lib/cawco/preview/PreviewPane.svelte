@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { CanvasChoices } from "@cawco/core";
+  import type { Snippet } from "svelte";
   import { toast } from "svelte-sonner";
   import { Button } from "#lib/components/ui/button/index.js";
   import PendingContent, {
@@ -39,8 +40,11 @@
     instanceId,
     onselect,
     onescape,
+    switcher,
   }: {
     instanceId: string;
+    /** The Plan | Preview switch, when the conversation has a plan beside it (SideSplit). */
+    switcher?: Snippet;
     onselect: (
       selection: CapturedSelection
     ) => "added" | "duplicate" | "full" | undefined;
@@ -431,6 +435,9 @@
   class:selecting
 >
   <header>
+    {#if switcher}
+      {@render switcher()}
+    {/if}
     <div class="identity">
       <span class="title">{title}</span
       ><span class="path"

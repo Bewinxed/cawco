@@ -15,22 +15,9 @@
    * pane's either way — `draft` below.
    */
   import { untrack } from "svelte";
-  import type { TransitionConfig } from "svelte/transition";
-  import {
-    crossIn,
-    crossOut,
-    dur,
-    easeOut,
-    motionOk,
-  } from "#lib/cawco/motion/curves.svelte.js";
-  import {
-    waiting as departing,
-    land,
-  } from "#lib/cawco/motion/share.svelte.js";
+  import { crossIn, crossOut } from "#lib/cawco/motion/curves.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component group.
-  import * as Resizable from "#lib/components/ui/resizable/index.js";
   import { IconAlert, IconChat, IconLaptop } from "#lib/icons.js";
   import { browser } from "$app/env";
   import AutopilotToggle from "./AutopilotToggle.svelte";
@@ -58,9 +45,10 @@
   } from "./client.svelte";
   import { cleanDetail } from "./command-detail";
   import { delegateHandle } from "./links";
-  import PreviewPane from "./preview/PreviewPane.svelte";
-  import PreviewSheet from "./preview/PreviewSheet.svelte";
+  import { planProgress, planShows } from "./plan/PlanPane.svelte";
+  import PlanRing from "./plan/PlanRing.svelte";
   import { keepsDrafts } from "./protocol-reload";
+  import SideSplit from "./side/SideSplit.svelte";
   import { clip, type SuggestCandidate, suggestions } from "./suggest.svelte";
   import { inLists } from "./thread-tabs";
   import Composer, { type Mention } from "./transcript/Composer.svelte";
@@ -115,111 +103,19 @@
   /** A named state stands in the middle of the transcript area. */
   const STATEFUL = "m-auto max-w-[46ch] px-[var(--space-6)]";
   let paneWidth = $state(0);
-  let content = $state<HTMLDivElement>();
-  let previewPane = $state<ReturnType<typeof Resizable.Pane>>();
-  let savedWidth = 45;
   /**
-   * The side preview's share of this pane's width, in percent, as the layout
-   * has it this moment: 0 while it is closed or a sheet. What is left is the
-   * transcript's, and the group's composer sits over exactly that much.
+   * The side surface's share of this pane's width, in percent (SideSplit):
+   * 0 while it is closed or a sheet. What is left is the transcript's, and
+   * the group's composer sits over exactly that much.
    */
   let previewShare = $state(0);
-  let resizing = $state(false);
   const phone = $derived(paneWidth > 0 && paneWidth < 900);
-  const previewOpen = $derived(cawco.previews[viewId]?.state === "open");
-  /**
-   * The side preview beside the transcript, on screen or not. A pane going
-   * off screen keeps its split: collapsing it there and opening it again on
-   * the way back narrowed the transcript, the preview and the group's
-   * composer over 300ms on every visit — the switch into or out of the tab
-   * moved all three.
-   */
-  const desktopPreview = $derived(previewOpen && !phone);
-  /**
-   * The split is sliding: the reader is watching the preview open or close
-   * beside the transcript, and the split's size change is the information.
-   * Only then does `flex-grow` animate. A split sized any other way — off
-   * screen, where no style is computed and a transition would start from a
-   * stale size the frame the pane is shown, or out of its tool row, where
-   * the surface clips open instead — takes its size at once.
-   */
-  let sliding = $state(false);
-  let previewMounted = $state(false);
-  /**
-   * The side preview is opening out of its tool row
-   * (motion/share.svelte.ts, `preview:<session>`): the split takes its width
-   * in one frame and the surface clips open from the row's box over
-   * --dur-panel on --ease-drawer, standing still while it does, so the two
-   * never move at once. Opened any other way it slides in with the split.
-   */
-  let fromRow = $state(false);
-  let sheetMounted = $state(false);
-  $effect(() => {
-    if (phone && previewOpen && visible) {
-      sheetMounted = true;
-      return;
-    }
-    const timer = setTimeout(
-      () => {
-        sheetMounted = false;
-      },
-      motionOk.current ? dur("--dur-panel") : 1
-    );
-    return () => clearTimeout(timer);
-  });
-
-  $effect(() => {
-    const id = viewId;
-    const stored = Number(localStorage.getItem(`cawco.preview.width.${id}`));
-    savedWidth = stored > 0 ? Math.min(70, stored) : 45;
-  });
-  $effect(() => {
-    const open = desktopPreview;
-    const pane = previewPane;
-    if (!pane) {
-      return;
-    }
-    if (open) {
-      fromRow =
-        untrack(() => !previewMounted) && departing(`preview:${viewId}`);
-      previewMounted = true;
-    }
-    const seen = untrack(() => visible && !fromRow) && motionOk.current;
-    sliding = seen;
-    let settle = 0;
-    // The size is this conversation's own (`savedWidth`); the split's
-    // `minSize` holds the preview to its 320px floor, and re-applies it
-    // whenever the pane's width changes.
-    const frame = requestAnimationFrame(() => {
-      if (open) {
-        pane.resize(savedWidth);
-      } else {
-        pane.collapse();
-      }
-      settle = requestAnimationFrame(() => {
-        fromRow = false;
-      });
-    });
-    const slid = seen
-      ? setTimeout(() => {
-          sliding = false;
-        }, 300)
-      : undefined;
-    const timer = open
-      ? undefined
-      : setTimeout(
-          () => {
-            previewMounted = false;
-          },
-          motionOk.current ? dur("--dur-panel") : 1
-        );
-    return () => {
-      cancelAnimationFrame(frame);
-      cancelAnimationFrame(settle);
-      clearTimeout(slid);
-      clearTimeout(timer);
-    };
-  });
+  let side = $state<ReturnType<typeof SideSplit>>();
+  /** The session's plan has something to show: its ring opens it (SideSplit). */
+  const plan = $derived(cawco.planOf(viewId));
+  const planProgressNow = $derived(
+    planShows(plan) && plan ? planProgress(plan) : null
+  );
 
   /** Why this pane has nothing to show, when it has nothing to show. */
   let failure = $state<ReadFault | null>(null);
@@ -1045,6 +941,9 @@
     onstop,
     prompts: parkedPrompts,
     leading: autopilot,
+    get planRing() {
+      return planProgressNow ? planRing : undefined;
+    },
   };
 
   $effect(() => {
@@ -1059,31 +958,21 @@
       }
     };
   });
-
-  /**
-   * The side preview mounting already open slides 25px in from the edge it
-   * opens against and fades up (--dur-panel, --ease-out), the same move its
-   * class transition makes when it opens later. Mounted closed, it waits for
-   * that class. Reduced motion keeps the fade.
-   */
-  function surfaceIn(_node: Element): TransitionConfig {
-    if (!desktopPreview || fromRow) {
-      return { duration: 0 };
-    }
-    const still = !motionOk.current;
-    return {
-      duration: dur("--dur-panel"),
-      easing: easeOut,
-      css: (t, u) =>
-        still
-          ? `opacity: ${t}`
-          : `opacity: ${t}; transform: translateX(${u * 25}px);`,
-    };
-  }
 </script>
 
 <!-- The composer's two slots, drawn by whichever composer is writing to this
      conversation: the one below on a desk, the deck's on a phone. -->
+{#snippet planRing()}
+  {#if planProgressNow}
+    <PlanRing
+      done={planProgressNow.done}
+      onopen={() => side?.openPlan()}
+      open={side?.planShowing() ?? false}
+      total={planProgressNow.total}
+    />
+  {/if}
+{/snippet}
+
 {#snippet autopilot()}
   <AutopilotToggle instance={instanceRow} instanceId={viewId} />
 {/snippet}
@@ -1148,147 +1037,93 @@
 
 <div class="pane" bind:clientWidth={paneWidth}>
   {#if session}
-    <div
-      class="session-content"
-      bind:this={content}
-      class:preview-shown={desktopPreview}
-      class:resizing={resizing}
-      class:sliding={sliding}
+    <SideSplit
+      onescape={() => draft.closeSelectionEditor()}
+      onselect={(selection) => draft.attach(selection)}
+      {phone}
+      planOf={viewId}
+      {viewId}
+      {visible}
+      bind:this={side}
+      bind:share={previewShare}
     >
-      <Resizable.PaneGroup class="preview-group" direction="horizontal">
-        <Resizable.Pane class="transcript-pane" defaultSize={100} minSize={30}>
-          <div
-            class="body"
-            style="--composer-clearance: calc({composerRoom} + var(--space-4) + var(--space-4))"
-          >
-            <!-- The transcript area. Movement between conversations is owned by the
+      <div
+        class="body"
+        style="--composer-clearance: calc({composerRoom} + var(--space-4) + var(--space-4))"
+      >
+        <!-- The transcript area. Movement between conversations is owned by the
            pane above this one, so nothing here animates on a switch — this is
            the surface a swipe carries, not the thing that carries it. -->
-            <div class="transcript-slide">
-              <!-- A named state, not an empty pane: what happened, in one line,
+        <div class="transcript-slide">
+          <!-- A named state, not an empty pane: what happened, in one line,
                    and the one thing that can be done about it. -->
-              {#if fault}
-                <div class="state" in:crossIn out:leave>
-                  {@render faultState(fault)}
-                </div>
-              {:else if unaddressable}
-                <div class="state" in:crossIn out:leave>
-                  {@render missingState()}
-                </div>
-              {:else if blank}
-                <div class="state" in:crossIn out:leave>
-                  <EmptyState
-                    class={STATEFUL}
-                    icon={IconChat}
-                    line="The transcript was found and has no turns yet. Write the first message below."
-                    title="Nothing has been said here yet"
-                  />
-                </div>
-              {:else if mounted}
-                <div class="state">
-                  <Transcript
-                    {agentName}
-                    {focused}
-                    onshown={(drawn) => {
-                      shown = drawn;
-                    }}
-                    {session}
-                    {visible}
-                  />
-                </div>
-              {/if}
-              {#if veiled}
-                <div class="veil" in:crossIn out:crossOut>
-                  <TranscriptSkeleton />
-                </div>
-              {/if}
+          {#if fault}
+            <div class="state" in:crossIn out:leave>
+              {@render faultState(fault)}
             </div>
-
-            <!-- The group draws the composer; only the server's first paint,
-                 before any group composer exists, draws one here. -->
-            {#if !fault && (unaddressable || readOnly)}
-              <p class="readonly" in:crossIn out:crossOut>
-                This transcript is stored; the session isn't reachable from
-                here.
-              </p>
-            {:else if writable && !browser}
-              <Composer
-                {agentName}
-                busy={session.busy}
-                {commands}
-                delegatesOf={viewId}
-                {draft}
-                leading={autopilot}
-                {mentions}
-                {oninterruptsend}
-                onmenu={refreshMenu}
-                {onstop}
-                {onsubmit}
-                paneVisible={visible}
-                previewPhone={phone}
-                prompts={parkedPrompts}
-                recallOf={viewId}
-                sendError={sendFailure}
-                {sending}
-                {suggest}
+          {:else if unaddressable}
+            <div class="state" in:crossIn out:leave>
+              {@render missingState()}
+            </div>
+          {:else if blank}
+            <div class="state" in:crossIn out:leave>
+              <EmptyState
+                class={STATEFUL}
+                icon={IconChat}
+                line="The transcript was found and has no turns yet. Write the first message below."
+                title="Nothing has been said here yet"
               />
-            {/if}
-          </div>
-        </Resizable.Pane>
-        <Resizable.Handle
-          class={desktopPreview ? "preview-divider" : "preview-divider hidden"}
-          onDraggingChange={(dragging) => {
-            resizing = dragging;
-          }}
-        />
-        <Resizable.Pane
-          class="artifact-pane"
-          collapsedSize={0}
-          collapsible
-          defaultSize={0}
-          maxSize={70}
-          minSize={paneWidth ? Math.min(70, (320 / paneWidth) * 100) : 30}
-          onResize={(size) => {
-            previewShare = size;
-            if (size > 0 && desktopPreview) {
-              savedWidth = size;
-              localStorage.setItem(
-                `cawco.preview.width.${viewId}`,
-                String(size)
-              );
-            }
-          }}
-          bind:this={previewPane}
-        >
-          {#if previewMounted && !phone}
-            <div
-              class="artifact-surface"
-              class:shown={desktopPreview}
-              in:surfaceIn
-              {@attach land(() => `preview:${viewId}`, {
-                mode: "clip",
-                ms: dur("--dur-panel"),
-              })}
-            >
-              <PreviewPane
-                instanceId={viewId}
-                onescape={() => draft.closeSelectionEditor()}
-                onselect={(selection) => draft.attach(selection)}
+            </div>
+          {:else if mounted}
+            <div class="state">
+              <Transcript
+                {agentName}
+                {focused}
+                onshown={(drawn) => {
+                  shown = drawn;
+                }}
+                {session}
+                {visible}
               />
             </div>
           {/if}
-        </Resizable.Pane>
-      </Resizable.PaneGroup>
-      {#if sheetMounted && phone && visible}
-        <PreviewSheet
-          {content}
-          instanceId={viewId}
-          onescape={() => draft.closeSelectionEditor()}
-          onselect={(selection) => draft.attach(selection)}
-          open={previewOpen}
-        />
-      {/if}
-    </div>
+          {#if veiled}
+            <div class="veil" in:crossIn out:crossOut>
+              <TranscriptSkeleton />
+            </div>
+          {/if}
+        </div>
+
+        <!-- The group draws the composer; only the server's first paint,
+                 before any group composer exists, draws one here. -->
+        {#if !fault && (unaddressable || readOnly)}
+          <p class="readonly" in:crossIn out:crossOut>
+            This transcript is stored; the session isn't reachable from here.
+          </p>
+        {:else if writable && !browser}
+          <Composer
+            {agentName}
+            busy={session.busy}
+            {commands}
+            delegatesOf={viewId}
+            {draft}
+            leading={autopilot}
+            {mentions}
+            {oninterruptsend}
+            onmenu={refreshMenu}
+            {onstop}
+            {onsubmit}
+            paneVisible={visible}
+            previewPhone={phone}
+            prompts={parkedPrompts}
+            recallOf={viewId}
+            sendError={sendFailure}
+            {sending}
+            {suggest}
+          />
+        {/if}
+      </div>
+    </SideSplit>
   {:else if fault}
     <!-- No session in the store yet, and the server's read was refused: the
          same named state the pane's own read would show. -->
@@ -1303,71 +1138,6 @@
 </div>
 
 <style>
-  .session-content {
-    display: flex;
-    flex: 1;
-    min-height: 0;
-    min-width: 0;
-  }
-  .session-content :global(.transcript-pane),
-  .session-content :global(.artifact-pane) {
-    display: flex;
-    min-width: 0;
-    min-height: 0;
-  }
-  /* Opening or closing the preview in front of the reader grows one side
-     into the other: the split's size change is the information. Opening
-     decelerates into place on the drawer curve; closing is a morph on
-     --ease-in-out. Any other
-     size — a drag following the pointer, a pane sized off screen — is taken
-     at once (`sliding`). */
-  @media (prefers-reduced-motion: no-preference) {
-    .sliding :global(.transcript-pane),
-    .sliding :global(.artifact-pane) {
-      transition: flex-grow var(--dur-panel) var(--ease-in-out);
-    }
-    .sliding.preview-shown :global(.transcript-pane),
-    .sliding.preview-shown :global(.artifact-pane) {
-      transition-timing-function: var(--ease-drawer);
-    }
-  }
-  .artifact-surface {
-    width: 100%;
-    min-width: 320px;
-    padding: var(--space-3);
-    opacity: 0;
-    transform: translateX(var(--space-7));
-    transition: opacity var(--dur-panel) var(--ease-out);
-    @media (prefers-reduced-motion: no-preference) {
-      transition:
-        opacity var(--dur-panel) var(--ease-out),
-        transform var(--dur-panel) var(--ease-out);
-    }
-  }
-  .artifact-surface.shown {
-    opacity: 1;
-    transform: translateX(0);
-    transition-timing-function: var(--ease-out);
-  }
-  .session-content :global(.preview-divider) {
-    z-index: 2;
-    background: var(--border-hairline);
-    transition: background-color var(--dur-control) var(--ease-out);
-  }
-  .session-content :global(.preview-divider.hidden) {
-    display: none;
-  }
-  .resizing :global(iframe) {
-    pointer-events: none;
-  }
-  .session-content :global(.preview-divider[data-active]) {
-    background: var(--ink-muted);
-  }
-  @media (hover: hover) {
-    .session-content :global(.preview-divider:hover) {
-      background: var(--border-control);
-    }
-  }
   .body {
     min-width: 0;
   }

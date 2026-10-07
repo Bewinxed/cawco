@@ -41,9 +41,13 @@
     sayInThread,
     startThread,
     submitCommand,
+    unwatchPlan,
+    watchPlan,
   } from "./client.svelte";
   import Caw, { CAW_HEADROOM, LEDGE_LINE } from "./home/Caw.svelte";
   import CawFace from "./home/CawFace.svelte";
+  import { planProgress, planShows } from "./plan/PlanPane.svelte";
+  import PlanRing from "./plan/PlanRing.svelte";
   import {
     listTasks,
     movesFrom,
@@ -54,6 +58,7 @@
     type TaskSummary,
     type TaskView,
   } from "./project-tasks";
+  import SideSplit from "./side/SideSplit.svelte";
   import TaskCard from "./tasks/TaskCard.svelte";
   import TaskSheet from "./tasks/TaskSheet.svelte";
   import { newThreadProjectOf, threadIdOf, threadTabId } from "./thread-tabs";
@@ -219,6 +224,28 @@
     }
   }
 
+  // --- his plan, the thread's --------------------------------------------------
+
+  /** The lead's session: a thread's plan is his, beside it as a session's is. */
+  const lead = $derived(view?.leadInstanceId ?? null);
+  // The lead is no tab of this dashboard's, so his plan is followed alone.
+  $effect(() => {
+    const id = lead;
+    if (!id) {
+      return;
+    }
+    watchPlan(id);
+    return () => unwatchPlan(id);
+  });
+  const leadPlan = $derived(lead ? cawco.planOf(lead) : undefined);
+  const planProgressNow = $derived(
+    leadPlan && planShows(leadPlan) ? planProgress(leadPlan) : null
+  );
+  let side = $state<ReturnType<typeof SideSplit>>();
+  /** The side surface's share of the width, in percent. */
+  let sideShare = $state(0);
+  const phone = $derived(paneWidth > 0 && paneWidth < 900);
+
   /** What Caw plays on the composer: the thread's status, his loop or its still. */
   const seatStatus = $derived(thread?.status ?? "ready");
 
@@ -311,7 +338,6 @@
 
   /** Stop interrupts the lead's turn. */
   function onstop() {
-    const lead = view?.leadInstanceId;
     const row = lead ? cawco.instanceIndex.byId.get(lead) : undefined;
     if (lead && row) {
       submitCommand(lead, row.machineId, "interrupt", {});
@@ -338,9 +364,11 @@
       return visible;
     },
     get previewPhone() {
-      return paneWidth > 0 && paneWidth < 900;
+      return phone;
     },
-    transcriptShare: 1,
+    get transcriptShare() {
+      return (100 - sideShare) / 100;
+    },
     delegatesOf: "",
     get recallOf() {
       return viewId;
@@ -354,6 +382,9 @@
     onstop,
     prompts: parkedPrompts,
     perch,
+    get planRing() {
+      return planProgressNow ? planRing : undefined;
+    },
   };
 
   $effect(() => {
@@ -435,6 +466,17 @@
   {/each}
 {/snippet}
 
+{#snippet planRing()}
+  {#if planProgressNow}
+    <PlanRing
+      done={planProgressNow.done}
+      onopen={() => side?.openPlan()}
+      open={side?.planShowing() ?? false}
+      total={planProgressNow.total}
+    />
+  {/if}
+{/snippet}
+
 {#snippet perch()}
   <!-- He lands here from wherever he stood (the empty board's 80px Caw). -->
   <div
@@ -459,31 +501,42 @@
     class="body"
     style="--composer-clearance: calc({composerRoom} + var(--space-4) + var(--space-4))"
   >
-    <div class="transcript-slide">
-      {#if readProblem}
-        <p class="problem" role="alert" in:crossIn>
-          The thread could not be read: {readProblem}
-        </p>
-      {:else if messages !== null}
-        <div class="state">
-          <Transcript
-            agentName="Caw"
-            bare
-            {focused}
-            onshown={(drawn) => {
-              shown = drawn;
-            }}
-            {session}
-            {visible}
-          />
-        </div>
-      {/if}
-      {#if veiled}
-        <div class="veil" in:crossIn out:crossOut>
-          <TranscriptSkeleton />
-        </div>
-      {/if}
-    </div>
+    <SideSplit
+      onescape={() => draft.closeSelectionEditor()}
+      onselect={(selection) => draft.attach(selection)}
+      {phone}
+      planOf={lead}
+      {viewId}
+      {visible}
+      bind:this={side}
+      bind:share={sideShare}
+    >
+      <div class="transcript-slide">
+        {#if readProblem}
+          <p class="problem" role="alert" in:crossIn>
+            The thread could not be read: {readProblem}
+          </p>
+        {:else if messages !== null}
+          <div class="state">
+            <Transcript
+              agentName="Caw"
+              bare
+              {focused}
+              onshown={(drawn) => {
+                shown = drawn;
+              }}
+              {session}
+              {visible}
+            />
+          </div>
+        {/if}
+        {#if veiled}
+          <div class="veil" in:crossIn out:crossOut>
+            <TranscriptSkeleton />
+          </div>
+        {/if}
+      </div>
+    </SideSplit>
     {#if view && !leadOn}
       <!-- No composer: nothing would read it. What is true, and the one
            thing that changes it. -->

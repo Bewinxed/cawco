@@ -3679,6 +3679,49 @@ export function watchDelegate(instanceId: string): void {
   syncSubscriptions();
 }
 
+/**
+ * Sessions whose plan something on screen shows without streaming the
+ * session: a thread's lead, whose plan is the thread's. Counted by reader.
+ */
+const watchedPlans = new Map<string, number>();
+/** The plan-follow set last sent, so an unchanged set stays quiet. */
+let lastPlanFollowKey = "";
+
+/** Sends the hub the plans this dashboard follows beside its streams, when the set changed. */
+function syncPlanFollows(): void {
+  const ids = [...watchedPlans.keys()].sort();
+  const socket = globalThis.__cawcoSocket;
+  if (!socket || socket.readyState !== WebSocket.OPEN) {
+    return;
+  }
+  const key = ids.join("\u0000");
+  if (key === lastPlanFollowKey) {
+    return;
+  }
+  lastPlanFollowKey = key;
+  streamHost.sendToHub({ type: "plan.follow", instanceIds: ids });
+}
+
+/** One more reader of a session's plan alone: it stays live while any reader remains. */
+export function watchPlan(instanceId: string): void {
+  watchedPlans.set(instanceId, (watchedPlans.get(instanceId) ?? 0) + 1);
+  syncPlanFollows();
+}
+
+/** A plan's reader let go; the last one stops following it. */
+export function unwatchPlan(instanceId: string): void {
+  const count = watchedPlans.get(instanceId);
+  if (count === undefined) {
+    return;
+  }
+  if (count > 1) {
+    watchedPlans.set(instanceId, count - 1);
+    return;
+  }
+  watchedPlans.delete(instanceId);
+  syncPlanFollows();
+}
+
 /** A reader let go; the last one stops the instance's frames. */
 export function unwatchDelegate(instanceId: string): void {
   const count = watchedDelegates.get(instanceId);
@@ -3790,6 +3833,8 @@ function connect(): void {
     // this dashboard the moment the socket dropped.
     lastSubscriptionKey = "";
     syncSubscriptions();
+    lastPlanFollowKey = "";
+    syncPlanFollows();
     resumePendingSends(streamState, streamHost);
     // biome-ignore lint/complexity/noVoid: fire-and-forget — the update notice says it when the served build is newer
     void checkServedBuild();
@@ -3931,6 +3976,8 @@ export function ensureConnected(): void {
       readFleet();
       lastSubscriptionKey = "";
       syncSubscriptions();
+      lastPlanFollowKey = "";
+      syncPlanFollows();
       resumePendingSends(streamState, streamHost);
     } else {
       state.status = "connecting";

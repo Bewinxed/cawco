@@ -160,6 +160,7 @@ export type StreamServerMessage =
 export type StreamClientMessage =
   | StreamSubscribe
   | CommandEnvelope
+  | import("./plan").PlanFollow
   | import("./plan").PlanResync;
 
 // ---------------------------------------------------------------------------

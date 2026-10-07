@@ -428,6 +428,7 @@
         paneVisible={bound.paneVisible}
         perch={bound.perch}
         placeholder={bound.placeholder}
+        planRing={bound.planRing}
         previewPhone={bound.previewPhone}
         prompts={bound.prompts}
         recallOf={bound.recallOf}

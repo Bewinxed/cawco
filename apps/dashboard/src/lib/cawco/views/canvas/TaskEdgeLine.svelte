@@ -8,11 +8,7 @@
    * - `found_in`: dashed and muted.
    * Tokens only; the arrow is the canvas's one marker (ViewCanvas).
    */
-  import {
-    BaseEdge,
-    type EdgeProps,
-    getSmoothStepPath,
-  } from "@xyflow/svelte";
+  import { BaseEdge, type EdgeProps, getSmoothStepPath } from "@xyflow/svelte";
   import type { TaskEdgeKind } from "../task-graph";
 
   let {

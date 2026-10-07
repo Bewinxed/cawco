@@ -210,6 +210,8 @@ interface AwaitedCommand {
 }
 
 interface Follower {
+  /** Sessions whose plan alone it follows (`plan.follow`). */
+  plans: Set<string>;
   readonly sessions: Set<string>;
   socket: HubSocket;
 }
@@ -321,7 +323,7 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
       existing.socket = socket;
       return existing;
     }
-    const entry: Follower = { socket, sessions: new Set() };
+    const entry: Follower = { socket, sessions: new Set(), plans: new Set() };
     sockets.set(socket.id, entry);
     return entry;
   };
@@ -626,6 +628,26 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
     });
   };
 
+  /**
+   * The sessions whose plan alone a socket follows, the whole set: each one
+   * new to it is answered with its plan whole, and every frame after comes
+   * as it comes to the session's followers.
+   */
+  const followPlans = (socket: HubSocket, raw: unknown): void => {
+    if (!(Array.isArray(raw) && raw.every(nonEmpty))) {
+      console.warn("[hub] dropped plan.follow with no session list", raw);
+      return;
+    }
+    const entry = entryFor(socket);
+    const before = entry.plans;
+    entry.plans = new Set(raw);
+    for (const instanceId of entry.plans) {
+      if (!before.has(instanceId)) {
+        ports.planSnapshot(instanceId, (plan) => deliver(socket, plan));
+      }
+    }
+  };
+
   /** A client found a gap in a session's plan: the plan whole, to it alone. */
   const resyncPlan = (socket: HubSocket, instanceId: unknown): void => {
     if (nonEmpty(instanceId)) {
@@ -640,6 +662,11 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
 
     if (raw.type === "stream.subscribe") {
       subscribeMessage(socket, raw);
+      return true;
+    }
+
+    if (raw.type === "plan.follow") {
+      followPlans(socket, raw.instanceIds);
       return true;
     }
 
@@ -727,9 +754,9 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
     dropSocket,
     head: (sessionId) => rings.get(sessionId)?.head ?? 0,
     planToFollowers: (sessionId, message) => {
-      for (const socketId of followers.get(sessionId) ?? []) {
-        const follower = sockets.get(socketId);
-        if (follower) {
+      const streaming = followers.get(sessionId);
+      for (const [socketId, follower] of sockets) {
+        if (streaming?.has(socketId) || follower.plans.has(sessionId)) {
           deliver(follower.socket, message);
         }
       }

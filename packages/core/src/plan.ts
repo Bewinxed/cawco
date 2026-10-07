@@ -110,6 +110,16 @@ export interface PlanDelta {
   type: "plan.delta";
 }
 
+/**
+ * Client → hub: the sessions whose plan this socket follows beside the ones
+ * it streams (a thread showing its lead's plan), the whole set each time.
+ * One newly in the set is answered with its snapshot; deltas follow.
+ */
+export interface PlanFollow {
+  instanceIds: string[];
+  type: "plan.follow";
+}
+
 /** Client → hub: "my copy has a gap; send the plan whole". */
 export interface PlanResync {
   instanceId: string;

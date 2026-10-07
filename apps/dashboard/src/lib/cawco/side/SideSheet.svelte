@@ -1,5 +1,12 @@
 <script lang="ts">
+  /**
+   * The side surface on a phone (SideSplit): a sheet over the transcript,
+   * standing on the composer, at a usable middle snap or the full height. It
+   * holds whatever the conversation shows beside it — its plan, its preview
+   * — and each of those closes it from its own header.
+   */
   import { Portal } from "bits-ui";
+  import type { Snippet } from "svelte";
   import { tick, untrack } from "svelte";
   import { Drawer as Vaul } from "vaul-svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
@@ -7,23 +14,20 @@
   import { cawco } from "../client.svelte";
   import { land, waiting } from "../motion/share.svelte";
   import { lightbox } from "../transcript/lightbox-state.svelte";
-  import PreviewPane from "./PreviewPane.svelte";
-  import type { CapturedSelection } from "./selection";
 
   let {
     instanceId,
     open,
     content,
-    onselect,
-    onescape,
+    onkeyescape,
+    children,
   }: {
     instanceId: string;
     open: boolean;
     content?: HTMLDivElement;
-    onselect: (
-      selection: CapturedSelection
-    ) => "added" | "duplicate" | "full" | undefined;
-    onescape: () => boolean;
+    /** Escape inside the sheet, past the lightbox: what it holds handles it. */
+    onkeyescape?: (event: KeyboardEvent) => void;
+    children: Snippet;
   } = $props();
   /**
    * How the sheet arrives, decided once as it mounts. It always settles on
@@ -48,7 +52,6 @@
   let previousMiddle: string;
   let host = $state<HTMLDivElement>();
   let drawer = $state<HTMLElement | null>(null);
-  let previewPane = $state<ReturnType<typeof PreviewPane>>();
   let handleStartY = 0;
   let handleDragged = false;
   async function cycleSnap() {
@@ -60,6 +63,21 @@
     snap = snap === middle ? 1 : middle;
   }
   let snapPoints = $state<(number | string)[]>([0.6, 1]);
+  /**
+   * How much of the sheet stands below the composer at its snap, clipped by
+   * the host: a scrolling surface pads its end by it (`--sheet-hidden`), so
+   * its last rows scroll into view at the middle snap too.
+   */
+  const hidden = $derived.by(() => {
+    if (snap === null || snap === 1) {
+      return 0;
+    }
+    const visible =
+      typeof snap === "number"
+        ? availableHeight * snap
+        : Number.parseFloat(snap);
+    return Math.max(0, availableHeight - visible);
+  });
   $effect(() => {
     const dimensions = bottom + viewportHeight + availableHeight;
     const nextMiddle = middle;
@@ -190,7 +208,7 @@
         if (lightbox.current) {
           lightbox.close();
         } else {
-          previewPane?.parentEscape(event);
+          onkeyescape?.(event);
         }
         event.preventDefault();
       }}
@@ -201,8 +219,12 @@
       trapFocus={false}
       bind:ref={drawer}
     >
-      <Drawer.Title class="sr-only">Preview</Drawer.Title>
-      <div class="sheet" {@attach land(() => share, { mode: "clip" })}>
+      <Drawer.Title class="sr-only">Beside the conversation</Drawer.Title>
+      <div
+        class="sheet"
+        style:--sheet-hidden="{hidden}px"
+        {@attach land(() => share, { mode: "clip" })}
+      >
         <Vaul.Handle
           class="preview-grab"
           onclick={cycleSnap}
@@ -217,12 +239,7 @@
           }}
           preventCycle
         />
-        <PreviewPane
-          {instanceId}
-          {onescape}
-          {onselect}
-          bind:this={previewPane}
-        />
+        {@render children()}
       </div>
     </Drawer.Content>
   </Drawer.Root>
@@ -285,7 +302,8 @@
   :global(.preview-sheet [data-vaul-handle-hitarea]) {
     height: 44px;
   }
-  :global(.preview-sheet .sheet > .preview-pane) {
+  :global(.preview-sheet .sheet > .preview-pane),
+  :global(.preview-sheet .sheet > .plan-pane) {
     flex: 1;
     height: auto;
     box-shadow: none;

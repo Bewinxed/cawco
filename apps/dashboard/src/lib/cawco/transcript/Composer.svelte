@@ -120,6 +120,7 @@
     prompts,
     leading,
     perch,
+    planRing,
     placeholder,
     suggest,
     delegatesOf,
@@ -183,6 +184,11 @@
      * pill's top edge: a project's Caw peeking over the composer.
      */
     perch?: Snippet;
+    /**
+     * How far the conversation's plan has got, as the control that opens it
+     * (PlanRing), at the tray row's trailing end; none while it has no plan.
+     */
+    planRing?: Snippet;
     /** The field's hint, for a surface whose agent takes no `/` or `@`. */
     placeholder?: string;
     /**
@@ -2000,6 +2006,8 @@
    */
   let panel = $state(0);
   let lift = $state(0);
+  /** The plan's ring's width: the delegate tray's row keeps clear of it. */
+  let ringWidth = $state(0);
   let stack = $state(0);
 
   /**
@@ -2067,8 +2075,18 @@
         />
       {/key}
     {/if}
+    {#if planRing}
+      <div class="progress-slot" bind:clientWidth={ringWidth}>
+        {@render planRing()}
+      </div>
+    {/if}
     {#if delegatesOf}
-      <div class="tray-slot">
+      <div
+        class="tray-slot"
+        style:padding-inline-end={planRing
+          ? `calc(${ringWidth}px + var(--space-2))`
+          : undefined}
+      >
         {#key delegatesOf}
           <div in:trayFade out:trayFade>
             <DelegateTray {held} parentId={delegatesOf} />
@@ -2479,6 +2497,17 @@
      none (app.css `--c-tray-row`, which every transcript keeps clear), with
      the tray standing on its foot: a chip arriving late fills room already
      there, and the suggestion row standing on the slot never moves. */
+  /* The plan's ring, at the tray row's trailing end, standing on the panel. */
+  .progress-slot {
+    position: absolute;
+    inset-block-end: 0;
+    inset-inline-end: 0;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    block-size: var(--c-tray-row);
+    pointer-events: auto;
+  }
   .tray-slot {
     position: relative;
     display: grid;
