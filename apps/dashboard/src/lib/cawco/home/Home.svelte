@@ -166,15 +166,17 @@
   data-flip={variant === "rail" && !relaying ? "box" : undefined}
   {@attach reflow()}
 >
-  <div class="top" class:bare={bare || noFleet}>
+  <div
+    class="top"
+    class:bare={bare || (machinesThere !== null && home.needs.length === 0)}
+  >
     <!-- The line every other line on this screen is believed by; live and
          read, it says nothing and takes no room. -->
     <StatusLine />
-    {#if variant === "page" && home.machines !== "none"}
+    {#if variant === "page" && home.limitsShown}
       <!-- The phone has no rail: the rail's usage strip stands here (owner
-           pick i), on the home's own ground, whenever a machine is
-           registered: limits are read on machines, and with none the empty
-           fleet below already says what is missing. -->
+           pick i), on the home's own ground, while a machine is online
+           (home `limitsShown`). -->
       <div class="usage">
         <UsageMeter />
       </div>

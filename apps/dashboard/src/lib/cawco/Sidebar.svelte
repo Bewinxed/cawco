@@ -1146,9 +1146,9 @@
   <!-- ────────────────────── footer ──────────────────────── -->
 
   <Sidebar.Footer {@attach reflow()}>
-    <!-- Limits are read on machines: with none registered there is nothing
-         for the strip to say that the empty fleet does not say already. -->
-    {#if home.machines !== "none"}
+    <!-- Limits are read on machines: with none online the strip would only
+         repeat the empty fleet (home `limitsShown`). -->
+    {#if home.limitsShown}
       <UsageMeter />
     {/if}
     <div class="flex items-center gap-1" data-flip>

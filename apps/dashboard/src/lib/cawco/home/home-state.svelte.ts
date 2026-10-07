@@ -530,6 +530,16 @@ class Home {
   });
 
   /**
+   * The usage strip stands (the home's and the rail's) unless the fleet is
+   * known to have no machine online: limits are read on machines, and then
+   * the empty fleet already says what is missing. The Usage page still says
+   * each machine's state; it is where limits are read.
+   */
+  readonly limitsShown = $derived(
+    this.machines !== "none" && this.machines !== "offline"
+  );
+
+  /**
    * What hangs directly under each session and run, as every list nests it
    * (a session's delegates and runs, a run's steps and child runs): the
    * rows' own parents, runs among them.
