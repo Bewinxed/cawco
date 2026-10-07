@@ -118,6 +118,8 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
     private let prompts = UIStackView()
     private var action: Action = .send
     private var writable = false
+    /// Why Send cannot work now; the box wears the warning state meanwhile.
+    private var block: SendBlock?
     private var attachments: [ComposerAttachment] = [] {
         didSet { renderAttachments() }
     }
@@ -369,6 +371,8 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
         pill.layer.borderColor = grown ? UIColor.clear.cgColor : Palette.borderControl.resolvedColor(with: traits).cgColor
         attach.layer.borderColor = Palette.borderControl.resolvedColor(with: traits).cgColor
         historyBox.layer.borderColor = Palette.borderControl.resolvedColor(with: traits).cgColor
+        // The warning state's edge, a CGColor, follows the appearance by hand.
+        actionBox.layer.borderColor = Palette.warning9.resolvedColor(with: traits).cgColor
         gradient.colors = Palette.actionSurface.colors(for: traits)
         let opaque = UIAccessibility.isReduceTransparencyEnabled
         material.isHidden = opaque || grown
@@ -437,6 +441,7 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
         guard source === binding else { return }
         action = source.action
         writable = source.writable
+        block = source.sendBlock
         attach.menu = source.attachMenu
         attach.showsMenuAsPrimaryAction = true
         let message = source.sendError ?? ""
@@ -759,19 +764,37 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
 
     /// What the button does now. While a queued message is being edited it
     /// puts the edit in its place, even mid-turn, when the agent is working.
+    /// While the agent works, words or attachments in the field make it Send,
+    /// which queues the message as the web's Enter does (a phone has no
+    /// Enter to send with); an empty field leaves it Stop.
     private var shownAction: Action {
-        edit != nil ? .send : action
+        if edit != nil { return .send }
+        if action == .stop, hasContent { return .send }
+        return action
+    }
+
+    /// The warning state shows, rather than a dimmed box, while a reason
+    /// other than an empty field keeps Send from working (never during a
+    /// swipe, which is over before anyone could read it).
+    private var shownBlock: SendBlock? {
+        held || action == .sending ? nil : block
     }
 
     /// The dashboard's order (Composer.svelte `onaction`): an edit replaces,
-    /// a working agent stops, then the wheel sends the row on its line.
+    /// a working agent stops (unless there is something to queue), then the
+    /// wheel sends the row on its line.
     private func pressAction() {
         guard !held else { return }
+        // A blocked box explains why; its menu, when it has one, opens on its own.
+        if let block = shownBlock {
+            block.explain?()
+            return
+        }
         if edit != nil {
             submit()
             return
         }
-        if action == .stop {
+        if action == .stop, !hasContent {
             binding?.onStop()
             return
         }
@@ -780,7 +803,8 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
             wheel.take(send: true)
             return
         }
-        if action == .send { submit() }
+        // Send, or a working agent's queue: the hub holds the message until it is read.
+        if action != .sending { submit() }
     }
 
     /// A refused send never eats what was typed: nothing to send, the last
@@ -805,28 +829,51 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
 
     private func renderAction(animated: Bool) {
         let action = shownAction
+        let block = shownBlock
         let enabled = writable && !held && (action != .send || (hasContent && !unready) || wheel != nil)
-        actionBox.isEnabled = enabled && action != .sending
-        actionBox.isUserInteractionEnabled = action != .sending
-        actionBox.alpha = enabled || action == .sending ? 1 : 0.55
-        gradient.isHidden = !enabled && action == .send
-        actionBox.backgroundColor = Palette.actionSolid
         actionBox.layer.cornerRadius = Radius.radiusLg - Self.inset
         actionBox.layer.cornerCurve = .continuous
-        actionBox.accessibilityLabel = action == .stop ? "Stop the agent" : "Send message"
-        actionBox.accessibilityTraits = action == .sending ? [.button, .notEnabled] : .button
-        let next: SwapGlyph.Face = switch action {
-        case .send: .glyph(Glyph.send)
-        case .stop: .glyph(.stop)
-        case .sending: .spinner
+        // Blocked: the warning pair (the design's warning variant: tint, edge
+        // and ink), at full presence and pressable, because a press is how
+        // the reader learns why and what fixes it.
+        actionBox.menu = block?.menu
+        actionBox.showsMenuAsPrimaryAction = block?.menu != nil
+        if let block {
+            actionBox.isEnabled = true
+            actionBox.isUserInteractionEnabled = true
+            actionBox.alpha = 1
+            gradient.isHidden = true
+            actionBox.backgroundColor = Palette.warning3
+            actionBox.layer.borderWidth = 1
+            actionBox.layer.borderColor = Palette.warning9.resolvedColor(with: traitCollection).cgColor
+            actionBox.accessibilityLabel = "Can't send: \(block.reason)"
+            actionBox.accessibilityTraits = .button
+        } else {
+            actionBox.isEnabled = enabled && action != .sending
+            actionBox.isUserInteractionEnabled = action != .sending
+            actionBox.alpha = enabled || action == .sending ? 1 : 0.55
+            gradient.isHidden = !enabled && action == .send
+            actionBox.backgroundColor = Palette.actionSolid
+            actionBox.layer.borderWidth = 0
+            actionBox.accessibilityLabel = action == .stop ? "Stop the agent" : "Send message"
+            actionBox.accessibilityTraits = action == .sending ? [.button, .notEnabled] : .button
+        }
+        let next: SwapGlyph.Face = if block != nil {
+            .glyph(.warning)
+        } else {
+            switch action {
+            case .send: .glyph(Glyph.send)
+            case .stop: .glyph(.stop)
+            case .sending: .spinner
+            }
         }
         // The send plane's mass sits low-left: nudged up and right while it can be pressed.
-        let nudge = action == .send && enabled ? CGAffineTransform(translationX: 0.5, y: -0.5) : .identity
+        let nudge = block == nil && action == .send && enabled ? CGAffineTransform(translationX: 0.5, y: -0.5) : .identity
         if let glyph, glyph.face == next {
             glyph.transform = nudge
             return
         }
-        let incoming = SwapGlyph(next, tint: Palette.onAction)
+        let incoming = SwapGlyph(next, tint: block == nil ? Palette.onAction : Palette.warning11)
         incoming.translatesAutoresizingMaskIntoConstraints = false
         actionBox.addSubview(incoming)
         // Centred by constraint, so the box's size arriving later can't strand it.

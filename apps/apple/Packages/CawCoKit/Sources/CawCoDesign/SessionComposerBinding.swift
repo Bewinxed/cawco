@@ -20,6 +20,9 @@ public final class SessionComposerBinding {
     public var writable = true
     /// Why the last send did not go through.
     public var sendError: String?
+    /// Why nothing can be sent here right now, when it is not an empty
+    /// field: the action box wears the warning state and explains on a tap.
+    public var sendBlock: SendBlock?
     /// The parked permission and question cards, in arrival order. The pane
     /// builds them; the composer stands them on its pill.
     public var prompts: [UIView] = []
@@ -121,6 +124,26 @@ public final class SessionComposerBinding {
         draft = ""
         attachments = []
         composer?.loadDraft(of: self)
+    }
+}
+
+/// Why Send cannot work now, for a reason other than an empty field (HIG
+/// Feedback: "Show people when a command can't be carried out and help them
+/// understand why"; Alerts: an indicator people choose to learn more from,
+/// never an alert of its own accord). The action box shows it as its
+/// warning state, and a tap explains: `menu`, anchored on the box, for a
+/// reason that is only information (with the action that fixes it), or
+/// `explain` for one that carries its fix in an alert.
+public struct SendBlock {
+    /// What VoiceOver reads after "Can't send:", and the menu's title.
+    public let reason: String
+    public let menu: UIMenu?
+    public let explain: (() -> Void)?
+
+    public init(reason: String, menu: UIMenu? = nil, explain: (() -> Void)? = nil) {
+        self.reason = reason
+        self.menu = menu
+        self.explain = explain
     }
 }
 

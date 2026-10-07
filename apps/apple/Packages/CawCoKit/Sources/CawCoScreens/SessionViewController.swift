@@ -31,6 +31,8 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
     var onReturnToFleet: () -> Void = {}
     /// Opens another session, or a run's board row (`BoardRun.prefix + runId`), as a board row opens.
     var onOpenSession: (String) -> Void = { _ in }
+    /// "Continue in new session…" for this one (PaneHost `continueInNewSession`).
+    var onContinue: (String) -> Void = { _ in }
 
     /// How far up from the pane's foot the group's composer (and the cards
     /// standing on it) reaches; the transcript's last line clears it.
@@ -162,6 +164,7 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
             composerBinding.action = transcript.tail?.busy == true && live ? .stop : .send
         }
         composerBinding.sendError = editNote ?? (command?.stage == .failed ? "Couldn't send that message.\(command?.reason.map { " \($0)" } ?? "")" : nil)
+        composerBinding.sendBlock = sendBlock(row)
         syncCards(machineId: row?.machineId)
         composerBinding.publish()
         syncPreview()
@@ -420,6 +423,54 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
     }
 
     // MARK: Steer and Stop
+
+    /// Why nothing can be sent here now, other than an empty field: the
+    /// composer's action box wears it as its warning state and explains on a
+    /// tap. Nothing is said unasked (HIG Alerts: "Avoid using an alert merely
+    /// to provide information"). The first seconds of a connect, and a swipe,
+    /// are too brief to explain.
+    private func sendBlock(_ row: InstanceRow?) -> SendBlock? {
+        // The hub answered in a shape this app cannot read (HubConnection
+        // `incompatible`, the same check and `/health` version the connect
+        // screen uses): the fix is an update, so it is told in an alert.
+        if let incompatible = hub.incompatible {
+            return SendBlock(reason: "This app is older than your hub") { [weak self] in
+                self?.explainIncompatible(incompatible)
+            }
+        }
+        if hub.state == .unreachable {
+            let reason = "Reconnecting to the hub…"
+            return SendBlock(reason: reason, menu: UIMenu(title: reason, children: [
+                UIAction(title: "Reconnect", image: Glyph.refresh.image) { [weak hub] _ in hub?.reconnectNow() },
+            ]))
+        }
+        guard hub.state == .connected, row?.isLive != true else { return nil }
+        let reason = row?.status == .sleeping ? "This session is asleep" : "This session has ended"
+        return SendBlock(reason: reason, menu: UIMenu(title: reason, children: [
+            UIAction(title: "Continue in new session…", image: Glyph.arrowRight.image) { [weak self] _ in
+                guard let self else { return }
+                onContinue(sessionId)
+            },
+        ]))
+    }
+
+    /// The one reason that carries its fix in an alert: this app cannot read
+    /// the hub, which a newer build of the app can.
+    private func explainIncompatible(_ incompatible: HubConnection.Incompatible) {
+        let runs = incompatible.hubVersion.map { "Your hub runs CawCo \($0)." } ?? "Your hub runs a newer CawCo."
+        let alert = UIAlertController(title: "This app is older than your hub",
+                                      message: "\(runs) Update CawCo from TestFlight to keep sending.", preferredStyle: .alert)
+        let open = UIAlertAction(title: "Open TestFlight", style: .default) { _ in
+            // CawCo's TestFlight listing (App Store Connect app 6819139448).
+            if let testFlight = URL(string: "itms-beta://beta.itunes.apple.com/v1/app/6819139448") {
+                UIApplication.shared.open(testFlight)
+            }
+        }
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        alert.addAction(open)
+        alert.preferredAction = open
+        present(alert, animated: true)
+    }
 
     func focusComposer() { composerBinding.focus() }
     var canControl: Bool { hub.fleet.byId[sessionId]?.isLive == true && hub.state == .connected }

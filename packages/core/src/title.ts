@@ -8,6 +8,8 @@
  * deriving it on the hub is meant to remove.
  */
 
+import { attachedFiles } from "./attachments";
+
 /** How long a title derived from a first message runs before it is cut. */
 export const TITLE_LIMIT = 80;
 
@@ -25,7 +27,9 @@ const WHITESPACE_RUN = /\s+/g;
  */
 export function deriveTitleFromFirstMessage(raw: string): string {
   const command = COMMAND_ECHO.exec(raw)?.[1]?.trim();
-  const cleaned = (command ?? raw.replace(ANY_TAG, " "))
+  // A file's line names where the machine put it, not what the session is about.
+  const { typed } = attachedFiles(raw);
+  const cleaned = (command ?? typed.replace(ANY_TAG, " "))
     .replace(WHITESPACE_RUN, " ")
     .trim();
   return cleaned.slice(0, TITLE_LIMIT);
