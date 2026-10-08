@@ -101,6 +101,29 @@ EXTRA_INKS = {
 # gate the soft edge of an eye white, a grey, lands nearer cream than white.
 CREAM_WARM = 10
 CREAM_LIGHT = 180
+# Both rules below run only where a status traces the cream ink (the props a take carries are
+# cream), so every take traced in his four inks alone is traced exactly as before.
+# Some takes draw his eye whites a touch warm, so the cream gate takes their pixels for the note.
+# Measured on 25 hero takes that carry a cream prop: enclosed regions ringed mostly by black with
+# a pupil in them (his eye whites, 143 regions) have a median red minus blue of 6-16, while the
+# cream ink is 22 and the cream props measure 29 at the median. So an enclosed region of paper,
+# white and cream, ringed by black over EYE_RING of its edge, whose median red minus blue is under
+# EYE_WARM, is an eye white and its cream pixels are white. A cream prop with a black outline
+# keeps its cream: its median is over EYE_WARM. (A pupil test was tried and dropped: a pupil
+# looking down bites in from the eye white's edge, and seo take 1's eyes stayed cream.)
+EYE_WARM = 20
+EYE_RING = 0.5
+# A prop's thin outline that a take draws tan instead of black (about 198, 181, 150): measured
+# next to the props of the same takes (5th-95th percentile), red minus green 5-27, green minus
+# blue 12-48, red minus blue 18-76, darkest channel 102-179, lightest 136-226. Colour alone is not
+# enough: the soft edges of his vermilion and his yellow marks against paper or black fall inside
+# these bands too (51,277 such pixels over the 22 loops, at every hue the outline has). The
+# outline always borders a cream prop, so a connected run of TAN pixels that touches cream is the
+# outline and is traced in black. Red minus blue starts at 26: the compacted note's own fold
+# shadow, a grey line in the owner's pick (about 197, 190, 176), measures 20-24, while the
+# outline's core measures 40 at the median (89% of its pixels at 26 or more; the rest are its
+# soft edge).
+TAN = {"rg": (-100, 45), "gb": (10, 45), "rb": (26, 70), "min": (110, 199), "max": (0, 225)}
 # Two frames are the same drawing when they differ by less than this mean absolute RGB difference
 # (held pairs measure <= 0.7, a new drawing >= 6).
 SAME_DRAWING = 1.5
@@ -277,6 +300,9 @@ def inks(rgb: np.ndarray, centres: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         distance[..., 0] = np.where(is_cream, np.inf, distance[..., 0])
         distance[..., WHITE] = np.where(is_cream, np.inf, distance[..., WHITE])
     label = distance.argmin(-1)
+    if "cream" in INKS:
+        tan_outline(label, px)
+        warm_eye_whites(label, px)
     light = (label == 0) | (label == WHITE)
     regions, _ = ndimage.label(light)
     edge = np.unique(
@@ -287,6 +313,53 @@ def inks(rgb: np.ndarray, centres: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     enclosed = np.where(light & ~outside, regions, 0)
     label[enclosed > 0] = WHITE
     return label, enclosed
+
+
+def tan(px: np.ndarray) -> np.ndarray:
+    """A prop's outline drawn tan (see TAN): pixels inside every band."""
+    r, g, b = px[..., 0], px[..., 1], px[..., 2]
+    bands = {"rg": r - g, "gb": g - b, "rb": r - b, "min": px.min(-1), "max": px.max(-1)}
+    out = np.ones(px.shape[:2], bool)
+    for name, (low, high) in TAN.items():
+        out &= (bands[name] >= low) & (bands[name] <= high)
+    return out
+
+
+def tan_outline(label: np.ndarray, px: np.ndarray) -> None:
+    """A cream prop's tan outline (see TAN) traced in black, in place: each connected run of tan
+    pixels that touches cream."""
+    cream = list(INKS).index("cream") + 1
+    outline = tan(px)
+    parts, _ = ndimage.label(outline, structure=np.ones((3, 3)))
+    touching = np.unique(parts[ndimage.binary_dilation(label == cream) & outline])
+    label[np.isin(parts, touching[touching > 0])] = list(INKS).index("black") + 1
+
+
+def warm_eye_whites(label: np.ndarray, px: np.ndarray) -> None:
+    """Gives back to the eye white the cream pixels of a warm eye white (see EYE_WARM), in place."""
+    cream = list(INKS).index("cream") + 1
+    black = list(INKS).index("black") + 1
+    lightish = (label == 0) | (label == WHITE) | (label == cream)
+    regions, n = ndimage.label(lightish)
+    edge = np.unique(np.concatenate([regions[0], regions[-1], regions[:, 0], regions[:, -1]]))
+    has_cream = ndimage.sum(label == cream, regions, index=np.arange(1, n + 1)) > 0
+    warmth = px[..., 0] - px[..., 2]
+    h, w = label.shape
+    for k, box in enumerate(ndimage.find_objects(regions), start=1):
+        if box is None or k in edge or not has_cream[k - 1]:
+            continue
+        box = (
+            slice(max(box[0].start - 2, 0), min(box[0].stop + 2, h)),
+            slice(max(box[1].start - 2, 0), min(box[1].stop + 2, w)),
+        )
+        region = regions[box] == k
+        ring = ndimage.binary_dilation(region, iterations=2) & ~region
+        if (label[box][ring] == black).mean() < EYE_RING:
+            continue
+        if np.median(warmth[box][region]) >= EYE_WARM:
+            continue
+        inside = label[box]
+        inside[region & (inside == cream)] = WHITE
 
 
 def decide(
