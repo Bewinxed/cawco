@@ -2033,6 +2033,18 @@ export const createServer = (
       ) {
         continue;
       }
+      // Its account may have been signed out there while the machine updated.
+      const [stored] = db.getInstancesByIds([owed.id]);
+      const refused =
+        stored &&
+        accountStartRefusal(machineId, stored.accountId, sessionName(stored));
+      if (refused) {
+        console.warn(`[hub] not starting ${owed.id}: ${refused}`);
+        db.failInstance(owed.id, refused);
+        forgetPending(owed.id, refused);
+        publishInstances(machineId);
+        continue;
+      }
       agent.send(JSON.parse(owed.envelope) as Envelope<SpawnPayload>);
     }
   };
@@ -2072,6 +2084,52 @@ export const createServer = (
       db.listAgents().find((agent) => agent.machineId === machineId)
         ?.hostname ?? machineId
     );
+  /** A session as a sentence names it. */
+  const sessionName = (row: {
+    derivedTitle?: string | null;
+    id: string;
+    title?: string | null;
+  }): string => row.title || row.derivedTitle || row.id.slice(0, 8);
+  /** A session a send wakes: its process is gone, its conversation on record. */
+  const wakesForSend = (row: {
+    sessionId: string | null;
+    status: string;
+  }): boolean =>
+    row.sessionId !== null &&
+    (row.status === "sleeping" ||
+      row.status === "error" ||
+      row.status === "stopped");
+  /**
+   * Why a session on `accountId` can't be launched on `machineId`: the
+   * account has no signed-in sign-in there, so the dir its Claude Code would
+   * run in, with that account's login, is not there to run in. Nothing moves
+   * it to another account on its own. Undefined when it can be launched, and
+   * for a session on the machine's own login (no account). Every launch asks
+   * this before its row opens, and {@link bounded} refuses any that did not.
+   */
+  const accountStartRefusal = (
+    machineId: string,
+    accountId: string | null | undefined,
+    session: string
+  ): string | undefined => {
+    if (
+      !accountId ||
+      db.accounts
+        .signins()
+        .some(
+          (one) =>
+            one.accountId === accountId &&
+            one.machineId === machineId &&
+            one.state === "signed-in"
+        )
+    ) {
+      return undefined;
+    }
+    const account = db.accounts.get(accountId);
+    const named = account ? accountName(account) : accountId;
+    const machine = machineName(machineId);
+    return `${named} isn't signed in on ${machine}, so ${session} can't run there. Sign ${named} in on ${machine} in Configure → Accounts, or continue the session on another account.`;
+  };
   /**
    * One config dir's initialize response, read on its machine by a session
    * that never takes a turn. Undefined, and said in the log, when it could
@@ -2195,6 +2253,18 @@ export const createServer = (
       return `This session never started, so nothing can read this message${
         row.lastError ? `: ${row.lastError}` : "."
       }`;
+    }
+    // A send to a session whose process is gone wakes it ({@link wakeForSend});
+    // one whose account can't run on its machine is not woken, and says why.
+    if (row && wakesForSend(row)) {
+      const refused = accountStartRefusal(
+        row.machineId,
+        row.accountId,
+        sessionName(row)
+      );
+      if (refused) {
+        return refused;
+      }
     }
     return row ? workItems.refusal(row, origin) : "This session is gone.";
   };
@@ -3352,15 +3422,24 @@ export const createServer = (
   /**
    * The session's account, every time it is launched: its Claude Code runs
    * in that account's config dir on the machine, where its transcript and
-   * its credential are.
+   * its credential are. Every launch asked {@link accountStartRefusal}
+   * before its row opened; one that did not is refused here rather than run
+   * in a dir the machine lacks. A reattach launches nothing: its process
+   * already runs where it runs.
    */
-  const accountDirOf = (row: {
-    accountId: string | null;
-    machineId: string;
-  }): SpawnPayload["accountDir"] => {
+  const accountDirOf = (
+    row: ReturnType<typeof db.getInstancesByIds>[number],
+    reattachOnly: SpawnPayload["reattachOnly"]
+  ): SpawnPayload["accountDir"] => {
     const { accountId, machineId } = row;
     if (!accountId) {
       return undefined;
+    }
+    const refused = reattachOnly
+      ? undefined
+      : accountStartRefusal(machineId, accountId, sessionName(row));
+    if (refused) {
+      throw new WorkItemRefusal(409, refused);
     }
     const signin = db.accounts
       .signins()
@@ -3413,7 +3492,7 @@ export const createServer = (
       : identities.mint(payload.instanceId);
     noteEffortAsked(payload);
     noteFork(payload, stored);
-    const accountDir = accountDirOf(stored);
+    const accountDir = accountDirOf(stored, payload.reattachOnly);
     return {
       // A project's Caw never has edit or shell tools: every spawn of its
       // row — the first, and each revive, restore and relaunch — denies them.
@@ -3568,12 +3647,7 @@ export const createServer = (
     crossed = false
   ): void => {
     const [row] = db.getInstancesByIds([instanceId]);
-    if (
-      row?.sessionId &&
-      (row.status === "sleeping" ||
-        row.status === "error" ||
-        row.status === "stopped")
-    ) {
+    if (row?.sessionId && wakesForSend(row)) {
       resumeSpawn(
         agent,
         machineId,
@@ -3601,6 +3675,17 @@ export const createServer = (
     relaunch = false
   ): void => {
     const instanceId = row.id;
+    const refused = accountStartRefusal(
+      machineId,
+      row.accountId,
+      sessionName(row)
+    );
+    if (refused) {
+      // Nothing it was sent will be read by a process that does not start.
+      console.warn(`[hub] not waking ${instanceId}: ${refused}`);
+      forgetPending(instanceId, refused);
+      return;
+    }
     const settled = settleMode(
       machineId,
       {
@@ -4806,9 +4891,22 @@ export const createServer = (
         refusal: `The project "${payload.projectId}" was deleted, so the session can't start in it. Pick another.`,
       };
     }
+    // Held, resumed, forked or placed: an account with no sign-in on the
+    // machine has no dir there to run in, so the start is refused.
+    const runsOn = (chosen: {
+      accountId?: string;
+    }): { accountId?: string } | { refusal: string } => {
+      const [row] = db.getInstancesByIds([payload.instanceId]);
+      const refusal = accountStartRefusal(
+        machineId,
+        chosen.accountId,
+        row ? sessionName(row) : payload.title || "this session"
+      );
+      return refusal ? { refusal } : chosen;
+    };
     const held = accountHeld(payload);
     if (held) {
-      return held;
+      return runsOn(held);
     }
     const { resume } = payload;
     const item = workItemId ? db.workItem(workItemId) : undefined;
@@ -4834,7 +4932,7 @@ export const createServer = (
     if (!placed.ok) {
       return { refusal: `${placed.refusal} Nothing was started.` };
     }
-    return placed.accountId ? { accountId: placed.accountId } : {};
+    return runsOn(placed.accountId ? { accountId: placed.accountId } : {});
   };
 
   /** A start as the placement explain query describes it, for placement to read. */
@@ -6734,16 +6832,28 @@ export const createServer = (
       });
       return;
     }
-    const settled = settleMode(row.machineId, asked, row.permissionMode);
-    if ("refusal" in settled) {
+    const refuse = (refusal: string): void => {
       // Custody also inspects failed OpenCode handles. A recorded refusal
       // stays failed until its settings change, rather than failing each boot.
-      if (row.status === "error" && row.lastError === settled.refusal) {
+      if (row.status === "error" && row.lastError === refusal) {
         return;
       }
-      db.failInstance(row.id, settled.refusal);
-      forgetPending(row.id, settled.refusal);
-      console.warn(`[hub] not restoring ${row.id}: ${settled.refusal}`);
+      db.failInstance(row.id, refusal);
+      forgetPending(row.id, refusal);
+      console.warn(`[hub] not restoring ${row.id}: ${refusal}`);
+    };
+    const unsigned = accountStartRefusal(
+      row.machineId,
+      row.accountId,
+      sessionName(row)
+    );
+    if (unsigned) {
+      refuse(unsigned);
+      return;
+    }
+    const settled = settleMode(row.machineId, asked, row.permissionMode);
+    if ("refusal" in settled) {
+      refuse(settled.refusal);
       return;
     }
     const { payload } = settled;
