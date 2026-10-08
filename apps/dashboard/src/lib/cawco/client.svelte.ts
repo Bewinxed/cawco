@@ -29,6 +29,7 @@ import type {
   OnCap,
   OpenCodeGoLimits,
   PermissionMode,
+  PermissionPresentation,
   PermissionResult,
   PermissionUpdate,
   ProjectCap,
@@ -318,6 +319,8 @@ export interface PendingPermission {
   heard: number;
   input: Record<string, unknown>;
   instanceId: string;
+  /** What the ask says, as the hub read it parking it: the same words on every surface. */
+  presentation: PermissionPresentation;
   /**
    * When the hub first parked the ask, ms epoch: one clock for every device,
    * so the wait each shows and the order it lists asks in agree.
@@ -2621,6 +2624,7 @@ function handleFrame(frame: FramePayload): void {
         // stored entry follows the latest word from the hub.
         existing.routedTo = routedTo;
         existing.raisedAt = frame.raisedAt;
+        existing.presentation = frame.presentation;
         existing.heard = hearAsk();
         break;
       }
@@ -2630,6 +2634,7 @@ function handleFrame(frame: FramePayload): void {
         instanceId: frame.instanceId,
         toolName: frame.toolName,
         input: frame.input,
+        presentation: frame.presentation,
         suggestions: frame.suggestions,
         routedTo,
         toolUseId: frame.toolUseId,

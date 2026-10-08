@@ -28186,6 +28186,10 @@
               "permission_request"
             ]
           },
+          "presentation": {
+            "$ref": "#/components/schemas/PermissionPresentation",
+            "description": "What the ask says on every surface, read once by the hub as it parks it\n(permission-presentation.ts): the daemon's leg does not carry it, and the\nhub fills it before anything else reads the frame."
+          },
           "processGeneration": {
             "description": "The launch that raised this request; daemon replays retain it verbatim.",
             "type": "string"
@@ -28228,8 +28232,95 @@
           "input",
           "instanceId",
           "kind",
+          "presentation",
           "requestId",
           "toolName"
+        ]
+      },
+      "PermissionPresentation": {
+        "type": "object",
+        "properties": {
+          "asker": {
+            "description": "The session that asked, by the name the board gives it.",
+            "type": "string"
+          },
+          "changes": {
+            "description": "The changes the call makes, each drawn as a diff. Empty when it changes no text.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PermissionChange"
+            }
+          },
+          "detail": {
+            "description": "The line under the summary: how much changes and where (\"3 lines changed in Working style\").",
+            "type": "string"
+          },
+          "fields": {
+            "description": "The rest of the input worth reading, secrets hidden. What the summary and the diffs already say is left out.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PermissionField"
+            }
+          },
+          "summary": {
+            "description": "What will happen and to what, in one line: \"Change the fleet's CLAUDE.md\".",
+            "type": "string"
+          }
+        },
+        "required": [
+          "asker",
+          "changes",
+          "fields",
+          "summary"
+        ]
+      },
+      "PermissionChange": {
+        "description": "One file or document the call changes: both sides, for the diff renderers.",
+        "type": "object",
+        "properties": {
+          "added": {
+            "description": "Lines the proposed side adds.",
+            "type": "number"
+          },
+          "after": {
+            "description": "The text the proposed side ends with.",
+            "type": "string"
+          },
+          "before": {
+            "description": "The text as it stands now (\"\" when there is none yet, or the call does not say).",
+            "type": "string"
+          },
+          "path": {
+            "description": "What changes, named as the person knows it: `CLAUDE.md`, a memory path, a file path.",
+            "type": "string"
+          },
+          "removed": {
+            "description": "Lines the proposed side removes.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "added",
+          "after",
+          "before",
+          "path",
+          "removed"
+        ]
+      },
+      "PermissionField": {
+        "description": "One input field, as shown: its value written out, secrets already hidden.",
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "value"
         ]
       },
       "PermissionUpdate": {

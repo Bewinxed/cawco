@@ -2,48 +2,12 @@ import type {
   PermissionUpdate,
   PermissionUpdateDestination,
 } from "@cawco/core";
-import { questionsOf } from "@cawco/core";
 
-/**
- * One line naming what a parked tool call would do. The permission card and the
- * fleet view's "needs attention" rail have to read identically — the rail is how
- * you decide which session to open, the card is what you approve there.
+/*
+ * What an ask says (its summary, the change, its fields) is the hub's reading,
+ * on the ask itself: `PendingPermission.presentation` (core
+ * permission-presentation.ts). This file keeps only the standing grant's words.
  */
-export function permissionSummary(
-  toolName: string,
-  input: Record<string, unknown>
-): string {
-  // A question names itself: "AskUserQuestion operation" tells the rail's reader
-  // nothing about which of their sessions is worth opening.
-  const questions = questionsOf(toolName, input);
-  if (questions) {
-    return questions.map((question) => question.question).join(" · ");
-  }
-
-  switch (toolName) {
-    case "Edit":
-    case "Write":
-    case "Read":
-      return `${toolName} ${input.file_path ?? "unknown"}`;
-    // opencode parks its asks under its own lowercase names, keyed `filepath`.
-    case "edit":
-    case "write":
-    case "read":
-      return `${toolName} ${input.filepath ?? input.filePath ?? "unknown"}`;
-    case "Bash":
-    case "bash": {
-      const command = String(input.command ?? "");
-      return `Run: ${command.length > 80 ? `${command.slice(0, 79)}…` : command}`;
-    }
-    case "webfetch":
-      return `webfetch ${input.url ?? "unknown"}`;
-    case "Glob":
-    case "Grep":
-      return `${toolName} ${input.pattern ?? "unknown"}`;
-    default:
-      return `${toolName} operation`;
-  }
-}
 
 /** How much of a rule the card's "always allow" label carries before it is cut. */
 const RULE_LABEL_MAX = 30;

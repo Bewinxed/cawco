@@ -7,7 +7,13 @@ import type {
   UserAnswers,
   UserQuestion,
 } from "@cawco/core";
-import { questionsOf as askedIn, CAWCO_ENV, readEnv } from "@cawco/core";
+import {
+  questionsOf as askedIn,
+  CAWCO_ENV,
+  changeStat,
+  commandOf,
+  readEnv,
+} from "@cawco/core";
 import type { DbShape } from "./db";
 import type { PendingShape } from "./pending";
 import { answerPermission } from "./pending";
@@ -192,25 +198,8 @@ const leaf = (cwd: string): string =>
 const questionsOf = (request: PermissionRequest): UserQuestion[] | null =>
   askedIn(request.toolName, request.input);
 
-/**
- * One line of what a tool is about to do, off whichever field carries it. Best
- * effort by design: the fleet's tools are not a closed set, so a glance that
- * cannot be taken is simply not shown.
- */
-const glance = (input: Record<string, unknown>): string | undefined => {
-  for (const key of ["command", "description", "file_path", "url"]) {
-    const value = input[key];
-    if (typeof value === "string" && value.trim()) {
-      return value;
-    }
-  }
-  for (const value of Object.values(input)) {
-    if (typeof value === "string" && value.trim()) {
-      return value;
-    }
-  }
-  return undefined;
-};
+/** How many of an ask's fields its message carries; the rest are in the app. */
+const TELEGRAM_FIELDS = 3;
 
 /**
  * The hub's own line to its owner's Telegram: every ask the fleet parks lands
@@ -538,11 +527,29 @@ export const createTelegramBridge = ({
         `Answer in the dashboard → ${esc(dashboardUrl(registry))}/session/${request.instanceId}`
       );
     } else {
-      lines.push("", `<b>${esc(request.toolName)}</b>`);
-      const detail = glance(request.input);
-      if (detail) {
-        lines.push(`<code>${esc(clip(detail, 900))}</code>`);
+      // The card's own words (core permission-presentation.ts): what will
+      // happen and to what, how much it changes, and who asks. The diff
+      // itself stays in the app.
+      const { presentation } = request;
+      lines.push("", `<b>${esc(clip(presentation.summary, 600))}</b>`);
+      if (presentation.changes.length > 0) {
+        const stat = changeStat(presentation.changes);
+        lines.push(
+          esc(presentation.detail ? `${stat} · ${presentation.detail}` : stat)
+        );
+      } else if (presentation.detail) {
+        lines.push(esc(presentation.detail));
       }
+      const command = commandOf(request.input);
+      if (command) {
+        lines.push(`<code>${esc(clip(command, 900))}</code>`);
+      }
+      for (const field of presentation.fields.slice(0, TELEGRAM_FIELDS)) {
+        lines.push(
+          `${esc(field.key)}: <code>${esc(clip(field.value, 200))}</code>`
+        );
+      }
+      lines.push(`<i>Asked by ${esc(presentation.asker)}</i>`);
       buttons = [
         [
           { text: "Allow", callback_data: `p:${requestId}:a` },

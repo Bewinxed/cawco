@@ -30,13 +30,21 @@
   import { fileName, languageOf } from "./diff-language";
 
   interface Props {
+    /** How tall the rows stand before they scroll, as a CSS length; the transcript's cap when not given. */
+    cap?: string;
     fileDiff?: FileDiffMetadata;
     filePath: string;
     newContent: string;
     oldContent: string;
   }
 
-  let { filePath, oldContent, newContent, fileDiff }: Props = $props();
+  let {
+    filePath,
+    oldContent,
+    newContent,
+    fileDiff,
+    cap = "var(--tx-diff-cap)",
+  }: Props = $props();
   let showModal = $state(false);
   /**
    * The rows are in the box. With the highlighter loaded (every diff after
@@ -139,7 +147,8 @@
     {:else}
       {#key attempt}
         <div
-          class="diff-content overflow-x-auto max-h-[400px]"
+          class="diff-content overflow-auto"
+          style:max-block-size={cap}
           class:veiled={!drawn}
           {@attach draw(attempt)}
         ></div>

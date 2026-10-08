@@ -2,9 +2,10 @@ import CawCoCore
 import UIKit
 
 /// The one human-in-the-loop surface, parked above the composer
-/// (transcript/Prompt.svelte `.hitl`): a permission gate, Approve and Deny as
-/// symmetric recessed peers at opposite ends with what it touches one
-/// disclosure away, or a question, its options as chips led by keycaps, then
+/// (transcript/Prompt.svelte `.hitl`): a permission gate, who asks and what
+/// will happen over the change itself and its fields, then Approve and Deny
+/// as symmetric recessed peers at opposite ends, or a question, its options
+/// as chips led by keycaps, then
 /// Answer and Dismiss. The pressed button pends with its own label while its
 /// peers dim; a refusal stops it and says why under the buttons.
 @MainActor
@@ -28,11 +29,10 @@ public final class PromptCardView: UIView {
     private var chips: [[OptionChip]] = []
     private var buttons: [Choice: UIButton] = [:]
     private let wait = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted, lines: 0)
-    private let fields = UIStackView()
-    private let disclosure = UIButton(type: .custom)
-    private let disclosureMark = KitLabel(TypeScale.typeLabel, ink: Palette.inkMuted)
 
-    public init(_ ask: ParkedAsk, arriving: Bool) {
+    /// `diff` draws one change a permission makes: the transcript's diff,
+    /// which lives above this module.
+    public init(_ ask: ParkedAsk, arriving: Bool, diff: (PermissionChange) -> UIView) {
         self.ask = ask
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
@@ -42,7 +42,7 @@ public final class PromptCardView: UIView {
         layer.borderWidth = 1
         boxShadow = Shadow.shadowHairline
         isAccessibilityElement = false
-        accessibilityLabel = ask.isQuestion ? "Question from the agent" : "Permission request"
+        accessibilityLabel = ask.isQuestion ? "Question from the agent" : "Permission request from \(ask.presentation.asker)"
         let column = UIStackView()
         column.axis = .vertical
         column.translatesAutoresizingMaskIntoConstraints = false
@@ -58,7 +58,7 @@ public final class PromptCardView: UIView {
         if ask.isQuestion {
             buildQuestion(column)
         } else {
-            buildPermission(column)
+            buildPermission(column, diff: diff)
         }
         wait.isHidden = true
         wait.wrap = .pretty
@@ -195,13 +195,27 @@ public final class PromptCardView: UIView {
 
     // MARK: Permission
 
-    private func buildPermission(_ column: UIStackView) {
-        let top = head("Permission — \(ask.toolName)")
+    /// Who asks, what will happen and to what, how much changes, then the
+    /// change and the fields, open (Prompt.svelte's permission body). The
+    /// words are the hub's, the same on the web and in Telegram.
+    private func buildPermission(_ column: UIStackView, diff: (PermissionChange) -> UIView) {
+        let presentation = ask.presentation
+        let top = head("\(presentation.asker) asks for permission")
         column.addArrangedSubview(top)
         column.setCustomSpacing(Space.space2, after: top)
-        let words = lede(ask.summary)
+        let words = lede(presentation.summary)
+        words.role = TypeRole(weight: TypeScale.weightStrong, size: TypeScale.typeBody.size, leading: TypeScale.leadingBody, family: TypeScale.typeBody.family)
         column.addArrangedSubview(words)
-        column.setCustomSpacing(Space.space2, after: words)
+        column.setCustomSpacing(Space.space1, after: words)
+        if let detail = presentation.detail {
+            let line = KitLabel(TypeScale.typeLabel, ink: Palette.inkMuted, lines: 0)
+            line.role = TypeRole(weight: TypeScale.weightBody, size: TypeScale.typeLabel.size, leading: TypeScale.typeLabel.leading, family: TypeScale.typeLabel.family)
+            line.text = detail
+            column.addArrangedSubview(line)
+            column.setCustomSpacing(Space.space2, after: line)
+        } else {
+            column.setCustomSpacing(Space.space2, after: words)
+        }
         if let command = ask.command {
             let text = KitLabel(TypeScale.typeCode, ink: Palette.inkStrong, lines: 0)
             text.role = TypeRole(weight: .regular, size: TypeScale.textLabel ... TypeScale.textLabel, leading: TypeScale.leadingCode, family: FontFamily.fontMono)
@@ -216,41 +230,38 @@ public final class PromptCardView: UIView {
             column.addArrangedSubview(block)
             column.setCustomSpacing(Space.space2, after: block)
         }
-        // "What this touches": every field of the tool input, one disclosure away.
-        var config = UIButton.Configuration.plain()
-        config.contentInsets = .zero
-        config.attributedTitle = AttributedString("What this touches", attributes: AttributeContainer(TypeScale.typeLabel.attributes(color: Palette.inkMuted)))
-        disclosure.configuration = config
-        disclosure.contentHorizontalAlignment = .leading
-        disclosure.accessibilityTraits = .button
-        disclosure.addAction(UIAction { [weak self] _ in self?.disclose() }, for: .primaryActionTriggered)
-        disclosureMark.text = "▸"
-        let summary = UIStackView(arrangedSubviews: [disclosureMark, disclosure, UIView()])
-        summary.spacing = Space.space2
-        summary.alignment = .center
-        column.addArrangedSubview(summary)
-        fields.axis = .vertical
-        fields.spacing = Space.space2
-        fields.isLayoutMarginsRelativeArrangement = true
-        fields.directionalLayoutMargins = NSDirectionalEdgeInsets(top: Space.space3, leading: Space.space3, bottom: Space.space3, trailing: Space.space3)
-        fields.backgroundColor = Palette.surfaceRecess
-        fields.layer.cornerRadius = Radius.radiusSm
-        fields.layer.cornerCurve = .continuous
-        for field in ask.fields {
-            let key = KitLabel(TypeScale.typeLabel, ink: Palette.inkMuted)
-            key.text = field.key
-            let value = KitLabel(TypeScale.typeCode, ink: Palette.inkStrong, lines: 12)
-            value.role = TypeRole(weight: .regular, size: TypeScale.textMeta ... TypeScale.textMeta, leading: TypeScale.leadingCode, family: FontFamily.fontMono)
-            value.text = field.value
-            let pair = UIStackView(arrangedSubviews: [key, value])
-            pair.axis = .vertical
-            pair.spacing = Space.space1
-            fields.addArrangedSubview(pair)
+        // The change itself, open: a grant is made on what it changes.
+        for change in presentation.changes {
+            let made = diff(change)
+            column.addArrangedSubview(made)
+            column.setCustomSpacing(Space.space2, after: made)
         }
-        fields.isHidden = true
-        column.addArrangedSubview(fields)
-        column.setCustomSpacing(Space.space3, after: fields)
-        column.setCustomSpacing(Space.space3 + Space.space2, after: summary)
+        // The rest of the input, shown, its secrets already hidden by the hub.
+        if !presentation.fields.isEmpty {
+            let fields = UIStackView()
+            fields.axis = .vertical
+            fields.spacing = Space.space2
+            fields.isLayoutMarginsRelativeArrangement = true
+            fields.directionalLayoutMargins = NSDirectionalEdgeInsets(top: Space.space3, leading: Space.space3, bottom: Space.space3, trailing: Space.space3)
+            fields.backgroundColor = Palette.surfaceRecess
+            fields.layer.cornerRadius = Radius.radiusSm
+            fields.layer.cornerCurve = .continuous
+            for field in presentation.fields {
+                let key = KitLabel(TypeScale.typeLabel, ink: Palette.inkMuted)
+                key.text = field.key
+                let value = KitLabel(TypeScale.typeCode, ink: Palette.inkStrong, lines: 12)
+                value.role = TypeRole(weight: .regular, size: TypeScale.textMeta ... TypeScale.textMeta, leading: TypeScale.leadingCode, family: FontFamily.fontMono)
+                value.text = field.value
+                let pair = UIStackView(arrangedSubviews: [key, value])
+                pair.axis = .vertical
+                pair.spacing = Space.space1
+                pair.isAccessibilityElement = true
+                pair.accessibilityLabel = "\(field.key): \(field.value)"
+                fields.addArrangedSubview(pair)
+            }
+            column.addArrangedSubview(fields)
+            column.setCustomSpacing(Space.space3, after: fields)
+        }
 
         let approve = Self.button("Approve", glyph: .tick, kind: .grant) { [weak self] in self?.choose(.allow) }
         let deny = Self.button("Deny", glyph: .close, kind: .refuse) { [weak self] in self?.choose(.deny) }
@@ -259,20 +270,6 @@ public final class PromptCardView: UIView {
         let choice = UIStackView(arrangedSubviews: [approve, UIView(), deny])
         choice.spacing = Space.space8
         column.addArrangedSubview(choice)
-    }
-
-    private func disclose() {
-        let open = fields.isHidden
-        disclosure.accessibilityValue = open ? "Expanded" : "Collapsed"
-        let turn = CGAffineTransform(rotationAngle: open ? .pi / 2 : 0)
-        let still = UIAccessibility.isReduceMotionEnabled
-        fields.isHidden = !open
-        if still {
-            disclosureMark.transform = turn
-        } else {
-            Motion.easeOut.animator(Motion.durControl) { self.disclosureMark.transform = turn }.startAnimation()
-        }
-        onHeight()
     }
 
     // MARK: Answering

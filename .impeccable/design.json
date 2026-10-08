@@ -2554,7 +2554,7 @@
       },
       {
         "name": "The Consequential Grant Rule",
-        "body": "A standing grant (\"Always allow … for …\") is a wider grant than the request, so it is kept apart: under a 32px break and a hairline, after a sentence saying what it would allow, and drawn in the warning tint with warning ink, a shield glyph and a real edge. It is the most salient control on the card on purpose. The raw tool input sits behind a \"What this touches\" disclosure, so a grant can be informed.",
+        "body": "A standing grant (\"Always allow … for …\") is a wider grant than the request, so it is kept apart: under a 32px break and a hairline, after a sentence saying what it would allow, and drawn in the warning tint with warning ink, a shield glyph and a real edge. It is the most salient control on the card on purpose. Above the answer row the card says who asks (its title), what will happen and to what (one strong line), and how much changes; then the change itself, open (the transcript's diff, at most `c-ask-diff-share` of the screen tall, scrolling inside), and the other input fields in a recess well, each value scrolling past 200px. Nothing is behind a disclosure: a grant is made on what it changes.",
         "section": "components"
       },
       {

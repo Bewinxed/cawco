@@ -26,6 +26,13 @@ export interface PendingShape {
    */
   readonly onSettled: (listener: SettledListener) => void;
   /**
+   * Set once by the server: stamps what an ask says on every surface (its
+   * `presentation`, ask-presentation.ts) onto its payload. Every ask already
+   * held, the ones kept across a restart included, is stamped at once, and
+   * every ask parked after it as it parks.
+   */
+  readonly presentWith: (present: Presenter) => void;
+  /**
    * `outlivesHub` marks a session process's own ask, which is kept across
    * this hub's restart; one the hub raised for itself is not.
    */
@@ -51,6 +58,13 @@ export type SettledListener = (
   outcome: "answered" | "cancelled",
   why?: string
 ) => void;
+
+/** Stamps a parked ask's presentation onto its payload. */
+export type Presenter = (envelope: Envelope) => void;
+
+const isPermissionAsk = (envelope: Envelope): boolean =>
+  (envelope.payload as { kind?: unknown } | undefined)?.kind ===
+  "permission_request";
 
 export class Pending extends Context.Service<Pending, PendingShape>()(
   "Pending"
@@ -118,6 +132,7 @@ const make = (kept: DbShape["parkedAsks"]): PendingShape => {
   // A daemon replay must not resurrect a request that already left this ledger.
   const settledIds = new Set<string>();
   let settled: SettledListener | undefined;
+  let present: Presenter | undefined;
   const resolve: PendingShape["resolve"] = (requestId, outcome, why) => {
     const envelope = requests.get(requestId);
     if (!envelope) {
@@ -134,6 +149,14 @@ const make = (kept: DbShape["parkedAsks"]): PendingShape => {
     onSettled: (listener) => {
       settled = listener;
     },
+    presentWith: (presenter) => {
+      present = presenter;
+      for (const envelope of requests.values()) {
+        if (isPermissionAsk(envelope)) {
+          presenter(envelope);
+        }
+      }
+    },
     /**
      * Parks an ask and stamps the moment the hub first saw it onto its
      * payload, before the payload is relayed or replayed from `/api/pending`.
@@ -144,6 +167,14 @@ const make = (kept: DbShape["parkedAsks"]): PendingShape => {
     remember: (requestId, envelope, outlivesHub = false) => {
       if (settledIds.has(requestId)) {
         return false;
+      }
+      if (isPermissionAsk(envelope)) {
+        if (!present) {
+          throw new Error(
+            "An ask was parked before the hub could say what it asks."
+          );
+        }
+        present(envelope);
       }
       const payload = envelope.payload as Record<string, unknown>;
       payload.raisedAt = raisedAtOf(requests.get(requestId)) ?? Date.now();

@@ -162,6 +162,7 @@ import { websocket } from "elysia/websocket";
 import { createAdminAsks } from "./admin-asks";
 import { isAdminWrite } from "./admin-tools";
 import { appleDiagnosticsRoutes } from "./apple-diagnostics";
+import { createAskPresenter } from "./ask-presentation";
 import { createBinaryUpdates } from "./binary-updates";
 import { type Caw, cawRoutes, createCaw, withCawDenials } from "./caw";
 import { DB_PATH, HUB_VERSION, SPAWN_START_TIMEOUT_MS } from "./config";
@@ -7609,6 +7610,8 @@ export const createServer = (
   // route group, mounted rather than folded into the routes below — see
   // delegate-types.ts for why it keeps its own connection.
   const delegateTypes = makeDelegateTypes();
+  // What each ask says on every surface, read as it parks (ask-presentation.ts).
+  pending.presentWith(createAskPresenter(db, delegateTypes));
   // A project's own types (`delegates/*.md` in its folder) shadow the fleet's.
   const projectTypes = makeProjectDelegateTypes(delegateTypes);
   /**

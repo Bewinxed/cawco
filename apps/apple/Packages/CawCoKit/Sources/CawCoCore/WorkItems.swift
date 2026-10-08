@@ -6,11 +6,15 @@ import Observation
 public typealias WorkItem = Components.Schemas.WorkItemSummary
 
 extension ParkedAsk {
+    /// A string field of the tool input, as it came.
+    private func text(_ key: String) -> String? {
+        input.value[key].flatMap { $0 as? String }
+    }
+
     /// present.ts `askShortOf`: the first question, else the tool and its most telling argument.
     public var short: String {
         if let first = questions.first { return "Q1: \(first.question)" }
-        let fields = Dictionary(fields.map { ($0.key, $0.value) }, uniquingKeysWith: { first, _ in first })
-        if let path = fields["filepath"] ?? fields["filePath"] ?? fields["path"] {
+        if let path = text("filepath") ?? text("filePath") ?? text("path") {
             return "\(toolName) \(path.split(separator: "/").last.map(String.init) ?? path)"
         }
         if let command { return "\(toolName) \(command.prefix(80))" }
@@ -18,20 +22,19 @@ extension ParkedAsk {
     }
 
     /// present.ts `askDetailOf`: the questions, else the diff under its file,
-    /// else the command, else the input as it came.
+    /// else the command, else what the hub says of it, its secrets hidden.
     public var detail: String {
         if !questions.isEmpty {
             return questions.enumerated().map { index, question in
                 (["Q\(index + 1): \(question.question)"] + question.options.map { "- \($0.label)" }).joined(separator: "\n")
             }.joined(separator: "\n")
         }
-        let fields = Dictionary(fields.map { ($0.key, $0.value) }, uniquingKeysWith: { first, _ in first })
-        if let diff = fields["diff"] {
-            let path = fields["filepath"] ?? fields["filePath"] ?? fields["path"]
+        if let diff = text("diff") {
+            let path = text("filepath") ?? text("filePath") ?? text("path")
             return (path.map { "\($0)\n\n" } ?? "") + diff
         }
         if let command { return command }
-        return self.fields.map { "\($0.key): \($0.value)" }.joined(separator: "\n")
+        return ([presentation.summary] + presentation.fields.map { "\($0.key): \($0.value)" }).joined(separator: "\n")
     }
 }
 

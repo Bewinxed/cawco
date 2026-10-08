@@ -602,6 +602,8 @@
     /* The group composer's field at one line; every transcript keeps the composer's standing parts clear at its foot. */
     --c-composer-field: 34px;
     --c-composer-inset: var(--space-2);
+    /* How tall a permission card's diff of the change it asks for stands before it scrolls, as a share of the screen's height: open, and two fifths of the screen at most, so Approve and Deny stay in reach. */
+    --c-ask-diff-share: 0.4;
     --c-composer-panel: calc(
       var(--c-composer-field) +
       var(--c-composer-inset) *

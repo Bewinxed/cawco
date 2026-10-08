@@ -33,7 +33,6 @@ import {
 } from "../links";
 import { signInWarning } from "../machine";
 import { heldOrder } from "../motion/held-order.svelte";
-import { permissionSummary } from "../permission-summary";
 import { projectsFor } from "../projects";
 import { rail } from "../rail.svelte";
 import { threadTabId } from "../thread-tabs";
@@ -688,9 +687,7 @@ class Home {
         title: thread?.title ?? (row ? instanceTitle(row) : item.hostname),
         place: row ? placeOfRow(row) : placeOf(item.machineId, item.cwd),
         isQuestion: Boolean(questions),
-        ask: questions
-          ? questions.map((question) => question.question).join(" · ")
-          : permissionSummary(item.request.toolName, item.request.input),
+        ask: item.request.presentation.summary,
         raisedAt: item.request.raisedAt,
         request: item.request,
       };

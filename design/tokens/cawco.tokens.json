@@ -2227,6 +2227,11 @@
       "$type": "dimension",
       "$value": "{space.space-2}"
     },
+    "c-ask-diff-share": {
+      "$type": "number",
+      "$value": "0.4",
+      "$description": "How tall a permission card's diff of the change it asks for stands before it scrolls, as a share of the screen's height: open, and two fifths of the screen at most, so Approve and Deny stay in reach."
+    },
     "c-composer-panel": {
       "$type": "dimension",
       "$value": "calc({size.c-composer-field} + {size.c-composer-inset} * 2 + 2px)"

@@ -44,8 +44,8 @@
    * A one-line summary is not a record of what a tool did: the input it ran on
    * and the result it came back with live in the message metadata and were,
    * until now, unreachable. Every row that carries either opens — same anatomy
-   * as Prompt.svelte's "What this touches" disclosure, so the two surfaces read
-   * as one idea.
+   * as Prompt.svelte's permission fields, so the two surfaces read as one
+   * idea.
    */
   import type { Message } from "../types";
   import { useLedger } from "./arrivals.svelte";
@@ -838,7 +838,7 @@
     }
   }
 
-  /* The disclosed payload — same anatomy as Prompt.svelte's "What this touches".
+  /* The disclosed payload — same anatomy as Prompt.svelte's permission fields.
      Its words hang at the row's text column; the well reaches out past them
      by its own padding. */
   .fields {

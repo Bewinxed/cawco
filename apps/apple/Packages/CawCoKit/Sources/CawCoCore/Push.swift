@@ -317,8 +317,7 @@ enum PushPending {
             let payloadRequestId = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["requestId"] as? String
             var ask: ParkedAsk?
             if case let .permissionRequest(frame, routedTo) = try? Inbound.frame(data) {
-                ask = ParkedAsk(instanceId: frame.instanceId, requestId: frame.requestId, toolName: frame.toolName,
-                                input: frame.input, raisedAt: frame.raisedAt, routedTo: routedTo)
+                ask = ParkedAsk(frame, routedTo: routedTo)
             }
             // push.ts `onAsk`: the envelope's id, else the payload's.
             guard let requestId = envelope.requestId ?? payloadRequestId else { return nil }

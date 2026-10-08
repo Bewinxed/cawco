@@ -16,7 +16,7 @@
     UserAnswers,
     UserQuestion,
   } from "@cawco/core";
-  import { questionsOf } from "@cawco/core";
+  import { commandOf, questionsOf } from "@cawco/core";
   /**
    * The one human-in-the-loop surface, held in the composer's grown shape
    * (Composer, grown.ts): a permission gate (a measurably-symmetric Approve /
@@ -30,6 +30,7 @@
    * as the shape grows (`shown`), and sink back as it folds.
    */
   import { onMount, tick } from "svelte";
+  import DiffView from "#lib/components/features/DiffView.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Kbd } from "#lib/components/ui/kbd/index.js";
   import {
@@ -46,7 +47,7 @@
     type PendingPermission,
     permissionAnswer,
   } from "../client.svelte";
-  import { permissionSummary, suggestedRule } from "../permission-summary";
+  import { suggestedRule } from "../permission-summary";
   import { questionAnswer } from "../question";
 
   let {
@@ -74,10 +75,8 @@
 
   const input = $derived(request.input as Record<string, unknown>);
   const questions = $derived(questionsOf(request.toolName, input));
-  const summary = $derived(permissionSummary(request.toolName, input));
-  const command = $derived(
-    typeof input.command === "string" ? input.command : null
-  );
+  const presentation = $derived(request.presentation);
+  const command = $derived(commandOf(input));
   const rule = $derived(
     request.suggestions ? suggestedRule(request.suggestions) : null
   );
@@ -417,7 +416,9 @@
 {/snippet}
 
 <section
-  aria-label={questions ? `Question from ${asker}` : "Permission request"}
+  aria-label={questions
+    ? `Question from ${asker}`
+    : `Permission request from ${presentation.asker}`}
   class="hitl"
   class:shown={shown}
 >
@@ -492,31 +493,41 @@
       {@render wait()}
     </div>
   {:else}
-    {@render title(`Permission — ${request.toolName}`)}
+    {@render title(`${presentation.asker} asks for permission`)}
+    <!-- What will happen and to what, then the change itself, open: a grant
+         is made on what it changes, never on a sentence about it. The words
+         are the hub's (core permission-presentation.ts), the same on iOS and
+         Telegram; secrets in the fields are already hidden. -->
     <div class="body part" style:--part="1">
-      <p class="lede">{summary}</p>
+      <p class="lede summary">{presentation.summary}</p>
+      {#if presentation.detail}
+        <p class="detail">{presentation.detail}</p>
+      {/if}
       {#if command}
         <div class="cmd">{command}</div>
       {/if}
-      <!-- The disclosed payload: a summary line is not enough to grant on — an
-           Edit/Write/WebFetch shows one sentence and hides the file, the diff, the
-           URL it is actually about. Every field of the tool input is here, one
-           disclosure away, so the grant is informed. -->
-      <details class="disclose">
-        <summary>What this touches</summary>
-        <div class="fields">
-          {#each Object.entries(input) as [key, value]}
-            {@const text =
-              typeof value === "string"
-                ? value
-                : JSON.stringify(value, null, 2)}
-            <div class="field">
-              <span class="k">{key}</span>
-              <pre class="v">{text}</pre>
-            </div>
+      {#if presentation.changes.length > 0}
+        <div class="changes">
+          {#each presentation.changes as change, i (i)}
+            <DiffView
+              cap="calc(var(--c-ask-diff-share) * 100dvh)"
+              filePath={change.path}
+              newContent={change.after}
+              oldContent={change.before}
+            />
           {/each}
         </div>
-      </details>
+      {/if}
+      {#if presentation.fields.length > 0}
+        <dl class="fields">
+          {#each presentation.fields as field, i (`${i}:${field.key}`)}
+            <div class="field">
+              <dt class="k">{field.key}</dt>
+              <dd class="v">{field.value}</dd>
+            </div>
+          {/each}
+        </dl>
+      {/if}
     </div>
     <div class="foot part" style:--part="2">
       <div class="choice">
@@ -748,38 +759,34 @@
     white-space: pre-wrap;
   }
 
-  /* The disclosed payload — collapsed by default, every tool-input field inside. */
-  .disclose {
-    margin-block-end: var(--space-3);
-  }
-  .disclose > summary {
-    display: inline-flex;
-    align-items: center;
-    inline-size: fit-content;
-    cursor: pointer;
-    list-style: none;
-    font-size: var(--text-label);
+  /* What will happen, in the title's weight: the line the grant is made on. */
+  .summary {
     font-weight: var(--weight-strong);
+    margin-block-end: var(--space-1);
+    overflow-wrap: anywhere;
+  }
+  /* How much it changes and where, under it. */
+  .detail {
+    font-size: var(--text-label);
+    font-weight: var(--weight-body);
     color: var(--ink-muted);
+    margin-block-end: var(--space-2);
   }
-  .disclose > summary::-webkit-details-marker {
-    display: none;
+  /* The change itself, open: each diff stands to the token's share of the
+     screen and scrolls inside it, so the answer row stays in reach. */
+  .changes {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    margin-block-end: var(--space-2);
   }
-  .disclose > summary::before {
-    content: "▸";
-    margin-inline-end: var(--space-2);
-  }
-  .disclose[open] > summary::before {
-    transform: rotate(90deg);
-  }
-  .disclose > summary:hover {
-    color: var(--ink-strong);
-  }
+  /* The rest of the input, shown rather than disclosed: each field's name
+     over its value, values that run long scrolling in place. */
   .fields {
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
-    margin-block-start: var(--space-2);
+    margin-block: 0 var(--space-3);
     padding: var(--space-3);
     border-radius: var(--radius-sm);
     background: var(--surface-recess);
@@ -804,14 +811,6 @@
     color: var(--ink-strong);
     white-space: pre-wrap;
     word-break: break-word;
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    .disclose > summary {
-      transition: color var(--dur-control) var(--ease-out);
-    }
-    .disclose > summary::before {
-      transition: transform var(--dur-control) var(--ease-out);
-    }
   }
   /* JOURNEY §Triage: the full row width sits between grant and refusal. At
      --space-2 the two sat 7px apart, close enough that a hand aiming at

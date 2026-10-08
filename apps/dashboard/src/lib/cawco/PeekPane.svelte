@@ -67,7 +67,6 @@
   import { conversationHref } from "./links";
   import { echoBeat } from "./motion/echo.svelte";
   import OsMark from "./OsMark.svelte";
-  import { permissionSummary } from "./permission-summary";
   import { plainMarkdown, plainStreaming } from "./plain-markdown";
   import SessionMark, { sessionStatus } from "./SessionMark.svelte";
   import TaskPanel from "./TaskPanel.svelte";
@@ -361,7 +360,7 @@
     {@const question = Boolean(questionsOf(request.toolName, request.input))}
     {@const summary = question
       ? "asked a question"
-      : permissionSummary(request.toolName, request.input)}
+      : request.presentation.summary}
     <div
       class="flex flex-col gap-2 border-t border-border/50 bg-[var(--status-attn-bg)] px-4 py-3"
     >

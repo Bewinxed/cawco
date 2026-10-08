@@ -19,6 +19,7 @@ import type {
   Verb,
   WorkItemSummary,
 } from "./index";
+import type { PermissionPresentation } from "./permission-presentation";
 import type { ThreadMessage, ThreadSummary } from "./threads";
 import type { UsageLimitsReading, UsageSpend } from "./usage";
 
@@ -109,6 +110,12 @@ export interface PermissionRequestFrame {
   input: Record<string, unknown>;
   instanceId: string;
   kind: "permission_request";
+  /**
+   * What the ask says on every surface, read once by the hub as it parks it
+   * (permission-presentation.ts): the daemon's leg does not carry it, and the
+   * hub fills it before anything else reads the frame.
+   */
+  presentation: PermissionPresentation;
   /** The launch that raised this request; daemon replays retain it verbatim. */
   processGeneration?: string;
   /** When the hub first parked this ask, ms epoch. Absent only on the daemon-to-hub leg. */
@@ -127,6 +134,15 @@ export interface PermissionRequestFrame {
   /** The tool call the ask gates, as its transcript message names it. */
   toolUseId?: string;
 }
+
+/**
+ * A permission request as a daemon sends it to the hub: what the hub stamps
+ * as it parks the ask (`presentation`, `raisedAt`) is not on it yet.
+ */
+export type DaemonPermissionRequestFrame = Omit<
+  PermissionRequestFrame,
+  "presentation" | "raisedAt"
+>;
 
 export interface PermissionSettledFrame {
   instanceId: string;

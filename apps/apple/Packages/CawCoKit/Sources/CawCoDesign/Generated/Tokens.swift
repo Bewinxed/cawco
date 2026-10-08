@@ -466,6 +466,8 @@ public enum Size {
     /// The group composer's field at one line; every transcript keeps the composer's standing parts clear at its foot.
     public static let cComposerField: Double = 34
     public static let cComposerInset: Double = 7
+    /// How tall a permission card's diff of the change it asks for stands before it scrolls, as a share of the screen's height: open, and two fifths of the screen at most, so Approve and Deny stay in reach.
+    public static let cAskDiffShare: Double = 0.4
     public static let cComposerPanel: Double = 50
     /// The group composer's column: its panel, the cards parked over it and its tray, and whatever stands in its place (a thread's lead-off line).
     /// At most this, in points: on the web the least of it and a share of its container (min).

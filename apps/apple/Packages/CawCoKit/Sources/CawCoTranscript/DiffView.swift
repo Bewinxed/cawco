@@ -83,10 +83,12 @@ public final class DiffView: UIView {
     private let rows = UIView()
     private var fit: NSLayoutConstraint!
     private var source: (path: String, old: String, new: String)?
+    /// How tall the rows stand before they scroll, in points.
+    private var cap = Size.txDiffCap
 
     /// The same measured diff outside a transcript. With no custom action,
     /// Expand opens the transcript's existing lightbox from this view's window.
-    public convenience init(path: String, old: String, new: String, onExpand: ((UIView) -> Void)? = nil) {
+    public convenience init(path: String, old: String, new: String, cap: Double = Size.txDiffCap, onExpand: ((UIView) -> Void)? = nil) {
         let env = RowEnv()
         env.openLightbox = { [weak env] item, source in
             if let onExpand { onExpand(source); return }
@@ -95,6 +97,7 @@ public final class DiffView: UIView {
             host.present(Lightbox(item, env: env), animated: !UIAccessibility.isReduceMotionEnabled)
         }
         self.init(env: env)
+        self.cap = cap
         configure(path: path, old: old, new: new)
     }
 
@@ -252,7 +255,7 @@ public final class DiffView: UIView {
             rows.heightAnchor.constraint(equalToConstant: y),
             rows.widthAnchor.constraint(equalToConstant: widestLine).withPriority(.defaultLow),
         ])
-        fit.constant = min(Size.txDiffCap, y)
+        fit.constant = min(cap, y)
         accessibilityLabel = "Diff of \(source.path)"
     }
 

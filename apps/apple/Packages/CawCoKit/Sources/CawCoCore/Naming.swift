@@ -78,29 +78,4 @@ public enum Naming {
               let asked = try? Wire.decoder().decode([Components.Schemas.UserQuestion].self, from: bytes) else { return nil }
         return asked
     }
-
-    /// What a parked ask wants, in plain words.
-    static func permissionSummary(_ toolName: String, _ input: [String: (any Sendable)?]) -> String {
-        if let questions = questions(toolName, input) {
-            return questions.map(\.question).joined(separator: " · ")
-        }
-        func field(_ key: String) -> String? {
-            input[key].flatMap { $0 as? String }
-        }
-        switch toolName {
-        case "Edit", "Write", "Read":
-            return "\(toolName) \(field("file_path") ?? "unknown")"
-        case "edit", "write", "read":
-            return "\(toolName) \(field("filepath") ?? field("filePath") ?? "unknown")"
-        case "Bash", "bash":
-            let command = field("command") ?? ""
-            return "Run: \(command.count > 80 ? String(command.prefix(79)) + "…" : command)"
-        case "webfetch":
-            return "webfetch \(field("url") ?? "unknown")"
-        case "Glob", "Grep":
-            return "\(toolName) \(field("pattern") ?? "unknown")"
-        default:
-            return "\(toolName) operation"
-        }
-    }
 }

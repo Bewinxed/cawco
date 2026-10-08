@@ -454,35 +454,39 @@ public final class FleetStore {
     }
 }
 
+/// One change a permission makes, both sides, as the hub read it parking the ask.
+public typealias PermissionChange = Components.Schemas.PermissionChange
+
 /// One permission or question parked on the operator.
 public struct ParkedAsk: Sendable {
     public let instanceId: String
     public let requestId: String
     public let toolName: String
     let input: OpenAPIObjectContainer
+    /// What the ask says, as the hub read it parking it (core
+    /// permission-presentation.ts): the same words the web card and Telegram use.
+    public let presentation: Components.Schemas.PermissionPresentation
     /// When the hub first parked it, ms epoch: one clock for every device.
     public let raisedAt: Double?
     /// Set when the hub routed it to the delegate's parent rather than to the operator.
     public let routedTo: String?
 
+    init(_ frame: AskFrame, routedTo: String?) {
+        instanceId = frame.instanceId
+        requestId = frame.requestId
+        toolName = frame.toolName
+        input = frame.input
+        presentation = frame.presentation
+        raisedAt = frame.raisedAt
+        self.routedTo = routedTo
+    }
+
     public var isQuestion: Bool { Naming.questions(toolName, input.value) != nil }
     public var questions: [Components.Schemas.UserQuestion] { Naming.questions(toolName, input.value) ?? [] }
-    public var summary: String { Naming.permissionSummary(toolName, input.value) }
+    /// What will happen and to what, in one line.
+    public var summary: String { presentation.summary }
     /// The shell command a permission is about, said whole (Prompt.svelte `.cmd`).
     public var command: String? { input.value["command"] as? String }
-    /// Every field of the tool input, for "What this touches": strings as
-    /// they are, anything else as indented JSON.
-    public var fields: [(key: String, value: String)] {
-        input.value.keys.sorted().map { key in
-            let raw = input.value[key] ?? nil
-            if let text = raw as? String { return (key, text) }
-            guard let raw, JSONSerialization.isValidJSONObject(raw) || raw is NSNumber,
-                  let data = try? JSONSerialization.data(withJSONObject: raw, options: [.prettyPrinted, .fragmentsAllowed, .sortedKeys]),
-                  let text = String(data: data, encoding: .utf8)
-            else { return (key, raw.map { "\($0)" } ?? "null") }
-            return (key, text)
-        }
-    }
 }
 
 /// Every ask parked on the operator, across every machine, and the answers
@@ -522,10 +526,9 @@ public final class NeedsYouStore {
         var list = parked[frame.instanceId] ?? []
         if let at = list.firstIndex(where: { $0.requestId == frame.requestId }) {
             // A re-broadcast follows the hub's latest word on it.
-            let old = list[at]
-            list[at] = ParkedAsk(instanceId: old.instanceId, requestId: old.requestId, toolName: old.toolName, input: old.input, raisedAt: frame.raisedAt, routedTo: routedTo)
+            list[at] = ParkedAsk(frame, routedTo: routedTo)
         } else {
-            list.append(ParkedAsk(instanceId: frame.instanceId, requestId: frame.requestId, toolName: frame.toolName, input: frame.input, raisedAt: frame.raisedAt, routedTo: routedTo))
+            list.append(ParkedAsk(frame, routedTo: routedTo))
         }
         parked[frame.instanceId] = list
     }

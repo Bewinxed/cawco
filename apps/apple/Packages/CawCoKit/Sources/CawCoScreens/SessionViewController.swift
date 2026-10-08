@@ -396,7 +396,11 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
         var ordered: [UIView] = []
         for ask in parked {
             let card = cards[ask.requestId] ?? {
-                let made = PromptCardView(ask, arriving: shownOnce && composerBinding.composer != nil)
+                // Each change stands at most the token's share of the screen, scrolling inside.
+                let cap = (view.window?.bounds.height ?? view.bounds.height) * Size.cAskDiffShare
+                let made = PromptCardView(ask, arriving: shownOnce && composerBinding.composer != nil) { change in
+                    DiffView(path: change.path, old: change.before, new: change.after, cap: cap)
+                }
                 made.onAnswer = { [weak self] choice, picks in self?.answer(ask, choice, picks) }
                 made.onHeight = { [weak self] in self?.composerBinding.composer?.onHeight() }
                 cards[ask.requestId] = made

@@ -13,6 +13,7 @@ import { basename, dirname, join } from "node:path";
 import type {
   AgentBusyReport,
   ControlPayload,
+  DaemonPermissionRequestFrame,
   Envelope,
   FleetConfig,
   FleetSyncReport,
@@ -179,7 +180,13 @@ export interface SessiondAwareContext extends HarnessContext {
  * way to tell a replayed line it already has from one it does not.
  */
 export type FrameSink = (
-  frame: Exclude<FramePayload, { kind: "instances" | "instances_delta" }> &
+  frame: (
+    | Exclude<
+        FramePayload,
+        { kind: "instances" | "instances_delta" | "permission_request" }
+      >
+    | DaemonPermissionRequestFrame
+  ) &
     Partial<FrameProvenance> & { processGeneration?: string }
 ) => boolean;
 
