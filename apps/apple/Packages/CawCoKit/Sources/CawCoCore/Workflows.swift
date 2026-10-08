@@ -396,11 +396,11 @@ public final class WorkflowsStore {
             }
             throw HubConnection.ControlError(message: try await String(collecting: bad.body.plainText, upTo: 64_000))
         case let .forbidden(refused):
-            throw HubConnection.ControlError(message: try await String(collecting: refused.body.plainText, upTo: 64_000))
-        case let .notFound(gone):
-            throw HubConnection.ControlError(message: try await String(collecting: gone.body.plainText, upTo: 64_000))
+            throw HubConnection.ControlError(message: try await Wire.sentence(refused.body.plainText, status: 403))
+        case let .notFound(refused):
+            throw HubConnection.ControlError(message: try await Wire.sentence(refused.body.plainText, status: 404))
         case let .conflict(refused):
-            throw HubConnection.ControlError(message: try await String(collecting: refused.body.plainText, upTo: 64_000))
+            throw HubConnection.ControlError(message: try await Wire.sentence(refused.body.plainText, status: 409))
         case let .undocumented(statusCode, _):
             throw HubConnection.ControlError(message: "The hub answered \(statusCode).")
         }
@@ -449,11 +449,11 @@ public final class WorkflowsStore {
             let text = try await String(collecting: bad.body.plainText, upTo: 64_000)
             throw HubConnection.ControlError(message: text.isEmpty ? "The hub answered 400." : text)
         case let .forbidden(refused):
-            throw HubConnection.ControlError(message: try await String(collecting: refused.body.plainText, upTo: 64_000))
-        case let .notFound(gone):
-            throw HubConnection.ControlError(message: try await String(collecting: gone.body.plainText, upTo: 64_000))
+            throw HubConnection.ControlError(message: try await Wire.sentence(refused.body.plainText, status: 403))
+        case let .notFound(refused):
+            throw HubConnection.ControlError(message: try await Wire.sentence(refused.body.plainText, status: 404))
         case let .conflict(refused):
-            throw HubConnection.ControlError(message: try await String(collecting: refused.body.plainText, upTo: 64_000))
+            throw HubConnection.ControlError(message: try await Wire.sentence(refused.body.plainText, status: 409))
         case let .undocumented(statusCode, _):
             throw HubConnection.ControlError(message: "The hub answered \(statusCode).")
         }

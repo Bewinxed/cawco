@@ -43,6 +43,13 @@ enum Wire {
     static func data(_ container: OpenAPIValueContainer) throws -> Data {
         try encoder().encode(container)
     }
+
+    /// A refusal's own sentence, or "The hub answered <status>." when it
+    /// wrote none (workflows.ts `request`: `text || The hub answered …`).
+    static func sentence(_ body: HTTPBody, status: Int) async throws -> String {
+        let text = try await String(collecting: body, upTo: 64_000)
+        return text.isEmpty ? "The hub answered \(status)." : text
+    }
 }
 
 /// A date the generated types carry as `Date`, string or a number of

@@ -54,9 +54,9 @@ public final class WorkflowRunsStore {
                     if next.ask?.stepId != detail.run?.ask?.stepId, next.ask != nil { detail.answerStage = .pending }
                     detail.run = next
                 case let .badRequest(bad): detail.error = try await String(collecting: bad.body.plainText, upTo: 64_000)
-                case let .forbidden(refused): detail.error = try await String(collecting: refused.body.plainText, upTo: 64_000)
-                case let .notFound(gone): detail.error = try await String(collecting: gone.body.plainText, upTo: 64_000)
-                case let .conflict(refused): detail.error = try await String(collecting: refused.body.plainText, upTo: 64_000)
+                case let .forbidden(refused): detail.error = try await Wire.sentence(refused.body.plainText, status: 403)
+                case let .notFound(refused): detail.error = try await Wire.sentence(refused.body.plainText, status: 404)
+                case let .conflict(refused): detail.error = try await Wire.sentence(refused.body.plainText, status: 409)
                 case let .undocumented(statusCode, _): detail.error = "The hub answered \(statusCode)."
                 }
             } catch {
@@ -104,13 +104,13 @@ public final class WorkflowRunsStore {
                     detail.error = try await String(collecting: bad.body.plainText, upTo: 64_000)
                     detail.answerStage = .failed
                 case let .forbidden(refused):
-                    detail.error = try await String(collecting: refused.body.plainText, upTo: 64_000)
+                    detail.error = try await Wire.sentence(refused.body.plainText, status: 403)
                     detail.answerStage = .failed
-                case let .notFound(gone):
-                    detail.error = try await String(collecting: gone.body.plainText, upTo: 64_000)
+                case let .notFound(refused):
+                    detail.error = try await Wire.sentence(refused.body.plainText, status: 404)
                     detail.answerStage = .failed
                 case let .conflict(refused):
-                    detail.error = try await String(collecting: refused.body.plainText, upTo: 64_000)
+                    detail.error = try await Wire.sentence(refused.body.plainText, status: 409)
                     detail.answerStage = .failed
                 case let .unprocessableContent(bad):
                     let problem = try bad.body.applicationProblemJson
