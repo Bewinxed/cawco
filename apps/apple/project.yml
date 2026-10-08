@@ -74,8 +74,9 @@ targets:
         # Profiles carrying Push Notifications (made 2026-10-07 when the App ID
         # got the capability; that invalidated "CawCo App Store 20261005").
         # Automatic signing over the App Store Connect key made no push profile.
-        # The Mac's profile (Mac Catalyst development, made 2026-10-09 through the
-        # App Store Connect API) lists this Mac's Provisioning UDID.
+        # The Mac's profiles (Mac Catalyst development and App Store, made
+        # 2026-10-09 through the App Store Connect API); development lists this
+        # Mac's Provisioning UDID.
         Debug:
           "CODE_SIGN_STYLE[sdk=iphoneos*]": Manual
           "CODE_SIGN_IDENTITY[sdk=iphoneos*]": Apple Development
@@ -88,10 +89,9 @@ targets:
           "CODE_SIGN_STYLE[sdk=iphoneos*]": Manual
           "CODE_SIGN_IDENTITY[sdk=iphoneos*]": Apple Distribution
           "PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*]": CawCo App Store 20261007
-          # No Mac App Store profile yet: a Release Mac build stays signed ad hoc
-          # and claims no push entitlement (refused at launch without team signing).
-          "CODE_SIGN_IDENTITY[sdk=macosx*]": "-"
-          "CODE_SIGN_ENTITLEMENTS[sdk=macosx*]": ""
+          "CODE_SIGN_STYLE[sdk=macosx*]": Manual
+          "CODE_SIGN_IDENTITY[sdk=macosx*]": Apple Distribution
+          "PROVISIONING_PROFILE_SPECIFIER[sdk=macosx*]": CawCo Mac Catalyst App Store 20261009
     entitlements:
       path: CawCo/CawCo.entitlements
       properties:
