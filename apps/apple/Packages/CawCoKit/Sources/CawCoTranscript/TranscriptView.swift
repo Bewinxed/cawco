@@ -1306,6 +1306,8 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
 
     private func toggle(_ key: String, from view: UIView) {
         guard let row = view as? Disclosing else { return }
+        // The reader is acting where they stand: a restored place is theirs now.
+        pendingPosition = nil
         if open.contains(key) { open.remove(key) } else { open.insert(key) }
         // A disclosure the reader opens holds its header where they pressed it and
         // opens downward: the transcript lets go of the tail (Transcript `onrevealstart`).
@@ -1373,6 +1375,8 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     /// Jump to latest (Transcript `jump`): within three screens one smooth
     /// glide, past it — or under Reduce Motion — an instant landing.
     private func jump() {
+        // The reader leaves a restored place for the tail.
+        pendingPosition = nil
         let distance = bottomOffset - collection.contentOffset.y
         if UIAccessibility.isReduceMotionEnabled || distance > 3 * collection.bounds.height {
             latest()
@@ -1397,20 +1401,34 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     }
 
     public func restorePosition(_ position: TranscriptPosition) {
+        Self.restoring.notice("place to restore: following \(position.following), anchor \(position.anchor ?? "none", privacy: .public) +\(position.offset, format: .fixed(precision: 1))")
         following = position.following
         pendingPosition = position
         restoreIfReady()
     }
 
+    private static let restoring = Logger(subsystem: "dev.cawco.app", category: "Restore")
+
+    /// The restored place is held, every frame, until the reader moves the
+    /// list: the rows above it are measured as they are built, and an offset
+    /// set once from their estimated heights drifted tens of rows away from
+    /// the anchor as their real heights came in.
     private func restoreIfReady() {
         guard let position = pendingPosition, dataSource.snapshot().numberOfItems > 0 else { return }
         if position.following { pendingPosition = nil; latest(); return }
         guard let id = position.anchor, let index = dataSource.indexPath(for: id),
               let frame = collection.layoutAttributesForItem(at: index)?.frame else { return }
-        // A first screen is built down from the anchor: it is kept until every row is in.
-        if fed == nil { pendingPosition = nil }
-        collection.setContentOffset(CGPoint(x: 0, y: frame.minY + position.offset), animated: false)
+        let y = frame.minY + position.offset
+        if fed == nil, !placeHeld {
+            placeHeld = true
+            Self.restoring.notice("place restored at \(id, privacy: .public), offset \(Double(y), format: .fixed(precision: 1))")
+        }
+        guard abs(collection.contentOffset.y - y) > 0.5 else { return }
+        collection.setContentOffset(CGPoint(x: 0, y: y), animated: false)
     }
+
+    /// The restored place has stood once with every row in (logged once).
+    private var placeHeld = false
 
     public func scrollViewDidScroll(_ scrollView: UIScrollView) {
         guard scrollView.isDragging || scrollView.isDecelerating else { return }

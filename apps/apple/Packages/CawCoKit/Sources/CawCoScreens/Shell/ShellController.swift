@@ -338,6 +338,9 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     var selected: SessionViewController? { currentId.flatMap(panes.session) }
     var currentId: String? { workspace.activeSessionId }
 
+    /// A restored scene's draft and place for session `id`, whenever its screen is built.
+    func restoreValues(_ values: [AnyHashable: Any], for id: String) { panes.restore(values, for: id) }
+
     /// Opens a conversation in the workspace: its group's tab, the deck pushed
     /// over the board on a compact width, the grid in the detail on a wide one.
     func openSession(_ id: String) {

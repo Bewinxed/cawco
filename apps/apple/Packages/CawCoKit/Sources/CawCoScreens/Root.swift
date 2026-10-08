@@ -19,6 +19,8 @@ public final class RootViewController: ObservedViewController {
     private var shownKey = ""
     private var initialSession: String?
     private var initialValues: [AnyHashable: Any]?
+    /// A scene put back as it was left: which session, and whether its place came with it.
+    private static let restoring = Logger(subsystem: "dev.cawco.app", category: "Restore")
 
     public init(sessionId: String? = nil, boardTab: String? = nil) {
         initialSession = sessionId
@@ -103,7 +105,13 @@ public final class RootViewController: ObservedViewController {
         if read, let id = initialSession {
             initialSession = nil
             board.openSession(id)
-            if let initialValues { board.selected?.restoreValues(initialValues); self.initialValues = nil }
+            if let initialValues {
+                // Its screen is built when its group first shows it, after this:
+                // the values wait for it there (PaneHost `restore`).
+                Self.restoring.notice("restoring \(id.prefix(8), privacy: .public), place saved: \(initialValues["transcriptPosition"] != nil)")
+                board.restoreValues(initialValues, for: id)
+                self.initialValues = nil
+            }
         }
         // After the first full read, `/api/pending` included: an ask's
         // session opens with its card in view, never an empty pane.

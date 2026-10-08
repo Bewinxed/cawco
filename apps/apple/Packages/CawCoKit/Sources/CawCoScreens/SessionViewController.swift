@@ -1,6 +1,7 @@
 import CawCoCore
 import CawCoDesign
 import CawCoTranscript
+import OSLog
 import PhotosUI
 import UIKit
 import UniformTypeIdentifiers
@@ -14,6 +15,7 @@ import UniformTypeIdentifiers
 /// (`composerInset`), and the transcript keeps its last line clear of it.
 final class SessionViewController: ObservedViewController, PHPickerViewControllerDelegate, UIDocumentPickerDelegate {
     let sessionId: String
+    private static let restoring = Logger(subsystem: "dev.cawco.app", category: "Restore")
     private let hub: HubConnection
     private let transcript: SessionTranscript
     private let transcriptView = TranscriptView()
@@ -123,7 +125,9 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
 
     var restorationValues: [String: Any] {
         var values: [String: Any] = ["draft": composerBinding.draft]
-        if let position = try? JSONEncoder().encode(transcriptView.restorationPosition) { values["transcriptPosition"] = position }
+        let position = transcriptView.restorationPosition
+        Self.restoring.notice("place saved for \(self.sessionId.prefix(8), privacy: .public): following \(position.following), anchor \(position.anchor ?? "none", privacy: .public) +\(position.offset, format: .fixed(precision: 1))")
+        if let data = try? JSONEncoder().encode(position) { values["transcriptPosition"] = data }
         return values
     }
 

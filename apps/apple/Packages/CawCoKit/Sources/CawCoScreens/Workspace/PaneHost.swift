@@ -75,6 +75,17 @@ final class PaneHost {
 
     func session(_ id: String) -> SessionViewController? { built[id] as? SessionViewController }
 
+    /// A restored scene's draft and scroll for `id`: given to its screen if
+    /// that is built, else kept for when it is. The screen is built when its
+    /// group first shows it, which is after the scene asks to restore it.
+    func restore(_ values: [AnyHashable: Any], for id: String) {
+        if let session = session(id) {
+            session.restoreValues(values)
+            return
+        }
+        parked[id] = Dictionary(uniqueKeysWithValues: values.compactMap { key, value in (key as? String).map { ($0, value) } })
+    }
+
     /// What the group's composer draws for a tab: nil for a run, which has no
     /// composer, and for no tab at all.
     func binding(for id: String?) -> SessionComposerBinding? {
