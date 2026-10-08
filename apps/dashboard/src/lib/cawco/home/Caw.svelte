@@ -562,6 +562,11 @@
         .catch(failed);
       return () => {
         gone = true;
+        // An animation outlives the element it is on: a fade left running
+        // past its canvas resolved, and its `then` read this Caw's props
+        // after the place holding him was gone. Cancelled, it takes the
+        // fade's own "left the page" path.
+        layer.fade?.cancel();
         rive?.cleanup();
       };
     };
