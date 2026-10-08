@@ -37,11 +37,11 @@
    */
   import { mergeProps } from "bits-ui";
   import { untrack } from "svelte";
-  import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import beatDark from "#lib/assets/brand/bar-beat-needs-you-dark.png";
   import beatLight from "#lib/assets/brand/bar-beat-needs-you-light.png";
   import smileDark from "#lib/assets/brand/bar-beat-smile-dark.png";
   import smileLight from "#lib/assets/brand/bar-beat-smile-light.png";
+  import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import { IconDollar, IconWorkflow } from "#lib/icons.js";
   import { theme } from "#lib/theme.svelte.js";
   import { goto } from "$app/navigation";
@@ -50,12 +50,7 @@
   import { CAW_HEAD_CENTRE } from "./home/caw-still.svelte";
   import { clock, home, type NeedsItem, span } from "./home/home-state.svelte";
   import { conversationHref } from "./links";
-  import {
-    dur,
-    easeInOut,
-    easeOut,
-    motionOk,
-  } from "./motion/curves.svelte";
+  import { dur, easeInOut, easeOut, motionOk } from "./motion/curves.svelte";
   import { integrate, type Sample, sampleAt } from "./motion/spring";
   import SessionMark from "./SessionMark.svelte";
   import { capLine } from "./usage";
@@ -158,6 +153,14 @@
   const lapCount = $derived(
     ringClosed ? 0 : Math.min(Math.max(count - ARCS, 0), ARCS)
   );
+  /**
+   * The arcs' slots, 0 up, keyed by their place on the rim. A list rather
+   * than `{#each { length }, k (k)}`: Biome's Svelte parser takes no key
+   * after an index without an `as`.
+   */
+  const slots = (n: number) => Array.from({ length: n }, (_, k) => k);
+  const arcSlots = $derived(slots(arcCount));
+  const lapSlots = $derived(slots(lapCount));
   const tipText = $derived(count > 0 ? `${count} need you` : quiet);
 
   /** A point on the rim, `deg` clockwise from 12 o'clock. */
@@ -876,91 +879,93 @@
   </div>
 
   <Tip label={tipText}>
-    {#snippet children(tip)}
-  <button
-    {...mergeProps(tip, {
-      onclick: onCapsuleClick,
-      onpointerdown: (event: PointerEvent) => {
-        press(event);
-        grabCapsule(event);
-      },
-      onpointerenter: pointerOn,
-      onpointerleave: pointerOff,
-    })}
-    aria-controls="needs-drawer"
-    aria-expanded={open}
-    aria-haspopup="dialog"
-    aria-label={label}
-    class="capsule bar-item touch-hit"
-    data-needs-caw
-    type="button"
-    bind:this={capsule}
-  >
-    <span class="mug" class:cut={cut} class:pressed={pressed}>
-      <span
-        class="face"
-        style:--dx={0.5 - CAW_HEAD_CENTRE.x}
-        style:--dy={0.5 - CAW_HEAD_CENTRE.y}
-        style:--side="{HEAD}px"
-        class:away={beating}
-        class:smiled={smiling}
+    {#snippet children(
+      tip
+    )}
+      <button
+        {...mergeProps(tip, {
+          onclick: onCapsuleClick,
+          onpointerdown: (event: PointerEvent) => {
+            press(event);
+            grabCapsule(event);
+          },
+          onpointerenter: pointerOn,
+          onpointerleave: pointerOff,
+        })}
+        aria-controls="needs-drawer"
+        aria-expanded={open}
+        aria-haspopup="dialog"
+        aria-label={label}
+        class="capsule bar-item touch-hit"
+        data-needs-caw
+        type="button"
+        bind:this={capsule}
       >
-        <CawFace size={HEAD} status="compacted" />
-      </span>
-      <span
-        aria-hidden="true"
-        class="beat"
-        bind:this={beatEl}
-        style:--box="{BEAT_BOX}px"
-        style:--frames={BEAT_FRAMES}
-        style:background-image="url({beatStrip})"
-        class:on={beating}
-      ></span>
-      <span
-        aria-hidden="true"
-        class="smile"
-        bind:this={smileEl}
-        style:--box="{SMILE_BOX}px"
-        style:--dx={0.5 - SMILE_HEAD_CENTRE.x}
-        style:--dy={0.5 - SMILE_HEAD_CENTRE.y}
-        style:--frames={SMILE_FRAMES}
-        style:background-image="url({smileStrip})"
-        style:background-position-x="{SMILE_LAST}px"
-        class:on={smiling}
-      ></span>
-    </span>
-    <!-- What waits, on his rim: an arc each, a second lap on top in its
+        <span class="mug" class:cut={cut} class:pressed={pressed}>
+          <span
+            class="face"
+            style:--dx={0.5 - CAW_HEAD_CENTRE.x}
+            style:--dy={0.5 - CAW_HEAD_CENTRE.y}
+            style:--side="{HEAD}px"
+            class:away={beating}
+            class:smiled={smiling}
+          >
+            <CawFace size={HEAD} status="compacted" />
+          </span>
+          <span
+            aria-hidden="true"
+            class="beat"
+            bind:this={beatEl}
+            style:--box="{BEAT_BOX}px"
+            style:--frames={BEAT_FRAMES}
+            style:background-image="url({beatStrip})"
+            class:on={beating}
+          ></span>
+          <span
+            aria-hidden="true"
+            class="smile"
+            bind:this={smileEl}
+            style:--box="{SMILE_BOX}px"
+            style:--dx={0.5 - SMILE_HEAD_CENTRE.x}
+            style:--dy={0.5 - SMILE_HEAD_CENTRE.y}
+            style:--frames={SMILE_FRAMES}
+            style:background-image="url({smileStrip})"
+            style:background-position-x="{SMILE_LAST}px"
+            class:on={smiling}
+          ></span>
+        </span>
+        <!-- What waits, on his rim: an arc each, a second lap on top in its
          own ink past ARCS, closed whole past two laps. -->
-    <svg
-      aria-hidden="true"
-      class="rim"
-      data-count={count}
-      viewBox="0 0 {RING_BOX} {RING_BOX}"
-    >
-      {#each { length: arcCount }, k (k)}
-        <path class="arc" d={arcPath(k)} pathLength="1" transition:drawn />
-      {/each}
-      {#each { length: lapCount }, k (k)}
-        <path
-          class="arc lap"
-          d={arcPath(k)}
-          pathLength="1"
-          transition:drawn
-        />
-      {/each}
-      {#if ringClosed}
-        <circle
-          class="arc lap whole"
-          cx={RING_BOX / 2}
-          cy={RING_BOX / 2}
-          pathLength="1"
-          r={RIM}
-          transform="rotate(-90 {RING_BOX / 2} {RING_BOX / 2})"
-          transition:drawn
-        />
-      {/if}
-    </svg>
-  </button>
+        <svg
+          aria-hidden="true"
+          class="rim"
+          data-count={count}
+          viewBox="0 0 {RING_BOX} {RING_BOX}"
+        >
+          {#each arcSlots as k (k)}
+            <path class="arc" d={arcPath(k)} pathLength="1" transition:drawn />
+          {/each}
+          {#each lapSlots as k (k)}
+            <path
+              class="arc lap"
+              d={arcPath(k)}
+              pathLength="1"
+              transition:drawn
+            />
+          {/each}
+          {#if ringClosed}
+            <circle
+              class="arc lap whole"
+              cx={RING_BOX / 2}
+              cy={RING_BOX / 2}
+              pathLength="1"
+              r={RIM}
+              transform="rotate(-90 {RING_BOX / 2} {RING_BOX / 2})"
+              transition:drawn
+            />
+          {/if}
+        </svg>
+      </button>
     {/snippet}
   </Tip>
 </div>

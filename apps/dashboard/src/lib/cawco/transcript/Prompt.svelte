@@ -45,6 +45,7 @@
   import {
     cawco,
     commandRecord,
+    isStale,
     type PendingPermission,
     permissionAnswer,
   } from "../client.svelte";
@@ -227,14 +228,20 @@
   // once and only when it can reach the daemon that asked. `pressed` latches
   // the card the instant it is answered — a double-tap, or an Enter after a
   // click, cannot answer twice — and every path refuses while the hub is
-  // unreachable, where the answer would resolve into nothing and leave the
-  // turn wedged. The pressed button pends (the kit's pending: spinner, its
+  // unreachable, or the session's machine is (its row reads `unknown`, as
+  // NeedsCard holds a stale ask): the answer would resolve into nothing and
+  // leave the turn wedged, so the card waits, and is live again the moment
+  // the machine is. The pressed button pends (the kit's pending: spinner, its
   // label morphing to what it is doing) while its peers dim, until the gate
   // leaves; refused, it stops and the reason sits under the buttons.
   type Choice = "allow" | "deny" | "always" | "answer";
   let pressed = $state<Choice | null>(null);
-  const connected = $derived(cawco.hub === "connected");
-  const answerable = $derived(pressed === null && connected);
+  const row = $derived(cawco.instanceIndex.byId.get(request.instanceId));
+  /** The session's machine is offline: the ask stands, its answer waits. */
+  const offline = $derived(row ? isStale(row) : false);
+  /** An answer can reach the daemon that asked: the hub is live, and its machine. */
+  const reachable = $derived(cawco.hub === "connected" && !offline);
+  const answerable = $derived(pressed === null && reachable);
 
   /**
    * The command this card's answer went out as. The card reads its OWN id
@@ -268,7 +275,7 @@
   const failedOf = (choice: Choice): boolean =>
     pressed === choice && refused !== null;
   const disabledOf = (choice: Choice): boolean =>
-    pressed === null ? !connected : !pendingOf(choice);
+    pressed === null ? !reachable : !pendingOf(choice);
 
   /* Only a question card claims the digits, and only one of them at a time. */
   const claim = Symbol("prompt");
@@ -385,12 +392,15 @@
 <svelte:window onkeydown={handleKeydown} />
 
 <!-- Under the buttons, one line when there is something the buttons cannot
-     say: the socket cannot carry an answer yet, or the hub refused the one
-     sent and said why. A live region, so the refusal is heard. -->
+     say: the session's machine or the socket cannot carry an answer yet, or
+     the hub refused the one sent and said why. A live region, so the
+     refusal is heard. -->
 {#snippet wait()}
   {#if refused}
     <p class="wait refused" role="status">{refused}</p>
-  {:else if pressed === null && !connected}
+  {:else if pressed === null && offline}
+    <p class="wait" role="status">Machine offline — can't answer yet.</p>
+  {:else if pressed === null && !reachable}
     <p class="wait" role="status">Reconnecting — can't answer yet.</p>
   {/if}
 {/snippet}
