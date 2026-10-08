@@ -1,6 +1,7 @@
 import CawCoCore
 import CawCoDesign
 import CawCoMascot
+import OSLog
 import UIKit
 
 /// One window's half of CawCo Pro (paywall DESIGN.md §1): it locks the board
@@ -26,6 +27,9 @@ final class PaywallGate {
     private var endedOffered = false
     private var reminderKey = ""
     private var locked = false
+    /// What the gate last saw, logged when it changes.
+    private var seen = ""
+    private let log = Logger(subsystem: "dev.cawco.app", category: "Paywall")
 
     /// `paywall-shown`: the onboarding sheet has risen once on this install.
     private static let shownKey = "paywall-shown"
@@ -79,6 +83,11 @@ final class PaywallGate {
     /// once the hub's fleet was read.
     func update(onBoard: Bool, read: Bool) {
         let pro = Pro.shared
+        let state = "board \(onBoard) read \(read) access \(pro.access.map { String(describing: $0) } ?? "unread") shown \(UserDefaults.standard.bool(forKey: Self.shownKey)) locked \(locked)"
+        if state != seen {
+            seen = state
+            log.notice("gate: \(state, privacy: .public)")
+        }
         guard onBoard, let access = pro.access else {
             lock(false)
             bar.isHidden = true
@@ -150,6 +159,7 @@ final class PaywallGate {
     }
 
     private func fire(with ask: ParkedAsk?) {
+        log.notice("gate: the onboarding paywall rises (\(ask == nil ? "no ask waiting" : "after the ask was answered", privacy: .public))")
         UserDefaults.standard.set(true, forKey: Self.shownKey)
         held = nil
         triggerClock?.cancel()

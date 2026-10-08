@@ -27,6 +27,8 @@ targets:
   CawCo:
     type: application
     supportedDestinations: [iOS, macCatalyst]
+    # CawCo/ includes PrivacyInfo.xcprivacy, the privacy manifest, which
+    # XcodeGen copies into the app's resources (App Review audit R3).
     sources:
       - path: CawCo
     # Xcode's Run reads Pro and the free week from this file instead of the
