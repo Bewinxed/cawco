@@ -15,6 +15,7 @@
    */
   import { accountMoveWords } from "@cawco/core";
   import IconTransfer from "~icons/solar/transfer-horizontal-bold-duotone";
+  import { hueVar } from "../accounts/model.svelte";
   import type { Row } from "./rows";
 
   let { row }: { row: Extract<Row, { kind: "account" }> } = $props();
@@ -69,7 +70,7 @@
       open = !open;
     }}
     type="button"
-    style:--account={`var(--hue-${hue}-500)`}
+    style:--account={hueVar(hue)}
   >
     <span class="arm"></span>
     <span class="mid"

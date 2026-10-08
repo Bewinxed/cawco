@@ -14295,6 +14295,12 @@
                   "string"
                 ]
               },
+              "forkedFrom": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
               "parentInstanceId": {
                 "type": [
                   "null",
@@ -14396,6 +14402,7 @@
               "delegateType",
               "delegateTypeProject",
               "derivedTitle",
+              "forkedFrom",
               "harness",
               "id",
               "kind",
@@ -14569,6 +14576,12 @@
                     "string"
                   ]
                 },
+                "forkedFrom": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
                 "parentInstanceId": {
                   "type": [
                     "null",
@@ -14670,6 +14683,7 @@
                 "delegateType",
                 "delegateTypeProject",
                 "derivedTitle",
+                "forkedFrom",
                 "harness",
                 "id",
                 "kind",
@@ -16749,14 +16763,6 @@
               }
             }
           },
-          "yours": {
-            "type": "object",
-            "properties": {
-              "pinnedAccountId": {
-                "type": "string"
-              }
-            }
-          },
           "atLimit": {
             "type": "object",
             "properties": {
@@ -16779,6 +16785,14 @@
               "prepareAtPct",
               "waitMinutes"
             ]
+          },
+          "yours": {
+            "type": "object",
+            "properties": {
+              "pinnedAccountId": {
+                "type": "string"
+              }
+            }
           },
           "provider": {
             "type": "string",
@@ -17852,6 +17866,11 @@
               "inspect",
               true
             ]
+          },
+          "relaunch": {
+            "description": "The process the session runs in is replaced, though the spawn resumes\nits own conversation: it moves to another account. Without it, a resume\nfor a session the machine carries is a recovery of that process, and\nthe process is kept.",
+            "const": true,
+            "type": "boolean"
           },
           "requestId": {
             "description": "Correlates the `control_result` frame the agent answers the spawn with, once\nthe session is in place.",
@@ -24187,6 +24206,11 @@
           "id": {
             "type": "string"
           },
+          "inherits": {
+            "description": "The new session takes the source's place: its parent, work item, thread\nand tab. Set when the hub continued a session whose account reached its\nlimit on another account.",
+            "const": true,
+            "type": "boolean"
+          },
           "sourceInstanceId": {
             "type": "string"
           },
@@ -24702,6 +24726,132 @@
         "description": "Everything a renderer may need beyond `content`, keyed by the kind that uses it.",
         "type": "object",
         "properties": {
+          "accountMove": {
+            "description": "A `system.account_move`: what the hub did at the session's account's limit.",
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "moved"
+                    ]
+                  },
+                  "from": {
+                    "$ref": "#/components/schemas/NamedAccount"
+                  },
+                  "to": {
+                    "$ref": "#/components/schemas/NamedAccount"
+                  },
+                  "sameOrganization": {
+                    "description": "Both accounts in one organization: its prompt cache came along.",
+                    "type": "boolean"
+                  },
+                  "tokens": {
+                    "type": [
+                      "null",
+                      "number"
+                    ]
+                  },
+                  "window": {
+                    "description": "The window that refused it, as {@link windowWords} names it.",
+                    "type": [
+                      "null",
+                      "string"
+                    ]
+                  },
+                  "resetsAt": {
+                    "description": "When that window resets, epoch ms; null when nothing said.",
+                    "type": [
+                      "null",
+                      "number"
+                    ]
+                  }
+                },
+                "required": [
+                  "from",
+                  "kind",
+                  "resetsAt",
+                  "sameOrganization",
+                  "to",
+                  "tokens",
+                  "window"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "waiting"
+                    ]
+                  },
+                  "account": {
+                    "$ref": "#/components/schemas/NamedAccount"
+                  },
+                  "until": {
+                    "description": "The reset it waits for, epoch ms: the line counts down to it.",
+                    "type": "number"
+                  },
+                  "why": {
+                    "$ref": "#/components/schemas/WaitReason"
+                  },
+                  "tokens": {
+                    "type": [
+                      "null",
+                      "number"
+                    ]
+                  }
+                },
+                "required": [
+                  "account",
+                  "kind",
+                  "tokens",
+                  "until",
+                  "why"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "continued"
+                    ]
+                  },
+                  "from": {
+                    "$ref": "#/components/schemas/NamedAccount"
+                  },
+                  "to": {
+                    "$ref": "#/components/schemas/NamedAccount"
+                  },
+                  "tokens": {
+                    "type": [
+                      "null",
+                      "number"
+                    ]
+                  },
+                  "preparedAtPct": {
+                    "description": "The window's percent when the summary was written ahead of the limit; null when it was written at the move.",
+                    "type": [
+                      "null",
+                      "number"
+                    ]
+                  }
+                },
+                "required": [
+                  "from",
+                  "kind",
+                  "preparedAtPct",
+                  "to",
+                  "tokens"
+                ]
+              }
+            ]
+          },
           "askLabel": {
             "description": "A `user.delegate_ask`'s display label, e.g. `cawco#506dfafb`.",
             "type": "string"
@@ -24994,6 +25144,47 @@
             "type": "string"
           }
         }
+      },
+      "NamedAccount": {
+        "description": "An account as a transcript line names it, as it was when the line was written.",
+        "type": "object",
+        "properties": {
+          "hue": {
+            "$ref": "#/components/schemas/AccountHue"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "hue",
+          "id",
+          "name"
+        ]
+      },
+      "AccountHue": {
+        "description": "The colour an account is drawn in: the `--account-<name>` token.",
+        "enum": [
+          "amber",
+          "blue",
+          "cyan",
+          "green",
+          "orange"
+        ],
+        "type": "string"
+      },
+      "WaitReason": {
+        "description": "Why a session at its account's limit waits for the reset rather than\nmoving: it is a fork (it reads its origin's cache, on its origin's\naccount), moving is switched off, no other account has room, or the reset\ncomes sooner than re-reading its context elsewhere is worth.",
+        "enum": [
+          "fork",
+          "full",
+          "off",
+          "soon"
+        ],
+        "type": "string"
       },
       "ShownFile": {
         "description": "A file a sent turn names, as its transcript row shows it.",
@@ -27089,17 +27280,6 @@
           "reservePct"
         ]
       },
-      "AccountHue": {
-        "description": "The colour an account is drawn in: the `--account-<name>` token.",
-        "enum": [
-          "amber",
-          "blue",
-          "cyan",
-          "green",
-          "orange"
-        ],
-        "type": "string"
-      },
       "AccountIdentity": {
         "description": "Who an account is, as Claude Code's initialize response reports it\n(`account.email`, `account.organization` — the organization's name).",
         "type": "object",
@@ -27190,7 +27370,7 @@
         ]
       },
       "AtLimit": {
-        "description": "What a session does when its account hits its limit (used by part 2).",
+        "description": "What a running session does when its account hits its limit: wait for the\nreset, move whole to an account with room, or continue there from a summary\n(the hub's `decideAtLimit`). `waitMinutes`: a reset this close is waited\nfor. `moveWholeUnderK`: a context under this many thousand tokens moves\nwhole; a larger one continues from a summary, which is written early, once\nthe account passes `prepareAtPct` of its window.",
         "type": "object",
         "properties": {
           "move": {
@@ -29097,6 +29277,131 @@
           },
           "model": {
             "type": "string"
+          },
+          "move": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "moved"
+                    ]
+                  },
+                  "from": {
+                    "$ref": "#/components/schemas/NamedAccount"
+                  },
+                  "to": {
+                    "$ref": "#/components/schemas/NamedAccount"
+                  },
+                  "sameOrganization": {
+                    "description": "Both accounts in one organization: its prompt cache came along.",
+                    "type": "boolean"
+                  },
+                  "tokens": {
+                    "type": [
+                      "null",
+                      "number"
+                    ]
+                  },
+                  "window": {
+                    "description": "The window that refused it, as {@link windowWords} names it.",
+                    "type": [
+                      "null",
+                      "string"
+                    ]
+                  },
+                  "resetsAt": {
+                    "description": "When that window resets, epoch ms; null when nothing said.",
+                    "type": [
+                      "null",
+                      "number"
+                    ]
+                  }
+                },
+                "required": [
+                  "from",
+                  "kind",
+                  "resetsAt",
+                  "sameOrganization",
+                  "to",
+                  "tokens",
+                  "window"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "waiting"
+                    ]
+                  },
+                  "account": {
+                    "$ref": "#/components/schemas/NamedAccount"
+                  },
+                  "until": {
+                    "description": "The reset it waits for, epoch ms: the line counts down to it.",
+                    "type": "number"
+                  },
+                  "why": {
+                    "$ref": "#/components/schemas/WaitReason"
+                  },
+                  "tokens": {
+                    "type": [
+                      "null",
+                      "number"
+                    ]
+                  }
+                },
+                "required": [
+                  "account",
+                  "kind",
+                  "tokens",
+                  "until",
+                  "why"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "continued"
+                    ]
+                  },
+                  "from": {
+                    "$ref": "#/components/schemas/NamedAccount"
+                  },
+                  "to": {
+                    "$ref": "#/components/schemas/NamedAccount"
+                  },
+                  "tokens": {
+                    "type": [
+                      "null",
+                      "number"
+                    ]
+                  },
+                  "preparedAtPct": {
+                    "description": "The window's percent when the summary was written ahead of the limit; null when it was written at the move.",
+                    "type": [
+                      "null",
+                      "number"
+                    ]
+                  }
+                },
+                "required": [
+                  "from",
+                  "kind",
+                  "preparedAtPct",
+                  "to",
+                  "tokens"
+                ]
+              }
+            ]
           },
           "patch": {
             "type": "object",
