@@ -449,6 +449,7 @@ export const createCaw = ({
   /**
    * Notes an event in its thread, else the project's newest, else a thread
    * of its own; answers the thread it went to. `withRow` as {@link said}.
+   * A project deleted since the event began has no threads to note it in.
    */
   const noteIn = (
     projectId: string,
@@ -456,6 +457,7 @@ export const createCaw = ({
     note: { body?: string; title: string },
     withRow = true
   ): string => {
+    projectOf(projectId);
     const thread =
       (threadId ? db.thread(threadId) : undefined) ??
       db.newestThread(projectId);
@@ -787,7 +789,11 @@ export const createCaw = ({
         threadId,
       }),
     }).catch((error: unknown) => {
-      if (error instanceof CawRefusal && error.status === 409) {
+      // Already started, or the project was deleted meanwhile: nothing to say.
+      if (
+        (error instanceof CawRefusal && error.status === 409) ||
+        !db.project(project.id)
+      ) {
         return;
       }
       noteIn(project.id, threadId, {

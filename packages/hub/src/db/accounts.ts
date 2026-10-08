@@ -159,6 +159,9 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
     get,
     catalogs,
     putCatalog: (accountId, models, at = Date.now()) => {
+      if (!get(accountId)) {
+        return;
+      }
       db.insert(accountCatalogs)
         .values({ accountId, models, readAt: new Date(at) })
         .onConflictDoUpdate({
@@ -213,23 +216,10 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
     setIdentity: (id, identity) => {
       db.update(accounts).set({ identity }).where(eq(accounts.id, id)).run();
     },
-    // The schema's cascade is the rows' intent, but SQLite enforces no foreign
-    // key without `PRAGMA foreign_keys`: the account's own rows go with it here.
+    // Its sign-ins, readings, catalog and bench go with it (cascade).
     remove: (id) =>
-      db.transaction((tx) => {
-        tx.delete(accountSignins).where(eq(accountSignins.accountId, id)).run();
-        tx.delete(accountReadings)
-          .where(eq(accountReadings.accountId, id))
-          .run();
-        tx.delete(accountCatalogs)
-          .where(eq(accountCatalogs.accountId, id))
-          .run();
-        tx.delete(accountBench).where(eq(accountBench.accountId, id)).run();
-        return (
-          tx.delete(accounts).where(eq(accounts.id, id)).returning().all()
-            .length > 0
-        );
-      }),
+      db.delete(accounts).where(eq(accounts.id, id)).returning().all().length >
+      0,
     signins: () =>
       db
         .select()
@@ -237,6 +227,9 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
         .all()
         .map((row) => ({ ...row, checkedAt: row.checkedAt.getTime() })),
     putSignin: ({ accountId, machineId, state, home }) => {
+      if (!get(accountId)) {
+        return false;
+      }
       const before = db
         .select()
         .from(accountSignins)
@@ -302,6 +295,9 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
           lastSeenAt: row.lastSeenAt.getTime(),
         })),
     putReading: (accountId, report, at = Date.now()) => {
+      if (!get(accountId)) {
+        return;
+      }
       const previous = db
         .select()
         .from(accountReadings)
@@ -419,6 +415,9 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
           until: row.until.getTime(),
         })),
     setBench: (accountId, scope, until) => {
+      if (!get(accountId)) {
+        return;
+      }
       const values = { accountId, scope: scope ?? "", until: new Date(until) };
       db.insert(accountBench)
         .values(values)

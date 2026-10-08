@@ -552,10 +552,15 @@ export const instances = sqliteTable("instances", {
    */
   threadId: text("thread_id"),
   id: text("id").primaryKey(),
-  machineId: text("machine_id")
-    .notNull()
-    .references(() => agents.machineId),
-  projectId: text("project_id").references(() => projects.id),
+  /**
+   * The machine it runs on. Not a foreign key: a removed machine's sessions
+   * stay, `machineRemoved`, under its id, and come back if it rejoins.
+   */
+  machineId: text("machine_id").notNull(),
+  /** Its project; a deleted project's sessions outlive it, just not as its. */
+  projectId: text("project_id").references(() => projects.id, {
+    onDelete: "set null",
+  }),
   /** SDK session id, absent until the first init frame arrives. */
   sessionId: text("session_id"),
   /** Which harness owns `sessionId` — what a resume and a catalog read route on. */

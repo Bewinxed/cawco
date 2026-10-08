@@ -1735,11 +1735,17 @@ const make = (path: string): DbShape => {
     migrating,
     JSON.stringify({ ...ownIdentity(), startedAt: Date.now() })
   );
+  // Migrations rebuild tables, which SQLite does with foreign keys off; they
+  // run in one transaction, where the pragma cannot change, so it is set on
+  // the connection around them. From then on every key the schema declares
+  // holds, and its cascades run.
+  db.$client.run("PRAGMA foreign_keys = OFF");
   try {
     migrate(db, { migrationsFolder: MIGRATIONS_DIR });
   } finally {
     rmSync(migrating, { force: true });
   }
+  db.$client.run("PRAGMA foreign_keys = ON");
 
   type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
   /** One project and its places, read inside a transaction or out of one. */
@@ -4581,7 +4587,19 @@ const make = (path: string): DbShape => {
         return;
       }
       db.transaction((tx) => {
-        for (const row of rows) {
+        // An index is read from a project's folder off the write path: a
+        // project deleted meanwhile has no tasks left to index.
+        const live = new Set(
+          tx
+            .select({ id: projects.id })
+            .from(projects)
+            .where(
+              inArray(projects.id, [...new Set(rows.map((r) => r.projectId))])
+            )
+            .all()
+            .map((project) => project.id)
+        );
+        for (const row of rows.filter((r) => live.has(r.projectId))) {
           tx.insert(projectTasks)
             .values(row)
             .onConflictDoUpdate({
@@ -4772,13 +4790,8 @@ const make = (path: string): DbShape => {
       }),
     deleteProject: (id) => {
       db.transaction((tx) => {
-        // The sessions started from it outlive it; they just stop being its.
-        tx.update(instances)
-          .set({ projectId: null })
-          .where(eq(instances.projectId, id))
-          .run();
-        tx.delete(projectPlaces).where(eq(projectPlaces.projectId, id)).run();
-        tx.delete(projectTasks).where(eq(projectTasks.projectId, id)).run();
+        // Its places, tasks, threads and Caw turns go with it (cascade); the
+        // sessions started from it outlive it and stop being its (set null).
         tx.delete(queuedTaskStarts)
           .where(eq(queuedTaskStarts.projectId, id))
           .run();
