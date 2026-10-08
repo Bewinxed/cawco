@@ -337,7 +337,7 @@ final class ConnectViewController: ObservedViewController, UITextFieldDelegate {
                 if entitled { action = (PaywallCopy.Hub.turnOn, { [weak self] in self?.turnOnNotifications() }) }
             case .denied:
                 line = PaywallCopy.Hub.denied
-                action = (PaywallCopy.Hub.openSettings, { UIApplication.shared.open(URL(string: UIApplication.openSettingsURLString)!) })
+                action = (PaywallCopy.Hub.openSettings, { UIApplication.shared.open(PushRegistry.settingsURL) })
             case .pending:
                 line = PaywallCopy.Hub.registering
             case .failed:

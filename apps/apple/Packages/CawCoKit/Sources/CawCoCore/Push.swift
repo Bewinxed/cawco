@@ -441,6 +441,16 @@ public final class PushRegistry {
         }
     }
 
+    /// This app's notification settings: iOS's Settings app, or on the Mac
+    /// System Settings › Notifications at CawCo's entry.
+    public static var settingsURL: URL {
+        #if targetEnvironment(macCatalyst)
+        URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=dev.cawco.app")!
+        #else
+        URL(string: UIApplication.openNotificationSettingsURLString)!
+        #endif
+    }
+
     static var platform: String {
         #if targetEnvironment(macCatalyst)
         "macos"

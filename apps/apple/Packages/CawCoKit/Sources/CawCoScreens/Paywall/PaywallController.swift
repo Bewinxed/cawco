@@ -452,7 +452,7 @@ final class PaywallController: ObservedViewController {
     private func deniedParts() -> [UIView] {
         [column([title(PaywallCopy.S5.headline), muted(PaywallCopy.S5.body)], spacing: Space.space1),
          KitButton.make(PaywallCopy.S5.openSettings, variant: .outline, height: .lg, stretch: true) {
-             UIApplication.shared.open(URL(string: UIApplication.openSettingsURLString)!)
+             UIApplication.shared.open(PushRegistry.settingsURL)
          },
          links([LinkButton(PaywallCopy.S5.later) { [weak self] in self?.finish() }])]
     }
