@@ -1515,6 +1515,68 @@ function stopFlight(
   };
 }
 
+/**
+ * Lets go of every animation a group's flight still holds. A paused
+ * animation is in play for as long as it exists: the document's timeline
+ * keeps it, and it keeps its target and the whole tree that target was cut
+ * out of. A fold holds the pieces of an opening it turned back where they
+ * stood until the group is gone (`fold`), so every tree folded mid-opening —
+ * a tab switch away from a session whose rail tree was still drawing in —
+ * stayed on the heap for good: 62MB over a hundred switches across twenty tabs.
+ */
+function release(group: HTMLElement): void {
+  const flight = flights.get(group);
+  flights.delete(group);
+  if (!flight) {
+    return;
+  }
+  flight.hold?.();
+  flight.unwatch?.();
+  for (const animation of flight.animations) {
+    animation.cancel();
+  }
+  flight.animations = [];
+}
+
+/** Groups whose fold lets go of its flight once Svelte has taken them out. */
+const leaving = new WeakSet<HTMLElement>();
+
+/**
+ * Releases the group's flight once its fold has run and the group is out of
+ * the page. Svelte says the fold is over (`outroend`) and takes the group out
+ * once every outro of its block has ended, in that task at the soonest, so
+ * the release waits behind it, a microtask and then a frame at a time. The
+ * group is shut by then (the clip at its end), so nothing let go of is ever
+ * drawn. A fold turned back by an opening never ends, and the opening takes
+ * the flight over as before.
+ */
+function releaseWhenGone(group: HTMLElement): void {
+  if (leaving.has(group)) {
+    return;
+  }
+  leaving.add(group);
+  group.addEventListener(
+    "outroend",
+    () => {
+      leaving.delete(group);
+      const ended = flights.get(group);
+      const gone = () => {
+        // Taken over since (another turn holds the group): that turn's own.
+        if (flights.get(group) !== ended) {
+          return;
+        }
+        if (group.isConnected) {
+          requestAnimationFrame(gone);
+          return;
+        }
+        release(group);
+      };
+      queueMicrotask(gone);
+    },
+    { once: true }
+  );
+}
+
 /** Back in the flow, and out of it: the room the group takes. */
 function inFlow(group: HTMLElement): void {
   group.style.position = "";
@@ -1794,7 +1856,12 @@ function open(group: HTMLElement, options: BranchOptions): TransitionConfig {
     // as the window narrows, a row leaving with live data): nothing is left
     // to open. Measured off the page, it has no length and no duration, and
     // `fly` asked for a frame on every frame from then on, never landing.
-    if (flights.get(group) !== flight || !group.isConnected) {
+    // Its pieces, built and held for the batch, are let go of with it.
+    if (flights.get(group) !== flight) {
+      return;
+    }
+    if (!group.isConnected) {
+      release(group);
       return;
     }
     // Laid out at the speed it asked for; another tree in its batch set a
@@ -1829,6 +1896,7 @@ function fold(group: HTMLElement, options: BranchOptions): TransitionConfig {
   if (skippedAt(group)) {
     return unseenTurn(group, false);
   }
+  releaseWhenGone(group);
   const items = itemsOf(group);
   const exit = dur("--dur-exit");
   if (!motionOk.current) {
