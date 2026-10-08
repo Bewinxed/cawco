@@ -92,7 +92,7 @@ function cloudflareScheme(header) {
   try {
     return JSON.parse(header ?? "null")?.scheme;
   } catch {
-    return undefined;
+    // A CF-Visitor that is not JSON names no scheme.
   }
 }
 
