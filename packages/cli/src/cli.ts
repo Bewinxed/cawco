@@ -1,5 +1,12 @@
 #!/usr/bin/env bun
-import { CONFIG_PATH, toHttpBase } from "@cawco/agent";
+// What every verb loads is the agent's two leaf modules, never its index: the
+// index brings the daemon and its harnesses, and pi's harness brings
+// `proper-lockfile`, whose `signal-exit` takes SIGTERM into JavaScript the
+// moment it loads. A `cawco hub` holding that could not be stopped while its
+// event loop was busy (nightly 2069, killed by systemd after 90s). The daemon
+// and the harnesses load inside the verbs that run them.
+import { CONFIG_PATH } from "@cawco/agent/config";
+import { toHttpBase } from "@cawco/agent/discovery";
 import type { AgentRow, AuthState } from "@cawco/core";
 import {
   CAWCO_ENV,

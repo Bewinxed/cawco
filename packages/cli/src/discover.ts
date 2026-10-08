@@ -1,15 +1,13 @@
+import { CONFIG_PATH, readConfig, writeConfig } from "@cawco/agent/config";
 import {
   browseMdns,
-  CONFIG_PATH,
   firstToAnswer,
   MDNS_BROWSE_MS,
   probeHub,
-  readConfig,
   tailscaleCandidates,
   toHttpBase,
   toWsUrl,
-  writeConfig,
-} from "@cawco/agent";
+} from "@cawco/agent/discovery";
 import {
   CAWCO_ENV,
   CAWCO_HUB_PORT,
