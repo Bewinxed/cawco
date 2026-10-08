@@ -371,7 +371,27 @@ export type AccountMove =
       tokens: number | null;
       /** The window's percent when the summary was written ahead of the limit; null when it was written at the move. */
       preparedAtPct: number | null;
+    }
+  | {
+      /** Continuing it on `to` failed at `step`: it is the one session running, still on `from`. */
+      kind: "unmoved";
+      from: NamedAccount;
+      to: NamedAccount;
+      step: ContinueStep;
+      /** The session's machine, as the fleet names it. */
+      machine: string;
+      /** The session, as its title names it. */
+      session: string;
+      /** What the hub got from the step that failed. */
+      reason: string;
     };
+
+/**
+ * The steps of continuing a session on another account, in order: read its
+ * transcript, summarise it, start its successor, end it. Only after the last
+ * does the successor take its place.
+ */
+export type ContinueStep = "prepare" | "summary" | "start" | "end";
 
 /** "5-hour", "weekly", "weekly Opus": a window as a sentence names it. */
 export const windowWords = (
@@ -447,6 +467,16 @@ export const accountMoveWords = (
         detail: WAIT_WHY[move.why](tokenWords(move.tokens)),
       };
     }
+    case "unmoved":
+      return move.step === "end"
+        ? {
+            line: `${move.machine} didn't end ${move.session}; it's still running`,
+            detail: `Stop it there, or try again when ${move.machine} answers`,
+          }
+        : {
+            line: `Couldn't continue on ${move.to.name}: ${move.reason}`,
+            detail: `It stays on ${move.from.name}; the hub tries again in a few minutes, or it goes on when ${move.from.name} resets`,
+          };
     default:
       return {
         line: `Continued on ${move.to.name} from a summary · ${tokenWords(move.tokens)} stayed on ${move.from.name}`,

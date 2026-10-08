@@ -24525,8 +24525,10 @@
             "type": "string"
           },
           "stage": {
+            "description": "`ending`: a continuation at an account's limit whose new session runs,\nwaiting for its source to be ended before it takes the source's place.",
             "enum": [
               "cancelled",
+              "ending",
               "failed",
               "started",
               "starting",
@@ -25159,6 +25161,48 @@
                   "to",
                   "tokens"
                 ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "description": "Continuing it on `to` failed at `step`: it is the one session running, still on `from`.",
+                    "type": "string",
+                    "enum": [
+                      "unmoved"
+                    ]
+                  },
+                  "from": {
+                    "$ref": "#/components/schemas/NamedAccount"
+                  },
+                  "to": {
+                    "$ref": "#/components/schemas/NamedAccount"
+                  },
+                  "step": {
+                    "$ref": "#/components/schemas/ContinueStep"
+                  },
+                  "machine": {
+                    "description": "The session's machine, as the fleet names it.",
+                    "type": "string"
+                  },
+                  "session": {
+                    "description": "The session, as its title names it.",
+                    "type": "string"
+                  },
+                  "reason": {
+                    "description": "What the hub got from the step that failed.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "from",
+                  "kind",
+                  "machine",
+                  "reason",
+                  "session",
+                  "step",
+                  "to"
+                ]
               }
             ]
           },
@@ -25493,6 +25537,16 @@
           "full",
           "off",
           "soon"
+        ],
+        "type": "string"
+      },
+      "ContinueStep": {
+        "description": "The steps of continuing a session on another account, in order: read its\ntranscript, summarise it, start its successor, end it. Only after the last\ndoes the successor take its place.",
+        "enum": [
+          "end",
+          "prepare",
+          "start",
+          "summary"
         ],
         "type": "string"
       },
@@ -29709,6 +29763,48 @@
                   "preparedAtPct",
                   "to",
                   "tokens"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "description": "Continuing it on `to` failed at `step`: it is the one session running, still on `from`.",
+                    "type": "string",
+                    "enum": [
+                      "unmoved"
+                    ]
+                  },
+                  "from": {
+                    "$ref": "#/components/schemas/NamedAccount"
+                  },
+                  "to": {
+                    "$ref": "#/components/schemas/NamedAccount"
+                  },
+                  "step": {
+                    "$ref": "#/components/schemas/ContinueStep"
+                  },
+                  "machine": {
+                    "description": "The session's machine, as the fleet names it.",
+                    "type": "string"
+                  },
+                  "session": {
+                    "description": "The session, as its title names it.",
+                    "type": "string"
+                  },
+                  "reason": {
+                    "description": "What the hub got from the step that failed.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "from",
+                  "kind",
+                  "machine",
+                  "reason",
+                  "session",
+                  "step",
+                  "to"
                 ]
               }
             ]

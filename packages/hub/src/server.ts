@@ -8,6 +8,7 @@ import type {
   BuildInfo,
   CommandResult,
   ContinuationJob,
+  ContinueStep,
   ControlPayload,
   DelegateEvent,
   Envelope,
@@ -4994,9 +4995,7 @@ export const createServer = (
     machineId: string,
     asked: SpawnPayload,
     kind: InstanceKind,
-    fallbackMode?: string,
-    /** The session this one takes the place of: its parent, work item, thread and project. */
-    succeeds?: string
+    fallbackMode?: string
   ): Promise<void> => {
     const agent = registry.agent(machineId);
     if (!agent) {
@@ -5026,9 +5025,6 @@ export const createServer = (
       model: payload.model,
       ...placed,
     });
-    if (succeeds) {
-      takePlaceOf(succeeds, payload.instanceId);
-    }
     publishInstances(machineId);
     const reply = await awaitReply(
       machineId,
@@ -5058,7 +5054,8 @@ export const createServer = (
    * A session taking another's place (continued on another account at the
    * other's limit): it answers to the same parent, runs the same work item,
    * works for the same thread and project. The work item names it as its
-   * session from here.
+   * session from here, so the source's end is not the item's end. Done as
+   * the source is ended, never sooner: until then the source is the item's.
    */
   const takePlaceOf = (sourceId: string, targetId: string): void => {
     const [source] = db.getInstancesByIds([sourceId]);
@@ -5075,6 +5072,20 @@ export const createServer = (
     });
     if (source.workItemId) {
       db.updateWorkItem(source.workItemId, { instanceId: targetId });
+      db.patchInstance(sourceId, { workItemId: null });
+    }
+  };
+
+  /**
+   * The work item {@link takePlaceOf} gave `targetId` goes back to
+   * `sourceId`: the source was not ended after all, and goes on with it.
+   */
+  const giveBack = (targetId: string, sourceId: string): void => {
+    const [target] = db.getInstancesByIds([targetId]);
+    if (target?.workItemId) {
+      db.patchInstance(sourceId, { workItemId: target.workItemId });
+      db.updateWorkItem(target.workItemId, { instanceId: sourceId });
+      db.patchInstance(targetId, { workItemId: null });
     }
   };
 
@@ -5240,6 +5251,13 @@ export const createServer = (
     confirmed: (row) => {
       if (row.workflowStepId && row.workflowRunId) {
         workflowRuntime.endConfirmed(row.workflowRunId);
+      }
+      // A continuation waiting on its source's end takes its place now.
+      for (const job of db.continuationRows()) {
+        if (job.stage === "ending" && job.sourceInstanceId === row.id) {
+          // biome-ignore lint/complexity/noVoid: the job runs on its own; its record is what anyone follows
+          void advanceContinuation(job.id);
+        }
       }
     },
     ready: (machineId) =>
@@ -5979,7 +5997,10 @@ export const createServer = (
    * seeded with the summary, the artifact index and the tail. Returns at once;
    * the job is carried to a started target whatever happens to whoever asked
    * or to this hub, and only its Cancel — while it is still summarising —
-   * stops it. The source is only read.
+   * stops it. The source is only read, unless the job continues it at its
+   * account's limit (`target.inherit`): then the source is ended before the
+   * new session takes its place, or the job fails and the source goes on
+   * ({@link continuationSteps}).
    */
   const startContinuation = (
     prepared: PreparedContinuation,
@@ -6041,9 +6062,21 @@ export const createServer = (
     }
   };
 
-  /** A job's steps from where its record stands, each only while its machine is here. */
+  /**
+   * A job's steps from where its record stands, each only while its machine
+   * is here. A continuation at an account's limit takes its source's place,
+   * so its steps run in the order that leaves one session running whatever
+   * fails: its machine is first asked whether it can end sessions at all;
+   * then the summary, then the new session, started but not yet handed
+   * anything; then the source is ended, and only once its machine confirms
+   * that is the new session handed its opening and both transcripts told
+   * (see {@link endSource}, {@link tookPlace}).
+   */
   const continuationSteps = async (id: string): Promise<void> => {
     let row = db.continuationRow(id);
+    if (row && endsNothing(row)) {
+      return;
+    }
     if (row?.stage === "summarising") {
       if (!registry.agent(machineFor(row))) {
         return;
@@ -6058,12 +6091,183 @@ export const createServer = (
       if (!registry.agent(machineFor(row))) {
         return;
       }
-      await startTarget(row);
-      const started = moveContinuation(id, { stage: "started" });
-      if (started?.request.target.inherit) {
-        succeeded(started);
-      }
+      row = await startOrSpawn(row);
     }
+    if (row?.stage === "ending") {
+      await endSource(row);
+    }
+  };
+
+  /**
+   * A continuation at an account's limit whose source's machine is here and
+   * cannot end sessions fails before anything is summarised or started:
+   * true when it did.
+   */
+  const endsNothing = (row: ContinuationRow): boolean => {
+    const machine = row.prepared.source.machineId;
+    const early = row.stage === "summarising" || row.stage === "starting";
+    if (
+      !(row.request.target.inherit && early && registry.agent(machine)) ||
+      endsSessions(machine)
+    ) {
+      return false;
+    }
+    failContinuation(
+      row,
+      "end",
+      `${machineName(machine)} can't end sessions: its agent hasn't reported its sessions' addresses`
+    );
+    return true;
+  };
+
+  /**
+   * The `starting` step: a plain continuation starts its new session and
+   * hands it the opening, and is done; one at an account's limit only
+   * starts it, and goes on to end its source. The job as it then stands.
+   */
+  const startOrSpawn = async (
+    row: ContinuationRow
+  ): Promise<ContinuationRow | undefined> => {
+    if (!row.request.target.inherit) {
+      await startTarget(row);
+      return moveContinuation(row.id, { stage: "started" });
+    }
+    await spawnTarget(row);
+    return moveContinuation(row.id, { stage: "ending" });
+  };
+
+  /** Whether `machineId` is here and can end a session now, not on its next register. */
+  const endsSessions = (machineId: string): boolean =>
+    !!registry.agent(machineId) && addressProtocolMachines.has(machineId);
+
+  /**
+   * How long a continuation's new session gets to come up, as its machine
+   * reports it running, before its source is ended.
+   */
+  const successorUp = async (
+    row: ContinuationRow
+  ): Promise<"running" | "away" | "late"> => {
+    const machine = targetMachineOf(row);
+    const deadline = Date.now() + SPAWN_START_TIMEOUT_MS;
+    for (;;) {
+      const [target] = db.getInstancesByIds([row.targetInstanceId]);
+      if (target?.status === "running") {
+        return "running";
+      }
+      if (!registry.agent(machine)) {
+        return "away";
+      }
+      if (Date.now() >= deadline) {
+        return "late";
+      }
+      // biome-ignore lint/performance/noAwaitInLoops: one look a beat until the new session runs or its machine goes
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+  };
+
+  /**
+   * Why a continuation's source cannot be ended now, and at which step:
+   * its new session never came up, or the source's machine went away or
+   * cannot end sessions. Nothing when it can.
+   */
+  const cannotEnd = async (
+    row: ContinuationRow
+  ): Promise<{ step: ContinueStep; reason: string } | undefined> => {
+    const { machineId: machine, title } = row.prepared.source;
+    const away = {
+      step: "end" as const,
+      reason: `${machineName(machine)} went away before ${title} was ended`,
+    };
+    const up = await successorUp(row);
+    if (up === "away") {
+      return away;
+    }
+    if (up === "late") {
+      return {
+        step: "start",
+        reason: `the new session didn't come up within ${SPAWN_START_TIMEOUT_MS / 1000}s`,
+      };
+    }
+    if (!registry.agent(machine)) {
+      return away;
+    }
+    return endsSessions(machine)
+      ? undefined
+      : {
+          step: "end",
+          reason: `${machineName(machine)} can't end sessions: its agent hasn't reported its sessions' addresses`,
+        };
+  };
+
+  /**
+   * The step that makes a continuation at an account's limit final: its new
+   * session running, the source is ended. Once its machine confirms the end
+   * the new session takes the source's place ({@link tookPlace}); until
+   * then the job waits in `ending`, and the confirmation, or the machine's
+   * next register, moves it on. A source its machine cannot end now fails
+   * the job: the new session is ended, and the source goes on.
+   */
+  const endSource = async (row: ContinuationRow): Promise<void> => {
+    const source = db.ownedInstance(row.sourceInstanceId);
+    if (!source) {
+      failContinuation(
+        row,
+        "end",
+        `${row.prepared.source.title} is no longer recorded`
+      );
+      return;
+    }
+    if (source.endConfirmedAt) {
+      tookPlace(row);
+      return;
+    }
+    if (source.endIntent) {
+      return;
+    }
+    const unended = await cannotEnd(row);
+    if (unended) {
+      failContinuation(row, unended.step, unended.reason);
+      return;
+    }
+    const { machineId: machine } = row.prepared.source;
+    takePlaceOf(source.id, row.targetInstanceId);
+    try {
+      endSession(source.id, "stop");
+    } catch (error) {
+      giveBack(row.targetInstanceId, source.id);
+      throw error;
+    }
+    const move = continuedMove(row.request);
+    if (move) {
+      db.noteEndReason(source.id, `continued on ${move.to.name}`);
+    }
+    publishInstances(machine);
+  };
+
+  /**
+   * A continuation at an account's limit whose source has ended: the new
+   * session is told what went where, then handed its opening, and the job
+   * is done. Both transcripts say "Continued on" only now.
+   */
+  const tookPlace = (row: ContinuationRow): void => {
+    const move = continuedMove(row.request);
+    const told = (instanceId: string): boolean =>
+      db.atLimit
+        .events([instanceId])
+        .some((event) => event.move.kind === "continued");
+    const [source] = db.getInstancesByIds([row.sourceInstanceId]);
+    const [target] = db.getInstancesByIds([row.targetInstanceId]);
+    if (move && source && !told(source.id)) {
+      noteAtLimit(source, move);
+    }
+    // The tab follows the job to the new session (the dashboard's
+    // `followSuccessions`): its transcript opens on the line, ahead of the
+    // opening.
+    if (move && target && !told(target.id)) {
+      noteAtLimit(target, move);
+    }
+    sendOpening(row);
+    moveContinuation(row.id, { stage: "started" });
   };
 
   /**
@@ -6088,43 +6292,79 @@ export const createServer = (
       : undefined;
   };
 
+  /** The step of a job that a failure in its stage is. */
+  const STEP_OF: Partial<Record<ContinuationJob["stage"], ContinueStep>> = {
+    summarising: "summary",
+    starting: "start",
+    ending: "end",
+  };
+
   /**
-   * A session continued on another account at its old one's limit has its
-   * successor running in its place: the source ends, "continued on" that
-   * account, and its transcript says what went where.
+   * A job fails at `step` in the words the hub got. A continuation at an
+   * account's limit leaves its source the one session running: a new
+   * session already started is ended (its row says why), anything it was
+   * given goes back, and the source's transcript says what failed and what
+   * to do (the at-limit controller holds it, and decides again).
    */
-  const succeeded = (job: ContinuationRow): void => {
-    const [source] = db.getInstancesByIds([job.sourceInstanceId]);
-    const move = continuedMove(job.request);
-    if (!(source && move)) {
+  const failContinuation = (
+    row: ContinuationRow,
+    step: ContinueStep,
+    reason: string
+  ): void => {
+    moveContinuation(row.id, { stage: "failed", error: reason });
+    const { inherit, account } = row.request.target;
+    if (!(inherit && account)) {
       return;
     }
-    noteAtLimit(source, move);
-    // The work item went with the successor: ending the source is not the
-    // item's end.
-    db.patchInstance(source.id, { workItemId: null });
-    endSession(source.id, "stop");
-    db.noteEndReason(source.id, `continued on ${move.to.name}`);
-    publishInstances(source.machineId);
+    const target = db.ownedInstance(row.targetInstanceId);
+    let said = reason;
+    if (
+      target &&
+      !target.endIntent &&
+      !["stopped", "discarded"].includes(target.status)
+    ) {
+      giveBack(target.id, row.sourceInstanceId);
+      try {
+        endSession(target.id, "discard");
+      } catch (error) {
+        said = `${reason}; its new session ${target.id} could not be ended either: ${error instanceof Error ? error.message : String(error)}`;
+      }
+      db.noteEndReason(
+        target.id,
+        `didn't take ${row.prepared.source.title}'s place: ${said}`
+      );
+      publishInstances(target.machineId);
+    }
+    atLimit.continuationFailed(row.sourceInstanceId, {
+      fromAccountId: inherit.fromAccountId,
+      toAccountId: account,
+      step,
+      reason: said,
+    });
   };
 
   /**
    * A step that threw: nothing, when the job has settled meanwhile (a
-   * Cancel); a wait, when its machine went away; otherwise the job fails in
-   * the error's own words. True when it waits for its machine.
+   * Cancel); a wait, when its machine went away before the job changed
+   * anything that cannot wait; otherwise the job fails at its step, in the
+   * error's own words. True when it waits for its machine.
    */
   const continuationStepFailed = (id: string, error: unknown): boolean => {
     const row = db.continuationRow(id);
     if (!row || SETTLED.has(row.stage)) {
       return false;
     }
-    if (error instanceof MachineAway || !registry.agent(machineFor(row))) {
+    if (
+      row.stage !== "ending" &&
+      (error instanceof MachineAway || !registry.agent(machineFor(row)))
+    ) {
       return true;
     }
-    moveContinuation(id, {
-      stage: "failed",
-      error: error instanceof Error ? error.message : String(error),
-    });
+    failContinuation(
+      row,
+      STEP_OF[row.stage] ?? "start",
+      error instanceof Error ? error.message : String(error)
+    );
     return false;
   };
 
@@ -6192,37 +6432,34 @@ export const createServer = (
       }
       return;
     }
-    const machine = targetMachineOf(row);
+    await spawnTarget(row);
+    sendOpening(row);
+  };
+
+  /** Starts a job's new session under its minted id, unless it already runs. */
+  const spawnTarget = async (row: ContinuationRow): Promise<void> => {
     const { request, prepared } = row;
     const [target] = db.getInstancesByIds([row.targetInstanceId]);
     if (target?.status !== "running") {
       await spawnFromHub(
-        machine,
+        targetMachineOf(row),
         targetSpawn(request, prepared.source, row.targetInstanceId),
         request.target.scratch ? "scratch" : "mainline",
-        request.target.fallbackPermissionMode,
-        request.target.inherit ? prepared.source.instanceId : undefined
+        request.target.fallbackPermissionMode
       );
     }
-    // A session continued at its account's limit: the tab follows it here
-    // (the dashboard's `followSuccessions`), so its transcript opens on the
-    // line that says why, ahead of the opening, once.
-    const move = continuedMove(request);
-    if (move && db.atLimit.events([row.targetInstanceId]).length === 0) {
-      noteAtLimit(
-        {
-          id: row.targetInstanceId,
-          sessionId: target?.sessionId ?? null,
-          harness: request.target.harness,
-        },
-        move
-      );
+  };
+
+  /** Hands a job's new session its opening under the job's send uuid, once. */
+  const sendOpening = (row: ContinuationRow): void => {
+    if (db.sendRecord(row.openingUuid)) {
+      return;
     }
     sendFromHub(
-      machine,
+      targetMachineOf(row),
       row.targetInstanceId,
       openingOf(row),
-      { id: prepared.source.instanceId, cwd: prepared.source.cwd },
+      { id: row.prepared.source.instanceId, cwd: row.prepared.source.cwd },
       row.openingUuid
     );
   };
@@ -9498,6 +9735,16 @@ export const createServer = (
   const atLimit = createAtLimit({
     db,
     accountOf: (row) => row.accountId ?? machineAccount(db, row.machineId),
+    continuing: (row) =>
+      db
+        .continuationRows()
+        .some(
+          (job) => job.sourceInstanceId === row.id && !SETTLED.has(job.stage)
+        ),
+    named: (row) => ({
+      machine: machineName(row.machineId),
+      session: row.title || row.derivedTitle || row.id.slice(0, 8),
+    }),
     target: limitTarget,
     idle: sessionIdle,
     move: (row, accountId) => {

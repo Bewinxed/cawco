@@ -54,10 +54,17 @@
   });
 
   const words = $derived(accountMoveWords(row.move, now));
-  /** The account the line is drawn in: where it went, or the one it waits for. */
-  const hue = $derived(
-    row.move.kind === "waiting" ? row.move.account.hue : row.move.to.hue
-  );
+  /** The account the line is drawn in: where it went, the one it waits for, or the one it stayed on. */
+  const hue = $derived.by(() => {
+    switch (row.move.kind) {
+      case "waiting":
+        return row.move.account.hue;
+      case "unmoved":
+        return row.move.from.hue;
+      default:
+        return row.move.to.hue;
+    }
+  });
 </script>
 
 <div class="move" class:open>

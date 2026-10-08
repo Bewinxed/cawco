@@ -644,7 +644,17 @@ export interface ContinuationJob {
    */
   inherits?: true;
   sourceInstanceId: string;
-  stage: "summarising" | "starting" | "started" | "failed" | "cancelled";
+  /**
+   * `ending`: a continuation at an account's limit whose new session runs,
+   * waiting for its source to be ended before it takes the source's place.
+   */
+  stage:
+    | "summarising"
+    | "starting"
+    | "ending"
+    | "started"
+    | "failed"
+    | "cancelled";
   /** Absent when the source is short enough that nothing is summarised. */
   summariserInstanceId?: string;
   targetInstanceId: string;

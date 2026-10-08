@@ -5,6 +5,7 @@ import {
   type AccountReading,
   type AtLimit,
   accountName,
+  type ContinueStep,
   type LimitWindow,
   modelScope,
   namedAccount,
@@ -184,18 +185,24 @@ export interface AtLimitPorts {
   /**
    * Continues `row` on `accountId` from a summary (`kept` when one was
    * written ahead; otherwise one is written there), the new session taking
-   * its place. The source's line is written once the new session runs.
+   * its place once `row` has ended. Throws when `row` cannot be read to
+   * start one; a later step that fails comes back as
+   * {@link createAtLimit}'s `continuationFailed`.
    */
   continueOn: (
     row: LimitRow,
     accountId: string,
     kept: KeptSummary | undefined
   ) => Promise<void>;
+  /** Whether a continuation of `row` is under way: nothing else is done to it meanwhile. */
+  continuing: (row: LimitRow) => boolean;
   db: DbShape;
   /** Whether `row` is between turns: nothing running and nothing waiting on it. */
   idle: (row: LimitRow) => Promise<boolean>;
   /** Relaunches `row` on `accountId`, its conversation with it, and has it carry on. */
   move: (row: LimitRow, accountId: string) => void;
+  /** The session's machine and title, as a line names them. */
+  named: (row: LimitRow) => { machine: string; session: string };
   /** Writes one line into `row`'s transcript. */
   note: (row: LimitRow, move: AccountMove) => void;
   /** Has `row` carry on where its limit stopped it, on the account it is on. */
@@ -208,6 +215,10 @@ export interface AtLimitPorts {
   /** Who would carry `row` off `accountId`: placement for its kind, excluding that account. */
   target: (row: LimitRow, accountId: string) => string | null;
 }
+
+/** What a failure said, as a line quotes it. */
+const messageOf = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
 
 /** A session past caring: its process will not be woken by anything the hub does here. */
 const over = (row: LimitRow | undefined): boolean =>
@@ -337,9 +348,59 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     };
   };
 
+  /**
+   * Continuing `row` on `target` failed at `step`: it is the one session
+   * running, still on `current`. Its transcript says so (once for the same
+   * failure, however often a retry meets it again), and it is held until
+   * its reset, each look deciding again whether to wait or try once more.
+   */
+  const unmoved = (
+    row: LimitRow,
+    current: Account,
+    target: Account,
+    step: ContinueStep,
+    reason: string
+  ): void => {
+    const last = db.atLimit.events([row.id]).at(-1)?.move;
+    const repeated =
+      last?.kind === "unmoved" &&
+      last.step === step &&
+      last.reason === reason &&
+      last.to.id === target.id;
+    if (!repeated) {
+      ports.note(row, {
+        kind: "unmoved",
+        from: namedAccount(current),
+        to: namedAccount(target),
+        step,
+        reason,
+        ...ports.named(row),
+      });
+    }
+    const now = Date.now();
+    const policy = db.accounts.routing(current.provider).atLimit;
+    db.atLimit.putHold({
+      instanceId: row.id,
+      accountId: current.id,
+      until:
+        refusedUntil(
+          db.accounts.bench(now),
+          readingOf(current.id),
+          current.id,
+          row.model,
+          now
+        ) ?? now + policy.waitMinutes * MINUTE_MS,
+    });
+    console.warn(
+      `[at-limit] ${row.id}: continuing on ${accountName(target)} failed at ${step}: ${reason}`
+    );
+    ports.changed();
+    plan();
+  };
+
   /** Moves or continues `row` off `current`, or holds it, as {@link decideAtLimit} says. */
   const act = async (row: LimitRow, current: Account): Promise<void> => {
-    if (acting.has(row.id)) {
+    if (acting.has(row.id) || ports.continuing(row)) {
       return;
     }
     acting.add(row.id);
@@ -383,8 +444,13 @@ export const createAtLimit = (ports: AtLimitPorts) => {
         Date.parse(kept.resetsAt) > now
           ? { text: kept.summary, percent: kept.percent }
           : undefined;
+      try {
+        await ports.continueOn(row, target.id, summary);
+      } catch (error) {
+        unmoved(row, current, target, "prepare", messageOf(error));
+        return;
+      }
       db.atLimit.dropSummary(row.id);
-      await ports.continueOn(row, target.id, summary);
     } finally {
       acting.delete(row.id);
       ports.changed();
@@ -564,6 +630,26 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       const current = row ? currentOf(row) : undefined;
       if (row?.harness === "claude" && current) {
         await prepare(row, current);
+      }
+    },
+    /**
+     * A continuation of `instanceId` from `fromAccountId` to `toAccountId`
+     * failed at `step`; nothing of it is left running but `instanceId`.
+     */
+    continuationFailed(
+      instanceId: string,
+      failure: {
+        fromAccountId: string;
+        toAccountId: string;
+        step: ContinueStep;
+        reason: string;
+      }
+    ): void {
+      const row = rowOf(instanceId);
+      const current = db.accounts.get(failure.fromAccountId);
+      const target = db.accounts.get(failure.toAccountId);
+      if (row && current && target) {
+        unmoved(row, current, target, failure.step, failure.reason);
       }
     },
     /** Looks at every hold and kept summary now. */
