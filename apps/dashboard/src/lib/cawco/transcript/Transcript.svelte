@@ -1240,18 +1240,37 @@
    * few rows are kept mounted instead, whatever the range says.
    */
   const TAIL_MOUNTED = 8;
+  /**
+   * How many rows virtua's store holds: the rows of the last flush. virtua
+   * hands its store a new length in an `$effect.pre`, and in async mode its
+   * each block runs before that, on the new `data` but the old store. Its
+   * range comes from the store and stays inside it; a kept-mounted index is
+   * checked only against `data.length`, and one past the store's end was
+   * laid out past its sizes, caching NaN offsets that the list's total then
+   * read as `height:NaNpx` for a frame. So nothing is kept mounted past this
+   * count, and it takes the new length in an `$effect`, which runs after
+   * virtua's `$effect.pre`: the new tail is kept mounted in the next flush,
+   * still before the paint.
+   */
+  let stored = $state(untrack(() => renderedRows.length));
+  $effect(() => {
+    stored = renderedRows.length;
+  });
   // A row folding shut stays mounted too, wherever it stands: virtua dropping
   // it mid-fold cancelled the fold, it never said it had gone, and it stayed
   // in the list at full height to fold again whenever it was next drawn.
-  const keepMounted = $derived([
-    ...Array.from(
-      { length: Math.min(TAIL_MOUNTED, renderedRows.length) },
-      (_, i) => renderedRows.length - 1 - i
-    ),
-    ...renderedRows.flatMap((row, index) =>
-      presentation.leaving.has(row.key) ? [index] : []
-    ),
-  ]);
+  const keepMounted = $derived.by(() => {
+    const count = Math.min(stored, renderedRows.length);
+    return [
+      ...Array.from(
+        { length: Math.min(TAIL_MOUNTED, count) },
+        (_, i) => count - 1 - i
+      ),
+      ...renderedRows.flatMap((row, index) =>
+        index < count && presentation.leaving.has(row.key) ? [index] : []
+      ),
+    ];
+  });
 
   function left(key: string): void {
     leaving = leaving.filter(({ row }) => row.key !== key);
