@@ -1253,14 +1253,52 @@ export interface Field {
   text: string;
 }
 
-const asText = (value: unknown): string => {
-  if (typeof value === "string") {
-    return value;
+/** Name order by UTF-16 code unit, which every client can reproduce exactly. */
+const byName = (a: string, b: string): number => (a < b ? -1 : Number(a > b));
+
+/** `1e-7`, never `1e-07`: an exponent written without leading zeros. */
+const EXPONENT_ZEROS = /e([+-])0+(\d)/;
+
+/**
+ * A value in the one JSON form a fields body writes, on every client: two
+ * spaces a level, `"key": value`, every object's keys in name order (the
+ * order a call wrote them is not one the native app ever sees), an empty
+ * object or list as `{}` or `[]`. The native app writes it by the same
+ * steps (ToolDescriptor.json).
+ */
+export function writeJson(value: unknown, indent = ""): string {
+  if (value === null || value === undefined) {
+    return "null";
   }
-  // JSON.stringify answers undefined for what JSON has no form for (a function).
-  const json: string | undefined = JSON.stringify(value, null, 2);
-  return json ?? String(value);
-};
+  if (typeof value === "string") {
+    return JSON.stringify(value);
+  }
+  if (typeof value === "number") {
+    return Number.isFinite(value)
+      ? String(value).replace(EXPONENT_ZEROS, "e$1$2")
+      : "null";
+  }
+  if (typeof value === "boolean") {
+    return String(value);
+  }
+  const inner = `${indent}  `;
+  if (Array.isArray(value)) {
+    return value.length
+      ? `[\n${value.map((item) => inner + writeJson(item, inner)).join(",\n")}\n${indent}]`
+      : "[]";
+  }
+  if (isRecord(value)) {
+    const keys = Object.keys(value).sort(byName);
+    return keys.length
+      ? `{\n${keys.map((key) => `${inner}${JSON.stringify(key)}: ${writeJson(value[key], inner)}`).join(",\n")}\n${indent}}`
+      : "{}";
+  }
+  return JSON.stringify(String(value));
+}
+
+/** A field's value as text: a string as written, anything else in the one JSON form. */
+const asText = (value: unknown): string =>
+  typeof value === "string" ? value : writeJson(value);
 
 /** A fields body's input fields, in the order the call wrote them. */
 export function inputFields(raw: unknown): Field[] {
@@ -1284,9 +1322,7 @@ export function fieldOrder(keys: string[]): string[] {
     const at = PRIMARY_FIELDS.indexOf(key);
     return at === -1 ? PRIMARY_FIELDS.length : at;
   };
-  return [...keys].sort(
-    (a, b) => rank(a) - rank(b) || (a < b ? -1 : Number(a > b))
-  );
+  return [...keys].sort((a, b) => rank(a) - rank(b) || byName(a, b));
 }
 
 /** A result as a fields body shows it: its head, and how much of it is not shown. */

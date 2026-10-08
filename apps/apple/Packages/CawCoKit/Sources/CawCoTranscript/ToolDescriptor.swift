@@ -324,17 +324,69 @@ nonisolated struct ToolDescriptor {
     static func fieldOrder(_ keys: some Sequence<String>) -> [String] {
         let primary = ToolPresentation.primaryFields
         func rank(_ key: String) -> Int { primary.firstIndex(of: key) ?? primary.count }
-        return keys.sorted { a, b in rank(a) != rank(b) ? rank(a) < rank(b) : a < b }
+        return keys.sorted { a, b in rank(a) != rank(b) ? rank(a) < rank(b) : byName(a, b) }
     }
 
-    /// A fields body's value for any input value: a string as written, anything else as JSON.
+    /// Name order by UTF-16 code unit (tool-presentation.ts `byName`).
+    static func byName(_ a: String, _ b: String) -> Bool { a.utf16.lexicographicallyPrecedes(b.utf16) }
+
+    /// A fields body's value for any input value: a string as written, anything else in the one JSON form.
     static func text(_ value: Any) -> String {
         if let string = value as? String { return string }
-        if let data = try? JSONSerialization.data(withJSONObject: value, options: [.prettyPrinted, .withoutEscapingSlashes, .fragmentsAllowed]),
-           let text = String(data: data, encoding: .utf8) {
-            return text.replacingOccurrences(of: "    ", with: "  ")
+        return json(value)
+    }
+
+    /// tool-presentation.ts `writeJson`, step for step: two spaces a level,
+    /// `"key": value`, every object's keys in name order, `{}` and `[]` when
+    /// empty, numbers as JavaScript writes them.
+    static func json(_ value: Any, indent: String = "") -> String {
+        let inner = indent + "  "
+        switch value {
+        case is NSNull:
+            return "null"
+        case let string as String:
+            return quoted(string)
+        case let number as NSNumber:
+            if CFGetTypeID(number) == CFBooleanGetTypeID() { return number.boolValue ? "true" : "false" }
+            return script(number.doubleValue)
+        case let list as [Any]:
+            guard !list.isEmpty else { return "[]" }
+            return "[\n" + list.map { inner + json($0, indent: inner) }.joined(separator: ",\n") + "\n\(indent)]"
+        case let object as [String: Any]:
+            guard !object.isEmpty else { return "{}" }
+            let keys = object.keys.sorted(by: byName)
+            return "{\n" + keys.map { "\(inner)\(quoted($0)): \(json(object[$0] as Any, indent: inner))" }.joined(separator: ",\n") + "\n\(indent)}"
+        default:
+            return quoted("\(value)")
         }
-        return "\(value)"
+    }
+
+    /// A number as JavaScript's `String(number)` writes it: whole numbers
+    /// below 1e21 without a fraction, the rest in the shortest form that
+    /// reads back, an exponent without leading zeros.
+    private static func script(_ number: Double) -> String {
+        guard number.isFinite else { return "null" }
+        if number == number.rounded(), abs(number) < 1e21 { return String(format: "%.0f", number) }
+        return "\(number)".replacing(/e([+-])0+(\d)/) { "e\($0.1)\($0.2)" }
+    }
+
+    /// A string as `JSON.stringify` quotes it.
+    private static func quoted(_ text: String) -> String {
+        var out = "\""
+        for scalar in text.unicodeScalars {
+            switch scalar {
+            case "\"": out += "\\\""
+            case "\\": out += "\\\\"
+            case "\u{08}": out += "\\b"
+            case "\u{0C}": out += "\\f"
+            case "\n": out += "\\n"
+            case "\r": out += "\\r"
+            case "\t": out += "\\t"
+            case _ where scalar.value < 0x20: out += String(format: "\\u%04x", scalar.value)
+            default: out.unicodeScalars.append(scalar)
+            }
+        }
+        return out + "\""
     }
 
     /// A result as a fields body shows it: its head, and how many characters are not shown.

@@ -130,6 +130,20 @@ final class ToolLineView: RailRow, RowContent, Disclosing {
         env.toggle(key, self)
     }
 
+    /// What VoiceOver reads, in order, asked afresh each time: the line (or
+    /// the preview card), the opened body's keys and values while it is
+    /// open, the pictures. Left to UIKit, the row's elements were the ones
+    /// it found while the body was hidden, kept after the body opened.
+    override var accessibilityElements: [Any]? {
+        get {
+            var elements: [Any] = [preview.isHidden ? line : preview]
+            if reveal.isOpen { elements.append(opened) }
+            if !shots.isHidden { elements.append(shots) }
+            return elements
+        }
+        set {}
+    }
+
     func toggled(open: Bool) -> (() -> Void, () -> Void) {
         chevron.set(open: open, animated: true)
         line.accessibilityValue = open ? "Expanded" : "Collapsed"

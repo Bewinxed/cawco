@@ -449,6 +449,7 @@ final class OptionChip: UIView {
         let row = railLine([key, words])
         pin(row, insets: UIEdgeInsets(top: Space.space2, left: Space.space3, bottom: Space.space2, right: Space.space3))
         heightAnchor.constraint(greaterThanOrEqualToConstant: Columns.line).isActive = true
+        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (view: OptionChip, _: UITraitCollection) in view.paint() }
         paint()
     }
 
@@ -459,11 +460,6 @@ final class OptionChip: UIView {
         backgroundColor = chosen ? Palette.surfaceRecess : Palette.surfaceRaised
         layer.borderColor = (chosen ? Palette.brandSolid : Palette.borderControl).resolvedColor(with: traitCollection).cgColor
         key.backgroundColor = chosen ? Palette.chipChosenBg : Palette.surfaceRecess
-    }
-
-    override func traitCollectionDidChange(_ previous: UITraitCollection?) {
-        super.traitCollectionDidChange(previous)
-        paint()
     }
 }
 
