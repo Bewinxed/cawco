@@ -2175,6 +2175,14 @@
     askRun = 0;
     if (askRefocus) {
       askRefocus = false;
+      // Once the field's label is no longer inert: focus does not land in
+      // an inert subtree, and the draft would stay folded to its first line.
+      await tick();
+      if (turn !== askTurn) {
+        // Another ask came up meanwhile: its fold gives the keys back.
+        askRefocus = true;
+        return;
+      }
       field?.focus();
     }
   }

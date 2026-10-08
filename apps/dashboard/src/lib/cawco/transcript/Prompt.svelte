@@ -32,6 +32,7 @@
   import { onMount, tick } from "svelte";
   import DiffView from "#lib/components/features/DiffView.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
   import { Kbd } from "#lib/components/ui/kbd/index.js";
   import {
     IconAsk,
@@ -154,13 +155,13 @@
   };
 
   /**
-   * An answer of the reader's own, written on the card's last line, set as
-   * the composer's field is. It answers the question it was opened for (`otherAt`); what was written
+   * An answer of the reader's own, written in a field under the question's
+   * choices. It answers the question it was opened for (`otherAt`); what was written
    * for each question is kept, so going back to it finds it there.
    */
   let otherAt = $state<number | null>(null);
   let others = $state<Record<string, string>>({});
-  let otherField = $state<HTMLInputElement>();
+  let otherField = $state<HTMLInputElement | null>(null);
 
   /** Whether a question's answer is the reader's own words. */
   const otherPicked = (q: UserQuestion): boolean => {
@@ -449,7 +450,7 @@
               <span class="kc">{i + 1}</span><span>{opt.label}</span>
             </button>
           {/each}
-          <!-- The reader's own answer, written on the card's last line. -->
+          <!-- The reader's own answer, written in the field it opens. -->
           {#if own < 9}
             {@const live = ownsKeys && qi === current}
             <button
@@ -464,6 +465,20 @@
             </button>
           {/if}
         </div>
+        {#if otherAt === qi}
+          <!-- The reader's own answer, a field under the choices it stands
+               in for, before the card's actions. -->
+          <Input
+            aria-label={`Your answer to: ${q.question}`}
+            class="other"
+            disabled={!answerable}
+            oninput={(event) => writeOther(event.currentTarget.value)}
+            onkeydown={otherKey}
+            placeholder="Your answer…"
+            value={others[q.question] ?? ""}
+            bind:ref={otherField}
+          />
+        {/if}
       {/each}
     </div>
     <div class="foot part" style:--part="2">
@@ -580,32 +595,12 @@
   {/if}
 </section>
 
-<!-- Once a question's "Other" is chosen, the reader's own answer to it, the
-     card's last line, set as the composer's field is (the draft keeps the
-     field, under the card, meanwhile). "Other" is its one way in. -->
-{#if questions && otherAt !== null}
-  {@const q = questions[otherAt]}
-  <input
-    aria-label={`Your answer to: ${q?.question ?? ""}`}
-    class="other"
-    disabled={!answerable}
-    oninput={(event) => writeOther(event.currentTarget.value)}
-    onkeydown={otherKey}
-    placeholder="Your answer…"
-    type="text"
-    value={others[q?.question ?? ""] ?? ""}
-    bind:this={otherField}
-    class:shown={shown}
-  >
-{/if}
-
 <style>
   /* The grown shape is the surface (Composer draws it): the card is what
      stands in it, its title on top, its foot on the pill's top edge, and a
      long ask scrolls between the two. As tall as the room over the pill
      allows (`--ask-max`, the composer's). */
   .hitl {
-    container: ask / inline-size;
     display: flex;
     flex-direction: column;
     max-block-size: var(--ask-max, none);
@@ -695,36 +690,9 @@
   h2 :global(.place) {
     margin-inline-start: auto;
   }
-  /* The reader's own answer, the card's last line: set as the composer's
-     field sets its text, on the field's one-line height and inset off the
-     card's edge as the field is off the pill's. It fades up as it opens. */
-  .other {
-    display: block;
-    inline-size: 100%;
-    block-size: var(--c-composer-field);
-    margin-block-end: var(--c-composer-inset);
-    padding: 0 var(--space-3);
-    border: 0;
-    outline: none;
-    background: transparent;
-    font-family: var(--font-body);
-    font-size: 16px;
-    line-height: var(--leading-ui);
-    color: var(--ink-strong);
-    text-overflow: ellipsis;
-    opacity: 0;
-    transition: opacity var(--dur-fade) var(--ease-out);
-
-    &.shown {
-      opacity: 1;
-
-      @starting-style {
-        opacity: 0;
-      }
-    }
-    &::placeholder {
-      color: var(--ink-muted);
-    }
+  /* The reader's own answer (the kit's field), on the step under the choices. */
+  .body :global(.other) {
+    margin-block-end: var(--space-2);
   }
   .wait {
     margin-block-start: var(--space-2);
@@ -854,18 +822,9 @@
     flex-wrap: wrap;
     margin-block: 2px var(--space-2);
   }
-  /* A narrow card (a phone) sets its chips two to a row on one grid, so no
-     chip drops onto a row of its own at whatever width it wrapped; an odd
-     last chip ("Other") takes its row's whole width. */
-  @container ask (width < 32rem) {
-    .qopts {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-    .qopts button:last-child:nth-child(odd) {
-      grid-column: 1 / -1;
-    }
-  }
+  /* Each chip is as wide as its words at every width (DESIGN.md option
+     chip), and they wrap as whole chips onto the next line. Only an option
+     too long for the card's row wraps its words inside its chip. */
   .qopts button {
     min-block-size: 30px;
     padding-block: var(--space-2);
