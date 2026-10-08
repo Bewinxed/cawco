@@ -24,6 +24,7 @@
    * row fold and the arrival decision. A fixture that stubbed either would have
    * rendered the bug invisible.
    */
+  import { COMPACT_SUMMARY_KIND } from "@cawco/core";
   import { blankSession, type SessionState } from "#lib/cawco/client.svelte.js";
   import Transcript from "#lib/cawco/transcript/Transcript.svelte";
   import type { Message } from "#lib/cawco/types.js";
@@ -109,6 +110,62 @@
     session.busy = !!text;
   }
 
+  /**
+   * A compaction's frames, as the hub's transcript writes them onto the
+   * session (@cawco/core `Transcript`): a `status` frame sets `sdkStatus`
+   * and, carrying `compact_result`, a newer `lastCompaction`; a
+   * `compact_boundary` is a boundary message and a `lastCompaction` with
+   * its size; the summary is the harness's note. Sent in either harness's
+   * order by the caller.
+   */
+  const compaction = {
+    status(
+      status: "compacting" | null,
+      result?: "success" | "failed",
+      error?: string
+    ): void {
+      session.sdkStatus = status;
+      if (result) {
+        session.lastCompaction = {
+          at: Date.now(),
+          preTokens: session.lastCompaction?.preTokens ?? 0,
+          trigger: session.lastCompaction?.trigger ?? "auto",
+          result,
+          error,
+        };
+      }
+    },
+    boundary(trigger: "manual" | "auto", preTokens?: number): void {
+      n += 1;
+      push({
+        id: `boundary-${n}`,
+        type: "system.compact_boundary",
+        content: "Compacted",
+        timestamp: now(),
+        metadata: { subtype: "compact_boundary", preTokens, trigger },
+      });
+      session.lastCompaction = {
+        at: Date.now(),
+        preTokens: preTokens ?? 0,
+        trigger,
+      };
+    },
+    summary(text: string): void {
+      n += 1;
+      push({
+        id: `summary-${n}`,
+        type: "ui.system_note",
+        content: text,
+        timestamp: now(),
+        metadata: { noteKind: COMPACT_SUMMARY_KIND },
+      });
+    },
+    idle(): void {
+      session.busy = false;
+      session.sdkStatus = null;
+    },
+  };
+
   /** Seed history, so the bench starts where a real session starts: landed. */
   function seed(count: number): void {
     for (let i = 0; i < count; i += 1) {
@@ -178,6 +235,7 @@
       thinking,
       streaming,
       run,
+      compaction,
       landed: () => landed,
       rows: () => session.messages.length,
       patch: (next: Partial<SessionState>) => Object.assign(session, next),

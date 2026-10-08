@@ -1003,6 +1003,23 @@ function outcome(
   return null;
 }
 
+/**
+ * No working indicator under a compaction that is done and still waiting
+ * for its boundary. Claude Code says it succeeded a frame before it sends
+ * the boundary, and in that frame the session is busy and no longer
+ * compacting: the indicator came in under the row settling above it, and
+ * left again as the boundary landed.
+ */
+function quietWhileSettling(
+  content: LiveContent | null,
+  told: readonly Told[]
+): LiveContent | null {
+  const settling = told.some(
+    (each) => each.state === "done" && each.boundary === null
+  );
+  return settling && content?.indicating && !content.text ? null : content;
+}
+
 /** Each compaction's drawn row by the row it is drawn from, for as long as it stands so. */
 const drawnAs = new WeakMap<object, Row>();
 
@@ -1195,19 +1212,22 @@ export function buildRowsFrom(
       ? foldOnto(messages, session.subagents, memo, cut)
       : foldAll(messages, session.subagents, memo?.said ?? NO_SAID);
   const { starts, voices } = folded;
-
-  const prior = memo?.live ?? NO_LIVE;
-  const content = liveContent(session) ?? answerLanding(prior, folded.rows);
-  const same = prior.on && content !== null && continues(prior, content);
-  const gen = same ? prior.gen : prior.gen + 1;
-  const ended = prior.on && !same ? endOf(prior, folded.rows, memo) : null;
-  const { rows, said, told } = tell(
+  const { rows, told, ...toldSaid } = tell(
     session,
     messages,
     folded,
     memo,
-    keepLive(ended, folded.rows, memo?.said ?? NO_SAID)
+    memo?.said ?? NO_SAID
   );
+
+  const prior = memo?.live ?? NO_LIVE;
+  const content =
+    quietWhileSettling(liveContent(session), told) ??
+    answerLanding(prior, rows);
+  const same = prior.on && content !== null && continues(prior, content);
+  const gen = same ? prior.gen : prior.gen + 1;
+  const ended = prior.on && !same ? endOf(prior, rows, memo) : null;
+  const said = keepLive(ended, rows, toldSaid.said);
   const drawn = presentTold(
     rows,
     starts,
