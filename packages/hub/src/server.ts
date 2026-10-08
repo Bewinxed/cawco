@@ -3698,28 +3698,21 @@ export const createServer = (
     relaunch = false
   ): void => {
     const instanceId = row.id;
-    const refused = accountStartRefusal(
-      machineId,
-      row.accountId,
-      sessionName(row)
-    );
+    const refused =
+      launchRefusal(instanceId) ??
+      accountStartRefusal(machineId, row.accountId, sessionName(row));
     if (refused) {
       // Nothing it was sent will be read by a process that does not start.
       console.warn(`[hub] not waking ${instanceId}: ${refused}`);
       forgetPending(instanceId, refused);
       return;
     }
-    const launched = atLaunchDir(instanceId, { cwd: row.cwd });
-    if ("refusal" in launched) {
-      console.warn(`[hub] not waking ${instanceId}: ${launched.refusal}`);
-      forgetPending(instanceId, launched.refusal);
-      return;
-    }
+    // A row whose launch directory is known holds it in `cwd` (`atLaunchDir`).
     const settled = settleMode(
       machineId,
       {
         instanceId,
-        cwd: launched.payload.cwd,
+        cwd: row.cwd,
         ...(row.harness ? { harness: row.harness as HarnessKind } : {}),
         resume: { sessionKey: row.sessionId },
         ...(relaunch ? { relaunch: true as const } : {}),
@@ -5055,6 +5048,11 @@ export const createServer = (
       };
     }
     return { payload: { ...payload, cwd: launched.cwd } };
+  };
+  /** {@link atLaunchDir}'s refusal for a row, if it would refuse one. */
+  const launchRefusal = (instanceId: string): string | undefined => {
+    const launched = atLaunchDir(instanceId, { cwd: "" });
+    return "refusal" in launched ? launched.refusal : undefined;
   };
 
   /** A hub-issued spawn's mode (`settleMode`) and directory (`atLaunchDir`), or the first refusal. */
