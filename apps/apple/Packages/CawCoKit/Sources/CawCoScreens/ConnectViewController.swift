@@ -45,6 +45,14 @@ final class ConnectViewController: ObservedViewController, UITextFieldDelegate {
     private let quietSwitch = UISwitch()
     private lazy var testLink = LinkButton(PaywallCopy.Hub.test) { Task { await PushRegistry.shared.sendTest() } }
     private let testProblem = KitLabel(TypeScale.typeMeta, ink: Palette.statusFailInk, lines: 0)
+    // H5: the free week's day-6 reminder.
+    private let reminderRow = UIStackView()
+    private let reminderHint = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted, lines: 0)
+    private let reminderSwitch = UISwitch()
+    // H7: this device leaves the relay.
+    private let removeBlock = UIStackView()
+    private lazy var removeLink = LinkButton(PaywallCopy.Hub.remove) { Task { await PushRegistry.shared.removeFromRelay() } }
+    private let removeProblem = KitLabel(TypeScale.typeMeta, ink: Palette.statusFailInk, lines: 0)
     private var drawnNotify: NotifyState?
     /// H2's Turn on: the shell opens the notification setup over this sheet.
     var turnOnNotifications: () -> Void = {}
@@ -268,9 +276,32 @@ final class ConnectViewController: ObservedViewController, UITextFieldDelegate {
         let test = UIStackView(arrangedSubviews: [testLink, testProblem])
         test.axis = .vertical
         test.alignment = .leading
+
+        let reminderLabel = KitLabel(TypeScale.typeBody, ink: Palette.inkStrong)
+        reminderLabel.text = PaywallCopy.Hub.reminder
+        let reminderWords = UIStackView(arrangedSubviews: [reminderLabel, reminderHint])
+        reminderWords.axis = .vertical
+        reminderWords.spacing = Space.space1
+        reminderSwitch.onTintColor = Palette.inkStrong
+        reminderSwitch.accessibilityLabel = PaywallCopy.Hub.reminder
+        reminderSwitch.addAction(UIAction { [weak self] _ in
+            guard let self else { return }
+            PushRegistry.shared.setTrialReminder(reminderSwitch.isOn)
+        }, for: .valueChanged)
+        reminderRow.addArrangedSubview(reminderWords)
+        reminderRow.addArrangedSubview(reminderSwitch)
+        reminderRow.alignment = .center
+        reminderRow.spacing = Space.space3
+
+        let removeHint = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted, lines: 0)
+        removeHint.text = PaywallCopy.Hub.removeHint
+        removeBlock.axis = .vertical
+        removeBlock.alignment = .leading
+        for view in [removeLink, removeHint, removeProblem] { removeBlock.addArrangedSubview(view) }
+
         notifications.axis = .vertical
         notifications.spacing = Space.space2
-        for view in [head, lineRow, notifyReason, notifyAction, quietRow, test] { notifications.addArrangedSubview(view) }
+        for view in [head, lineRow, notifyReason, notifyAction, quietRow, reminderRow, test, removeBlock] { notifications.addArrangedSubview(view) }
         return notifications
     }
 
@@ -278,7 +309,8 @@ final class ConnectViewController: ObservedViewController, UITextFieldDelegate {
         let push = PushRegistry.shared
         guard Pro.shared.access?.entitled == true else { return .off(entitled: false) }
         if push.authorization == .denied { return .denied }
-        if !push.allowed { return .off(entitled: true) }
+        // H7 took this device off the relay: H2 until it is turned on again.
+        if !push.allowed || push.removed { return .off(entitled: true) }
         if push.tokenFailed { return .failed }
         if push.token == nil { return .pending }
         switch push.relay {
@@ -330,7 +362,17 @@ final class ConnectViewController: ObservedViewController, UITextFieldDelegate {
             notifyAction.isHidden = action == nil
             quietRow.isHidden = state != .on
             testLink.superview?.isHidden = state != .on
+            removeBlock.isHidden = state != .on
         }
+        // H5 shows while a free week is live and iOS allows notifications.
+        var trialLive = false
+        if case .trial = Pro.shared.access { trialLive = true }
+        reminderRow.isHidden = !(trialLive && push.allowed)
+        if reminderSwitch.isOn != push.trialReminder { reminderSwitch.setOn(push.trialReminder, animated: true) }
+        reminderHint.text = push.trialReminder ? PaywallCopy.Hub.reminderOn : PaywallCopy.Hub.reminderOff
+        removeLink.busy = push.removing
+        removeProblem.text = push.removeProblem
+        removeProblem.isHidden = push.removeProblem == nil
         if let quiet = push.quiet {
             quietSwitch.setOn(quiet, animated: true)
             quietHint.text = quiet ? PaywallCopy.Hub.quietOn : PaywallCopy.Hub.quietOff

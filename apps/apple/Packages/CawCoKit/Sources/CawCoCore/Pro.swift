@@ -153,11 +153,13 @@ public final class Pro {
 
     /// Buys `product` with Apple's sheet over `scene`. The entitlement is read
     /// again before this returns, so `access` already says what it came to.
+    /// The paywall variant rides in the purchase as its `appAccountToken`.
     public func purchase(_ product: ProProduct, in scene: UIWindowScene) async -> ProPurchaseOutcome {
         guard let item = products[product] else { return .failed }
+        let token = PaywallExperiment.variant.accountToken
         let result: Product.PurchaseResult
         do {
-            result = try await item.purchase(confirmIn: scene)
+            result = try await item.purchase(confirmIn: scene, options: [.appAccountToken(token)])
         } catch StoreKitError.userCancelled {
             return .cancelled
         } catch {
@@ -239,6 +241,8 @@ public final class Pro {
         canMakePayments = AppStore.canMakePayments
         let changed = access != next
         access = next
+        // Bought, restored to Pro, or over: the day-6 reminder has nothing left to say.
+        if case .trial = next {} else { TrialReminder.cancel() }
         watchTrialEnd(next)
         if changed {
             log.notice("access \(String(describing: next), privacy: .public)")
@@ -273,23 +277,25 @@ public final class Pro {
     }
 }
 
-/// The paywall's A/B test (DESIGN.md ruling 6): two variants, assigned once
-/// per install the first time the paywall is built, and three anonymous
-/// counters at Cawrier. Fire and forget: no retries that could count twice, no ids.
+/// The paywall's A/B test (DESIGN.md rulings 6 and 9): two variants, assigned
+/// once per install the first time the paywall is built. The variant leaves
+/// the device only inside a purchase, as its `appAccountToken`; the app sends
+/// no events of its own (App Review R6).
 @MainActor
 public enum PaywallExperiment {
     public enum Variant: String, CaseIterable, Sendable {
         case story, poster
+
+        /// The fixed token a purchase made under this variant carries.
+        var accountToken: UUID {
+            switch self {
+            case .story: UUID(uuidString: "5c0f1a7e-0000-4000-8000-00000000057a")!
+            case .poster: UUID(uuidString: "5c0f1a7e-0000-4000-8000-0000000057e2")!
+            }
+        }
     }
 
-    public enum Event: String, Sendable {
-        case shown, trial, bought
-    }
-
-    static let name = "paywall-1"
     private static let variantKey = "paywall-1.variant"
-    private static let shownKey = "paywall-1.shown-sent"
-    private static let log = Logger(subsystem: "dev.cawco.app", category: "Experiment")
 
     /// This install's variant, drawn 50/50 the first time it is asked for.
     public static var variant: Variant {
@@ -299,29 +305,6 @@ public enum PaywallExperiment {
         let drawn = Variant.allCases.randomElement() ?? .story
         UserDefaults.standard.set(drawn.rawValue, forKey: variantKey)
         return drawn
-    }
-
-    /// `shown` goes once per install, the first time P1 appears.
-    public static func shown() {
-        guard !UserDefaults.standard.bool(forKey: shownKey) else { return }
-        UserDefaults.standard.set(true, forKey: shownKey)
-        post(.shown)
-    }
-
-    public static func post(_ event: Event) {
-        let body = ["experiment": name, "variant": variant.rawValue, "event": event.rawValue]
-        var request = URLRequest(url: Cawrier.origin.appending(path: "v1/experiment/event"))
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try? JSONEncoder().encode(body)
-        Task {
-            do {
-                let (_, response) = try await URLSession.shared.data(for: request)
-                log.notice("\(event.rawValue, privacy: .public) posted: \((response as? HTTPURLResponse)?.statusCode ?? 0)")
-            } catch {
-                log.error("\(event.rawValue, privacy: .public) not posted: \(String(describing: error), privacy: .public)")
-            }
-        }
     }
 }
 

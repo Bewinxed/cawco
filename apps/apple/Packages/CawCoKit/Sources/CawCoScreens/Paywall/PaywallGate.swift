@@ -194,12 +194,14 @@ final class PaywallGate {
         }
     }
 
-    /// T6's local notification, scheduled while the week is live and notifications are allowed.
+    /// T6's local notification, scheduled while the week is live, notifications
+    /// are allowed and H5 is on; taken down when any of those stops holding.
     private func remind(access: ProAccess, price: String?) {
         var endsAt: Date?
         if case let .trial(end) = access { endsAt = end }
         let allowed = PushRegistry.shared.allowed
-        let key = "\(endsAt?.timeIntervalSince1970 ?? 0)|\(allowed)|\(price ?? "")"
+        let on = PushRegistry.shared.trialReminder
+        let key = "\(endsAt?.timeIntervalSince1970 ?? 0)|\(allowed)|\(on)|\(price ?? "")"
         guard key != reminderKey else { return }
         reminderKey = key
         Task {
@@ -302,8 +304,8 @@ final class GateBar: UIView {
         guard drawn.map({ $0.0 != form || $0.1 != price }) ?? true else { return }
         drawn = (form, price)
         sub.text = switch form {
-        case .trial: PaywallCopy.Gate.trial(price) ?? " "
-        case .ended: PaywallCopy.Gate.ended(price) ?? " "
+        case .trial: PaywallCopy.Gate.trial(price)
+        case .ended: PaywallCopy.Gate.ended(price)
         case .askToBuy: PaywallCopy.Gate.askToBuy
         }
         for view in buttons.arrangedSubviews { view.removeFromSuperview() }
@@ -417,7 +419,7 @@ final class TrialCard: TileView {
     func configure(price: String?) {
         guard self.price != .some(price) else { return }
         self.price = .some(price)
-        body.text = PaywallCopy.Trial.cardBody(price) ?? " "
+        body.text = PaywallCopy.Trial.cardBody(price)
         for view in buttonSlot.arrangedSubviews { view.removeFromSuperview() }
         let buy = KitButton.make(PaywallCopy.P1.secondary(price), variant: .action) { [weak self] in self?.onBuy() }
         buy.isEnabled = price != nil

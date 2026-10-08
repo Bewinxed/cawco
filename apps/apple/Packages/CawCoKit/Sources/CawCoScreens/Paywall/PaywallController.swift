@@ -310,7 +310,6 @@ final class PaywallController: ObservedViewController {
         }
         for view in old { view.removeFromSuperview() }
         for part in parts { panel.addArrangedSubview(part) }
-        if screen == .offer, form == .trial { PaywallExperiment.shown() }
         guard animated, let sheet = view.window else { return }
         let still = UIAccessibility.isReduceMotionEnabled
         for part in parts {
@@ -332,7 +331,7 @@ final class PaywallController: ObservedViewController {
         let pro = Pro.shared
         let price = pro.displayPrice(.pro)
         let pitch = PaywallCopy.P1.pitch(variant)
-        let (headline, body): (String, String?) = switch form {
+        let (headline, body): (String, String) = switch form {
         case .trial: (pitch.headline, pitch.subline)
         case .ended: (PaywallCopy.P1e.headline, PaywallCopy.P1e.body(price))
         case .keep: (PaywallCopy.Keep.headline, PaywallCopy.Keep.subline(price))
@@ -347,7 +346,7 @@ final class PaywallController: ObservedViewController {
         } else {
             words.addArrangedSubview(title(headline))
         }
-        words.addArrangedSubview(muted(body ?? " "))
+        words.addArrangedSubview(muted(body))
         parts.append(words)
         parts.append(column(pitch.ticks.map { tick($0, ink: Palette.inkStrong) }, spacing: Space.space2))
         if form == .trial {
@@ -551,10 +550,8 @@ final class PaywallController: ObservedViewController {
             case .done:
                 switch Pro.shared.access {
                 case .owned:
-                    if product == .pro { PaywallExperiment.post(.bought) }
                     screen = .started(.bought)
                 case .trial:
-                    PaywallExperiment.post(.trial)
                     screen = .started(.trial)
                 default:
                     // The week was already used on this Apple Account: P1e.

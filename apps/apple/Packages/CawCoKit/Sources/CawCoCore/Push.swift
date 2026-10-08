@@ -155,13 +155,33 @@ public final class PushRegistry {
     /// The hub's or Cawrier's word on the last test, when it didn't go.
     public private(set) var testProblem: String?
     public private(set) var testSending = false
+    /// H5: the free week's day-6 reminder may be scheduled. On until the operator turns it off.
+    public private(set) var trialReminder: Bool {
+        didSet { UserDefaults.standard.set(trialReminder, forKey: Self.reminderKey) }
+    }
+
+    /// H7 ran: this device left the relay and stays out of it until the
+    /// operator turns notifications on again. Kept across launches.
+    public private(set) var removed: Bool {
+        didSet { UserDefaults.standard.set(removed, forKey: Self.removedKey) }
+    }
+
+    /// H7 is on its way to the hub.
+    public private(set) var removing = false
+    /// The hub's reason H7 didn't go; the pairing is kept until it does.
+    public private(set) var removeProblem: String?
 
     @ObservationIgnored private var registeredWith: URL?
     @ObservationIgnored private var enrolling: Task<Void, Never>?
     @ObservationIgnored private var enrolAgain = false
     private let log = Logger(subsystem: "dev.cawco.app", category: "Push")
+    private static let reminderKey = "push-trial-reminder"
+    private static let removedKey = "push-relay-removed"
 
-    private init() {}
+    private init() {
+        trialReminder = UserDefaults.standard.object(forKey: Self.reminderKey) as? Bool ?? true
+        removed = UserDefaults.standard.bool(forKey: Self.removedKey)
+    }
 
     public var allowed: Bool {
         authorization == .authorized || authorization == .provisional || authorization == .ephemeral
@@ -185,6 +205,8 @@ public final class PushRegistry {
     /// registers, enrols and registers with the hub. Denied, nothing more
     /// happens, and the sheet says so.
     public func turnOn() async {
+        removed = false
+        removeProblem = nil
         await readAuthorization()
         if authorization == .notDetermined {
             do {
@@ -256,7 +278,7 @@ public final class PushRegistry {
     }
 
     private func enrolOnce() async {
-        guard let token, let proof = Pro.shared.proof else {
+        guard !removed, let token, let proof = Pro.shared.proof else {
             relay = .idle
             return
         }
@@ -272,10 +294,10 @@ public final class PushRegistry {
         let enrolment = Enrolment(pairingId: pairing.id, secret: pairing.secret, deviceToken: token,
                                   apnsEnvironment: environment.rawValue, proof: .init(transaction: proof))
         do {
-            let _: Enrolled = try await Self.post(Cawrier.origin.appending(path: "v1/enroll"), enrolment, refused: "Caw's relay")
+            let _: Enrolled = try await Self.post(Cawrier.origin.appending(path: "v1/enroll"), enrolment, refused: "The relay")
             log.notice("enrolled with Cawrier (\(self.environment.rawValue, privacy: .public))")
         } catch {
-            relay = .failed(Self.reason(error, from: "Caw's relay"))
+            relay = .failed(Self.reason(error, from: "The relay"))
             log.error("Cawrier enrolment failed: \(String(describing: error), privacy: .public)")
             return
         }
@@ -313,13 +335,44 @@ public final class PushRegistry {
         do {
             let answer: Tested = try await Self.post(hub.appending(path: "api/push/test"), TestRequest(pairingId: pairing.id), refused: "The hub")
             if let outcome = answer.outcomes.first(where: { $0.status != 200 }) {
-                testProblem = outcome.reason ?? (outcome.status == 0 ? "The hub couldn't reach Caw's relay." : "Caw's relay answered \(outcome.status).")
+                testProblem = outcome.reason ?? (outcome.status == 0 ? "The hub couldn't reach the relay." : "The relay answered \(outcome.status).")
             }
             log.notice("test sent: \(answer.outcomes.map { "\($0.status)" }.joined(separator: ","), privacy: .public)")
         } catch {
             testProblem = Self.reason(error, from: "The hub")
             log.error("test failed: \(String(describing: error), privacy: .public)")
         }
+    }
+
+    /// H5's switch. Off, the reminder already scheduled is taken down now.
+    public func setTrialReminder(_ on: Bool) {
+        trialReminder = on
+        if !on { TrialReminder.cancel() }
+    }
+
+    /// H7: the hub unenrols this device from Cawrier (`/api/push/unregister`),
+    /// then the pairing leaves the Keychain. Nothing is enrolled again until
+    /// the operator turns notifications on, which makes a new pairing.
+    public func removeFromRelay() async {
+        guard !removing, let hub = HubConnection.keptAddress else { return }
+        removing = true
+        removeProblem = nil
+        defer { removing = false }
+        do {
+            if let pairing = try? Pairing.kept(existing: true) {
+                let answer: Unregistered = try await Self.post(hub.appending(path: "api/push/unregister"), Unregistration(pairingId: pairing.id), refused: "The hub")
+                log.notice("removed from the relay through \(hub.absoluteString, privacy: .public): \(answer.removed)")
+            }
+            try Pairing.forget()
+        } catch {
+            removeProblem = Self.reason(error, from: "The hub")
+            log.error("remove from the relay failed: \(String(describing: error), privacy: .public)")
+            return
+        }
+        removed = true
+        registeredWith = nil
+        quiet = nil
+        relay = .idle
     }
 
     /// The notification centre showed the hub's test while the app was in front.
@@ -528,11 +581,22 @@ struct Pairing: Codable, Sendable {
         guard wrote == errSecSuccess else { throw Failure.keychain(wrote) }
         return pairing
     }
+
+    /// Deletes the kept pairing (H7); the next `kept()` makes a new one.
+    static func forget() throws {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+        ]
+        let deleted = SecItemDelete(query as CFDictionary)
+        guard deleted == errSecSuccess || deleted == errSecItemNotFound else { throw Failure.keychain(deleted) }
+    }
 }
 
-/// The free week's one reminder (DESIGN.md T6): a local notification at
-/// 10:00 local time on the day before it ends, sent only while notifications
-/// are allowed and the week is live.
+/// The free week's one reminder (DESIGN.md T6, ruling 9, App Review R14): a
+/// local notification at 10:00 local time on the day before it ends, scheduled
+/// only while the week is live, notifications are allowed and H5 is on.
 @MainActor
 public enum TrialReminder {
     static let kind = "trial-ending"
@@ -541,11 +605,12 @@ public enum TrialReminder {
     /// Schedules the reminder for a live week, or takes it down for anything else.
     /// One identifier, so scheduling again replaces it; a time already past schedules nothing.
     public static func schedule(endsAt: Date?, title: String, body: String) async {
-        let center = UNUserNotificationCenter.current()
-        guard let endsAt, PushRegistry.shared.allowed, let fire = fireDate(endsAt: endsAt), fire > .now else {
-            center.removePendingNotificationRequests(withIdentifiers: [identifier])
+        let push = PushRegistry.shared
+        guard let endsAt, push.allowed, push.trialReminder, let fire = fireDate(endsAt: endsAt), fire > .now else {
+            cancel()
             return
         }
+        let center = UNUserNotificationCenter.current()
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body
@@ -558,6 +623,11 @@ public enum TrialReminder {
         } catch {
             Logger(subsystem: "dev.cawco.app", category: "Push").error("trial reminder not scheduled: \(String(describing: error), privacy: .public)")
         }
+    }
+
+    /// Takes the scheduled reminder down: H5 off, Pro bought or restored, the week over.
+    public static func cancel() {
+        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [identifier])
     }
 
     /// The first 10:00 local at or after 48 h before the end: inside the week's

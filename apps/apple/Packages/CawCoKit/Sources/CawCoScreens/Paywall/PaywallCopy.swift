@@ -22,14 +22,14 @@ enum PaywallCopy {
                       subline: "Your whole fleet on one live board. When an agent stops to ask, approve or answer it from your phone, not an hour later.",
                       ticks: ["Every machine and agent, one live board",
                               "Approve or deny from the lock screen",
-                              "One purchase for iPhone and iPad"])
+                              "One purchase for iPhone, iPad and Mac"])
             case .poster:
                 Pitch(eyebrow: "CawCo Pro",
                       headline: "Keep every agent moving.",
                       subline: "Every session on every machine, live on your phone. Approve from the lock screen.",
                       ticks: ["See every agent, every machine, live",
                               "Answer, steer and start sessions from anywhere",
-                              "Buy once for iPhone and iPad"])
+                              "Buy once for iPhone, iPad and Mac"])
             }
         }
 
@@ -40,12 +40,12 @@ enum PaywallCopy {
         static func timeline(price: String?) -> [(day: String, text: String)] {
             [("Today", "Everything on. Nothing to pay."),
              ("Day 6", "One notification from CawCo: tomorrow is the last free day. Turn it off any time under Notifications."),
-             ("Day 7", "The trial ends and the app locks. Pay \(price.map { "\($0) " } ?? "")once to keep it; nothing is charged on its own. The hub and web dashboard stay free.")]
+             ("Day 7", "The trial ends and the app locks. Pay \(spaced(price))once to keep it; nothing is charged on its own. The hub and web dashboard stay free.")]
         }
 
         /// P1.price, or P1a.price while `displayPrice` hasn't arrived.
         static func price(_ price: String?) -> String {
-            "Pay \(price.map { "\($0) " } ?? "")once. No subscription, no auto-charge."
+            "Pay \(spaced(price))once. No subscription, no auto-charge."
         }
 
         static let primary = "Start 7 days free"
@@ -67,16 +67,16 @@ enum PaywallCopy {
     /// P1e: the week is over, or was already used on this Apple Account.
     enum P1e {
         static let headline = "Your 7 days are up."
-        static func body(_ price: String?) -> String? {
-            price.map { "The app is locked. Your hub, machines and sessions are all still there. Pay \($0) once and the board comes back. No subscription." }
+        static func body(_ price: String?) -> String {
+            "The app is locked. Your hub, machines and sessions are all still there. Pay \(spaced(price))once and the board comes back. No subscription."
         }
     }
 
     /// T's tap: the paywall for a live week, in its Get Pro form.
     enum Keep {
         static let headline = "Keep the board after day 7."
-        static func subline(_ price: String?) -> String? {
-            price.map { "Pay \($0) once. Everything you set up stays." }
+        static func subline(_ price: String?) -> String {
+            "Pay \(spaced(price))once. Everything you set up stays."
         }
     }
 
@@ -84,7 +84,7 @@ enum PaywallCopy {
     enum Store {
         static let loading = "Getting prices from the App Store…"
         static func restricted(_ price: String?) -> String {
-            "Purchases are off on this device (Screen Time or a management profile). Turn them on to start the free 7 days or pay \(price ?? "for Pro") once."
+            "Purchases are off on this device (Screen Time or a management profile). Turn them on to start the free 7 days or pay \(spaced(price))once."
         }
 
         static let unavailable = "The App Store didn't answer, so prices can't show."
@@ -95,12 +95,12 @@ enum PaywallCopy {
     /// G: the bar over the locked board.
     enum Gate {
         static let line = "The board is locked."
-        static func trial(_ price: String?) -> String? {
-            price.map { "Try 7 days free, then \($0) once to keep it. Nothing is charged on its own." }
+        static func trial(_ price: String?) -> String {
+            "Try 7 days free, then \(price ?? "pay") once to keep it. Nothing is charged on its own."
         }
 
-        static func ended(_ price: String?) -> String? {
-            price.map { "Pay \($0) once to unlock it. No subscription." }
+        static func ended(_ price: String?) -> String {
+            "Pay \(spaced(price))once to unlock it. No subscription."
         }
 
         static let askToBuy = "Waiting for a family organizer to approve the request."
@@ -110,11 +110,11 @@ enum PaywallCopy {
     enum S1 {
         static let startedHeadline = "Your free 7 days start now."
         static func startedBody(_ price: String?) -> String {
-            "Everything is on. On day 7 the app locks unless you've paid \(price ?? "for Pro") once. One more step: notifications, so an agent's question reaches you wherever you are."
+            "Everything is on. On day 7 the app locks unless you've paid \(spaced(price))once. One more step: notifications, so an agent's question reaches you wherever you are."
         }
 
         static let boughtHeadline = "Pro is yours."
-        static let boughtBody = "Paid once, on every iPhone and iPad signed into this Apple Account. One more step: notifications, so an agent's question reaches you wherever you are."
+        static let boughtBody = "Paid once, on every iPhone, iPad and Mac signed into this Apple Account. One more step: notifications, so an agent's question reaches you wherever you are."
         static let restoredProHeadline = "Pro is back."
         static let restoredTrialHeadline = "Your free 7 days are back."
         static let notifyLine = "Without notifications, you only find out when you open the app."
@@ -183,8 +183,8 @@ enum PaywallCopy {
 
         static let owned = "Pro"
         static let cardTitle = "Your free 7 days end tomorrow."
-        static func cardBody(_ price: String?) -> String? {
-            price.map { "Tomorrow the app locks; your hub, machines and sessions stay as they are. To keep the app, pay \($0) once. Nothing is charged on its own." }
+        static func cardBody(_ price: String?) -> String {
+            "Tomorrow the app locks; your hub, machines and sessions stay as they are. To keep the app, pay \(spaced(price))once. Nothing is charged on its own."
         }
 
         static let pushTitle = "Free trial ends tomorrow"
@@ -215,6 +215,12 @@ enum PaywallCopy {
         /// H7: this device leaves the relay.
         static let remove = "Remove this device from the relay"
         static let removeHint = "Deletes this device's registration from the relay. Notifications stop until you turn them on again; your purchase is untouched."
+    }
+
+    /// StoreKit's price and a space, or nothing while it hasn't arrived, so a
+    /// sentence reads "Pay once" until then (P1a.price): the charge is always said.
+    static func spaced(_ price: String?) -> String {
+        price.map { "\($0) " } ?? ""
     }
 
     /// The banner the hero draws when no ask is waiting: the machine is real, the ask an example.
