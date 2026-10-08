@@ -168,8 +168,11 @@ export const keepAliveResult = (
 interface KeepAlivePorts {
   changed: () => void;
   idle: (row: KeepAliveRow) => boolean | Promise<boolean>;
-  /** The limits the session runs under: its account's. */
-  limits: (row: KeepAliveRow) => ClaudeLimits | undefined;
+  /**
+   * Reads the accounts once and answers the limits each session runs under
+   * (its account's). Taken once per pass over the rows, not once per row.
+   */
+  limits: () => (row: KeepAliveRow) => ClaudeLimits | undefined;
   rows: () => KeepAliveRow[];
   send: (envelope: Envelope<SendPayload>) => unknown;
 }
@@ -205,7 +208,8 @@ export const tickKeepAlive = async (
     ) {
       continue;
     }
-    const due = keepAliveState(fresh, ports.limits(fresh), Date.now());
+    const limits = ports.limits();
+    const due = keepAliveState(fresh, limits(fresh), Date.now());
     if (
       due.state !== "waiting" ||
       due.nextAt === null ||
@@ -216,7 +220,7 @@ export const tickKeepAlive = async (
     console.info(
       `[keepalive] ${fresh.id}: send due ${new Date(due.nextAt).toISOString()} at ${new Date().toISOString()}`
     );
-    const state = keepAliveState(row, ports.limits(row), now);
+    const state = keepAliveState(row, limits(row), now);
     if (
       state.state !== "waiting" ||
       state.nextAt === null ||
@@ -262,8 +266,9 @@ export const createKeepAliveScheduler = (ports: KeepAlivePorts) => {
     // Retry due-but-busy/unreachable sessions, while a future due time gets an
     // exact wake even when it falls between those retry ticks.
     let at = now + 30_000;
+    const limits = ports.limits();
     for (const row of ports.rows()) {
-      const state = keepAliveState(row, ports.limits(row), now);
+      const state = keepAliveState(row, limits(row), now);
       if (
         state.state === "waiting" &&
         state.nextAt !== null &&

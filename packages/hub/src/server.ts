@@ -185,7 +185,7 @@ import {
   machineReadings,
   noteRateLimit,
   reconcileAccounts,
-  sessionLimits,
+  sessionLimitsReader,
 } from "./accounts";
 import { createAdminAsks } from "./admin-asks";
 import { isAdminWrite } from "./admin-tools";
@@ -3613,10 +3613,11 @@ export const createServer = (
       return [];
     }
     const now = Date.now();
+    const limits = sessionLimitsReader(db, now);
     return db
       .getInstancesByIds(ids)
       .filter((row) => {
-        const { state } = keepAliveState(row, sessionLimits(db, row, now), now);
+        const { state } = keepAliveState(row, limits(row), now);
         return (
           row.machineId === machineId &&
           (state === "waiting" || state === "paused-usage")
@@ -6422,6 +6423,7 @@ export const createServer = (
     rows: Row[]
   ) => {
     const now = Date.now();
+    const limits = sessionLimitsReader(db, now);
     return rows.map((row) => {
       const {
         keepAliveEnabled: _enabled,
@@ -6437,11 +6439,7 @@ export const createServer = (
       } = row;
       return {
         ...visible,
-        keepAlive: keepAliveState(
-          row as KeepAliveRow,
-          sessionLimits(db, row, now),
-          now
-        ),
+        keepAlive: keepAliveState(row as KeepAliveRow, limits(row), now),
       };
     });
   };
@@ -9087,7 +9085,7 @@ export const createServer = (
 
   const keepAliveScheduler = createKeepAliveScheduler({
     rows: db.listInstances,
-    limits: (row) => sessionLimits(db, row),
+    limits: () => sessionLimitsReader(db),
     idle: async (row) => {
       if (!registry.agent(row.machineId)) {
         return false;

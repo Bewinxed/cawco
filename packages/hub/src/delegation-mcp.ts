@@ -572,9 +572,9 @@ export function createDelegationMcp(options: {
   const hashOf = (listing: unknown): string =>
     createHash("sha256").update(JSON.stringify(listing)).digest("hex");
 
-  /** The hash of what a connection bound to `binding` is listed now. */
-  const toolsHash = (binding: string | null): string =>
-    hashOf(toolsFor(boundRow(binding)).map(listed));
+  /** The hash of what a connection bound to `row` is listed now. */
+  const toolsHash = (row: InstanceRow | undefined): string =>
+    hashOf(toolsFor(row).map(listed));
 
   /**
    * Each connection's open GET stream, where the client hears what the server
@@ -596,10 +596,16 @@ export function createDelegationMcp(options: {
    * the hub, so a restart onto a new build still finds the difference.
    */
   const reconcileLists = () => {
+    // The rows read once for the whole pass: every stream and every pi
+    // session is looked up in them, not read again for each.
+    const rows = options.instances();
+    const byId = new Map(rows.map((row) => [row.id, row]));
     for (const stream of streams) {
       const listing = listingOf(stream.binding);
       const last = options.toolListing(listing);
-      const now = toolsHash(stream.binding);
+      const now = toolsHash(
+        stream.binding ? byId.get(stream.binding) : undefined
+      );
       if (last === undefined || last === now || stream.told === now) {
         continue;
       }
@@ -615,12 +621,12 @@ export function createDelegationMcp(options: {
     }
     // A pi session lists over REST, from its own host, and hears through its
     // machine: the same check, the same once per change.
-    for (const row of options.instances()) {
+    for (const row of rows) {
       if (row.harness !== "pi" || row.status !== "running") {
         continue;
       }
       const last = options.toolListing(row.id);
-      const now = toolsHash(row.id);
+      const now = toolsHash(row);
       if (last === undefined || last === now || hostTold.get(row.id) === now) {
         continue;
       }

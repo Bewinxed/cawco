@@ -1148,6 +1148,14 @@ export interface DbShape {
   /** Per-rule totals for the list, aggregated in SQL rather than per row. */
   readonly ruleStats: () => RuleStats[];
   readonly runningDelegateCounts: () => Map<string, number>;
+  /**
+   * The listed Claude sessions that are running, as the accounts read them:
+   * two columns, so asking which accounts a session runs on reads no row whole.
+   */
+  readonly runningClaudeSessions: () => {
+    accountId: string | null;
+    machineId: string;
+  }[];
   /** One send's record, by its uuid. */
   readonly sendRecord: (uuid: string) => SentMessageRow | undefined;
   /**
@@ -4872,6 +4880,21 @@ const make = (path: string): DbShape => {
       }
       return counts;
     },
+    runningClaudeSessions: () =>
+      db
+        .select({
+          accountId: instances.accountId,
+          machineId: instances.machineId,
+        })
+        .from(instances)
+        .where(
+          and(
+            listedInstances(),
+            eq(instances.status, "running"),
+            eq(instances.harness, "claude")
+          )
+        )
+        .all(),
     liveWorkItems: () =>
       db
         .select()

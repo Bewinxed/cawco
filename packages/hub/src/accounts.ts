@@ -3,6 +3,7 @@ import {
   type AccountOverage,
   type AccountProbe,
   type AccountReading,
+  type AccountSignin,
   type ClaudeAccountReport,
   type ClaudeExtraUsage,
   type ClaudeLimits,
@@ -302,57 +303,76 @@ export const limitsOf = (
   };
 };
 
-/** The account a Claude session runs on: its own, else its machine's. */
-const accountOfSession = (
-  db: DbShape,
-  row: { accountId: string | null; machineId: string }
-): string | undefined => row.accountId ?? machineAccount(db, row.machineId);
-
-/** The accounts a running Claude session is on. */
-const watchedAccounts = (db: DbShape): Set<string> => {
-  const watched = new Set<string>();
-  for (const row of db.listInstances()) {
-    const id =
-      row.status === "running" && row.harness === "claude"
-        ? accountOfSession(db, row)
-        : undefined;
-    if (id) {
-      watched.add(id);
-    }
-  }
-  return watched;
-};
-
-/** The limits a session runs under: its account's. */
-export const sessionLimits = (
-  db: DbShape,
-  row: { accountId: string | null; machineId: string },
-  now = Date.now()
-): ClaudeLimits | undefined => {
-  const accountId = accountOfSession(db, row);
-  if (!accountId) {
-    return undefined;
-  }
-  return limitsOf(
-    db.accounts.readings().find((one) => one.accountId === accountId),
-    watchedAccounts(db).has(accountId),
-    now
-  );
-};
-
 /**
  * The account that speaks for a machine where a screen shows one Claude
- * reading per machine: its `~/.claude` login, else the first account signed
- * in there.
+ * reading per machine, out of sign-ins already read: its `~/.claude` login,
+ * else the first account signed in there.
  */
+const speakerAmong = (
+  signins: readonly AccountSignin[],
+  machineId: string
+): string | undefined => {
+  const signed = signins.filter(
+    (one) => one.machineId === machineId && one.state === "signed-in"
+  );
+  return (signed.find((one) => one.home) ?? signed[0])?.accountId;
+};
+
+/** {@link speakerAmong}, reading the sign-ins for one machine's answer. */
 export const machineAccount = (
   db: DbShape,
   machineId: string
-): string | undefined => {
-  const signed = db.accounts
-    .signins()
-    .filter((one) => one.machineId === machineId && one.state === "signed-in");
-  return (signed.find((one) => one.home) ?? signed[0])?.accountId;
+): string | undefined => speakerAmong(db.accounts.signins(), machineId);
+
+/** A session as its account is read off it. */
+interface SessionOnAccount {
+  accountId: string | null;
+  machineId: string;
+}
+
+/**
+ * The accounts as one read sees them: who speaks for each machine, each
+ * account's reading, and which accounts a running Claude session is on.
+ * Read once per pass over the sessions, never once per session: a board is
+ * thousands of rows, and reading every session again for each of them is what
+ * held the hub's one thread for minutes once its first account existed
+ * (nightly 2069, 2026-10-08).
+ */
+const accountsView = (db: DbShape) => {
+  const signins = db.accounts.signins();
+  const readings = new Map(
+    db.accounts.readings().map((reading) => [reading.accountId, reading])
+  );
+  /** The account a Claude session runs on: its own, else its machine's. */
+  const accountOf = (row: SessionOnAccount): string | undefined =>
+    row.accountId ?? speakerAmong(signins, row.machineId);
+  const watched = new Set(
+    db.runningClaudeSessions().flatMap((row) => {
+      const id = accountOf(row);
+      return id ? [id] : [];
+    })
+  );
+  return {
+    accountOf,
+    speakerFor: (machineId: string) => speakerAmong(signins, machineId),
+    limits: (accountId: string, now: number): ClaudeLimits =>
+      limitsOf(readings.get(accountId), watched.has(accountId), now),
+  };
+};
+
+/**
+ * The limits each session runs under (its account's), read off one read of
+ * the accounts: take one per pass over the sessions and ask it for each.
+ */
+export const sessionLimitsReader = (
+  db: DbShape,
+  now = Date.now()
+): ((row: SessionOnAccount) => ClaudeLimits | undefined) => {
+  const view = accountsView(db);
+  return (row) => {
+    const accountId = view.accountOf(row);
+    return accountId ? view.limits(accountId, now) : undefined;
+  };
 };
 
 /**
@@ -364,20 +384,15 @@ export const machineReadings = (db: DbShape, now = Date.now()) => {
   const goByMachine = new Map(
     db.listUsageLimits().map((row) => [row.machineId, row])
   );
-  const readings = db.accounts.readings();
-  const watched = watchedAccounts(db);
+  const view = accountsView(db);
   return db.listAgents().flatMap((agent) => {
     const go = goByMachine.get(agent.machineId);
-    const accountId = machineAccount(db, agent.machineId);
+    const accountId = view.speakerFor(agent.machineId);
     if (!(go || accountId)) {
       return [];
     }
     const payload: ClaudeLimits = accountId
-      ? limitsOf(
-          readings.find((one) => one.accountId === accountId),
-          watched.has(accountId),
-          now
-        )
+      ? view.limits(accountId, now)
       : {
           extraUsage: null,
           fetchedAt: now,
