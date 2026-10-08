@@ -175,7 +175,9 @@ public final class Pro {
                 return .unverified
             }
             await transaction.finish()
-            await refresh()
+            // Apple-signed and just verified: the record of this purchase,
+            // which `currentEntitlements` can lag behind for a moment.
+            await refresh(bought: (transaction, verification.jwsRepresentation))
             log.notice("purchase \(product.rawValue, privacy: .public) verified, access \(String(describing: self.access), privacy: .public)")
             return .done
         case .pending:
@@ -206,20 +208,27 @@ public final class Pro {
     }
 
     /// Reads `Transaction.currentEntitlements` and sets `access` from it.
+    /// `bought` is the verified transaction a purchase just returned, with its
+    /// JWS: it counts as if `currentEntitlements` had returned it, since that
+    /// read can lag right after a non-consumable purchase.
     /// Returns whether an entitlement for our products came back unverified.
     @discardableResult
-    public func refresh() async -> Bool {
+    public func refresh(bought: (transaction: Transaction, jws: String)? = nil) async -> Bool {
         var pro: (transaction: Transaction, jws: String)?
         var trial: (transaction: Transaction, jws: String)?
         var unverified = false
+        func hold(_ transaction: Transaction, jws: String) {
+            guard transaction.revocationDate == nil, let product = ProProduct(rawValue: transaction.productID) else { return }
+            switch product {
+            case .pro: pro = (transaction, jws)
+            case .trial: trial = (transaction, jws)
+            }
+        }
+        if let bought { hold(bought.transaction, jws: bought.jws) }
         for await result in Transaction.currentEntitlements {
             switch result {
             case let .verified(transaction):
-                guard transaction.revocationDate == nil, let product = ProProduct(rawValue: transaction.productID) else { continue }
-                switch product {
-                case .pro: pro = (transaction, result.jwsRepresentation)
-                case .trial: trial = (transaction, result.jwsRepresentation)
-                }
+                hold(transaction, jws: result.jwsRepresentation)
             case let .unverified(transaction, error):
                 guard ProProduct(rawValue: transaction.productID) != nil else { continue }
                 unverified = true
