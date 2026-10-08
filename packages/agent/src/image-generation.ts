@@ -11,6 +11,7 @@ import {
 import { homedir } from "node:os";
 import { dirname, extname, join, resolve } from "node:path";
 import { type GeneratedImage, IMAGE_GENERATION_TIMEOUT_MS } from "@cawco/core";
+import { LineSplitter } from "@cawco/core/lines";
 import { z } from "zod";
 
 const requestSchema = z
@@ -29,7 +30,6 @@ const oauthSchema = z.object({
 });
 const SIZE = /^(\d+)x(\d+)$/;
 const SSE_LINES = /\r?\n/;
-const SSE_EVENTS = /\r?\n\r?\n/;
 const PNG = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 const activeOutputs = new Set<string>();
 
@@ -159,7 +159,27 @@ async function imageFromStream(
 ): Promise<Buffer> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
-  let pending = "";
+  // The image arrives as one base64 event of megabytes: it is framed line by
+  // line, each chunk searched once, never the whole pending event again.
+  const lines = new LineSplitter();
+  let event: string[] = [];
+  /** Takes up `text`'s lines; the image of the first event they complete that carries one. */
+  const take = (text: string[]): string | undefined => {
+    for (const raw of text) {
+      const line = raw.endsWith("\r") ? raw.slice(0, -1) : raw;
+      if (line !== "") {
+        event.push(line);
+        continue;
+      }
+      // A blank line ends an event.
+      const image = eventImage(event.join("\n"));
+      event = [];
+      if (image) {
+        return image;
+      }
+    }
+    return undefined;
+  };
   try {
     for (;;) {
       // biome-ignore lint/performance/noAwaitInLoops: SSE chunks must be decoded in wire order.
@@ -167,17 +187,14 @@ async function imageFromStream(
       if (done) {
         break;
       }
-      pending += decoder.decode(value, { stream: true });
-      const events = pending.split(SSE_EVENTS);
-      pending = events.pop() ?? "";
-      for (const event of events) {
-        const image = eventImage(event);
-        if (image) {
-          return Buffer.from(image, "base64");
-        }
+      const image = take(lines.push(decoder.decode(value, { stream: true })));
+      if (image) {
+        return Buffer.from(image, "base64");
       }
     }
-    const image = eventImage(pending + decoder.decode());
+    // What the stream ended on: the decoder's last bytes, the unfinished
+    // line, and the blank line that closes an event the stream did not.
+    const image = take([...lines.push(decoder.decode()), lines.end(), ""]);
     if (image) {
       return Buffer.from(image, "base64");
     }

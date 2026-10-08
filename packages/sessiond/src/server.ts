@@ -29,6 +29,8 @@ import {
 } from "node:net";
 import { dirname } from "node:path";
 import { type BuildInfo, SessionRing } from "@cawco/core";
+import { LineSplitter } from "@cawco/core/lines";
+import { PacedWriter } from "@cawco/core/paced-write";
 // The protocol lives behind its own subpath: `sessiond.ts` reaches for `node:os`
 // to derive the endpoint, and the core barrel is imported by the browser bundle.
 import {
@@ -197,8 +199,8 @@ interface Proc {
   /** The spec's `cwd`, kept so a reattaching agent learns where this child runs. */
   cwd?: string;
   exitCode: number | null;
-  /** Bytes of the current, not-yet-terminated stdout line. Framing only. */
-  partial: string;
+  /** Cuts stdout into lines. Framing only. */
+  lines: LineSplitter;
   procId: string;
   ring: SessionRing<string>;
   signal: NodeJS.Signals | null;
@@ -220,10 +222,12 @@ interface Proc {
 
 /** One attached agent. Cursors are per-proc, because subscriptions are. */
 export interface Conn {
-  /** Line framing for the agent's own NDJSON — the protocol, not a payload. */
-  buffer: string;
   /** procId → the last seq this connection has been sent. */
   cursors: Map<string, number>;
+  /** Line framing for the agent's own NDJSON — the protocol, not a payload. */
+  lines: LineSplitter;
+  /** Everything sent to this agent, in order, a piece at a time. */
+  out: PacedWriter;
   socket: Socket;
 }
 
@@ -367,7 +371,12 @@ export class SessiondServer {
   // ---------------------------------------------------------------- connections
 
   #accept(socket: Socket): void {
-    const conn: Conn = { socket, buffer: "", cursors: new Map() };
+    const conn: Conn = {
+      socket,
+      lines: new LineSplitter(),
+      out: new PacedWriter(socket),
+      cursors: new Map(),
+    };
     this.#conns.add(conn);
     socket.setEncoding("utf8");
     socket.on("data", (chunk: string) => this.#onData(conn, chunk));
@@ -386,15 +395,10 @@ export class SessiondServer {
   }
 
   #onData(conn: Conn, chunk: string): void {
-    conn.buffer += chunk;
-    let nl = conn.buffer.indexOf("\n");
-    while (nl >= 0) {
-      const line = conn.buffer.slice(0, nl);
-      conn.buffer = conn.buffer.slice(nl + 1);
+    for (const line of conn.lines.push(chunk)) {
       if (line.trim()) {
         this.#onLine(conn, line);
       }
-      nl = conn.buffer.indexOf("\n");
     }
   }
 
@@ -597,7 +601,7 @@ export class SessiondServer {
       ring: new SessionRing<string>(SESSIOND_RING_LINES),
       sizes: [],
       bytes: 0,
-      partial: "",
+      lines: new LineSplitter(),
       alive: true,
       exitCode: null,
       signal: null,
@@ -827,12 +831,8 @@ export class SessiondServer {
    * done to a payload anywhere in this daemon.
    */
   #ingest(proc: Proc, chunk: string): void {
-    proc.partial += chunk;
-    let nl = proc.partial.indexOf("\n");
-    while (nl >= 0) {
-      this.#record(proc, proc.partial.slice(0, nl));
-      proc.partial = proc.partial.slice(nl + 1);
-      nl = proc.partial.indexOf("\n");
+    for (const line of proc.lines.push(chunk)) {
+      this.#record(proc, line);
     }
   }
 
@@ -867,9 +867,8 @@ export class SessiondServer {
     }
     // The final line often arrives without its newline; record it rather than
     // lose the record that explains the death.
-    if (proc.partial) {
-      this.#record(proc, proc.partial);
-      proc.partial = "";
+    if (proc.lines.pending) {
+      this.#record(proc, proc.lines.end());
     }
     proc.alive = false;
     proc.exitCode = code;
@@ -899,7 +898,9 @@ export class SessiondServer {
     if (conn.socket.destroyed) {
       return;
     }
-    conn.socket.write(`${JSON.stringify(message)}\n`);
+    // Paced: a ring line can be megabytes, and Bun's socket write is
+    // quadratic in what it has to queue (core/paced-write.ts).
+    conn.out.write(`${JSON.stringify(message)}\n`);
   }
 
   // --------------------------------------------------------------------- drain

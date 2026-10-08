@@ -84,6 +84,7 @@ import {
   settledQuestionResult,
   VERIFY_SESSION_CREDENTIAL,
 } from "@cawco/core";
+import { LineSplitter } from "@cawco/core/lines";
 import {
   accountConfigDir,
   claudeConfigDirs,
@@ -1620,7 +1621,10 @@ class ClaudeSession implements HarnessSession {
       return;
     }
     let offset = (await stat(file)).size;
-    let rest = "";
+    // A transcript line can be megabytes (an image in a tool result), and a
+    // read can end mid-line and mid-character: both are carried to the next.
+    const lines = new LineSplitter();
+    const decoder = new TextDecoder();
     let reading = Promise.resolve();
     const read = async (): Promise<void> => {
       const handle = await open(file, "r");
@@ -1632,9 +1636,9 @@ class ClaudeSession implements HarnessSession {
         const added = Buffer.alloc(size - offset);
         await handle.read(added, 0, added.length, offset);
         offset = size;
-        const lines = (rest + added.toString("utf8")).split("\n");
-        rest = lines.pop() ?? "";
-        for (const line of lines) {
+        for (const line of lines.push(
+          decoder.decode(added, { stream: true })
+        )) {
           if (line.includes("hook_non_blocking_error")) {
             this.#transcriptHookFailure(line);
           }

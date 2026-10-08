@@ -31,6 +31,8 @@ import { Socket } from "node:net";
 import { dirname, join } from "node:path";
 import { Readable, Writable } from "node:stream";
 import { fileURLToPath } from "node:url";
+import { LineSplitter } from "@cawco/core/lines";
+import { PacedWriter } from "@cawco/core/paced-write";
 import { standalone } from "@cawco/core/runtime";
 // The protocol lives behind its own subpath on purpose: `sessiond.ts` reaches
 // for `node:os`, and the core barrel is imported by the browser bundle.
@@ -167,7 +169,7 @@ export const dialKeeper = (
     // Listeners before the dial, as in {@link probeEndpoint}.
     const socket = new Socket();
     let connected = false;
-    let buffer = "";
+    const lines = new LineSplitter();
     const settle = (answered: boolean, detail: string): void => {
       clearTimeout(timer);
       socket.destroy();
@@ -188,10 +190,8 @@ export const dialKeeper = (
       connected = true;
     });
     socket.on("data", (chunk: string) => {
-      buffer += chunk;
-      const nl = buffer.indexOf("\n");
-      if (nl >= 0) {
-        const first = buffer.slice(0, nl);
+      const [first] = lines.push(chunk);
+      if (first !== undefined) {
         settle(
           WELCOME_LINE.test(first),
           WELCOME_LINE.test(first) ? "welcome" : "first line was not a welcome"
@@ -313,7 +313,10 @@ interface ProcListener {
  */
 export class SessiondClient {
   readonly #socket: Socket;
-  #buffer = "";
+  /** A ring line can be megabytes (an image folded into a user echo): framed in linear time. */
+  readonly #lines = new LineSplitter();
+  /** A write to a child's stdin can be megabytes too (an image): sent a piece at a time (core/paced-write.ts). */
+  readonly #out: PacedWriter;
   #welcome: SessiondWelcomeInfo | undefined;
   readonly #acks = new Map<string, (ack: SessiondAck) => void>();
   /** Sent but not yet settled — re-sent once at reconnect under the same id (§8). */
@@ -333,6 +336,7 @@ export class SessiondClient {
 
   private constructor(socket: Socket) {
     this.#socket = socket;
+    this.#out = new PacedWriter(socket);
     socket.setEncoding("utf8");
     socket.on("data", (chunk: string) => this.#onData(chunk));
     socket.on("close", () => {
@@ -419,15 +423,10 @@ export class SessiondClient {
   // ------------------------------------------------------------------ framing
 
   #onData(chunk: string): void {
-    this.#buffer += chunk;
-    let nl = this.#buffer.indexOf("\n");
-    while (nl >= 0) {
-      const line = this.#buffer.slice(0, nl);
-      this.#buffer = this.#buffer.slice(nl + 1);
+    for (const line of this.#lines.push(chunk)) {
       if (line.trim()) {
         this.#onMessage(line);
       }
-      nl = this.#buffer.indexOf("\n");
     }
   }
 
@@ -508,7 +507,7 @@ export class SessiondClient {
     if (this.#closed) {
       throw new Error("[sessiond] connection is closed");
     }
-    this.#socket.write(`${JSON.stringify(message)}\n`);
+    this.#out.write(`${JSON.stringify(message)}\n`);
   }
 
   /**

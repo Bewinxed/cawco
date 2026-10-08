@@ -26,6 +26,7 @@ import {
 import { RELEASE_REPOSITORY } from "@cawco/core/binary-distribution";
 import { readInstallation } from "@cawco/core/binary-installation";
 import { generateInstallScript } from "@cawco/core/install-script";
+import { LineSplitter } from "@cawco/core/lines";
 import { RELEASE_PUBLIC_KEY } from "@cawco/core/release-key";
 import { Elysia, t } from "elysia";
 import { HUB_PORT } from "./config";
@@ -219,7 +220,7 @@ export const joinRoutes = ({ online }: JoinDeps) => {
     stream: ReadableStream<Uint8Array>
   ): Promise<void> => {
     const decoder = new TextDecoder();
-    let partial = "";
+    const lines = new LineSplitter();
     const take = (line: string): void => {
       const clean = line.replace(CARRIAGE_RETURN, "");
       if (clean.startsWith(INSTALL_JOINED)) {
@@ -231,15 +232,16 @@ export const joinRoutes = ({ online }: JoinDeps) => {
       }
     };
     for await (const chunk of stream) {
-      partial += decoder.decode(chunk, { stream: true });
-      const parts = partial.split("\n");
-      partial = parts.pop() ?? "";
-      for (const line of parts) {
+      for (const line of lines.push(decoder.decode(chunk, { stream: true }))) {
         take(line);
       }
     }
-    if (partial) {
-      take(partial);
+    const rest = lines.push(decoder.decode());
+    for (const line of rest) {
+      take(line);
+    }
+    if (lines.pending) {
+      take(lines.end());
     }
   };
 
