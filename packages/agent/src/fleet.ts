@@ -2307,21 +2307,24 @@ const converge = async (config: FleetConfig): Promise<FleetSyncReport> => {
 let queue: Promise<unknown> = Promise.resolve();
 
 /**
+ * Runs `work` in that queue: nothing else of cawco's writes a `.claude.json`
+ * while it runs (the login move rewrites two of them).
+ */
+export const inFleetQueue = <T>(work: () => Promise<T>): Promise<T> => {
+  const next = queue.then(work, work);
+  // biome-ignore lint/suspicious/noEmptyBlockStatements: the caller already gets this rejection from `next`; the queue only needs to know the work finished, not how
+  queue = next.catch(() => {});
+  return next;
+};
+
+/**
  * Applies the fleet's desired state to this machine and answers with what every
  * entry in it came to. Idempotent: a second sync with the same config writes the
  * same file and runs no CLI at all.
  */
 export const syncFleetConfig = (
   config: FleetConfig
-): Promise<FleetSyncReport> => {
-  const next = queue.then(
-    () => converge(config),
-    () => converge(config)
-  );
-  // biome-ignore lint/suspicious/noEmptyBlockStatements: the caller of syncFleetConfig already gets this rejection from `next`; the queue only needs to know a sync finished, not how
-  queue = next.catch(() => {});
-  return next;
-};
+): Promise<FleetSyncReport> => inFleetQueue(() => converge(config));
 
 /**
  * What the machine has of what cawco last put on it, without changing any of

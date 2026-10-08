@@ -753,11 +753,10 @@ const attach = (
       )
     );
 
-    // Who each Claude Code config dir is signed in as, read again on a
-    // cadence: a login switched under a connected machine (`claude auth
-    // login` in a terminal, nightly 2132's obelisk at 21:38) moves its
-    // sign-ins at the hub within a minute, and the readings of the sessions
-    // running on it with them, not at the machine's next connect.
+    // Who each account dir is signed in as, read again on a cadence
+    // (`claude auth status`, which reads and refreshes nothing): an account
+    // signed out or switched under a connected machine moves its sign-in at
+    // the hub within a minute, not at the machine's next connect.
     yield* Effect.forkScoped(
       Effect.repeat(
         Effect.promise(async () => {
@@ -1200,8 +1199,8 @@ const attach = (
       )
     );
 
-    // No periodic Claude Code auth re-probe. It cost far more than it was worth:
-    // `probeAuth` starts a real `query()`, which is a Claude Code process that
+    // No periodic Claude Code login probe. It cost far more than it was worth:
+    // a probe that starts a real `query()` is a Claude Code process that
     // reads the credentials and may refresh them. Refresh tokens rotate, so a
     // probe that refreshes invalidates the token every other process on this
     // machine is holding — measured: 38 live processes against 10 sessions,

@@ -4,7 +4,6 @@ import {
   type AccountIdentity,
   type AccountKind,
   type AccountSigninResult,
-  type AuthState,
   sameIdentity,
 } from "@cawco/core";
 import { accountIds, accountsRoot } from "@cawco/core/paths";
@@ -16,15 +15,16 @@ import {
 import type { Subprocess } from "bun";
 import {
   accountEnv,
+  bareEnv,
   linkUserLayer,
   probeAccount,
   removeAccountDir,
 } from "./accounts";
-import { probeAuth, resolveClaudeExecutable } from "./auth";
+import { resolveClaudeExecutable } from "./auth";
 
 /**
- * Logging a machine in from the dashboard, over the tunnel: its own
- * `~/.claude`, or one account's config dir (`~/.cawco/accounts/<id>/claude`).
+ * Signing an account in on a machine from the dashboard, over the tunnel, in
+ * that account's own config dir (`~/.cawco/accounts/<id>/claude`).
  *
  * The sign-in is Claude Code's own: the daemon runs the unmodified
  * `claude auth login` under a pseudo-terminal, hands the authorisation link it
@@ -63,10 +63,8 @@ interface SignIn {
   readonly terminal: Bun.Terminal;
 }
 
-/** The sign-ins in flight, by config dir: an account id, or `~/.claude` as null's key. */
+/** The sign-ins in flight, by account id. */
 const inFlight = new Map<string, SignIn>();
-const HOME = "~/.claude";
-const keyOf = (account: string | null): string => account ?? HOME;
 
 export interface LoginChallenge {
   /** Where the reader authorises. Opened in *their* browser, not on the machine. */
@@ -84,11 +82,9 @@ const end = (signIn: SignIn) => {
  * daemon started again knows nothing of it, so nothing could ever end it.
  */
 export const endSignIns = (): void => {
-  for (const [key, signIn] of inFlight) {
+  for (const [account, signIn] of inFlight) {
     end(signIn);
-    if (key !== HOME) {
-      rmSync(markerFile(key), { force: true });
-    }
+    rmSync(markerFile(account), { force: true });
   }
   inFlight.clear();
 };
@@ -185,19 +181,18 @@ const until = (signIn: SignIn, done: () => boolean, ms: number) =>
   });
 
 /**
- * Starts `claude auth login` in one config dir (an account's, or `~/.claude`
- * for null) and hands back the link it prints. A Console account signs in
- * with `--console`; a subscription with the CLI's default.
+ * Starts `claude auth login` in an account's config dir and hands back the
+ * link it prints. A Console account signs in with `--console`; a
+ * subscription with the CLI's default.
  */
 const beginSignIn = async (
-  account: string | null,
+  account: string,
   kind: AccountKind
 ): Promise<LoginChallenge> => {
-  const key = keyOf(account);
-  const previous = inFlight.get(key);
+  const previous = inFlight.get(account);
   if (previous) {
     end(previous);
-    inFlight.delete(key);
+    inFlight.delete(account);
   }
   const executable = resolveClaudeExecutable();
   if (!executable) {
@@ -215,7 +210,6 @@ const beginSignIn = async (
       }
     },
   });
-  const { CLAUDE_CONFIG_DIR: _own, ...env } = process.env;
   signIn = {
     child: Bun.spawn(
       [
@@ -227,21 +221,19 @@ const beginSignIn = async (
       {
         // `true` as the browser: the link is for the reader's browser, not
         // one on this machine.
-        env: { ...env, ...accountEnv(account), BROWSER: "true" },
+        env: { ...bareEnv(), ...accountEnv(account), BROWSER: "true" },
         terminal,
       }
     ),
     output: "",
     terminal,
   };
-  inFlight.set(key, signIn);
+  inFlight.set(account, signIn);
   const current = signIn;
-  if (account !== null) {
-    const { pid } = current.child;
-    await markLogin(account, pid);
-    // biome-ignore lint/complexity/noVoid: the marker goes however the login ends; nothing waits on it
-    void current.child.exited.then(() => unmarkLogin(account, pid));
-  }
+  const { pid } = current.child;
+  await markLogin(account, pid);
+  // biome-ignore lint/complexity/noVoid: the marker goes however the login ends; nothing waits on it
+  void current.child.exited.then(() => unmarkLogin(account, pid));
 
   const prompted = await until(
     current,
@@ -251,8 +243,8 @@ const beginSignIn = async (
   const url = said(current).match(LINK)?.[0];
   if (!(prompted && url)) {
     end(current);
-    if (inFlight.get(key) === current) {
-      inFlight.delete(key);
+    if (inFlight.get(account) === current) {
+      inFlight.delete(account);
     }
     throw new Error(
       said(current) || "`claude auth login` printed no sign-in link."
@@ -265,23 +257,19 @@ const beginSignIn = async (
  * Types the code the reader pasted into the dir's waiting `claude auth
  * login`, and waits for it to exchange the code and store the login.
  */
-const finishSignIn = async (
-  account: string | null,
-  code: string
-): Promise<void> => {
+const finishSignIn = async (account: string, code: string): Promise<void> => {
   const trimmed = code.trim();
   if (!trimmed) {
     throw new Error("Paste the code from the authorisation page.");
   }
-  const key = keyOf(account);
-  const signIn = inFlight.get(key);
+  const signIn = inFlight.get(account);
   if (!signIn || signIn.child.exitCode !== null) {
     throw new Error(
       "That code belongs to a login this machine didn't start or already used. Open the authorisation page again."
     );
   }
   // Used or refused, the sign-in is spent either way.
-  inFlight.delete(key);
+  inFlight.delete(account);
 
   const from = signIn.output.length;
   signIn.terminal.write(`${trimmed}\r`);
@@ -300,21 +288,6 @@ const finishSignIn = async (
           : "`claude auth login` did not finish signing in.")
     );
   }
-};
-
-/** Starts the machine's own `~/.claude` sign-in and hands back its link. */
-export const beginLogin = (): Promise<LoginChallenge> =>
-  beginSignIn(null, "subscription");
-
-/**
- * Finishes the machine's own `~/.claude` sign-in, and answers with what this
- * machine can do afterwards — which is the only claim worth making, since a
- * login that does not work is indistinguishable from no login at all until
- * something tries to use it.
- */
-export const completeLogin = async (code: string): Promise<AuthState> => {
-  await finishSignIn(null, code);
-  return await probeAuth();
 };
 
 /**
@@ -336,9 +309,8 @@ const logout = async (account: string): Promise<void> => {
   if (!executable) {
     return;
   }
-  const { CLAUDE_CONFIG_DIR: _own, ...env } = process.env;
   const child = Bun.spawn([executable, "auth", "logout"], {
-    env: { ...env, ...accountEnv(account) },
+    env: { ...bareEnv(), ...accountEnv(account) },
     stdin: "ignore",
     stdout: "ignore",
     stderr: "pipe",
@@ -379,10 +351,9 @@ export const completeAccountLogin = async (
  * is ended first, and gone before the dir is: nothing of the account stays.
  */
 export const forgetAccount = async (account: string): Promise<void> => {
-  const key = keyOf(account);
-  const waiting = inFlight.get(key);
+  const waiting = inFlight.get(account);
   if (waiting) {
-    inFlight.delete(key);
+    inFlight.delete(account);
     end(waiting);
     await waiting.child.exited;
   }

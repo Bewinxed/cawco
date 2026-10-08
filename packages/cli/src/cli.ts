@@ -361,34 +361,30 @@ const status = async (args: Args): Promise<number> => {
  */
 const authNote = (state: Exclude<AuthState, "authenticated">): string =>
   state === "unreadable-credentials"
-    ? `cawco: this machine has Claude Code credentials, but this process cannot read them.
-They live in your login keychain, and the keychain only opens for a process
-inside your desktop session — a daemon started over SSH is not one, so sessions
-will start and then answer "Not logged in". A login made from here is kept in a
-file instead, which this process can read.`
-    : `cawco: nobody is signed in to Claude Code on this machine, so sessions will
-start and then answer "Not logged in".`;
+    ? `cawco: a Claude account is signed in on this machine, but this process cannot read its login.
+It lives in your login keychain, and the keychain only opens for a process
+inside your desktop session — a daemon started over SSH is not one. Running the
+daemon as a service — \`cawco service install\` — is enough on its own.`
+    : "cawco: no Claude account is signed in on this machine, so Claude sessions can't start here.";
 
 /**
  * Asked before registering, because a machine that cannot start a session should
  * say so rather than sit in the fleet looking ready. It prints the fix and
- * carries on: the fix is a sign-in through Claude Code's own flow, which the
- * dashboard drives once this daemon is up.
+ * carries on: the fix is signing an account in from the dashboard, once this
+ * daemon is up.
  */
 const preflight = async (): Promise<AuthState> => {
   // Loaded here rather than at the top so `status` never pays for the agent SDK.
-  const { probeAuth } = await import("@cawco/agent");
-  const state = await probeAuth();
+  const { machineClaudeAuth } = await import("@cawco/agent");
+  const state = await machineClaudeAuth();
   if (state === "authenticated") {
     return state;
   }
 
   console.error(authNote(state));
   console.error(`
-Log this machine in from the dashboard — Log in… in its machine menu — or run
-\`claude auth login\` here. On macOS, running the daemon as a service — \`cawco
-service install\` — is enough on its own. Starting anyway; the fleet will show
-this machine as needing sign-in.`);
+Add one in Configure → Accounts and sign it in there. Starting anyway; the
+fleet will show this machine as needing sign-in.`);
   return state;
 };
 

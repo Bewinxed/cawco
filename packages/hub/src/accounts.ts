@@ -23,10 +23,10 @@ import type { DbShape } from "./db";
  * and what its sessions' Claude Code says about its limits.
  */
 
-/** Asks a machine's Claude harness for one dir's initialize response; undefined when it could not say. */
+/** Asks a machine's Claude harness for one account dir's initialize response; undefined when it could not say. */
 export type AccountProber = (
   machineId: string,
-  account: string | null
+  account: string
 ) => Promise<AccountProbe | undefined>;
 
 /** Keeps what a probe or a session's initialize said about an account. */
@@ -55,52 +55,19 @@ interface Squared {
 }
 
 /**
- * The machine's own `~/.claude` login is `identity`, as its `auth status` or a
- * session's initialize response just said: it is the account of that
- * identity, made now when the hub has none, and it is the only account home
- * on the machine. Machines signed in as the same email and organization share
- * one account; a different identity is another, whichever machine registers
- * first. The account lives in `~/.claude` on that machine (`home`); no
- * credential moves. The limit history read from that login before accounts
- * moves to it, the account of the identity the login answers as.
+ * The account of `identity`: the one already signed in as it, else one made
+ * now with no nickname (it goes by its email). Machines signed in as the
+ * same email and organization share one account.
  */
-export const homeIs = (
+export const accountOfIdentity = (
   db: DbShape,
-  machineId: string,
   identity: AccountIdentity,
   kind: AccountKind
-): { account: Account; changed: boolean } => {
-  const store = db.accounts;
-  let changed = false;
-  let account = store
+): Account =>
+  db.accounts
     .list()
-    .find((one) => one.identity && sameIdentity(one.identity, identity));
-  if (!account) {
-    // No nickname: it goes by the email it is signed in as.
-    account = store.create({ provider: "anthropic", kind, identity });
-    changed = true;
-  }
-  for (const signin of store.signins()) {
-    if (
-      signin.machineId === machineId &&
-      signin.home &&
-      signin.accountId !== account.id
-    ) {
-      // `~/.claude` is someone else now: the account it held is not signed
-      // in on this machine any more.
-      changed = store.removeSignin(signin.accountId, machineId) || changed;
-    }
-  }
-  changed =
-    store.putSignin({
-      accountId: account.id,
-      machineId,
-      state: "signed-in",
-      home: true,
-    }) || changed;
-  changed = store.adoptMachineHistory(machineId, account.id) > 0 || changed;
-  return { account, changed };
-};
+    .find((one) => one.identity && sameIdentity(one.identity, identity)) ??
+  db.accounts.create({ provider: "anthropic", kind, identity });
 
 /**
  * The account's models, read through a probe of its dir on the machine when
@@ -110,14 +77,13 @@ export const homeIs = (
 const catalogFor = async (
   db: DbShape,
   machineId: string,
-  dir: string | null,
   account: Account,
   probe: AccountProber
 ): Promise<boolean> => {
   if (db.accounts.catalogs().some((one) => one.accountId === account.id)) {
     return true;
   }
-  const read = await probe(machineId, dir);
+  const read = await probe(machineId, account.id);
   if (!read) {
     return false;
   }
@@ -129,40 +95,6 @@ const catalogFor = async (
     keepProbe(db, account.id, read);
   }
   return true;
-};
-
-/**
- * The machine's own `~/.claude` login, as its `auth status` read it for the
- * machine's latest report: signed in as someone, it is that identity's account
- * ({@link homeIs}); signed out, the account it held is signed out there.
- * Signed in as nobody the hub can name (an API key, a third-party provider),
- * it is no account.
- */
-const squareHome = async (
-  db: DbShape,
-  machineId: string,
-  home: ClaudeAccountReport,
-  probe: AccountProber
-): Promise<Squared> => {
-  const store = db.accounts;
-  if (!(home.loggedIn && home.identity)) {
-    let changed = false;
-    for (const signin of store.signins()) {
-      if (signin.machineId === machineId && signin.home) {
-        changed =
-          store.putSignin({ ...signin, state: "signed-out" }) || changed;
-      }
-    }
-    return { changed, failed: false };
-  }
-  const { account, changed } = homeIs(
-    db,
-    machineId,
-    home.identity,
-    home.kind ?? "subscription"
-  );
-  const read = await catalogFor(db, machineId, null, account, probe);
-  return { changed, failed: !read };
 };
 
 /**
@@ -189,9 +121,9 @@ const dirState = (
 
 /**
  * Squares the account sign-ins on `machineId` with what its agent just read
- * from every Claude Code config dir there: who each dir is signed in as
- * decides its sign-in, every time. True when anything changed; `failed` when
- * a catalog probe it needed could not be read, which the caller retries.
+ * from every account dir there: who each dir is signed in as decides its
+ * sign-in, every time. True when anything changed; `failed` when a catalog
+ * probe it needed could not be read, which the caller retries.
  */
 export const reconcileAccounts = async (
   db: DbShape,
@@ -201,29 +133,21 @@ export const reconcileAccounts = async (
 ): Promise<Squared> => {
   const store = db.accounts;
   const mine = store.signins().filter((one) => one.machineId === machineId);
-  const home = reports.find((report) => report.account === null);
-  const squared = home
-    ? await squareHome(db, machineId, home, probe)
-    : { changed: false, failed: false };
-  let { changed, failed } = squared;
+  let changed = false;
+  let failed = false;
 
   for (const report of reports) {
-    const found = report.account ? store.get(report.account) : undefined;
+    const found = store.get(report.account);
     if (!found) {
       continue;
     }
     const state = dirState(db, found, report);
     const account = store.get(found.id) ?? found;
     changed =
-      store.putSignin({
-        accountId: account.id,
-        machineId,
-        state,
-        home: false,
-      }) || changed;
+      store.putSignin({ accountId: account.id, machineId, state }) || changed;
     if (state === "signed-in") {
       // biome-ignore lint/performance/noAwaitInLoops: one dir's Claude Code at a time on the machine
-      const read = await catalogFor(db, machineId, account.id, account, probe);
+      const read = await catalogFor(db, machineId, account, probe);
       failed = failed || !read;
     }
   }
@@ -231,7 +155,6 @@ export const reconcileAccounts = async (
   // An account dir the machine no longer has is an account it is not signed in to.
   for (const signin of mine) {
     const gone =
-      !signin.home &&
       signin.state !== "signed-out" &&
       !reports.some((report) => report.account === signin.accountId);
     if (gone) {
@@ -316,18 +239,16 @@ export const limitsOf = (
 
 /**
  * The account that speaks for a machine where a screen shows one Claude
- * reading per machine, out of sign-ins already read: its `~/.claude` login,
- * else the first account signed in there.
+ * reading per machine, out of sign-ins already read: the first account
+ * signed in there.
  */
 const speakerAmong = (
   signins: readonly AccountSignin[],
   machineId: string
-): string | undefined => {
-  const signed = signins.filter(
+): string | undefined =>
+  signins.find(
     (one) => one.machineId === machineId && one.state === "signed-in"
-  );
-  return (signed.find((one) => one.home) ?? signed[0])?.accountId;
-};
+  )?.accountId;
 
 /** {@link speakerAmong}, reading the sign-ins for one machine's answer. */
 export const machineAccount = (
@@ -354,9 +275,9 @@ const accountsView = (db: DbShape) => {
   const readings = new Map(
     db.accounts.readings().map((reading) => [reading.accountId, reading])
   );
-  /** The account a Claude session runs on: its own, else its machine's. */
+  /** The account a Claude session runs on; none for one that runs on no CawCo account. */
   const accountOf = (row: SessionOnAccount): string | undefined =>
-    row.accountId ?? speakerAmong(signins, row.machineId);
+    row.accountId ?? undefined;
   const watched = new Set(
     db.runningClaudeSessions().flatMap((row) => {
       const id = accountOf(row);

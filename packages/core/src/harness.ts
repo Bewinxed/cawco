@@ -284,11 +284,12 @@ export type PermissionUpdate =
     };
 
 /**
- * Whether a machine's daemon can actually start sessions for a harness.
- * `unreadable-credentials` is macOS's own failure: Claude Code keeps its
- * credentials in the login keychain, and a daemon outside the GUI session is
- * refused the secret (`errSecInteractionNotAllowed`). Generalized: every
- * harness reports its own auth word through the same three states.
+ * Whether a machine's daemon can actually start sessions for a harness. For
+ * Claude: whether any CawCo account is signed in on the machine.
+ * `unreadable-credentials` is macOS's own failure: Claude Code keeps an
+ * account's credentials in the login keychain, and a daemon outside the GUI
+ * session is refused the secret (`errSecInteractionNotAllowed`). Generalized:
+ * every harness reports its own auth word through the same three states.
  */
 export type AuthState =
   | "authenticated"
@@ -952,10 +953,10 @@ export interface HarnessCapabilities {
 /** What a machine knows about one harness: is it installed, can it work, what can it do. */
 export interface HarnessReport {
   /**
-   * Claude only: every Claude Code config dir on the machine and what
-   * `claude auth status` said of it — `~/.claude` (`account: null`) and each
-   * account's `~/.cawco/accounts/<id>/claude`. The hub reads it as where each
-   * account is signed in.
+   * Claude only: every account's config dir on the machine
+   * (`~/.cawco/accounts/<id>/claude`) and what `claude auth status` said of
+   * it there. The hub reads it as where each account is signed in. The
+   * machine's own `~/.claude` is never read.
    */
   accounts?: import("./accounts").ClaudeAccountReport[];
   auth: AuthState;

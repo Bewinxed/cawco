@@ -64,7 +64,9 @@ import {
   CONTROL_BEGIN_ACCOUNT_LOGIN,
   CONTROL_COMPLETE_ACCOUNT_LOGIN,
   CONTROL_FORGET_ACCOUNT,
+  CONTROL_MOVE_HOME_LOGIN,
   CONTROL_PROBE_ACCOUNT,
+  CONTROL_READ_HOME_LOGIN,
   CONTROL_READ_SESSION_CONTEXT,
   CONTROL_SET_EFFORT,
   CONTROL_SET_MODEL,
@@ -86,16 +88,16 @@ import {
   VERIFY_SESSION_CREDENTIAL,
 } from "@cawco/core";
 import { LineSplitter } from "@cawco/core/lines";
-import {
-  accountConfigDir,
-  claudeConfigDirs,
-  homeConfigDir,
-} from "@cawco/core/paths";
+import { accountConfigDir, claudeConfigDirs } from "@cawco/core/paths";
 import { sessiondEndpoint } from "@cawco/core/sessiond";
-import { accountEnv, accountReports, probeAccount } from "../accounts";
+import {
+  accountEnv,
+  accountReports,
+  claudeAuth,
+  probeAccount,
+} from "../accounts";
 import {
   claudeExecutableOptions,
-  probeAuth,
   resolveClaudeExecutable,
   unlockKeychain,
 } from "../auth";
@@ -131,11 +133,10 @@ import {
 } from "../harness";
 import {
   beginAccountLogin,
-  beginLogin,
   completeAccountLogin,
-  completeLogin,
   forgetAccount,
 } from "../login";
+import { moveHomeLogin, readHomeLogin } from "../move-login";
 import { parseProcId, procIdFor } from "../proc-id";
 // Type-only, and deliberately so: `session.ts` imports the harness registry
 // this file is part of, so a value import here would close a module cycle.
@@ -2231,13 +2232,14 @@ export class ClaudeHarness implements Harness {
   auth: AuthState = "authenticated";
 
   /**
-   * The machine's Claude Code: installed or not, whether `~/.claude` is
-   * signed in, and every account dir's sign-in. No model catalog: that is
-   * each account's, which its sessions' initialize responses report and the
-   * hub keeps.
+   * The machine's Claude Code: installed or not, and every account dir's
+   * sign-in, which is also the machine's word on Claude (signed in when any
+   * account is). No model catalog: that is each account's, which its
+   * sessions' initialize responses report and the hub keeps.
    */
   async detect(): Promise<HarnessReport> {
-    const [auth, accounts] = await Promise.all([probeAuth(), accountReports()]);
+    const accounts = await accountReports();
+    const auth = await claudeAuth(accounts);
     this.auth = auth;
     return {
       harness: "claude",
@@ -2286,25 +2288,28 @@ export class ClaudeHarness implements Harness {
     // surviving child to the row it belongs to.
     const client = await this.sessiond();
     // The session's account: its Claude Code runs in that account's config
-    // dir, where its credential and transcripts are. The machine's own
-    // `~/.claude` needs nothing set.
-    const account =
-      spec.accountDir && !spec.accountDir.home
-        ? spec.accountDir.accountId
-        : null;
+    // dir, where its credential and transcripts are, and never in the
+    // machine's own `~/.claude`.
+    if (!spec.accountDir) {
+      throw new Error(
+        "This Claude session has no account to run on. Add one in Configure → Accounts and sign it in on this machine."
+      );
+    }
+    const account = spec.accountDir.accountId;
     if (spec.resume) {
       const file = await claudeSessionFile(spec.resume.sessionKey, ctx.cwd);
       if (!file) {
         throw new Error(CLAUDE_CONVERSATION_GONE);
       }
-      // A conversation resumed on another account (its old one reached its
-      // limit) goes on in that account's dir. A fork reads its origin's
-      // where it is: it runs on its origin's account.
+      // A conversation resumed in another dir (its old account reached its
+      // limit, or it ran in `~/.claude` before accounts) goes on in its
+      // account's dir. A fork reads its origin's where it is: it runs on its
+      // origin's account.
       if (!spec.resume.fork) {
         await carryConversation(
           file,
           spec.resume.sessionKey,
-          account ? accountConfigDir(account) : homeConfigDir()
+          accountConfigDir(account)
         );
       }
     }
@@ -2316,9 +2321,7 @@ export class ClaudeHarness implements Harness {
       ctx.instanceId,
       ctx,
       ctx.cwd,
-      account
-        ? { ...options, env: { ...options?.env, ...accountEnv(account) } }
-        : spec.options,
+      { ...options, env: { ...options?.env, ...accountEnv(account) } },
       spec.permissionMode,
       spec.model,
       spec.effort,
@@ -2657,10 +2660,6 @@ export class ClaudeHarness implements Harness {
         return readSkillFiles(args[0] as string, args[1] as string | undefined);
       case INSPECT_CONFIG:
         return inspectConfig(args[0] as string | undefined);
-      case "beginLogin":
-        return beginLogin();
-      case "completeLogin":
-        return completeLogin(args[0] as string);
       case CONTROL_BEGIN_ACCOUNT_LOGIN:
         return beginAccountLogin(args[0] as string, args[1] as AccountKind);
       case CONTROL_COMPLETE_ACCOUNT_LOGIN:
@@ -2675,11 +2674,16 @@ export class ClaudeHarness implements Harness {
         await forgetAccount(args[0] as string);
         return { forgotten: true };
       case CONTROL_PROBE_ACCOUNT:
-        return probeAccount((args[0] as string | null) ?? null);
-      case "unlockKeychain":
-        return unlockKeychain(args[0] as string);
-      case "probeAuth":
-        return probeAuth();
+        return probeAccount(args[0] as string);
+      case CONTROL_READ_HOME_LOGIN:
+        return readHomeLogin();
+      case CONTROL_MOVE_HOME_LOGIN:
+        return moveHomeLogin(args[0] as string, args[1] as AccountIdentity);
+      case "unlockKeychain": {
+        await unlockKeychain(args[0] as string);
+        this.auth = await claudeAuth(await accountReports());
+        return this.auth;
+      }
       default:
         return undefined;
     }

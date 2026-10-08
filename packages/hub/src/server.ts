@@ -106,7 +106,9 @@ import {
   CONTROL_INTERRUPT,
   CONTROL_LIST_SESSIONS,
   CONTROL_MODEL_CATALOG,
+  CONTROL_MOVE_HOME_LOGIN,
   CONTROL_PROBE_ACCOUNT,
+  CONTROL_READ_HOME_LOGIN,
   CONTROL_READ_SESSION_CONTEXT,
   CONTROL_REFRESH_CAWCO_TOOLS,
   CONTROL_RELOAD_SKILLS,
@@ -128,6 +130,8 @@ import {
   GENERATE_IMAGE,
   HARNESSES,
   HOOK_TEMPLATES,
+  type HomeLogin,
+  type HomeLoginMoved,
   hookProblem,
   IMAGE_GENERATION_TIMEOUT_MS,
   INSPECT_CONFIG,
@@ -189,7 +193,7 @@ import { Elysia, t, ValidationError } from "elysia";
 import { websocket } from "elysia/websocket";
 import {
   type AccountProber,
-  homeIs,
+  accountOfIdentity,
   keepProbe,
   machineAccount,
   machineReadings,
@@ -273,7 +277,11 @@ import {
   onWorkflowAnswer,
   workflowRunOf,
 } from "./pending";
-import { type PlacementInput, place as placeAccount } from "./placement";
+import {
+  noAccountRefusal,
+  type PlacementInput,
+  place as placeAccount,
+} from "./placement";
 import { createPlans, planRoutes } from "./plans";
 import {
   isHubDirectory,
@@ -2039,8 +2047,7 @@ export const createServer = (
       // Its account may have been signed out there while the machine updated.
       const [stored] = db.getInstancesByIds([owed.id]);
       const refused =
-        stored &&
-        accountStartRefusal(machineId, stored.accountId, sessionName(stored));
+        stored && accountStartRefusal(machineId, stored, sessionName(stored));
       if (refused) {
         console.warn(`[hub] not starting ${owed.id}: ${refused}`);
         db.failInstance(owed.id, refused);
@@ -2125,20 +2132,77 @@ export const createServer = (
       row.status === "error" ||
       row.status === "stopped");
   /**
-   * Why a session on `accountId` can't be launched on `machineId`: the
-   * account has no signed-in sign-in there, so the dir its Claude Code would
-   * run in, with that account's login, is not there to run in. Nothing moves
-   * it to another account on its own. Undefined when it can be launched, and
-   * for a session on the machine's own login (no account). Every launch asks
-   * this before its row opens, and {@link bounded} refuses any that did not.
+   * The account a session launches on, on `machineId`, or why it can't
+   * launch there. A Claude session always runs in its account's own dir and
+   * never in the machine's `~/.claude`: one whose account has no signed-in
+   * sign-in there is refused (nothing moves it to another account on its
+   * own), and so is one with no account at all once placement finds none. A
+   * Claude row with no account (it ran in `~/.claude` before accounts) is
+   * placed now, like a new session, and its row names that account from here
+   * on; the machine carries its conversation into the account's dir. Other
+   * harnesses run on no account. Every launch asks this before its row
+   * opens, and {@link bounded} refuses any that did not.
    */
-  const accountStartRefusal = (
+  /**
+   * A Claude row with no account, placed now like a new session: its row
+   * names the account from here on. Nothing when placement finds none.
+   */
+  const claimAccount = (
     machineId: string,
-    accountId: string | null | undefined,
+    row: { id: string; model?: string | null; projectId?: string | null }
+  ): { accountId?: string } | { refusal: string } => {
+    const input = placementInput(
+      machineId,
+      {
+        instanceId: row.id,
+        cwd: "",
+        harness: "claude",
+        ...(row.model ? { model: row.model } : {}),
+      },
+      { projectId: row.projectId },
+      undefined
+    );
+    const placed = input ? placeAccount(input) : undefined;
+    if (!placed?.ok) {
+      return placed ? { refusal: placed.refusal } : {};
+    }
+    const { accountId } = placed;
+    if (!accountId) {
+      return {};
+    }
+    db.patchInstance(row.id, { accountId });
+    console.log(
+      `[hub] ${row.id} ran on no account; it runs on ${accountId} from now on (${placed.why})`
+    );
+    return { accountId };
+  };
+  const launchAccount = (
+    machineId: string,
+    row: {
+      accountId?: string | null;
+      harness?: string | null;
+      id?: string;
+      model?: string | null;
+      projectId?: string | null;
+    },
     session: string
-  ): string | undefined => {
+  ): { accountId?: string } | { refusal: string } => {
+    if (!providerOf(row.harness ?? "claude")) {
+      return {};
+    }
+    const machine = machineName(machineId);
+    const claimed =
+      row.accountId || !row.id
+        ? { accountId: row.accountId ?? undefined }
+        : claimAccount(machineId, { ...row, id: row.id });
+    if ("refusal" in claimed) {
+      return claimed;
+    }
+    const { accountId } = claimed;
+    if (!accountId) {
+      return { refusal: noAccountRefusal(machine) };
+    }
     if (
-      !accountId ||
       db.accounts
         .signins()
         .some(
@@ -2148,15 +2212,42 @@ export const createServer = (
             one.state === "signed-in"
         )
     ) {
-      return undefined;
+      return { accountId };
     }
     const account = db.accounts.get(accountId);
     const named = account ? accountName(account) : accountId;
-    const machine = machineName(machineId);
-    return `${named} isn't signed in on ${machine}, so ${session} can't run there. Sign ${named} in on ${machine} in Configure → Accounts, or continue the session on another account.`;
+    return {
+      refusal: `${named} isn't signed in on ${machine}, so ${session} can't run there. Sign ${named} in on ${machine} in Configure → Accounts, or continue the session on another account.`,
+    };
   };
   /**
-   * One config dir's initialize response, read on its machine by a session
+   * The machines whose own Claude Code login is moving into CawCo now
+   * (`POST /api/accounts/move-login`), with the account it moves into. While
+   * one is, its Claude sessions are put to sleep as each comes to rest, a
+   * send to one waits instead of waking it, and the move itself runs once
+   * none is left running.
+   */
+  const movingLogins = new Map<
+    string,
+    {
+      accountId: string;
+      identity: AccountIdentity;
+      /** The machine is moving it now. */
+      running?: true;
+      since: number;
+    }
+  >();
+  /** {@link launchAccount}'s refusal, or undefined when the session can launch. */
+  const accountStartRefusal = (
+    machineId: string,
+    row: Parameters<typeof launchAccount>[1],
+    session: string
+  ): string | undefined => {
+    const launch = launchAccount(machineId, row, session);
+    return "refusal" in launch ? launch.refusal : undefined;
+  };
+  /**
+   * One account dir's initialize response, read on its machine by a session
    * that never takes a turn. Undefined, and said in the log, when it could
    * not be read.
    */
@@ -2170,7 +2261,7 @@ export const createServer = (
     );
     if (answer === "offline" || answer === "timeout" || !answer.ok) {
       console.warn(
-        `[hub] account probe on ${machineName(machineId)} (${account ?? "~/.claude"}) failed: ${typeof answer === "string" ? answer : answer.error}`
+        `[hub] account probe on ${machineName(machineId)} (${account}) failed: ${typeof answer === "string" ? answer : answer.error}`
       );
       return;
     }
@@ -2226,22 +2317,6 @@ export const createServer = (
       })
       .catch(console.error);
   };
-  /**
-   * A session just heard `~/.claude` on the machine answer as `identity`:
-   * the machine's last report says so from now on, so a retry of its
-   * reconcile squares the home with who it is now, not who it was at connect.
-   */
-  const heardHome = (machineId: string, identity: AccountIdentity): void => {
-    const sync = accountSyncs.get(machineId);
-    if (sync) {
-      sync.reports = sync.reports.map((report) =>
-        report.account === null
-          ? { ...report, loggedIn: true, identity }
-          : report
-      );
-    }
-  };
-
   /** Every screen's limits and spend, said again after a reading or a sign-in moved. */
   const publishUsage = (machineId = ""): void => {
     registry.broadcast({
@@ -2281,12 +2356,10 @@ export const createServer = (
     }
     // A send to a session whose process is gone wakes it ({@link wakeForSend});
     // one whose account can't run on its machine is not woken, and says why.
-    if (row && wakesForSend(row)) {
-      const refused = accountStartRefusal(
-        row.machineId,
-        row.accountId,
-        sessionName(row)
-      );
+    // While its machine's login moves into CawCo the send waits: the move
+    // wakes it once the account is signed in there.
+    if (row && wakesForSend(row) && !movingLogins.has(row.machineId)) {
+      const refused = accountStartRefusal(row.machineId, row, sessionName(row));
       if (refused) {
         return refused;
       }
@@ -3447,31 +3520,23 @@ export const createServer = (
   /**
    * The session's account, every time it is launched: its Claude Code runs
    * in that account's config dir on the machine, where its transcript and
-   * its credential are. Every launch asked {@link accountStartRefusal}
-   * before its row opened; one that did not is refused here rather than run
-   * in a dir the machine lacks. A reattach launches nothing: its process
-   * already runs where it runs.
+   * its credential are. Every launch asked {@link launchAccount} before its
+   * row opened; one that did not is refused here rather than run anywhere
+   * else. A reattach launches nothing: its process already runs where it
+   * runs.
    */
   const accountDirOf = (
     row: ReturnType<typeof db.getInstancesByIds>[number],
     reattachOnly: SpawnPayload["reattachOnly"]
   ): SpawnPayload["accountDir"] => {
-    const { accountId, machineId } = row;
-    if (!accountId) {
-      return undefined;
+    if (reattachOnly) {
+      return row.accountId ? { accountId: row.accountId } : undefined;
     }
-    const refused = reattachOnly
-      ? undefined
-      : accountStartRefusal(machineId, accountId, sessionName(row));
-    if (refused) {
-      throw new WorkItemRefusal(409, refused);
+    const launch = launchAccount(row.machineId, row, sessionName(row));
+    if ("refusal" in launch) {
+      throw new WorkItemRefusal(409, launch.refusal);
     }
-    const signin = db.accounts
-      .signins()
-      .find(
-        (one) => one.accountId === accountId && one.machineId === machineId
-      );
-    return { accountId, home: signin?.home ?? false };
+    return launch.accountId ? { accountId: launch.accountId } : undefined;
   };
   /**
    * A fork reads its origin's cache: it never moves to another account on
@@ -3672,14 +3737,23 @@ export const createServer = (
     crossed = false
   ): void => {
     const [row] = db.getInstancesByIds([instanceId]);
-    if (row?.sessionId && wakesForSend(row)) {
-      resumeSpawn(
-        agent,
-        machineId,
-        { ...row, sessionId: row.sessionId },
-        crossed
-      );
+    if (!(row?.sessionId && wakesForSend(row))) {
+      return;
     }
+    // Its machine's own login is moving into CawCo: what it was sent waits,
+    // and the move wakes it once the account is signed in there.
+    if (movingLogins.has(machineId) && providerOf(row.harness ?? "claude")) {
+      console.log(
+        `[hub] not waking ${instanceId} yet: ${machineName(machineId)}'s login is moving into CawCo`
+      );
+      return;
+    }
+    resumeSpawn(
+      agent,
+      machineId,
+      { ...row, sessionId: row.sessionId },
+      crossed
+    );
   };
 
   /**
@@ -3702,7 +3776,7 @@ export const createServer = (
     const instanceId = row.id;
     const refused =
       launchRefusal(instanceId) ??
-      accountStartRefusal(machineId, row.accountId, sessionName(row));
+      accountStartRefusal(machineId, row, sessionName(row));
     if (refused) {
       // Nothing it was sent will be read by a process that does not start.
       console.warn(`[hub] not waking ${instanceId}: ${refused}`);
@@ -3800,7 +3874,8 @@ export const createServer = (
    * keep-alive reached its cap, sleeps like any other.
    */
   const keptWarm = (machineId: string, ids: string[]): string[] => {
-    if (ids.length === 0) {
+    // A machine whose login is moving puts its sessions to sleep at rest.
+    if (ids.length === 0 || movingLogins.has(machineId)) {
       return [];
     }
     const now = Date.now();
@@ -3850,6 +3925,141 @@ export const createServer = (
       undefined,
       row.id
     );
+  };
+
+  /** How long a machine gets to move its login: two `claude auth status` runs and the store's own tool. */
+  const MOVE_TIMEOUT_MS = 120_000;
+  /** How often a moving machine's sessions are asked to sleep, and the move tried. */
+  const MOVE_TICK_MS = 5000;
+  /** What the last move on each machine came to, for `GET /api/accounts/move-login`. */
+  const moveResults = new Map<
+    string,
+    { accountId: string; at: number; error?: string; store?: string }
+  >();
+  let moveTicker: ReturnType<typeof setInterval> | undefined;
+
+  /**
+   * One step of a machine's login move ({@link movingLogins}). While any of
+   * its Claude sessions still runs, each is asked to sleep, which its
+   * machine does only once it is at rest (no turn, no ask, no subagent
+   * running): a running Claude Code re-reads its credential store before
+   * each request, so the login must not leave `~/.claude` under a turn.
+   * With none running, the machine moves the login; the account's sign-in
+   * there is recorded as moved, and every session with a send waiting is
+   * woken into the account's dir. A move that fails is said in the log and
+   * in its result, and the original login is as it was.
+   */
+  /** The machine's Claude sessions whose process still runs. */
+  const liveClaude = (machineId: string) =>
+    db
+      .listInstances()
+      .filter(
+        (row) =>
+          row.machineId === machineId &&
+          providerOf(row.harness ?? "claude") &&
+          (row.status === "running" || row.status === "starting")
+      );
+
+  /** What one move came to: the sign-in recorded as moved, or why not. */
+  const settleMove = (
+    machineId: string,
+    move: { accountId: string; identity: AccountIdentity },
+    answer: Awaited<ReturnType<typeof callAgent>>
+  ): void => {
+    const at = Date.now();
+    const machine = machineName(machineId);
+    if (answer === "offline" || answer === "timeout") {
+      const error = `${machine} is ${answer === "offline" ? "not connected" : "not answering"}; nothing was moved there.`;
+      moveResults.set(machineId, { accountId: move.accountId, at, error });
+      console.warn(`[hub] moving ${machine}'s login failed: ${error}`);
+      return;
+    }
+    if (!answer.ok) {
+      const error = answer.error ?? "The move did not finish.";
+      moveResults.set(machineId, { accountId: move.accountId, at, error });
+      console.warn(`[hub] moving ${machine}'s login failed: ${error}`);
+      return;
+    }
+    const { store } = answer.result as HomeLoginMoved;
+    db.accounts.putSignin({
+      accountId: move.accountId,
+      machineId,
+      state: "signed-in",
+      movedAt: at,
+    });
+    moveResults.set(machineId, { accountId: move.accountId, at, store });
+    console.log(
+      `[hub] moved ${machine}'s Claude Code login (${move.identity.email}) into account ${move.accountId}, kept in ${store}`
+    );
+    publishUsage(machineId);
+  };
+
+  /**
+   * What waited for a machine's move is woken: into the account's dir, or,
+   * the move having failed, refused with why.
+   */
+  const wakeAfterMove = (machineId: string): void => {
+    const agent = registry.agent(machineId);
+    if (!agent) {
+      return;
+    }
+    for (const row of db.listInstances()) {
+      const waiting =
+        row.machineId === machineId &&
+        wakesForSend(row) &&
+        db.sendsIn(row.id, ["pending"]).some((send) => !isKeepAlive(send.body));
+      if (waiting) {
+        wakeForSend(agent, machineId, row.id, true);
+      }
+    }
+  };
+
+  const advanceMove = async (machineId: string): Promise<void> => {
+    const move = movingLogins.get(machineId);
+    if (!move || move.running) {
+      return;
+    }
+    const live = liveClaude(machineId);
+    for (const row of live) {
+      // biome-ignore lint/complexity/noVoid: the machine's `asleep` frame files the row; a refusal is a session not at rest yet, asked again next tick
+      void callAgent(
+        machineId,
+        CONTROL_SLEEP,
+        [],
+        SLEEP_TIMEOUT_MS,
+        undefined,
+        row.id
+      );
+    }
+    if (live.length > 0) {
+      return;
+    }
+    move.running = true;
+    const answer = await callAgent(
+      machineId,
+      CONTROL_MOVE_HOME_LOGIN,
+      [move.accountId, move.identity],
+      MOVE_TIMEOUT_MS,
+      "claude"
+    );
+    movingLogins.delete(machineId);
+    settleMove(machineId, move, answer);
+    wakeAfterMove(machineId);
+    publishInstances(machineId);
+    if (movingLogins.size === 0 && moveTicker) {
+      clearInterval(moveTicker);
+      moveTicker = undefined;
+    }
+  };
+
+  /** Starts the ticks that carry every moving machine's login move along. */
+  const tickMoves = (): void => {
+    moveTicker ??= setInterval(() => {
+      for (const machineId of movingLogins.keys()) {
+        advanceMove(machineId).catch(console.error);
+      }
+    }, MOVE_TICK_MS);
+    moveTicker.unref?.();
   };
 
   /**
@@ -4909,7 +5119,8 @@ export const createServer = (
    * The account a spawn already has, so nothing is placed: its row's (an
    * account is for the session's whole life), or, for a resumed conversation,
    * the account of the row it was stored under (its transcript is there).
-   * Undefined for a session to place: a new one, or a fork.
+   * Undefined for a session to place: a new one, a fork, or a conversation
+   * that ran on no account (the machine carries it into the placed one's dir).
    */
   const accountHeld = (
     payload: SpawnPayload
@@ -4923,7 +5134,7 @@ export const createServer = (
       return undefined;
     }
     const origin = db.instanceBySessionId(resume.sessionKey);
-    return origin?.accountId ? { accountId: origin.accountId } : {};
+    return origin?.accountId ? { accountId: origin.accountId } : undefined;
   };
 
   /**
@@ -4953,7 +5164,7 @@ export const createServer = (
       const [row] = db.getInstancesByIds([payload.instanceId]);
       const refusal = accountStartRefusal(
         machineId,
-        chosen.accountId,
+        { accountId: chosen.accountId, harness: payload.harness },
         row ? sessionName(row) : payload.title || "this session"
       );
       return refusal ? { refusal } : chosen;
@@ -4968,7 +5179,7 @@ export const createServer = (
       machineId,
       payload,
       { projectId: item?.projectId, taskId: item?.taskId },
-      resume
+      resume?.fork
         ? {
             accountId:
               db.instanceBySessionId(resume.sessionKey)?.accountId ?? null,
@@ -6968,11 +7179,7 @@ export const createServer = (
       forgetPending(row.id, refusal);
       console.warn(`[hub] not restoring ${row.id}: ${refusal}`);
     };
-    const unsigned = accountStartRefusal(
-      row.machineId,
-      row.accountId,
-      sessionName(row)
-    );
+    const unsigned = accountStartRefusal(row.machineId, row, sessionName(row));
     if (unsigned) {
       refuse(unsigned);
       return;
@@ -10030,7 +10237,7 @@ export const createServer = (
     kept: KeptSummary | undefined,
     keepUntil: number
   ): Promise<void> => {
-    const fromAccountId = row.accountId ?? machineAccount(db, row.machineId);
+    const fromAccountId = row.accountId;
     if (!fromAccountId) {
       return;
     }
@@ -10101,7 +10308,7 @@ export const createServer = (
 
   const atLimit = createAtLimit({
     db,
-    accountOf: (row) => row.accountId ?? machineAccount(db, row.machineId),
+    accountOf: (row) => row.accountId ?? undefined,
     continuing: (row) =>
       db
         .continuationRows()
@@ -13437,13 +13644,6 @@ export const createServer = (
         const signins = db.accounts
           .signins()
           .filter((one) => one.accountId === account.id);
-        const home = signins.find((one) => one.home);
-        if (home) {
-          return status(
-            409,
-            `${accountName(account)} is the machine's own Claude Code login on ${machineName(home.machineId)}; sign it out there with \`claude auth logout\`, and the account goes with it.`
-          );
-        }
         const live = db
           .listInstances()
           .filter(
@@ -13664,7 +13864,6 @@ export const createServer = (
               accountId: account.id,
               machineId: params.machineId,
               state: "signed-out",
-              home: false,
             });
             publishUsage(params.machineId);
           }
@@ -13717,16 +13916,111 @@ export const createServer = (
             }
             keepProbe(db, account.id, result.probe);
           }
+          // Signed in here through CawCo: no longer the login that was moved.
           db.accounts.putSignin({
             accountId: account.id,
             machineId: params.machineId,
             state: result.state,
-            home: false,
+            movedAt: null,
           });
           publishUsage(params.machineId);
           return result;
         }
       )
+      // Moves a machine's own Claude Code login into CawCo, once: into the
+      // account of the identity it is signed in as (made now when there is
+      // none), in that account's dir on the machine, so it works in CawCo
+      // without a second sign-in. The machine's Claude sessions are put to
+      // sleep as each comes to rest, then the machine moves the login; the
+      // answer says how many it waits for, and GET says how it came out.
+      .post(
+        "/api/accounts/move-login",
+        { body: t.Object({ machineId: t.String() }) },
+        async ({ body, status }) => {
+          const { machineId } = body;
+          const machine = machineName(machineId);
+          if (movingLogins.has(machineId)) {
+            return status(
+              409,
+              `${machine}'s login is already moving into CawCo.`
+            );
+          }
+          const read = await callAgent(
+            machineId,
+            CONTROL_READ_HOME_LOGIN,
+            [],
+            SIGNIN_TIMEOUT_MS,
+            "claude"
+          );
+          if (read === "offline" || read === "timeout") {
+            return status(
+              503,
+              `${machine} is ${read === "offline" ? "not connected" : "not answering"}.`
+            );
+          }
+          if (!read.ok) {
+            return status(
+              422,
+              read.error ?? `${machine} could not say who it is signed in as.`
+            );
+          }
+          const home = read.result as HomeLogin;
+          if (!(home.loggedIn && home.identity)) {
+            return status(
+              409,
+              `Claude Code on ${machine} isn't signed in, so there is no login to move.`
+            );
+          }
+          const account = accountOfIdentity(
+            db,
+            home.identity,
+            home.kind ?? "subscription"
+          );
+          if (
+            db.accounts
+              .signins()
+              .some(
+                (one) =>
+                  one.accountId === account.id &&
+                  one.machineId === machineId &&
+                  one.state === "signed-in"
+              )
+          ) {
+            return status(
+              409,
+              `${accountName(account)} is already signed in on ${machine} in CawCo; nothing was moved.`
+            );
+          }
+          movingLogins.set(machineId, {
+            accountId: account.id,
+            identity: home.identity,
+            since: Date.now(),
+          });
+          moveResults.delete(machineId);
+          tickMoves();
+          const waitingFor = liveClaude(machineId).length;
+          console.log(
+            `[hub] moving ${machine}'s Claude Code login (${home.identity.email}) into account ${account.id}; waiting for ${waitingFor} session(s) to come to rest`
+          );
+          await advanceMove(machineId);
+          return status(202, {
+            accountId: account.id,
+            email: home.identity.email,
+            waitingFor,
+          });
+        }
+      )
+      .get("/api/accounts/move-login", () => ({
+        moving: [...movingLogins].map(([machineId, move]) => ({
+          machineId,
+          accountId: move.accountId,
+          since: move.since,
+        })),
+        done: [...moveResults].map(([machineId, result]) => ({
+          machineId,
+          ...result,
+        })),
+      }))
       // ── Usage (USAGE-SPEC.md §6) ─────────────────────────────────────────────
       // The heavy data lives behind these reads; the socket only carries the small
       // limits frame, so the dashboard pulls aggregates when it needs them.
@@ -14751,8 +15045,7 @@ export const createServer = (
                   // model runs at by default on its account.
                   if (effortUnasked.delete(message.instanceId)) {
                     const [row] = db.getInstancesByIds([message.instanceId]);
-                    const accountId =
-                      row?.accountId ?? machineAccount(db, message.machineId);
+                    const accountId = row?.accountId;
                     if (accountId && row?.model) {
                       db.accounts.putDefaultEffort(accountId, row.model, level);
                     }
@@ -14762,18 +15055,18 @@ export const createServer = (
                 // What the session's Claude Code reported about its account:
                 // its limits, from each `rate_limit_event`, and its plan, once
                 // per start. The account's reading, and no screen's line. A
-                // session runs in its account's own dir on the machine, which
-                // the machine reports as that account's sign-in there, or in
-                // the machine's `~/.claude`: one from before accounts, one on
-                // the account that is that login, and one launched on that
-                // login's account before the login switched to someone else.
+                // session's readings are its row's account's while that
+                // account is signed in on the machine, where the session runs
+                // in its dir. One that is not (a process launched in the
+                // machine's own `~/.claude` before accounts were CawCo's
+                // alone) reads nobody CawCo knows, and is kept by nobody.
                 if (
                   frame.message.type === "system" &&
                   (frame.message.subtype === RATE_LIMIT_READ ||
                     frame.message.subtype === ACCOUNT_READ)
                 ) {
                   const [row] = db.getInstancesByIds([message.instanceId]);
-                  const ownDir =
+                  const accountId =
                     row?.accountId &&
                     db.accounts
                       .signins()
@@ -14781,69 +15074,45 @@ export const createServer = (
                         (one) =>
                           one.accountId === row.accountId &&
                           one.machineId === message.machineId &&
-                          !one.home
+                          one.state === "signed-in"
                       )
                       ? row.accountId
                       : undefined;
+                  if (!accountId) {
+                    break;
+                  }
                   const read = frame.message.account;
-                  if (!ownDir && read?.identity) {
-                    // `~/.claude` answers as whoever it is signed in as now:
-                    // that identity's account is the machine's own login,
-                    // even when it signed in as someone else since the
-                    // machine last connected.
-                    const homed = homeIs(
-                      db,
-                      message.machineId,
-                      read.identity,
-                      read.subscriptionType ? "subscription" : "console"
+                  const account = db.accounts.get(accountId);
+                  if (
+                    read?.identity &&
+                    account?.identity &&
+                    !sameIdentity(account.identity, read.identity)
+                  ) {
+                    // The account's own dir answers as someone else: not
+                    // this account's reading or catalog, and not this
+                    // account signed in there.
+                    console.warn(
+                      `[hub] ${message.instanceId} runs on ${accountName(account)} but its Claude Code is signed in as someone else on ${machineName(message.machineId)}`
                     );
-                    if (homed.changed) {
-                      heardHome(message.machineId, read.identity);
-                    }
-                  }
-                  const accountId =
-                    ownDir ??
-                    db.accounts
-                      .signins()
-                      .find(
-                        (one) => one.machineId === message.machineId && one.home
-                      )?.accountId ??
-                    row?.accountId ??
-                    machineAccount(db, message.machineId);
-                  if (accountId) {
-                    const info = frame.message.rate_limit_info;
-                    if (info) {
-                      noteRateLimit(db, accountId, info);
-                      if (info.status === "rejected" && !info.isUsingOverage) {
-                        limitRefused.add(message.instanceId);
-                      }
-                    }
-                    if (read) {
-                      const account = db.accounts.get(accountId);
-                      if (
-                        ownDir &&
-                        account?.identity &&
-                        read.identity &&
-                        !sameIdentity(account.identity, read.identity)
-                      ) {
-                        // The account's own dir answers as someone else: not
-                        // this account's catalog, and not this account signed
-                        // in there.
-                        console.warn(
-                          `[hub] ${message.instanceId} runs on ${accountName(account)} but its Claude Code is signed in as someone else on ${machineName(message.machineId)}`
-                        );
-                        db.accounts.putSignin({
-                          accountId,
-                          machineId: message.machineId,
-                          state: "mismatch",
-                          home: false,
-                        });
-                      } else {
-                        keepProbe(db, accountId, read);
-                      }
-                    }
+                    db.accounts.putSignin({
+                      accountId,
+                      machineId: message.machineId,
+                      state: "mismatch",
+                    });
                     publishUsage(message.machineId);
+                    break;
                   }
+                  const info = frame.message.rate_limit_info;
+                  if (info) {
+                    noteRateLimit(db, accountId, info);
+                    if (info.status === "rejected" && !info.isUsingOverage) {
+                      limitRefused.add(message.instanceId);
+                    }
+                  }
+                  if (read) {
+                    keepProbe(db, accountId, read);
+                  }
+                  publishUsage(message.machineId);
                   break;
                 }
                 observeTurn(message.instanceId, frame);

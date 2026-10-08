@@ -16,8 +16,7 @@
   import { IconKey } from "#lib/icons.js";
   import ClaudeIcon from "~icons/logos/claude-icon";
   import AccountName from "../accounts/AccountName.svelte";
-  import { cawco, type InstanceRow, type Machine } from "../client.svelte";
-  import MachineLogin from "../MachineLogin.svelte";
+  import { cawco, type InstanceRow } from "../client.svelte";
   import OpenCodeLogo from "../OpenCodeLogo.svelte";
   import { claudeGap, money, speakingReading } from "../usage";
   import Figure from "./Figure.svelte";
@@ -91,9 +90,6 @@
     const count = row.keepAlive?.contextTokens;
     return count ? `${Math.round(count / 1000)}k` : "";
   };
-
-  let loginFor = $state<Machine | null>(null);
-  let loginOpen = $state(false);
 </script>
 
 {#snippet running(
@@ -215,15 +211,11 @@
     {:else if claudeUnknown}
       <div class="unknown">
         <p>{claudeUnknown.reason}</p>
-        {#if claudeUnknown.signIn && claudeUnknown.machine}
-          {@const machine = claudeUnknown.machine}
+        {#if claudeUnknown.signIn}
           <Button
+            href="/config/accounts"
             icon={IconKey}
-            label="Log in to Claude"
-            onclick={() => {
-              loginFor = machine;
-              loginOpen = true;
-            }}
+            label="Sign in an account"
             size="sm"
             variant="outline"
           />
@@ -257,10 +249,6 @@
     {/if}
   {/if}
 </section>
-
-{#if loginFor}
-  <MachineLogin machine={loginFor} bind:open={loginOpen} />
-{/if}
 
 <style>
   .card {

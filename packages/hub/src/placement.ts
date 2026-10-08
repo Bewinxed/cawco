@@ -53,6 +53,13 @@ export type Placement =
   | ({ ok: true } & PlacementExplain)
   | { ok: false; refusal: string };
 
+/**
+ * Why a Claude session can't start on a machine with no CawCo account
+ * signed in: it never runs on the machine's own Claude Code login.
+ */
+export const noAccountRefusal = (machine: string): string =>
+  `No Claude account is signed in on ${machine}. Add one in Configure → Accounts and sign it in there.`;
+
 /** A window's use now: one whose reset has passed with no newer reading is a fresh window. */
 const used = (window: LimitWindow | undefined, now: number): number => {
   if (!window) {
@@ -364,7 +371,9 @@ const choose = (
     ok: true,
     accountId: fallback?.id ?? null,
     strategy: choice.strategy,
-    why: `No allowed account has room for it now${out}, so it starts on ${fallback ? accountName(fallback) : "the machine's own login"} anyway.`,
+    why: fallback
+      ? `No allowed account has room for it now${out}, so it starts on ${accountName(fallback)} anyway.`
+      : `No allowed account has room for it now${out}.`,
   };
 };
 
@@ -379,14 +388,17 @@ export const place = (input: PlacementInput): Placement => {
   // A fork reuses its origin's cache, so it runs where its origin ran.
   if (input.fork) {
     const { accountId } = input.fork;
-    return {
-      ok: true,
-      accountId,
-      strategy: "fork",
-      why: accountId
-        ? `A fork runs on the account of the session it forks: ${name(accountId)}.`
-        : "A fork runs on the account of the session it forks, which ran on the machine's own login.",
-    };
+    return accountId
+      ? {
+          ok: true,
+          accountId,
+          strategy: "fork",
+          why: `A fork runs on the account of the session it forks: ${name(accountId)}.`,
+        }
+      : {
+          ok: false,
+          refusal: `A fork runs where the session it forks ran, and that session ran on Claude Code's own login on ${machine}, not on a CawCo account. Send it a message first so it moves onto one, then fork it.`,
+        };
   }
 
   const eligibleHere = eligible(input);
@@ -401,12 +413,7 @@ export const place = (input: PlacementInput): Placement => {
     return explicitPick(input, input.explicit, signedIn, name);
   }
   if (signedIn.length === 0) {
-    return {
-      ok: true,
-      accountId: null,
-      strategy: "none",
-      why: `No account is signed in on ${machine}, so the session runs on the machine's own Claude Code login.`,
-    };
+    return { ok: false, refusal: noAccountRefusal(machine) };
   }
   if (allowed.length === 0) {
     const limits = [

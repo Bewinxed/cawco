@@ -351,11 +351,11 @@ export async function buildBinary(options: {
               })
             );
             build.onLoad(
-              { filter: /packages\/agent\/src\/auth\.ts$/ },
+              { filter: /packages\/agent\/src\/accounts\.ts$/ },
               async ({ path }) => ({
                 contents: (await Bun.file(path).text()).replace(
-                  "export const probeAuth = async (): Promise<AuthState> => {",
-                  'export const probeAuth = async (): Promise<AuthState> => { return "unauthenticated";'
+                  /export const machineClaudeAuth = [^;]*;/,
+                  'export const machineClaudeAuth = async (): Promise<AuthState> => "unauthenticated";'
                 ),
                 loader: "ts",
                 resolveDir: dirname(path),

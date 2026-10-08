@@ -99,7 +99,6 @@ import {
   limitEvents,
   limitHolds,
   limitSummaries,
-  machineLimitHistory,
   marketplaces,
   mcpServers,
   mcpToolListings,
@@ -4842,9 +4841,6 @@ const make = async (path: string): Promise<DbShape> => {
           .run();
         tx.delete(accountSignins)
           .where(eq(accountSignins.machineId, machineId))
-          .run();
-        tx.delete(machineLimitHistory)
-          .where(eq(machineLimitHistory.machineId, machineId))
           .run();
         tx.delete(agents).where(eq(agents.machineId, machineId)).run();
         return { instanceIds: ids };

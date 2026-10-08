@@ -124,13 +124,13 @@ export interface SpawnPayload {
    */
   account?: string;
   /**
-   * The account the hub placed the session on, and where its Claude Code
-   * config dir is on the machine: its own `~/.cawco/accounts/<id>/claude`, or
-   * the machine's `~/.claude` (`home`). Set by the hub on every spawn of a
-   * session with an account — the first and every revive, restore and
-   * relaunch — and never by a client.
+   * The account the hub placed the session on: its Claude Code runs in that
+   * account's own `~/.cawco/accounts/<id>/claude` on the machine, never in the
+   * machine's `~/.claude`. Set by the hub on every launch of a Claude session
+   * — the first and every revive, restore and relaunch — and never by a
+   * client. A Claude launch without one is refused on the machine.
    */
-  accountDir?: { accountId: string; home: boolean };
+  accountDir?: { accountId: string };
   /**
    * Start from a repository instead of a directory that is already there: the
    * agent clones `repo` — `owner/name`, or any URL git understands — into a

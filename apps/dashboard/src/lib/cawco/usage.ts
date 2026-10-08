@@ -355,8 +355,9 @@ export const planName = (subscription: string | null): string | null =>
 /**
  * Why Claude's limits cannot be shown, and what fixes it: the one source of
  * those words for the Usage page's Limits block and the usage strip, so the
- * two say the same thing. `signIn` with a machine: logging in on it fixes it
- * (MachineLogin); otherwise there is nothing to do but wait for a read.
+ * two say the same thing. `signIn`: signing an account in on the machine
+ * fixes it, in Configure → Accounts; otherwise there is nothing to do but
+ * wait for a read.
  */
 export interface LimitsGap {
   machine: AgentRow | null;
@@ -390,7 +391,7 @@ export function claudeGap(
   if (reading.error === "not signed in") {
     return {
       machine,
-      reason: `Claude isn't signed in on ${host}.`,
+      reason: `No Claude account is signed in on ${host}.`,
       signIn: true,
     };
   }

@@ -16,6 +16,7 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import { IconPlus } from "#lib/icons.js";
   import Attention from "~icons/solar/hand-shake-bold-duotone";
+  import { movedLogins } from "../accounts/model.svelte";
   import { cawco } from "../client.svelte";
   import MachinesEmpty from "../MachinesEmpty.svelte";
   import { crossIn, crossOut, morphMs } from "../motion/curves.svelte";
@@ -30,6 +31,7 @@
   import Caw from "./Caw.svelte";
   import HomeRecent from "./HomeRecent.svelte";
   import { home } from "./home-state.svelte";
+  import MovedLoginCard from "./MovedLoginCard.svelte";
   import NeedsCard from "./NeedsCard.svelte";
   import StatusLine from "./StatusLine.svelte";
   import UpdateCard from "./UpdateCard.svelte";
@@ -46,6 +48,8 @@
   } = $props();
 
   const stale = $derived(!home.live);
+  /** Logins moved into CawCo that nobody has dismissed yet. */
+  const moved = $derived(notices.known ? movedLogins(notices.seen) : []);
   /** The landing nobody has acknowledged, until it is dismissed. */
   const updated = $derived(
     variant === "page" && notices.known
@@ -232,6 +236,25 @@
         />
       </section>
     {/if}
+
+    {#each moved as one (one.id)}
+      <!-- A machine's own login moved into CawCo stays here until dismissed. -->
+      <section
+        aria-label="Login moved"
+        class="group"
+        data-flip="box"
+        in:crossIn
+        out:crossOut
+      >
+        <MovedLoginCard
+          moved={one}
+          ondismiss={() => {
+            // biome-ignore lint/complexity/noVoid: the hub's record comes back on the next board frame
+            void notices.acknowledge([one.id]);
+          }}
+        />
+      </section>
+    {/each}
 
     {#if home.ready && home.needs.length > 0}
       <!-- The headline above names this group and counts it; a header

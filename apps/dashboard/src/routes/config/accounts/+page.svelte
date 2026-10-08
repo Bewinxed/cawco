@@ -64,9 +64,13 @@
   {#if accounts.length === 0}
     <EmptyState
       icon={section.icon}
-      line="Sign in a Claude account here, then choose which one each new session runs on. Add a second to share the work between them."
+      line="Claude sessions run only on accounts signed in here. Add one and sign it in on each machine; add a second to share the work between them."
       title="Add your first Claude account"
-    />
+    >
+      {#snippet action()}
+        <Button href={addHref} icon={IconPlus} label="Add account" size="sm" />
+      {/snippet}
+    </EmptyState>
   {:else}
     <section aria-labelledby="provider-claude" class="provider">
       <header class="head">

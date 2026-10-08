@@ -30,8 +30,7 @@
   import ClaudeIcon from "~icons/logos/claude-icon";
   import Arrow from "~icons/solar/arrow-right-linear";
   import AccountName from "./accounts/AccountName.svelte";
-  import { cawco, type Machine } from "./client.svelte";
-  import MachineLogin from "./MachineLogin.svelte";
+  import { cawco } from "./client.svelte";
   import { dur, motionOk } from "./motion/curves.svelte";
   import { morph } from "./motion/morph.svelte";
   import OpenCodeLogo from "./OpenCodeLogo.svelte";
@@ -89,8 +88,6 @@
       ? claudeGap(cawco.claudeLimits, cawco.machines)
       : null
   );
-  let loginFor = $state<Machine | null>(null);
-  let loginOpen = $state(false);
 
   /** The hub's word for a key or login the provider turned away. */
   const KEY_REFUSED = /^HTTP 40[13]\b/;
@@ -336,16 +333,11 @@
   {#if gap}
     <EmptyState icon={IconUsage} inline line={gap.reason} title="No limits">
       {#snippet action()}
-        {#if gap.signIn && gap.machine}
-          {@const machine = gap.machine}
+        {#if gap.signIn}
           <Button
-            aria-label="Log in to Claude on {machine.hostname}"
+            href="/config/accounts"
             icon={IconKey}
-            label="Log in"
-            onclick={() => {
-              loginFor = machine;
-              loginOpen = true;
-            }}
+            label="Sign in an account"
             size="xs"
             variant="outline"
           />
@@ -398,10 +390,6 @@
     </Popover.Root>
   {/if}
 </div>
-
-{#if loginFor}
-  <MachineLogin machine={loginFor} bind:open={loginOpen} />
-{/if}
 
 <style>
   /* Its ground is the surface it stands on: the rail's by default, the

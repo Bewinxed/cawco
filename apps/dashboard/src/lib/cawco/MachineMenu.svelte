@@ -21,7 +21,6 @@
   } from "./client.svelte";
   import { confirm } from "./confirm.svelte";
   import ErrorDialog from "./ErrorDialog.svelte";
-  import MachineLogin from "./MachineLogin.svelte";
   import UnlockKeychain from "./UnlockKeychain.svelte";
   import { updates } from "./updates/updates.svelte";
 
@@ -31,12 +30,10 @@
   const isMac = $derived(/darwin|mac/i.test(machine.os));
   /**
    * The keychain workaround is offered only to the machine that is actually
-   * stuck behind one. Logging in is offered always — it is the fix, and it
-   * leaves the machine holding a token that no lock can hide.
+   * stuck behind one. Signing an account in is Configure → Accounts' work.
    */
   const stuck = $derived(machine.auth === "unreadable-credentials");
   let unlocking = $state(false);
-  let loggingIn = $state(false);
   /**
    * What the machine reports about its update decides the items: "Install
    * update now" while a build waits (it queues until the machine is idle),
@@ -95,14 +92,6 @@
       <IconPlus />
       New session here
     </ContextMenu.Item>
-    <ContextMenu.Item
-      onSelect={() => {
-        loggingIn = true;
-      }}
-    >
-      <IconKey />
-      Log in…
-    </ContextMenu.Item>
     {#if isMac && stuck}
       <ContextMenu.Item
         onSelect={() => {
@@ -149,7 +138,6 @@
   </ContextMenu.Content>
 </ContextMenu.Root>
 
-<MachineLogin {machine} bind:open={loggingIn} />
 {#if phase === "failed" || phase === "failed-rolled-back"}
   <ErrorDialog
     message={machine.binaryUpdate?.error ?? "The machine did not say why."}

@@ -19,15 +19,6 @@ export const accountsRoot = (): string => join(homedir(), ".cawco", "accounts");
 export const accountConfigDir = (accountId: string): string =>
   join(accountsRoot(), accountId, "claude");
 
-/**
- * The config dir Claude Code uses when nothing names one for it: what a
- * session on the machine's own login runs in (`$CLAUDE_CONFIG_DIR`, else
- * `~/.claude`).
- */
-export const homeConfigDir = (): string =>
-  process.env.CLAUDE_CONFIG_DIR?.split(",")[0]?.trim() ||
-  join(homedir(), ".claude");
-
 /** The ids of the accounts that have a config dir on this machine. */
 export const accountIds = (): string[] => {
   try {

@@ -1393,8 +1393,8 @@ export const accountSignins = sqliteTable(
       .references(() => accounts.id, { onDelete: "cascade" }),
     machineId: text("machine_id").notNull(),
     state: text("state").$type<SigninState>().notNull(),
-    /** The account is the machine's own `~/.claude` login, not `~/.cawco/accounts/<id>/claude`. */
-    home: integer("home", { mode: "boolean" }).notNull().default(false),
+    /** When the machine's own Claude Code login was moved into this account's dir there; null for a sign-in made in CawCo. */
+    movedAt: timestamp("moved_at"),
     checkedAt: timestamp("checked_at")
       .notNull()
       .$defaultFn(() => new Date()),
@@ -1564,29 +1564,6 @@ export const usageLimitHistory = sqliteTable(
     ),
     // Retention prunes by age alone, across every account and kind.
     index("usage_limit_history_fetched_idx").on(table.fetchedAt),
-  ]
-);
-
-/**
- * Limit history read before accounts, keyed by the machine whose `~/.claude`
- * it was read from. It waits here until the hub learns which account that
- * login is, then moves into {@link usageLimitHistory} under that account.
- */
-export const machineLimitHistory = sqliteTable(
-  "machine_limit_history",
-  {
-    id: integer("id").primaryKey({ autoIncrement: true }),
-    machineId: text("machine_id").notNull(),
-    kind: text("kind").notNull(),
-    scopeLabel: text("scope_label"),
-    percent: integer("percent").notNull(),
-    severity: text("severity").notNull(),
-    resetsAt: text("resets_at"),
-    fetchedAt: timestamp("fetched_at").notNull(),
-  },
-  (table) => [
-    index("machine_limit_history_machine_idx").on(table.machineId),
-    index("machine_limit_history_fetched_idx").on(table.fetchedAt),
   ]
 );
 

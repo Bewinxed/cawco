@@ -13202,6 +13202,91 @@
         }
       }
     },
+    "/api/accounts/move-login": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "machineId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "machineId"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiAccountsMoveLogin",
+        "responses": {
+          "202": {
+            "description": "postApiAccountsMoveLogin 202",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiAccountsMoveLogin202"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiAccountsMoveLogin 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiAccountsMoveLogin 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "postApiAccountsMoveLogin 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "getApiAccountsMoveLogin",
+        "responses": {
+          "200": {
+            "description": "getApiAccountsMoveLogin 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiAccountsMoveLogin200"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/usage/limits": {
       "get": {
         "operationId": "getApiUsageLimits",
@@ -17380,6 +17465,84 @@
           "url"
         ]
       },
+      "postApiAccountsMoveLogin202": {
+        "type": "object",
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "waitingFor": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "accountId",
+          "email",
+          "waitingFor"
+        ]
+      },
+      "getApiAccountsMoveLogin200": {
+        "type": "object",
+        "properties": {
+          "moving": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "machineId": {
+                  "type": "string"
+                },
+                "accountId": {
+                  "type": "string"
+                },
+                "since": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "accountId",
+                "machineId",
+                "since"
+              ]
+            }
+          },
+          "done": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "accountId": {
+                  "type": "string"
+                },
+                "at": {
+                  "type": "number"
+                },
+                "error": {
+                  "type": "string"
+                },
+                "store": {
+                  "type": "string"
+                },
+                "machineId": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "accountId",
+                "at",
+                "machineId"
+              ]
+            }
+          }
+        },
+        "required": [
+          "done",
+          "moving"
+        ]
+      },
       "getApiUsageLimitsHistory200": {
         "type": "array",
         "items": {
@@ -18248,19 +18411,15 @@
             "type": "string"
           },
           "accountDir": {
-            "description": "The account the hub placed the session on, and where its Claude Code\nconfig dir is on the machine: its own `~/.cawco/accounts/<id>/claude`, or\nthe machine's `~/.claude` (`home`). Set by the hub on every spawn of a\nsession with an account — the first and every revive, restore and\nrelaunch — and never by a client.",
+            "description": "The account the hub placed the session on: its Claude Code runs in that\naccount's own `~/.cawco/accounts/<id>/claude` on the machine, never in the\nmachine's `~/.claude`. Set by the hub on every launch of a Claude session\n— the first and every revive, restore and relaunch — and never by a\nclient. A Claude launch without one is refused on the machine.",
             "type": "object",
             "properties": {
               "accountId": {
                 "type": "string"
-              },
-              "home": {
-                "type": "boolean"
               }
             },
             "required": [
-              "accountId",
-              "home"
+              "accountId"
             ]
           },
           "bootstrap": {
@@ -19051,7 +19210,7 @@
         }
       },
       "AuthState": {
-        "description": "Whether a machine's daemon can actually start sessions for a harness.\n`unreadable-credentials` is macOS's own failure: Claude Code keeps its\ncredentials in the login keychain, and a daemon outside the GUI session is\nrefused the secret (`errSecInteractionNotAllowed`). Generalized: every\nharness reports its own auth word through the same three states.",
+        "description": "Whether a machine's daemon can actually start sessions for a harness. For\nClaude: whether any CawCo account is signed in on the machine.\n`unreadable-credentials` is macOS's own failure: Claude Code keeps an\naccount's credentials in the login keychain, and a daemon outside the GUI\nsession is refused the secret (`errSecInteractionNotAllowed`). Generalized:\nevery harness reports its own auth word through the same three states.",
         "enum": [
           "authenticated",
           "unauthenticated",
@@ -24456,7 +24615,7 @@
         "type": "object",
         "properties": {
           "accounts": {
-            "description": "Claude only: every Claude Code config dir on the machine and what\n`claude auth status` said of it — `~/.claude` (`account: null`) and each\naccount's `~/.cawco/accounts/<id>/claude`. The hub reads it as where each\naccount is signed in.",
+            "description": "Claude only: every account's config dir on the machine\n(`~/.cawco/accounts/<id>/claude`) and what `claude auth status` said of\nit there. The hub reads it as where each account is signed in. The\nmachine's own `~/.claude` is never read.",
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ClaudeAccountReport"
@@ -24502,11 +24661,8 @@
         "type": "object",
         "properties": {
           "account": {
-            "description": "The account id for `~/.cawco/accounts/<id>/claude`; null for `~/.claude`.",
-            "type": [
-              "null",
-              "string"
-            ]
+            "description": "The account whose dir this is, `~/.cawco/accounts/<id>/claude`.",
+            "type": "string"
           },
           "identity": {
             "$ref": "#/components/schemas/AccountIdentity",
@@ -27989,12 +28145,15 @@
           "checkedAt": {
             "type": "number"
           },
-          "home": {
-            "description": "The account lives in the machine's own `~/.claude` (the login it had\nbefore accounts existed), rather than in `~/.cawco/accounts/<id>/claude`.",
-            "type": "boolean"
-          },
           "machineId": {
             "type": "string"
+          },
+          "movedAt": {
+            "description": "When the machine's own Claude Code login was moved into this account's\ndir there ({@link CONTROL_MOVE_HOME_LOGIN}), epoch ms; null for a sign-in\nmade in Configure → Accounts.",
+            "type": [
+              "null",
+              "number"
+            ]
           },
           "state": {
             "$ref": "#/components/schemas/SigninState"
@@ -28003,8 +28162,8 @@
         "required": [
           "accountId",
           "checkedAt",
-          "home",
           "machineId",
+          "movedAt",
           "state"
         ]
       },

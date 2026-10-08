@@ -41,7 +41,7 @@
    * the exact `spawnSession` payload — and composes the designed sections.
    */
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
-  import { IconShield, IconClose as X } from "#lib/icons.js";
+  import { IconKey, IconShield, IconClose as X } from "#lib/icons.js";
   import { goto } from "$app/navigation";
   import Bolt from "~icons/solar/bolt-bold-duotone";
   import Book from "~icons/solar/book-2-bold-duotone";
@@ -248,6 +248,11 @@
    * when it differs): Auto never names an account that has since run out.
    */
   let placement = $state<PlacementExplain | null>(null);
+  /**
+   * Why no Claude session can start here, in the hub's words: no account is
+   * signed in on the machine, or none of them is allowed. Start waits on it.
+   */
+  let placementRefusal = $state<string | null>(null);
   $effect(() => {
     const view = cawco.accounts;
     const query = {
@@ -258,6 +263,7 @@
     };
     if (harness !== "claude" || !machineId || !view) {
       placement = null;
+      placementRefusal = null;
       return;
     }
     let stale = false;
@@ -265,11 +271,14 @@
       .then((placed) => {
         if (!stale) {
           placement = placed ?? null;
+          placementRefusal = null;
         }
       })
-      .catch(() => {
+      .catch((cause: unknown) => {
         if (!stale) {
           placement = null;
+          placementRefusal =
+            cause instanceof Error ? cause.message : String(cause);
         }
       });
     return () => {
@@ -535,6 +544,7 @@
   const startFailed = $derived(error !== "");
   const cantStart = $derived(
     continueBlocked ||
+      placementRefusal !== null ||
       cawco.hub !== "connected" ||
       machineIds.length === 0 ||
       Boolean(offlineMachine) ||
@@ -1419,6 +1429,21 @@
       </div>
     </NsPopoverGroup>
   </div>
+  <!-- No Claude account can take it on this machine: why, beside Start,
+       and where to sign one in. -->
+  {#if placementRefusal}
+    <div class="full-send" data-vaul-no-drag in:unfold|global out:unfold>
+      <Alert role="status" variant="warning">
+        <IconKey />
+        <AlertTitle>{placementRefusal}</AlertTitle>
+        <AlertDescription>
+          <a class="accounts-link" href="/config/accounts"
+            >Open Configure → Accounts</a
+          >
+        </AlertDescription>
+      </Alert>
+    </div>
+  {/if}
   <!-- Full Send in the form, however it got there, stands outside the body's
        scroll, beside Start: it is in view whenever the form can start. -->
   {#if fullSendWarning}
@@ -1457,6 +1482,16 @@
   .full-send {
     flex: none;
     padding-top: var(--space-2);
+  }
+  .accounts-link {
+    border-radius: var(--radius-xs);
+    color: var(--link-ink);
+    text-decoration: none;
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .accounts-link:hover {
+      color: var(--link-hover);
+    }
   }
   :global(.session-scrim) {
     position: fixed;

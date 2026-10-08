@@ -79,6 +79,62 @@ export function signinState(
 }
 
 /**
+ * A machine's own Claude Code login, moved into CawCo: the account it went
+ * into, the machine it came from and when, and the machines the account is
+ * still not signed in on. Its notice id is acknowledged on the hub once.
+ */
+export interface MovedLogin {
+  account: Account;
+  at: number;
+  from: string;
+  id: string;
+  missing: string[];
+}
+
+/** Every move whose notice nobody has acknowledged, newest first. */
+export function movedLogins(seen: ReadonlySet<string>): MovedLogin[] {
+  const view = cawco.accounts;
+  if (!view) {
+    return [];
+  }
+  const machines = claudeMachines();
+  return view.signins
+    .flatMap((signin) => {
+      const account = view.accounts.find((one) => one.id === signin.accountId);
+      const from = machines.find((one) => one.machineId === signin.machineId);
+      if (!(account && signin.movedAt !== null && from)) {
+        return [];
+      }
+      const id = `moved-login:${account.id}:${signin.machineId}:${signin.movedAt}`;
+      if (seen.has(id)) {
+        return [];
+      }
+      return [
+        {
+          account,
+          at: signin.movedAt,
+          from: machineName(from),
+          id,
+          missing: machines
+            .filter(
+              (one) =>
+                signinState(view.signins, account.id, one.machineId) !==
+                "signed-in"
+            )
+            .map(machineName),
+        },
+      ];
+    })
+    .sort((a, b) => b.at - a.at);
+}
+
+/** "obelisk", "obelisk and mac", "a, b and c": machines as a sentence lists them. */
+export const machineList = (names: readonly string[]): string =>
+  names.length < 2
+    ? (names[0] ?? "")
+    : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
+
+/**
  * An account the rail counts as a fault: one a machine signed in as
  * somebody else, or one signed in nowhere.
  */

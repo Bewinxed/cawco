@@ -1,7 +1,8 @@
 <script lang="ts">
   /**
    * Where an account is signed in: one chip per machine with Claude Code.
-   * Filled, it is signed in there. Hollow, it is a button opening the
+   * Filled, it is signed in there; one whose login was moved in from that
+   * machine's own Claude Code says so, and when, on hover. Hollow, it is a button opening the
    * sign-in popover. Signed in as somebody else, it is hollow in the warning
    * tint with a warning mark, and says so on hover. The popovers are one
    * surface (the NsPopoverGroup around the page's chips), so moving to
@@ -63,12 +64,31 @@
     {@const name = machineName(machine)}
     {@const open = openOn === machine.machineId}
     {@const flow = flows.get(machine.machineId)}
+    {@const movedAt = signins.find(
+      (one) =>
+        one.accountId === account.id && one.machineId === machine.machineId
+    )?.movedAt}
     {#if state === "signed-in" && !open}
-      <span class="mchip is-signed-in">
-        <i aria-hidden="true" class="mark"></i>
-        <span class="text">{name}</span>
-        <span class="sr-only">, signed in</span>
-      </span>
+      {#if movedAt}
+        {@const moved = `Moved from Claude Code’s own login on ${name}, ${new Date(movedAt).toLocaleString()}`}
+        <Tip label={moved}>
+          {#snippet children(
+            props
+          )}
+            <span {...props} class="mchip is-signed-in">
+              <i aria-hidden="true" class="mark"></i>
+              <span class="text">{name}</span>
+              <span class="sr-only">, signed in. {moved}</span>
+            </span>
+          {/snippet}
+        </Tip>
+      {:else}
+        <span class="mchip is-signed-in">
+          <i aria-hidden="true" class="mark"></i>
+          <span class="text">{name}</span>
+          <span class="sr-only">, signed in</span>
+        </span>
+      {/if}
     {:else}
       {#snippet chip()}
         <NsPopover

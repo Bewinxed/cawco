@@ -74,12 +74,13 @@ export type SigninState = "signed-in" | "signed-out" | "mismatch";
 export interface AccountSignin {
   accountId: string;
   checkedAt: number;
-  /**
-   * The account lives in the machine's own `~/.claude` (the login it had
-   * before accounts existed), rather than in `~/.cawco/accounts/<id>/claude`.
-   */
-  home: boolean;
   machineId: string;
+  /**
+   * When the machine's own Claude Code login was moved into this account's
+   * dir there ({@link CONTROL_MOVE_HOME_LOGIN}), epoch ms; null for a sign-in
+   * made in Configure → Accounts.
+   */
+  movedAt: number | null;
   state: SigninState;
 }
 
@@ -144,8 +145,8 @@ export interface ProviderRouting {
  * once per account.
  */
 export interface ClaudeAccountReport {
-  /** The account id for `~/.cawco/accounts/<id>/claude`; null for `~/.claude`. */
-  account: string | null;
+  /** The account whose dir this is, `~/.cawco/accounts/<id>/claude`. */
+  account: string;
   /**
    * Who the dir is signed in as: `auth status`'s email and organization name,
    * the same fields its initialize response reports. Absent when it names
@@ -285,11 +286,37 @@ export const CONTROL_BEGIN_ACCOUNT_LOGIN = "beginAccountLogin";
 export const CONTROL_COMPLETE_ACCOUNT_LOGIN = "completeAccountLogin";
 export const CONTROL_FORGET_ACCOUNT = "forgetAccount";
 /**
- * Claude harness control: read one config dir's initialize response with a
- * session that never takes a turn (arg: account id, or null for `~/.claude`),
- * answering an {@link AccountProbe}.
+ * Claude harness control: read one account dir's initialize response with a
+ * session that never takes a turn (arg: account id), answering an
+ * {@link AccountProbe}.
  */
 export const CONTROL_PROBE_ACCOUNT = "probeAccount";
+
+/**
+ * The one-time move of a machine's own Claude Code login into CawCo, run
+ * once per machine when the operator asks (`POST /api/accounts/move-login`).
+ * Read answers who the machine's `~/.claude` is signed in as, a
+ * {@link HomeLogin} (no args). Move (args: account id, the identity read)
+ * moves that login's credential and `oauthAccount` into the account's dir,
+ * checks the dir answers as the identity, and only then deletes the original;
+ * it answers a {@link HomeLoginMoved}. These are the only two places CawCo
+ * touches `~/.claude`'s login.
+ */
+export const CONTROL_READ_HOME_LOGIN = "readHomeLogin";
+export const CONTROL_MOVE_HOME_LOGIN = "moveHomeLogin";
+
+/** Who a machine's own `~/.claude` is signed in as, by its `claude auth status`. */
+export interface HomeLogin {
+  identity?: AccountIdentity;
+  kind?: AccountKind;
+  loggedIn: boolean;
+}
+
+/** Where a moved login now is: the account's dir, in the store Claude Code reads there. */
+export interface HomeLoginMoved {
+  /** `the macOS Keychain` or `the credentials file`, as Claude Code names its stores. */
+  store: string;
+}
 
 /**
  * How a sign-in ended, and what the dir's Claude Code said once it had.

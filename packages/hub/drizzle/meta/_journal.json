@@ -757,6 +757,13 @@
       "when": 1791502331243,
       "tag": "0107_launch_dir_state",
       "breakpoints": true
+    },
+    {
+      "idx": 108,
+      "version": "6",
+      "when": 1791502947493,
+      "tag": "0108_account_signins_moved",
+      "breakpoints": true
     }
   ]
 }

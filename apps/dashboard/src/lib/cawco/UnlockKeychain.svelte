@@ -50,15 +50,15 @@
   const SAID: Record<AuthState, { title: string; body: string }> = $derived({
     authenticated: {
       title: `${machine.hostname} is unlocked`,
-      body: `${machine.hostname} is logged in again. New sessions there can read its credentials.`,
+      body: `New sessions on ${machine.hostname} can read its accounts' logins again.`,
     },
     unauthenticated: {
-      title: `${machine.hostname} is not logged in`,
-      body: `${machine.hostname} unlocked, but nobody has logged in there yet.`,
+      title: `No account is signed in on ${machine.hostname}`,
+      body: `${machine.hostname} unlocked, but no Claude account is signed in there. Add one in Configure → Accounts and sign it in there.`,
     },
     "unreadable-credentials": {
-      title: `${machine.hostname} cannot read its login`,
-      body: `${machine.hostname} unlocked, but its credentials still cannot be read.`,
+      title: `${machine.hostname} cannot read its logins`,
+      body: `${machine.hostname} unlocked, but its accounts' logins still cannot be read.`,
     },
   });
 
