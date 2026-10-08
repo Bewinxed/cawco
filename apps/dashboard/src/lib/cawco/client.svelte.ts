@@ -5541,9 +5541,7 @@ export function readOlderPage(viewId: string): Promise<void> {
   if (!(target && cursor) || target.loading) {
     return Promise.resolve();
   }
-  const read = readOlderInto(target, cursor).finally(() =>
-    olderReads.delete(viewId)
-  );
+  const read = readOlderInto(target, cursor);
   olderReads.set(viewId, read);
   return read;
 }
@@ -5560,6 +5558,13 @@ async function readOlderInto(
   target.hydrating = true;
   target.olderFault = null;
   const answer = await olderPage(viewId, cursor);
+  // The read is over before anything it brought is written. Whoever its page
+  // wakes asks for the next one in that same pass — a transcript reading back
+  // to its reader's place, an open well reading to its start — and handed
+  // this read again, they waited on a page already in: cleared behind the
+  // writes, a reload far up a long transcript read one page and stopped,
+  // with the tab blank behind its skeleton.
+  olderReads.delete(viewId);
   target.hydrating = false;
   if (target.reads !== reads || target.cursor !== cursor) {
     return;

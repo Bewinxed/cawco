@@ -2045,7 +2045,9 @@
     // time, until one holds that row or the conversation's start is in hand,
     // and the list is drawn there. A page that cannot be read ends the
     // search: the list is drawn with what it holds, the failure said at its
-    // top.
+    // top. Each page is asked for once the last one is in the rows searched:
+    // a pane off screen builds its rows on its scheduler turn, and asking on
+    // the page's landing alone read on past the place before it was looked for.
     const own = paged();
     if (
       own?.cursor &&
@@ -2054,7 +2056,7 @@
       !resume.tail &&
       anchorIndex() < 0
     ) {
-      if (!own.hydrating) {
+      if (!own.hydrating && untrack(printOf) === builtPrint) {
         // biome-ignore lint/complexity/noVoid: fire-and-forget; the page landing re-runs this reveal
         void untrack(() => readOlderPage(own.instanceId));
       }
