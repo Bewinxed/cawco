@@ -104,8 +104,12 @@ final class PaywallGate {
 
         if access == .none, !shown, pending == nil, read { onboarding() }
         if access == .ended, read, !endedOffered {
-            endedOffered = true
-            present(.offer)
+            if presentable {
+                endedOffered = true
+                present(.offer)
+            } else {
+                passAgain()
+            }
         }
 
         var daysLeft: Int?
@@ -158,7 +162,24 @@ final class PaywallGate {
         fire(with: nil)
     }
 
+    /// The shell stands in its window. Before that, UIKit drops a sheet
+    /// presented over it ("whose view is not in the window hierarchy").
+    private var presentable: Bool { shell.viewIfLoaded?.window != nil }
+
+    /// Another pass shortly, for a sheet that couldn't be presented yet.
+    private func passAgain() {
+        Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(300))
+            self?.onChange()
+        }
+    }
+
     private func fire(with ask: ParkedAsk?) {
+        // `paywall-shown` is kept only once the sheet can really show.
+        guard presentable else {
+            passAgain()
+            return
+        }
         log.notice("gate: the onboarding paywall rises (\(ask == nil ? "no ask waiting" : "after the ask was answered", privacy: .public))")
         UserDefaults.standard.set(true, forKey: Self.shownKey)
         held = nil
