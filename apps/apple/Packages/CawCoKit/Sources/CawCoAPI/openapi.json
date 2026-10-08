@@ -3141,10 +3141,7 @@
                   "pairingId": {
                     "type": "string"
                   }
-                },
-                "required": [
-                  "pairingId"
-                ]
+                }
               }
             }
           }

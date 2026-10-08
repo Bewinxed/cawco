@@ -411,16 +411,16 @@ export const pushRoutes = (db: DbShape, push: Push) =>
   new Elysia()
     // ── Settings: the devices and the test ───────────────────────────────
     .get("/api/push", () => ({ devices: db.push.devices().map(deviceView) }))
-    // A test to one device, or with no body to every registered device.
+    // A test to one device, or without a pairing id to every registered
+    // device. Elysia hands an absent body over as `{}`.
     .post(
       "/api/push/test",
-      { body: t.Optional(t.Object({ pairingId: t.String() })) },
+      { body: t.Optional(t.Object({ pairingId: t.Optional(t.String()) })) },
       async ({ body, status }) => {
         const devices = db.push.devices();
-        if (body) {
-          const device = devices.find(
-            (row) => row.pairingId === body.pairingId
-          );
+        const pairingId = body?.pairingId;
+        if (pairingId !== undefined) {
+          const device = devices.find((row) => row.pairingId === pairingId);
           return device
             ? await push.test([device])
             : status(404, "That device is no longer registered.");
