@@ -55,36 +55,43 @@ targets:
         # Embedded frameworks (RiveRuntime) sit in Contents/Frameworks on the Mac;
         # the iOS-style default runpath (@executable_path/Frameworks) misses them.
         "LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]": ["$(inherited)", "@executable_path/../Frameworks"]
-        # Sign to Run Locally until a development team is chosen.
-        "CODE_SIGN_IDENTITY[sdk=macosx*]": "-"
         # The Mac app is sandboxed and may open connections to the hub.
         ENABLE_APP_SANDBOX: YES
         ENABLE_OUTGOING_NETWORK_CONNECTIONS: YES
         # An ad-hoc signature carries no Team ID, so the hardened runtime's library
         # validation refuses the embedded RiveRuntime ("mapping process and mapped
         # file have different Team IDs") and the Mac app cannot launch at all.
-        # Revisit together with the team signing above.
         ENABLE_HARDENED_RUNTIME[sdk=macosx*]: NO
-        # Push Notifications (PRD §5.5 "iOS app"): `entitlements` below goes to
-        # iPhone and iPad builds only. The Mac app is signed ad hoc ("-"), and an
-        # ad-hoc build carrying aps-environment is refused at launch, so on the
-        # Mac push does not start until the Mac app gets team signing.
-        "CODE_SIGN_ENTITLEMENTS[sdk=macosx*]": ""
+        # Push Notifications (PRD §5.5): the key differs per platform. iPhone and
+        # iPad claim `aps-environment` (`entitlements` below); the Mac claims
+        # `com.apple.developer.aps-environment` ("The entitlement key is different
+        # for iOS than it is for macOS", Apple's Entitlement Key Reference), and an
+        # iOS profile does not authorise the Mac key, so each has its own file.
+        "CODE_SIGN_ENTITLEMENTS[sdk=macosx*]": CawCo/CawCo-macCatalyst.entitlements
         # Xcode builds talk to APNs' sandbox; TestFlight and the App Store to production.
         APS_ENVIRONMENT: development
       configs:
         # Profiles carrying Push Notifications (made 2026-10-07 when the App ID
         # got the capability; that invalidated "CawCo App Store 20261005").
         # Automatic signing over the App Store Connect key made no push profile.
+        # The Mac's profile (Mac Catalyst development, made 2026-10-09 through the
+        # App Store Connect API) lists this Mac's Provisioning UDID.
         Debug:
           "CODE_SIGN_STYLE[sdk=iphoneos*]": Manual
           "CODE_SIGN_IDENTITY[sdk=iphoneos*]": Apple Development
           "PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*]": CawCo Development 20261007
+          "CODE_SIGN_STYLE[sdk=macosx*]": Manual
+          "CODE_SIGN_IDENTITY[sdk=macosx*]": Apple Development
+          "PROVISIONING_PROFILE_SPECIFIER[sdk=macosx*]": CawCo Mac Catalyst Development 20261009
         Release:
           APS_ENVIRONMENT: production
           "CODE_SIGN_STYLE[sdk=iphoneos*]": Manual
           "CODE_SIGN_IDENTITY[sdk=iphoneos*]": Apple Distribution
           "PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*]": CawCo App Store 20261007
+          # No Mac App Store profile yet: a Release Mac build stays signed ad hoc
+          # and claims no push entitlement (refused at launch without team signing).
+          "CODE_SIGN_IDENTITY[sdk=macosx*]": "-"
+          "CODE_SIGN_ENTITLEMENTS[sdk=macosx*]": ""
     entitlements:
       path: CawCo/CawCo.entitlements
       properties:
