@@ -8,8 +8,6 @@
  * deriving it on the hub is meant to remove.
  */
 
-import { attachedFiles } from "./attachments";
-
 /** How long a title derived from a first message runs before it is cut. */
 export const TITLE_LIMIT = 80;
 
@@ -17,6 +15,13 @@ const COMMAND_ECHO =
   /<command-(?:message|name)>([\s\S]*?)<\/command-(?:message|name)>/;
 const ANY_TAG = /<[^>]+>/g;
 const WHITESPACE_RUN = /\s+/g;
+/**
+ * The attached files' lines (core `attachedFileLine`) and all after them: a
+ * turn carries them after its typed words. Matched from the first one to the
+ * end, not line by line, because a harness's session list reports its first
+ * prompt folded onto one line and cut short (claude's `firstPrompt`).
+ */
+const ATTACHED_TAIL = /\s*Attached file: [~/][\s\S]*$/;
 
 /**
  * A session's first message as a title. A slash command's first message is the
@@ -28,7 +33,7 @@ const WHITESPACE_RUN = /\s+/g;
 export function deriveTitleFromFirstMessage(raw: string): string {
   const command = COMMAND_ECHO.exec(raw)?.[1]?.trim();
   // A file's line names where the machine put it, not what the session is about.
-  const { typed } = attachedFiles(raw);
+  const typed = raw.replace(ATTACHED_TAIL, "");
   const cleaned = (command ?? typed.replace(ANY_TAG, " "))
     .replace(WHITESPACE_RUN, " ")
     .trim();
