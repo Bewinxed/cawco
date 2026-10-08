@@ -1393,8 +1393,17 @@
   }
   /* Padding, not margin: the crumb leaving is pinned where its border box
      stands (crossOut), and a margin would carry it along. */
+  /* A long name (a thread's, a project's) ends in an ellipsis and keeps
+     clear of the cluster beside it: the bar's own gap plus --space-3 of
+     margin, outside the box its text is clipped to, past the 16px a name
+     needs from a control. */
   span.crumb {
+    min-width: 0;
+    overflow: hidden;
     padding-inline-start: var(--space-7);
+    margin-inline-end: var(--space-3);
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .back {
     display: inline-flex;

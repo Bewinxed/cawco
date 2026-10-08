@@ -106,8 +106,13 @@
     serverTail?: ServerTail | null;
   } = $props();
 
-  /** A named state stands in the middle of the transcript area. */
-  const STATEFUL = "m-auto max-w-[46ch] px-[var(--space-6)]";
+  /**
+   * A named state stands in the middle of the transcript area, its mark,
+   * title and line centred in it, as the board's empty state stands: never
+   * a start-aligned block set in the middle.
+   */
+  const STATEFUL =
+    "m-auto max-w-[46ch] items-center px-[var(--space-6)] text-center";
   let paneWidth = $state(0);
   /**
    * The side surface's share of this pane's width, in percent (SideSplit):

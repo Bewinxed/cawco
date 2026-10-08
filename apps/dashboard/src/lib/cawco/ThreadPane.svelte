@@ -47,6 +47,7 @@
   } from "./client.svelte";
   import Caw, { CAW_HEADROOM, LEDGE_LINE } from "./home/Caw.svelte";
   import CawFace from "./home/CawFace.svelte";
+  import { machinesPopover } from "./join/join.svelte";
   import { planProgress, planShows } from "./plan/PlanPane.svelte";
   import PlanRing from "./plan/PlanRing.svelte";
   import FolderFiles from "./project/FolderFiles.svelte";
@@ -187,6 +188,14 @@
     return { ...base, type: "user", content: message.body };
   }
 
+  /**
+   * His questions withdrawn before they were answered (his turn
+   * interrupted): each leaves its quiet line in the thread, where it was
+   * asked. Declared before the effect below reads it: a pre-effect runs as
+   * the component is set up, and a later `let` is not yet initialised.
+   */
+  let withdrawn = $state<Message[]>([]);
+
   /** The thread as the transcript's session: one object, its fields kept current. */
   const session = $state<SessionState>(
     untrack(() => ({ ...blankSession(viewId), harness: "claude" }))
@@ -298,13 +307,8 @@
       : null;
   });
 
-  /**
-   * His questions withdrawn before they were answered (his turn
-   * interrupted): each leaves its quiet line in the thread, where it was
-   * asked. They are his session's asks, so the line is read from the store
-   * as one leaves.
-   */
-  let withdrawn = $state<Message[]>([]);
+  // His questions withdrawn (`withdrawn`, declared before the transcript's
+  // effect that reads them) are read from the store as one leaves.
   let waitingOn = new Set<string>();
   $effect(() => {
     const now = new Set(asks.map((ask) => ask.request.requestId));
@@ -507,7 +511,11 @@
   const offLine = $derived(
     view?.on && view.problem
       ? view.problem
-      : "Caw lead is off for this project — turn it on to message him."
+      : "Caw lead is off for this project — turn it on to message Caw."
+  );
+  /** Caw is on and cannot start because no machine is online: the cause's one action is to look at the machines. */
+  const noMachine = $derived(
+    !!view?.on && !!view.problem && cawco.onlineMachines.length === 0
   );
 </script>
 
@@ -654,6 +662,17 @@
                 onclick={turnOn}
                 pending={turningOn}
                 pendingLabel="Turning on…"
+                size="sm"
+                variant="outline"
+              />
+            </AlertAction>
+          {:else if noMachine}
+            <AlertAction>
+              <Button
+                label="Check machines"
+                onclick={() => {
+                  machinesPopover.open = true;
+                }}
                 size="sm"
                 variant="outline"
               />

@@ -216,29 +216,67 @@
   // moved the choice: reading it there lays the page out mid-task, and a
   // swipe's release paid 30ms for it. The callbacks run before that frame's
   // layout, so it paints already scrolled.
+  //
+  // Every tab's box is read here, not only the chosen one's: a tab beside it
+  // settling to its width (a title arriving) moves where a whole leading
+  // tab starts, and the scroll is placed again for it.
   $effect(() => {
     const rect = segmentRect;
+    const boxes = [...rects.rects.values()];
     const { width } = rects.viewport;
     const track = node;
-    if (!(scrollable && track && rect && width > 0)) {
+    const room = endRoom;
+    if (!(scrollable && track && room && rect && width > 0)) {
       return;
     }
     const frame = requestAnimationFrame(() => {
       // An instant write, not a smooth one: a smooth scroll is an animation
       // the browser abandons when the track's content changes under it, and
       // the segment sliding into place is the motion here.
-      const pad = 8;
       const at = track.scrollLeft;
-      if (rect.left - pad < at) {
+      const to = inView(at, rect, boxes, width);
+      // The end room is what the track lacks to reach `to`: written before
+      // the scroll, which is clamped to the track's width as laid out.
+      const max = track.scrollWidth - track.clientWidth - room.offsetWidth;
+      room.style.inlineSize = `${Math.max(0, Math.ceil(to - max))}px`;
+      if (Math.abs(to - at) > 0.5) {
         stopGlide();
-        track.scrollLeft = rect.left - pad;
-      } else if (rect.left + rect.width + pad > at + width) {
-        stopGlide();
-        track.scrollLeft = rect.left + rect.width + pad - width;
+        track.scrollLeft = to;
       }
     });
     return () => cancelAnimationFrame(frame);
   });
+
+  /**
+   * Where the track stands: the chosen item whole in view, and the leading
+   * edge on no item's middle (a tab cut at the left edge reads as a broken
+   * tab, not as more to scroll to). Any tab's start from where the chosen
+   * one's end comes into view to the chosen one's own start qualifies, the
+   * nearest to where the track stands now, so a track already showing the
+   * chosen item over a whole leading edge stays put. Past the last tab the
+   * track gets the room it needs (`endRoom`): a strip ending in empty room,
+   * as a browser's does, rather than starting on a sliver of a tab.
+   */
+  function inView(
+    at: number,
+    chosen: { left: number; width: number },
+    boxes: readonly { left: number; width: number }[],
+    width: number
+  ): number {
+    const pad = 8;
+    const lo = Math.max(0, chosen.left + chosen.width + pad - width);
+    const whole = (s: number) =>
+      !boxes.some(
+        (box) => box.left < s - 0.5 && box.left + box.width > s + 0.5
+      );
+    const [nearest] = [at, 0, ...boxes.map((box) => box.left)]
+      .filter((s) => s >= lo - 0.5 && s <= chosen.left + 0.5 && whole(s))
+      .sort((a, b) => Math.abs(a - at) - Math.abs(b - at));
+    return nearest ?? Math.min(lo, chosen.left);
+  }
+
+  /** The room after the last tab that lets the leading edge reach a whole tab. */
+  let endRoom = $state<HTMLElement | undefined>();
 
   /**
    * A vertical wheel over the track moves it sideways on a spring: each
@@ -364,6 +402,9 @@
     <div aria-hidden="true" class="ring" style={px(focusRect)}></div>
   {/if}
   {@render children()}
+  {#if scrollable}
+    <span aria-hidden="true" class="end-room" bind:this={endRoom}></span>
+  {/if}
 </div>
 
 <style>
@@ -465,6 +506,15 @@
     }
   }
 
+  /* The room after the last tab (`endRoom`): none at rest, its gap taken
+     back, so it changes nothing until the scroll needs it. */
+  .end-room {
+    flex: none;
+    align-self: stretch;
+    inline-size: 0;
+    margin-inline-start: calc(-1 * var(--gap));
+    pointer-events: none;
+  }
   /* Placed by `transform`, not `left`/`top`: moving between tabs is then a
      compositor-only translate. Only the width change lays out, and it lays
      out one empty absolutely-positioned box. */

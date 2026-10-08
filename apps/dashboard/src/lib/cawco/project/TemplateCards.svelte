@@ -15,6 +15,7 @@
    */
   import { RadioGroup } from "bits-ui";
   import { appear } from "#lib/cawco/motion/curves.svelte.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import Caw, { LEDGE_LINE } from "../home/Caw.svelte";
   import CardFace from "./CardFace.svelte";
@@ -30,6 +31,7 @@
     metaOf,
     peekSize,
     peekShare,
+    action,
   }: {
     cards: readonly TemplateCard[];
     selected: TemplateName | null;
@@ -46,6 +48,12 @@
     peekSize: number;
     /** The key the peek departs under when the page goes (motion/share). */
     peekShare?: string;
+    /**
+     * A card's one action beside its notice (no machine online: the Code
+     * card's "Check machines"). A sibling of the card, never inside it: a
+     * card is a radio button, and a button holds no button.
+     */
+    action?: { template: TemplateName; label: string; onclick: () => void };
   } = $props();
 
   interface Box {
@@ -64,11 +72,13 @@
       for (const card of node.querySelectorAll<HTMLElement>(
         "[data-template]"
       )) {
+        const at = card.getBoundingClientRect();
+        const grid = node.getBoundingClientRect();
         next[card.dataset.template as TemplateName] = {
-          top: card.offsetTop,
-          left: card.offsetLeft,
-          width: card.offsetWidth,
-          height: card.offsetHeight,
+          top: at.top - grid.top - node.clientTop,
+          left: at.left - grid.left - node.clientLeft,
+          width: at.width,
+          height: at.height,
         };
       }
       boxes = next;
@@ -131,24 +141,40 @@
     })}
   >
     {#each cards as card (card.template)}
-      <RadioGroup.Item
-        class="icon-card"
-        data-template={card.template}
-        value={card.template}
-      >
-        <CardFace
-          hue={card.hue}
-          icon={card.icon}
-          meta={metaOf(card)}
-          name={card.name}
+      {@const acted = action?.template === card.template ? action : undefined}
+      <div class="tcell">
+        <RadioGroup.Item
+          class="icon-card"
+          data-template={card.template}
+          value={card.template}
         >
-          {#snippet aside()}
-            {#if fit === card.template && peek}
-              <span class="fits" transition:appear>Fits your prompt</span>
-            {/if}
-          {/snippet}
-        </CardFace>
-      </RadioGroup.Item>
+          <CardFace
+            hue={card.hue}
+            icon={card.icon}
+            meta={metaOf(card)}
+            name={card.name}
+          >
+            {#snippet aside()}
+              {#if fit === card.template && peek}
+                <span class="fits" transition:appear>Fits your prompt</span>
+              {/if}
+            {/snippet}
+          </CardFace>
+          {#if acted}
+            <!-- The room its action stands in, under its notice. -->
+            <span aria-hidden="true" class="action-room"></span>
+          {/if}
+        </RadioGroup.Item>
+        {#if acted}
+          <Button
+            class="tcard-action"
+            label={acted.label}
+            onclick={acted.onclick}
+            size="sm"
+            variant="outline"
+          />
+        {/if}
+      </div>
     {/each}
 
     {#if peek && peekAt}
@@ -182,6 +208,22 @@
      Caw's rise has the room. */
   .templates :global(.cards) {
     row-gap: var(--space-8);
+  }
+  /* Each card's cell: the card fills it, and an action stands over the
+     room the card keeps for it. */
+  .tcell {
+    position: relative;
+    display: grid;
+  }
+  .action-room {
+    block-size: var(--c-btn-h-sm);
+    margin-block-start: var(--space-2);
+  }
+  .tcell :global(.tcard-action) {
+    position: absolute;
+    inset-inline-start: calc(var(--space-4) + 1px);
+    inset-block-end: calc(var(--space-4) + 1px);
+    z-index: 4;
   }
   .fits {
     font: var(--type-label);

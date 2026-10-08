@@ -17,6 +17,8 @@
   import { tick } from "svelte";
   import { cawco, createProject } from "#lib/cawco/client.svelte.js";
   import Caw from "#lib/cawco/home/Caw.svelte";
+  import { machinesPopover } from "#lib/cawco/join/join.svelte.js";
+  import { morph } from "#lib/cawco/motion/morph.svelte.js";
   import CawField from "#lib/cawco/project/CawField.svelte";
   import {
     fitOf,
@@ -37,16 +39,27 @@
 
   let words = $state("");
   let fit = $state<TemplateName | null>(null);
-  /** The card the person tapped; until then the fitting card is the pick. */
+  /**
+   * The card the person tapped: it is the pick until the prompt fits
+   * another card. Untapped, the fitting card is the pick, so the frame
+   * stands on the fit or the tap and nowhere else.
+   */
   let tapped = $state<TemplateName | null>(null);
   const selected = $derived(tapped ?? fit);
+
+  /** The prompt's fit, now: a new fit releases the tap and the frame follows it. */
+  function refit(text: string) {
+    const next = fitOf(text);
+    if (next !== null && next !== fit) {
+      tapped = null;
+    }
+    fit = next;
+  }
 
   // The fit runs once typing has rested.
   $effect(() => {
     const now = words;
-    const timer = setTimeout(() => {
-      fit = fitOf(now);
-    }, FIT_AFTER_MS);
+    const timer = setTimeout(() => refit(now), FIT_AFTER_MS);
     return () => clearTimeout(timer);
   });
 
@@ -72,8 +85,10 @@
   function starter(text: string) {
     flights += 1;
     words = text;
+    // A chip is a new prompt, never a pick: the frame goes to its fit.
+    tapped = null;
     // A press runs the fit at once: there is no typing to wait for.
-    fit = fitOf(text);
+    refit(text);
   }
 
   const noMachine = $derived(cawco.onlineMachines.length === 0);
@@ -108,15 +123,14 @@
 </svelte:head>
 
 <main class="new-project">
-  <div class="ask">
-    <div
-      class="caw-80"
-      data-share={made && caw === "page" ? `caw:${made}` : undefined}
-    >
-      {#if caw === "page"}
+  <!-- His slot goes with him when he peeks over a card, and comes back
+       with him: the hero's height tweens (morph) rather than leaving a band. -->
+  <div class="ask" {@attach morph()}>
+    {#if caw === "page"}
+      <div class="caw-80" data-share={made ? `caw:${made}` : undefined}>
         <Caw ongone={gone} present={!leaving} size={CAW_SIZE} status="ready" />
-      {/if}
-    </div>
+      </div>
+    {/if}
     <h1 class="title">What are we working on?</h1>
     <div class="field">
       <CawField
@@ -150,6 +164,15 @@
 
   <div class="cards">
     <TemplateCards
+      action={noMachine
+        ? {
+            template: "code",
+            label: "Check machines",
+            onclick: () => {
+              machinesPopover.open = true;
+            },
+          }
+        : undefined}
       cards={TEMPLATE_CARDS}
       {fit}
       {metaOf}
@@ -161,8 +184,8 @@
       bind:selected={
         () => selected,
         (next) => {
-    tapped = next;
-  }
+          tapped = next;
+        }
       }
     />
   </div>

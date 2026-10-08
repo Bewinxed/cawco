@@ -1238,7 +1238,12 @@
      highlight): the hover ghost under it, and the selection pill drawn in
      the channel-card recipe (DESIGN.md, Channel cards): 1px brand-solid
      over surface-recess, at the card's own radius, which the pill takes
-     from the card. Its face is CardFace. */
+     from the card. Its face is CardFace.
+     A card draws its own 1px border on the pill's rect, so the pill stands
+     over the card's border and fill (z 1) and under its face (CardFace,
+     z 2): left at the highlight's -1, under the card, the card's border
+     covers the frame's brand edge on every pixel and only the hover ghost
+     reads. */
   .icon-cards {
     position: relative;
     display: grid;
@@ -1253,6 +1258,7 @@
     }
 
     & :is(.kit-pill, .kit-pill-trail) {
+      z-index: 1;
       box-sizing: border-box;
       border: 1px solid var(--brand-solid);
       background: var(--surface-recess);

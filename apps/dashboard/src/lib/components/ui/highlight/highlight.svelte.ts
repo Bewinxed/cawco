@@ -254,12 +254,20 @@ export function highlight(options: HighlightOptions) {
       }
       const rect = row.getBoundingClientRect();
       const slid = slideOf(row, container, shares);
-      const at = toLocal(rect.left - slid.x, rect.top - slid.y);
+      // On the device-pixel grid, as the row's own box is painted: a layer
+      // placed by a fractional translate draws its 1px edge across two
+      // pixels, a soft line beside the row's crisp one (a card at x 1026.3
+      // drew the frame's brand edge at 73%).
+      const snap = (v: number) =>
+        Math.round(v * window.devicePixelRatio) / window.devicePixelRatio;
+      const left = snap(rect.left - slid.x);
+      const top = snap(rect.top - slid.y);
+      const at = toLocal(left, top);
       return {
         x: at.x,
         y: at.y,
-        w: rect.width / at.sx,
-        h: rect.height / at.sy,
+        w: (snap(rect.right - slid.x) - left) / at.sx,
+        h: (snap(rect.bottom - slid.y) - top) / at.sy,
       };
     };
     const boxOf = (row: HTMLElement): Box | undefined => {

@@ -511,5 +511,11 @@
     .acts :global([aria-label^="More for"]) {
       margin-inline-start: auto;
     }
+    /* The trailing ghost button's glyph stands on the page's edge, where the
+       filled controls under it end (the field's send): its box reaches past
+       the gutter by the glyph's inset. */
+    .acts :global([aria-label^="More for"]) {
+      margin-inline-end: calc((var(--c-btn-h) - 16px) / -2);
+    }
   }
 </style>

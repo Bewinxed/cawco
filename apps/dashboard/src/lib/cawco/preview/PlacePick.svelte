@@ -1,7 +1,7 @@
 <script lang="ts">
   /**
    * `cawco.pickPlace()` (wire.ts): a page asks the person for a machine and a
-   * folder on it, and gets CawCo's own pickers, docked over the foot of the
+   * folder on it, and gets CawCo's own pickers, over the whole of the
    * preview's well: the machine select and the folder browser New Session
    * uses. "Use this place" answers the page; Cancel or Escape answers null.
    */
@@ -71,6 +71,7 @@
   onsubmit={use}
   transition:appear
 >
+  <h2 class="pick-title">Pick a machine and folder</h2>
   <div class="flex flex-col gap-1">
     <span class="text-label text-muted-foreground" id="place-machine-label"
       >Machine</span
@@ -141,23 +142,21 @@
 </form>
 
 <style>
-  /* Docked over the foot of the well, as the pane's own error line is, and
-     as wide as the well allows: opaque, so the page under it never reads
-     through (the page's own question names what is being picked). */
+  /* Over the whole well, opaque: the page under it is put by while the
+     person picks, never shown cut through, so it carries its own heading. */
   .place-pick {
     position: absolute;
-    inset-inline: var(--space-3);
-    bottom: var(--space-3);
+    inset: 0;
     z-index: 1;
     display: flex;
     flex-direction: column;
     gap: var(--space-3);
-    max-block-size: calc(100% - var(--space-6));
     overflow-y: auto;
-    padding: var(--space-4);
-    border: 1px solid var(--border-hairline);
-    border-radius: var(--radius-lg);
+    padding: var(--space-5);
     background: var(--surface-raised);
-    box-shadow: var(--shadow-drawer);
+  }
+  .pick-title {
+    font: var(--type-title);
+    color: var(--ink-strong);
   }
 </style>
