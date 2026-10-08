@@ -1,14 +1,27 @@
+import { chmod, rename } from "node:fs/promises";
+import { join } from "node:path";
+
 /**
  * The script the hub, dashboard, agent and session keeper units start through.
- * Most verbs run the current build, but first put the previous build back when
- * an update's trial ran out without the new build confirming itself: the
- * recovery for an update helper that died after the swap, which does not depend
- * on the new build being able to start. The keeper is started through the same
- * script, from its own link, and gets the same recovery for a keeper move: a
- * move writes `keeper-trial.json` before it changes the link, and the keeper's
- * next start after the deadline puts the previous build back. Nothing is
- * restored while a helper is live: the helper owns the outcome and rolls back
- * itself. Written once at install and never replaced by an update.
+ *
+ * An update's trial is decided by one process, the update helper (`cawco
+ * binary-apply`), and nothing here decides it. What this script does is see
+ * that a decider is running: a unit that starts while `trial.json` is open and
+ * no helper holds the lock (the helper died, or the machine rebooted mid-trial)
+ * launches one, `binary-apply --resume`, from the build the trial would put
+ * back. That build ran before the swap, so the decider does not depend on the
+ * new build being able to start. It is launched as a job of the service
+ * manager, not of this unit, so the rollback it may decide, which restarts
+ * this unit, does not end it.
+ *
+ * The session keeper is started through the same script from its own link,
+ * and keeps its own recovery for a keeper move: a move writes
+ * `keeper-trial.json` before it changes the link, and the keeper's next start
+ * after the deadline, with no helper live, puts the previous keeper back.
+ *
+ * Written by the installer, and afterwards only by a build the update helper
+ * has confirmed ({@link writeWrapper}): the script that recovers a trial is
+ * always one a confirmed build wrote, never the build on trial.
  */
 export const BINARY_WRAPPER = `#!/bin/sh
 ROOT="$(cd "$(dirname "$0")" && pwd)"
@@ -34,6 +47,48 @@ helper_live() {
 swap_link() {
   ln -sfn "$1" "$2.swap" && { mv -T "$2.swap" "$2" 2>/dev/null || mv -h "$2.swap" "$2"; }
 }
+# What the decider is given of this unit's environment: CawCo's own settings, and where things are.
+forwarded() {
+  env | grep -E '^(CAWCO_[A-Z0-9_]*|PATH|HOME|XDG_[A-Z_]*)='
+}
+# Starts the update helper given as $1 as a one-shot job of the service manager.
+launch_decider() {
+  stamp="$(date +%s)-$$"
+  if [ "$(uname)" = Darwin ]; then
+    label="dev.cawco.binary-apply.resume-$stamp"
+    plist="$ROOT/$label.plist"
+    {
+      printf '<?xml version="1.0" encoding="UTF-8"?>\\n<plist version="1.0"><dict><key>Label</key><string>%s</string>' "$label"
+      printf '<key>ProgramArguments</key><array><string>%s</string><string>binary-apply</string><string>--resume</string></array>' "$1"
+      printf '<key>EnvironmentVariables</key><dict>'
+      while IFS='=' read -r key value; do
+        printf '<key>%s</key><string>%s</string>' "$key" "$(printf '%s' "$value" | sed 's/&/\\&amp;/g;s/</\\&lt;/g;s/>/\\&gt;/g')"
+      done <<EOF
+$(forwarded)
+EOF
+      printf '</dict><key>RunAtLoad</key><true/></dict></plist>\\n'
+    } > "$plist"
+    launchctl bootstrap "gui/$(id -u)" "$plist"
+  else
+    decider="$1"
+    set --
+    while IFS= read -r pair; do
+      set -- "$@" "--setenv=$pair"
+    done <<EOF
+$(forwarded)
+EOF
+    XDG_RUNTIME_DIR="\${XDG_RUNTIME_DIR:-/run/user/$(id -u)}" systemd-run --user --collect --quiet \\
+      --unit="cawco-binary-apply-resume-$stamp" --property=Type=exec "$@" "$decider" binary-apply --resume
+  fi
+}
+if [ -f "$TRIAL" ] && ! helper_live; then
+  previous="$(sed -n 's/.*"previous":"\\([^"]*\\)".*/\\1/p' "$TRIAL")"
+  version="$(sed -n 's/.*"version":"\\([^"]*\\)".*/\\1/p' "$TRIAL")"
+  if [ -n "$previous" ] && [ -x "$ROOT/versions/$previous/cawco" ]; then
+    echo "cawco: the trial of $version is open and no update helper is deciding it; starting one from $previous" >&2
+    launch_decider "$ROOT/versions/$previous/cawco" || echo "cawco: the update helper could not be started" >&2
+  fi
+fi
 if [ "$1" = sessiond ]; then
   KEEPER_TRIAL="$ROOT/keeper-trial.json"
   if [ -f "$KEEPER_TRIAL" ] && ! helper_live; then
@@ -43,58 +98,21 @@ if [ "$1" = sessiond ]; then
       swap_link "versions/$keeper_from" "$ROOT/keeper"
       cp "$KEEPER_TRIAL" "$ROOT/keeper-trial.recovered"
       rm -f "$KEEPER_TRIAL" "$ROOT/apply.lock"
-      # The build was not at fault while its keeper was failing (its agent could not stay up to confirm it):
-      # it gets a fresh trial from here.
-      if [ -f "$TRIAL" ]; then
-        sed 's/"deadline":[0-9][0-9]*/"deadline":'"$(( $(date +%s) + 150 ))"'/' "$TRIAL" > "$TRIAL.renew" && mv "$TRIAL.renew" "$TRIAL"
-      fi
     fi
   fi
   exec "$ROOT/keeper/cawco" sessiond
 fi
-# The build's own recovery: not while a helper is live, and not while a keeper move is unresolved (a failing
-# keeper keeps the agent from staying up, which is not the build's fault).
-if [ -f "$TRIAL" ] && ! helper_live && [ ! -f "$ROOT/keeper-trial.json" ]; then
-  field() { sed -n "s/.*\\"$1\\":\\"\\([^\\"]*\\)\\".*/\\1/p" "$TRIAL"; }
-  deadline="$(sed -n 's/.*"deadline":\\([0-9][0-9]*\\).*/\\1/p' "$TRIAL")"
-  if [ -n "$deadline" ] && [ "$(date +%s)" -gt "$deadline" ]; then
-    previous="$(field previous)"
-    version="$(field version)"
-    role="$(field role)"
-    db="$(field dbPath)"
-    backup="$(field dbBackup)"
-    migrating=0
-    if [ -n "$db" ] && [ -f "$db.migrating" ]; then
-      mfield() { sed -n "s/.*\\"$1\\":\\"\\([^\\"]*\\)\\".*/\\1/p" "$db.migrating"; }
-      pid="$(sed -n 's/.*"pid":\\([0-9]*\\).*/\\1/p' "$db.migrating")"
-      # A marker is live only if its process is still the one that wrote it: same start time, same boot.
-      if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
-        if [ -r "/proc/$pid/stat" ]; then
-          now_start="$(sed 's/^.*) //' "/proc/$pid/stat" | cut -d ' ' -f 20)"
-          now_boot="$(cat /proc/sys/kernel/random/boot_id 2>/dev/null)"
-        else
-          now_start="$(ps -o lstart= -p "$pid" | sed 's/^ *//;s/ *$//')"
-          now_boot="$(sysctl -n kern.boottime 2>/dev/null)"
-        fi
-        if [ -n "$now_start" ] && [ "$now_start" = "$(mfield procStart)" ] && [ "$now_boot" = "$(mfield bootId)" ]; then migrating=1; fi
-      fi
-    fi
-    if [ -n "$previous" ] && [ "$migrating" = 0 ]; then
-      # One service does the whole recovery, so it is never half done: the hub restores its database, an
-      # agent-only machine's agent has none. A service that runs fine leaves the unconfirmed build alone.
-      if { [ "$role" = hub ] && [ "$1" = hub ]; } || { [ "$role" != hub ] && [ "$1" = up ]; }; then
-        ln -sfn "versions/$previous" "$ROOT/current"
-        [ ! -f "$ROOT/installation.previous.json" ] || cp "$ROOT/installation.previous.json" "$ROOT/installation.json"
-        if [ -n "$backup" ] && [ -f "$backup" ] && [ -n "$db" ]; then
-          mv "$db" "$db.migrated-$version"
-          rm -f "$db-wal" "$db-shm"
-          cp "$backup" "$db"
-        fi
-        printf '%s\\n' "$version" > "$ROOT/trial.recovered"
-        rm -f "$TRIAL" "$ROOT/installation.previous.json" "$ROOT/apply.lock"
-      fi
-    fi
-  fi
-fi
 exec "$ROOT/current/cawco" "$@"
 `;
+
+/**
+ * Puts {@link BINARY_WRAPPER} at `<root>/run`, atomically: a shell already
+ * reading the old script keeps reading the file it opened.
+ */
+export async function writeWrapper(root: string): Promise<void> {
+  const path = join(root, "run");
+  const temporary = `${path}.${process.pid}.tmp`;
+  await Bun.write(temporary, BINARY_WRAPPER);
+  await chmod(temporary, 0o700);
+  await rename(temporary, path);
+}

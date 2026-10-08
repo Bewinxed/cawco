@@ -355,7 +355,7 @@ clean() {
 if healthy && clean && [ -S /run/user/1000/cawco/sessiond.sock ]; then echo "GOODVERSION=$good"; exit 0; fi
 pkill -9 -f binary-apply
 systemctl --user stop cawco-agent.service cawco-hub.service cawco-dashboard.service
-rm -f "$binary/apply.lock" "$binary/trial.json" "$binary/trial.recovered" "$binary/keeper-trial.json" "$binary/keeper-trial.recovered" "$binary/installation.previous.json" "$binary/update-failures.json" "$data/cawco.db.migrating"
+rm -f "$binary/apply.lock" "$binary/trial.json" "$binary/keeper-trial.json" "$binary/keeper-trial.recovered" "$binary/update-failures.json" "$data/cawco.db.migrating"
 rm -rf "$HOME/.config/systemd/user/cawco-sessiond.service.d"
 for d in "$binary"/versions/*/; do [ -f "${d}cawco.real" ] && mv -f "${d}cawco.real" "${d}cawco"; done
 systemctl --user daemon-reload
@@ -457,7 +457,7 @@ data="$HOME/.local/share/cawco"
 echo "== apply.log (last 60 lines)"
 tail -n 60 "$binary/apply.log" 2>&1
 cd "$binary" 2> /dev/null || { echo "no $binary"; exit 0; }
-for f in installation.json installation.previous.json update-state.json trial.json trial.recovered keeper-trial.json keeper-trial.recovered apply.lock; do
+for f in installation.json update-state.json trial.json keeper-trial.json keeper-trial.recovered apply.lock; do
   if [ -e "$f" ]; then echo "== $f"; cat "$f"; echo; else echo "== $f: absent"; fi
 done
 echo "== current -> $(readlink current)"
@@ -802,7 +802,8 @@ swap_kill_recover() {
     live=$(keeper_pid "$hubc")
     as_user "$hubc" sh -c "printf '{\"pid\":$live,\"procStart\":\"1\",\"bootId\":\"not-this-boot\"}' > ~/.local/share/cawco/cawco.db.migrating"
   fi
-  # The unit that cannot start keeps being restarted; the first start after the trial runs out restores the previous build.
+  # The unit that cannot start keeps being restarted through the wrapper, which finds the trial with no helper and
+  # starts one from the previous build; that helper rolls every unit back when the build is not healthy in time.
   wait_until 420 '[[ "$(as_user "$hubc" readlink /home/cawco/.local/share/cawco/binary/current)" == versions/0.0.1-test.2 ]]'
   wait_until 120 'as_user "$hubc" curl -fsS http://127.0.0.1:3456/health | grep -q "\"version\":\"0.0.1-test.2\""'
   wait_until 120 '[[ "$(field $hid failedVersion)" == '"$version"' && "$(phase $hid)" == failed-rolled-back ]]'
@@ -991,13 +992,13 @@ trial_keeps_what_it_restores() {
   previous=$(current_link "$hubc")
   publish_nightly 5 42
   learn
-  wait_until 400 '[[ "$(build_version $hid)" == "$(nb 5)" && "$(phase $hid)" == installed ]]'
-  # Right after the update the trial is pending and the build it would restore is still on disk.
-  has_file "$hubc" trial.json
+  # While the helper decides the trial, the build it would restore is still on disk.
+  wait_until 400 '[[ "$(current_link "$hubc")" == "versions/$(nb 5)" ]] && has_file "$hubc" trial.json'
   has_version "$hubc" "${previous#versions/}"
-  [[ "$(keeper_link "$hubc")" == "versions/$(nb 5)" ]]
-  # Once the agent has confirmed the trial it is gone.
-  wait_until 240 '! has_file "$hubc" trial.json'
+  # Once the helper has confirmed the build the trial is gone, the keeper has followed it, and nothing runs or
+  # names the previous build, so it is pruned.
+  wait_until 400 '[[ "$(build_version $hid)" == "$(nb 5)" && "$(phase $hid)" == installed ]] && ! has_file "$hubc" trial.json'
+  wait_until 120 '[[ "$(keeper_link "$hubc")" == "versions/$(nb 5)" ]]'
   wait_until 60 '! has_version "$hubc" "${previous#versions/}"'
 }
 export -f trial_keeps_what_it_restores
@@ -1058,9 +1059,8 @@ helper_killed_mid_keeper_move() {
   wait_until 120 '[[ "$(phase $hid)" != installing ]]'
   [[ "$(current_link "$hubc")" == "versions/$(nb 7)" ]]
   [[ "$(build_version $hid)" == "$(nb 7)" ]]
-  # The build's own trial, unconfirmed while the keeper failed, is confirmed afterwards and nothing rolled it back.
+  # The build was confirmed before its keeper moved, and nothing rolled it back.
   wait_until 300 '! has_file "$hubc" trial.json'
-  ! has_file "$hubc" trial.recovered
   ! has_file "$hubc" apply.lock
   [[ "$(current_link "$hubc")" == "versions/$(nb 7)" ]]
   # Sessions start, and the keeper link was not touched again.
@@ -1089,23 +1089,6 @@ keeper_moves_on_joined_machine() {
 export -f keeper_moves_on_joined_machine
 check "the keeper moves by itself on a joined machine once it holds nothing" keeper_moves_on_joined_machine 1200 "Install now applies the newer build"
 
-slow_keeper_stage_not_undone() {
-  keeper_start_state
-  keeper_dropin delay 20
-  publish_nightly 8 45
-  learn
-  # While the helper waits for the slow keeper, the trial's deadline is made to have passed: the wrapper must leave the build alone while the helper lives.
-  wait_until 400 'has_file "$hubc" keeper-trial.json'
-  as_user "$hubc" sed -i 's/"deadline":[0-9]*/"deadline":1/' /home/cawco/.local/share/cawco/binary/trial.json
-  wait_until 400 '[[ "$(build_version $hid)" == "$(nb 8)" && "$(phase $hid)" == installed ]]'
-  [[ "$(current_link "$hubc")" == "versions/$(nb 8)" ]]
-  ! has_file "$hubc" trial.recovered
-  ! has_file "$hubc" keeper-trial.recovered
-  keeper_dropin remove
-}
-export -f slow_keeper_stage_not_undone
-check "a slow keeper stage is not undone by the wrapper while the helper lives" slow_keeper_stage_not_undone 900 "Install now applies the newer build" "$(printf '0.0.1-nightly.8+%s' 888888888888)"
-
 agent_cannot_start_whole_recovery() {
   keeper_start_state
   # Only the commanded update below may move the machine: an automatic one (a newer build published by an
@@ -1124,9 +1107,9 @@ agent_cannot_start_whole_recovery() {
   wait_until 20 'as_user "$hubc" test -e /tmp/stub-9.done'
   # Killed right after the swap: the new build's hub runs, its agent cannot stay up, and nothing is left to confirm it.
   as_user "$hubc" pkill -9 -f binary-apply
-  # Within the trial's deadline (150 s) plus 60 s: the hub, which is the designated service, restarts itself
-  # and the wrapper puts the previous build back whole.
-  wait_until 240 '[[ "$(current_link "$hubc")" == "'"$previous"'" ]]'
+  # The agent's unit keeps restarting through the wrapper, which starts a helper from the previous build; within
+  # that helper's window (180 s) plus a minute it rolls every unit back, the hub with them.
+  wait_until 300 '[[ "$(current_link "$hubc")" == "'"$previous"'" ]]'
   wait_until 60 'as_user "$hubc" curl -fsS http://127.0.0.1:3456/health | grep -q "\"version\":\"${previous#versions/}\""'
   wait_until 60 '[[ "$(hub_api /api/agents | json "d => d.find(a => a.machineId === \"$hid\")?.status")" == online ]]'
   wait_until 60 '[[ "$(custody_of $hid)" == available ]]'

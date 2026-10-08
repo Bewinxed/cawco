@@ -10659,6 +10659,10 @@ export const createServer = (
           body: t.Object({
             restartAgent: t.Optional(t.Boolean()),
             force: t.Optional(t.Boolean()),
+            // One per press of Install now: the machine acts on a command once.
+            commandId: t.Optional(t.String()),
+            // The build the person was shown; the machine applies that one only.
+            version: t.Optional(t.String()),
           }),
         },
         async ({ params, body, status }) => {

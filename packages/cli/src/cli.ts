@@ -150,6 +150,8 @@ interface Args {
   releaseHost?: string;
   /** Everything after the verb — the services `service` acts on. */
   rest: string[];
+  /** `binary-apply --resume`: decide the update trial a helper left open. */
+  resume: boolean;
   /** The session `tools` and `tool` act as. */
   session?: string;
   verbose: boolean;
@@ -165,6 +167,7 @@ const parseArgs = (argv: string[]): Args => {
     rest: [],
     ask: false,
     keeperOnly: false,
+    resume: false,
     autoUpdate: false,
     dev: false,
     whenIdle: false,
@@ -192,6 +195,9 @@ const parseArgs = (argv: string[]): Args => {
         break;
       case "--keeper-only":
         args.keeperOnly = true;
+        break;
+      case "--resume":
+        args.resume = true;
         break;
       case "--held": {
         index += 1;
@@ -480,6 +486,11 @@ const runBinaryInstall = async (args: Args): Promise<number> => {
 };
 
 const runBinaryApply = async (args: Args): Promise<number> => {
+  if (args.resume) {
+    const { resumeBinary } = await import("./binary-apply");
+    await resumeBinary();
+    return 0;
+  }
   if (!args.action || args.held === undefined) {
     throw new UsageError(
       "binary-apply needs a staged version and --held <count>"

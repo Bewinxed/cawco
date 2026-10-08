@@ -3,6 +3,7 @@ import {
   AGENT_RESTARTING,
   RESUMABLE_CAWCO_TOOLS,
 } from "@cawco/core/binary-updates";
+import { portHolder } from "@cawco/core/live-processes";
 import {
   fenced,
   holdRestart,
@@ -209,12 +210,13 @@ async function restartRoute(request: Request): Promise<Response> {
 
 /** One stable loopback endpoint for every harness and the browser's OAuth callback. */
 export const startMcpGateway = (hubUrl: () => string) => {
+  const port = Number(
+    process.env.CAWCO_MCP_CALLBACK_PORT ?? CAWCO_MCP_CALLBACK_PORT
+  );
   try {
     return Bun.serve({
       hostname: "127.0.0.1",
-      port: Number(
-        process.env.CAWCO_MCP_CALLBACK_PORT ?? CAWCO_MCP_CALLBACK_PORT
-      ),
+      port,
       idleTimeout: 0,
       async fetch(request) {
         const url = new URL(request.url);
@@ -257,8 +259,11 @@ export const startMcpGateway = (hubUrl: () => string) => {
     });
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "EADDRINUSE") {
+      // Whoever it is, by name: on 2026-10-08 it was a leaf's network namespace
+      // forwarding the port, not an agent, and saying "another agent" sent the
+      // diagnosis the wrong way for an hour and a half.
       throw new Error(
-        `MCP gateway port ${CAWCO_MCP_CALLBACK_PORT} is already held by another agent.`,
+        `MCP gateway port 127.0.0.1:${port} is held by ${portHolder(port)}.`,
         { cause: error }
       );
     }

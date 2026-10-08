@@ -11,6 +11,7 @@ import {
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import type { BinaryUpdateState } from "./binary-updates";
+import { versionsInUse } from "./live-processes";
 import { markerIsLive } from "./process-identity";
 import type { ReleaseManifest } from "./release-manifest";
 import { runtimeVersion } from "./runtime";
@@ -80,29 +81,44 @@ export async function readRunningManifest(): Promise<ReleaseManifest> {
 }
 
 /**
- * Written when a build is swapped in and cleared by that build once it has
- * been healthy for a minute. The service wrapper restores `previous` when a
- * start finds it past its deadline: the recovery for a helper that died after
- * the swap.
+ * An update's trial: the decider's whole state, on disk from before the swap
+ * until the trial is decided. The decider is the update helper (`cawco
+ * binary-apply`); it stays up through the trial and either confirms the build
+ * (healthy for a minute) or rolls every unit back, within minutes. A helper
+ * that dies leaves this file with no live lock, and the next decider resumes
+ * from it: the agent launches one within seconds, and the service wrapper
+ * launches one from the previous build at any unit's start (a reboot, a
+ * crash loop). Nothing but a decider acts on it.
  */
 export interface TrialMarker {
-  /** The hub database copy to restore with `previous`, when the schema changed. */
+  /** The hub database copy a rollback restores, when the schema changed. */
   dbBackup?: string;
   dbPath?: string;
-  /** Unix seconds after which a start that finds this marker puts `previous` back. */
-  deadline: number;
+  /** A rollback has put the database copy in place: a resumed one does not do it again over the previous build's writes. */
+  dbRestored?: boolean;
+  /** Unix seconds by which the build must be healthy, or it is rolled back. A migration moves it. */
+  decideBy?: number;
+  /**
+   * Written before either is carried out, so a decider that resumes finishes
+   * the one already begun rather than deciding again.
+   */
+  decision?: "confirm" | "roll-back";
   previous: string;
+  /** Why a rollback was decided: the problem that stood at the deadline. */
+  reason?: string;
   role: BinaryInstallation["role"];
+  /** Unix seconds: units started after this run the trial build. */
   swappedAt: number;
   version: string;
 }
 export const trialPath = (): string => join(binaryRoot(), "trial.json");
-export const previousInstallationPath = (): string =>
-  join(binaryRoot(), "installation.previous.json");
-export const recoveredPath = (): string =>
-  join(binaryRoot(), "trial.recovered");
 export const readTrial = (): Promise<TrialMarker | undefined> =>
   readJson<TrialMarker>(trialPath());
+/** The services an update restarts, and its rollback restarts again: every one that runs from `current`. */
+export const trialUnits = (
+  role: BinaryInstallation["role"]
+): ("hub" | "dashboard" | "agent")[] =>
+  role === "hub" ? ["hub", "dashboard", "agent"] : ["agent"];
 
 /**
  * The session keeper's pin: a relative link `<root>/keeper` -> `versions/<v>`,
@@ -154,33 +170,13 @@ export async function helperIsLive(): Promise<boolean> {
 }
 
 /**
- * The update trial of `running` when it is unresolved: its deadline has passed,
- * no keeper move is pending (a failing keeper is not the build's fault) and no
- * helper is live (a live helper owns the outcome). Undefined otherwise.
- */
-export async function expiredTrial(
-  running: string
-): Promise<TrialMarker | undefined> {
-  const trial = await readTrial();
-  if (
-    !trial ||
-    trial.version !== running ||
-    trial.deadline > Date.now() / 1000
-  ) {
-    return undefined;
-  }
-  if ((await readKeeperTrial()) || (await helperIsLive())) {
-    return undefined;
-  }
-  return trial;
-}
-
-/**
  * Deletes the directories under `versions/` nothing needs. Kept: what `current`
  * and `keeper` name, what a pending update trial would restore or has swapped
  * in (`trial.json`), what a pending keeper trial names (`keeper-trial.json`),
- * and the build a live helper is applying (named in `apply.lock`). The caller
- * never supplies a keep-list.
+ * the build a live helper is applying (named in `apply.lock`), and every build
+ * a live process runs or names ({@link versionsInUse}): a unit still on a build
+ * the links have left, the keeper's children, and the hooks baked into their
+ * CLI settings. The caller never supplies a keep-list.
  */
 export async function prune(): Promise<void> {
   const keep = new Set<string>();
@@ -202,6 +198,9 @@ export async function prune(): Promise<void> {
   >(lockFilePath());
   if (lock && (await helperIsLive())) {
     add(lock.version);
+  }
+  for (const version of versionsInUse(binaryRoot())) {
+    add(version);
   }
   const versions = join(binaryRoot(), "versions");
   const present = await readdir(versions).catch(() => [] as string[]);

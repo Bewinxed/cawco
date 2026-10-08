@@ -10,30 +10,26 @@
  * applies only the build its hub is running, and the hub's machine never
  * installs a build with fewer migrations than its database holds.
  */
-import { readdir, rename, rm } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
+import { readdir, readFile, rename, rm } from "node:fs/promises";
+import { join } from "node:path";
 import type { UpdateReport } from "@cawco/core";
 import {
   archiveMatches,
   readAtMost,
   type SignedRelease,
 } from "@cawco/core/binary-distribution";
-import { hubProtocol, probeHealth } from "@cawco/core/binary-health";
+import { hubProtocol } from "@cawco/core/binary-health";
 import {
   type BinaryInstallation,
   binaryRoot,
   helperIsLive,
   keeperRecoveredPath,
-  previousInstallationPath,
-  prune,
   readInstallation,
   readKeeperRecovered,
   readKeeperVersion,
   readRunningManifest,
   readTrial,
   readUpdateState,
-  recoveredPath,
-  trialPath,
   updateStatePath,
   versionDirectory,
   writeJsonAtomic,
@@ -48,6 +44,7 @@ import {
   UPDATE_DRAIN_MS,
   UPDATE_WAIT_CAP_MS,
 } from "@cawco/core/binary-updates";
+import { BINARY_WRAPPER, writeWrapper } from "@cawco/core/binary-wrapper";
 import { machineId } from "@cawco/core/machine-id";
 import { verifyManifest } from "@cawco/core/release-manifest";
 import { runtimeVersion } from "@cawco/core/runtime";
@@ -56,10 +53,10 @@ import { lowerFence, raiseFence, restartReadiness } from "./restart";
 import { heldSessions, SessiondClient } from "./sessiond-client";
 
 const POLL_MS = 60_000;
-/** An update that says it is installing for longer than this has lost its helper. */
+/** An update that says it is installing for longer than this, with no helper and no trial, has lost its helper. */
 const INSTALL_STALE_MS = 10 * 60_000;
-/** How long a new build must be healthy before it clears its trial marker. */
-const TRIAL_CONFIRM_MS = 60_000;
+/** How many of the last commands' ids the state keeps, so one delivered again is not acted on twice. */
+const COMMANDS_KEPT = 20;
 /** Minutes to wait before trying a failed download or verification again; the last repeats. */
 const RETRY_DELAYS_MIN = [1, 5, 30, 60];
 
@@ -141,6 +138,9 @@ async function readKeeper(): Promise<{
   }
 }
 
+/** The hub could not be reached at all: no answer, not an answer that refused. */
+class HubUnreachable extends Error {}
+
 interface Failure {
   count: number;
   error: string;
@@ -178,19 +178,9 @@ function helperEnvironment(): [string, string][] {
   );
 }
 
-async function launchApplyHelper(
-  version: string,
-  held: number,
-  keeperOnly: boolean
-) {
+/** The update helper (`cawco binary-apply`, given `args`), as a job of the service manager so it outlives the restarts it performs. */
+async function launchApplyHelper(args: readonly string[]) {
   const executable = process.execPath;
-  const args = [
-    "binary-apply",
-    version,
-    "--held",
-    String(held),
-    ...(keeperOnly ? ["--keeper-only"] : []),
-  ];
   const forwarded = helperEnvironment();
   if (process.platform === "linux") {
     const child = Bun.spawn(
@@ -277,12 +267,19 @@ export class BinaryUpdater {
   #hostsHub = false;
   #policy: BinaryUpdatePolicy = { channel: "stable", autoUpdate: false };
   #staged: string | undefined;
-  /** `commanded`: a person asked for this build, so it applies at the first moment allowed. */
-  readonly #flags: { commanded: boolean } = { commanded: false };
+  /**
+   * `commanded`: a person asked for a build, so it applies at the first moment
+   * allowed; `version`, the build they were shown, when they named one. Held in
+   * memory only: a command acts on this process's passes and on no other.
+   */
+  readonly #flags: { commanded: boolean; version?: string } = {
+    commanded: false,
+  };
   #running: Promise<void> | undefined;
   #timer: ReturnType<typeof setInterval> | undefined;
   #trialTimer: ReturnType<typeof setInterval> | undefined;
-  #healthySince: number | undefined;
+  /** When this agent last launched a helper to resume an open trial. */
+  #resumedAt = 0;
   /**
    * The fence this updater raised, while it stands: on this agent, and on the
    * hub when its restart is part of the update (the hub's url then). Lowered
@@ -313,7 +310,6 @@ export class BinaryUpdater {
     }
     this.#hostsHub = (await readInstallation())?.role === "hub";
     await this.#load();
-    await this.#noteRecovery();
     await this.#noteKeeperRecovery();
     this.#timer = setInterval(() => this.tick(), POLL_MS);
     this.#timer.unref();
@@ -359,10 +355,37 @@ export class BinaryUpdater {
     return this.#state;
   }
 
-  /** The command behind "Install now": stage the offered build, then apply it. */
-  async installNow(): Promise<UpdateReport> {
+  /**
+   * The command behind "Install now": stage the offered build, then apply it.
+   * A command is acted on once: its id is kept in the state, on disk, and the
+   * same command delivered again (a request a browser or proxy sent twice, or
+   * one that reaches this machine after it restarted) is answered and not
+   * acted on. A command that names a build applies that build only; one that
+   * names none takes what is offered now. A build that failed and was rolled
+   * back is applied again only this way.
+   */
+  async installNow(
+    command: { commandId?: string; version?: string } = {}
+  ): Promise<UpdateReport> {
     const from = this.#state.installedVersion;
+    const id = command.commandId ?? crypto.randomUUID();
+    if (this.#state.commands?.includes(id)) {
+      return {
+        from,
+        to: this.#state.availableVersion,
+        built: false,
+        changed: [],
+        installed: false,
+        pulled: "nothing",
+        restarted: [],
+        skipped: `command ${id} was already acted on; it is not acted on again`,
+      };
+    }
+    await this.#set({
+      commands: [...(this.#state.commands ?? []), id].slice(-COMMANDS_KEPT),
+    });
     this.#flags.commanded = true;
+    this.#flags.version = command.version;
     // A pass already in flight began before the command: let it end, then run one that sees it.
     await this.#running;
     await this.tick();
@@ -403,27 +426,6 @@ export class BinaryUpdater {
     this.#report(this.#state);
   }
 
-  /** A service wrapper that restored the previous build leaves a note; this records it. */
-  async #noteRecovery(): Promise<void> {
-    const note = (
-      await Bun.file(recoveredPath())
-        .text()
-        .catch(() => undefined)
-    )?.trim();
-    if (!note) {
-      return;
-    }
-    await this.#set({
-      phase: "failed-rolled-back",
-      failedVersion: note,
-      availableVersion: note,
-      error:
-        "The new build did not become healthy and the helper never reported back; the previous build was restored on its next start",
-      landed: { at: Date.now(), outcome: "rolled-back", version: note },
-    });
-    await rm(recoveredPath(), { force: true });
-  }
-
   /** The keeper's wrapper put the previous keeper back after a move whose helper died; this records it and does not retry that build. */
   async #noteKeeperRecovery(): Promise<void> {
     const trial = await readKeeperRecovered();
@@ -441,7 +443,12 @@ export class BinaryUpdater {
     await rm(keeperRecoveredPath(), { force: true });
   }
 
-  /** Every ten seconds: take up what the helper wrote, so the hub learns the phase has moved on, confirm the trial, and take up a keeper recovery. */
+  /**
+   * Every ten seconds: take up what the helper wrote, so the hub learns the
+   * phase has moved on; see that an open trial has a decider; take up a keeper
+   * recovery; and, on a build no trial is deciding, keep the service wrapper as
+   * this build writes it.
+   */
   async #watch(): Promise<void> {
     if (!this.#running) {
       await this.#load();
@@ -460,47 +467,54 @@ export class BinaryUpdater {
       }
     }
     await this.#noteKeeperRecovery();
-    await this.#confirmTrial();
+    await this.#keepDecider();
+    await this.#ownWrapper();
   }
 
-  /** Clears the trial marker once this build has been healthy for a minute. */
-  async #confirmTrial(): Promise<void> {
+  /**
+   * An open trial with no live helper has lost its decider (killed, or the
+   * machine went down mid-trial): this agent launches one, `--resume`, from its
+   * own build, which is running and so can start. The service wrapper does the
+   * same at any unit's start, for an agent that cannot stay up.
+   */
+  async #keepDecider(): Promise<void> {
     const trial = await readTrial();
+    if (
+      !trial ||
+      (await helperIsLive()) ||
+      Date.now() - this.#resumedAt < HELPER_START_MS
+    ) {
+      return;
+    }
+    this.#resumedAt = Date.now();
+    console.warn(
+      `[update] the trial of ${trial.version} is open and no helper is deciding it; starting one`
+    );
+    await launchApplyHelper(["binary-apply", "--resume"]).catch((error) =>
+      console.error(
+        `[update] ${error instanceof Error ? error.message : error}`
+      )
+    );
+  }
+
+  /**
+   * The service wrapper is this build's own once no trial is open: the update
+   * helper has confirmed it, so the script that will recover the next update's
+   * trial is one a confirmed build wrote, never the build on trial.
+   */
+  async #ownWrapper(): Promise<void> {
     const installation = await readInstallation();
-    if (!(trial && installation) || trial.version !== runtimeVersion) {
-      this.#healthySince = undefined;
+    if (
+      !installation ||
+      installation.installedVersion !== runtimeVersion ||
+      (await readTrial())
+    ) {
       return;
     }
-    const problem = await probeHealth({
-      installation,
-      machineId: await machineId(),
-      sinceMs: trial.swappedAt * 1000,
-      version: runtimeVersion,
-    });
-    if (problem) {
-      this.#healthySince = undefined;
-      return;
-    }
-    this.#healthySince ??= Date.now();
-    if (Date.now() - this.#healthySince < TRIAL_CONFIRM_MS) {
-      return;
-    }
-    await rm(trialPath(), { force: true });
-    await rm(previousInstallationPath(), { force: true });
-    await prune();
-    if (trial.dbPath && trial.dbBackup) {
-      // Confirmed healthy: keep the newest copy, drop older ones.
-      const prefix = `${basename(trial.dbPath)}.pre-`;
-      const old = (await readdir(dirname(trial.dbPath))).filter(
-        (name) =>
-          name.startsWith(prefix) &&
-          join(dirname(trial.dbPath ?? ""), name) !== trial.dbBackup
-      );
-      await Promise.all(
-        old.map((name) =>
-          rm(join(dirname(trial.dbPath ?? ""), name), { force: true })
-        )
-      );
+    const path = join(binaryRoot(), "run");
+    if ((await readFile(path, "utf8").catch(() => "")) !== BINARY_WRAPPER) {
+      await writeWrapper(binaryRoot());
+      console.info(`[update] ${path} is ${runtimeVersion}'s wrapper now`);
     }
   }
 
@@ -519,11 +533,17 @@ export class BinaryUpdater {
       // update that just landed.
       await removeFinishedHelpers();
       await this.#load();
-      await this.#noteRecovery();
       await this.#check();
     } catch (error) {
       this.#flags.commanded = false;
       await this.#lowerFence();
+      if (error instanceof HubUnreachable) {
+        // Nothing was tried, and the state reaches a person only through the
+        // hub that did not answer: what it says (a rollback and its reason,
+        // after an update restarted this agent before its hub) stays.
+        console.warn(`[update] ${error.message}`);
+        return;
+      }
       await this.#set({
         phase: "failed",
         error: error instanceof Error ? error.message : String(error),
@@ -579,7 +599,11 @@ export class BinaryUpdater {
     const settings = await fetch(
       `${installation.hubUrl}/api/binary-updates/settings`,
       { signal: AbortSignal.timeout(10_000) }
-    );
+    ).catch((error: unknown) => {
+      throw new HubUnreachable(
+        `the hub at ${installation.hubUrl} did not answer: ${error instanceof Error ? error.message : String(error)}`
+      );
+    });
     if (!settings.ok) {
       throw new Error(`The hub's update settings answered ${settings.status}`);
     }
@@ -590,9 +614,12 @@ export class BinaryUpdater {
     if (this.#state.channel !== this.#policy.channel) {
       await this.#set({ channel: this.#policy.channel });
     }
+    // A live helper, or an open trial (which #keepDecider gives a helper), owns an install.
     if (
       this.#state.phase === "installing" &&
-      Date.now() - this.#state.updatedAt > INSTALL_STALE_MS
+      Date.now() - this.#state.updatedAt > INSTALL_STALE_MS &&
+      !(await helperIsLive()) &&
+      !(await readTrial())
     ) {
       await this.#set({
         phase: "failed",
@@ -613,6 +640,7 @@ export class BinaryUpdater {
       await this.#advanceKeeper();
       return;
     }
+    this.#spendCommandFor(release.manifest.version);
     const failedBefore = this.#state.failedVersion === release.manifest.version;
     if (
       !["installing", "waiting-sessions", "ready"].includes(this.#state.phase)
@@ -641,6 +669,14 @@ export class BinaryUpdater {
       throw error;
     }
     await this.#apply(release);
+  }
+
+  /** A command for a build other than the one offered now is spent: it named that build only. */
+  #spendCommandFor(offered: string): void {
+    if (this.#flags.version !== undefined && this.#flags.version !== offered) {
+      this.#flags.commanded = false;
+      this.#flags.version = undefined;
+    }
   }
 
   /** Nothing is newer: say `none`, or that a channel change waits for that channel's next release. */
@@ -802,7 +838,13 @@ export class BinaryUpdater {
     const installation = await readInstallation();
     await this.#replace(
       installation?.role === "hub" ? installation.hubUrl : undefined,
-      () => launchApplyHelper(release.manifest.version, keeper.held, false)
+      () =>
+        launchApplyHelper([
+          "binary-apply",
+          release.manifest.version,
+          "--held",
+          String(keeper.held),
+        ])
     );
   }
 
@@ -1004,7 +1046,13 @@ export class BinaryUpdater {
     }
     // The keeper moves with this agent alone; the hub stays up.
     await this.#replace(undefined, () =>
-      launchApplyHelper(runtimeVersion, 0, true)
+      launchApplyHelper([
+        "binary-apply",
+        runtimeVersion,
+        "--held",
+        "0",
+        "--keeper-only",
+      ])
     );
   }
 }

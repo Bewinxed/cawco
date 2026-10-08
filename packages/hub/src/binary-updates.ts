@@ -23,7 +23,6 @@ import {
   type SignedRelease,
 } from "@cawco/core/binary-distribution";
 import {
-  expiredTrial,
   readInstallation,
   readRunningManifest,
   versionDirectory,
@@ -34,7 +33,6 @@ import type {
   BinaryUpdateState,
   ChannelRelease,
 } from "@cawco/core/binary-updates";
-import { runtimeVersion } from "@cawco/core/runtime";
 import { Elysia, t } from "elysia";
 import { hidden } from "./hidden";
 import { fenceHub, hubRestartReadiness } from "./restart-holds";
@@ -88,39 +86,7 @@ async function runningRelease(): Promise<LocatedRelease> {
   };
 }
 
-/**
- * An update's trial that ran out unconfirmed is resolved by the machine's
- * designated service (the wrapper's recovery runs only when that service
- * starts): on a hub machine that is this hub. If the new build's hub runs fine
- * but its agent cannot stay up, nothing would ever restart the hub, so the hub
- * restarts itself and the wrapper puts the previous build back. A joined
- * machine needs nothing like this: its designated service is the agent, and an
- * agent that cannot start reaches the wrapper at every restart. A hub run from a
- * source checkout has no installation and does nothing.
- */
-const TRIAL_WATCH_MS = 10_000;
-async function watchUnconfirmedTrial(): Promise<void> {
-  const installation = await readInstallation();
-  if (installation?.role !== "hub") {
-    return;
-  }
-  const check = async () => {
-    // Only a trial that names a build to put back: the wrapper has nothing to do for one that does not.
-    if ((await expiredTrial(runtimeVersion))?.previous) {
-      console.error(
-        `[hub] Build ${runtimeVersion} was not confirmed in time. Restarting so the previous build is put back.`
-      );
-      process.exit(1);
-    }
-  };
-  await check();
-  setInterval(check, TRIAL_WATCH_MS).unref();
-}
-
 export function createBinaryUpdates(options: Options) {
-  watchUnconfirmedTrial().catch(() => {
-    // no installation to read, or no trial: nothing to watch
-  });
   const root = join(dirname(options.dbPath), "binary-releases");
   const policyPath = join(root, "policy.json");
   let policy: BinaryUpdatePolicy = existsSync(policyPath)

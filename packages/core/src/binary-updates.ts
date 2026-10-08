@@ -198,6 +198,11 @@ export interface BinaryUpdateState {
   availableVersion?: string;
   channel: BinaryUpdatePolicy["channel"];
   /**
+   * The ids of the last Install now commands this machine acted on, oldest
+   * first: one delivered again is answered and not acted on twice.
+   */
+  commands?: string[];
+  /**
    * What the last install cut: the work in flight when it was applied anyway,
    * because a person pressed Install now or auto-update had waited its cap.
    * Kept until the next install.

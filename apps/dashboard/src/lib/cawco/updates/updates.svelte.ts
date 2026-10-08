@@ -10,6 +10,7 @@ import type {
   BinaryUpdatePolicy,
 } from "@cawco/core/binary-updates";
 import { SvelteSet } from "svelte/reactivity";
+import { newId } from "../id";
 import { toast } from "../toasts";
 import { installable, type UpdateMachine } from "./model";
 
@@ -93,7 +94,12 @@ class Updates {
       response = await fetch(`/api/agents/${machineId}/update`, {
         method: "POST",
         headers: JSON_HEADERS,
-        body: "{}",
+        // A press is one command, acted on once even if the request is sent
+        // again, and for the build this row showed.
+        body: JSON.stringify({
+          commandId: newId(),
+          version: machine.binaryUpdate?.availableVersion,
+        }),
       });
     } catch {
       return;

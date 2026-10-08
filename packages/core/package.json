@@ -13,6 +13,7 @@
     "./binary-health": "./src/binary-health.ts",
     "./binary-wrapper": "./src/binary-wrapper.ts",
     "./process-identity": "./src/process-identity.ts",
+    "./live-processes": "./src/live-processes.ts",
     "./machine-id": "./src/machine-id.ts",
     "./file-hash": "./src/file-hash.ts",
     "./binary-installation": "./src/binary-installation.ts",

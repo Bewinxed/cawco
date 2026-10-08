@@ -8112,6 +8112,12 @@
                   },
                   "force": {
                     "type": "boolean"
+                  },
+                  "commandId": {
+                    "type": "string"
+                  },
+                  "version": {
+                    "type": "string"
                   }
                 }
               }
@@ -23860,6 +23866,13 @@
               "stable"
             ],
             "type": "string"
+          },
+          "commands": {
+            "description": "The ids of the last Install now commands this machine acted on, oldest\nfirst: one delivered again is answered and not acted on twice.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
           "cut": {
             "description": "What the last install cut: the work in flight when it was applied anyway,\nbecause a person pressed Install now or auto-update had waited its cap.\nKept until the next install.",

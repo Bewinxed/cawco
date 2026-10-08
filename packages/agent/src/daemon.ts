@@ -1312,7 +1312,11 @@ export const startDaemon = (auth?: AuthState, rediscover = false) =>
     // Updates arrive only as signed builds from the hub: this one object owns
     // the update tick, the "Install now" command and the policy the hub pushes.
     const updater = new BinaryUpdater(reportBinaryUpdate);
-    supervisor.registerDaemonFunction(UPDATE_CAWCO, () => updater.installNow());
+    supervisor.registerDaemonFunction(UPDATE_CAWCO, (command) =>
+      updater.installNow(
+        (command ?? {}) as { commandId?: string; version?: string }
+      )
+    );
     supervisor.registerDaemonFunction(CONFIGURE_BINARY_UPDATES, () =>
       updater.configure()
     );
