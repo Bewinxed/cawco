@@ -12,6 +12,7 @@
     BinaryUpdateState,
   } from "@cawco/core/binary-updates";
   import UpdateCard from "#lib/cawco/home/UpdateCard.svelte";
+  import { reflow } from "#lib/cawco/motion/rows.svelte.js";
   import { toast } from "#lib/cawco/toasts.js";
   import ChannelCards from "#lib/cawco/updates/ChannelCards.svelte";
   import {
@@ -287,13 +288,28 @@
     onPage: false,
   });
   /**
-   * Reload here does not reload: it changes the notice under the box at
-   * once, as an acknowledgement can, so the box can be seen to hold.
+   * The rig's reload stand-in. Reload here does not reload: it changes the
+   * notice under the box at once, as an acknowledgement can, so the goodbye
+   * can be seen to stand on its own until the tab would go.
    */
   function demoAction(action: NonNullable<Notice["action"]>) {
     if (action === "reload") {
       demo.notice = NOTICES.at(-1) as Notice;
     }
+  }
+  const inline = $state<{ notice: Notice; onPage: boolean }>({
+    notice: UPDATED_RELOAD,
+    onPage: false,
+  });
+  function inlineAction(action: NonNullable<Notice["action"]>) {
+    if (action === "reload") {
+      inline.notice = NOTICES.at(-1) as Notice;
+    }
+  }
+  /** Home's card, which the acknowledgement drops as Reload is chosen. */
+  let reloadCard = $state<Notice | null>(UPDATED);
+  function cardReload() {
+    reloadCard = null;
   }
   function showAsToast(notice: Notice) {
     demo.notice = notice;
@@ -378,11 +394,7 @@
   <h1>Updated, in a tab older than the dashboard</h1>
   <div class="notices" data-states="notice-reload">
     <div class="one" data-notice="reload">
-      <UpdateNotice
-        onaction={noop}
-        ondismiss={noop}
-        view={{ notice: UPDATED_RELOAD, onPage: false }}
-      />
+      <UpdateNotice onaction={inlineAction} ondismiss={noop} view={inline} />
       <Button
         label="Show as toast"
         onclick={() => showAsToast(UPDATED_RELOAD)}
@@ -414,8 +426,14 @@
     <UpdateCard notice={UPDATED} ondismiss={noop} />
   </div>
   <h1>Updated, unseen, on Home, in a tab older than the dashboard</h1>
-  <div class="home-card" data-states="update-card-reload">
-    <UpdateCard notice={UPDATED} ondismiss={noop} onreload={noop} />
+  <!-- As Home has it: the card in a group box of a `reflow`, a group under it. -->
+  <div class="home-card" data-states="update-card-reload" {@attach reflow()}>
+    <section class="group" data-flip="box">
+      <UpdateCard notice={reloadCard} ondismiss={noop} onreload={cardReload} />
+    </section>
+    <section class="group under" data-flip="box">
+      The next group on Home follows the card's edge
+    </section>
   </div>
 </main>
 
@@ -447,7 +465,17 @@
     gap: var(--space-5);
   }
   .home-card {
+    display: grid;
+    gap: var(--space-4);
     max-inline-size: 440px;
+  }
+  .under {
+    padding: var(--space-3) var(--space-4);
+    border-radius: var(--radius-lg);
+    background: var(--surface-raised);
+    box-shadow: var(--shadow-tile);
+    font: var(--type-meta);
+    color: var(--ink-muted);
   }
   .one {
     display: grid;

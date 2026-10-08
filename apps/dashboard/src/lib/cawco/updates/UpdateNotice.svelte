@@ -15,9 +15,12 @@
    * again (Family's one icon for one job). "Show all N changes" opens them
    * and is gone while they stand open. Esc closes them too.
    *
-   * Reload holds the whole box as it stands, notes and open or closed
-   * included, until the tab goes: what the acknowledgement changes upstream
-   * never reaches it, and Reload shows its pending state.
+   * Reload turns the box into its goodbye (./goodbye): Caw, where he
+   * stood, waiting on his `loading`, beside "See you in a bit", and nothing
+   * else, until the tab goes. The height morphs, the notes and footer leave
+   * on the list switch's exit while the line arrives; nothing of the notice
+   * is shown after, so what the acknowledgement changes upstream never
+   * reaches the box.
    */
   import { tick } from "svelte";
   import { fade } from "svelte/transition";
@@ -30,6 +33,7 @@
   import { IconError } from "#lib/icons.js";
   import Caw, { type CawStatus } from "../home/Caw.svelte";
   import CawMark from "../home/CawMark.svelte";
+  import { arrive, GOODBYE, leaveInPlace } from "./goodbye";
   import type { Notice } from "./model";
   import ReleaseNotes from "./ReleaseNotes.svelte";
 
@@ -45,27 +49,47 @@
     onaction: (action: NonNullable<Notice["action"]>) => void;
     ondismiss: () => void;
     /**
-     * The box stands at its new height after the notes opened or closed,
-     * its morph run: a toaster that stacks by stored heights measures it
-     * again here (`remeasure`).
+     * The box stands at a new height, whatever changed it (another notice,
+     * a line more or less, the notes opening or closing, the goodbye), its
+     * morph run: a toaster that stacks by stored heights measures it again
+     * here (`remeasure`).
      */
-    onsettle?: (open: boolean) => void;
+    onsettle?: (height: number) => void;
     /** Sonner's own, given to a custom toast. */
     closeToast?: () => void;
   } = $props();
 
-  /** The notice as it stood when Reload was chosen; the box shows it until the tab goes. */
-  let held = $state.raw<Notice | null>(null);
-  const notice = $derived(held ?? view.notice);
+  const notice = $derived(view.notice);
+  /** Reload was chosen: the box says its goodbye until the tab goes. */
+  let leaving = $state(false);
+  /** The kind Caw stood for then, so a notice changing under the goodbye never swaps him. */
+  let leftKind = $state<number | null>(null);
+  const cawKind = $derived(leftKind ?? notice.kind);
+  let layer = $state<HTMLElement>();
 
   function act(action: NonNullable<Notice["action"]>): void {
-    if (held) {
-      return;
-    }
     if (action === "reload") {
-      held = $state.snapshot(view.notice) as Notice;
+      sayGoodbye();
     }
     onaction(action);
+  }
+
+  /** Everything but Caw leaves where it stood, and the box turns into its goodbye. */
+  function sayGoodbye(): void {
+    if (noticeBox && layer) {
+      const away = layer;
+      leaveInPlace(
+        [...noticeBox.children].filter(
+          (child): child is HTMLElement =>
+            child instanceof HTMLElement &&
+            child !== away &&
+            !child.matches(".caw")
+        ),
+        away
+      );
+    }
+    leftKind = notice.kind;
+    leaving = true;
   }
   const status = $derived(notice.caw.status as CawStatus);
   /** The first busy line takes the one spinner; the rest are plain words. */
@@ -83,8 +107,10 @@
   let noticeBox = $state<HTMLElement>();
   let closeButton = $state<HTMLButtonElement>();
   let moreButton = $state<HTMLButtonElement>();
-  /** Bumped on every open or close, so only the last one reports it settled. */
+  /** Bumped on every size change, so only the last one reports it settled. */
   let turn = 0;
+  /** The height last reported, so an unchanged one is not reported again. */
+  let reported = -1;
 
   /** Resolves once no tween is left on `box`, waiting again on one that restarted. */
   async function still(box: HTMLElement | undefined): Promise<void> {
@@ -101,21 +127,42 @@
 
   /**
    * Once the box's morph has run (or at once, with nothing to run), says
-   * the box stands at its new height. The morph starts in the microtask
-   * after the notes change, so a frame later it is on the box. It can start
-   * again on the way: a later change cancels the tween in flight (its
-   * `finished` settles) and tweens on from where it stood. So the box is
-   * waited on until no tween is left on it.
+   * the height it stands at. The morph starts in the microtask after the
+   * content changes, so a frame later it is on the box. It can start again
+   * on the way: a later change cancels the tween in flight (its `finished`
+   * settles) and tweens on from where it stood. So the box is waited on
+   * until no tween is left on it.
    */
-  async function settle(next: boolean): Promise<void> {
+  async function settle(): Promise<void> {
     turn += 1;
     const mine = turn;
     await new Promise((done) => requestAnimationFrame(done));
     await still(noticeBox);
-    if (mine === turn) {
-      onsettle?.(next);
+    if (mine !== turn || !noticeBox) {
+      return;
+    }
+    const height = Math.round(noticeBox.getBoundingClientRect().height);
+    if (height !== reported) {
+      reported = height;
+      onsettle?.(height);
     }
   }
+
+  // Every change of the box's size, from any cause, settles and is reported:
+  // svelte-sonner stores a toast's height only when it mounts or its words
+  // change, and stacks the toasts behind by what it stored.
+  $effect(() => {
+    const box = noticeBox;
+    if (!(box && onsettle)) {
+      return;
+    }
+    const sized = new ResizeObserver(() => {
+      // biome-ignore lint/complexity/noVoid: settling reports through onsettle
+      void settle();
+    });
+    sized.observe(box);
+    return () => sized.disconnect();
+  });
 
   /**
    * Opens or closes the notes. The box's height follows by itself (`morph`
@@ -149,13 +196,12 @@
     } else if (next) {
       ListSwap.reveal([...box.querySelectorAll(ROWS)].slice(had));
     }
-    await settle(next);
   }
 </script>
 
 <svelte:window
   onkeydown={(event) => {
-    if (open && event.key === "Escape" && !event.defaultPrevented) {
+    if (open && !leaving && event.key === "Escape" && !event.defaultPrevented) {
       event.preventDefault();
       // biome-ignore lint/complexity/noVoid: closing reports nothing back
       void setOpen(false);
@@ -164,14 +210,21 @@
 />
 
 <div class="notice" role="status" bind:this={noticeBox} {@attach morph()}>
-  {#key notice.kind}
+  {#key cawKind}
     <div
       aria-hidden="true"
       class="caw"
       in:fade={{ duration: dur("--dur-fade"), delay: dur("--dur-fade") }}
       out:fade={{ duration: dur("--dur-fade") }}
     >
-      {#if notice.caw.moves && motionOk.current}
+      {#if leaving}
+        <!-- His wait: the page can't show its content until the tab is back. -->
+        {#if motionOk.current}
+          <Caw size={48} status="loading" />
+        {:else}
+          <CawMark size={48} status="loading" />
+        {/if}
+      {:else if notice.caw.moves && motionOk.current}
         <Caw size={48} {status} />
       {:else}
         <CawMark size={48} {status} />
@@ -179,126 +232,132 @@
     </div>
   {/key}
 
-  <div class="title">
-    {#key notice.kind}
-      <span
-        class="words"
-        in:fade={{ duration: dur("--dur-fade") }}
-        out:fade={{ duration: dur("--dur-exit") }}
-      >
-        {#if notice.failed}
-          <IconError class="fail size-4 shrink-0" />
-        {/if}
-        {notice.title}
-      </span>
-    {/key}
-  </div>
-  <!-- One icon, two roles: it dismisses the notice, and while the notes
-       stand open it is the way back to their summary. -->
-  <button
-    aria-controls={open ? notesId : undefined}
-    aria-expanded={open ? true : undefined}
-    aria-label={open ? "Back to the summary" : "Dismiss"}
-    class="x touch-hit pointer-hit"
-    onclick={() => {
-      if (open) {
-        // biome-ignore lint/complexity/noVoid: closing reports nothing back
-        void setOpen(false);
-        return;
-      }
-      ondismiss();
-      closeToast?.();
-    }}
-    type="button"
-    bind:this={closeButton}
-  >
-    <CloseBack back={open} class="size-3" />
-  </button>
+  <!-- What the box showed, copied where it stood, leaving (./goodbye). -->
+  <div aria-hidden="true" class="leaving" inert bind:this={layer}></div>
 
-  {#if notes}
-    <!-- A click anywhere on the summary opens it, as a convenience for the
-         pointer; the keyboard's way is the button under it. -->
-    <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-    <!-- biome-ignore lint/a11y: the pointer's shortcut; the "Show all" button under it is the keyboard's and the screen reader's -->
-    <div
-      aria-live="off"
-      class="notes"
-      id={notesId}
-      onclick={() => {
-        if (opens && !open) {
-          // biome-ignore lint/complexity/noVoid: opening reports nothing back
-          void setOpen(true);
-        }
-      }}
-      bind:this={notesBox}
-      class:open
-      class:opens
-    >
-      <ReleaseNotes source={open ? notes.full : notes.summary} />
-    </div>
-    {#if opens && !open}
-      <button
-        aria-controls={notesId}
-        aria-expanded="false"
-        class="more touch-hit pointer-hit"
-        onclick={() => setOpen(true)}
-        type="button"
-        bind:this={moreButton}
-      >
-        Show all {notes.count} changes
-      </button>
-    {/if}
-  {/if}
-
-  {#if notice.lines.length > 0 || notice.closing}
-    <div class="body">
-      {#each notice.lines as line, i (i)}
-        {#if line.state === "busy" && i === spinnerAt}
-          <div class="ink busy">
-            <Spinner class="size-3.5 shrink-0 text-muted-foreground" />
-            {line.text}
-          </div>
-        {:else}
-          <div class="ink">{line.text}</div>
-        {/if}
-      {/each}
-      {#if notice.closing}
-        <span class="closing">{notice.closing}</span>
-      {/if}
-    </div>
-  {/if}
-
-  {#if (notice.configure && !view.onPage) || notice.action}
-    <div class="buttons">
-      {#if notice.configure && !view.onPage}
-        <Button class="quiet" href="/config/updates" size="sm" variant="ghost"
-          >Configure update behaviour</Button
+  {#if leaving}
+    <span class="bye" {@attach arrive}>{GOODBYE}</span>
+  {:else}
+    <div class="title">
+      {#key notice.kind}
+        <span
+          class="words"
+          in:fade={{ duration: dur("--dur-fade") }}
+          out:fade={{ duration: dur("--dur-exit") }}
         >
-      {/if}
-      {#if notice.action === "retry"}
-        <Button
-          class="primary"
-          label="Retry"
-          onclick={() => act("retry")}
-          size="sm"
-        />
-      {:else if notice.action === "install-all"}
-        <Button
-          class="primary"
-          label="Install now"
-          onclick={() => act("install-all")}
-          size="sm"
-        />
-      {:else if notice.action === "reload"}
-        <Button
-          class="primary"
-          label="Reload"
-          onclick={() => act("reload")}
-          pending={held !== null}
-          size="sm"
-        />
-      {/if}
+          {#if notice.failed}
+            <IconError class="fail size-4 shrink-0" />
+          {/if}
+          {notice.title}
+        </span>
+      {/key}
     </div>
+    <!-- One icon, two roles: it dismisses the notice, and while the notes
+       stand open it is the way back to their summary. -->
+    <button
+      aria-controls={open ? notesId : undefined}
+      aria-expanded={open ? true : undefined}
+      aria-label={open ? "Back to the summary" : "Dismiss"}
+      class="x touch-hit pointer-hit"
+      onclick={() => {
+        if (open) {
+          // biome-ignore lint/complexity/noVoid: closing reports nothing back
+          void setOpen(false);
+          return;
+        }
+        ondismiss();
+        closeToast?.();
+      }}
+      type="button"
+      bind:this={closeButton}
+    >
+      <CloseBack back={open} class="size-3" />
+    </button>
+
+    {#if notes}
+      <!-- A click anywhere on the summary opens it, as a convenience for the
+         pointer; the keyboard's way is the button under it. -->
+      <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+      <!-- biome-ignore lint/a11y: the pointer's shortcut; the "Show all" button under it is the keyboard's and the screen reader's -->
+      <div
+        aria-live="off"
+        class="notes"
+        id={notesId}
+        onclick={() => {
+          if (opens && !open) {
+            // biome-ignore lint/complexity/noVoid: opening reports nothing back
+            void setOpen(true);
+          }
+        }}
+        bind:this={notesBox}
+        class:open
+        class:opens
+      >
+        <ReleaseNotes source={open ? notes.full : notes.summary} />
+      </div>
+      {#if opens && !open}
+        <button
+          aria-controls={notesId}
+          aria-expanded="false"
+          class="more touch-hit pointer-hit"
+          onclick={() => setOpen(true)}
+          type="button"
+          bind:this={moreButton}
+        >
+          Show all {notes.count} changes
+        </button>
+      {/if}
+    {/if}
+
+    {#if notice.lines.length > 0 || notice.closing}
+      <div class="body">
+        {#each notice.lines as line, i (i)}
+          {#if line.state === "busy" && i === spinnerAt}
+            <div class="ink busy">
+              <Spinner class="size-3.5 shrink-0 text-muted-foreground" />
+              {line.text}
+            </div>
+          {:else}
+            <div class="ink">{line.text}</div>
+          {/if}
+        {/each}
+        {#if notice.closing}
+          <span class="closing">{notice.closing}</span>
+        {/if}
+      </div>
+    {/if}
+
+    {#if (notice.configure && !view.onPage) || notice.action}
+      <div class="buttons">
+        {#if notice.configure && !view.onPage}
+          <Button class="quiet" href="/config/updates" size="sm" variant="ghost"
+            >Configure update behaviour</Button
+          >
+        {/if}
+        {#if notice.action === "retry"}
+          <Button
+            class="primary"
+            label="Retry"
+            onclick={() => act("retry")}
+            size="sm"
+          />
+        {:else if notice.action === "install-all"}
+          <Button
+            class="primary"
+            label="Install now"
+            onclick={() => act("install-all")}
+            size="sm"
+          />
+        {:else if notice.action === "reload"}
+          <Button
+            class="primary"
+            label="Reload"
+            onclick={() => act("reload")}
+            size="sm"
+          />
+        {/if}
+      </div>
+    {/if}
   {/if}
 </div>
 
@@ -329,6 +388,19 @@
     grid-column: 1;
     inline-size: 48px;
     block-size: 48px;
+  }
+  .leaving {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+  /* The goodbye's one line, beside Caw and centred on him. */
+  .bye {
+    grid-row: 1 / 4;
+    grid-column: 2;
+    align-self: center;
+    font: var(--type-label);
+    color: var(--ink-strong);
   }
   .title {
     grid-column: 2;

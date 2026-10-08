@@ -24,24 +24,21 @@ const ID = "cawco-update";
 const DONE_MS = 6000;
 
 /**
- * Has sonner measure the toast `id` again once its notes opened or closed
- * and its box settled. svelte-sonner (1.2.1, the latest) stores each toast's
+ * Has sonner measure the toast `id` again once its box settled at a new
+ * height, whatever changed it (UpdateNotice's ResizeObserver). svelte-sonner (1.2.1, the latest) stores each toast's
  * height when it mounts and measures it again only when its title or
  * description changes (Toast.svelte's height effect, upstream PR #76), and
  * stacks every older toast by those stored heights; a custom toast that
  * grows in place would otherwise lie over the toasts behind it. So the same
- * toast is given again, by its id, with a description naming the state. A
+ * toast is given again, by its id, with a description naming its height. A
  * custom toast never draws its description (Toast.svelte renders the
  * component in place of title and description), so the word is never shown;
  * the update keeps its component, props, duration and onDismiss.
  */
 export const remeasure =
   (id: string) =>
-  (open: boolean): void => {
-    toast.custom(UpdateNotice, {
-      id,
-      description: open ? "notes open" : "notes closed",
-    });
+  (height: number): void => {
+    toast.custom(UpdateNotice, { id, description: `${height}px` });
   };
 
 /**
@@ -63,7 +60,7 @@ export function startUpdateNotice(): () => void {
     let shown = false;
     /** A dismissal we asked for ourselves is not the person's. */
     let ours = false;
-    /** Reload was chosen: the box stays as it stands until the tab goes. */
+    /** Reload was chosen: the box says its goodbye, and nothing replaces or closes it, until the tab goes. */
     let leaving = false;
 
     /** The person closed the notice (its ✕). */

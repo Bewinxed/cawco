@@ -4,6 +4,11 @@
  * build is complete it is swapped in with two renames on the same filesystem,
  * so `build/` is always a whole build: the old one or the new one.
  *
+ * The build it replaces stays as `.build-old` until the next publish: a tab
+ * still holding the old pages asks for the old hashed assets, and serve.js
+ * answers them from there instead of with a 404 (a stylesheet that 404s
+ * leaves the page unstyled).
+ *
  * Before the swap, Caw's .riv files get the precompressed siblings adapter-node
  * writes only for text and WASM: brotli takes a status file to about a third
  * (loading 1.86 MB to 0.62 MB), and sirv serves the sibling the browser accepts.
@@ -41,4 +46,3 @@ await rename(build, old).catch((error) => {
   }
 });
 await rename(next, build);
-await rm(old, { recursive: true, force: true });

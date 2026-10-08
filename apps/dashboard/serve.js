@@ -32,10 +32,16 @@
  * a Referer-routed GET or HEAD gets a 302 back under the prefix, and every URL
  * the iframe holds carries it; any other method is forwarded where it stands.
  */
-import { createReadStream, existsSync, readFileSync, statSync } from "node:fs";
+import {
+  createReadStream,
+  existsSync,
+  readdirSync,
+  readFileSync,
+  statSync,
+} from "node:fs";
 import http from "node:http";
 import net from "node:net";
-import { extname, resolve, sep } from "node:path";
+import { extname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import sockets from "socket-activation";
 
@@ -207,8 +213,9 @@ function proxyPreviewHttp(req, res, info) {
  * once at startup, so it still claims them: `send()` writes a 200 head and then
  * pipes `fs.createReadStream(file)` into the response with no `'error'`
  * listener, and the ENOENT from `open()` becomes an unhandled error that exits
- * the process. A hashed asset that is no longer on disk is answered with a 404
- * before sirv sees it; the listener on the piped stream covers the file that
+ * the process. A hashed asset that is no longer in this build is answered
+ * before sirv sees it: from an earlier build's tree (`EARLIER`) when one
+ * holds it, else with a 404; the listener on the piped stream covers the file that
  * disappears between that check and sirv's open, where the 200 head is already
  * committed and the response can only be cut off.
  */
@@ -238,21 +245,52 @@ const TYPES = {
 const ACCEPTS_BROTLI = /(br|brotli)/i;
 
 /**
+ * The client trees of earlier builds still on disk, newest first: every
+ * earlier release's under the runtime directory (nothing prunes them), or in
+ * a checkout the one build the last publish replaced (`.build-old`,
+ * scripts/publish-build.ts). A page from an earlier build asks for that
+ * build's hashed assets: an open tab loading a chunk or stylesheet late, a
+ * page restored from the browser's cache. Answered with a 404 they leave it
+ * half loaded; a stylesheet that 404s left the update notice unstyled. A
+ * hashed name is its content, so a file found under that name in any of
+ * them is the file the page asked for. Listed once: an earlier build cannot
+ * appear while this process runs.
+ */
+const EARLIER = (() => {
+  if (!standalone) {
+    const old = fileURLToPath(new URL("./.build-old/client", import.meta.url));
+    return existsSync(old) ? [old] : [];
+  }
+  // <runtime>/<release>/dashboard/client
+  const releases = resolve(CLIENT_DIR, "..", "..", "..");
+  return readdirSync(releases)
+    .map((release) => join(releases, release, "dashboard", "client"))
+    .filter((client) => client !== CLIENT_DIR && existsSync(client))
+    .map((client) => ({ client, at: statSync(client).mtimeMs }))
+    .sort((a, b) => b.at - a.at)
+    .map(({ client }) => client);
+})();
+
+/** What a hashed asset is answered with, as sirv answers the current ones. */
+const IMMUTABLE = { "Cache-Control": "public,max-age=31536000,immutable" };
+
+/**
  * sirv also cached the SIZE of every non-hashed file (version.json, favicon,
  * manifest…) at startup, so between a deploy's swap and the restart it answers
  * with the old Content-Length over the new bytes. Those files are served here
- * from a stat taken on each request, with the headers sirv gave them. Returns
- * false when the path is not a file under build/client, leaving it to handler.
+ * from a stat taken on each request, with the headers sirv gave them; so are
+ * an earlier build's hashed assets, from its own tree (`EARLIER`). Returns
+ * false when the path is not a file under `root`, leaving it to the caller.
  */
-function serveFresh(req, res, pathname) {
+function serveFile(req, res, pathname, root = CLIENT_DIR, extra = {}) {
   let decoded;
   try {
     decoded = decodeURIComponent(pathname);
   } catch {
     return false;
   }
-  const abs = resolve(CLIENT_DIR, `.${decoded}`);
-  if (!abs.startsWith(CLIENT_DIR + sep)) {
+  const abs = resolve(root, `.${decoded}`);
+  if (!abs.startsWith(root + sep)) {
     return false;
   }
   let stats;
@@ -290,6 +328,7 @@ function serveFresh(req, res, pathname) {
   }
   const etag = `W/"${stats.size}-${stats.mtime.getTime()}"`;
   const headers = {
+    ...extra,
     Vary: "Accept-Encoding",
     "Content-Type": type,
     "Last-Modified": stats.mtime.toUTCString(),
@@ -325,18 +364,24 @@ function serveApp(req, res) {
     res.end(runningVersion);
     return;
   }
+  const reading = req.method === "GET" || req.method === "HEAD";
   if (
     pathname.startsWith(IMMUTABLE_PREFIX) &&
     !existsSync(`${CLIENT_DIR}${pathname}`)
   ) {
-    res.writeHead(404);
-    res.end();
+    const earlier = EARLIER.find((root) => existsSync(`${root}${pathname}`));
+    if (
+      !(reading && earlier && serveFile(req, res, pathname, earlier, IMMUTABLE))
+    ) {
+      res.writeHead(404);
+      res.end();
+    }
     return;
   }
   if (
-    (req.method === "GET" || req.method === "HEAD") &&
+    reading &&
     !pathname.startsWith(IMMUTABLE_PREFIX) &&
-    serveFresh(req, res, pathname)
+    serveFile(req, res, pathname)
   ) {
     return;
   }

@@ -24,12 +24,7 @@
   import { newerBuild } from "../served-build.svelte";
   import { newSession } from "../spawn/new-session.svelte";
   import UsageMeter from "../UsageMeter.svelte";
-  import {
-    type Notice,
-    reloadId,
-    unseenLandings,
-    updatedNotice,
-  } from "../updates/model";
+  import { reloadId, unseenLandings, updatedNotice } from "../updates/model";
   import { reloadAcknowledging } from "../updates/update-notice.svelte";
   import { updates } from "../updates/updates.svelte";
   import Caw from "./Caw.svelte";
@@ -58,11 +53,11 @@
       : null
   );
   /**
-   * The card as it stood when Reload was chosen: acknowledging drops the
-   * landing from `updated`, and the card holds still until the tab goes.
+   * Reload was chosen: the card says its goodbye until the tab goes, also
+   * once acknowledging has dropped the landing from `updated`.
    */
-  let reloadingWith = $state.raw<Notice | null>(null);
-  const card = $derived(reloadingWith ?? updated);
+  let reloading = $state(false);
+  const card = $derived(updated !== null || reloading);
   // While the card is on screen it is the landing's one surface: the toast stands aside.
   $effect(() => {
     if (!card) {
@@ -83,10 +78,10 @@
     void notices.acknowledge(updated?.acks ?? []);
   }
   function reloadForUpdate(): void {
-    if (reloadingWith) {
+    if (reloading) {
       return;
     }
-    reloadingWith = updated;
+    reloading = true;
     const build = newerBuild();
     // biome-ignore lint/complexity/noVoid: the tab goes once the acknowledgement is in
     void reloadAcknowledging([
@@ -225,10 +220,9 @@
         out:crossOut
       >
         <UpdateCard
-          notice={card}
+          notice={updated}
           ondismiss={dismissUpdate}
-          onreload={reloadingWith || newerBuild() ? reloadForUpdate : undefined}
-          reloading={reloadingWith !== null}
+          onreload={newerBuild() ? reloadForUpdate : undefined}
         />
       </section>
     {/if}
