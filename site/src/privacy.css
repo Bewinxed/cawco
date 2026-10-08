@@ -1,0 +1,46 @@
+/*
+ * The privacy policy. It is the landing page's own type (h1, lede, the panel
+ * heading) set as one reading column, so every colour, face and size comes
+ * from styles.css. Only the layout is new.
+ */
+
+.policy {
+  padding-block: clamp(12px, 3vw, 40px) clamp(40px, 6vw, 72px);
+}
+
+.policy > * {
+  max-width: 40rem;
+}
+
+.policy h1 {
+  font-size: clamp(2.1rem, 1.2rem + 3.8vw, 3.6rem);
+}
+
+.policy-date {
+  margin-top: 12px;
+  color: var(--soft-on-paper);
+  font-size: 0.95rem;
+}
+
+.policy section {
+  margin-top: clamp(28px, 4vw, 40px);
+}
+
+/* The panel heading from the feature tabs. */
+.policy h2 {
+  font-size: clamp(1.2rem, 1rem + 0.8vw, 1.5rem);
+  font-weight: 1000;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+
+.policy p,
+.policy ul {
+  margin-top: 12px;
+  text-wrap: pretty;
+}
+
+.policy li + li {
+  margin-top: 4px;
+}

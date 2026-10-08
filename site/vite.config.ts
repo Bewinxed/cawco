@@ -188,10 +188,12 @@ export default defineConfig({
     outDir: 'dist',
     emptyOutDir: true,
     assetsInlineLimit: 0,
-    // The landing page, and the two pages a sign-in passes through on its way back to a hub.
+    // The landing page, the privacy policy, and the two pages a sign-in passes through on its
+    // way back to a hub.
     rollupOptions: {
       input: {
         main: fileURLToPath(new URL('./index.html', import.meta.url)),
+        privacy: fileURLToPath(new URL('./privacy.html', import.meta.url)),
         oauthStart: fileURLToPath(new URL('./oauth/start.html', import.meta.url)),
         oauthCallback: fileURLToPath(new URL('./oauth/callback.html', import.meta.url)),
       },

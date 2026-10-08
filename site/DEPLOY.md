@@ -11,6 +11,8 @@ that folder on `cawco.dev/*` (see `wrangler.jsonc`).
   machine drawings and Caw are written into `index.html` at build time.
   The files in `assets/` are named after their contents, and `public/_headers`
   lets browsers keep them for a year.
+- `/privacy` is the privacy policy the iOS app links to: `privacy.html`, with
+  the landing page's stylesheet plus the layout in `src/privacy.css`.
 - `/install.sh` is the first-machine installer. The build generates it from
   `packages/core/src/install-script.ts`, so it is always the script the hub
   itself would hand out. `public/_headers` serves it as plain text and tells

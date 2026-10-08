@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#F4F0E6" />
+    <title>Privacy policy · CawCo</title>
+    <meta
+      name="description"
+      content="What data CawCo handles, where it goes, how long it is kept and how to have it deleted."
+    />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link
+      rel="preload"
+      href="/node_modules/@fontsource-variable/nunito/files/nunito-latin-wght-normal.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link rel="stylesheet" href="/src/styles.css" />
+    <link rel="stylesheet" href="/src/privacy.css" />
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+
+    <header class="top wrap">
+      <a class="wordmark" href="./" aria-label="Caw&amp;Co home"><img class="wordmark-icon" src="/src/assets/brand/app-icon.webp" width="84" height="84" alt="">Caw&amp;Co</a>
+    </header>
+
+    <main id="main" class="wrap policy">
+      <h1>Privacy policy</h1>
+      <p class="lede">
+        CawCo is made by Petra Solutions LLC. This page covers what data CawCo handles, where it
+        goes, how long it's kept and how to have it deleted.
+      </p>
+      <p class="policy-date">Last updated <time datetime="2026-10-08">October 8, 2026</time></p>
+
+      <section aria-labelledby="hub">
+        <h2 id="hub">Your work stays on your machines</h2>
+        <p>
+          You run the CawCo hub and dashboard yourself, on your own machines. Your agent sessions,
+          transcripts, prompts and files stay there. Petra Solutions never receives them.
+        </p>
+        <p>
+          When a transcript links to a website, your hub fetches that website's icon directly from
+          the website. It never asks a third party for it.
+        </p>
+      </section>
+
+      <section aria-labelledby="app">
+        <h2 id="app">The iOS app</h2>
+        <p>
+          The app talks to your own hub. To deliver push notifications it also uses CawCo's push
+          relay, which runs on Cloudflare. The relay receives and stores:
+        </p>
+        <ul>
+          <li>your device's Apple push token;</li>
+          <li>a random pairing id and a hash of a random secret;</li>
+          <li>the push environment;</li>
+          <li>the App Store transaction the app sends to verify your purchase or free trial.</li>
+        </ul>
+        <p>
+          The relay uses these only to deliver your notifications and to check your purchase. It
+          deletes a pairing 30 days after its last use, when its trial ends, when you remove the
+          device, or when Apple reports a refund.
+        </p>
+      </section>
+
+      <section aria-labelledby="notifications">
+        <h2 id="notifications">Notifications</h2>
+        <p>
+          A notification carries only what it takes to tell you something needs you: the session's
+          own name, or which agent on which machine. Notifications pass
+          through Apple's push service on the way to your device.
+        </p>
+      </section>
+
+      <section aria-labelledby="purchases">
+        <h2 id="purchases">Purchases</h2>
+        <p>
+          Apple processes every purchase. CawCo receives Apple's notices of purchases and refunds
+          of its products, and uses them to verify your access. It also uses them to count
+          purchases per paywall version. Those counts carry no user or device identifier.
+        </p>
+      </section>
+
+      <section aria-labelledby="none">
+        <h2 id="none">What CawCo doesn't do</h2>
+        <p>
+          CawCo doesn't track you, show ads or sell your data, and the app has no analytics SDKs
+          in it.
+        </p>
+      </section>
+
+      <section aria-labelledby="delete">
+        <h2 id="delete">Deleting your data</h2>
+        <p>
+          To delete a device's pairing, remove the device in the app or in the dashboard. For
+          anything else, email <a href="mailto:support@cawco.dev">support@cawco.dev</a>.
+        </p>
+      </section>
+    </main>
+
+    <footer class="foot wrap">
+      <span class="wordmark"><img class="wordmark-icon" src="/src/assets/brand/app-icon.webp" width="84" height="84" alt="">Caw&amp;Co</span>
+      <span class="foot-line">A little flock. A lot of work.</span>
+      <nav class="foot-nav" aria-label="Links">
+        <a href="https://github.com/Bewinxed/cawco"><i data-mark="github"></i>GitHub</a>
+        <a href="install.sh"><i data-icon="file-text"></i>install.sh</a>
+        <a href="privacy" aria-current="page"><i data-icon="shield-check"></i>Privacy</a>
+      </nav>
+    </footer>
+  </body>
+</html>
