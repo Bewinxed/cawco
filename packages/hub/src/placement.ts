@@ -21,6 +21,12 @@ export interface PlacementInput {
   /** Every account of the session's provider. */
   accounts: Account[];
   bench: AccountBench[];
+  /**
+   * The account a running session leaves at its limit. Placement then looks
+   * for another to carry it: never this one, only one with headroom, and none
+   * at all ({@link Placement}'s `accountId` null) rather than one anyway.
+   */
+  exclude?: string;
   /** The account the spawn named (id, nickname or email); must be allowed, and ignores bench and reserve. */
   explicit?: string;
   /** A fork runs on the account of the session it forks, whatever else holds. */
@@ -307,8 +313,11 @@ const choose = (
   name: (id: string) => string
 ): Placement => {
   const usage = new Usage(input);
+  // A session leaving its account at the limit goes only where there is room.
   const candidates = allowed.filter(
-    (account) => !(usage.benched(account.id) || usage.pastReserve(account))
+    (account) =>
+      !(usage.benched(account.id) || usage.pastReserve(account)) &&
+      (input.exclude === undefined || usage.headroom(account))
   );
   const outNote = allowed
     .filter((account) => !candidates.includes(account))
@@ -338,6 +347,14 @@ const choose = (
       accountId: decided.account.id,
       strategy: choice.strategy,
       why: `${decided.why}${out}`,
+    };
+  }
+  if (input.exclude !== undefined) {
+    return {
+      ok: true,
+      accountId: null,
+      strategy: "none",
+      why: `No other account this session may run on has room for it now${out}.`,
     };
   }
   // Nothing left: the pinned account, else the first, anyway.
@@ -372,7 +389,14 @@ export const place = (input: PlacementInput): Placement => {
     };
   }
 
-  const { allowed, signedIn } = eligible(input);
+  const eligibleHere = eligible(input);
+  const { signedIn } = eligibleHere;
+  const allowed = eligibleHere.allowed.filter(
+    (account) => account.id !== input.exclude
+  );
+  if (input.exclude !== undefined) {
+    return choose(input, allowed, name);
+  }
   if (input.explicit) {
     return explicitPick(input, input.explicit, signedIn, name);
   }

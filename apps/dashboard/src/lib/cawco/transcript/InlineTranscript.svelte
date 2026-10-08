@@ -15,6 +15,7 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import CollapsibleLazy from "#lib/components/ui/collapsible/collapsible-lazy.svelte";
   import { cawco, readOlderPage, readTranscript } from "../client.svelte";
+  import AccountMoveDivider from "./AccountMoveDivider.svelte";
   import CompactionDivider from "./CompactionDivider.svelte";
   import Delegate from "./Delegate.svelte";
   import MessageBody from "./MessageBody.svelte";
@@ -166,6 +167,8 @@
           <RunBlock message={r.message} runId={r.runId} />
         {:else if r.kind === "compaction"}
           <CompactionDivider row={r} />
+        {:else if r.kind === "account"}
+          <AccountMoveDivider row={r} />
         {:else if r.kind === "subagent"}
           <Subagent branch={r.branch} spawn={r.spawn} />
         {:else if r.kind === "thinking"}

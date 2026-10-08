@@ -55,6 +55,8 @@ export interface BlockTooling {
 
 /** Everything a renderer may need beyond `content`, keyed by the kind that uses it. */
 export interface BlockMetadata {
+  /** A `system.account_move`: what the hub did at the session's account's limit. */
+  accountMove?: import("./accounts").AccountMove;
   /** A `user.delegate_ask`'s display label, e.g. `cawco#506dfafb`. */
   askLabel?: string;
   /** A `user.delegate_ask`'s hub permission requestId — what it waits on to be answered. */

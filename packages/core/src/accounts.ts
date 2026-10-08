@@ -103,7 +103,14 @@ export interface StrategyChoice {
   strategy: PlacementStrategy;
 }
 
-/** What a session does when its account hits its limit (used by part 2). */
+/**
+ * What a running session does when its account hits its limit: wait for the
+ * reset, move whole to an account with room, or continue there from a summary
+ * (the hub's `decideAtLimit`). `waitMinutes`: a reset this close is waited
+ * for. `moveWholeUnderK`: a context under this many thousand tokens moves
+ * whole; a larger one continues from a summary, which is written early, once
+ * the account passes `prepareAtPct` of its window.
+ */
 export interface AtLimit {
   move: boolean;
   moveWholeUnderK: number;
@@ -309,6 +316,147 @@ export const modelScope = (model: string | null | undefined): string | null => {
 export const accountName = (
   account: Pick<Account, "email" | "id" | "label">
 ): string => account.label ?? account.email ?? "an account not signed in yet";
+
+/** An account as a transcript line names it, as it was when the line was written. */
+export interface NamedAccount {
+  hue: AccountHue;
+  id: string;
+  name: string;
+}
+
+export const namedAccount = (account: Account): NamedAccount => ({
+  id: account.id,
+  name: accountName(account),
+  hue: account.hue,
+});
+
+/**
+ * Why a session at its account's limit waits for the reset rather than
+ * moving: it is a fork (it reads its origin's cache, on its origin's
+ * account), moving is switched off, no other account has room, or the reset
+ * comes sooner than re-reading its context elsewhere is worth.
+ */
+export type WaitReason = "fork" | "off" | "full" | "soon";
+
+/**
+ * What the hub did when a running session's account reached its limit: the
+ * one line its transcript says it in (core `ACCOUNT_MOVE`). `tokens` is the
+ * session's context as its harness last reported it; null when it never has.
+ */
+export type AccountMove =
+  | {
+      kind: "moved";
+      from: NamedAccount;
+      to: NamedAccount;
+      /** Both accounts in one organization: its prompt cache came along. */
+      sameOrganization: boolean;
+      tokens: number | null;
+      /** The window that refused it, as {@link windowWords} names it. */
+      window: string | null;
+      /** When that window resets, epoch ms; null when nothing said. */
+      resetsAt: number | null;
+    }
+  | {
+      kind: "waiting";
+      account: NamedAccount;
+      /** The reset it waits for, epoch ms: the line counts down to it. */
+      until: number;
+      why: WaitReason;
+      tokens: number | null;
+    }
+  | {
+      kind: "continued";
+      from: NamedAccount;
+      to: NamedAccount;
+      tokens: number | null;
+      /** The window's percent when the summary was written ahead of the limit; null when it was written at the move. */
+      preparedAtPct: number | null;
+    };
+
+/** "5-hour", "weekly", "weekly Opus": a window as a sentence names it. */
+export const windowWords = (
+  window: Pick<LimitWindow, "kind" | "scopeLabel">
+): string => {
+  if (window.kind === "session") {
+    return "5-hour";
+  }
+  if (window.kind === "weekly_scoped" && window.scopeLabel) {
+    return `weekly ${window.scopeLabel}`;
+  }
+  return "weekly";
+};
+
+const MINUTE = 60_000;
+
+/** "12 min", "2h 10m", "3d 4h": a span ahead, rounded up to the minute. */
+export const spanWords = (ms: number): string => {
+  const minutes = Math.max(1, Math.ceil(ms / MINUTE));
+  if (minutes < 60) {
+    return `${minutes} min`;
+  }
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) {
+    return `${hours}h ${minutes % 60}m`;
+  }
+  return `${Math.floor(hours / 24)}d ${hours % 24}h`;
+};
+
+/** "412k tokens"; a context never reported is "its whole context". */
+export const tokenWords = (tokens: number | null): string =>
+  tokens === null
+    ? "its whole context"
+    : `${Math.round(tokens / 1000).toLocaleString("en")}k tokens`;
+
+const WAIT_WHY: Record<WaitReason, (tokens: string) => string> = {
+  fork: () => "A fork stays on the account its origin's cache is on",
+  off: () => "Moving to another account at the limit is switched off",
+  full: () => "No other account has room for it",
+  soon: (tokens) =>
+    `The reset comes sooner than re-reading ${tokens} elsewhere is worth`,
+};
+
+/**
+ * An account line in words at `now`: its line, and the second line drawn on
+ * hover, focus, or at wide widths. A wait counts down to its reset and, once
+ * that has passed, says the session went on there.
+ */
+export const accountMoveWords = (
+  move: AccountMove,
+  now: number
+): { line: string; detail: string } => {
+  switch (move.kind) {
+    case "moved": {
+      const left = move.resetsAt === null ? 0 : move.resetsAt - now;
+      return {
+        line: move.sameOrganization
+          ? `Moved to ${move.to.name} · same organization, cache kept`
+          : `Moved to ${move.to.name} · re-read ${tokenWords(move.tokens)}`,
+        detail: [
+          `${move.from.name} hit its ${move.window ? `${move.window} ` : ""}limit`,
+          ...(left > 0 ? [`resets in ${spanWords(left)}`] : []),
+        ].join(" · "),
+      };
+    }
+    case "waiting": {
+      const left = move.until - now;
+      return {
+        line:
+          left > 0
+            ? `Waiting for ${move.account.name} to reset · ${spanWords(left)}`
+            : `Continued on ${move.account.name}`,
+        detail: WAIT_WHY[move.why](tokenWords(move.tokens)),
+      };
+    }
+    default:
+      return {
+        line: `Continued on ${move.to.name} from a summary · ${tokenWords(move.tokens)} stayed on ${move.from.name}`,
+        detail:
+          move.preparedAtPct === null
+            ? `Summary written on ${move.to.name}, at the move`
+            : `Summary written at ${Math.round(move.preparedAtPct)}%, before the move`,
+      };
+  }
+};
 
 /** Whether two identities are the same account: same email in the same organization. */
 export const sameIdentity = (a: AccountIdentity, b: AccountIdentity): boolean =>

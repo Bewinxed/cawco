@@ -1539,13 +1539,19 @@ export class SessionSupervisor {
     }
   }
 
+  /**
+   * Whether a spawn for a session this agent already carries is a recovery of
+   * that very process, which is kept: recovery delivery and the register ack
+   * may name the same attachment (shared by Claude adoption, pi resume and
+   * OpenCode reattach). A spawn that says it relaunches (a move to another
+   * account) replaces the process instead.
+   */
   #reuseRecovery(payload: SpawnPayload): boolean {
     const { instanceId, requestId: ack } = payload;
-    // Recovery delivery and the register ack may name the same attachment.
-    // This is shared by Claude adoption, pi resume and OpenCode reattach.
     if (
       (payload.reattachOnly || payload.resume) &&
       !payload.resume?.atMessage &&
+      !payload.relaunch &&
       this.#sessions.has(instanceId)
     ) {
       if (ack) {

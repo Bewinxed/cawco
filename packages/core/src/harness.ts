@@ -134,6 +134,15 @@ export const RATE_LIMIT_READ = "rate_limit";
  */
 export const ACCOUNT_READ = "account";
 
+/**
+ * The `system` subtype of the line the hub writes into a session's transcript
+ * when its account reached its limit and the hub moved it, held it until the
+ * reset, or continued it from a summary: `move` says which, on what account,
+ * and what it cost ({@link import("./accounts").accountMoveWords}). Drawn as a
+ * hairline divider of its own.
+ */
+export const ACCOUNT_MOVE = "account_move";
+
 /** A session's own word on what it is doing right now. */
 export type NeutralStatus = "compacting" | "requesting" | null;
 
@@ -814,6 +823,8 @@ export interface NeutralSystemMessage {
   mcp_servers?: { name: string; status: string }[];
   // init
   model?: string;
+  // account_move ({@link ACCOUNT_MOVE}) — what the hub did at the account's limit
+  move?: import("./accounts").AccountMove;
   patch?: { description?: string; status?: string; error?: string };
   permissionMode?: PermissionMode;
   // rate_limit ({@link RATE_LIMIT_READ}) — the `rate_limit_info` Claude Code reported

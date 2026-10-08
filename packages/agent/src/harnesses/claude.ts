@@ -11,8 +11,8 @@
  */
 
 import type { Dirent } from "node:fs";
-import { access, readdir, realpath } from "node:fs/promises";
-import { join } from "node:path";
+import { access, cp, mkdir, readdir, realpath, rename } from "node:fs/promises";
+import { basename, dirname, join } from "node:path";
 import {
   deleteSession,
   getSessionInfo,
@@ -75,7 +75,11 @@ import {
   settledQuestionResult,
   VERIFY_SESSION_CREDENTIAL,
 } from "@cawco/core";
-import { claudeConfigDirs } from "@cawco/core/paths";
+import {
+  accountConfigDir,
+  claudeConfigDirs,
+  homeConfigDir,
+} from "@cawco/core/paths";
 import { sessiondEndpoint } from "@cawco/core/sessiond";
 import { accountEnv, accountReports, probeAccount } from "../accounts";
 import {
@@ -425,6 +429,59 @@ async function claudeSessionFile(
     }
   }
   return null;
+}
+
+/** Whether `error` is the file system saying there is nothing at the path. */
+const missing = (error: unknown): boolean =>
+  (error as { code?: string } | null)?.code === "ENOENT";
+
+/**
+ * Brings a conversation stored under another config dir into `configDir`,
+ * the one its session is about to run in: the session moved to another
+ * account, and Claude Code resumes only from its own dir's `projects/`.
+ *
+ * The transcript is moved, not copied: a transcript is read from the first
+ * config dir that holds it ({@link claudeSessionFile}), so a copy left behind
+ * would be read in place of the one that goes on. The conversation's own
+ * folder (subagent transcripts, tool output kept on disk), its task list and
+ * its file checkpoints are copied, since the conversation names some of them
+ * by their full paths and those must still answer.
+ */
+async function carryConversation(
+  file: string,
+  sessionId: string,
+  configDir: string
+): Promise<void> {
+  const projectDir = dirname(file);
+  const projects = join(configDir, "projects");
+  if (dirname(projectDir) === projects) {
+    return;
+  }
+  const from = dirname(dirname(projectDir));
+  const target = join(projects, basename(projectDir));
+  await mkdir(target, { recursive: true });
+  const copies: [string, string][] = [
+    [join(projectDir, sessionId), join(target, sessionId)],
+    [join(from, "tasks", sessionId), join(configDir, "tasks", sessionId)],
+    [
+      join(from, "file-history", sessionId),
+      join(configDir, "file-history", sessionId),
+    ],
+  ];
+  for (const [source, destination] of copies) {
+    try {
+      // biome-ignore lint/performance/noAwaitInLoops: three small folders, each copied whole before the transcript moves
+      await cp(source, destination, { recursive: true, force: true });
+    } catch (error) {
+      if (!missing(error)) {
+        throw error;
+      }
+    }
+  }
+  await rename(file, join(target, basename(file)));
+  console.info(
+    `[claude] conversation ${sessionId} moved from ${from} to ${configDir}`
+  );
 }
 
 export const CLAUDE_CAPABILITIES: HarnessCapabilities = {
@@ -1964,13 +2021,6 @@ export class ClaudeHarness implements Harness {
     // across agent restarts, which is what lets the returning agent match a
     // surviving child to the row it belongs to.
     const client = await this.sessiond();
-    if (
-      spec.resume &&
-      !(await claudeSessionFile(spec.resume.sessionKey, ctx.cwd))
-    ) {
-      throw new Error(CLAUDE_CONVERSATION_GONE);
-    }
-    const fleetDenyList = await sessionFleetDenials(spec.cawcoTodos);
     // The session's account: its Claude Code runs in that account's config
     // dir, where its credential and transcripts are. The machine's own
     // `~/.claude` needs nothing set.
@@ -1978,6 +2028,23 @@ export class ClaudeHarness implements Harness {
       spec.accountDir && !spec.accountDir.home
         ? spec.accountDir.accountId
         : null;
+    if (spec.resume) {
+      const file = await claudeSessionFile(spec.resume.sessionKey, ctx.cwd);
+      if (!file) {
+        throw new Error(CLAUDE_CONVERSATION_GONE);
+      }
+      // A conversation resumed on another account (its old one reached its
+      // limit) goes on in that account's dir. A fork reads its origin's
+      // where it is: it runs on its origin's account.
+      if (!spec.resume.fork) {
+        await carryConversation(
+          file,
+          spec.resume.sessionKey,
+          account ? accountConfigDir(account) : homeConfigDir()
+        );
+      }
+    }
+    const fleetDenyList = await sessionFleetDenials(spec.cawcoTodos);
     const options = spec.options as
       | { env?: Record<string, string | undefined> }
       | undefined;

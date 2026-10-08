@@ -204,6 +204,13 @@ export interface SpawnPayload {
   /** Existing custody only: `busy` recovers active turns; `inspect` only reports them. */
   reattachOnly?: boolean | "busy" | "inspect";
   /**
+   * The process the session runs in is replaced, though the spawn resumes
+   * its own conversation: it moves to another account. Without it, a resume
+   * for a session the machine carries is a recovery of that process, and
+   * the process is kept.
+   */
+  relaunch?: true;
+  /**
    * Correlates the `control_result` frame the agent answers the spawn with, once
    * the session is in place.
    */
@@ -630,6 +637,12 @@ export const CLAUDE_CONVERSATION_GONE =
 export interface ContinuationJob {
   error?: string;
   id: string;
+  /**
+   * The new session takes the source's place: its parent, work item, thread
+   * and tab. Set when the hub continued a session whose account reached its
+   * limit on another account.
+   */
+  inherits?: true;
   sourceInstanceId: string;
   stage: "summarising" | "starting" | "started" | "failed" | "cancelled";
   /** Absent when the source is short enough that nothing is summarised. */

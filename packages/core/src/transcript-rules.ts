@@ -9,6 +9,7 @@
  * (`transcript.ts`) applies it.
  */
 
+import { accountMoveWords } from "./accounts";
 import { attachedFiles } from "./attachments";
 import type {
   NeutralAssistantMessage,
@@ -19,7 +20,11 @@ import type {
   SlashCommand,
   UserQuestionResult,
 } from "./harness";
-import { REPEATED_FAILURE, REPEATED_FAILURE_LIMIT } from "./harness";
+import {
+  ACCOUNT_MOVE,
+  REPEATED_FAILURE,
+  REPEATED_FAILURE_LIMIT,
+} from "./harness";
 import {
   parseDelegateAsk,
   parseHandoffMarker,
@@ -925,6 +930,23 @@ export function mapFrame(
               compactError: sdk.compact_metadata?.error,
             })
           );
+          break;
+        // The hub's line where the session's account reached its limit: it
+        // moved, waited for the reset, or went on from a summary.
+        case ACCOUNT_MOVE:
+          if (sdk.move) {
+            mapping.blocks.push(
+              systemLine(
+                base,
+                "system.account_move",
+                accountMoveWords(
+                  sdk.move,
+                  sdk.timestamp ? Date.parse(sdk.timestamp) : 0
+                ).line,
+                { subtype: ACCOUNT_MOVE, accountMove: sdk.move }
+              )
+            );
+          }
           break;
         // A session-start hook that failed: the one hook frame a transcript
         // draws, live and read back alike (its output when it works is startup

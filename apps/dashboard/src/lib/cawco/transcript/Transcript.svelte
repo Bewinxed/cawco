@@ -43,6 +43,7 @@
   import { BLEED } from "../motion/rows.svelte";
   import { carry, waiting } from "../motion/share.svelte";
   import { rebuildScheduler } from "../workspace/scheduler.svelte";
+  import AccountMoveDivider from "./AccountMoveDivider.svelte";
   import {
     type Handoff,
     type Motion,
@@ -2905,6 +2906,8 @@
                 lead={ticket?.kind === "arrive" ? ticket.lead : null}
                 {row}
               />
+            {:else if row.kind === "account"}
+              <AccountMoveDivider {row} />
             {:else if row.kind === "subagent"}
               <Subagent branch={row.branch} spawn={row.spawn} />
             {:else if row.kind === "delegate"}

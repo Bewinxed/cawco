@@ -40,10 +40,24 @@ export interface ContinuationSource {
 /** What "continue in new session" is asked: who summarises, what starts. */
 export interface ContinueRequest {
   note?: string;
-  /** Absent `model`: the harness's own default. */
-  summarizer: { harness: HarnessKind; model?: string };
+  /** Absent `model`: the harness's own default. Absent `account`: placed as any start is. */
+  summarizer: { harness: HarnessKind; model?: string; account?: string };
   /** The same options a dashboard spawn sends; machine and cwd default to the source's. */
   target: {
+    /** The account it runs on; absent, placed as any start is. */
+    account?: string;
+    /**
+     * The new session takes the source's place, and the source ends: its
+     * account reached its limit and it goes on on `account` from a summary.
+     * What the source's transcript then says names both accounts, the
+     * context it left behind, and the window's percent when the summary was
+     * written ahead of the limit (null: written at the move).
+     */
+    inherit?: {
+      fromAccountId: string;
+      contextTokens: number | null;
+      preparedAtPct: number | null;
+    };
     bootstrap?: { repo: string; baseDir: string };
     cwd?: string;
     effort?: EffortLevel;

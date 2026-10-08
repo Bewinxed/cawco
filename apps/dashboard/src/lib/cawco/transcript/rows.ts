@@ -7,6 +7,7 @@
  */
 
 import {
+  type AccountMove,
   ASK_USER_QUESTION,
   COMPACT_SUMMARY_KIND,
   type ToolGlance,
@@ -97,7 +98,12 @@ export type Row =
       state: "compacting" | "done" | "failed";
       /** Why it failed, in the harness's words, when it said. */
       error?: string;
-    };
+    }
+  /**
+   * The hub's line where the session's account reached its limit: it moved,
+   * waited for the reset, or went on from a summary (core `AccountMove`).
+   */
+  | { kind: "account"; key: string; move: AccountMove; timestamp?: string };
 
 /**
  * Who has the floor, row by row: a speaker line appears only when the speaker
@@ -154,6 +160,7 @@ function voiceOf(row: Row): Voice {
     case "live":
       return row.text ? "says" : "acts";
     case "compaction":
+    case "account":
       return "note";
     default:
       // tools, livetool, question, subagent, delegate, thinking, stream, and
@@ -586,7 +593,9 @@ export function foldMessages(
   messages: Message[],
   subagents: Record<string, SubagentState>
 ): Row[] {
-  return foldRange(messages, subagents, 0, { ...NO_VOICE }, NO_SAID).rows;
+  return withoutEndedWaits(
+    foldRange(messages, subagents, 0, { ...NO_VOICE }, NO_SAID).rows
+  );
 }
 
 /**
@@ -607,6 +616,15 @@ function ownRow(
       key: `r:${keyOf(m, i)}`,
       message: m,
       runId: receipt.anchor,
+    };
+  }
+  const move = m.type === "system.account_move" && m.metadata?.accountMove;
+  if (move) {
+    return {
+      kind: "account",
+      key: `am:${keyOf(m, i)}`,
+      move,
+      timestamp: m.timestamp,
     };
   }
   if (isHarnessNote(m)) {
@@ -1074,6 +1092,26 @@ function withoutEchoes(rows: Row[]): Row[] {
   return echoes ? rows.filter((row) => !echoes.has(row)) : rows;
 }
 
+/**
+ * A wait for an account's reset that a later account line follows is not
+ * drawn: the session did not wait it out, and the later line (a move, a
+ * continuation, another wait) says what happened instead. Read over every
+ * row on each fold, as a wait already folded is followed later.
+ */
+export function withoutEndedWaits(rows: Row[]): Row[] {
+  const last = rows.findLastIndex((row) => row.kind === "account");
+  const ended = rows.some(
+    (row, at) =>
+      at < last && row.kind === "account" && row.move.kind === "waiting"
+  );
+  return ended
+    ? rows.filter(
+        (row, at) =>
+          !(at < last && row.kind === "account" && row.move.kind === "waiting")
+      )
+    : rows;
+}
+
 /** Each compaction's drawn row by the row it is drawn from, for as long as it stands so. */
 const drawnAs = new WeakMap<object, Row>();
 
@@ -1301,7 +1339,7 @@ export function buildRowsFrom(
   const ahead = aheadOf(memo, waited, content !== null || tool !== null);
   return {
     rows: [
-      ...withoutEchoes(drawn.rows),
+      ...withoutEndedWaits(withoutEchoes(drawn.rows)),
       ...tailRows(session, content, tool, gen, new Set(ahead), {
         ...drawn.voices,
       }),

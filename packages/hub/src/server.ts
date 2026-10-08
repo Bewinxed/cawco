@@ -73,12 +73,15 @@ import type {
 } from "@cawco/core";
 import {
   ACCOUNT_HUES,
+  ACCOUNT_MOVE,
   ACCOUNT_READ,
+  type AccountMove,
   type AccountProbe,
   type AccountSigninResult,
   AGENT_BUSY,
   ASK_USER_QUESTION,
   ATTACHMENTS_HOME,
+  accountMoveWords,
   accountName,
   agentProblem,
   archiveRefusal,
@@ -133,6 +136,8 @@ import {
   MESSAGES_STORED,
   machineLabel,
   memoryDocProblem,
+  type NeutralSystemMessage,
+  namedAccount,
   PLACEMENT_STRATEGIES,
   type PlacementExplain,
   PREVIEW_START,
@@ -195,6 +200,7 @@ import {
   clientCopy,
   createAskPresenter,
 } from "./ask-presentation";
+import { createAtLimit, type KeptSummary } from "./at-limit";
 import { createBinaryUpdates } from "./binary-updates";
 import { type Caw, cawRoutes, createCaw, withCawDenials } from "./caw";
 import { DB_PATH, HUB_VERSION, SPAWN_START_TIMEOUT_MS } from "./config";
@@ -1016,6 +1022,22 @@ const peekCustody = (payload: unknown): SessionCustody => {
  */
 const heldProcesses = (custody: SessionCustody | undefined): string[] =>
   custody?.state === "available" ? custody.instances : [];
+
+/**
+ * One line the hub writes into a session's transcript at its account's limit
+ * (core `ACCOUNT_MOVE`), as its live stream and a later read both carry it.
+ */
+const limitLine = (
+  row: { sessionId: string | null },
+  event: { id: string; at: number; move: AccountMove }
+): NeutralSystemMessage => ({
+  type: "system",
+  subtype: ACCOUNT_MOVE,
+  move: event.move,
+  uuid: `limit-${event.id}`,
+  session_id: row.sessionId ?? "",
+  timestamp: new Date(event.at).toISOString(),
+});
 
 /** The same operator notice on the live stream and a later transcript read. */
 const custodyNotice = (
@@ -3328,6 +3350,22 @@ export const createServer = (
       );
     return { accountId, home: signin?.home ?? false };
   };
+  /**
+   * A fork reads its origin's cache: it never moves to another account on
+   * its own, so its row says it is one, from its first spawn.
+   */
+  const noteFork = (
+    payload: SpawnPayload,
+    stored: { id: string; forkedFrom: string | null }
+  ): void => {
+    if (payload.resume?.fork && !stored.forkedFrom) {
+      db.patchInstance(stored.id, {
+        forkedFrom:
+          db.instanceBySessionId(payload.resume.sessionKey)?.id ??
+          payload.resume.sessionKey,
+      });
+    }
+  };
   const bounded = (
     payload: SpawnPayload,
     knownRow?: InstanceRow
@@ -3355,6 +3393,7 @@ export const createServer = (
       ? undefined
       : identities.mint(payload.instanceId);
     noteEffortAsked(payload);
+    noteFork(payload, stored);
     const accountDir = accountDirOf(stored);
     return {
       // A project's Caw never has edit or shell tools: every spawn of its
@@ -3511,15 +3550,38 @@ export const createServer = (
   ): void => {
     const [row] = db.getInstancesByIds([instanceId]);
     if (
-      !(
-        row?.sessionId &&
-        (row.status === "sleeping" ||
-          row.status === "error" ||
-          row.status === "stopped")
-      )
+      row?.sessionId &&
+      (row.status === "sleeping" ||
+        row.status === "error" ||
+        row.status === "stopped")
     ) {
-      return;
+      resumeSpawn(
+        agent,
+        machineId,
+        { ...row, sessionId: row.sessionId },
+        crossed
+      );
     }
+  };
+
+  /**
+   * Launches a session's process again on its own conversation, on the
+   * settings it last ran with and the account its row names: a wake for a
+   * send, or a move to another account at its limit. A spawn for a session
+   * still running replaces its process, as the machine settles the old one
+   * first.
+   */
+  const resumeSpawn = (
+    agent: NonNullable<ReturnType<typeof registry.agent>>,
+    machineId: string,
+    row: ReturnType<typeof db.getInstancesByIds>[number] & {
+      sessionId: string;
+    },
+    crossed: boolean,
+    /** The process is replaced even if the machine still runs one: a move to another account. */
+    relaunch = false
+  ): void => {
+    const instanceId = row.id;
     const settled = settleMode(
       machineId,
       {
@@ -3527,6 +3589,7 @@ export const createServer = (
         cwd: row.cwd,
         ...(row.harness ? { harness: row.harness as HarnessKind } : {}),
         resume: { sessionKey: row.sessionId },
+        ...(relaunch ? { relaunch: true as const } : {}),
         ...(row.kind === "scratch" ? { scratch: {} } : {}),
         ...(row.model ? { model: row.model } : {}),
         ...(isEffortLevel(row.effort) ? { effort: row.effort } : {}),
@@ -3838,6 +3901,13 @@ export const createServer = (
    * message can arrive as several text frames.
    */
   const finalMessage = new Map<string, string[]>();
+  /**
+   * Sessions whose turn in flight their account's limit refused: Claude Code
+   * said `rejected` with no extra usage to fall back on, or ended the turn on
+   * its `rate_limit` error. Its end is the at-limit controller's to answer,
+   * not a failed turn to hand back.
+   */
+  const limitRefused = new Set<string>();
   /**
    * Installs somebody is waiting on, by `requestId`: what keeps a machine from
    * being sent the same install twice while the first is still running, and
@@ -4895,7 +4965,9 @@ export const createServer = (
     machineId: string,
     asked: SpawnPayload,
     kind: InstanceKind,
-    fallbackMode?: string
+    fallbackMode?: string,
+    /** The session this one takes the place of: its parent, work item, thread and project. */
+    succeeds?: string
   ): Promise<void> => {
     const agent = registry.agent(machineId);
     if (!agent) {
@@ -4925,6 +4997,9 @@ export const createServer = (
       model: payload.model,
       ...placed,
     });
+    if (succeeds) {
+      takePlaceOf(succeeds, payload.instanceId);
+    }
     publishInstances(machineId);
     const reply = await awaitReply(
       machineId,
@@ -4947,6 +5022,30 @@ export const createServer = (
       throw reply.error === MACHINE_DISCONNECTED
         ? new MachineAway(machineId)
         : new Error(reply.error ?? "the session failed to start");
+    }
+  };
+
+  /**
+   * A session taking another's place (continued on another account at the
+   * other's limit): it answers to the same parent, runs the same work item,
+   * works for the same thread and project. The work item names it as its
+   * session from here.
+   */
+  const takePlaceOf = (sourceId: string, targetId: string): void => {
+    const [source] = db.getInstancesByIds([sourceId]);
+    if (!source) {
+      return;
+    }
+    db.patchInstance(targetId, {
+      ...(source.parentInstanceId
+        ? { parentInstanceId: source.parentInstanceId }
+        : {}),
+      ...(source.workItemId ? { workItemId: source.workItemId } : {}),
+      ...(source.threadId ? { threadId: source.threadId } : {}),
+      ...(source.projectId ? { projectId: source.projectId } : {}),
+    });
+    if (source.workItemId) {
+      db.updateWorkItem(source.workItemId, { instanceId: targetId });
     }
   };
 
@@ -5430,7 +5529,7 @@ export const createServer = (
    */
   const summariserRun = async (
     source: ContinuationSource & { machineId: string },
-    summarizer: { harness: HarnessKind; model?: string },
+    summarizer: { harness: HarnessKind; model?: string; account?: string },
     prompt: string,
     id: string,
     cancelled: () => boolean,
@@ -5450,6 +5549,7 @@ export const createServer = (
           cwd: source.cwd,
           harness: summarizer.harness,
           ...(summarizer.model ? { model: summarizer.model } : {}),
+          ...(summarizer.account ? { account: summarizer.account } : {}),
           title: `Summary of ${source.title}`,
           scratch: {},
           spawnedBy: { instanceId: source.instanceId },
@@ -5774,6 +5874,7 @@ export const createServer = (
     ...(row.summariserInstanceId
       ? { summariserInstanceId: row.summariserInstanceId }
       : {}),
+    ...(row.request.target.inherit ? { inherits: true as const } : {}),
     stage: row.stage,
     ...(row.error ? { error: row.error } : {}),
   });
@@ -5853,18 +5954,21 @@ export const createServer = (
    */
   const startContinuation = (
     prepared: PreparedContinuation,
-    request: ContinueRequest
+    request: ContinueRequest,
+    /** A summary already written (ahead of an account's limit): nothing is summarised. */
+    written?: string
   ): ContinuationRow => {
+    const summarise = !!prepared.prompt && written === undefined;
     const row = db.insertContinuation({
       id: crypto.randomUUID(),
       sourceInstanceId: prepared.source.instanceId,
       request,
       prepared,
-      summariserInstanceId: prepared.prompt ? crypto.randomUUID() : null,
+      summariserInstanceId: summarise ? crypto.randomUUID() : null,
       targetInstanceId: crypto.randomUUID(),
       openingUuid: crypto.randomUUID(),
-      summary: null,
-      stage: prepared.prompt ? "summarising" : "starting",
+      summary: prepared.prompt ? (written ?? null) : null,
+      stage: summarise ? "summarising" : "starting",
       error: null,
     });
     publishInstances(prepared.source.machineId);
@@ -5926,8 +6030,39 @@ export const createServer = (
         return;
       }
       await startTarget(row);
-      moveContinuation(id, { stage: "started" });
+      const started = moveContinuation(id, { stage: "started" });
+      if (started?.request.target.inherit) {
+        succeeded(started);
+      }
     }
+  };
+
+  /**
+   * A session continued on another account at its old one's limit has its
+   * successor running in its place: the source ends, "continued on" that
+   * account, and its transcript says what went where.
+   */
+  const succeeded = (job: ContinuationRow): void => {
+    const { inherit, account } = job.request.target;
+    const [source] = db.getInstancesByIds([job.sourceInstanceId]);
+    const from = inherit ? db.accounts.get(inherit.fromAccountId) : undefined;
+    const to = account ? db.accounts.get(account) : undefined;
+    if (!(source && inherit && from && to)) {
+      return;
+    }
+    noteAtLimit(source, {
+      kind: "continued",
+      from: namedAccount(from),
+      to: namedAccount(to),
+      tokens: inherit.contextTokens,
+      preparedAtPct: inherit.preparedAtPct,
+    });
+    // The work item went with the successor: ending the source is not the
+    // item's end.
+    db.patchInstance(source.id, { workItemId: null });
+    endSession(source.id, "stop");
+    db.noteEndReason(source.id, `continued on ${accountName(to)}`);
+    publishInstances(source.machineId);
   };
 
   /**
@@ -6022,7 +6157,8 @@ export const createServer = (
         machine,
         targetSpawn(request, prepared.source, row.targetInstanceId),
         request.target.scratch ? "scratch" : "mainline",
-        request.target.fallbackPermissionMode
+        request.target.fallbackPermissionMode,
+        request.target.inherit ? prepared.source.instanceId : undefined
       );
     }
     sendFromHub(
@@ -6104,6 +6240,7 @@ export const createServer = (
     ...(target.scratch ? { scratch: target.scratch } : {}),
     ...(target.bootstrap ? { bootstrap: target.bootstrap } : {}),
     ...(target.projectId ? { projectId: target.projectId } : {}),
+    ...(target.account ? { account: target.account } : {}),
     title: `${source.title} (continued)`,
     spawnedBy: { instanceId: source.instanceId },
   });
@@ -8066,6 +8203,24 @@ export const createServer = (
         nameFromFirstTurn(row.machineId, row.id, first);
       }
     }
+    // The hub's own lines at the account's limit, each where it happened.
+    for (const event of db.atLimit.events([row.id])) {
+      const at = transcript.findIndex(
+        (entry) =>
+          entry.timestamp !== undefined &&
+          Date.parse(entry.timestamp) > event.at
+      );
+      const line: SessionMessage = {
+        type: "system",
+        uuid: `limit-${event.id}`,
+        session_id: row.sessionId ?? "",
+        parent_tool_use_id: null,
+        parent_agent_id: null,
+        message: limitLine(row, event),
+        timestamp: new Date(event.at).toISOString(),
+      };
+      transcript.splice(at < 0 ? transcript.length : at, 0, line);
+    }
     const held = heldSessions.get(row.id);
     if (
       held &&
@@ -9083,36 +9238,234 @@ export const createServer = (
     }
   };
 
+  /**
+   * Whether a session is between turns, on its machine's own word: no turn
+   * running, nothing sent to it still pending, no ask of its parked. The one
+   * moment the hub puts anything into a session unasked: a keep-alive ping, or
+   * a move to another account at its limit.
+   */
+  const sessionIdle = async (row: {
+    id: string;
+    machineId: string;
+  }): Promise<boolean> => {
+    if (!registry.agent(row.machineId)) {
+      return false;
+    }
+    const answer = await callAgent(
+      row.machineId,
+      AGENT_BUSY,
+      [],
+      BUSY_TIMEOUT_MS
+    );
+    if (typeof answer === "string" || !answer.ok) {
+      return false;
+    }
+    const reading = answer.result as AgentBusyReport | undefined;
+    return (
+      reading?.ready === true &&
+      Array.isArray(reading.instances) &&
+      !reading.instances.includes(row.id) &&
+      !!registry.agent(row.machineId) &&
+      db.sendsIn(row.id, ["pending"]).length === 0 &&
+      !pending.list().some((ask) => ask.instanceId === row.id) &&
+      ![...awaitingMachine.values()].some((sends) =>
+        sends.some((send) => send.instanceId === row.id)
+      )
+    );
+  };
+
   const keepAliveScheduler = createKeepAliveScheduler({
     rows: db.listInstances,
     limits: () => sessionLimitsReader(db),
-    idle: async (row) => {
-      if (!registry.agent(row.machineId)) {
-        return false;
-      }
-      const answer = await callAgent(
-        row.machineId,
-        AGENT_BUSY,
-        [],
-        BUSY_TIMEOUT_MS
-      );
-      if (typeof answer === "string" || !answer.ok) {
-        return false;
-      }
-      const reading = answer.result as AgentBusyReport | undefined;
-      return (
-        reading?.ready === true &&
-        Array.isArray(reading.instances) &&
-        !reading.instances.includes(row.id) &&
-        !!registry.agent(row.machineId) &&
-        db.sendsIn(row.id, ["pending"]).length === 0 &&
-        !pending.list().some((ask) => ask.instanceId === row.id) &&
-        ![...awaitingMachine.values()].some((sends) =>
-          sends.some((send) => send.instanceId === row.id)
-        )
-      );
-    },
+    idle: sessionIdle,
     send: deliverSend,
+    changed: () => publishInstances(""),
+  });
+
+  /** What a session at its account's limit is told when it may go on, in its own process. */
+  const CARRY_ON =
+    "The usage limit that stopped your last turn no longer applies. Carry on from where you stopped.";
+
+  /** Has a session carry on where its account's limit stopped it. */
+  const carryOn = (row: { id: string; machineId: string }): void => {
+    deliverSend({
+      verb: "send",
+      machineId: row.machineId,
+      instanceId: row.id,
+      payload: {
+        instanceId: row.id,
+        message: {
+          type: "user",
+          uuid: crypto.randomUUID(),
+          message: { role: "user", content: CARRY_ON },
+          parent_tool_use_id: null,
+          origin: { kind: "system", name: "limit" },
+        },
+      },
+    } satisfies Envelope<SendPayload>);
+  };
+
+  /** Writes a line into a session's transcript: kept, and folded into what its screens show now. */
+  const noteAtLimit = (
+    row: { id: string; sessionId: string | null; harness: string | null },
+    move: AccountMove
+  ): void => {
+    const event = { id: crypto.randomUUID(), at: Date.now(), move };
+    db.atLimit.putEvent({ ...event, instanceId: row.id });
+    transcripts.ingest(row.id, {
+      kind: "frame",
+      instanceId: row.id,
+      harness: (row.harness ?? "claude") as HarnessKind,
+      message: limitLine(row, event),
+    });
+    console.info(
+      `[at-limit] ${row.id}: ${accountMoveWords(move, event.at).line}`
+    );
+  };
+
+  /**
+   * Who would carry a running session off `accountId`: placement for the
+   * kind of session it is, on its machine, within its project's and task's
+   * lists and its type's preference, never `accountId`, and only an account
+   * with room.
+   */
+  const limitTarget = (
+    row: ReturnType<typeof db.getInstancesByIds>[number],
+    accountId: string
+  ): string | null => {
+    const provider = providerOf((row.harness ?? "claude") as HarnessKind);
+    if (!provider) {
+      return null;
+    }
+    const item = row.workItemId ? db.workItem(row.workItemId) : undefined;
+    const projectId = row.projectId ?? item?.projectId ?? null;
+    const typeAccount = row.delegateType
+      ? projectTypes.resolveTypeFor(
+          row.delegateTypeProject ?? projectId ?? undefined,
+          row.delegateType
+        )?.account
+      : undefined;
+    const placed = placeAccount({
+      accounts: db.accounts
+        .list()
+        .filter((account) => account.provider === provider),
+      signins: db.accounts.signins(),
+      readings: db.accounts.readings(),
+      bench: db.accounts.bench(),
+      routing: db.accounts.routing(provider),
+      machineId: row.machineId,
+      machineName: machineName(row.machineId),
+      ...(row.model ? { model: row.model } : {}),
+      kind: row.parentInstanceId ? "delegates" : "yours",
+      projectAccounts: projectId
+        ? (db.project(projectId)?.accounts ?? null)
+        : null,
+      taskAccounts: taskAccounts(projectId, item?.taskId),
+      ...(typeAccount ? { typeAccount } : {}),
+      exclude: accountId,
+      now: Date.now(),
+    });
+    return placed.ok ? placed.accountId : null;
+  };
+
+  /**
+   * Continues a session on `accountId` from a summary, the new session in
+   * its place (its parent, work item, thread and tab): the summary written
+   * ahead of the limit when there is one, else one written on `accountId`.
+   */
+  const continueOnAccount = async (
+    row: ReturnType<typeof db.getInstancesByIds>[number],
+    accountId: string,
+    kept: KeptSummary | undefined
+  ): Promise<void> => {
+    const fromAccountId = row.accountId ?? machineAccount(db, row.machineId);
+    if (!fromAccountId) {
+      return;
+    }
+    const prepared = await prepareContinuation(row.id);
+    const harness = (row.harness ?? "claude") as HarnessKind;
+    startContinuation(
+      prepared,
+      {
+        summarizer: {
+          harness,
+          ...(row.model ? { model: row.model } : {}),
+          account: accountId,
+        },
+        target: {
+          harness,
+          machineId: row.machineId,
+          cwd: row.cwd,
+          ...(row.model ? { model: row.model } : {}),
+          ...(isEffortLevel(row.effort) ? { effort: row.effort } : {}),
+          ...(row.permissionMode
+            ? { permissionMode: row.permissionMode as PermissionMode }
+            : {}),
+          ...(row.projectId ? { projectId: row.projectId } : {}),
+          ...(row.kind === "scratch" ? { scratch: {} } : {}),
+          account: accountId,
+          inherit: {
+            fromAccountId,
+            contextTokens: row.contextTokens,
+            preparedAtPct: kept?.percent ?? null,
+          },
+        },
+      },
+      kept?.text
+    );
+  };
+
+  /** A summary of a session written on `accountId`; undefined when nothing comes before its last turns. */
+  const summariseOn = async (
+    row: ReturnType<typeof db.getInstancesByIds>[number],
+    accountId: string
+  ): Promise<string | undefined> => {
+    const prepared = await prepareContinuation(row.id);
+    if (!prepared.prompt) {
+      return undefined;
+    }
+    return await summariserRun(
+      prepared.source,
+      {
+        harness: (row.harness ?? "claude") as HarnessKind,
+        ...(row.model ? { model: row.model } : {}),
+        account: accountId,
+      },
+      prepared.prompt,
+      crypto.randomUUID(),
+      () => false,
+      unwatchedMode(row.permissionMode)
+    );
+  };
+
+  const atLimit = createAtLimit({
+    db,
+    accountOf: (row) => row.accountId ?? machineAccount(db, row.machineId),
+    target: limitTarget,
+    idle: sessionIdle,
+    move: (row, accountId) => {
+      const agent = registry.agent(row.machineId);
+      if (!(agent && row.sessionId)) {
+        console.warn(
+          `[at-limit] ${row.id}: cannot move to ${accountId}: ${agent ? "it has no conversation" : "its machine is away"}`
+        );
+        return;
+      }
+      db.patchInstance(row.id, { accountId });
+      transcripts.noteRelaunch(row.id);
+      resumeSpawn(
+        agent,
+        row.machineId,
+        { ...row, sessionId: row.sessionId },
+        false,
+        true
+      );
+      carryOn(row);
+    },
+    resume: carryOn,
+    continueOn: continueOnAccount,
+    summarise: summariseOn,
+    note: noteAtLimit,
     changed: () => publishInstances(""),
   });
 
@@ -13665,12 +14018,12 @@ export const createServer = (
                   const accountId =
                     row?.accountId ?? machineAccount(db, message.machineId);
                   if (accountId) {
-                    if (frame.message.rate_limit_info) {
-                      noteRateLimit(
-                        db,
-                        accountId,
-                        frame.message.rate_limit_info
-                      );
+                    const info = frame.message.rate_limit_info;
+                    if (info) {
+                      noteRateLimit(db, accountId, info);
+                      if (info.status === "rejected" && !info.isUsingOverage) {
+                        limitRefused.add(message.instanceId);
+                      }
                     }
                     const read = frame.message.account;
                     if (read) {
@@ -13927,6 +14280,10 @@ export const createServer = (
                   neutral.type === "assistant" &&
                   !neutral.parent_tool_use_id
                 ) {
+                  // Claude Code ending the turn on its account's limit.
+                  if ((neutral as { error?: string }).error === "rate_limit") {
+                    limitRefused.add(message.instanceId);
+                  }
                   const text = neutral.message.content
                     .filter((block) => block.type === "text")
                     .map((block) => block.text)
@@ -13947,6 +14304,22 @@ export const createServer = (
                       finalMessage.set(message.instanceId, [text]);
                     }
                   }
+                } else if (
+                  neutral.type === "result" &&
+                  limitRefused.delete(message.instanceId) &&
+                  atLimit.manages(message.instanceId)
+                ) {
+                  // A turn its account's limit refused: nothing ended. The
+                  // session is held, moved or continued; no report goes up,
+                  // no rule answers it, and what a refused request says of
+                  // the context is not the session's context.
+                  finalMessage.delete(message.instanceId);
+                  const refused = message.instanceId;
+                  atLimit.turnRefused(refused).catch((error: unknown) => {
+                    console.error(
+                      `[at-limit] ${refused}: ${error instanceof Error ? error.message : String(error)}`
+                    );
+                  });
                 } else if (neutral.type === "result") {
                   const [cacheRow] = db.getInstancesByIds([message.instanceId]);
                   if (cacheRow?.harness === "claude") {
@@ -13959,6 +14332,12 @@ export const createServer = (
                     if (cacheRow.keepAliveEnabled) {
                       publishInstances(cacheRow.machineId);
                     }
+                    // Near the limit, a summary is written ahead of it.
+                    atLimit.turnEnded(cacheRow.id).catch((error: unknown) => {
+                      console.error(
+                        `[at-limit] ${cacheRow.id}: ${error instanceof Error ? error.message : String(error)}`
+                      );
+                    });
                   }
                   // Claude reports each model's window only here; kept so a
                   // picker can say whether a model fits (claude's catalog

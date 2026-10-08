@@ -2,6 +2,7 @@ import type {
   AccountHue,
   AccountIdentity,
   AccountKind,
+  AccountMove,
   AccountOverage,
   AccountProvider,
   AtLimit,
@@ -561,10 +562,16 @@ export const instances = sqliteTable("instances", {
   harness: text("harness"),
   /**
    * The account the session runs on, chosen by placement when it started (a
-   * fork's is its origin's). Every later spawn of the row runs on it. Null: a
-   * harness without accounts, or a session from before accounts.
+   * fork's is its origin's). Every later spawn of the row runs on it, until
+   * the hub moves it to another at its limit. Null: a harness without
+   * accounts, or a session from before accounts.
    */
   accountId: text("account_id"),
+  /**
+   * The session this one was forked from, when it was: it reads that
+   * session's cache, so it never moves to another account on its own.
+   */
+  forkedFrom: text("forked_from"),
   /** The instance this one is a delegate of (nested under it in every rail). */
   parentInstanceId: text("parent_instance_id"),
   /** The delegating tool call, so the parent transcript can render the round trip. */
@@ -1428,6 +1435,58 @@ export const accountBench = sqliteTable(
     until: timestamp("until").notNull(),
   },
   (table) => [primaryKey({ columns: [table.accountId, table.scope] })]
+);
+
+/**
+ * Sessions waiting out their account's limit: their last turn was refused,
+ * and the hub sends them on when `until` comes (the reset), or sooner when
+ * another account can take them. `until` null: no reset was named, and the
+ * hub looks again on its own clock.
+ */
+export const limitHolds = sqliteTable("limit_holds", {
+  instanceId: text("instance_id").primaryKey(),
+  /** The account at its limit. */
+  accountId: text("account_id").notNull(),
+  until: timestamp("until"),
+  createdAt: timestamp("created_at")
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
+/**
+ * A summary written ahead of the limit, while the session's account still had
+ * room: what continuing it on another account starts from, should its window
+ * run out. Discarded when that window resets first. `summary` null: the
+ * summariser is still writing it.
+ */
+export const limitSummaries = sqliteTable("limit_summaries", {
+  instanceId: text("instance_id").primaryKey(),
+  accountId: text("account_id").notNull(),
+  /** The reset of the window it was written against (ISO). */
+  resetsAt: text("resets_at").notNull(),
+  /** That window's percent when the summary was started. */
+  percent: integer("percent").notNull(),
+  summary: text("summary"),
+  preparedAt: timestamp("prepared_at")
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
+/**
+ * The lines the hub writes into a session's transcript at its account's
+ * limit (core `ACCOUNT_MOVE`, `move` what it did): kept here, since the
+ * harness's own transcript is not the hub's to write, and laid into every
+ * read of it by time.
+ */
+export const limitEvents = sqliteTable(
+  "limit_events",
+  {
+    id: text("id").primaryKey(),
+    instanceId: text("instance_id").notNull(),
+    at: timestamp("at").notNull(),
+    move: text("move", { mode: "json" }).$type<AccountMove>().notNull(),
+  },
+  (table) => [index("limit_events_instance_idx").on(table.instanceId)]
 );
 
 /**

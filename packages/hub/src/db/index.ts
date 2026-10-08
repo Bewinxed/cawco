@@ -74,6 +74,7 @@ import { bundledSkills } from "../bundled-skills";
 import { DB_PATH } from "../config";
 import { workflowSkill } from "../workflows/skills";
 import { type AccountsDb, accountsDb } from "./accounts";
+import { type AtLimitDb, atLimitDb } from "./at-limit";
 import {
   accountSignins,
   agents,
@@ -95,6 +96,9 @@ import {
   fleetMemoryHistory,
   fleetSkillHistory,
   instances,
+  limitEvents,
+  limitHolds,
+  limitSummaries,
   machineLimitHistory,
   marketplaces,
   mcpServers,
@@ -341,6 +345,8 @@ export interface DbShape {
     answer: "accepted" | "dismissed",
     projectId?: string
   ) => void;
+  /** Sessions held at their account's limit, summaries kept ahead of it, and the lines it wrote. */
+  readonly atLimit: AtLimitDb;
   /** Records ownership before sending a create; a restart discards anything still unfiled. */
   readonly beginWorkspaceCreate: (id: string, machineId: string) => void;
   /** Adds what a Caw turn the thread woke cost to the thread's spend. */
@@ -806,8 +812,13 @@ export interface DbShape {
       kind?: InstanceKind;
       permissionMode?: string;
       model?: string;
-      workItemId?: string;
+      workItemId?: string | null;
       parentInstanceId?: string;
+      /** The account it moves to at its old one's limit. */
+      accountId?: string;
+      forkedFrom?: string;
+      threadId?: string;
+      projectId?: string;
     }
   ) => PublicInstanceRow | undefined;
   /** A project with its places, or undefined for an id the hub does not hold. */
@@ -1434,6 +1445,7 @@ export interface DbShape {
         | "groupReportedAt"
         | "digest"
         | "turns"
+        | "instanceId"
       >
     >
   ) => WorkItemRow | undefined;
@@ -1768,6 +1780,11 @@ const make = (path: string): DbShape => {
       .run();
     tx.delete(ruleState).where(inArray(ruleState.instanceId, list)).run();
     tx.delete(sentMessages).where(inArray(sentMessages.instanceId, list)).run();
+    tx.delete(limitHolds).where(inArray(limitHolds.instanceId, list)).run();
+    tx.delete(limitSummaries)
+      .where(inArray(limitSummaries.instanceId, list))
+      .run();
+    tx.delete(limitEvents).where(inArray(limitEvents.instanceId, list)).run();
     tx.delete(supervisorEvents)
       .where(inArray(supervisorEvents.instanceId, list))
       .run();
@@ -5225,6 +5242,7 @@ const make = (path: string): DbShape => {
     },
     listUsageLimits: () => db.select().from(usageLimits).all(),
     accounts: accountsDb(db),
+    atLimit: atLimitDb(db),
     usageSpend: ({ harness, todayStart, weekStart }) => {
       const since = (start: number) =>
         sql<number>`coalesce(sum(case when ${usageBuckets.start} >= ${start} then ${usageBuckets.costUsd} else 0 end), 0)`;
