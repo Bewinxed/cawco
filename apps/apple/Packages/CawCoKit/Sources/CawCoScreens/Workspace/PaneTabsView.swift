@@ -506,6 +506,8 @@ final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteraction
         switch pan.state {
         case .began:
             guard let tab = pan.view as? TabView, let host = window else { return }
+            tab.yieldToPull(pan)
+            for menu in tab.interactions.compactMap({ $0 as? UIContextMenuInteraction }) { menu.dismissMenu() }
             sheet?.dismiss()
             let made = TabOptionsSheet(sections: actions(tab.id), under: tab, in: host)
             made.onGone = { [weak self, weak made] in
@@ -628,6 +630,17 @@ final class TabView: UIView {
     private(set) var chosen = false
     private var hovering = false
     private var pressed = false
+    /// The press tint's own recognizer: it watches every touch and gives way to none.
+    private let press = UILongPressGestureRecognizer()
+
+    /// A pull down has the finger: the long press's context menu, the drag's
+    /// lift and the tap give it up, so the one touch opens one thing.
+    func yieldToPull(_ pull: UIGestureRecognizer) {
+        for gesture in gestureRecognizers ?? [] where gesture !== pull && gesture !== press && gesture.isEnabled {
+            gesture.isEnabled = false
+            gesture.isEnabled = true
+        }
+    }
 
     init(id: String) {
         self.id = id
@@ -686,7 +699,7 @@ final class TabView: UIView {
         ])
         addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(tapped)))
         addGestureRecognizer(UIHoverGestureRecognizer(target: self, action: #selector(hovered(_:))))
-        let press = UILongPressGestureRecognizer(target: self, action: #selector(held(_:)))
+        press.addTarget(self, action: #selector(held(_:)))
         press.minimumPressDuration = 0
         press.cancelsTouchesInView = false
         press.delegate = PressPassThrough.shared
