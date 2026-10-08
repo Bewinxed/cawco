@@ -7,6 +7,8 @@ interface Env {
   readonly APNS_TOPIC: string;
   /** The App Store app record; Apple's verifier requires it for Production. */
   readonly APP_APPLE_ID: string;
+  /** Where each verified App Store Server Notification's exact body goes on to: Yield. */
+  readonly ASSN_FORWARD_URL: string;
   readonly ENROLL_LIMIT: RateLimit;
   readonly EXPERIMENT: DurableObjectNamespace<
     import("./experiment").Experiment

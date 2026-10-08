@@ -71,16 +71,21 @@ const matches = (value: unknown, pattern: RegExp): value is string =>
   typeof value === "string" && pattern.test(value);
 
 /** The body as an object, or undefined when it is too big or not a JSON object. */
-const bodyOf = async (
+/** The body as sent, or undefined when it is over `maxBytes`. */
+const rawBodyOf = async (
   request: Request,
-  maxBytes = MAX_BODY_BYTES
-): Promise<Body | undefined> => {
+  maxBytes: number
+): Promise<string | undefined> => {
   const declared = Number(request.headers.get("content-length") ?? 0);
   if (declared > maxBytes) {
     return undefined;
   }
   const text = await request.text();
-  if (bytes(text) > maxBytes) {
+  return bytes(text) > maxBytes ? undefined : text;
+};
+
+const parsedBody = (text: string | undefined): Body | undefined => {
+  if (text === undefined) {
     return undefined;
   }
   let parsed: unknown;
@@ -91,6 +96,9 @@ const bodyOf = async (
   }
   return isObject(parsed) ? parsed : undefined;
 };
+
+const bodyOf = async (request: Request): Promise<Body | undefined> =>
+  parsedBody(await rawBodyOf(request, MAX_BODY_BYTES));
 
 interface Enrollment {
   readonly apnsEnvironment: ApnsEnvironment;
@@ -381,13 +389,21 @@ const revoked = async (env: Env, notice: Verified): Promise<string> => {
  * inside it are verified against Apple's root, for bundle dev.cawco.app, in
  * Production or the sandbox; anything else is refused. Types not handled
  * here answer 200 so Apple does not retry them.
+ *
+ * Apple allows one notification URL per app, so once a notification has
+ * verified and been applied here, its exact body goes on to Yield (the
+ * owner's revenue dashboard, `ASSN_FORWARD_URL`), which verifies Apple's JWS
+ * itself. The forward runs after the answer and never changes it: Apple's
+ * retries stay about Cawrier. Nothing that failed verification is forwarded.
  */
 const appleNotification = async (
   request: Request,
-  env: Env
+  env: Env,
+  ctx: ExecutionContext
 ): Promise<Response> => {
-  const body = await bodyOf(request, MAX_NOTIFICATION_BYTES);
-  if (typeof body?.signedPayload !== "string") {
+  const raw = await rawBodyOf(request, MAX_NOTIFICATION_BYTES);
+  const body = parsedBody(raw);
+  if (!(raw && typeof body?.signedPayload === "string")) {
     return refuse(400, "The notification is not in the shape Cawrier reads.");
   }
   const notice = await verifyNotification(env, body.signedPayload);
@@ -406,7 +422,28 @@ const appleNotification = async (
   console.log(
     `notification ${notice.type} ${notice.environment} ${notice.uuid}: ${outcome}`
   );
+  ctx.waitUntil(forward(env, raw, notice.uuid));
   return json(200, { ok: true });
+};
+
+const FORWARD_TIMEOUT_MS = 10_000;
+
+/** Passes a verified notification's exact body on to Yield; logs its answer, never throws. */
+const forward = async (env: Env, raw: string, uuid: string): Promise<void> => {
+  try {
+    const response = await fetch(env.ASSN_FORWARD_URL, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: raw,
+      signal: AbortSignal.timeout(FORWARD_TIMEOUT_MS),
+    });
+    await response.body?.cancel();
+    console.log(`forward ${uuid}: Yield answered ${response.status}`);
+  } catch (error) {
+    console.log(
+      `forward ${uuid}: Yield not reached (${error instanceof Error ? error.message : String(error)})`
+    );
+  }
 };
 
 /** Constant-time over equal-length digests, so the token's length does not show either. */
@@ -468,7 +505,7 @@ const healthCheck = async (env: Env): Promise<Response> => {
 };
 
 export default {
-  async fetch(request, env): Promise<Response> {
+  async fetch(request, env, ctx): Promise<Response> {
     const { pathname } = new URL(request.url);
     if (request.method === "POST" && pathname === "/v1/enroll") {
       return await enroll(request, env);
@@ -483,7 +520,7 @@ export default {
       return await healthCheck(env);
     }
     if (request.method === "POST" && pathname === "/v1/apple/notifications") {
-      return await appleNotification(request, env);
+      return await appleNotification(request, env, ctx);
     }
     if (request.method === "GET" && pathname.startsWith(EXPERIMENT_PATH)) {
       return await experimentReport(
