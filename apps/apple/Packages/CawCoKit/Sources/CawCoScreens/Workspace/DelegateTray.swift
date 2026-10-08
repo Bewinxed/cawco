@@ -31,6 +31,8 @@ final class DelegateTrayView: UIView {
     private static let chipCeiling = 224.0
     private static let gap = Space.space2
     private static let more = 59.0
+    /// "+N"'s own width (`--more`), and the box the fan folds into.
+    private static let moreBox = 52.0
     private static let tick = 0.25
 
     enum Tone: String { case starting, running, asked, needs, done, cancelled, failed }
@@ -77,6 +79,21 @@ final class DelegateTrayView: UIView {
     private var folded: [Chip] = []
     private var moreChip: TrayChipView?
 
+    /// What "+N" holds, unfolded over it (DelegateTray.svelte `.fan`): the
+    /// same chips in a column over "+N", with no surface of their own, pulled
+    /// back inside the row's end by the widest of them. Folded, each sits in
+    /// "+N"'s box, clipped to it and clear; opening, each rises to its place,
+    /// the nearest first. Taller than the room over the tray, the column
+    /// scrolls, and opens on the chips nearest "+N".
+    private let fan = UIScrollView()
+    private var fanViews: [String: TrayChipView] = [:]
+    private var fanOrder: [String] = []
+    private var fanOpen = false
+    /// Opened by a press: it stays until the next press, or one outside.
+    private var fanPinned = false
+    /// The last conversation's row is fading out: the next one's fades in.
+    private var handingOver = false
+
     /// Delegates that existed before this tray: their chips are simply there.
     private var mountedAt = Date().timeIntervalSince1970 * 1000
     /// When the tray first heard of each item, and how long each finished chip has been on screen.
@@ -106,7 +123,14 @@ final class DelegateTrayView: UIView {
         row.alpha = 0
         panel.onHold = { [weak self] in self?.closing?.cancel() }
         panel.onRelease = { [weak self] in self?.rootLeft() }
-        ground.onOutside = { [weak self] in self?.close() }
+        ground.onOutside = { [weak self] in self?.shut() }
+        ground.tray = row
+        // Under the panel, which stands over the whole fan for one of its chips.
+        fan.showsVerticalScrollIndicator = false
+        fan.contentInsetAdjustmentBehavior = .never
+        fan.isUserInteractionEnabled = false
+        fan.accessibilityElementsHidden = true
+        ground.addSubview(fan)
         addGestureRecognizer(UIHoverGestureRecognizer(target: self, action: #selector(hovered(_:))))
         accessibilityLabel = "Delegates"
     }
@@ -131,7 +155,7 @@ final class DelegateTrayView: UIView {
         beat?.invalidate()
         beat = nil
         guard window != nil else {
-            close()
+            shut()
             return
         }
         beat = Timer.scheduledTimer(withTimeInterval: Self.tick, repeats: true) { [weak self] _ in
@@ -143,7 +167,29 @@ final class DelegateTrayView: UIView {
     // MARK: The chips
 
     private func adopt() {
+        // One conversation's tray hands its place to the next (Composer.svelte
+        // `trayFade`): the row as it stood fades out over the new one fading
+        // in, opacity only, so it reads the same under Reduce Motion.
+        if window != nil, row.alpha > 0, !chips.isEmpty, let ghost = row.snapshotView(afterScreenUpdates: false) {
+            ghost.frame = row.frame
+            ghost.isUserInteractionEnabled = false
+            addSubview(ghost)
+            Motion.easeOut.animator(Motion.durExit) { ghost.alpha = 0 }
+                .also {
+                    $0.addCompletion { [weak self] _ in
+                        ghost.removeFromSuperview()
+                        self?.handingOver = false
+                    }
+                }.startAnimation()
+            handingOver = true
+        }
         close()
+        fanOpen = false
+        fanPinned = false
+        ground.catches = false
+        fanViews.values.forEach { $0.removeFromSuperview() }
+        fanViews = [:]
+        fanOrder = []
         mountedAt = Date().timeIntervalSince1970 * 1000
         known = [:]
         shownFor = [:]
@@ -220,7 +266,7 @@ final class DelegateTrayView: UIView {
     /// its check has had its beat, flies to its report if that row is in
     /// view; otherwise it stays out its hold and goes.
     private func holdFinished(_ now: Double) {
-        let paused = UIApplication.shared.applicationState != .active || hovering || openKey != nil
+        let paused = UIApplication.shared.applicationState != .active || hovering || openKey != nil || fanOpen
         for chip in chips where chip.tone == .done || chip.tone == .cancelled {
             let item = chip.item
             // At load, one that finished moments ago shows for what is left.
@@ -297,8 +343,9 @@ final class DelegateTrayView: UIView {
     override func layoutSubviews() {
         super.layoutSubviews()
         row.frame = CGRect(x: 0, y: bounds.height - foot - chipHeight, width: bounds.width, height: chipHeight)
-        fit()
+        // The ground first: the fan stands in it, at "+N".
         syncGround()
+        fit()
     }
 
     /// What does not fit at the floor goes into "+N", so the row never passes the composer's edge.
@@ -350,8 +397,9 @@ final class DelegateTrayView: UIView {
             if let moreChip {
                 self.moreChip = nil
                 Motion.easeOut.animator(Motion.durControl) { moreChip.alpha = 0 }.also { $0.addCompletion { _ in moreChip.removeFromSuperview() } }.startAnimation()
-                if openKey == "more" { close() }
             }
+            // Nothing left behind "+N": the fan is over.
+            closeFan()
         } else {
             let view = moreChip ?? {
                 let made = TrayChipView(height: chipHeight)
@@ -363,26 +411,30 @@ final class DelegateTrayView: UIView {
                 return made
             }()
             view.configureMore(folded.count, needs: folded.contains { $0.tone == .needs })
+            view.accessibilityValue = fanOpen ? "Expanded" : "Collapsed"
         }
         place(keys, arrivals: arrivals)
+        layoutFan()
         // The row comes and goes in the room kept for it: opacity only, so nothing standing on it moves.
         let visible: CGFloat = chips.isEmpty ? 0 : 1
         if row.alpha != visible {
-            if quiet || window == nil {
+            if handingOver, window != nil {
+                // The next conversation's row, over the last one's fading out.
+                Motion.easeOut.animator(Motion.durExit) { self.row.alpha = visible }.startAnimation()
+            } else if quiet || window == nil {
                 row.alpha = visible
             } else {
                 Motion.easeOut.animator(Motion.durControl) { self.row.alpha = visible }.startAnimation()
             }
         }
-        if let openKey, openKey != "more", let chip = chips.first(where: { $0.item.id == openKey }) { refreshPanel(chip) }
-        if openKey == "more" { moreList?.chips = folded }
+        if let openKey, let chip = chips.first(where: { $0.item.id == openKey }) { refreshPanel(chip) }
     }
 
     /// Chips share the row: each as wide as its words, between its floor and
     /// its ceiling, shrinking toward the floor together when the row is full.
     private func place(_ keys: [String], arrivals: [TrayChipView]) {
         let views = keys.compactMap { chipViews[$0] }
-        let moreWidth = moreChip == nil ? 0 : 52.0
+        let moreWidth = moreChip == nil ? 0 : Self.moreBox
         let room = bounds.width - (moreChip == nil ? 0 : moreWidth + Self.gap) - Double(max(0, views.count - 1)) * Self.gap
         let widths = Self.flex(views.map(\.naturalWidth), room: room)
         var x = 0.0
@@ -540,8 +592,20 @@ final class DelegateTrayView: UIView {
 
     // MARK: The panel
 
+    /// A chip's box in the row's space: a chip in the fan has the fan's place.
     private func frame(of key: String) -> CGRect? {
-        (key == "more" ? moreChip : chipViews[key])?.frame
+        if key == "more" { return moreChip?.frame }
+        if let leaf = fanViews[key] { return leaf.convert(leaf.bounds, to: row) }
+        return chipViews[key]?.frame
+    }
+
+    /// Where a chip's panel stands: over its chip, or, for a chip in the
+    /// fan, over the whole fan (DelegateTray.svelte `place`, `rise`).
+    private func place(for key: String, chip: CGRect) -> HoverPanel.Place {
+        let fanned = fanViews[key] != nil
+        return HoverPanel.Place(x: max(0, fanned ? fan.frame.minX : chip.minX),
+                                y: fanned ? fan.frame.minY : ground.bounds.height,
+                                origin: chip.width / 2, span: row.bounds.width)
     }
 
     /// The panel's ground: the composer's host above the row, as wide as the
@@ -556,70 +620,152 @@ final class DelegateTrayView: UIView {
     private func open(_ key: String, pin: Bool) {
         dwell?.cancel()
         closing?.cancel()
-        if key == "more" {
-            presentMore()
-            return
-        }
-        guard let chip = frame(of: key), panelHost != nil else { return }
+        guard key != "more", let chip = frame(of: key), panelHost != nil else { return }
+        // A row chip's panel takes the place of a fan nobody pinned.
+        if fanViews[key] == nil, !fanPinned { closeFan() }
         syncGround()
-        panel.room = min(320, ground.bounds.height - 16)
-        let place = HoverPanel.Place(x: max(0, chip.minX), y: ground.bounds.height, origin: chip.width / 2, span: row.bounds.width)
+        let place = place(for: key, chip: chip)
+        panel.room = min(320, place.y - 16)
         openKey = key
         pinned = pin || pinned
-        ground.catches = pinned
+        ground.catches = pinned || fanPinned
         panel.show(key, content: content(key), at: place, in: ground)
-        for (id, view) in chipViews { view.accessibilityValue = id == key ? "Expanded" : "Collapsed" }
+        for (id, view) in chipViews.merging(fanViews, uniquingKeysWith: { row, _ in row }) {
+            view.accessibilityValue = id == key ? "Expanded" : "Collapsed"
+        }
     }
 
-    /// The "+N" list: the system popover, standing on its chip.
-    private weak var moreList: TrayMoreController?
-
-    private func presentMore() {
-        guard moreList == nil, let source = moreChip, window != nil,
-              let host = sequence(first: self as UIResponder, next: \.next).compactMap({ $0 as? UIViewController }).first else { return }
-        let list = TrayMoreController(chips: folded, coarse: coarse, room: min(320, host.view.bounds.height / 2))
-        list.onPick = { [weak self] id in
-            self?.close()
-            self?.onOpen(id)
-        }
-        list.onGone = { [weak self] in
-            guard self?.openKey == "more" else { return }
-            self?.openKey = nil
-            self?.moreList = nil
-            self?.chipViews.values.forEach { $0.accessibilityValue = "Collapsed" }
-        }
-        list.modalPresentationStyle = .popover
-        if let popover = list.popoverPresentationController {
-            popover.sourceView = source
-            popover.sourceRect = source.bounds
-            popover.permittedArrowDirections = .down
-            popover.backgroundColor = Palette.surfaceRaised
-            popover.delegate = list
-        }
-        moreList = list
-        openKey = "more"
-        host.present(list, animated: true)
-    }
-
+    /// The panel goes.
     private func close() {
         dwell?.cancel()
         closing?.cancel()
         guard openKey != nil else { return }
-        if openKey == "more" {
-            moreList?.dismiss(animated: true)
-            moreList = nil
-        }
         openKey = nil
         pinned = false
-        ground.catches = false
+        ground.catches = fanPinned
         panel.hide()
         for view in chipViews.values { view.accessibilityValue = "Collapsed" }
+        for view in fanViews.values { view.accessibilityValue = "Collapsed" }
+    }
+
+    /// The panel and the fan, both.
+    private func shut() {
+        close()
+        closeFan()
     }
 
     private func refreshPanel(_ chip: Chip) {
         guard panelChip != chip, let frame = frame(of: chip.item.id) else { return }
-        let place = HoverPanel.Place(x: max(0, frame.minX), y: ground.bounds.height, origin: frame.width / 2, span: row.bounds.width)
-        panel.show(chip.item.id, content: content(chip.item.id), at: place, in: ground)
+        panel.show(chip.item.id, content: content(chip.item.id), at: place(for: chip.item.id, chip: frame), in: ground)
+    }
+
+    // MARK: The fan
+
+    private func openFan(pin: Bool) {
+        dwell?.cancel()
+        closing?.cancel()
+        guard !folded.isEmpty else { return }
+        // From a chip to "+N": that chip's panel goes, the fan comes.
+        close()
+        fanOpen = true
+        fanPinned = pin || fanPinned
+        ground.catches = fanPinned
+        moreChip?.accessibilityValue = "Expanded"
+        syncGround()
+        placeFan(animated: true)
+        // Taller than its room, it opens on the chips nearest "+N".
+        fan.contentOffset.y = max(0, fan.contentSize.height - fan.bounds.height)
+        UIAccessibility.post(notification: .layoutChanged, argument: fanOrder.first.flatMap { fanViews[$0] })
+    }
+
+    private func closeFan() {
+        guard fanOpen else { return }
+        if let openKey, fanViews[openKey] != nil { close() }
+        fanOpen = false
+        fanPinned = false
+        ground.catches = pinned
+        moreChip?.accessibilityValue = "Collapsed"
+        placeFan(animated: true)
+    }
+
+    /// The chips "+N" holds, one view each, in the fan.
+    private func layoutFan() {
+        let keys = folded.map(\.item.id)
+        for (key, view) in fanViews where !keys.contains(key) {
+            fanViews[key] = nil
+            view.removeFromSuperview()
+            if openKey == key { close() }
+        }
+        for chip in folded {
+            let id = chip.item.id
+            let view = fanViews[id] ?? {
+                let made = TrayChipView(height: chipHeight)
+                made.addAction(UIAction { [weak self] _ in self?.pressed(id) }, for: .touchUpInside)
+                made.onHover = { [weak self] over in if over { self?.chipEntered(id) } }
+                // Folded, a chip shows only what "+N"'s box shows of it.
+                let clip = UIView()
+                clip.backgroundColor = .black
+                clip.layer.cornerRadius = Radius.radiusSm
+                clip.layer.cornerCurve = .continuous
+                made.mask = clip
+                made.alpha = 0
+                fan.addSubview(made)
+                fanViews[id] = made
+                return made
+            }()
+            view.configure(chip, watched: (chip.item.endedAt ?? 0) > mountedAt, words: Self.stateWords(chip))
+        }
+        fanOrder = keys
+        placeFan(animated: false)
+    }
+
+    /// The fan's column over "+N" (`.fan`, `.leaf`): one chip and a gap a
+    /// step, the nearest chip a gap over "+N", each at its content's width
+    /// within the chip's bounds. Open, each stands in its place; folded, each
+    /// sits in "+N"'s box, clipped to it and clear. The nearest leaves first
+    /// and comes back last, five deep.
+    private func placeFan(animated: Bool) {
+        guard let moreChip, !fanOrder.isEmpty else { return }
+        let views = fanOrder.compactMap { fanViews[$0] }
+        let widths = views.map { min(Self.chipCeiling, max(Self.chipFloor, $0.naturalWidth)) }
+        let widest = widths.max() ?? 0
+        // The ground stands over the row, edge to edge with it: "+N" has the same x in both.
+        let at = moreChip.frame.minX
+        let x = max(0, min(at, row.bounds.width - widest))
+        let dx = at - x
+        let step = chipHeight + Self.gap
+        let count = views.count
+        let whole = Double(count) * step
+        let room = max(step, ground.bounds.height - Space.space2)
+        let height = min(whole, room)
+        fan.frame = CGRect(x: x, y: ground.bounds.height - height, width: widest, height: height)
+        fan.contentSize = CGSize(width: widest, height: whole)
+        // Clipped only while it scrolls, so the chips' shadows are drawn whole.
+        fan.clipsToBounds = whole > room
+        fan.isUserInteractionEnabled = fanOpen
+        fan.accessibilityElementsHidden = !fanOpen
+        let still = UIAccessibility.isReduceMotionEnabled
+        for (index, (view, width)) in zip(views, widths).enumerated() {
+            let top = Double(count - 1 - index) * step
+            view.bounds = CGRect(x: 0, y: 0, width: width, height: chipHeight)
+            view.center = CGPoint(x: width / 2, y: top + chipHeight / 2)
+            let open = fanOpen
+            let pose = {
+                // Past its own edge when open, so the chip's shadow is drawn whole.
+                view.mask?.frame = open
+                    ? CGRect(x: -Space.space2, y: -Space.space2, width: width + Space.space2 * 2, height: self.chipHeight + Space.space2 * 2)
+                    : CGRect(x: 0, y: 0, width: still ? width : Self.moreBox, height: self.chipHeight)
+                view.transform = open || still ? .identity : CGAffineTransform(translationX: dx, y: whole - top)
+                view.alpha = open ? 1 : 0
+            }
+            guard animated, window != nil else {
+                pose()
+                continue
+            }
+            let turn = open ? index : count - 1 - index
+            let delay = Double(min(turn, 4)) * Motion.durStagger
+            Motion.easeOut.animator(open ? Motion.durMorph : Motion.durExit) { pose() }.startAnimation(afterDelay: delay)
+        }
     }
 
     private var panelChip: Chip?
@@ -628,6 +774,20 @@ final class DelegateTrayView: UIView {
         guard !coarse else { return }
         closing?.cancel()
         dwell?.cancel()
+        if key == "more" {
+            if openKey != nil, !pinned {
+                openFan(pin: false)
+            } else if !fanOpen {
+                dwell = Task { @MainActor [weak self] in
+                    try? await Task.sleep(for: .milliseconds(350))
+                    guard !Task.isCancelled else { return }
+                    self?.openFan(pin: false)
+                }
+            }
+            return
+        }
+        // A chip in the row folds a fan nobody pinned.
+        if fanOpen, !fanPinned, fanViews[key] == nil { closeFan() }
         if openKey != nil, !pinned {
             if openKey != key { open(key, pin: false) }
         } else if openKey == nil {
@@ -640,6 +800,10 @@ final class DelegateTrayView: UIView {
     }
 
     private func pressed(_ key: String) {
+        if key == "more" {
+            if fanOpen, fanPinned { closeFan() } else { openFan(pin: true) }
+            return
+        }
         // A finished chip whose report is in the transcript takes the reader there.
         if let parentId, let done = chips.first(where: { $0.item.id == key && $0.tone == .done }), let report = report(of: done.item) {
             close()
@@ -662,11 +826,12 @@ final class DelegateTrayView: UIView {
     private func rootLeft() {
         hovering = false
         dwell?.cancel()
-        guard !coarse, !pinned, openKey != nil else { return }
+        guard !coarse, (!pinned && openKey != nil) || (!fanPinned && fanOpen) else { return }
         closing = Task { @MainActor [weak self] in
             try? await Task.sleep(for: .milliseconds(300))
-            guard !Task.isCancelled else { return }
-            self?.close()
+            guard let self, !Task.isCancelled else { return }
+            if !pinned { close() }
+            if !fanPinned { closeFan() }
         }
     }
 
@@ -746,91 +911,20 @@ final class DelegateTrayView: UIView {
     }
 }
 
-/// The "+N" list: what the row had no room for, one row each, in the system
-/// popover. It scrolls past its room and hands back the delegate pressed.
-final class TrayMoreController: UIViewController, UIPopoverPresentationControllerDelegate {
-    var onPick: (String) -> Void = { _ in }
-    var onGone: () -> Void = {}
-    var chips: [DelegateTrayView.Chip] {
-        didSet { if isViewLoaded { fill() } }
-    }
-
-    private let coarse: Bool
-    private let room: Double
-    private let scroll = UIScrollView()
-    private let list = UIStackView()
-
-    init(chips: [DelegateTrayView.Chip], coarse: Bool, room: Double) {
-        self.chips = chips
-        self.coarse = coarse
-        self.room = room
-        super.init(nibName: nil, bundle: nil)
-    }
-
-    @available(*, unavailable)
-    required init?(coder _: NSCoder) {
-        fatalError("TrayMoreController is built in code")
-    }
-
-    override func viewDidLoad() {
-        super.viewDidLoad()
-        view.backgroundColor = Palette.surfaceRaised
-        list.axis = .vertical
-        list.spacing = 2
-        list.translatesAutoresizingMaskIntoConstraints = false
-        scroll.translatesAutoresizingMaskIntoConstraints = false
-        scroll.alwaysBounceVertical = false
-        view.addSubview(scroll)
-        scroll.addSubview(list)
-        let pad = Space.space2
-        NSLayoutConstraint.activate([
-            scroll.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            scroll.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            scroll.topAnchor.constraint(equalTo: view.topAnchor),
-            scroll.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-            list.leadingAnchor.constraint(equalTo: scroll.contentLayoutGuide.leadingAnchor, constant: pad),
-            list.trailingAnchor.constraint(equalTo: scroll.contentLayoutGuide.trailingAnchor, constant: -pad),
-            list.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor, constant: pad),
-            list.bottomAnchor.constraint(equalTo: scroll.contentLayoutGuide.bottomAnchor, constant: -pad),
-            list.widthAnchor.constraint(equalTo: scroll.frameLayoutGuide.widthAnchor, constant: -pad * 2),
-        ])
-        fill()
-    }
-
-    private func fill() {
-        list.arrangedSubviews.forEach { $0.removeFromSuperview() }
-        for chip in chips {
-            let row = TrayPanelRow(chip, coarse: coarse)
-            row.addAction(UIAction { [weak self] _ in self?.onPick(chip.item.instanceId) }, for: .touchUpInside)
-            list.addArrangedSubview(row)
-        }
-        let width = min(320, UIScreen.main.bounds.width - 32)
-        let fit = list.systemLayoutSizeFitting(CGSize(width: width - Space.space2 * 2, height: 0),
-                                               withHorizontalFittingPriority: .required, verticalFittingPriority: .fittingSizeLevel).height
-        preferredContentSize = CGSize(width: width, height: min(room, fit + Space.space2 * 2))
-    }
-
-    func adaptivePresentationStyle(for _: UIPresentationController, traitCollection _: UITraitCollection) -> UIModalPresentationStyle { .none }
-
-    func presentationControllerDidDismiss(_: UIPresentationController) { onGone() }
-
-    override func viewDidDisappear(_ animated: Bool) {
-        super.viewDidDisappear(animated)
-        onGone()
-    }
-}
-
 /// The ground the tray's panel stands in: only the panel takes a touch, and
 /// while a panel is pinned a press anywhere else closes it and goes on to
 /// what it pressed.
 private final class PanelGround: UIView {
     var onOutside: () -> Void = {}
     var catches = false
+    /// The tray's own row: a press there is the tray's (a chip, "+N"), not outside.
+    weak var tray: UIView?
 
     override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
         let hit = super.hitTest(point, with: event)
         guard hit === self || hit == nil else { return hit }
-        if catches, event?.type == .touches { DispatchQueue.main.async { [weak self] in self?.onOutside() } }
+        let onTray = tray.map { $0.point(inside: convert(point, to: $0), with: event) } ?? false
+        if catches, !onTray, event?.type == .touches { DispatchQueue.main.async { [weak self] in self?.onOutside() } }
         return nil
     }
 
@@ -852,50 +946,6 @@ private final class TrayPanelColumn: UIStackView {
         let first = fitted == .zero
         fitted = fit
         if !first { DispatchQueue.main.async { [weak self] in self?.onLayout() } }
-    }
-}
-
-/// One hidden delegate in the "+N" panel: its mark, its title, and its state in words.
-private final class TrayPanelRow: UIControl {
-    init(_ chip: DelegateTrayView.Chip, coarse: Bool) {
-        super.init(frame: .zero)
-        layer.cornerRadius = Radius.radiusSm
-        layer.cornerCurve = .continuous
-        let mark = SessionMarkView(tile: 17)
-        mark.configure(id: chip.item.instanceId, place: chip.item.instanceId, status: .idle)
-        let title = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong)
-        title.text = chip.item.title
-        title.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        title.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        let words = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
-        words.text = DelegateTrayView.stateWords(chip)
-        words.setContentHuggingPriority(.required, for: .horizontal)
-        let line = UIStackView(arrangedSubviews: [mark, title, words])
-        line.spacing = Space.space2
-        line.alignment = .center
-        line.isUserInteractionEnabled = false
-        line.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(line)
-        NSLayoutConstraint.activate([
-            heightAnchor.constraint(greaterThanOrEqualToConstant: coarse ? 44 : 30),
-            line.leadingAnchor.constraint(equalTo: leadingAnchor),
-            line.trailingAnchor.constraint(equalTo: trailingAnchor),
-            line.centerYAnchor.constraint(equalTo: centerYAnchor),
-        ])
-        isAccessibilityElement = true
-        accessibilityTraits = .link
-        accessibilityLabel = "\(chip.item.title), \(DelegateTrayView.stateWords(chip))"
-        addGestureRecognizer(UIHoverGestureRecognizer(target: self, action: #selector(hovered(_:))))
-    }
-
-    @available(*, unavailable)
-    required init?(coder _: NSCoder) {
-        fatalError("TrayPanelRow is built in code")
-    }
-
-    /// The row's wash reaches a step past its words on each side (`margin-inline: -space-2`).
-    @objc private func hovered(_ hover: UIHoverGestureRecognizer) {
-        backgroundColor = hover.state == .began || hover.state == .changed ? Palette.surfaceHover : .clear
     }
 }
 

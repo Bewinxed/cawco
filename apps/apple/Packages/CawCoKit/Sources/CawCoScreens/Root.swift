@@ -94,7 +94,7 @@ public final class RootViewController: ObservedViewController {
         }
         // A hub this app cannot read is said once, in place of a wait that would never end.
         if !read, let incompatible = hub.incompatible {
-            show(key: "too-old:\(incompatible.hubVersion ?? "")") { HubTooOldController(hub: hub, incompatible: incompatible) }
+            show(key: "mismatch:\(incompatible.hubVersion ?? "")") { HubMismatchController(hub: hub, incompatible: incompatible) }
             return
         }
         waiting.content = board

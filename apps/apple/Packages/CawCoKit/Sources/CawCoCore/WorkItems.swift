@@ -66,8 +66,24 @@ public final class WorkItemsStore {
                 read.remove(instanceId)
                 return
             }
+            // The tray is what the hub lists, nothing more: an item it no
+            // longer lists (dismissed, or ended past the tray's hold) goes.
+            let listed = Set(found.map(\.id))
+            for (id, item) in items where item.parentInstanceId == instanceId && !listed.contains(id) {
+                items[id] = nil
+            }
             for item in found { items[item.id] = item }
         }
+    }
+
+    /// A new connection. The frames sent while this client was away (a chip
+    /// dismissed on another screen, a delegate that failed or finished) never
+    /// reached it, and the hub does not send them again: every tray it has
+    /// read is read once more, and becomes what the hub lists now.
+    func reconnected() {
+        let parents = read
+        read = []
+        for parent in parents { load(parent: parent) }
     }
 
     func adopt(_ item: WorkItem) {

@@ -62,6 +62,20 @@ public final class HubConnection {
         public let hubVersion: String?
         /// What could not be read, for the log and the details line.
         public let read: String
+
+        /// What every screen says of it. Answers fail to decode whichever
+        /// side is behind, and nothing here can tell which, so neither is
+        /// named: both fixes are.
+        public static let title = "This app and your hub don't match"
+
+        /// The fix, with the hub's own version when `/health` said it.
+        public func message(host: String) -> String {
+            let runs = hubVersion.map { "Your hub runs CawCo \($0)." } ?? "This app can't read your hub's answers."
+            return "\(runs) Update the app from TestFlight, or update CawCo on \(host), then reconnect."
+        }
+
+        /// CawCo's TestFlight listing (App Store Connect app 6819139448).
+        public static let testFlight = URL(string: "itms-beta://beta.itunes.apple.com/v1/app/6819139448")!
     }
 
     public let ledger = Ledger()
@@ -297,6 +311,7 @@ public final class HubConnection {
         // A new connection may be to an updated hub: its answers are read again, once.
         incompatible = nil
         sessions.reconnected()
+        workItems.reconnected()
         readFleet(after: .seconds(1))
         if let address { PushRegistry.shared.connected(to: address) }
     }

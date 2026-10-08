@@ -431,10 +431,10 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
     /// are too brief to explain.
     private func sendBlock(_ row: InstanceRow?) -> SendBlock? {
         // The hub answered in a shape this app cannot read (HubConnection
-        // `incompatible`, the same check and `/health` version the connect
-        // screen uses): the fix is an update, so it is told in an alert.
+        // `incompatible`, the same check, words and `/health` version the
+        // connect screen uses): the fix is an update, so it is told in an alert.
         if let incompatible = hub.incompatible {
-            return SendBlock(reason: "This app is older than your hub") { [weak self] in
+            return SendBlock(reason: HubConnection.Incompatible.title) { [weak self] in
                 self?.explainIncompatible(incompatible)
             }
         }
@@ -454,20 +454,16 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
         ]))
     }
 
-    /// The one reason that carries its fix in an alert: this app cannot read
-    /// the hub, which a newer build of the app can.
+    /// The one reason that carries its fix in an alert: this app and the hub
+    /// don't match, and either update fixes it (HubMismatchController's words).
     private func explainIncompatible(_ incompatible: HubConnection.Incompatible) {
-        let runs = incompatible.hubVersion.map { "Your hub runs CawCo \($0)." } ?? "Your hub runs a newer CawCo."
-        let alert = UIAlertController(title: "This app is older than your hub",
-                                      message: "\(runs) Update CawCo from TestFlight to keep sending.", preferredStyle: .alert)
+        let alert = UIAlertController(title: HubConnection.Incompatible.title,
+                                      message: incompatible.message(host: hub.address?.host() ?? "your hub"), preferredStyle: .alert)
         let open = UIAlertAction(title: "Open TestFlight", style: .default) { _ in
-            // CawCo's TestFlight listing (App Store Connect app 6819139448).
-            if let testFlight = URL(string: "itms-beta://beta.itunes.apple.com/v1/app/6819139448") {
-                UIApplication.shared.open(testFlight)
-            }
+            UIApplication.shared.open(HubConnection.Incompatible.testFlight)
         }
-        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
         alert.addAction(open)
+        alert.addAction(UIAlertAction(title: "Reconnect", style: .default) { [weak hub] _ in hub?.reconnect() })
         alert.preferredAction = open
         present(alert, animated: true)
     }
@@ -654,15 +650,40 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
         }
     }
 
-    /// Pictures and files pasted into the composer: a picture as a picture,
-    /// a file as Choose File takes it.
+    /// Whatever is pasted into the composer that is not words: a picture as
+    /// a picture, anything else as Choose File takes it, by its own type
+    /// rather than the link Files copies beside it; and a bare link to a file,
+    /// as the file it names.
     private func attachPasted(_ items: [NSItemProvider]) {
         for provider in items {
+            let types = provider.registeredTypeIdentifiers.compactMap(UTType.init)
             if provider.hasItemConformingToTypeIdentifier(UTType.image.identifier) {
                 loadImage(provider)
-            } else if let type = provider.registeredTypeIdentifiers.compactMap(UTType.init)
-                .first(where: { $0.conforms(to: .data) || $0.conforms(to: .content) }) {
+            } else if let type = types.first(where: { !$0.conforms(to: .url) }) {
                 loadFile(provider, type: type)
+            } else if types.contains(where: { $0.conforms(to: .fileURL) }) {
+                loadLinkedFile(provider)
+            }
+        }
+    }
+
+    /// A pasted link to a file: the file it names, copied while it may be read.
+    private func loadLinkedFile(_ provider: NSItemProvider) {
+        let slot = reserve(provider.suggestedName ?? "File")
+        _ = provider.loadObject(ofClass: URL.self) { [weak self] url, error in
+            let scoped = url?.startAccessingSecurityScopedResource() ?? false
+            let kept = url.flatMap { Self.keep($0, name: $0.lastPathComponent) }
+            if scoped { url?.stopAccessingSecurityScopedResource() }
+            let reason = error?.localizedDescription ?? "The file couldn't be read."
+            Task { @MainActor in
+                guard let self else { return }
+                guard let kept else {
+                    self.composerBinding.resolve(slot, with: nil)
+                    Toast.error("Couldn't attach that file. \(reason)", in: self.view)
+                    return
+                }
+                let type = (try? kept.resourceValues(forKeys: [.contentTypeKey]).contentType) ?? UTType(filenameExtension: kept.pathExtension)
+                self.ingest(kept, name: kept.lastPathComponent, type: type, slot: slot)
             }
         }
     }
@@ -811,7 +832,8 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
     /// The name a pasted or picked file goes by: the name its source
     /// suggested, with its type's extension, else the copy's own.
     nonisolated private static func fileName(_ suggested: String?, url: URL, type: UTType) -> String {
-        guard let suggested, !suggested.isEmpty else { return url.lastPathComponent }
+        // A pasted item names nothing, and its copy's name is a hash: it goes by its kind ("PDF document.pdf").
+        let suggested = suggested.flatMap { $0.isEmpty ? nil : $0 } ?? type.localizedDescription ?? "File"
         guard let ext = type.preferredFilenameExtension ?? (url.pathExtension.isEmpty ? nil : url.pathExtension),
               (suggested as NSString).pathExtension.isEmpty else { return suggested }
         return "\(suggested).\(ext)"

@@ -3,9 +3,11 @@ import CawCoDesign
 import UIKit
 
 /// The hub answered in a shape this app cannot read: what to do about it,
-/// once, in place of a wait that would never end. Its version is the hub's
-/// own (`/health`); Reconnect reads it again after the reader updated it.
-final class HubTooOldController: UIViewController {
+/// once, in place of a wait that would never end. Nothing tells which side
+/// is behind, so it names both fixes in the words the composer's alert uses
+/// (`HubConnection.Incompatible`): the hub's version from `/health`, an app
+/// update from TestFlight, or a hub update; Reconnect reads it again after.
+final class HubMismatchController: UIViewController {
     private let hub: HubConnection
     private let incompatible: HubConnection.Incompatible
 
@@ -16,20 +18,24 @@ final class HubTooOldController: UIViewController {
     }
 
     @available(*, unavailable)
-    required init?(coder _: NSCoder) { fatalError("HubTooOldController is built in code") }
+    required init?(coder _: NSCoder) { fatalError("HubMismatchController is built in code") }
 
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = Palette.surfaceRecess
-        let host = hub.address?.host() ?? "your hub"
-        let runs = incompatible.hubVersion.map { "It runs CawCo \($0), which this app cannot read." }
-            ?? "It answers in a shape this app cannot read."
         let reconnect = KitButton.make("Reconnect", variant: .outline, height: .sm) { [weak self] in self?.hub.reconnect() }
+        let testFlight = KitButton.make("Open TestFlight", variant: .ghost, height: .sm) {
+            UIApplication.shared.open(HubConnection.Incompatible.testFlight)
+        }
+        // The next action, with the TestFlight link beside it.
+        let actions = UIStackView(arrangedSubviews: [reconnect, testFlight])
+        actions.spacing = Space.space2
+        actions.alignment = .center
         let state = KitEmptyState(
             icon: .warning,
-            title: "This hub is older than the app",
-            line: "\(runs) Update CawCo on \(host), then reconnect.",
-            action: reconnect
+            title: HubConnection.Incompatible.title,
+            line: incompatible.message(host: hub.address?.host() ?? "your hub"),
+            action: actions
         )
         state.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(state)

@@ -1205,9 +1205,19 @@ final class ComposerField: UITextView {
 
     override func paste(_ sender: Any?) {
         let board = UIPasteboard.general
-        let attached = board.itemProviders.filter { Self.isAttachment($0) }
+        let providers = board.itemProviders
+        let attached = providers.filter { Self.isAttachment($0) }
         if !attached.isEmpty {
             onPasteItems(attached)
+            // Words pasted along with them go where words go.
+            let words = zip(board.items, providers).filter { !Self.isAttachment($0.1) }.compactMap { item, _ in
+                item[UTType.utf8PlainText.identifier] as? String ?? item[UTType.plainText.identifier] as? String
+            }.joined(separator: "\n")
+            if words.count > ComposerView.largePaste {
+                onPaste(words)
+            } else if !words.isEmpty {
+                insertText(words)
+            }
             return
         }
         if let text = board.string, text.count > ComposerView.largePaste {
@@ -1217,14 +1227,16 @@ final class ComposerField: UITextView {
         super.paste(sender)
     }
 
-    /// A pasted item that is a picture or a file rather than words: a
-    /// picture, or something whose types are none of them text or a link
-    /// (a page's words come as text beside its archive, and stay words).
+    /// A pasted item that is a picture or a file rather than words: anything
+    /// at all (a PDF, a zip, audio, video, any data), unless it carries plain
+    /// text or a web link, which are words (a page's selection comes as text
+    /// beside its markup and archive, and stays words). A file's own link
+    /// (Files copies one beside the file) is the file, not words.
     static func isAttachment(_ provider: NSItemProvider) -> Bool {
         if provider.hasItemConformingToTypeIdentifier(UTType.image.identifier) { return true }
         let types = provider.registeredTypeIdentifiers.compactMap(UTType.init)
-        if types.contains(where: { $0.conforms(to: .text) || $0.conforms(to: .url) }) { return false }
-        return types.contains { $0.conforms(to: .data) || $0.conforms(to: .content) }
+        if types.contains(where: { $0.conforms(to: .plainText) || ($0.conforms(to: .url) && !$0.conforms(to: .fileURL)) }) { return false }
+        return !types.isEmpty
     }
 
     override func insertText(_ text: String) {
