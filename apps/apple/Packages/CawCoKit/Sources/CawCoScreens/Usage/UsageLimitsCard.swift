@@ -129,11 +129,12 @@ final class UsageLimitsCard: UsageCard {
         grid.spacing = Space.space1
         var resets: [UIView] = []
 
-        grid.addArrangedSubview(provider(.claude, name: "Claude", plan: nil, age: nil, first: true))
+        grid.addArrangedSubview(provider(.claude, name: "Claude", plan: limits.claudePlan, age: limits.claudeAge, first: true))
         if let unknown = limits.claudeUnknown {
             grid.addArrangedSubview(self.unknown(unknown))
         } else {
             for row in limits.claudeRows { grid.addArrangedSubview(window(row, limits, &resets)) }
+            if let extra = limits.extra { grid.addArrangedSubview(spend(extra, name: "Extra usage")) }
         }
         if limits.showGo {
             grid.addArrangedSubview(provider(.opencode, name: "opencode", plan: limits.goRows.isEmpty ? nil : "Go", age: limits.goAge, first: false))
@@ -299,9 +300,10 @@ final class UsageLimitsCard: UsageCard {
         return row
     }
 
-    /// `.spend`: "Spend" on the name column and the hub's three figures from the bar's column on.
-    private func spend(_ figures: String) -> UIView {
-        let name = Self.name("Spend")
+    /// `.spend`: a name on the name column ("Spend", "Extra usage") and its
+    /// words from the bar's column on.
+    private func spend(_ figures: String, name label: String = "Spend") -> UIView {
+        let name = Self.name(label)
         let said = KitLabel(TypeScale.typeBody, ink: Palette.inkStrong, lines: 0)
         said.tabular = true
         said.wrap = .pretty

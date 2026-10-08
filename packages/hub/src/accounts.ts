@@ -1,8 +1,10 @@
 import {
   type Account,
+  type AccountOverage,
   type AccountProbe,
   type AccountReading,
   type ClaudeAccountReport,
+  type ClaudeExtraUsage,
   type ClaudeLimits,
   type SigninState,
   sameIdentity,
@@ -53,7 +55,8 @@ export const keepProbe = (
  * catalog. The machine's own `~/.claude` login becomes an account the first
  * time it is seen, matched by identity: machines signed in as the same email
  * and organization share one account, a different identity is another. That
- * account lives in `~/.claude` on that machine (`home`); nothing is moved.
+ * account lives in `~/.claude` on that machine (`home`); no credential moves.
+ * The limit history read from that login before accounts moves to it then.
  */
 /** What one step of a reconcile did. */
 interface Squared {
@@ -124,6 +127,9 @@ const squareHome = async (
       state: "signed-in",
       home: true,
     }) || changed;
+  // What the hub read from this `~/.claude` before accounts was this
+  // account's use all along.
+  changed = store.adoptMachineHistory(machineId, account.id) > 0 || changed;
   return { changed, failed: false };
 };
 
@@ -223,26 +229,70 @@ export const reconcileAccounts = async (
   return { changed, failed };
 };
 
+/** Why extra usage is off, by Claude Code's `overageDisabledReason`, in words. */
+const OFF_REASONS: Record<string, string> = {
+  overage_not_provisioned: "not set up for this account",
+  no_limits_configured: "not set up for this account",
+  org_level_disabled: "turned off by the organization",
+  org_service_level_disabled: "turned off by the organization",
+  org_level_disabled_until: "turned off by the organization for now",
+  seat_tier_level_disabled: "turned off for this seat",
+  member_level_disabled: "turned off for this member",
+  out_of_credits: "out of credits",
+  seat_tier_zero_credit_limit: "no credit allowed for this seat",
+  group_zero_credit_limit: "no credit allowed for this group",
+  member_zero_credit_limit: "no credit allowed for this member",
+};
+
+/**
+ * Extra usage as the account's last `rate_limit_event` said: on while
+ * requests past the plan may run as extra usage (`overageStatus` allowed or
+ * allowed with a warning), off when they are refused.
+ */
+const extraUsageOf = (
+  overage: AccountOverage | null
+): ClaudeExtraUsage | null => {
+  if (!overage?.status) {
+    return overage?.inUse
+      ? { on: true, inUse: true, offReason: null, resetsAt: overage.resetsAt }
+      : null;
+  }
+  const on = overage.status !== "rejected";
+  return {
+    on,
+    inUse: overage.inUse,
+    offReason:
+      on || !overage.disabledReason
+        ? null
+        : (OFF_REASONS[overage.disabledReason] ?? null),
+    resetsAt: overage.resetsAt,
+  };
+};
+
 /**
  * An account's reading as `ClaudeLimits`. A window whose reset has passed
  * with no newer report reads 0%: it has rolled over, and nothing has been
- * spent in the new one that anyone has heard of.
+ * spent in the new one that anyone has heard of. `watched`: a session runs
+ * on the account, so Claude Code reports every change and the reading is
+ * current however long ago it last moved; otherwise it is stale, since use
+ * from anywhere else goes unseen.
  */
 export const limitsOf = (
   reading: AccountReading | undefined,
+  watched: boolean,
   now = Date.now()
 ): ClaudeLimits => {
+  const base = {
+    extraUsage: extraUsageOf(reading?.overage ?? null),
+    fetchedAt: reading?.lastSeenAt ?? now,
+    subscription: reading?.subscription ?? null,
+  };
   if (!reading || reading.windows.length === 0) {
-    return {
-      fetchedAt: reading?.lastSeenAt ?? now,
-      subscription: reading?.subscription ?? null,
-      windows: [],
-      error: "no reading yet",
-    };
+    return { ...base, stale: false, windows: [], error: "no reading yet" };
   }
   return {
-    fetchedAt: reading.lastSeenAt,
-    subscription: reading.subscription,
+    ...base,
+    stale: !watched,
     error: null,
     windows: reading.windows.map((window) =>
       window.resetsAt && Date.parse(window.resetsAt) <= now
@@ -252,18 +302,40 @@ export const limitsOf = (
   };
 };
 
+/** The account a Claude session runs on: its own, else its machine's. */
+const accountOfSession = (
+  db: DbShape,
+  row: { accountId: string | null; machineId: string }
+): string | undefined => row.accountId ?? machineAccount(db, row.machineId);
+
+/** The accounts a running Claude session is on. */
+const watchedAccounts = (db: DbShape): Set<string> => {
+  const watched = new Set<string>();
+  for (const row of db.listInstances()) {
+    const id =
+      row.status === "running" && row.harness === "claude"
+        ? accountOfSession(db, row)
+        : undefined;
+    if (id) {
+      watched.add(id);
+    }
+  }
+  return watched;
+};
+
 /** The limits a session runs under: its account's. */
 export const sessionLimits = (
   db: DbShape,
   row: { accountId: string | null; machineId: string },
   now = Date.now()
 ): ClaudeLimits | undefined => {
-  const accountId = row.accountId ?? machineAccount(db, row.machineId);
+  const accountId = accountOfSession(db, row);
   if (!accountId) {
     return undefined;
   }
   return limitsOf(
     db.accounts.readings().find((one) => one.accountId === accountId),
+    watchedAccounts(db).has(accountId),
     now
   );
 };
@@ -293,6 +365,7 @@ export const machineReadings = (db: DbShape, now = Date.now()) => {
     db.listUsageLimits().map((row) => [row.machineId, row])
   );
   const readings = db.accounts.readings();
+  const watched = watchedAccounts(db);
   return db.listAgents().flatMap((agent) => {
     const go = goByMachine.get(agent.machineId);
     const accountId = machineAccount(db, agent.machineId);
@@ -302,10 +375,13 @@ export const machineReadings = (db: DbShape, now = Date.now()) => {
     const payload: ClaudeLimits = accountId
       ? limitsOf(
           readings.find((one) => one.accountId === accountId),
+          watched.has(accountId),
           now
         )
       : {
+          extraUsage: null,
           fetchedAt: now,
+          stale: false,
           subscription: null,
           windows: [],
           error: "not signed in",

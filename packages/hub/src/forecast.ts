@@ -7,6 +7,7 @@ import type {
   LimitWindow,
   ProviderRouting,
   WindowForecast,
+  WindowRef,
 } from "@cawco/core";
 import { place } from "./placement";
 
@@ -95,6 +96,37 @@ const windowForecast = (
   };
 };
 
+/**
+ * The window that limits an account: among its 5-hour, week and per-model
+ * week windows, the one that runs out soonest at its pace; when none runs out
+ * before its reset, the one that resets latest. A window with no known reset
+ * resets latest of all. Null when there are no windows.
+ */
+export const bindingWindow = (windows: WindowForecast[]): WindowRef | null => {
+  const ref = (window: WindowForecast | undefined): WindowRef | null =>
+    window ? { kind: window.kind, scopeLabel: window.scopeLabel } : null;
+  const runningOut = windows.filter(
+    (window): window is WindowForecast & { runsOutAt: number } =>
+      window.runsOutAt !== undefined
+  );
+  if (runningOut.length > 0) {
+    return ref(
+      runningOut.reduce((soonest, window) =>
+        window.runsOutAt < soonest.runsOutAt ? window : soonest
+      )
+    );
+  }
+  const resets = (window: WindowForecast) =>
+    resetMs(window) ?? Number.POSITIVE_INFINITY;
+  return ref(
+    windows.reduce<WindowForecast | undefined>(
+      (latest, window) =>
+        !latest || resets(window) > resets(latest) ? window : latest,
+      undefined
+    )
+  );
+};
+
 /** Every account's windows as a forecast. `running`: accounts with a live session. */
 export const accountForecasts = (
   accounts: Account[],
@@ -105,18 +137,14 @@ export const accountForecasts = (
 ): AccountForecast[] =>
   accounts.map((account) => {
     const reading = readings.find((one) => one.accountId === account.id);
+    const windows = (reading?.windows ?? []).map((window) =>
+      windowForecast(window, history, account.id, running.has(account.id), now)
+    );
     return {
       accountId: account.id,
+      bindingWindow: bindingWindow(windows),
       lastSeenAt: reading?.lastSeenAt ?? null,
-      windows: (reading?.windows ?? []).map((window) =>
-        windowForecast(
-          window,
-          history,
-          account.id,
-          running.has(account.id),
-          now
-        )
-      ),
+      windows,
     };
   });
 

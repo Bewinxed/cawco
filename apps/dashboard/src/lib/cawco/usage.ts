@@ -5,6 +5,7 @@
  */
 import type {
   AgentRow,
+  ClaudeExtraUsage,
   ClaudeLimits,
   LimitWindow,
   UsageSpend,
@@ -408,6 +409,20 @@ export const readAgo = (fetchedAt: number, now: number): string =>
   now - fetchedAt < MINUTE_MS
     ? "read just now"
     : `read ${duration(now - fetchedAt)} ago`;
+
+/** "max" → "Max": the plan as Claude Code's `subscriptionType` names it. */
+export const planName = (subscription: string | null): string | null =>
+  subscription
+    ? subscription.charAt(0).toUpperCase() + subscription.slice(1)
+    : null;
+
+/** "On · in use", "Off · out of credits": the extra-usage switch in words. */
+export const extraUsageText = (extra: ClaudeExtraUsage): string => {
+  if (!extra.on) {
+    return extra.offReason ? `Off · ${extra.offReason}` : "Off";
+  }
+  return extra.inUse ? "On · in use" : "On";
+};
 
 /**
  * Why Claude's limits cannot be shown, and what fixes it: the one source of

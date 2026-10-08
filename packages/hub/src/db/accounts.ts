@@ -15,7 +15,7 @@ import {
   type ModelInfo,
   type ProviderRouting,
 } from "@cawco/core";
-import { and, asc, eq, gt, gte, lte, max } from "drizzle-orm";
+import { and, asc, count, eq, gt, gte, lte, max, sql } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import {
   accountBench,
@@ -24,6 +24,7 @@ import {
   accountRouting,
   accountSignins,
   accounts,
+  machineLimitHistory,
   usageLimitHistory,
 } from "./schema";
 
@@ -38,6 +39,15 @@ export type AccountPatch = Partial<
 export type AccountHistoryRow = typeof usageLimitHistory.$inferSelect;
 
 export interface AccountsDb {
+  /**
+   * Moves the limit history read from `machineId`'s `~/.claude` before
+   * accounts into `accountId`'s, now that the hub knows that login is this
+   * account. How many rows moved.
+   */
+  readonly adoptMachineHistory: (
+    machineId: string,
+    accountId: string
+  ) => number;
   readonly bench: (now?: number) => AccountBench[];
   readonly catalogs: () => AccountCatalog[];
   readonly create: (draft: {
@@ -337,15 +347,34 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
           }))
         )
         .run();
+      const cutoff = new Date(at - LIMIT_HISTORY_RETENTION_MS);
       db.delete(usageLimitHistory)
-        .where(
-          lte(
-            usageLimitHistory.fetchedAt,
-            new Date(at - LIMIT_HISTORY_RETENTION_MS)
-          )
-        )
+        .where(lte(usageLimitHistory.fetchedAt, cutoff))
+        .run();
+      db.delete(machineLimitHistory)
+        .where(lte(machineLimitHistory.fetchedAt, cutoff))
         .run();
     },
+    adoptMachineHistory: (machineId, accountId) =>
+      db.transaction((tx) => {
+        const mine = eq(machineLimitHistory.machineId, machineId);
+        const held =
+          tx.select({ n: count() }).from(machineLimitHistory).where(mine).get()
+            ?.n ?? 0;
+        if (held === 0) {
+          return 0;
+        }
+        // One statement in SQLite: a month of readings is tens of thousands
+        // of rows, past what one INSERT may bind.
+        tx.run(sql`
+          INSERT INTO ${usageLimitHistory}
+            (account_id, kind, scope_label, percent, severity, resets_at, fetched_at)
+          SELECT ${accountId}, kind, scope_label, percent, severity, resets_at, fetched_at
+          FROM ${machineLimitHistory}
+          WHERE machine_id = ${machineId}`);
+        tx.delete(machineLimitHistory).where(mine).run();
+        return held;
+      }),
     history: ({ accountId, kind, since, until }) =>
       db
         .select()

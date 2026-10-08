@@ -27158,6 +27158,10 @@
           "accountId": {
             "type": "string"
           },
+          "bindingWindow": {
+            "description": "The window that limits the account: the one that runs out soonest at its\npace, else (none runs out before its reset) the one that resets latest.\nNull when the account has no windows.",
+            "$ref": "#/components/schemas/WindowRef"
+          },
           "lastSeenAt": {
             "description": "When its Claude Code last reported; null: never.",
             "type": [
@@ -27176,6 +27180,25 @@
           "accountId",
           "lastSeenAt",
           "windows"
+        ]
+      },
+      "WindowRef": {
+        "description": "Names one of an account's windows.",
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "scopeLabel": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "kind",
+          "scopeLabel"
         ]
       },
       "WindowForecast": {
@@ -27324,9 +27347,17 @@
               "string"
             ]
           },
+          "extraUsage": {
+            "description": "Extra usage as the last `rate_limit_event` said; null: it never said.",
+            "$ref": "#/components/schemas/ClaudeExtraUsage"
+          },
           "fetchedAt": {
             "description": "When Claude Code last reported on the account.",
             "type": "number"
+          },
+          "stale": {
+            "description": "No session runs on the account, so use from anywhere else goes unseen\nand the windows are as of `fetchedAt`.",
+            "type": "boolean"
           },
           "subscription": {
             "type": [
@@ -27344,8 +27375,43 @@
         "required": [
           "error",
           "fetchedAt",
+          "stale",
           "subscription",
           "windows"
+        ]
+      },
+      "ClaudeExtraUsage": {
+        "description": "Extra usage: requests past the plan's limits, paid as they go.",
+        "type": "object",
+        "properties": {
+          "inUse": {
+            "description": "Whether the account is spending extra usage now (`isUsingOverage`).",
+            "type": "boolean"
+          },
+          "offReason": {
+            "description": "Why it is off, in words from Claude Code's `overageDisabledReason`\n(\"out of credits\"); null when on or when it gave no reason worth saying.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "on": {
+            "description": "Whether requests past the plan may run as extra usage (`overageStatus`).",
+            "type": "boolean"
+          },
+          "resetsAt": {
+            "description": "When extra usage resets, when Claude Code said.",
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "inUse",
+          "offReason",
+          "on",
+          "resetsAt"
         ]
       },
       "OpenCodeGoLimits": {

@@ -1470,6 +1470,29 @@ export const usageLimitHistory = sqliteTable(
 );
 
 /**
+ * Limit history read before accounts, keyed by the machine whose `~/.claude`
+ * it was read from. It waits here until the hub learns which account that
+ * login is, then moves into {@link usageLimitHistory} under that account.
+ */
+export const machineLimitHistory = sqliteTable(
+  "machine_limit_history",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    machineId: text("machine_id").notNull(),
+    kind: text("kind").notNull(),
+    scopeLabel: text("scope_label"),
+    percent: integer("percent").notNull(),
+    severity: text("severity").notNull(),
+    resetsAt: text("resets_at"),
+    fetchedAt: timestamp("fetched_at").notNull(),
+  },
+  (table) => [
+    index("machine_limit_history_machine_idx").on(table.machineId),
+    index("machine_limit_history_fetched_idx").on(table.fetchedAt),
+  ]
+);
+
+/**
  * Standing instructions the hub enforces on every session it watches: a phrase
  * to look for in what a session says, and a reply to send back when it shows
  * up. The hub is the only component that sees every frame from every machine,

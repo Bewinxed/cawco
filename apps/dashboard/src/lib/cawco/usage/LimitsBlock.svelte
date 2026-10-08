@@ -6,9 +6,9 @@
    *
    * Limits are account-scoped: every machine signed in to one account reads
    * the same numbers, so a provider's first good reading speaks for all of
-   * them, and a reading that failed with the last good windows kept is shown
-   * stale. Live: the readings are the client's, which the hub's `usage`
-   * frame keeps current.
+   * them. A Claude reading with no session running on its account is stale
+   * (nothing sees use from elsewhere) and says how old it is. Live: the
+   * readings are the client's, which the hub's `usage` frame keeps current.
    */
   import { Button } from "#lib/components/ui/button/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
@@ -20,11 +20,13 @@
   import MachineLogin from "../MachineLogin.svelte";
   import {
     claudeGap,
+    extraUsageText,
     firstToStop,
     type LimitRow,
     limitRows,
     type Meter,
     money,
+    planName,
     projectionNote,
     projectionSentence,
     readAgo,
@@ -127,6 +129,12 @@
         <header class="provider">
           <span class="glyph"><HarnessGlyph harness="claude" /></span>
           <span class="name">Claude</span>
+          {#if claude && planName(claude.reading.subscription)}
+            <span class="plan">· {planName(claude.reading.subscription)}</span>
+          {/if}
+          {#if claude?.reading.stale}
+            <span class="age">{readAgo(claude.reading.fetchedAt, now)}</span>
+          {/if}
         </header>
         {#if claudeUnknown}
           <div class="unknown">
@@ -147,6 +155,18 @@
           </div>
         {:else}
           {@render windows(claudeRows)}
+          {#if claude?.reading.extraUsage}
+            {@const extra = claude.reading.extraUsage}
+            <p class="spend">
+              <span class="label">Extra usage</span>
+              <span class="figures"
+                >{extraUsageText(extra)}
+                {#if extra.resetsAt}
+                  · resets {resetLabel(extra.resetsAt, now)}
+                {/if}</span
+              >
+            </p>
+          {/if}
         {/if}
       </div>
 

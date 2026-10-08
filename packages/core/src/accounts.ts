@@ -213,8 +213,20 @@ export interface WindowForecast {
   utilization: number;
 }
 
+/** Names one of an account's windows. */
+export interface WindowRef {
+  kind: string;
+  scopeLabel: string | null;
+}
+
 export interface AccountForecast {
   accountId: string;
+  /**
+   * The window that limits the account: the one that runs out soonest at its
+   * pace, else (none runs out before its reset) the one that resets latest.
+   * Null when the account has no windows.
+   */
+  bindingWindow: WindowRef | null;
   /** When its Claude Code last reported; null: never. */
   lastSeenAt: number | null;
   windows: WindowForecast[];

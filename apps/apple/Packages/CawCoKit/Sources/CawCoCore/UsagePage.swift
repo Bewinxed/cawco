@@ -22,6 +22,23 @@ extension Usage {
         return String(Int(n))
     }
 
+    /// "max" → "Max": the plan as Claude Code's `subscriptionType` names it (`planName`).
+    public static func planName(_ subscription: String?) -> String? {
+        guard let subscription, !subscription.isEmpty else { return nil }
+        return subscription.prefix(1).uppercased() + subscription.dropFirst()
+    }
+
+    /// "On · in use", "Off · out of credits", then its reset (`extraUsageText`).
+    public static func extraUsageText(_ extra: Components.Schemas.ClaudeExtraUsage, now: Double) -> String {
+        let said: String
+        if extra.on {
+            said = extra.inUse ? "On · in use" : "On"
+        } else {
+            said = extra.offReason.map { "Off · \($0)" } ?? "Off"
+        }
+        return extra.resetsAt.map { "\(said) · resets \(resetLabel($0, now: now))" } ?? said
+    }
+
     /// When the window started, from its reset and its span (`windowStart`).
     public static func windowStart(_ window: Window) -> Double? {
         guard let span = span(window), let reset = resetMs(window) else { return nil }
@@ -107,7 +124,13 @@ public struct UsageLimits: Sendable {
     public let leadName: String
     public let sentence: String
     public let claudeRows: [Usage.Row]
+    /// "Max": the plan Claude Code names (`subscriptionType`).
+    public let claudePlan: String?
+    /// "read 2h ago" when no session runs on the account.
+    public let claudeAge: String?
     public let claudeUnknown: Unknown?
+    /// "On · in use · resets in 4h", "Off · out of credits"; nil when Claude Code never said.
+    public let extra: String?
     /// The opencode group shows: it has windows, or there is spend to say.
     public let showGo: Bool
     public let goRows: [Usage.Row]
@@ -127,9 +150,9 @@ public struct UsageLimits: Sendable {
 
     @MainActor
     public static func read(fleet: FleetStore, now: Double) -> UsageLimits {
-        let claude = Usage.speaking(fleet.claudeLimits, error: \.error, stale: { _ in false }, windows: \.windows)
+        let claude = Usage.speaking(fleet.claudeLimits, error: \.error, stale: \.stale, windows: \.windows)
         let go = Usage.speaking(fleet.openCodeGoLimits, error: \.error, stale: { $0.stale ?? false }, windows: \.windows)
-        let claudeRows = claude.map { Usage.rows(provider: "Claude", windows: $0.windows, stale: false, now: now) } ?? []
+        let claudeRows = claude.map { Usage.rows(provider: "Claude", windows: $0.windows, stale: $0.stale, now: now) } ?? []
         let goRows = go.map { Usage.rows(provider: "opencode", windows: $0.windows, stale: $0.stale ?? false, now: now) } ?? []
 
         var unknown: Unknown?
@@ -166,7 +189,10 @@ public struct UsageLimits: Sendable {
             leadName: leadName,
             sentence: lead.map { Usage.projectionSentence($0.meter, now: now) } ?? "",
             claudeRows: claudeRows,
+            claudePlan: claude.flatMap { Usage.planName($0.subscription) },
+            claudeAge: claude.flatMap { $0.stale ? Usage.readAgo($0.fetchedAt, now: now) : nil },
             claudeUnknown: unknown,
+            extra: claude?.extraUsage.map { Usage.extraUsageText($0, now: now) },
             showGo: !goRows.isEmpty || showSpend,
             goRows: goRows,
             goAge: go.flatMap { $0.stale == true ? Usage.readAgo($0.fetchedAt, now: now) : nil },
@@ -220,7 +246,7 @@ extension UsageRange {
     public func since(fleet: FleetStore) -> [UsageHarness: UsageSince] {
         if self == .window {
             guard fleet.limitsRead else { return [.claude: .pending, .opencode: .pending] }
-            let claude = Usage.speaking(fleet.claudeLimits, error: \.error, stale: { _ in false }, windows: \.windows)
+            let claude = Usage.speaking(fleet.claudeLimits, error: \.error, stale: \.stale, windows: \.windows)
             let go = Usage.speaking(fleet.openCodeGoLimits, error: \.error, stale: { $0.stale ?? false }, windows: \.windows)
             func fiveHour(_ windows: [Usage.Window]?) -> UsageSince {
                 guard let window = windows?.first(where: { $0.group == "session" }), let start = Usage.windowStart(window) else { return .none }

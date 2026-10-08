@@ -73,10 +73,32 @@ export interface OpenCodeGoLimits {
 export interface ClaudeLimits {
   /** Why there are no windows: nothing on the account has reported any yet. */
   error: string | null;
+  /** Extra usage as the last `rate_limit_event` said; null: it never said. */
+  extraUsage: ClaudeExtraUsage | null;
   /** When Claude Code last reported on the account. */
   fetchedAt: number;
+  /**
+   * No session runs on the account, so use from anywhere else goes unseen
+   * and the windows are as of `fetchedAt`.
+   */
+  stale: boolean;
   subscription: string | null; // subscriptionType
   windows: LimitWindow[];
+}
+
+/** Extra usage: requests past the plan's limits, paid as they go. */
+export interface ClaudeExtraUsage {
+  /** Whether the account is spending extra usage now (`isUsingOverage`). */
+  inUse: boolean;
+  /**
+   * Why it is off, in words from Claude Code's `overageDisabledReason`
+   * ("out of credits"); null when on or when it gave no reason worth saying.
+   */
+  offReason: string | null;
+  /** Whether requests past the plan may run as extra usage (`overageStatus`). */
+  on: boolean;
+  /** When extra usage resets, when Claude Code said. */
+  resetsAt: string | null;
 }
 
 /**

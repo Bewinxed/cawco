@@ -304,10 +304,10 @@ public enum Usage {
     /// `read`: the hub's limits have been read once; before that nothing is claimed absent.
     public static func strip(claude: [String: Components.Schemas.ClaudeLimits], go: [String: Components.Schemas.OpenCodeGoLimits],
                              read: Bool, now: Double) -> Strip {
-        let claudeReading = speaking(claude, error: \.error, stale: { _ in false }, windows: \.windows)
+        let claudeReading = speaking(claude, error: \.error, stale: \.stale, windows: \.windows)
         let goReading = speaking(go, error: \.error, stale: { $0.stale ?? false }, windows: \.windows)
         let cells = [
-            cell("Claude", "Claude", windows: claudeReading?.windows, stale: false, fetchedAt: claudeReading?.fetchedAt ?? 0, now: now),
+            cell("Claude", "Claude", windows: claudeReading?.windows, stale: claudeReading?.stale ?? false, fetchedAt: claudeReading?.fetchedAt ?? 0, now: now),
             cell("opencode", "opencode Go", windows: goReading?.windows, stale: goReading?.stale ?? false, fetchedAt: goReading?.fetchedAt ?? 0, now: now),
         ].compactMap(\.self)
         let byMachine = { (readings: [String: String?]) in readings.sorted { $0.key < $1.key }.map(\.value) }

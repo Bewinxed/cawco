@@ -53,7 +53,11 @@ CREATE TABLE `accounts` (
 	`created_at` integer NOT NULL
 );
 --> statement-breakpoint
-DROP TABLE `usage_limit_history`;--> statement-breakpoint
+DROP INDEX `usage_limit_history_series_idx`;--> statement-breakpoint
+DROP INDEX `usage_limit_history_fetched_idx`;--> statement-breakpoint
+ALTER TABLE `usage_limit_history` RENAME TO `machine_limit_history`;--> statement-breakpoint
+CREATE INDEX `machine_limit_history_machine_idx` ON `machine_limit_history` (`machine_id`);--> statement-breakpoint
+CREATE INDEX `machine_limit_history_fetched_idx` ON `machine_limit_history` (`fetched_at`);--> statement-breakpoint
 CREATE TABLE `usage_limit_history` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`account_id` text NOT NULL,
