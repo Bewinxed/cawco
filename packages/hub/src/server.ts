@@ -4123,6 +4123,36 @@ export const createServer = (
   };
 
   /**
+   * A row from before `cwd` was pinned to the launch directory may hold a
+   * folder its CLI wandered into. Its conversation names where it started —
+   * Claude keeps the first cwd it saw, OpenCode and pi the session's own
+   * directory — so its machine is asked once, at register, before anything of
+   * it is restored. A machine that cannot answer is asked again at its next.
+   */
+  const readLaunchDirs = async (machineId: string): Promise<void> => {
+    const rows = db.unreadLaunchDirs(machineId);
+    for (let at = 0; at < rows.length; at += 8) {
+      // biome-ignore lint/performance/noAwaitInLoops: bounded batches keep the machine's other control requests serviceable.
+      await Promise.all(
+        rows.slice(at, at + 8).map(async (row) => {
+          const answer = await callAgent(
+            machineId,
+            CONTROL_GET_SESSION_INFO,
+            [row.sessionId],
+            READ_TIMEOUT_MS,
+            (row.harness as HarnessKind | null) ?? "claude"
+          );
+          if (answer === "offline" || answer === "timeout" || !answer.ok) {
+            return;
+          }
+          const info = answer.result as { cwd?: string } | null | undefined;
+          db.settleLaunchDir(row.id, info?.cwd || undefined);
+        })
+      );
+    }
+  };
+
+  /**
    * An account removed while a machine was signing it in: that machine
    * forgets the dir (and login) it just made for it, as removing the account
    * would have, and the caller is told why in a sentence.
@@ -4971,6 +5001,19 @@ export const createServer = (
     return placed;
   };
 
+  /**
+   * A spawn of a row that exists goes to the directory the row was launched
+   * in, whatever directory the caller sent: the harness keeps the conversation
+   * under that directory, and a folder the CLI later wandered into may be gone.
+   */
+  const atLaunchDir = <P extends { cwd: string }>(
+    instanceId: string | undefined,
+    payload: P
+  ): P => {
+    const launched = instanceId ? db.launchDirOf(instanceId) : undefined;
+    return launched ? { ...payload, cwd: launched } : payload;
+  };
+
   const issueSpawn = (
     machineId: string,
     asked: SpawnPayload,
@@ -4991,7 +5034,7 @@ export const createServer = (
     if ("refusal" in settled) {
       throw new WorkItemRefusal(400, settled.refusal);
     }
-    const { payload } = settled;
+    const payload = atLaunchDir(settled.payload.instanceId, settled.payload);
     const placed = placedOrRefused(machineId, payload, workItemId);
     forgetPending(payload.instanceId, UNREAD.restarted);
     db.openInstance({
@@ -5124,7 +5167,7 @@ export const createServer = (
     if ("refusal" in settled) {
       throw new Error(settled.refusal);
     }
-    const { payload } = settled;
+    const payload = atLaunchDir(settled.payload.instanceId, settled.payload);
     const placed = placedOrRefused(machineId, payload);
     const requestId = crypto.randomUUID();
     forgetPending(payload.instanceId, UNREAD.restarted);
@@ -6779,7 +6822,9 @@ export const createServer = (
     ) {
       return;
     }
-    const asked: SpawnPayload = {
+    // `row` is the register's snapshot, read before its machine was asked for
+    // the launch directories of rows from before they were pinned.
+    const asked: SpawnPayload = atLaunchDir(row.id, {
       instanceId: row.id,
       cwd: row.cwd,
       ...(row.workflowStepId
@@ -6808,7 +6853,7 @@ export const createServer = (
       // delegate the `delegate` tool back.
       ...(row.canDelegate === false ? { canDelegate: false } : {}),
       ...typeSettingsOf(row),
-    };
+    });
     // Adopt the stored mode without revalidating a new launch; custody must not be skipped.
     if (reattachOnly) {
       lifecycle.restoring(row.id);
@@ -13855,6 +13900,7 @@ export const createServer = (
                   row.kind !== "summariser" &&
                   !returningRemoved.has(row.id)
               );
+              await readLaunchDirs(message.machineId);
               let restoreBatch = 0;
               for (const orphan of revivable) {
                 restore(ws, orphan.row, heldRows.has(orphan.row.id));
@@ -15393,9 +15439,10 @@ export const createServer = (
                 toDashboard(ws, failure(message, settled.refusal));
                 break;
               }
+              const payload = atLaunchDir(message.instanceId, settled.payload);
               const placed = message.instanceId
                 ? placeSpawn(message.machineId, {
-                    ...settled.payload,
+                    ...payload,
                     instanceId: message.instanceId,
                   })
                 : {};
@@ -15420,14 +15467,14 @@ export const createServer = (
                     message.machineId
                   ),
                   machineId: message.machineId,
-                  cwd: peek(message.payload, "cwd") ?? "",
+                  cwd: payload.cwd,
                   sessionId: peekResume(message.payload),
                   harness: peekHarness(message.payload),
                   projectId: peek(message.payload, "projectId"),
                   title: peek(message.payload, "title"),
                   kind: peekKind(message.payload),
                   permissionMode: settled.permissionMode,
-                  model: settled.payload.model,
+                  model: payload.model,
                   ...peekParent(message.payload),
                   ...placed,
                 });
@@ -15437,15 +15484,12 @@ export const createServer = (
                     message.instanceId,
                     JSON.stringify({
                       ...message,
-                      payload: bounded(settled.payload),
+                      payload: bounded(payload),
                     }),
                     Date.now()
                   );
                 } else {
-                  forward(
-                    { ...message, payload: bounded(settled.payload) },
-                    ws
-                  );
+                  forward({ ...message, payload: bounded(payload) }, ws);
                 }
                 // A conversation that starts here: its first turn is its name.
                 if (!peekResume(message.payload)) {

@@ -180,6 +180,7 @@ export type PublicInstanceRow = Omit<
   | "endAttempts"
   | "owedSpawn"
   | "owedAt"
+  | "launchDirRead"
 >;
 export type BoardInstanceRow = Omit<PublicInstanceRow, "tooling">;
 export type PlaceRow = typeof projectPlaces.$inferSelect;
@@ -545,6 +546,8 @@ export interface DbShape {
   ) => void;
   /** The canvas a session showed last, for `read_choices` after its preview closed. */
   readonly latestCanvasOf: (instanceId: string) => CanvasRow | undefined;
+  /** The directory a row was launched in, which every spawn of it uses; undefined for a new id. */
+  readonly launchDirOf: (id: string) => string | undefined;
   /** Keys a send to the id its harness stores it under. */
   readonly linkSend: (uuid: string, harnessId: string) => void;
   /**
@@ -1285,6 +1288,8 @@ export interface DbShape {
      */
     resumableAt?: Record<string, number>
   ) => SettledInstance[];
+  /** Files a row's launch directory as read: `cwd` when its conversation named one. */
+  readonly settleLaunchDir: (id: string, cwd?: string) => void;
   readonly settleRemovedSession: (id: string, present: boolean) => void;
   readonly settleUnavailableRecovery: (id: string) => boolean;
   /** Names of fleet skills installed at or after `since`. */
@@ -1372,6 +1377,10 @@ export interface DbShape {
    * steady state, which is what makes that read free to offer.
    */
   readonly unnamedSessions: (machineId: string) => PublicInstanceRow[];
+  /** A machine's rows from before `cwd` was pinned whose launch directory is still to be read. */
+  readonly unreadLaunchDirs: (
+    machineId: string
+  ) => { id: string; sessionId: string; harness: string | null }[];
   /**
    * Enabled plugins with no resolved files, whether never tried or failed —
    * what a resolve at boot is for. A failed one is tried again so its sentence
@@ -1706,6 +1715,7 @@ const make = async (path: string): Promise<DbShape> => {
     endConfirmedAt: _endConfirmedAt,
     owedSpawn: _owedSpawn,
     owedAt: _owedAt,
+    launchDirRead: _launchDirRead,
     ...publicColumns
   } = getTableColumns(instances);
   const { tooling: _tooling, ...boardColumns } = publicColumns;
@@ -2725,8 +2735,9 @@ const make = async (path: string): Promise<DbShape> => {
         })
         .onConflictDoUpdate({
           target: instances.id,
+          // No `cwd`: a row keeps the directory it was launched in, and every
+          // spawn of it is sent there (`launchDirOf`).
           set: {
-            cwd,
             kind,
             permissionMode,
             ...(model ? { model } : {}),
@@ -2929,13 +2940,52 @@ const make = async (path: string): Promise<DbShape> => {
         return;
       }
       // Naming its conversation is liveness, not the session doing something.
+      // The directory is taken from the first `init` only — the spawn's own
+      // directory as the machine resolved it (`~` expanded). Every later `init`
+      // carries wherever the CLI has since `cd`'d to, which is not where the
+      // session lives.
       db.update(instances)
         .set({
           sessionId,
-          ...(cwd ? { cwd } : {}),
+          ...(cwd
+            ? {
+                cwd: sql`CASE WHEN ${instances.sessionId} IS NULL THEN ${cwd} ELSE ${instances.cwd} END`,
+              }
+            : {}),
           ...(harness ? { harness } : {}),
           ...(tooling ? { tooling } : {}),
         })
+        .where(eq(instances.id, id))
+        .run();
+    },
+    launchDirOf: (id) =>
+      db
+        .select({ cwd: instances.cwd })
+        .from(instances)
+        .where(eq(instances.id, id))
+        .get()?.cwd,
+    unreadLaunchDirs: (machineId) =>
+      db
+        .select({
+          id: instances.id,
+          sessionId: instances.sessionId,
+          harness: instances.harness,
+        })
+        .from(instances)
+        .where(
+          and(
+            eq(instances.machineId, machineId),
+            eq(instances.launchDirRead, false),
+            isNotNull(instances.sessionId)
+          )
+        )
+        .all()
+        .flatMap((row) =>
+          row.sessionId ? [{ ...row, sessionId: row.sessionId }] : []
+        ),
+    settleLaunchDir: (id, cwd) => {
+      db.update(instances)
+        .set({ launchDirRead: true, ...(cwd ? { cwd } : {}) })
         .where(eq(instances.id, id))
         .run();
     },

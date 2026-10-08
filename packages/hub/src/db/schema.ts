@@ -581,7 +581,26 @@ export const instances = sqliteTable("instances", {
   parentInstanceId: text("parent_instance_id"),
   /** The delegating tool call, so the parent transcript can render the round trip. */
   parentToolUseId: text("parent_tool_use_id"),
+  /**
+   * The directory the session was launched in: its spawn's, or, for a scratch
+   * session, the worktree its machine made for it, as its first `init` names
+   * it resolved (`~` expanded). Set at its first spawn and never changed:
+   * every resume, revive, restore, relaunch, fork and move spawns here, since
+   * a harness keeps the conversation under the directory it was launched in.
+   * Where the CLI later wanders (`cd`) is not recorded at all, so a folder it
+   * wandered into and deleted cannot stop it resuming, and its name in every
+   * listing (the folder's leaf) does not drift.
+   */
   cwd: text("cwd").notNull(),
+  /**
+   * False on a row from before `cwd` was pinned whose launch directory is still
+   * to be read from its conversation (the harness's first recorded cwd): its
+   * machine is asked at its next register, before anything is restored. True
+   * on every row spawned since.
+   */
+  launchDirRead: integer("launch_dir_read", { mode: "boolean" })
+    .notNull()
+    .default(true),
   /**
    * The session's given name: the owner's rename, or the name the session
    * gave itself (`set_title`) or was spawned under (a delegate's title).
