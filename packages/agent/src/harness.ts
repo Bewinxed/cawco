@@ -109,6 +109,14 @@ export interface HarnessContext {
   // biome-ignore lint/style/useConsistentMethodSignatures: matches context callbacks
   recordSessionAddress?(sessionId: string): Promise<void>;
   /**
+   * The session's process was stopped because it can no longer be trusted
+   * to run ({@link HeldProcessRefused}): its row and work item fail with the
+   * reason, which the parent hears, even for a session this agent attached
+   * to.
+   */
+  // biome-ignore lint/style/useConsistentMethodSignatures: matches the context callbacks
+  refused?(error: HeldProcessRefused): void;
+  /**
    * The harness refused one send, `uuid`: that send failed, with the
    * harness's own words. The session goes on — this is never a session
    * failure ({@link failed}).

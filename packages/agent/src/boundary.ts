@@ -29,7 +29,7 @@
  * token on the host side and hands it in as `GH_TOKEN`: pushes and `gh` keep
  * working inside.
  */
-import { constants } from "node:fs";
+import { accessSync, constants } from "node:fs";
 import {
   access,
   mkdir,
@@ -300,17 +300,40 @@ export const claudeBoundaryOptions = (boundary: Boundary | undefined) =>
 const LAUNCHED_HOOK =
   /"matcher":"Bash\|Monitor","hooks":\[\{"type":"command","command":("(?:[^"\\]|\\.)*")/;
 const HOOK_COMMAND = /^'([^']+\/hook)' \|\| exit 2$/;
+/** One word of a command {@link shellQuote} built: `'…'`, with `'\''` for a quote. */
+const QUOTED_WORD = /'((?:[^']|'\\'')*)'/g;
+const HOOK_EVENTS_FLAG = /(^| )--include-hook-events( |$)/;
+const QUOTED_WORDS = /^(?:'(?:[^']|'\\'')*' ?)+$/;
+
+/** A boundary hook a claude CLI was launched with ({@link launchedHook}). */
+export interface LaunchedHook {
+  /**
+   * Whether the CLI reports its hooks in its stream (`--include-hook-events`).
+   * One launched before cawco asked for that says a hook failed only in its
+   * transcript, as a `hook_non_blocking_error` record.
+   */
+  readonly events: boolean;
+  /** What names the hook when it fails: in its own words, or the shell's when what it runs is gone. */
+  readonly names: readonly string[];
+  /**
+   * What the hook runs, each checked as the CLI would use it, when its
+   * failing lets a command through. The workspace's {@link hookScript}
+   * refuses on any failure and needs none. The form before it — cawco's own
+   * binary, by the version that launched the CLI, then `boundary-hook` —
+   * fails open with whatever it names gone.
+   */
+  readonly needs: readonly { readonly path: string; readonly mode: number }[];
+}
 
 /**
  * The boundary hook the claude CLI `pid` was launched with, read off its
- * command line: `hook` for one launched with a workspace's {@link hookScript},
- * `stale` for any other boundary hook — the form before the script named
- * cawco's versioned binary, which an update deletes — and nothing for a CLI
- * launched without a boundary.
+ * command line (the `--settings` JSON {@link claudeBoundaryOptions} wrote);
+ * nothing for a CLI launched without one, and `unknown` for one whose hook
+ * is in neither form cawco has written.
  */
 export const launchedHook = async (
   pid: number
-): Promise<{ hook: string } | "stale" | undefined> => {
+): Promise<LaunchedHook | "unknown" | undefined> => {
   const commandLine =
     process.platform === "linux"
       ? (await readFile(`/proc/${pid}/cmdline`, "utf8")).replaceAll("\0", " ")
@@ -319,9 +342,53 @@ export const launchedHook = async (
   if (!quoted) {
     return;
   }
-  const hook = HOOK_COMMAND.exec(JSON.parse(quoted) as string)?.[1];
-  return hook ? { hook } : "stale";
+  const events = HOOK_EVENTS_FLAG.test(commandLine);
+  const command = JSON.parse(quoted) as string;
+  const hook = HOOK_COMMAND.exec(command)?.[1];
+  if (hook) {
+    return { events, names: [hook], needs: [] };
+  }
+  const words = QUOTED_WORDS.test(command)
+    ? [...command.matchAll(QUOTED_WORD)].map(([, word]) =>
+        (word as string).replaceAll("'\\''", "'")
+      )
+    : [];
+  const [binary, verb] = words;
+  if (
+    !binary ||
+    words.length !== 4 ||
+    !(verb === "boundary-hook" || verb?.endsWith("/boundary-hook.ts"))
+  ) {
+    return "unknown";
+  }
+  return {
+    events,
+    names: [binary, verb],
+    needs: [
+      { path: binary, mode: constants.X_OK },
+      ...(verb === "boundary-hook"
+        ? []
+        : [{ path: verb, mode: constants.R_OK }]),
+    ],
+  };
 };
+
+/** The hook a session launched with a workspace boundary runs: its script, which needs nothing. */
+export const workspaceHook = (
+  boundary: Boundary | undefined
+): LaunchedHook | undefined =>
+  boundary ? { events: true, names: [boundary.hook], needs: [] } : undefined;
+
+/** The first thing `hook` needs that is no longer there to run, if any. */
+export const hookMissing = (hook: LaunchedHook): string | undefined =>
+  hook.needs.find(({ path, mode }) => {
+    try {
+      accessSync(path, mode);
+      return false;
+    } catch {
+      return true;
+    }
+  })?.path;
 
 /** The boundary a spawn is bounded to, running; none for a spawn without a workspace. */
 export const boundaryFor = (

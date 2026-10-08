@@ -2002,6 +2002,7 @@ export class SessionSupervisor {
         recovery
           ? this.#failures.set(instanceId, String(error))
           : this.#fail(instanceId, error, processGeneration),
+      refused: (error) => this.#fail(instanceId, error, processGeneration),
       rejected: (uuid, error) => this.#reject(instanceId, uuid, error),
       emit: (envelope) => this.emit(envelope),
       closed: () => {

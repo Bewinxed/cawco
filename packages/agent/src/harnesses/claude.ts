@@ -10,8 +10,17 @@
  * with its `raw` self attached and nothing lost.
  */
 
-import type { Dirent } from "node:fs";
-import { access, cp, mkdir, readdir, realpath, rename } from "node:fs/promises";
+import { type Dirent, type FSWatcher, watch } from "node:fs";
+import {
+  access,
+  cp,
+  mkdir,
+  open,
+  readdir,
+  realpath,
+  rename,
+  stat,
+} from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import {
   deleteSession,
@@ -88,7 +97,13 @@ import {
   resolveClaudeExecutable,
   unlockKeychain,
 } from "../auth";
-import { claudeBoundaryOptions, launchedHook } from "../boundary";
+import {
+  claudeBoundaryOptions,
+  hookMissing,
+  type LaunchedHook,
+  launchedHook,
+  workspaceHook,
+} from "../boundary";
 import {
   callDelegationTool,
   delegationMcp,
@@ -155,6 +170,14 @@ interface CommandLifecycle {
   session_id?: string;
   state: "queued" | "started" | "completed" | "cancelled";
   type: "command_lifecycle";
+}
+
+/** A hook failure as the CLI stores it in a transcript, read by shape. */
+interface StoredHookFailure {
+  command?: string;
+  hookEvent?: string;
+  stderr?: string;
+  type?: string;
 }
 
 /** A hook's frame (`hook_started`, `hook_response`, sdk.d.ts), read by shape. */
@@ -890,9 +913,13 @@ class ClaudeSession implements HarnessSession {
    */
   readonly #hookFailures: NeutralMessage[] = [];
   /** The workspace boundary hook the CLI runs before each shell tool call; none for an unbounded session. */
-  #boundaryHook: string | undefined;
+  #boundaryHook: LaunchedHook | undefined;
   /** Why the running turn was stopped: its boundary hook failed ({@link #watchBoundary}). */
   #boundaryFailure: string | undefined;
+  /** Set once the session was stopped because its boundary hook can no longer run ({@link #hookGone}). */
+  #hookRefusal: HeldProcessRefused | undefined;
+  /** The transcript tail of a CLI that does not report its hooks in its stream ({@link #watchTranscript}). */
+  #transcriptWatch: FSWatcher | undefined;
   /** The child's sessiond. */
   readonly #sessiond:
     | { client: SessiondClient; procId: string; attach?: BridgeRing["attach"] }
@@ -958,7 +985,7 @@ class ClaudeSession implements HarnessSession {
     this.#mode = new SessionMode(permissionMode);
     const cliMode = this.#mode.cli;
     this.#launchCredential = ctx.sessionCredential;
-    this.#boundaryHook = ctx.boundary?.hook;
+    this.#boundaryHook = workspaceHook(ctx.boundary);
     const mcpServers: Record<string, McpServerConfig> = {
       ...((
         options as { mcpServers?: Record<string, McpServerConfig> } | undefined
@@ -1284,6 +1311,10 @@ class ClaudeSession implements HarnessSession {
           turn.running = true;
           // biome-ignore lint/suspicious/noUnnecessaryConditions: Turn.busy is mutated by Turn.start()/.end() elsewhere; the checker doesn't see that cross-class mutation
           if (!turn.busy) {
+            // One the CLI opened itself (a wake-up, a background task's
+            // notice) is checked as it starts; a send was checked before it
+            // went ({@link send}).
+            this.#hookGone();
             turn.start();
             ctx.busy(true);
           }
@@ -1431,6 +1462,7 @@ class ClaudeSession implements HarnessSession {
           : error
       );
     } finally {
+      this.#transcriptWatch?.close();
       for (const delivery of this.#delivery.values()) {
         delivery.resolve();
       }
@@ -1473,12 +1505,12 @@ class ClaudeSession implements HarnessSession {
 
   /**
    * The workspace's boundary hook failing, as the CLI reports it with the
-   * hook events {@link claudeBoundaryOptions} turns on. The hook refuses the
-   * call on any failure, so the command did not run; one that fails once
-   * fails every call after it, so the turn is stopped at once and ends
-   * failed with the hook's own words ({@link #pumpMessages}). The hook is
-   * known by its path in what it wrote: its first line names it, and so does
-   * the shell when it is missing.
+   * hook events {@link claudeBoundaryOptions} turns on: the workspace's hook
+   * script refuses the call, the form before it let the command through. A
+   * hook that fails once fails every call after it, so the turn is stopped
+   * at once and ends failed with the hook's own words ({@link #pumpMessages}).
+   * The hook is known by what names it in what was written: the script's
+   * first line names it; the shell names what it ran when that is gone.
    */
   #watchBoundary(hook: HookFrame): void {
     const own = this.#boundaryHook;
@@ -1488,19 +1520,160 @@ class ClaudeSession implements HarnessSession {
       hook.subtype !== "hook_response" ||
       hook.hook_event !== "PreToolUse" ||
       hook.outcome !== "error" ||
-      ![hook.stderr, hook.output].some((said) => said?.includes(own))
+      ![hook.stderr, hook.output].some((said) =>
+        own.names.some((name) => said?.includes(name))
+      )
     ) {
       return;
     }
-    this.#boundaryFailure = `boundary hook failed: ${(hook.stderr || hook.output || "").trim()}`;
-    console.warn(`[claude] ${this.instanceId}: ${this.#boundaryFailure}`);
+    const failure = `boundary hook failed: ${(hook.stderr || hook.output || "").trim()}`;
+    // A transcript can say so after its turn has ended: the session then
+    // takes no further turn.
+    // biome-ignore lint/suspicious/noUnnecessaryConditions: Turn.busy is mutated by Turn.start()/.end() elsewhere; the checker doesn't see that cross-class mutation
+    if (!this.#turn.busy) {
+      this.#refuse(
+        new HeldProcessRefused(
+          `${failure}. The session was stopped; resuming it starts it again with a hook that refuses instead.`
+        )
+      );
+      return;
+    }
+    this.#boundaryFailure = failure;
+    console.warn(`[claude] ${this.instanceId}: ${failure}`);
     // biome-ignore lint/complexity/noVoid: the turn's result frame carries the outcome
     void this.interrupt();
   }
 
+  /**
+   * Whether the session's boundary hook can no longer run, checked as each
+   * turn starts. Only a hook in the form before the workspace's script needs
+   * anything (it fails open without it): an adopted CLI launched with one
+   * whose cawco binary has gone since is stopped before the turn runs a
+   * command, and its work item fails with the reason.
+   */
+  #hookGone(): HeldProcessRefused | undefined {
+    if (this.#hookRefusal) {
+      return this.#hookRefusal;
+    }
+    const gone = this.#boundaryHook && hookMissing(this.#boundaryHook);
+    if (!gone) {
+      return;
+    }
+    return this.#refuse(
+      new HeldProcessRefused(
+        `boundary hook failed: ${gone} is gone, and this session's boundary hook runs it, so its commands would run outside the workspace boundary. The session was stopped before its turn; resuming it starts it again with a hook that refuses instead.`
+      )
+    );
+  }
+
+  /**
+   * Stops the session for good because its boundary hook cannot hold, and
+   * says why: its row and work item fail with `refusal`, and every send after
+   * it is refused ({@link #hookGone}).
+   */
+  #refuse(refusal: HeldProcessRefused): HeldProcessRefused {
+    if (this.#hookRefusal) {
+      return this.#hookRefusal;
+    }
+    this.#hookRefusal = refusal;
+    console.warn(`[claude] ${this.instanceId}: ${refusal.message}`);
+    this.#ctx.refused?.(refusal);
+    const held = this.#sessiond;
+    // biome-ignore lint/complexity/noVoid: the refusal is said; stopping finishes on its own
+    void this.stop()
+      .then(() => (held ? endProc(held.client, held.procId) : undefined))
+      .catch((error: unknown) =>
+        console.warn(
+          `[claude] ${this.instanceId}: stopping after its boundary hook went: ${String(error)}`
+        )
+      );
+    return refusal;
+  }
+
   /** An adopted CLI's boundary hook, read off its command line ({@link launchedHook}). */
-  boundedBy(hook: string): void {
+  boundedBy(hook: LaunchedHook): void {
     this.#boundaryHook = hook;
+    if (!hook.events) {
+      // biome-ignore lint/complexity/noVoid: the watch reports through #watchBoundary
+      void this.#watchTranscript().catch((error: unknown) =>
+        console.warn(
+          `[claude] ${this.instanceId}: watching its transcript for boundary hook failures failed: ${String(error)}`
+        )
+      );
+    }
+  }
+
+  /**
+   * For a CLI that does not report its hooks in its stream (launched before
+   * cawco asked it to), the boundary hook's failures as its transcript
+   * records them: each `hook_non_blocking_error` it appends from here on,
+   * which names the hook's command, goes to {@link #watchBoundary}.
+   */
+  async #watchTranscript(): Promise<void> {
+    const file = this.sessionId
+      ? await claudeSessionFile(this.sessionId, this.#ctx.cwd)
+      : null;
+    if (!file) {
+      console.warn(
+        `[claude] ${this.instanceId}: no transcript found to watch for its boundary hook's failures`
+      );
+      return;
+    }
+    let offset = (await stat(file)).size;
+    let rest = "";
+    let reading = Promise.resolve();
+    const read = async (): Promise<void> => {
+      const handle = await open(file, "r");
+      try {
+        const { size } = await handle.stat();
+        if (size <= offset) {
+          return;
+        }
+        const added = Buffer.alloc(size - offset);
+        await handle.read(added, 0, added.length, offset);
+        offset = size;
+        const lines = (rest + added.toString("utf8")).split("\n");
+        rest = lines.pop() ?? "";
+        for (const line of lines) {
+          if (line.includes("hook_non_blocking_error")) {
+            this.#transcriptHookFailure(line);
+          }
+        }
+      } finally {
+        await handle.close();
+      }
+    };
+    this.#transcriptWatch?.close();
+    this.#transcriptWatch = watch(file, () => {
+      reading = reading
+        .then(read)
+        .catch((error: unknown) =>
+          console.warn(
+            `[claude] ${this.instanceId}: reading its transcript failed: ${String(error)}`
+          )
+        );
+    });
+  }
+
+  /** One transcript line that may be a hook's non-blocking failure. */
+  #transcriptHookFailure(line: string): void {
+    let record: { attachment?: StoredHookFailure };
+    try {
+      record = JSON.parse(line) as { attachment?: StoredHookFailure };
+    } catch {
+      return;
+    }
+    const { attachment } = record;
+    if (attachment?.type === "hook_non_blocking_error") {
+      this.#watchBoundary({
+        type: "system",
+        subtype: "hook_response",
+        hook_event: attachment.hookEvent,
+        outcome: "error",
+        stderr: attachment.stderr,
+        output: attachment.command,
+      });
+    }
   }
 
   /**
@@ -1577,6 +1750,12 @@ class ClaudeSession implements HarnessSession {
   }
 
   send(message: SentMessage, extras: TurnExtras): void {
+    // A session whose boundary hook can no longer run takes no turn.
+    const refused = this.#hookGone();
+    if (refused) {
+      this.#ctx.rejected(message.uuid, refused);
+      return;
+    }
     // The uuid rides on the message: the CLI keeps it as the command's own id
     // and names it in the `command_lifecycle` that says it was consumed.
     // Every send goes to the CLI as a query, whatever its `shouldQuery`. Into a
@@ -2223,14 +2402,20 @@ export class ClaudeHarness implements Harness {
       throw new Error(`sessiond holds no live child ${procId}`);
     }
     // A CLI keeps the hook it was launched with for life. One whose boundary
-    // hook names cawco's own versioned binary lets every command through,
-    // outside the workspace boundary, once an update deletes that version: it
-    // is never driven again.
+    // hook is in the form before the workspace's script lets a command
+    // through, outside the boundary, when the cawco binary it names is gone:
+    // it is adopted only while that binary is there (prune keeps a version a
+    // live process names), and checked again as each turn starts. A hook in
+    // no form cawco wrote is never trusted.
     const launched = await launchedHook(child.pid);
-    if (launched === "stale") {
+    const gone =
+      launched === "unknown"
+        ? "its boundary hook is in no form cawco writes"
+        : launched && hookMissing(launched);
+    if (gone) {
       await endProc(client, procId);
       throw new HeldProcessRefused(
-        "This session's Claude Code was started with a workspace boundary hook that names a cawco binary an update deletes, and a hook that is gone lets every command run outside the boundary. It was stopped; resuming it starts it again with a hook that refuses instead."
+        `This session's Claude Code runs a workspace boundary hook that cannot hold (${launched === "unknown" ? gone : `${gone} is gone`}), and a failing hook lets its commands run outside the boundary. It was stopped; resuming it starts it again with a hook that refuses instead.`
       );
     }
     const asks = new Map<string, string>();
@@ -2317,8 +2502,8 @@ export class ClaudeHarness implements Harness {
       }
     );
     session.sessionId = sessionId;
-    if (launched) {
-      session.boundedBy(launched.hook);
+    if (launched && launched !== "unknown") {
+      session.boundedBy(launched);
     }
     if (turnRunning) {
       session.adoptTurn();
