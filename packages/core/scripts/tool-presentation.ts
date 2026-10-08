@@ -5,8 +5,10 @@
  *
  *   bun scripts/tool-presentation.ts          write the file
  *   bun scripts/tool-presentation.ts --check  fail when the file is stale
+ *
+ * Both fail when a kind names a glyph or ink either client cannot draw.
  */
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   FACTS,
@@ -216,6 +218,67 @@ ${kinds.join("\n")}
     ]
 }
 `;
+}
+
+/**
+ * Every glyph and ink a kind names, drawn by both clients: a name either
+ * client lacks would turn its rows generic (or, for an ink on iOS, stop the
+ * app), so it fails here instead.
+ */
+function missingOnClients(): string[] {
+  const repo = join(import.meta.dir, "../../..");
+  const design = join(repo, "apps/apple/Packages/CawCoKit/Sources/CawCoDesign");
+  const web = readFileSync(
+    join(
+      repo,
+      "apps/dashboard/src/lib/components/features/tool-cards/descriptors.ts"
+    ),
+    "utf8"
+  );
+  const keysOf = (table: string): Set<string> => {
+    const body = web.match(
+      new RegExp(`const ${table}: Record<string, \\w+> = \\{([^}]*)\\}`)
+    )?.[1];
+    if (body === undefined) {
+      throw new Error(`tools:check: descriptors.ts has no ${table} table`);
+    }
+    return new Set([...body.matchAll(/"([^"]+)":/g)].map((m) => m[1] ?? ""));
+  };
+  const webGlyphs = keysOf("GLYPHS");
+  const webInks = keysOf("INKS");
+  const swiftGlyphs = new Set(
+    [
+      ...readFileSync(join(design, "Glyph.swift"), "utf8").matchAll(
+        /case \w+ = "([^"]+)"/g
+      ),
+    ].map((m) => m[1] ?? "")
+  );
+  const swiftInk = (ink: string): boolean =>
+    existsSync(join(design, "Resources/Tokens.xcassets", `${ink}.colorset`));
+  const missing: string[] = [];
+  for (const kind of TOOL_KINDS) {
+    if (!webGlyphs.has(kind.glyph)) {
+      missing.push(`${kind.id}: glyph ${kind.glyph} not in the web's GLYPHS`);
+    }
+    if (!swiftGlyphs.has(kind.glyph)) {
+      missing.push(`${kind.id}: glyph ${kind.glyph} not in iOS Glyph.swift`);
+    }
+    if (!webInks.has(kind.ink)) {
+      missing.push(`${kind.id}: ink ${kind.ink} not in the web's INKS`);
+    }
+    if (!swiftInk(kind.ink)) {
+      missing.push(`${kind.id}: ink ${kind.ink} has no iOS colour set`);
+    }
+  }
+  return missing;
+}
+
+const missing = missingOnClients();
+if (missing.length) {
+  console.error(
+    `tools:check: a kind names what a client cannot draw:\n  ${missing.join("\n  ")}`
+  );
+  process.exit(1);
 }
 
 const swift = generate();
