@@ -1,5 +1,6 @@
 import type { Component } from "svelte";
 import {
+  IconAccounts,
   IconBolt,
   IconBook,
   IconCpu,
@@ -36,6 +37,7 @@ export type SectionSlug =
   | "mcp"
   | "skills"
   | "memory"
+  | "accounts"
   | "models"
   | "phone"
   | "spend"
@@ -113,6 +115,15 @@ export const SECTIONS: ConfigSection[] = [
     purpose: "CLAUDE.md and the model documents",
     icon: IconBook,
     hue: "var(--hue-blue-600)",
+  },
+  {
+    slug: "accounts",
+    counted: true,
+    group: "Hub",
+    label: "Accounts",
+    purpose: "Provider sign-ins, and which one a session runs on",
+    icon: IconAccounts,
+    hue: "var(--hue-cyan-500)",
   },
   {
     slug: "models",

@@ -420,6 +420,27 @@
         }
       }
     },
+    "account-amber": {
+      "$type": "color",
+      "$value": "{color.mark-3}",
+      "$description": "Account colours (core AccountHue): an account's identity, drawn on the identity-mark hues, which hold contrast on paper and at night."
+    },
+    "account-orange": {
+      "$type": "color",
+      "$value": "{color.mark-2}"
+    },
+    "account-green": {
+      "$type": "color",
+      "$value": "{color.mark-4}"
+    },
+    "account-cyan": {
+      "$type": "color",
+      "$value": "{color.mark-5}"
+    },
+    "account-blue": {
+      "$type": "color",
+      "$value": "{color.mark-6}"
+    },
     "mark-glyph": {
       "$type": "color",
       "$value": "oklch(99% 0 0)",
@@ -2630,6 +2651,11 @@
       "$type": "cubicBezier",
       "$value": "cubic-bezier(0.2, 0, 0, 1)",
       "$description": "A small mark arriving beside what it belongs to (the compaction divider's chevron): it leaves at once and takes most of its time settling, so a 160ms entrance reads as motion where ease-out reads as a swap."
+    },
+    "ease-figure": {
+      "$type": "cubicBezier",
+      "$value": "cubic-bezier(0.2, 0.8, 0.2, 1)",
+      "$description": "A strategy figure's travel and growth (Configure → Accounts): a session riding into its lane, a bar filling, a lane reordering. The owner's reference motion, from the Projects mockups (mocks/project-paths)."
     },
     "ease-glide-in": {
       "$type": "cubicBezier",

@@ -2318,7 +2318,10 @@ export class ClaudeHarness implements Harness {
           (args[2] as AccountIdentity | null) ?? null
         );
       case CONTROL_FORGET_ACCOUNT:
-        return forgetAccount(args[0] as string);
+        // An answer, not undefined: undefined tells the daemon this harness
+        // does not handle the control, and the hub reads that as a refusal.
+        await forgetAccount(args[0] as string);
+        return { forgotten: true };
       case CONTROL_PROBE_ACCOUNT:
         return probeAccount((args[0] as string | null) ?? null);
       case "unlockKeychain":

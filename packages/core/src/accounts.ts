@@ -25,7 +25,7 @@ export const ACCOUNT_KINDS: readonly AccountKind[] = [
   "console",
 ];
 
-/** The hue an account is drawn in: a `--hue-<name>-500` token. */
+/** The colour an account is drawn in: the `--account-<name>` token. */
 export type AccountHue = "amber" | "blue" | "cyan" | "green" | "orange";
 
 export const ACCOUNT_HUES: readonly AccountHue[] = [

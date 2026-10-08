@@ -48,6 +48,12 @@ public enum Palette {
     public static let mark6 = Palette.named("mark-6")
     public static let mark7 = Palette.named("mark-7")
     public static let mark8 = Palette.named("mark-8")
+    /// Account colours (core AccountHue): an account's identity, drawn on the identity-mark hues, which hold contrast on paper and at night.
+    public static let accountAmber = Palette.named("account-amber")
+    public static let accountOrange = Palette.named("account-orange")
+    public static let accountGreen = Palette.named("account-green")
+    public static let accountCyan = Palette.named("account-cyan")
+    public static let accountBlue = Palette.named("account-blue")
     public static let markGlyph = Palette.named("mark-glyph")
     /// Identity-mark sheen.
     public static let markOverlay = Gradient(stops: [Ink(light: P3(0.9949, 0.9906, 0.9805, 0.2200), dark: P3(0.0759, 0.0714, 0.0656, 0.2200)), Ink(light: P3(0.1850, 0.1722, 0.1560, 0.0600), dark: P3(0.9247, 0.9128, 0.8883, 0.0600))])
@@ -615,6 +621,8 @@ public enum Motion {
     public static let easeDrawer = TimingCurve(x1: 0.32, y1: 0.72, x2: 0, y2: 1)
     /// A small mark arriving beside what it belongs to (the compaction divider's chevron): it leaves at once and takes most of its time settling, so a 160ms entrance reads as motion where ease-out reads as a swap.
     public static let easeArrive = TimingCurve(x1: 0.2, y1: 0, x2: 0, y2: 1)
+    /// A strategy figure's travel and growth (Configure → Accounts): a session riding into its lane, a bar filling, a lane reordering. The owner's reference motion, from the Projects mockups (mocks/project-paths).
+    public static let easeFigure = TimingCurve(x1: 0.2, y1: 0.8, x2: 0.2, y2: 1)
     /// A glide's first stretch: speed rising evenly from rest (its position the square of its time), into the steady pace a tree's line, its room and the rows under it travel at.
     public static let easeGlideIn = TimingCurve(x1: 0.3333, y1: 0, x2: 0.6667, y2: 0.3333)
     /// A glide's last stretch: from the steady pace, speed falling evenly to rest.

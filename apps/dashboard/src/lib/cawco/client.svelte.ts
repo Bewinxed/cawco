@@ -5,8 +5,13 @@
  */
 import type {
   Account,
+  AccountBench,
   AccountCatalog,
+  AccountHue,
+  AccountKind,
+  AccountReading,
   AccountSignin,
+  AccountSigninResult,
   AgentRow,
   AvailableCommand,
   BuildInfo,
@@ -40,6 +45,7 @@ import type {
   ProjectOfferSummary,
   ProjectSpend,
   ProjectView,
+  ProviderRouting,
   SendAttachment,
   SendPayload,
   SendRecord,
@@ -1926,7 +1932,10 @@ export async function readSpend(): Promise<void> {
 /** What `/api/accounts` answers. */
 export interface AccountsView {
   accounts: Account[];
+  bench: AccountBench[];
   catalogs: AccountCatalog[];
+  readings: AccountReading[];
+  routing: ProviderRouting[];
   signins: AccountSignin[];
 }
 
@@ -1937,6 +1946,88 @@ export async function readAccounts(): Promise<void> {
     state.accounts = view;
   }
 }
+
+/**
+ * One write to the accounts routes. A refusal is thrown in the hub's own
+ * sentence, which is written for people; the accounts are read again after
+ * every write that landed, since only a sign-in makes the hub say so.
+ */
+async function accountsWrite<T>(
+  url: string,
+  method: "POST" | "PATCH" | "PUT" | "DELETE",
+  body?: unknown
+): Promise<T> {
+  const response = await fetch(url, {
+    method,
+    ...(body === undefined
+      ? {}
+      : {
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        }),
+  });
+  if (!response.ok) {
+    throw new Error(
+      (await response.text()) || `The hub answered ${response.status}.`
+    );
+  }
+  const answer = (await response.json()) as T;
+  await readAccounts();
+  return answer;
+}
+
+/** Adds an account; it goes last in fill-first order. */
+export const createAccount = (body: {
+  kind: AccountKind;
+  provider: "anthropic";
+  hue?: AccountHue;
+  label?: string;
+}): Promise<Account> => accountsWrite("/api/accounts", "POST", body);
+
+/** Changes an account's nickname (null: its email), colour, order or limits. */
+export const patchAccount = (
+  id: string,
+  patch: {
+    hue?: AccountHue;
+    label?: string | null;
+    neverBackup?: boolean;
+    order?: number;
+    reservePct?: number | null;
+  }
+): Promise<Account> =>
+  accountsWrite(`/api/accounts/${encodeURIComponent(id)}`, "PATCH", patch);
+
+/** Removes an account, signing it out on every machine signed in to it. */
+export const deleteAccount = (id: string): Promise<{ ok: true }> =>
+  accountsWrite(`/api/accounts/${encodeURIComponent(id)}`, "DELETE");
+
+/** Sets how a provider's new sessions choose among its accounts. */
+export const putRouting = (
+  routing: Omit<ProviderRouting, "provider">
+): Promise<ProviderRouting> =>
+  accountsWrite("/api/accounts/routing/anthropic", "PUT", routing);
+
+/** Starts Claude Code's own login for the account on a machine: the link to open. */
+export const beginSignin = (
+  id: string,
+  machineId: string
+): Promise<{ url: string }> =>
+  accountsWrite(
+    `/api/accounts/${encodeURIComponent(id)}/machines/${encodeURIComponent(machineId)}/signin`,
+    "POST"
+  );
+
+/** Types the pasted code into that login: signed in, or someone else's account. */
+export const completeSignin = (
+  id: string,
+  machineId: string,
+  code: string
+): Promise<AccountSigninResult> =>
+  accountsWrite(
+    `/api/accounts/${encodeURIComponent(id)}/machines/${encodeURIComponent(machineId)}/signin/complete`,
+    "POST",
+    { code }
+  );
 
 /**
  * Which account a session would start on, and why (`/api/accounts/placement`):

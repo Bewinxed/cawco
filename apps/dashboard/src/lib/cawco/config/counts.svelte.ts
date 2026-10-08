@@ -1,3 +1,4 @@
+import { accountFaults } from "../accounts/model.svelte";
 import { cawco } from "../client.svelte";
 import { hubFaults, machineFaults, SCOPE_ANCHOR } from "../fleet-faults";
 import { attention } from "../updates/model";
@@ -31,6 +32,8 @@ export function countOf(store: ConfigStore, slug: SectionSlug): number | null {
       const fleet = store.fleet.value;
       return fleet ? (fleet.memory ? 1 : 0) + fleet.memoryDocs.length : null;
     }
+    case "accounts":
+      return cawco.accounts?.accounts.length ?? null;
     default:
       return null;
   }
@@ -59,8 +62,14 @@ export function updatesWaiting(): number {
   return policy ? attention(cawco.machines, policy) : 0;
 }
 
-/** How many faults belong to a section, for its rail badge. */
+/**
+ * How many faults belong to a section, for its rail badge. Accounts' are its
+ * own: an account signed in as somebody else somewhere, or signed in nowhere.
+ */
 export function faultsIn(store: ConfigStore, slug: SectionSlug): number {
+  if (slug === "accounts") {
+    return accountFaults();
+  }
   const path = `/config/${slug}`;
   return allFaults(store).filter((fault) => SCOPE_ANCHOR[fault.scope] === path)
     .length;

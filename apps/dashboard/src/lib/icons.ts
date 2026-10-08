@@ -19,6 +19,8 @@ export { default as IconArchive } from "~icons/solar/archive-down-minimlistic-bo
 export { default as IconUnarchive } from "~icons/solar/archive-up-minimlistic-bold-duotone";
 export { default as IconArrowDown } from "~icons/solar/arrow-down-linear";
 export { default as IconArrowRight } from "~icons/solar/arrow-right-linear";
+/** A link that opens in another tab. */
+export { default as IconArrowUpRight } from "~icons/solar/arrow-right-up-linear";
 export { default as IconArrowUp } from "~icons/solar/arrow-up-linear";
 export {
   default as IconBolt,
@@ -168,8 +170,9 @@ export { default as IconTrash } from "~icons/solar/trash-bin-minimalistic-bold-d
 export { default as IconTuning } from "~icons/solar/tuning-2-bold-duotone";
 export { default as IconReset } from "~icons/solar/undo-left-bold-duotone";
 export { default as IconUser } from "~icons/solar/user-bold-duotone";
-/** Delegated work: the subagents a session still has out. */
+/** Delegated work: the subagents a session still has out. Accounts: Configure's sign-ins. */
 export {
+  default as IconAccounts,
   default as IconSubagents,
   default as IconToolTask,
 } from "~icons/solar/users-group-rounded-bold-duotone";
