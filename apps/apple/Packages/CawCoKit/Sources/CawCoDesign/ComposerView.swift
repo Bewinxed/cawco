@@ -865,7 +865,8 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
             actionBox.backgroundColor = Palette.actionSolid
             actionBox.layer.borderWidth = 0
             actionBox.accessibilityLabel = action == .stop ? "Stop the agent" : "Send message"
-            actionBox.accessibilityTraits = action == .sending ? [.button, .notEnabled] : .button
+            // Said as it is drawn: a dimmed box is "dimmed" to VoiceOver too.
+            actionBox.accessibilityTraits = actionBox.isEnabled ? .button : [.button, .notEnabled]
         }
         let next: SwapGlyph.Face = if block != nil {
             .glyph(.warning)
