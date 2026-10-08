@@ -2552,7 +2552,7 @@
             <img alt="" src="data:{img.mediaType};base64,{img.data}">
             <span class="att-name">{img.name}</span>
             <button
-              aria-label="Remove"
+              aria-label={`Remove ${img.name}`}
               class="touch-hit"
               onclick={() => removeImage(i)}
               type="button"
