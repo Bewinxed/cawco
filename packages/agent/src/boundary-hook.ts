@@ -1,30 +1,35 @@
 /**
- * The PreToolUse hook a work item's claude session runs before every shell
- * tool call (`Bash`, `Monitor`; `boundary.ts` registers it as flag settings):
- * it rewrites the call's command so it runs through the workspace's executor,
- * inside the workspace's boundary. The CLI runs it, not the agent, so it holds
- * while the agent restarts.
+ * `cawco boundary-hook EXEC SCRATCH`: what a workspace's hook script
+ * (`boundary.ts`) runs before every shell tool call (`Bash`, `Monitor`) of a
+ * work item's claude session. It rewrites the call's command so it runs
+ * through the workspace's executor, inside the workspace's boundary. The CLI
+ * runs it, not the agent, so it holds while the agent restarts.
  *
  * The rewritten command carries the directory the command ended in back out
  * of the boundary and `cd`s there, so the session's working directory still
  * follows its `cd`s from one call to the next.
  *
- * Anything this cannot do blocks the call (exit 2 — the one outcome a hook's
- * output cannot override): a command never runs outside the boundary.
+ * Anything this cannot do fails it, which the hook script turns into exit 2
+ * — the one outcome a hook's output cannot override: a command never runs
+ * outside the boundary.
  *
- * argv: the executor, the workspace's scratch dir.
+ * argv, after the runtime's own two and the verb: the executor, the
+ * workspace's scratch dir. The same three in a binary install and a checkout,
+ * where `bun packages/cli/src/cli.ts boundary-hook` runs it.
  */
 import { randomUUID } from "node:crypto";
+import { accessSync, constants } from "node:fs";
 import { join } from "node:path";
-import { standalone } from "@cawco/core/runtime";
 
 const quote = (value: string): string => `'${value.replaceAll("'", "'\\''")}'`;
 
 try {
-  const [exec, scratch] = process.argv.slice(standalone ? 3 : 2);
+  const [exec, scratch] = process.argv.slice(3);
   if (!(exec && scratch)) {
     throw new Error("the hook was registered without its executor");
   }
+  // The workspace's executor is gone when the workspace was archived.
+  accessSync(exec, constants.X_OK);
   const input = JSON.parse(await Bun.stdin.text()) as {
     tool_input?: Record<string, unknown>;
   };

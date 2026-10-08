@@ -88,7 +88,7 @@ import {
   resolveClaudeExecutable,
   unlockKeychain,
 } from "../auth";
-import { claudeBoundaryOptions } from "../boundary";
+import { claudeBoundaryOptions, launchedHook } from "../boundary";
 import {
   callDelegationTool,
   delegationMcp,
@@ -105,11 +105,12 @@ import {
   readSkillFiles,
   syncFleetConfig,
 } from "../fleet";
-import type {
-  Harness,
-  HarnessContext,
-  HarnessSession,
-  TurnExtras,
+import {
+  type Harness,
+  type HarnessContext,
+  type HarnessSession,
+  HeldProcessRefused,
+  type TurnExtras,
 } from "../harness";
 import {
   beginAccountLogin,
@@ -125,6 +126,7 @@ import type { SessiondAwareContext } from "../session";
 import { acknowledgeSessionCredential } from "../session-identity";
 import {
   type BridgeRing,
+  endProc,
   ensureSessiond,
   procEpoch,
   SessiondClient,
@@ -153,6 +155,20 @@ interface CommandLifecycle {
   session_id?: string;
   state: "queued" | "started" | "completed" | "cancelled";
   type: "command_lifecycle";
+}
+
+/** A hook's frame (`hook_started`, `hook_response`, sdk.d.ts), read by shape. */
+interface HookFrame {
+  exit_code?: number;
+  hook_event?: string;
+  hook_name?: string;
+  outcome?: string;
+  output?: string;
+  session_id?: string;
+  stderr?: string;
+  stdout?: string;
+  subtype?: string;
+  type: string;
 }
 
 /**
@@ -873,6 +889,10 @@ class ClaudeSession implements HarnessSession {
    * is taken up ({@link #hookFailure}).
    */
   readonly #hookFailures: NeutralMessage[] = [];
+  /** The workspace boundary hook the CLI runs before each shell tool call; none for an unbounded session. */
+  #boundaryHook: string | undefined;
+  /** Why the running turn was stopped: its boundary hook failed ({@link #watchBoundary}). */
+  #boundaryFailure: string | undefined;
   /** The child's sessiond. */
   readonly #sessiond:
     | { client: SessiondClient; procId: string; attach?: BridgeRing["attach"] }
@@ -938,6 +958,7 @@ class ClaudeSession implements HarnessSession {
     this.#mode = new SessionMode(permissionMode);
     const cliMode = this.#mode.cli;
     this.#launchCredential = ctx.sessionCredential;
+    this.#boundaryHook = ctx.boundary?.hook;
     const mcpServers: Record<string, McpServerConfig> = {
       ...((
         options as { mcpServers?: Record<string, McpServerConfig> } | undefined
@@ -1382,6 +1403,16 @@ class ClaudeSession implements HarnessSession {
           if (neutral.type === "result" && this.#lastRequestAt !== undefined) {
             neutral.lastRequestAt = this.#lastRequestAt;
           }
+          // The turn its boundary hook failed in ends failed, in the hook's
+          // words: the hub fails the work item on it and tells the parent.
+          if (
+            neutral.type === "result" &&
+            this.#boundaryFailure !== undefined
+          ) {
+            neutral.is_error = true;
+            neutral.errors = [this.#boundaryFailure];
+            this.#boundaryFailure = undefined;
+          }
           this.#lastRequestAt = undefined;
           turn.end();
           ctx.busy(false);
@@ -1418,23 +1449,14 @@ class ClaudeSession implements HarnessSession {
    * (claude-transcript.ts), for the run's first prompt.
    */
   #hookFailure(message: SDKMessage): boolean {
-    const hook = message as unknown as {
-      exit_code?: number;
-      hook_event?: string;
-      hook_name?: string;
-      outcome?: string;
-      session_id?: string;
-      stderr?: string;
-      stdout?: string;
-      subtype?: string;
-      type: string;
-    };
+    const hook = message as unknown as HookFrame;
     if (
       hook.type !== "system" ||
       !(hook.subtype === "hook_started" || hook.subtype === "hook_response")
     ) {
       return false;
     }
+    this.#watchBoundary(hook);
     if (hook.outcome === "error" && hook.hook_name === "SessionStart:startup") {
       this.#hookFailures.push({
         type: "system",
@@ -1447,6 +1469,38 @@ class ClaudeSession implements HarnessSession {
       });
     }
     return true;
+  }
+
+  /**
+   * The workspace's boundary hook failing, as the CLI reports it with the
+   * hook events {@link claudeBoundaryOptions} turns on. The hook refuses the
+   * call on any failure, so the command did not run; one that fails once
+   * fails every call after it, so the turn is stopped at once and ends
+   * failed with the hook's own words ({@link #pumpMessages}). The hook is
+   * known by its path in what it wrote: its first line names it, and so does
+   * the shell when it is missing.
+   */
+  #watchBoundary(hook: HookFrame): void {
+    const own = this.#boundaryHook;
+    if (
+      !own ||
+      this.#boundaryFailure !== undefined ||
+      hook.subtype !== "hook_response" ||
+      hook.hook_event !== "PreToolUse" ||
+      hook.outcome !== "error" ||
+      ![hook.stderr, hook.output].some((said) => said?.includes(own))
+    ) {
+      return;
+    }
+    this.#boundaryFailure = `boundary hook failed: ${(hook.stderr || hook.output || "").trim()}`;
+    console.warn(`[claude] ${this.instanceId}: ${this.#boundaryFailure}`);
+    // biome-ignore lint/complexity/noVoid: the turn's result frame carries the outcome
+    void this.interrupt();
+  }
+
+  /** An adopted CLI's boundary hook, read off its command line ({@link launchedHook}). */
+  boundedBy(hook: string): void {
+    this.#boundaryHook = hook;
   }
 
   /**
@@ -2161,6 +2215,24 @@ export class ClaudeHarness implements Harness {
   ): Promise<HarnessSession> {
     const client = await this.sessiond();
     const { head, turnRunning } = options;
+    const procId = procIdFor("claude", instanceId);
+    const child = (await client.list()).procs.find(
+      (proc) => proc.procId === procId && proc.alive
+    );
+    if (!child) {
+      throw new Error(`sessiond holds no live child ${procId}`);
+    }
+    // A CLI keeps the hook it was launched with for life. One whose boundary
+    // hook names cawco's own versioned binary lets every command through,
+    // outside the workspace boundary, once an update deletes that version: it
+    // is never driven again.
+    const launched = await launchedHook(child.pid);
+    if (launched === "stale") {
+      await endProc(client, procId);
+      throw new HeldProcessRefused(
+        "This session's Claude Code was started with a workspace boundary hook that names a cawco binary an update deletes, and a hook that is gone lets every command run outside the boundary. It was stopped; resuming it starts it again with a hook that refuses instead."
+      );
+    }
     const asks = new Map<string, string>();
     // Every send the CLI has been handed: each command it names in a
     // lifecycle line, queued or begun.
@@ -2172,31 +2244,25 @@ export class ClaudeHarness implements Harness {
     // `head` is the listing's, taken before every earlier row was adopted; a
     // ring that has since dropped past it ends the read rather than stalling
     // every later row behind this one ({@link readRing}).
-    const oldest = await readRing(
-      client,
-      procIdFor("claude", instanceId),
-      RING_START,
-      head,
-      (event) => {
-        const parsed = parseLine(event.data);
-        readAsk(asks, parsed, event.data);
-        if (
-          parsed?.type === "command_lifecycle" &&
-          typeof parsed.command_uuid === "string"
-        ) {
-          handed.add(parsed.command_uuid);
-        }
-        if (
-          parsed?.type === "control_request" &&
-          parsed.request?.subtype === "hook_callback"
-        ) {
-          wakeups = scheduledWakeups(parsed.request.input) ?? wakeups;
-        }
-        if (typeof parsed?.session_id === "string") {
-          sessionId = parsed.session_id;
-        }
+    const oldest = await readRing(client, procId, RING_START, head, (event) => {
+      const parsed = parseLine(event.data);
+      readAsk(asks, parsed, event.data);
+      if (
+        parsed?.type === "command_lifecycle" &&
+        typeof parsed.command_uuid === "string"
+      ) {
+        handed.add(parsed.command_uuid);
       }
-    );
+      if (
+        parsed?.type === "control_request" &&
+        parsed.request?.subtype === "hook_callback"
+      ) {
+        wakeups = scheduledWakeups(parsed.request.input) ?? wakeups;
+      }
+      if (typeof parsed?.session_id === "string") {
+        sessionId = parsed.session_id;
+      }
+    });
     const replayable =
       options.afterSeq !== undefined && options.afterSeq + 1 >= oldest;
     // What the CLI was handed is all it holds: a send the agent before this
@@ -2242,7 +2308,7 @@ export class ClaudeHarness implements Harness {
       [],
       {
         client,
-        procId: procIdFor("claude", instanceId),
+        procId,
         attach: {
           afterSeq: replayable ? (options.afterSeq ?? start) : start,
           head,
@@ -2251,6 +2317,9 @@ export class ClaudeHarness implements Harness {
       }
     );
     session.sessionId = sessionId;
+    if (launched) {
+      session.boundedBy(launched.hook);
+    }
     if (turnRunning) {
       session.adoptTurn();
     }

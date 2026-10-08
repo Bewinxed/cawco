@@ -48,6 +48,14 @@ export class HarnessRecoveryRefused extends Error {}
 /** A refusal is final for its launch attempt, including recovery attempts. */
 export class SessionAddressRefused extends Error {}
 export class HubContractRefused extends SessionAddressRefused {}
+/**
+ * A session process that cannot be trusted to run: its CawCo MCP credential
+ * did not install (a process this agent launched) or verify (one it attached
+ * to), or a Claude Code it attached to carries a workspace boundary hook that
+ * can stop holding. The process has been stopped; this is its spawn's
+ * failure, with the reason — an end, not a recovery the hub retries.
+ */
+export class HeldProcessRefused extends Error {}
 
 /** Everything a harness needs from the supervisor while it owns a session. */
 export interface HarnessContext {

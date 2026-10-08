@@ -22,18 +22,22 @@
  *
  * Each workspace's executor is a script, `~/.cawco/workspaces/<id>/exec
  * [--cwd-out FILE] COMMAND`, that every harness runs its shell commands
- * through: claude by a PreToolUse hook that rewrites the command
- * (`boundary-hook.ts`), OpenCode by its plugin's `bash` tool, pi by its bash
- * tool's operations. The GitHub CLI's keyring sits behind the bus the
- * boundary hides, so the executor reads its token on the host side and hands
- * it in as `GH_TOKEN`: pushes and `gh` keep working inside.
+ * through: claude by a PreToolUse hook that rewrites the command (the
+ * workspace's `hook` script, which runs `boundary-hook.ts`), OpenCode by its
+ * plugin's `bash` tool, pi by its bash tool's operations. The GitHub CLI's
+ * keyring sits behind the bus the boundary hides, so the executor reads its
+ * token on the host side and hands it in as `GH_TOKEN`: pushes and `gh` keep
+ * working inside.
  */
+import { constants } from "node:fs";
 import {
+  access,
   mkdir,
   readdir,
   readFile,
   readlink,
   realpath,
+  rename,
   rm,
   stat,
   writeFile,
@@ -42,6 +46,7 @@ import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import type { WorkspaceRef } from "@cawco/core";
 import { WORKSPACE_BOUNDARY_START_TIMEOUT_MS } from "@cawco/core";
+import { binaryRoot } from "@cawco/core/binary-installation";
 import { sessionIdentityDir } from "@cawco/core/paths";
 import { standalone } from "@cawco/core/runtime";
 import { type ProcSpec, sessiondEndpoint } from "@cawco/core/sessiond";
@@ -53,6 +58,8 @@ import { ensureSessiond, SessiondClient } from "./sessiond-client";
 export interface Boundary {
   /** `exec [--cwd-out FILE] COMMAND`: runs COMMAND inside the boundary, in the caller's directory. */
   readonly exec: string;
+  /** The PreToolUse hook a claude session runs before each shell tool call ({@link hookScript}). */
+  readonly hook: string;
   /** The anchor (Linux) or runner (macOS) process. */
   readonly pid: number;
   /** The workspace's scratch dir, its `/tmp`: `~/.cawco/workspaces/<id>/tmp`, on disk and outside the clone. */
@@ -147,15 +154,126 @@ export const boundaryCommand = (boundary: Boundary, command: string): string =>
   `${shellQuote(boundary.exec)} ${shellQuote(command)}`;
 
 /**
+ * How long the hook's own run of cawco may take before the hook kills it and
+ * refuses the command. Well under {@link HOOK_TIMEOUT_S}: Claude Code lets the
+ * call through when it times a hook out ("A timed-out `command`… hook doesn't
+ * block the tool call", code.claude.com/docs/en/hooks#timeouts), so the hook
+ * always answers first.
+ */
+const HOOK_LIMIT_S = 30;
+
+/** Claude Code's own limit on the boundary hook, in seconds; its default is 600. */
+const HOOK_TIMEOUT_S = 90;
+
+/**
+ * The workspace's PreToolUse hook: has cawco rewrite the call's command to run
+ * through the executor, and refuses the call every way that can fail. Claude
+ * Code blocks a call only on exit 2: any other failure — a missing binary, a
+ * crash, a signal — is a "non-blocking error" and the command runs as it was
+ * written, outside the boundary (code.claude.com/docs/en/hooks#exit-code-2).
+ * So every status but 0 becomes 2, and a run that hangs is killed at
+ * {@link HOOK_LIMIT_S} and refused too. The first line it writes names the
+ * hook, so a failure the CLI reports is known as this one's.
+ *
+ * It names cawco by a path no update deletes: the binary install's `run`
+ * wrapper, which execs whatever `current` names, or, in a checkout, bun on
+ * the CLI's source. The CLI keeps the hook command it launched with for as
+ * long as it lives, and outlives the agent that started it; a hook naming the
+ * agent's own versioned binary stopped resolving once an update pruned that
+ * version, and every command then ran outside the boundary.
+ */
+const hookScript = (
+  id: string,
+  runner: string[],
+  exec: string,
+  scratch: string
+): string => `#!/bin/sh
+# CawCo workspace ${id}: the PreToolUse hook its claude sessions run before each
+# shell tool call. Any status but 0 refuses the call (exit 2).
+echo "cawco boundary hook $0" >&2
+exec 3<&0
+${[...runner, "boundary-hook", exec, scratch].map(shellQuote).join(" ")} <&3 3<&- &
+hook=$!
+(
+  trap 'kill "$timer" 2>/dev/null; exit 0' TERM
+  sleep ${HOOK_LIMIT_S} & timer=$!
+  wait "$timer" && kill -KILL "$hook" 2>/dev/null
+) </dev/null >/dev/null 2>&1 &
+watchdog=$!
+wait "$hook"
+status=$?
+kill "$watchdog" 2>/dev/null
+[ "$status" -eq 0 ] && exit 0
+echo "cawco: the boundary hook $0 failed (status $status), so this command did not run" >&2
+exit 2
+`;
+
+/**
+ * How the hook reaches cawco: `<binary root>/run` in a binary install, bun on
+ * `packages/cli/src/cli.ts` in a checkout. Refuses the workspace when that is
+ * not there, rather than writing a hook that refuses every command.
+ */
+const hookRunner = async (id: string): Promise<string[]> => {
+  const runner = standalone
+    ? [join(binaryRoot(), "run")]
+    : [
+        process.execPath,
+        join(import.meta.dir, "..", "..", "cli", "src", "cli.ts"),
+      ];
+  const target = runner.at(-1) as string;
+  await access(target, standalone ? constants.X_OK : constants.R_OK).catch(
+    () => {
+      throw refusal(
+        id,
+        `${target} is not there, so its boundary hook could not reach cawco`
+      );
+    }
+  );
+  return runner;
+};
+
+/** Writes `path` whole or not at all: a reader never sees it half written. */
+const writeWhole = async (
+  path: string,
+  content: string,
+  mode: number
+): Promise<void> => {
+  const temporary = `${path}.${process.pid}.tmp`;
+  await writeFile(temporary, content, { mode });
+  await rename(temporary, path);
+};
+
+/** Writes the workspace's hook for `held`, and the record of it. */
+const armHook = async (id: string, held: Omit<Held, "hook">): Promise<Held> => {
+  const hook = join(stateDir(id), "hook");
+  await writeWhole(
+    hook,
+    hookScript(id, await hookRunner(id), held.exec, held.scratch),
+    0o755
+  );
+  const armed: Held = { ...held, hook };
+  await writeWhole(
+    join(stateDir(id), "boundary.json"),
+    `${JSON.stringify(armed)}\n`,
+    0o644
+  );
+  return armed;
+};
+
+/**
  * The `query()` options that bound a claude session, none for a session with
  * no boundary: flag settings with a PreToolUse hook on every shell tool that
- * rewrites its command through the executor. The CLI runs the hook itself, so
- * it holds while the agent that started the session restarts; a local
- * settings file cannot turn it off, because flag settings outrank it.
+ * rewrites its command through the executor, and the hook events in the
+ * stream, which is how the session hears that the hook failed. The CLI runs
+ * the hook itself, so it holds while the agent that started the session
+ * restarts; a local settings file cannot turn it off, because flag settings
+ * outrank it. `|| exit 2` refuses the call when the hook script itself is
+ * gone (the shell's 127 would let it through).
  */
 export const claudeBoundaryOptions = (boundary: Boundary | undefined) =>
   boundary
     ? {
+        includeHookEvents: true,
         settings: {
           disableAllHooks: false,
           hooks: {
@@ -165,16 +283,8 @@ export const claudeBoundaryOptions = (boundary: Boundary | undefined) =>
                 hooks: [
                   {
                     type: "command" as const,
-                    command: [
-                      process.execPath,
-                      standalone
-                        ? "boundary-hook"
-                        : join(import.meta.dir, "boundary-hook.ts"),
-                      boundary.exec,
-                      boundary.scratch,
-                    ]
-                      .map(shellQuote)
-                      .join(" "),
+                    command: `${shellQuote(boundary.hook)} || exit 2`,
+                    timeout: HOOK_TIMEOUT_S,
                   },
                 ],
               },
@@ -183,6 +293,33 @@ export const claudeBoundaryOptions = (boundary: Boundary | undefined) =>
         },
       }
     : {};
+
+/** The boundary hook's entry in the `--settings` JSON {@link claudeBoundaryOptions} launches a CLI with: its command, still JSON-quoted. */
+const LAUNCHED_HOOK =
+  /"matcher":"Bash\|Monitor","hooks":\[\{"type":"command","command":("(?:[^"\\]|\\.)*")/;
+const HOOK_COMMAND = /^'([^']+\/hook)' \|\| exit 2$/;
+
+/**
+ * The boundary hook the claude CLI `pid` was launched with, read off its
+ * command line: `hook` for one launched with a workspace's {@link hookScript},
+ * `stale` for any other boundary hook — the form before the script named
+ * cawco's versioned binary, which an update deletes — and nothing for a CLI
+ * launched without a boundary.
+ */
+export const launchedHook = async (
+  pid: number
+): Promise<{ hook: string } | "stale" | undefined> => {
+  const commandLine =
+    process.platform === "linux"
+      ? (await readFile(`/proc/${pid}/cmdline`, "utf8")).replaceAll("\0", " ")
+      : (await Bun.$`ps -ww -o args= -p ${pid}`.quiet()).text();
+  const quoted = LAUNCHED_HOOK.exec(commandLine)?.[1];
+  if (!quoted) {
+    return;
+  }
+  const hook = HOOK_COMMAND.exec(JSON.parse(quoted) as string)?.[1];
+  return hook ? { hook } : "stale";
+};
 
 /** The boundary a spawn is bounded to, running; none for a spawn without a workspace. */
 export const boundaryFor = (
@@ -287,7 +424,9 @@ const ensure = async (ref: WorkspaceRef): Promise<Boundary> => {
   const held = await readHeld(ref.id);
   if (held && (await running(client, ref.id, held))) {
     if (process.platform !== "darwin" || held.secretsMasked) {
-      return held;
+      // Written again each time: one an earlier agent started may have no
+      // hook yet, or one that reaches cawco another way.
+      return armHook(ref.id, held);
     }
     const listing = await Bun.$`ps -axwwE -o pid=,command=`.quiet();
     const active = listing
@@ -313,7 +452,12 @@ const ensure = async (ref: WorkspaceRef): Promise<Boundary> => {
 /**
  * The anchor's setup, run as root of a fresh user namespace (so the mounts
  * are allowed) with its own pid and mount namespaces. Everything goes
- * read-only, the writable paths come back, the scratch dir becomes `/tmp`
+ * read-only — the kernel's `mount_setattr(AT_RECURSIVE)`, called directly:
+ * util-linux's `ro=recursive` is that call only where libmount was built with
+ * the new mount API (2.42 here), and elsewhere (2.41.3, Ubuntu's) it exits 0
+ * having remounted `/` alone, every mount under it still writable — so the
+ * anchor checks that none is left writable, and refuses otherwise. The
+ * writable paths come back, the scratch dir becomes `/tmp`
  * (and stays writable at its own path, where the executor's `--cwd-out`
  * files land; a mountpoint both places, so nothing inside can remove it),
  * the user runtime dir becomes a private one, sessiond's directory an empty
@@ -334,7 +478,10 @@ const ANCHOR = `exec 2>&1
 set -eu
 ws=$1 scratch=$2 run=$3 uid=$4 gid=$5 runtime=$6 hidden=$7 ssh=$8 home=$9
 shift 9
-mount -o remount,bind,ro=recursive /
+# mount_setattr (syscall 442 on x86_64 and arm64): AT_FDCWD "/", AT_RECURSIVE, attr_set MOUNT_ATTR_RDONLY
+perl -e 'my ($path, $attr) = ("/", pack("Q4", 1, 0, 0, 0)); syscall(442, -100, $path, 0x8000, $attr, 32) == 0 or die "mount_setattr: $!"'
+writable=$(awk '$6 !~ /(^|,)ro(,|$)/ { print $5 }' /proc/self/mountinfo)
+if [ -n "$writable" ]; then echo "these mounts stayed writable: $writable"; exit 1; fi
 mount -o remount,rw /proc
 for path in "$ws" "$scratch" "$run" "$@"; do
   mount --bind "$path" "$path"
@@ -684,7 +831,7 @@ const start = async (
   if (!proc?.alive) {
     throw refusal(ref.id, "the boundary exited right after it started");
   }
-  let held: Held;
+  let held: Omit<Held, "hook">;
   const exec = join(dir, "exec");
   if (linux) {
     // sessiond's child is the unshare process; the anchor is its one child.
@@ -708,7 +855,7 @@ const start = async (
       path: ref.path,
       secretsMasked: true,
     };
-    await writeFile(exec, linuxExec(ref.id, pid, identity), { mode: 0o755 });
+    await writeWhole(exec, linuxExec(ref.id, pid, identity), 0o755);
   } else {
     held = {
       exec,
@@ -718,16 +865,13 @@ const start = async (
       path: ref.path,
       secretsMasked: true,
     };
-    await writeFile(
+    await writeWhole(
       exec,
       darwinExec(ref.id, proc.pid, join(dir, "runner.fifo"), scratch),
-      {
-        mode: 0o755,
-      }
+      0o755
     );
   }
-  await writeFile(join(dir, "boundary.json"), `${JSON.stringify(held)}\n`);
-  return held;
+  return armHook(ref.id, held);
 };
 
 const kill = (pid: number, signal: NodeJS.Signals): void => {

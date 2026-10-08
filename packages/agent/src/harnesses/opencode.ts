@@ -829,16 +829,27 @@ import { tool } from "@opencode-ai/plugin";
 const cawcoBase = ${JSON.stringify(harnessMcpUrl(""))};
 const cawcoWorkspaces = ${JSON.stringify(workspacesDir())};
 const cawcoCredentials = ${JSON.stringify(opencodeCredentialFile())};
-const boundaryOf = (directory) => {
+// The workspace whose clone \`directory\` is, by the records the agent keeps
+// for it outside the clone: \`create.json\`, written before the clone is cut and
+// removed only with it, and the running boundary's \`boundary.json\`.
+const workspaceOf = (directory) => {
   let ids = [];
   try { ids = readdirSync(cawcoWorkspaces); } catch { return undefined; }
-  for (const id of ids) {
-    try {
-      const held = JSON.parse(readFileSync(cawcoWorkspaces + "/" + id + "/boundary.json", "utf8"));
-      if (held.path === directory) return held;
-    } catch {}
+  return ids.find((id) => ["create.json", "boundary.json"].some((name) => {
+    try { return JSON.parse(readFileSync(cawcoWorkspaces + "/" + id + "/" + name, "utf8")).path === directory; } catch { return false; }
+  }));
+};
+// The workspace's boundary as it stands at the call. None means the command
+// does not run: never the built-in bash, which would run it outside.
+const boundaryOf = (id, directory) => {
+  let held;
+  try { held = JSON.parse(readFileSync(cawcoWorkspaces + "/" + id + "/boundary.json", "utf8")); } catch (error) {
+    throw new Error("cawco: workspace " + id + "'s boundary could not be read (" + error.message + "), so this command did not run. The workspace's next session starts it again.");
   }
-  return undefined;
+  if (held.path !== directory || typeof held.exec !== "string") {
+    throw new Error("cawco: workspace " + id + "'s boundary record does not name this clone, so this command did not run.");
+  }
+  return held;
 };
 const OUTPUT_LIMIT = 30000;
 // What each code-mode program's calls answered, by session and the program's
@@ -852,7 +863,7 @@ const sessionEnv = (sessionID) => {
   const held = sessionHeld(sessionID);
   return held ? { ${JSON.stringify(CAWCO_ENV.instanceId)}: held.instanceId, ${JSON.stringify(CAWCO_ENV.sessionCredential)}: held.credential } : {};
 };
-const boundedBash = (held) => tool({
+const boundedBash = (id, directory) => tool({
   description: "Runs a bash command inside this workspace's boundary, in the workspace's clone unless workdir says otherwise. The command can write only the clone, /tmp (the workspace's own), ~/.cache, ~/.bun and ~/.npm; it sees and signals only this workspace's processes, and cannot reach the service manager. Each call is a fresh shell. The output is stdout and stderr together, cut at 30000 characters.",
   args: {
     command: tool.schema.string().describe("The command to run"),
@@ -861,6 +872,7 @@ const boundedBash = (held) => tool({
     description: tool.schema.string().describe("What the command does, in 5-10 words"),
   },
   async execute(args, context) {
+    const held = boundaryOf(id, directory);
     const timeout = Math.min(args.timeout ?? 120000, 600000);
     const child = spawn(held.exec, [args.command], { cwd: args.workdir ?? context.directory, env: { ...process.env, ...sessionEnv(context.sessionID) }, detached: true, stdio: ["ignore", "pipe", "pipe"] });
     let output = "";
@@ -883,7 +895,7 @@ const boundedBash = (held) => tool({
   },
 });
 export const CawcoContext = async ({ directory, serverUrl }) => {
-const bounded = boundaryOf(directory);
+const workspace = workspaceOf(directory);
 const cawcoStep = async (context) => {
   const response = await fetch(cawcoBase + "/api/instances");
   if (!response.ok) throw new Error(await response.text());
@@ -926,7 +938,7 @@ return ({
         return written.text();
       }
     }),
-    ...(bounded ? { bash: boundedBash(bounded) } : {})
+    ...(workspace ? { bash: boundedBash(workspace, directory) } : {})
   },
   "tool.execute.before": async (input, output) => {
     if (input.tool.startsWith("cawco_")) {

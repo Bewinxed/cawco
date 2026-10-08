@@ -82,6 +82,7 @@ import { expandHome, runFs } from "./fs";
 import type { Harness, HarnessContext, HarnessSession } from "./harness";
 import {
   HarnessRecoveryRefused,
+  HeldProcessRefused,
   HubContractRefused,
   SessionAddressRefused,
 } from "./harness";
@@ -194,13 +195,6 @@ export type FrameSink = (
   ) &
     Partial<FrameProvenance> & { processGeneration?: string }
 ) => boolean;
-
-/**
- * A Claude or pi session whose CawCo MCP credential did not install (a
- * process this agent launched) or verify (one it attached to). The session
- * has been stopped; this is its spawn's failure, with the reason.
- */
-class SessionCredentialRefused extends Error {}
 
 const warn = (message: string): void => {
   Effect.runFork(Effect.logWarning(message));
@@ -1530,7 +1524,7 @@ export class SessionSupervisor {
         problem instanceof Error ? problem.message : String(problem);
       // biome-ignore lint/suspicious/noEmptyBlockStatements: best effort — the refusal below is the outcome either way
       await session.stop().catch(() => {});
-      throw new SessionCredentialRefused(
+      throw new HeldProcessRefused(
         launched
           ? `The session's CawCo MCP credential could not be installed, so it was stopped before its first turn: ${message}`
           : `The session's CawCo MCP credential could not be verified after the agent attached to it, so it was stopped: ${message}`,
@@ -1821,12 +1815,9 @@ export class SessionSupervisor {
         }
         return;
       }
-      // A probe that found nothing to attach says nothing; a held process that
-      // could not prove its credential was stopped, and that is its failure.
-      if (
-        payload.reattachOnly &&
-        !(error instanceof SessionCredentialRefused)
-      ) {
+      // A probe that found nothing to attach says nothing; a held process
+      // refused at attach was stopped, and that is its failure.
+      if (payload.reattachOnly && !(error instanceof HeldProcessRefused)) {
         return;
       }
       const message = error instanceof Error ? error.message : String(error);
@@ -2286,9 +2277,9 @@ export class SessionSupervisor {
           adopted.push(entry.row.instanceId);
         } catch (problem) {
           failed.add(entry.row.instanceId);
-          // A child that could not prove its credential was stopped: an end,
-          // not a recovery the hub retries.
-          if (problem instanceof SessionCredentialRefused) {
+          // A child refused at attach (its credential, its boundary hook) was
+          // stopped: an end, not a recovery the hub retries.
+          if (problem instanceof HeldProcessRefused) {
             this.#fail(
               entry.row.instanceId,
               problem,
