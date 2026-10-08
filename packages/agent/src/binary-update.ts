@@ -241,8 +241,8 @@ async function launchApplyHelper(
 }
 
 /**
- * A finished one-shot macOS job and its file are removed the next time an agent
- * starts. The helper restarts the agent itself mid-update, so a helper that is
+ * A finished one-shot macOS job and its file are removed on the updater's next
+ * pass. The helper restarts the agent itself mid-update, so a helper that is
  * still running is left alone: booting its job out would kill it half-way.
  */
 async function removeFinishedHelpers(): Promise<void> {
@@ -311,7 +311,6 @@ export class BinaryUpdater {
     if (!(await readInstallation())) {
       return;
     }
-    await removeFinishedHelpers();
     this.#hostsHub = (await readInstallation())?.role === "hub";
     await this.#load();
     await this.#noteRecovery();
@@ -528,6 +527,10 @@ export class BinaryUpdater {
 
   async #pass(): Promise<void> {
     try {
+      // Every pass, not only at start: the helper restarts this agent while it
+      // still holds its lock, so the start-up sweep always skips the job of the
+      // update that just landed.
+      await removeFinishedHelpers();
       await this.#load();
       await this.#noteRecovery();
       await this.#check();
