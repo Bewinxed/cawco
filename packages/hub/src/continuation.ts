@@ -50,13 +50,20 @@ export interface ContinueRequest {
      * The new session takes the source's place, and the source ends: its
      * account reached its limit and it goes on on `account` from a summary.
      * What the source's transcript then says names both accounts, the
-     * context it left behind, and the window's percent when the summary was
-     * written ahead of the limit (null: written at the move).
+     * context it left behind, and where its summary came from.
      */
     inherit?: {
       fromAccountId: string;
       contextTokens: number | null;
-      preparedAtPct: number | null;
+      /**
+       * The summary already kept for the source's conversation as it stands
+       * (the job writes none): the account that wrote it, and the window's
+       * percent when it was written ahead of the limit (null: at an earlier
+       * move). Null: the job's summariser writes it, on `summarizer.account`.
+       */
+      written: { onAccountId: string; atPct: number | null } | null;
+      /** Until when a summary the job writes is kept for a retry (epoch ms): the source's reset. */
+      keepUntil: number;
     };
     bootstrap?: { repo: string; baseDir: string };
     cwd?: string;
@@ -95,6 +102,12 @@ export interface PreparedContinuation {
 export interface Extracted {
   /** Files changed, files read, commands run — as plain text. */
   artifacts: string;
+  /**
+   * The uuid of the last transcript entry before the tail: how far a summary
+   * of {@link middle} reaches. A summary made at another `covers` answers
+   * for another conversation. Null when nothing comes before the tail.
+   */
+  covers: string | null;
   /** Everything before the tail, one string per user turn. */
   middle: string[];
   /** The newest user turns that fit the tail budget. */
@@ -578,6 +591,7 @@ export function extractTranscript(
   }
   return {
     artifacts: artifactIndex(ownMessages(whole)),
+    covers: turns[split - 1]?.at(-1)?.uuid ?? null,
     middle: turns
       .slice(0, split)
       .map((turn) => renderTurn(turn, results, true))

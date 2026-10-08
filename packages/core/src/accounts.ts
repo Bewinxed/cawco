@@ -368,6 +368,8 @@ export type AccountMove =
       kind: "continued";
       from: NamedAccount;
       to: NamedAccount;
+      /** The account whose summariser wrote the summary it went on from. */
+      writtenOn: NamedAccount;
       tokens: number | null;
       /** The window's percent when the summary was written ahead of the limit; null when it was written at the move. */
       preparedAtPct: number | null;
@@ -482,7 +484,7 @@ export const accountMoveWords = (
         line: `Continued on ${move.to.name} from a summary · ${tokenWords(move.tokens)} stayed on ${move.from.name}`,
         detail:
           move.preparedAtPct === null
-            ? `Summary written on ${move.to.name}, at the move`
+            ? `Summary written on ${move.writtenOn.name}, at the move`
             : `Summary written at ${Math.round(move.preparedAtPct)}%, before the move`,
       };
   }

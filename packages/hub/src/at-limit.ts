@@ -170,10 +170,23 @@ export const nearestLimit = (
     undefined
   );
 
-/** A summary written ahead of the limit, handed to the continuation. */
+/**
+ * A summary kept for a session at its limit, handed to its continuation:
+ * used only if the conversation still ends its summarised part at `covers`.
+ */
 export interface KeptSummary {
-  /** The window's percent when it was written. */
-  percent: number;
+  /** The last transcript entry it covers. */
+  covers: string;
+  /** The window's percent when it was written ahead of the limit; null: at a move. */
+  percent: number | null;
+  text: string;
+  /** The account whose summariser wrote it. */
+  writtenOn: string;
+}
+
+/** A summary its summariser wrote: the words, and the last transcript entry they cover. */
+export interface Summarised {
+  covers: string;
   text: string;
 }
 
@@ -183,16 +196,18 @@ export interface AtLimitPorts {
   accountOf: (row: LimitRow) => string | undefined;
   changed: () => void;
   /**
-   * Continues `row` on `accountId` from a summary (`kept` when one was
-   * written ahead; otherwise one is written there), the new session taking
-   * its place once `row` has ended. Throws when `row` cannot be read to
-   * start one; a later step that fails comes back as
-   * {@link createAtLimit}'s `continuationFailed`.
+   * Continues `row` on `accountId` from a summary, the new session taking
+   * its place once `row` has ended: `kept` when it still covers the
+   * conversation as it stands, otherwise one written there and kept for
+   * `row` until `keepUntil`, so a retry reads it again rather than writing
+   * another. Throws when `row` cannot be read to start one; a later step
+   * that fails comes back as {@link createAtLimit}'s `continuationFailed`.
    */
   continueOn: (
     row: LimitRow,
     accountId: string,
-    kept: KeptSummary | undefined
+    kept: KeptSummary | undefined,
+    keepUntil: number
   ) => Promise<void>;
   /** Whether a continuation of `row` is under way: nothing else is done to it meanwhile. */
   continuing: (row: LimitRow) => boolean;
@@ -211,7 +226,10 @@ export interface AtLimitPorts {
    * A summary of `row` written on `accountId`, its own while it has room.
    * Undefined when nothing comes before its last turns.
    */
-  summarise: (row: LimitRow, accountId: string) => Promise<string | undefined>;
+  summarise: (
+    row: LimitRow,
+    accountId: string
+  ) => Promise<Summarised | undefined>;
   /** Who would carry `row` off `accountId`: placement for its kind, excluding that account. */
   target: (row: LimitRow, accountId: string) => string | null;
 }
@@ -348,6 +366,17 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     };
   };
 
+  /** When `row` may go on on `current` again: the reset that refused it, else the next look the policy allows. */
+  const holdUntil = (row: LimitRow, current: Account, now: number): number =>
+    refusedUntil(
+      db.accounts.bench(now),
+      readingOf(current.id),
+      current.id,
+      row.model,
+      now
+    ) ??
+    now + db.accounts.routing(current.provider).atLimit.waitMinutes * MINUTE_MS;
+
   /**
    * Continuing `row` on `target` failed at `step`: it is the one session
    * running, still on `current`. Its transcript says so (once for the same
@@ -377,19 +406,10 @@ export const createAtLimit = (ports: AtLimitPorts) => {
         ...ports.named(row),
       });
     }
-    const now = Date.now();
-    const policy = db.accounts.routing(current.provider).atLimit;
     db.atLimit.putHold({
       instanceId: row.id,
       accountId: current.id,
-      until:
-        refusedUntil(
-          db.accounts.bench(now),
-          readingOf(current.id),
-          current.id,
-          row.model,
-          now
-        ) ?? now + policy.waitMinutes * MINUTE_MS,
+      until: holdUntil(row, current, Date.now()),
     });
     console.warn(
       `[at-limit] ${row.id}: continuing on ${accountName(target)} failed at ${step}: ${reason}`
@@ -437,20 +457,32 @@ export const createAtLimit = (ports: AtLimitPorts) => {
         ports.move(row, target.id);
         return;
       }
+      // The summary kept for it (ahead of the limit, or at a move that
+      // failed), stays kept until it ends or its window resets: a retry
+      // reads it again for as long as it covers the conversation.
       const kept = db.atLimit.summary(row.id);
       const summary =
         kept?.summary &&
+        kept.covers &&
         kept.accountId === current.id &&
         Date.parse(kept.resetsAt) > now
-          ? { text: kept.summary, percent: kept.percent }
+          ? {
+              text: kept.summary,
+              covers: kept.covers,
+              percent: kept.percent,
+              writtenOn: kept.writtenOn,
+            }
           : undefined;
       try {
-        await ports.continueOn(row, target.id, summary);
+        await ports.continueOn(
+          row,
+          target.id,
+          summary,
+          holdUntil(row, current, now)
+        );
       } catch (error) {
         unmoved(row, current, target, "prepare", messageOf(error));
-        return;
       }
-      db.atLimit.dropSummary(row.id);
     } finally {
       acting.delete(row.id);
       ports.changed();
@@ -494,6 +526,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       !db.atLimit.startSummary({
         instanceId: row.id,
         accountId: current.id,
+        writtenOn: current.id,
         resetsAt: window.resetsAt,
         percent: Math.round(window.percent),
       })
@@ -504,7 +537,10 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     try {
       const summary = await ports.summarise(row, current.id);
       if (summary) {
-        db.atLimit.writeSummary(row.id, summary);
+        db.atLimit.writeSummary(row.id, {
+          covers: summary.covers,
+          summary: summary.text,
+        });
         console.info(
           `[at-limit] ${row.id}: summary kept ahead of ${accountName(current)}'s limit (${window.percent}%)`
         );
@@ -530,7 +566,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       ) {
         db.atLimit.dropSummary(kept.instanceId);
         console.info(
-          `[at-limit] ${kept.instanceId}: summary kept ahead of the limit discarded`
+          `[at-limit] ${kept.instanceId}: summary kept at its limit discarded`
         );
       }
     }

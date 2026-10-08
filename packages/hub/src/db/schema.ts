@@ -1459,18 +1459,30 @@ export const limitHolds = sqliteTable("limit_holds", {
 });
 
 /**
- * A summary written ahead of the limit, while the session's account still had
- * room: what continuing it on another account starts from, should its window
- * run out. Discarded when that window resets first. `summary` null: the
- * summariser is still writing it.
+ * A summary of a session at its account's limit: what continuing it on
+ * another account starts from. Written ahead of the limit while its account
+ * still had room (`percent`), or at a move (`percent` null), and kept while
+ * it stays on that account, so a retry after a failed continuation starts
+ * from it again. It answers for the conversation up to `covers` only: once
+ * the session's summarised part ends elsewhere, a fresh one replaces it.
+ * Discarded when the window resets, or the session ends or leaves the
+ * account. `summary` and `covers` null: the summariser is still writing it.
  */
 export const limitSummaries = sqliteTable("limit_summaries", {
   instanceId: text("instance_id").primaryKey(),
+  /** The account the session is on, at its limit. */
   accountId: text("account_id").notNull(),
+  /** The account whose summariser wrote it. */
+  writtenOn: text("written_on").notNull(),
   /** The reset of the window it was written against (ISO). */
   resetsAt: text("resets_at").notNull(),
-  /** That window's percent when the summary was started. */
-  percent: integer("percent").notNull(),
+  /** That window's percent when a summary written ahead of the limit was started; null: written at a move. */
+  percent: integer("percent"),
+  /**
+   * The last transcript entry the summary covers: the end of the part of
+   * the conversation a continuation summarises (the rest goes verbatim).
+   */
+  covers: text("covers"),
   summary: text("summary"),
   preparedAt: timestamp("prepared_at")
     .notNull()

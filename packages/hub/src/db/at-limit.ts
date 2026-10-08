@@ -1,5 +1,5 @@
 import type { AccountMove } from "@cawco/core";
-import { asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import { limitEvents, limitHolds, limitSummaries } from "./schema";
 
@@ -12,16 +12,24 @@ export interface LimitHold {
   until: number | null;
 }
 
-/** A summary written ahead of the limit, or being written. */
+/**
+ * A session's summary at its account's limit, written ahead of the limit or
+ * at a move, or being written (schema `limitSummaries`).
+ */
 export interface LimitSummary {
+  /** The account the session is on. */
   accountId: string;
+  /** The last transcript entry it covers; null while the summariser writes it. */
+  covers: string | null;
   instanceId: string;
-  /** That window's percent when it was started. */
-  percent: number;
+  /** That window's percent when a summary ahead of the limit was started; null: written at a move. */
+  percent: number | null;
   /** The reset of the window it was written against (ISO). */
   resetsAt: string;
   /** Null while the summariser writes it. */
   summary: string | null;
+  /** The account whose summariser wrote it. */
+  writtenOn: string;
 }
 
 /** One line the hub wrote into a session's transcript at its account's limit. */
@@ -40,16 +48,30 @@ export interface AtLimitDb {
   readonly forget: (instanceIds: string[]) => void;
   readonly hold: (instanceId: string) => LimitHold | undefined;
   readonly holds: () => LimitHold[];
+  /** Keeps a summary written at a move, in place of any kept before. */
+  readonly keepSummary: (
+    summary: Omit<LimitSummary, "covers" | "summary"> & {
+      covers: string;
+      summary: string;
+    },
+    at?: number
+  ) => void;
   readonly putEvent: (event: LimitEvent) => void;
   readonly putHold: (hold: LimitHold) => void;
   /** Starts a summary ahead of the limit; false when one is already kept or being written. */
   readonly startSummary: (
-    summary: Omit<LimitSummary, "summary">,
+    summary: Omit<LimitSummary, "covers" | "summary" | "percent"> & {
+      percent: number;
+    },
     at?: number
   ) => boolean;
   readonly summaries: () => LimitSummary[];
   readonly summary: (instanceId: string) => LimitSummary | undefined;
-  readonly writeSummary: (instanceId: string, summary: string) => void;
+  /** A summary started ahead of the limit, written: its words and the last entry they cover. */
+  readonly writeSummary: (
+    instanceId: string,
+    written: { covers: string; summary: string }
+  ) => void;
 }
 
 type HoldRow = typeof limitHolds.$inferSelect;
@@ -63,8 +85,10 @@ const toHold = (row: HoldRow): LimitHold => ({
 const toSummary = (row: typeof limitSummaries.$inferSelect): LimitSummary => ({
   instanceId: row.instanceId,
   accountId: row.accountId,
+  writtenOn: row.writtenOn,
   resetsAt: row.resetsAt,
   percent: row.percent,
+  covers: row.covers,
   summary: row.summary,
 });
 
@@ -100,8 +124,15 @@ export const atLimitDb = (db: BunSQLiteDatabase): AtLimitDb => ({
       .get();
     return row ? toSummary(row) : undefined;
   },
+  keepSummary: (summary, at = Date.now()) => {
+    const values = { ...summary, preparedAt: new Date(at) };
+    db.insert(limitSummaries)
+      .values(values)
+      .onConflictDoUpdate({ target: limitSummaries.instanceId, set: values })
+      .run();
+  },
   startSummary: (
-    { instanceId, accountId, resetsAt, percent },
+    { instanceId, accountId, writtenOn, resetsAt, percent },
     at = Date.now()
   ) =>
     db
@@ -109,18 +140,26 @@ export const atLimitDb = (db: BunSQLiteDatabase): AtLimitDb => ({
       .values({
         instanceId,
         accountId,
+        writtenOn,
         resetsAt,
         percent,
+        covers: null,
         summary: null,
         preparedAt: new Date(at),
       })
       .onConflictDoNothing()
       .returning()
       .all().length > 0,
-  writeSummary: (instanceId, summary) => {
+  // Only into the row it started: a summary kept at a move meanwhile stands.
+  writeSummary: (instanceId, { covers, summary }) => {
     db.update(limitSummaries)
-      .set({ summary })
-      .where(eq(limitSummaries.instanceId, instanceId))
+      .set({ covers, summary })
+      .where(
+        and(
+          eq(limitSummaries.instanceId, instanceId),
+          isNull(limitSummaries.summary)
+        )
+      )
       .run();
   },
   dropSummary: (instanceId) => {

@@ -25140,6 +25140,10 @@
                   "to": {
                     "$ref": "#/components/schemas/NamedAccount"
                   },
+                  "writtenOn": {
+                    "$ref": "#/components/schemas/NamedAccount",
+                    "description": "The account whose summariser wrote the summary it went on from."
+                  },
                   "tokens": {
                     "type": [
                       "null",
@@ -25159,7 +25163,8 @@
                   "kind",
                   "preparedAtPct",
                   "to",
-                  "tokens"
+                  "tokens",
+                  "writtenOn"
                 ]
               },
               {
@@ -29743,6 +29748,10 @@
                   "to": {
                     "$ref": "#/components/schemas/NamedAccount"
                   },
+                  "writtenOn": {
+                    "$ref": "#/components/schemas/NamedAccount",
+                    "description": "The account whose summariser wrote the summary it went on from."
+                  },
                   "tokens": {
                     "type": [
                       "null",
@@ -29762,7 +29771,8 @@
                   "kind",
                   "preparedAtPct",
                   "to",
-                  "tokens"
+                  "tokens",
+                  "writtenOn"
                 ]
               },
               {

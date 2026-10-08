@@ -202,7 +202,7 @@ import {
   clientCopy,
   createAskPresenter,
 } from "./ask-presentation";
-import { createAtLimit, type KeptSummary } from "./at-limit";
+import { createAtLimit, type KeptSummary, type Summarised } from "./at-limit";
 import { createBinaryUpdates } from "./binary-updates";
 import { type Caw, cawRoutes, createCaw, withCawDenials } from "./caw";
 import { DB_PATH, HUB_VERSION, SPAWN_START_TIMEOUT_MS } from "./config";
@@ -6082,6 +6082,7 @@ export const createServer = (
         return;
       }
       const summary = await continuationSummary(row);
+      keepAtMove(row, summary);
       // A Cancel that landed while the summariser answered stands.
       row = cancelledContinuation(id)
         ? undefined
@@ -6134,6 +6135,30 @@ export const createServer = (
     }
     await spawnTarget(row);
     return moveContinuation(row.id, { stage: "ending" });
+  };
+
+  /**
+   * The summary a continuation at an account's limit just wrote, kept for
+   * its source until its reset with the last transcript entry it covers: a
+   * retry after this job fails starts from it while the conversation has
+   * not moved, rather than writing another.
+   */
+  const keepAtMove = (row: ContinuationRow, summary: string): void => {
+    const { inherit } = row.request.target;
+    const { covers } = row.prepared.extracted;
+    const writtenOn = row.request.summarizer.account;
+    if (!(inherit && covers && writtenOn)) {
+      return;
+    }
+    db.atLimit.keepSummary({
+      instanceId: row.sourceInstanceId,
+      accountId: inherit.fromAccountId,
+      writtenOn,
+      resetsAt: new Date(inherit.keepUntil).toISOString(),
+      percent: null,
+      covers,
+      summary,
+    });
   };
 
   /** Whether `machineId` is here and can end a session now, not on its next register. */
@@ -6281,13 +6306,17 @@ export const createServer = (
     const { inherit, account } = request.target;
     const from = inherit ? db.accounts.get(inherit.fromAccountId) : undefined;
     const to = account ? db.accounts.get(account) : undefined;
+    const writtenOn = db.accounts.get(
+      inherit?.written?.onAccountId ?? request.summarizer.account ?? ""
+    );
     return inherit && from && to
       ? {
           kind: "continued",
           from: namedAccount(from),
           to: namedAccount(to),
+          writtenOn: namedAccount(writtenOn ?? to),
           tokens: inherit.contextTokens,
-          preparedAtPct: inherit.preparedAtPct,
+          preparedAtPct: inherit.written?.atPct ?? null,
         }
       : undefined;
   };
@@ -9663,14 +9692,40 @@ export const createServer = (
   };
 
   /**
+   * The summary kept for a session, when it covers its conversation as it
+   * stands: the part a continuation summarises still ends at the entry the
+   * summary was written up to. A session that took a turn since has moved
+   * that end, and its summary is stale.
+   */
+  const stillCovers = (
+    instanceId: string,
+    kept: KeptSummary | undefined,
+    prepared: PreparedContinuation
+  ): KeptSummary | undefined => {
+    if (!kept) {
+      return undefined;
+    }
+    const { covers } = prepared.extracted;
+    const holds = !!prepared.prompt && kept.covers === covers;
+    console.info(
+      `[at-limit] ${instanceId}: ${holds ? "reusing the summary kept" : "the summary kept is stale"} (it covers to ${kept.covers}; the conversation's summarised part ends at ${covers ?? "nothing"})`
+    );
+    return holds ? kept : undefined;
+  };
+
+  /**
    * Continues a session on `accountId` from a summary, the new session in
-   * its place (its parent, work item, thread and tab): the summary written
-   * ahead of the limit when there is one, else one written on `accountId`.
+   * its place (its parent, work item, thread and tab): the summary kept for
+   * it (ahead of the limit, or at a move that failed) when it covers the
+   * conversation as it stands now, so an unchanged conversation is never
+   * summarised twice; else one the job writes on `accountId` and keeps
+   * until `keepUntil`.
    */
   const continueOnAccount = async (
     row: ReturnType<typeof db.getInstancesByIds>[number],
     accountId: string,
-    kept: KeptSummary | undefined
+    kept: KeptSummary | undefined,
+    keepUntil: number
   ): Promise<void> => {
     const fromAccountId = row.accountId ?? machineAccount(db, row.machineId);
     if (!fromAccountId) {
@@ -9678,6 +9733,7 @@ export const createServer = (
     }
     const prepared = await prepareContinuation(row.id);
     const harness = (row.harness ?? "claude") as HarnessKind;
+    const reused = stillCovers(row.id, kept, prepared);
     startContinuation(
       prepared,
       {
@@ -9701,24 +9757,31 @@ export const createServer = (
           inherit: {
             fromAccountId,
             contextTokens: row.contextTokens,
-            preparedAtPct: kept?.percent ?? null,
+            written: reused
+              ? { onAccountId: reused.writtenOn, atPct: reused.percent }
+              : null,
+            keepUntil,
           },
         },
       },
-      kept?.text
+      reused?.text
     );
   };
 
-  /** A summary of a session written on `accountId`; undefined when nothing comes before its last turns. */
+  /**
+   * A summary of a session written on `accountId`, with the last transcript
+   * entry it covers; undefined when nothing comes before its last turns.
+   */
   const summariseOn = async (
     row: ReturnType<typeof db.getInstancesByIds>[number],
     accountId: string
-  ): Promise<string | undefined> => {
+  ): Promise<Summarised | undefined> => {
     const prepared = await prepareContinuation(row.id);
-    if (!prepared.prompt) {
+    const { covers } = prepared.extracted;
+    if (!(prepared.prompt && covers)) {
       return undefined;
     }
-    return await summariserRun(
+    const text = await summariserRun(
       prepared.source,
       {
         harness: (row.harness ?? "claude") as HarnessKind,
@@ -9730,6 +9793,7 @@ export const createServer = (
       () => false,
       unwatchedMode(row.permissionMode)
     );
+    return { text, covers };
   };
 
   const atLimit = createAtLimit({
