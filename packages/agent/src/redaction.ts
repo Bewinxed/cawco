@@ -17,6 +17,12 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Envelope } from "@cawco/core";
+import {
+  encodeJson,
+  type JsonPieces,
+  jsonSizeEstimate,
+  textPieces,
+} from "@cawco/core/json-stream";
 import { sessionIdentityDir } from "@cawco/core/paths";
 import { delegationHubUrl } from "./delegation";
 
@@ -152,28 +158,87 @@ const carries = new Map<
   { envelope: Envelope; delta: Delta; text: string }
 >();
 
+/** One message for the socket: its JSON as it is written, and about how long. */
+export interface OutboundMessage {
+  chars: number;
+  pieces: JsonPieces;
+}
+
+const whole = (text: string): OutboundMessage => ({
+  pieces: textPieces(text),
+  chars: text.length,
+});
+
 /**
- * What goes on the socket for `envelope`, redacted: usually one message. A
- * credential streamed across two deltas is never sent whole in pieces: a
- * delta ending in the start of its session's credential holds that tail back
- * and sends it with the next piece, or ahead of the next frame about that
- * session.
+ * `source` with every credential replaced, a piece at a time. Each piece is
+ * redacted joined to the end of the one before, and that end is held back
+ * from the output: as long as the longest credential, less one character, so
+ * a credential that starts in text already given lies wholly inside it.
  */
-export const outbound = (envelope: Envelope): string[] => {
-  const out: string[] = [];
+const redactPieces = (source: JsonPieces): JsonPieces => {
+  let longest = 0;
+  for (const value of loaded()) {
+    longest = Math.max(longest, value.length);
+  }
+  const hold = Math.max(0, longest - 1);
+  let carry = "";
+  let ended = false;
+  return {
+    next: () => {
+      if (ended) {
+        return;
+      }
+      const piece = source.next();
+      if (piece === undefined) {
+        ended = true;
+        const rest = redactText(carry);
+        carry = "";
+        if (!rest) {
+          return;
+        }
+        return rest;
+      }
+      const text = redactText(carry + piece);
+      if (text.length <= hold) {
+        carry = text;
+        return "";
+      }
+      carry = text.slice(text.length - hold);
+      return text.slice(0, text.length - hold);
+    },
+  };
+};
+
+/**
+ * What goes on the socket for `envelope`, redacted: usually one message,
+ * written as it is sent ({@link encodeJson}), so a transcript of tens of MB
+ * is never encoded or redacted in one call. A credential streamed across two
+ * deltas is never sent whole in pieces: a delta ending in the start of its
+ * session's credential holds that tail back and sends it with the next
+ * piece, or ahead of the next frame about that session.
+ */
+export const outbound = (envelope: Envelope): OutboundMessage[] => {
+  const out: OutboundMessage[] = [];
   const key = envelope.instanceId;
   const delta = deltaOf(envelope);
   const carried = key ? carries.get(key) : undefined;
   if (key && carried && !(delta && delta.index === carried.delta.index)) {
     carries.delete(key);
     out.push(
-      redactText(
-        JSON.stringify(withText(carried.envelope, carried.delta, carried.text))
+      whole(
+        redactText(
+          JSON.stringify(
+            withText(carried.envelope, carried.delta, carried.text)
+          )
+        )
       )
     );
   }
   if (!(key && delta)) {
-    out.push(redactText(JSON.stringify(envelope)));
+    out.push({
+      pieces: redactPieces(encodeJson(envelope)),
+      chars: jsonSizeEstimate(envelope),
+    });
     return out;
   }
   const joined = redactText(
@@ -183,7 +248,7 @@ export const outbound = (envelope: Envelope): string[] => {
   const hold = heldTail(joined, bySession.get(key));
   const sent = joined.slice(0, joined.length - hold);
   if (sent) {
-    out.push(JSON.stringify(withText(envelope, delta, sent)));
+    out.push(whole(JSON.stringify(withText(envelope, delta, sent))));
   }
   if (hold) {
     carries.set(key, { envelope, delta, text: joined.slice(-hold) });

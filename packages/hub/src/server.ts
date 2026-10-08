@@ -189,7 +189,7 @@ import {
 } from "@cawco/core/binary-updates";
 import { hashFiles } from "@cawco/core/file-hash";
 import { machineId as hostMachineId } from "@cawco/core/machine-id";
-import { WIRE_FRAME_LIMIT_BYTES, WIRE_PENDING } from "@cawco/core/wire";
+import { WIRE_FRAME_LIMIT_BYTES } from "@cawco/core/wire";
 import { Elysia, t, ValidationError } from "elysia";
 import { websocket } from "elysia/websocket";
 import {
@@ -5538,26 +5538,24 @@ export const createServer = (
     >(
       handle: (ws: S, message: unknown) => void
     ) =>
-    (ws: S, incoming: unknown): void => {
-      // A message too long for one frame arrives as parts (`@cawco/core/wire`).
-      const message = receiveFrame(ws, incoming);
-      if (message === WIRE_PENDING) {
-        return;
-      }
-      try {
-        handle(ws, message);
-      } catch (error) {
-        if (isEnvelope(message)) {
-          sendFrame(
-            ws,
-            failure(
-              message,
-              error instanceof Error ? error.message : String(error)
-            )
-          );
+    (ws: S, incoming: unknown): void =>
+      // A message too long for one frame arrives as parts, read in order
+      // through the socket's inbox (`wire-socket.ts`).
+      receiveFrame(ws, incoming, (message) => {
+        try {
+          handle(ws, message);
+        } catch (error) {
+          if (isEnvelope(message)) {
+            sendFrame(
+              ws,
+              failure(
+                message,
+                error instanceof Error ? error.message : String(error)
+              )
+            );
+          }
         }
-      }
-    };
+      });
   const guardedAgentMessage =
     <
       S extends HubSocket & {
@@ -5567,69 +5565,69 @@ export const createServer = (
     >(
       handle: (ws: S, message: unknown) => Promise<void>
     ) =>
-    (ws: S, incoming: unknown): Promise<void> => {
-      // A transcript read, tens of MB, arrives as parts (`@cawco/core/wire`).
-      const message = receiveFrame(ws, incoming);
-      if (message === WIRE_PENDING) {
-        return Promise.resolve();
-      }
-      return handle(ws, message).catch(
-        // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: acknowledgement failures and correlated request failures share one socket error policy with explicit traces
-        (error: unknown) => {
-          const reason = error instanceof Error ? error.message : String(error);
-          if (!isEnvelope(message)) {
-            console.error(`[hub] malformed agent frame failed: ${reason}`);
-            return;
-          }
-          console.error(
-            `[hub] ${message.verb} for ${message.instanceId ?? "the machine"} failed: ${reason}`
-          );
-          const awaitsAddress =
-            message.verb === "frames" &&
-            peek(message.payload, "kind") === "session_address";
-          const replaysAddresses =
-            message.verb === "heartbeat" &&
-            !!addressClaims(message.payload)?.length;
-          if (
-            message.verb === "register" ||
-            awaitsAddress ||
-            replaysAddresses
-          ) {
-            ws.close(
-              1011,
-              "Session acknowledgement failed. Reconnect to retry custody."
+    (ws: S, incoming: unknown): void =>
+      // A transcript read, tens of MB, arrives as parts, read in order
+      // through the socket's inbox (`wire-socket.ts`).
+      receiveFrame(ws, incoming, (message) => {
+        // biome-ignore lint/complexity/noVoid: a failure is answered by the catch below; nothing awaits a frame
+        void handle(ws, message).catch(
+          // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: acknowledgement failures and correlated request failures share one socket error policy with explicit traces
+          (error: unknown) => {
+            const reason =
+              error instanceof Error ? error.message : String(error);
+            if (!isEnvelope(message)) {
+              console.error(`[hub] malformed agent frame failed: ${reason}`);
+              return;
+            }
+            console.error(
+              `[hub] ${message.verb} for ${message.instanceId ?? "the machine"} failed: ${reason}`
             );
-            return;
-          }
-          const requestId =
-            message.requestId ?? peek(message.payload, "requestId");
-          if (requestId) {
-            const frame: ControlResult = {
-              kind: "control_result",
-              requestId,
-              ok: false,
-              error: reason,
-            };
-            const waitingReply = waiting.get(requestId);
-            if (waitingReply) {
-              waitingReply(frame);
+            const awaitsAddress =
+              message.verb === "frames" &&
+              peek(message.payload, "kind") === "session_address";
+            const replaysAddresses =
+              message.verb === "heartbeat" &&
+              !!addressClaims(message.payload)?.length;
+            if (
+              message.verb === "register" ||
+              awaitsAddress ||
+              replaysAddresses
+            ) {
+              ws.close(
+                1011,
+                "Session acknowledgement failed. Reconnect to retry custody."
+              );
+              return;
             }
-            const commandAnswered = streams.settleCommand(requestId, frame);
-            const requester = registry.takeRequester(requestId);
-            if (requester) {
-              sendFrame(requester, {
-                ...message,
-                verb: "frames",
+            const requestId =
+              message.requestId ?? peek(message.payload, "requestId");
+            if (requestId) {
+              const frame: ControlResult = {
+                kind: "control_result",
                 requestId,
-                payload: frame,
-              });
-            } else if (!(waitingReply || commandAnswered)) {
-              logUnroutedReply({ ...message, payload: frame });
+                ok: false,
+                error: reason,
+              };
+              const waitingReply = waiting.get(requestId);
+              if (waitingReply) {
+                waitingReply(frame);
+              }
+              const commandAnswered = streams.settleCommand(requestId, frame);
+              const requester = registry.takeRequester(requestId);
+              if (requester) {
+                sendFrame(requester, {
+                  ...message,
+                  verb: "frames",
+                  requestId,
+                  payload: frame,
+                });
+              } else if (!(waitingReply || commandAnswered)) {
+                logUnroutedReply({ ...message, payload: frame });
+              }
             }
           }
-        }
-      );
-    };
+        );
+      });
   const recoveringRemoved = new Set<string>();
   const stopDispatches = new Map<
     string,

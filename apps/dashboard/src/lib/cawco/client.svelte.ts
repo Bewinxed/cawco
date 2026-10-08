@@ -91,7 +91,7 @@ import {
   runDoing,
   WIRE_PROTOCOL,
 } from "@cawco/core";
-import { clientLine, WIRE_PENDING } from "@cawco/core/wire";
+import { clientLine } from "@cawco/core/wire";
 import {
   CONTROL_TIMEOUT_MS,
   DISCARD_TIMEOUT_MS,
@@ -2870,7 +2870,7 @@ const streamHost: StreamHost = {
     if (!socket || socket.readyState !== WebSocket.OPEN) {
       return false;
     }
-    clientLine(socket).send(JSON.stringify(message));
+    clientLine(socket).send(message);
     return true;
   },
   now: () => Date.now(),
@@ -4023,7 +4023,7 @@ function send(envelope: Envelope): void {
       "Not connected to the hub. Check that it is running, then try again."
     );
   }
-  clientLine(socket).send(JSON.stringify(envelope));
+  clientLine(socket).send(envelope);
 }
 
 /**
@@ -4170,13 +4170,12 @@ function olderThanHub(message: unknown): boolean {
  * the inherited socket belong to whoever is rendering.
  */
 function bind(socket: WebSocket): void {
-  socket.onmessage = (event) => {
-    // A message too long for one frame (a large board) arrives as parts
-    // (`@cawco/core/wire`): nothing is read until its last one is in.
-    const message = clientLine(socket).receive(String(event.data));
-    if (message === WIRE_PENDING) {
-      return;
-    }
+  // Every frame is read in order through the socket's line, a part's worth
+  // per turn, so a large board (sent as parts) never holds the page; the
+  // handler is this module's, replacing whatever an earlier module bound.
+  const line = clientLine(socket);
+  socket.onmessage = (event) => line.receive(String(event.data));
+  line.listen((message) => {
     if (olderThanHub(message)) {
       return;
     }
@@ -4207,7 +4206,7 @@ function bind(socket: WebSocket): void {
         : payload
     );
     sweepOnTraffic();
-  };
+  });
 
   socket.onclose = () => {
     state.status = "disconnected";

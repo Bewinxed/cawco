@@ -19,6 +19,7 @@
  * session's frames resume (server.ts `registerAck`).
  */
 import {
+  Inbox,
   Outbox,
   type ServerSocketLike,
   serverTransport,
@@ -40,6 +41,7 @@ export interface HubSocket {
 
 interface Line {
   assembler: WireAssembler;
+  inbox: Inbox;
   outbox: Outbox;
   raw: RawSocket;
 }
@@ -66,13 +68,14 @@ export const openLine = (socket: HubSocket, compress: boolean): void => {
   lines.set(socket.id, {
     raw,
     assembler: new WireAssembler(),
+    inbox: new Inbox(),
     outbox: new Outbox(serverTransport(raw, compress)),
   });
 };
 
 /** The one way a frame leaves the hub for a socket. */
 export const sendFrame = (socket: HubSocket, frame: unknown): void => {
-  lines.get(socket.id)?.outbox.send(JSON.stringify(frame));
+  lines.get(socket.id)?.outbox.send(frame);
 };
 
 /** The socket's own `drain`: what waits goes on. */
@@ -87,23 +90,36 @@ export const closeLine = (socket: HubSocket): void => {
 };
 
 /**
- * A frame from the socket, as Elysia parsed it: the message it completes, or
- * {@link WIRE_PENDING} while its parts are still arriving. A part out of order
- * closes the socket (1002): what it was building can no longer be trusted.
+ * A frame from the socket, as Elysia parsed it, read in order through the
+ * socket's inbox: each message it completes goes to `deliver`. A message's
+ * parts are read about one per turn of the loop, however many the socket
+ * hands over at once. A part out of order closes the socket (1002): what it
+ * was building can no longer be trusted.
  */
-export const receiveFrame = (socket: HubSocket, frame: unknown): unknown => {
+export const receiveFrame = (
+  socket: HubSocket,
+  frame: unknown,
+  deliver: (message: unknown) => void
+): void => {
   const line = lines.get(socket.id);
   if (!line) {
-    return frame;
+    return;
   }
-  try {
-    return line.assembler.take(frame);
-  } catch (error) {
-    if (!(error instanceof WireError)) {
-      throw error;
+  const text = (frame as { text?: unknown } | null)?.text;
+  line.inbox.push(typeof text === "string" ? text.length : 0, () => {
+    let message: unknown;
+    try {
+      message = line.assembler.take(frame);
+    } catch (error) {
+      if (!(error instanceof WireError)) {
+        throw error;
+      }
+      console.warn(`[hub] socket ${socket.id}: ${error.message}`);
+      line.raw.close(1002, error.message);
+      return;
     }
-    console.warn(`[hub] socket ${socket.id}: ${error.message}`);
-    line.raw.close(1002, error.message);
-    return WIRE_PENDING;
-  }
+    if (message !== WIRE_PENDING) {
+      deliver(message);
+    }
+  });
 };

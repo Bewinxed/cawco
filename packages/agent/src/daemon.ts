@@ -32,7 +32,7 @@ import {
 import { machineId } from "@cawco/core/machine-id";
 import { sessiondEndpoint } from "@cawco/core/sessiond";
 import { fetchOpenCodeGoLimits } from "@cawco/core/usage/opencode-go";
-import { clientLine, WIRE_PENDING } from "@cawco/core/wire";
+import { clientLine } from "@cawco/core/wire";
 import { Data, Duration, Effect, Fiber, Schedule } from "effect";
 import { accountReports } from "./accounts";
 import {
@@ -356,7 +356,7 @@ const closeReason = (event: CloseEvent): string =>
 const send = (socket: WebSocket, envelope: Envelope): void => {
   const line = clientLine(socket);
   for (const message of outbound(envelope)) {
-    line.send(message);
+    line.sendPieces(message.pieces, message.chars);
   }
 };
 
@@ -1145,13 +1145,13 @@ const attach = (
       }
       supervisor.dispatch(envelope);
     };
-    socket.addEventListener("message", (event) => {
-      // A message too long for one frame arrives as parts.
-      const received = clientLine(socket).receive(String(event.data));
-      if (received !== WIRE_PENDING) {
-        onEnvelope(received as Envelope);
-      }
-    });
+    // Every frame is read in order through the socket's line, a part's worth
+    // per turn of the loop; a message too long for one frame arrives as parts.
+    const line = clientLine(socket);
+    line.listen((message) => onEnvelope(message as Envelope));
+    socket.addEventListener("message", (event) =>
+      line.receive(String(event.data))
+    );
 
     yield* Effect.forkScoped(
       Effect.repeat(
