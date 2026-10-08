@@ -1447,7 +1447,9 @@
     cursor: pointer;
     transition: var(--transition-control);
   }
-  .tools :global(.bar-item svg) {
+  /* An item's symbol, named so: an item may draw more than its symbol
+     (Caw's rim is an SVG too). */
+  .tools :global(.bar-symbol) {
     inline-size: var(--c-bar-symbol);
     block-size: var(--c-bar-symbol);
     color: var(--ink-muted);
@@ -1465,8 +1467,8 @@
   }
   /* The bar's badge: a count chip inside the glass, in a status pair, a
      circle for one digit and a short capsule for more, ringed in the
-     glass's surface. Caw's count of what needs you, inside his circle, and
-     the machines down or in trouble, on the glyph's corner. */
+     glass's surface: the machines down or in trouble, on the glyph's
+     corner. (What needs you is the arcs on Caw's rim, NeedsCaw.) */
   .tools :global(.bar-badge) {
     position: absolute;
     display: grid;

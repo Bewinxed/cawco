@@ -88,7 +88,7 @@
             type="button"
           >
             <span class="glyph">
-              <IconServer aria-hidden="true" />
+              <IconServer aria-hidden="true" class="bar-symbol" />
               {#if trouble}
                 <span class="bar-badge" data-tone={trouble.tone}
                   >{trouble.count}</span

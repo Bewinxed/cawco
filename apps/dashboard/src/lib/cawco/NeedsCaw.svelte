@@ -35,8 +35,9 @@
    * its composer grown into the ask, a run, or a project's spend. It closes
    * by a drag up, a tap outside, Escape, or a row.
    */
+  import { mergeProps } from "bits-ui";
   import { untrack } from "svelte";
-  import { TextMorph } from "torph/svelte";
+  import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import beatDark from "#lib/assets/brand/bar-beat-needs-you-dark.png";
   import beatLight from "#lib/assets/brand/bar-beat-needs-you-light.png";
   import smileDark from "#lib/assets/brand/bar-beat-smile-dark.png";
@@ -49,7 +50,12 @@
   import { CAW_HEAD_CENTRE } from "./home/caw-still.svelte";
   import { clock, home, type NeedsItem, span } from "./home/home-state.svelte";
   import { conversationHref } from "./links";
-  import { easeInOut, morphMs, motionOk } from "./motion/curves.svelte";
+  import {
+    dur,
+    easeInOut,
+    easeOut,
+    motionOk,
+  } from "./motion/curves.svelte";
   import { integrate, type Sample, sampleAt } from "./motion/spring";
   import SessionMark from "./SessionMark.svelte";
   import { capLine } from "./usage";
@@ -102,33 +108,56 @@
 
   /* ── The count ─────────────────────────────────────────────────────── */
   /**
-   * His count is a chip inside his circle (owner: "circular chips on the
-   * edge of the circle inside the circle"), on the rim's top-trailing 45°,
-   * so nothing of it ever stands past his glass or the screen's edge. His
-   * circle is the bar's control height across, round his item's centre:
-   * the narrow bar's glass circle, and the wide group's trailing end.
+   * His count is drawn on his circle's rim, never written on him (owner:
+   * "lines along the rim of the circle that increase with the count, to a
+   * limit"): an arc for each thing waiting, from 12 o'clock clockwise,
+   * ARC° long with GAP° between; past ARCS of them the ring closes whole,
+   * which says "a lot". Nothing of it leaves his circle, so nothing of it
+   * leaves the screen. The number itself is in his label, his tooltip and
+   * the drawer's head. His circle is the bar's control height across,
+   * round his item's centre: the narrow bar's glass circle, and the wide
+   * group's trailing end. Apple's NeedsCawButton draws the same arcs.
    */
-  let chipWidth = $state(0);
+  const ARC = 30;
+  const ARC_GAP = 8;
+  const ARCS = 9;
+  /** The ring's box: his circle, in px (`--c-btn-h`). */
+  const RING_BOX = 36;
+  /** The rim's radius: inside the glass's 1px edge, half the stroke in. */
+  const RIM = RING_BOX / 2 - 1 - 1;
+  const arcCount = $derived(Math.min(count, ARCS));
+  const ringClosed = $derived(count > ARCS);
+  const tipText = $derived(
+    count > 0 ? `${count} need you` : "All caught up"
+  );
+
+  /** A point on the rim, `deg` clockwise from 12 o'clock. */
+  const onRim = (deg: number) => {
+    const rad = (deg * Math.PI) / 180;
+    const c = RING_BOX / 2;
+    return `${(c + RIM * Math.sin(rad)).toFixed(3)} ${(c - RIM * Math.cos(rad)).toFixed(3)}`;
+  };
   /**
-   * How far the chip's centre stands from his circle's, along the 45° line
-   * each way: as far out as keeps all of it, ring and all, inside the rim.
-   * One digit is a circle (d across, ring r past it); more is a capsule
-   * whose end caps stand a = (width − d) / 2 either side of its centre, and
-   * the trailing cap is the one that meets the rim:
-   * (u + a)² + u² = (R − r)², so u = (√(2(R − r)² − a²) − a) / 2.
+   * A round cap reaches half the stroke past its path's end: this many
+   * degrees of the rim, taken off each end so the arc as seen, caps and
+   * all, is ARC° long and the gaps are ARC_GAP°.
    */
-  const chipOut = $derived.by(() => {
-    if (!capsule || chipWidth === 0) {
-      return 0;
-    }
-    const css = getComputedStyle(capsule);
-    const px = (name: string) => Number.parseFloat(css.getPropertyValue(name));
-    // Inside the glass's 1px edge, not on it.
-    const radius = px("--c-btn-h") / 2 - 1;
-    const side = px("--c-bar-chip");
-    const reach = radius - (side / 2 + px("--c-bar-chip-ring"));
-    const cap = Math.max(0, (chipWidth - side) / 2);
-    return (Math.sqrt(2 * reach ** 2 - cap ** 2) - cap) / 2;
+  const CAP = ((1 / RIM) * 180) / Math.PI;
+  /** Arc `k`, seen from k × (ARC + GAP)° clockwise for ARC°. */
+  const arcPath = (k: number) => {
+    const from = k * (ARC + ARC_GAP) + CAP;
+    return `M ${onRim(from)} A ${RIM} ${RIM} 0 0 1 ${onRim(from + ARC - 2 * CAP)}`;
+  };
+
+  /**
+   * An arc drawing itself in along its own length, and retracting the same
+   * way; with less motion, a fade. Each arc's path length is 1.
+   */
+  const drawn = (_node: Element) => ({
+    duration: dur("--dur-panel"),
+    easing: easeOut,
+    css: (t: number) =>
+      motionOk.current ? `stroke-dashoffset: ${1 - t}` : `opacity: ${t}`,
   });
 
   /* ── The beat ──────────────────────────────────────────────────────── */
@@ -812,21 +841,24 @@
     </div>
   </div>
 
+  <Tip label={tipText}>
+    {#snippet children(tip)}
   <button
+    {...mergeProps(tip, {
+      onclick: onCapsuleClick,
+      onpointerdown: (event: PointerEvent) => {
+        press(event);
+        grabCapsule(event);
+      },
+      onpointerenter: pointerOn,
+      onpointerleave: pointerOff,
+    })}
     aria-controls="needs-drawer"
     aria-expanded={open}
     aria-haspopup="dialog"
     aria-label={label}
     class="capsule bar-item touch-hit"
     data-needs-caw
-    onclick={onCapsuleClick}
-    onpointerdown={(event) => {
-      press(event);
-      grabCapsule(event);
-    }}
-    onpointerenter={pointerOn}
-    onpointerleave={pointerOff}
-    title={label}
     type="button"
     bind:this={capsule}
   >
@@ -863,20 +895,31 @@
         class:on={smiling}
       ></span>
     </span>
-    {#if count > 0}
-      <span
-        class="bar-badge chip"
-        data-tone="attn"
-        style:--out="{chipOut}px"
-        bind:offsetWidth={chipWidth}
-        ><TextMorph
-          as="span"
-          duration={morphMs()}
-          text={count > 99 ? "99+" : String(count)}
-        /></span
-      >
-    {/if}
+    <!-- What waits, on his rim: an arc each, closed whole past ARCS. -->
+    <svg
+      aria-hidden="true"
+      class="rim"
+      data-count={count}
+      viewBox="0 0 {RING_BOX} {RING_BOX}"
+    >
+      {#each { length: arcCount }, k (k)}
+        <path class="arc" d={arcPath(k)} pathLength="1" transition:drawn />
+      {/each}
+      {#if ringClosed}
+        <circle
+          class="arc whole"
+          cx={RING_BOX / 2}
+          cy={RING_BOX / 2}
+          pathLength="1"
+          r={RIM}
+          transform="rotate(-90 {RING_BOX / 2} {RING_BOX / 2})"
+          transition:drawn
+        />
+      {/if}
+    </svg>
   </button>
+    {/snippet}
+  </Tip>
 </div>
 
 <style>
@@ -900,12 +943,27 @@
     touch-action: none;
     -webkit-tap-highlight-color: transparent;
   }
-  /* His count: centred `--out` up and across from his circle's centre (his
-     item's), on the rim's top-trailing 45° and inside it (`chipOut`). */
-  .chip {
-    inset-block-start: calc(50% - var(--out));
-    inset-inline-start: calc(50% + var(--out));
+  /* What waits, on his circle's rim: his circle's box round his item's
+     centre, the arcs a 2px round-capped attention stroke, each with a path
+     length of 1 so it draws in and out along itself. (Not `.ring`: that is
+     Tailwind's ring utility, a box-shadow round the box.) */
+  .rim {
+    position: absolute;
+    inset-block-start: 50%;
+    inset-inline-start: 50%;
+    inline-size: var(--c-btn-h);
+    block-size: var(--c-btn-h);
+    overflow: visible;
     translate: -50% -50%;
+    pointer-events: none;
+  }
+  .arc {
+    fill: none;
+    stroke: var(--status-attn-glyph);
+    stroke-width: var(--c-caw-ring);
+    stroke-linecap: round;
+    stroke-dasharray: 1;
+    stroke-dashoffset: 0;
   }
   /* His head: the face, the beat and the smile in one cell, squashed once
      under a press (DESIGN.md, The Press Rule) with motion allowed. */

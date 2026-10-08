@@ -10,11 +10,11 @@ import UIKit
 
 /// His compacted head (assets/mascot/README.md, `compacted`: a head that
 /// fills its box, built for 18 pt) on a glass capsule (`GlassCapsule`), or
-/// on the bar's glass group where he shares one. The Needs you count rides
-/// his corner in the attention pill, morphing digit by digit, while anything
-/// waits. When something new arrives he plays his needs-you beat once
+/// on the bar's glass group where he shares one. What waits is arcs on his
+/// circle's rim, one for each, closing whole past nine; no digit is drawn on
+/// him. When something new arrives he plays his needs-you beat once
 /// (`CawBeat`; his guide: "a gentle beat… never a hello") and holds still
-/// again; with less motion only the badge changes. A tap or a drag down from
+/// again; with less motion only the arcs change. A tap or a drag down from
 /// him moves the drawer (`NeedsDrawer`), which the shell owns.
 final class NeedsCawButton: UIControl {
     /// His head's side, pt.
@@ -30,14 +30,16 @@ final class NeedsCawButton: UIControl {
     private let capsule: GlassCapsule?
     private let face = CawMark(status: .compacted, side: NeedsCawButton.head)
     private let beatView = UIImageView()
-    /// His count: a chip inside his circle on the rim's top-trailing 45°
-    /// (NeedsCaw.svelte `chipOut`), ringed in the glass's surface. The ring
-    /// is a view of its own round the chip, so both colours follow the scheme.
-    private let badgeRing = UIView()
-    private let badgeBox = UIView()
-    private let badge = MorphLabel(TypeScale.typeMeta, ink: Palette.statusAttnInk)
-    private var badgeX: NSLayoutConstraint?
-    private var badgeY: NSLayoutConstraint?
+    /// What waits, on his circle's rim (NeedsCaw.svelte, The count): an arc
+    /// for each, `arc`° long with `arcGap`° between, from 12 o'clock
+    /// clockwise; past `arcs` of them the ring closes whole. No digit is
+    /// drawn on him: the number is in his VoiceOver label and the drawer.
+    static let arc = 30.0
+    static let arcGap = 8.0
+    static let arcs = 9
+    /// One layer per arc and one for the closed ring, each drawn along itself.
+    private let arcLayers = (0 ..< NeedsCawButton.arcs).map { _ in CAShapeLayer() }
+    private let wholeRing = CAShapeLayer()
     private(set) var count = 0
     private var beating = false
 
@@ -62,23 +64,16 @@ final class NeedsCawButton: UIControl {
         }
         beatView.alpha = 0
         beatView.contentMode = .scaleAspectFit
-        badgeRing.backgroundColor = Palette.surfaceRaised
-        badgeRing.layer.cornerRadius = Size.cBarChip / 2 + Size.cBarChipRing
-        badgeRing.isUserInteractionEnabled = false
-        badgeRing.translatesAutoresizingMaskIntoConstraints = false
-        badgeBox.backgroundColor = Palette.statusAttnBg
-        badgeBox.layer.cornerRadius = Size.cBarChip / 2
-        badgeBox.isUserInteractionEnabled = false
-        badgeBox.translatesAutoresizingMaskIntoConstraints = false
-        badge.tabular = true
-        badge.translatesAutoresizingMaskIntoConstraints = false
-        badgeBox.addSubview(badge)
-        badgeRing.addSubview(badgeBox)
-        addSubview(badgeRing)
-        let badgeX = badgeRing.centerXAnchor.constraint(equalTo: centerXAnchor)
-        let badgeY = badgeRing.centerYAnchor.constraint(equalTo: centerYAnchor)
-        self.badgeX = badgeX
-        self.badgeY = badgeY
+        for ring in arcLayers + [wholeRing] {
+            ring.fillColor = nil
+            ring.lineWidth = Size.cCawRing
+            ring.lineCap = .round
+            ring.strokeEnd = 0
+            layer.addSublayer(ring)
+        }
+        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (button: NeedsCawButton, _: UITraitCollection) in
+            button.inkRing()
+        }
         NSLayoutConstraint.activate([
             widthAnchor.constraint(equalToConstant: Self.side),
             heightAnchor.constraint(equalToConstant: Self.side),
@@ -91,19 +86,8 @@ final class NeedsCawButton: UIControl {
             beatView.centerYAnchor.constraint(equalTo: centerYAnchor),
             beatView.widthAnchor.constraint(equalToConstant: Self.beatBox),
             beatView.heightAnchor.constraint(equalToConstant: Self.beatBox),
-            badgeX,
-            badgeY,
-            badgeBox.heightAnchor.constraint(equalToConstant: Size.cBarChip),
-            badgeBox.widthAnchor.constraint(greaterThanOrEqualToConstant: Size.cBarChip),
-            badgeBox.leadingAnchor.constraint(equalTo: badgeRing.leadingAnchor, constant: Size.cBarChipRing),
-            badgeBox.trailingAnchor.constraint(equalTo: badgeRing.trailingAnchor, constant: -Size.cBarChipRing),
-            badgeBox.topAnchor.constraint(equalTo: badgeRing.topAnchor, constant: Size.cBarChipRing),
-            badgeBox.bottomAnchor.constraint(equalTo: badgeRing.bottomAnchor, constant: -Size.cBarChipRing),
-            badge.leadingAnchor.constraint(equalTo: badgeBox.leadingAnchor, constant: Size.cBarChip / 4),
-            badge.trailingAnchor.constraint(equalTo: badgeBox.trailingAnchor, constant: -Size.cBarChip / 4),
-            badge.centerYAnchor.constraint(equalTo: badgeBox.centerYAnchor),
         ])
-        badgeRing.isHidden = true
+        inkRing()
         isAccessibilityElement = true
         accessibilityTraits = .button
         accessibilityLabel = "All caught up"
@@ -121,22 +105,51 @@ final class NeedsCawButton: UIControl {
     @objc private func tapped() { onTap() }
     @objc private func panned(_ pan: UIPanGestureRecognizer) { onPan(pan) }
 
-    /// The chip's centre, `out` up and across from his circle's: as far out
-    /// as keeps all of it, ring and all, inside the glass's 1 pt edge. Its end
-    /// caps stand `cap` either side of its centre, and the trailing one meets
-    /// the rim: (out + cap)² + out² = reach², so out = (√(2·reach² − cap²) − cap) / 2.
+    /// The arcs on his circle's rim: inside the glass's 1 pt edge, half the
+    /// stroke in; arc k from k × (arc + arcGap)° clockwise from 12 o'clock.
     override func layoutSubviews() {
         super.layoutSubviews()
-        let size = badgeRing.bounds.size
-        guard size.height > 0 else { return }
-        let reach = CGFloat(Self.side) / 2 - 1 - size.height / 2
-        let cap = max(0, (size.width - size.height) / 2)
-        let out = ((2 * reach * reach - cap * cap).squareRoot() - cap) / 2
-        let x = effectiveUserInterfaceLayoutDirection == .rightToLeft ? -out : out
-        if badgeX?.constant != x || badgeY?.constant != -out {
-            badgeX?.constant = x
-            badgeY?.constant = -out
+        let centre = CGPoint(x: bounds.midX, y: bounds.midY)
+        let rim = CGFloat(Self.side) / 2 - 1 - Size.cCawRing / 2
+        let top = -CGFloat.pi / 2
+        let degree = CGFloat.pi / 180
+        // A round cap reaches half the stroke past the path's end: taken off
+        // each end, so the arc as seen is `arc`° and the gaps `arcGap`°.
+        let cap = Size.cCawRing / 2 / rim
+        for (k, ring) in arcLayers.enumerated() {
+            let from = top + CGFloat(k) * CGFloat(Self.arc + Self.arcGap) * degree
+            ring.path = UIBezierPath(arcCenter: centre, radius: rim, startAngle: from + cap, endAngle: from + CGFloat(Self.arc) * degree - cap, clockwise: true).cgPath
         }
+        wholeRing.path = UIBezierPath(arcCenter: centre, radius: rim, startAngle: top, endAngle: top + 2 * .pi, clockwise: true).cgPath
+    }
+
+    /// The arcs take the scheme's attention ink.
+    private func inkRing() {
+        let ink = Palette.statusAttnGlyph.resolvedColor(with: traitCollection).cgColor
+        for ring in arcLayers + [wholeRing] {
+            ring.strokeColor = ink
+        }
+    }
+
+    /// An arc drawn in, or retracted, along its own length over `durPanel` on
+    /// the out curve; with less motion it fades instead.
+    private func show(_ ring: CAShapeLayer, _ on: Bool, animated: Bool) {
+        let target: CGFloat = on ? 1 : 0
+        let fade = UIAccessibility.isReduceMotionEnabled
+        let key = fade ? "opacity" : "strokeEnd"
+        let now = fade ? CGFloat(ring.presentation()?.opacity ?? ring.opacity) : (ring.presentation()?.strokeEnd ?? ring.strokeEnd)
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        ring.opacity = fade ? Float(target) : 1
+        ring.strokeEnd = fade ? 1 : target
+        CATransaction.commit()
+        guard animated, now != target else { return }
+        let move = CABasicAnimation(keyPath: key)
+        move.fromValue = now
+        move.toValue = target
+        move.duration = Motion.durPanel
+        move.timingFunction = Motion.easeOut.function
+        ring.add(move, forKey: key)
     }
 
     override var isHighlighted: Bool {
@@ -152,9 +165,11 @@ final class NeedsCawButton: UIControl {
         count = next
         accessibilityLabel = next > 0 ? "Needs you, \(next)" : "All caught up"
         accessibilityValue = open ? "Open" : nil
-        badge.text = next > 99 ? "99+" : "\(next)"
-        badgeRing.isHidden = next == 0
-        setNeedsLayout()
+        let animated = window != nil
+        for (k, ring) in arcLayers.enumerated() {
+            show(ring, next > k, animated: animated)
+        }
+        show(wholeRing, next > Self.arcs, animated: animated)
     }
 
     /// His needs-you beat, once; nothing with less motion.

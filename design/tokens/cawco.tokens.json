@@ -2242,12 +2242,17 @@
     "c-bar-chip": {
       "$type": "dimension",
       "$value": "14px",
-      "$description": "A count chip in the top bar's glass: a circle for one digit, a short capsule for more, inside its item's circle on the rim's top-trailing 45°."
+      "$description": "A count chip in the top bar's glass (the machines down or in trouble): a circle for one digit, a short capsule for more."
     },
     "c-bar-chip-ring": {
       "$type": "dimension",
       "$value": "1.5px",
       "$description": "The ring round a count chip, in the glass's surface, that parts it from what it sits on."
+    },
+    "c-caw-ring": {
+      "$type": "dimension",
+      "$value": "2px",
+      "$description": "The stroke of the arcs on Caw's rim in the top bar, one for each thing waiting on the operator."
     },
     "c-bar-search-w": {
       "$type": "dimension",
