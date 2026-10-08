@@ -1594,6 +1594,30 @@ class ClaudeSession implements HarnessSession {
     return reply?.response?.cancelled === true ? "withdrawn" : "started";
   }
 
+  /**
+   * THE CAWCO SLOT, DIALLED AGAIN WHEN THE CLI HAS GIVEN IT UP. The child
+   * reaches CawCo through this machine's agent (its MCP gateway, or the hub
+   * itself when that is local), and an update restarts both. Claude Code
+   * retries a dropped HTTP server five times, 1 s to 8 s apart, with a 30 s
+   * connect timeout each, then marks it `failed` for good and never dials it
+   * again (2.1.289, the slot's own `mcp-logs-cawco`: "Reconnect gave up after
+   * 5 attempts: failed", 2026-10-08 10:30:46, two seconds before the rollback
+   * brought a hub that answered back). A `failed` slot is dialled once more
+   * with the header it was launched with, so no credential changes: one the
+   * hub no longer knows is refused by that dial, or reads `needs-auth`,
+   * which is not redialled. A slot still connecting is left to finish.
+   */
+  async #reconnectCawco(): Promise<McpServerStatus[]> {
+    const servers = await this.#handle.mcpServerStatus();
+    if (
+      servers.find((server) => server.name === MCP_SERVER_NAME)?.status ===
+      "failed"
+    ) {
+      await this.#handle.reconnectMcpServer(MCP_SERVER_NAME);
+    }
+    return await this.#connectedCawcoSnapshot();
+  }
+
   async #connectedCawcoSnapshot(): Promise<McpServerStatus[]> {
     const deadline = Date.now() + 30_000;
     for (;;) {
@@ -1651,9 +1675,13 @@ class ClaudeSession implements HarnessSession {
    * acknowledges (the ACK is authenticated by that header, so a credential
    * the hub no longer knows is refused). A child launched with no credential
    * has no way to call CawCo tools: the hub takes no call without one.
+   *
+   * The slot is read through {@link #reconnectCawco}: a child that outlived
+   * the agent has often had its slot given up while the agent and the hub
+   * were restarting, and a gave-up slot is not a credential the hub refused.
    */
   async #verifyHeldCredential() {
-    const servers = await this.#connectedCawcoSnapshot();
+    const servers = await this.#reconnectCawco();
     const cawco = servers.find((server) => server.name === MCP_SERVER_NAME);
     const header =
       cawco?.config?.type === "http"
