@@ -5,8 +5,8 @@
     parseAgentFrontMatter,
   } from "@cawco/core";
   import { untrack } from "svelte";
-  import { toast } from "svelte-sonner";
   import { appear } from "#lib/cawco/motion/curves.svelte.js";
+  import { toast } from "#lib/cawco/toasts.js";
   import { Textarea } from "#lib/components/ui/textarea/index.js";
   import { IconDocument } from "#lib/icons.js";
   import { goto } from "$app/navigation";

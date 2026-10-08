@@ -17,7 +17,6 @@
   import type { ProjectView, ViewData } from "@cawco/core";
   import { untrack } from "svelte";
   import type { TransitionConfig } from "svelte/transition";
-  import { toast } from "svelte-sonner";
   import {
     cawco,
     discardView,
@@ -62,6 +61,7 @@
   import TaskSheet from "#lib/cawco/tasks/TaskSheet.svelte";
   import TaskTable from "#lib/cawco/tasks/TaskTable.svelte";
   import { threadHref } from "#lib/cawco/thread-tabs.js";
+  import { toast } from "#lib/cawco/toasts.js";
   import { taskEdges } from "#lib/cawco/views/task-graph.js";
   import ViewA2ui from "#lib/cawco/views/ViewA2ui.svelte";
   import ViewCalendar, {

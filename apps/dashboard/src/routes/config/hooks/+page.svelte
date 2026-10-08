@@ -1,6 +1,5 @@
 <script lang="ts">
   import { hookSentence } from "@cawco/core";
-  import { toast } from "svelte-sonner";
   import { cawco } from "#lib/cawco/client.svelte.js";
   import RolloutChip from "#lib/cawco/config/RolloutChip.svelte";
   import RowFaults from "#lib/cawco/config/RowFaults.svelte";
@@ -20,6 +19,7 @@
   } from "#lib/cawco/hooks.js";
   import { newId } from "#lib/cawco/id.js";
   import { orderMachines } from "#lib/cawco/rail.svelte.js";
+  import { toast } from "#lib/cawco/toasts.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { IconHook, IconPlus, IconTrash } from "#lib/icons.js";

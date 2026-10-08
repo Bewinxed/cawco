@@ -3,7 +3,7 @@
  * copied, and the answer tells the item (components/ui/context-menu
  * CopyItem) whether to show its check before the menu closes.
  */
-import { toast } from "svelte-sonner";
+import { toast } from "./toasts";
 
 export async function copyToClipboard(
   what: string,

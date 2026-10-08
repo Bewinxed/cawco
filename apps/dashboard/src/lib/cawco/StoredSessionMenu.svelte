@@ -6,7 +6,7 @@
    * the context-menu key still reaches this menu from the keyboard.
    */
   import type { Snippet } from "svelte";
-  import { toast } from "svelte-sonner";
+  import { toast } from "#lib/cawco/toasts.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as AlertDialog from "#lib/components/ui/alert-dialog/index.js";
   import { Button } from "#lib/components/ui/button/index.js";

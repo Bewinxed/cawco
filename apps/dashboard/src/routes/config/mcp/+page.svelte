@@ -1,6 +1,5 @@
 <script lang="ts">
   import type { FleetMcpServer } from "@cawco/core";
-  import { toast } from "svelte-sonner";
   import { cawco } from "#lib/cawco/client.svelte.js";
   import McpSignIn from "#lib/cawco/config/McpSignIn.svelte";
   import RolloutChip from "#lib/cawco/config/RolloutChip.svelte";
@@ -20,6 +19,7 @@
   } from "#lib/cawco/fleet.js";
   import MachineInventory from "#lib/cawco/MachineInventory.svelte";
   import { orderMachines } from "#lib/cawco/rail.svelte.js";
+  import { toast } from "#lib/cawco/toasts.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import {

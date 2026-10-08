@@ -15,7 +15,6 @@
    */
   import { machineLabel } from "@cawco/core";
   import { MediaQuery } from "svelte/reactivity";
-  import { toast } from "svelte-sonner";
   import type { Machine, ProjectRow } from "#lib/cawco/client.svelte.js";
   import {
     cawco,
@@ -31,6 +30,7 @@
   import { checkoutOf } from "#lib/cawco/projects.js";
   import { newSession } from "#lib/cawco/spawn/new-session.svelte.js";
   import { rememberSpawn, spawnPrefs } from "#lib/cawco/spawnPrefs.svelte.js";
+  import { toast } from "#lib/cawco/toasts.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as AlertDialog from "#lib/components/ui/alert-dialog/index.js";
   import { Button } from "#lib/components/ui/button/index.js";

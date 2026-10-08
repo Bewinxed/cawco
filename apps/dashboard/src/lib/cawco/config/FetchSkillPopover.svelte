@@ -6,9 +6,9 @@
    */
   import type { FleetSkillMeta } from "@cawco/core";
   import { tick } from "svelte";
-  import { toast } from "svelte-sonner";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { closeInto } from "#lib/cawco/motion/share.svelte.js";
+  import { toast } from "#lib/cawco/toasts.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention

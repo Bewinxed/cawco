@@ -10,7 +10,7 @@ import type {
   BinaryUpdatePolicy,
 } from "@cawco/core/binary-updates";
 import { SvelteSet } from "svelte/reactivity";
-import { toast } from "svelte-sonner";
+import { toast } from "../toasts";
 import { installable, type UpdateMachine } from "./model";
 
 const JSON_HEADERS = { "Content-Type": "application/json" };

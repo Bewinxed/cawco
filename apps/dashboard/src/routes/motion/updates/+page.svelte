@@ -11,9 +11,8 @@
     BinaryUpdatePolicy,
     BinaryUpdateState,
   } from "@cawco/core/binary-updates";
-  import { tick } from "svelte";
-  import { toast } from "svelte-sonner";
   import UpdateCard from "#lib/cawco/home/UpdateCard.svelte";
+  import { toast } from "#lib/cawco/toasts.js";
   import ChannelCards from "#lib/cawco/updates/ChannelCards.svelte";
   import {
     type Notice,
@@ -294,23 +293,19 @@
   }
   const noop = () => undefined;
   /**
-   * Two ordinary toasts that stay, to stack around the notice: one tick
-   * apart, as toasts arrive in the app. Two made in one tick are measured
-   * at the front toast's height (svelte-sonner issue #24), whatever the
-   * notice does.
+   * Two ordinary toasts that stay, to stack around the notice, made in one
+   * tick: the case svelte-sonner mis-measures (issue #24) and lib/cawco/
+   * toasts.ts spaces into macrotasks of their own.
    */
   let stacked = 0;
-  function stackOne() {
-    stacked += 1;
-    toast(`Toast ${stacked}`, {
-      description: "Stacked with the notice",
-      duration: Number.POSITIVE_INFINITY,
-    });
-  }
-  async function stackTwo() {
-    stackOne();
-    await tick();
-    stackOne();
+  function stackTwo() {
+    for (let i = 0; i < 2; i += 1) {
+      stacked += 1;
+      toast(`Toast ${stacked}`, {
+        description: "Stacked with the notice",
+        duration: Number.POSITIVE_INFINITY,
+      });
+    }
   }
 </script>
 

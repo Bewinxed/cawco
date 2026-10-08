@@ -14,10 +14,10 @@ import type {
   HarnessKind,
   PermissionMode,
 } from "@cawco/core";
-import { toast } from "svelte-sonner";
 import { goto } from "$app/navigation";
 import { cawco, followContinuations } from "./client.svelte";
 import { conversationHref } from "./links";
+import { toast } from "./toasts";
 import { contextOf } from "./workspace/workspace.svelte";
 
 /** The session a continuation starts from, as the dialog shows and sends it. */

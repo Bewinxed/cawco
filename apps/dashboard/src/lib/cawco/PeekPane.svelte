@@ -24,7 +24,7 @@
    * read between them, not two.
    */
   import { untrack } from "svelte";
-  import { toast } from "svelte-sonner";
+  import { toast } from "#lib/cawco/toasts.js";
   import { Button } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as ContextMenu from "#lib/components/ui/context-menu/index.js";

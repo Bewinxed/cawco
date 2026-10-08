@@ -4,7 +4,6 @@
     machineLabel,
     parseAgentFrontMatter,
   } from "@cawco/core";
-  import { toast } from "svelte-sonner";
   import { cawco } from "#lib/cawco/client.svelte.js";
   import RowList from "#lib/cawco/config/RowList.svelte";
   import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
@@ -21,6 +20,7 @@
   } from "#lib/cawco/fleet.js";
   import OsMark from "#lib/cawco/OsMark.svelte";
   import { orderMachines } from "#lib/cawco/rail.svelte.js";
+  import { toast } from "#lib/cawco/toasts.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { SectionHeader } from "#lib/components/ui/section-header/index.js";

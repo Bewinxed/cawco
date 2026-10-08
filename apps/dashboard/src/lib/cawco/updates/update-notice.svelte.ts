@@ -11,10 +11,10 @@
 import { machineLabel } from "@cawco/core";
 import { untrack } from "svelte";
 import { SvelteSet } from "svelte/reactivity";
-import { toast } from "svelte-sonner";
 import { page } from "$app/state";
 import { cawco } from "../client.svelte";
 import { servedNewer } from "../served-build.svelte";
+import { toast } from "../toasts";
 import { dismissKey, type Notice, noticeFor } from "./model";
 import UpdateNotice from "./UpdateNotice.svelte";
 import { updates } from "./updates.svelte";

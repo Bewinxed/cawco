@@ -7,7 +7,7 @@
     FleetSkillMeta,
   } from "@cawco/core";
   import { machineLabel } from "@cawco/core";
-  import { toast } from "svelte-sonner";
+  import { toast } from "#lib/cawco/toasts.js";
   import { Alert, AlertDescription } from "#lib/components/ui/alert/index.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";

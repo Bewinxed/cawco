@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { ToolPolicy, ToolSpec } from "@cawco/core";
   import { machineLabel } from "@cawco/core";
-  import { toast } from "svelte-sonner";
+  import { toast } from "#lib/cawco/toasts.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";

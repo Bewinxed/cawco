@@ -1,7 +1,6 @@
 <script lang="ts">
   import type { FleetMcpConfig, FleetMcpServer } from "@cawco/core";
   import { untrack } from "svelte";
-  import { toast } from "svelte-sonner";
   import {
     appear,
     crossIn,
@@ -10,6 +9,7 @@
   } from "#lib/cawco/motion/curves.svelte.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
+  import { toast } from "#lib/cawco/toasts.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { IconKey, IconPlay } from "#lib/icons.js";
   import { goto } from "$app/navigation";

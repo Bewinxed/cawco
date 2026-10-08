@@ -9,7 +9,6 @@
     machineLabel,
   } from "@cawco/core";
   import { untrack } from "svelte";
-  import { toast } from "svelte-sonner";
   import {
     appear,
     crossIn,
@@ -19,6 +18,7 @@
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
   import { reflow } from "#lib/cawco/motion/rows.svelte.js";
+  import { toast } from "#lib/cawco/toasts.js";
   import DiffView from "#lib/components/features/DiffView.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";

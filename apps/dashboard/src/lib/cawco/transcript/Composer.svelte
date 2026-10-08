@@ -62,7 +62,6 @@
    */
   import { type Snippet, tick, untrack } from "svelte";
   import type { TransitionConfig } from "svelte/transition";
-  import { toast } from "svelte-sonner";
   import { autosize } from "#lib/cawco/motion/autosize.svelte.js";
   import {
     CURVE,
@@ -76,6 +75,7 @@
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { reflow } from "#lib/cawco/motion/rows.svelte.js";
   import { departBox } from "#lib/cawco/motion/share.svelte.js";
+  import { toast } from "#lib/cawco/toasts.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { whileIdle } from "#lib/components/ui/button/pending-content.svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { completeMcpSignIn } from "#lib/cawco/fleet.js";
   /**
    * Where a provider's sign-in comes back to. cawco.dev/oauth/callback (or the
    * provider itself, when it can reach this address) brings the person here with
@@ -7,8 +8,7 @@
    * servers with the answer toasted. Nothing here holds a credential: the code
    * is spent once, by the hub, with the verifier only the hub has.
    */
-  import { toast } from "svelte-sonner";
-  import { completeMcpSignIn } from "#lib/cawco/fleet.js";
+  import { toast } from "#lib/cawco/toasts.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { IconWarningTriangle } from "#lib/icons.js";

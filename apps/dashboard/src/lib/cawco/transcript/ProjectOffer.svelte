@@ -7,7 +7,7 @@
    * the last word: a session is never offered again.
    */
   import type { ProjectOfferSummary } from "@cawco/core";
-  import { toast } from "svelte-sonner";
+  import { toast } from "#lib/cawco/toasts.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { IconFolder } from "#lib/icons.js";
   import { goto } from "$app/navigation";

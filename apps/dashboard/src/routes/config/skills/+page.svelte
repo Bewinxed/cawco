@@ -4,7 +4,6 @@
     FleetSkillMeta,
     MarketplacePluginInfo,
   } from "@cawco/core";
-  import { toast } from "svelte-sonner";
   import { cawco } from "#lib/cawco/client.svelte.js";
   import FetchSkillPopover from "#lib/cawco/config/FetchSkillPopover.svelte";
   import { hubDown } from "#lib/cawco/config/hub.svelte.js";
@@ -32,6 +31,7 @@
   import { hubFaults } from "#lib/cawco/fleet-faults.js";
   import MachineInventory from "#lib/cawco/MachineInventory.svelte";
   import { orderMachines } from "#lib/cawco/rail.svelte.js";
+  import { toast } from "#lib/cawco/toasts.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { SectionHeader } from "#lib/components/ui/section-header/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";

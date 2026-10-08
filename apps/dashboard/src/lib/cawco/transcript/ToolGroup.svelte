@@ -1,7 +1,6 @@
 <script lang="ts">
   import { getContext, untrack } from "svelte";
   import { SvelteSet } from "svelte/reactivity";
-  import { toast } from "svelte-sonner";
   import {
     cawco,
     openPreview,
@@ -16,6 +15,7 @@
     previewSourceKey,
     reopenAsk,
   } from "#lib/cawco/preview/source.js";
+  import { toast } from "#lib/cawco/toasts.js";
   import DiffView from "#lib/components/features/DiffView.svelte";
   import {
     describeTool,

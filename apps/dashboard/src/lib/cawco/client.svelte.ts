@@ -79,7 +79,6 @@ import {
   runDoing,
   WIRE_PROTOCOL,
 } from "@cawco/core";
-import { toast } from "svelte-sonner";
 import {
   CONTROL_TIMEOUT_MS,
   DISCARD_TIMEOUT_MS,
@@ -141,6 +140,7 @@ import {
   TASK_LEDGER_TOOLS,
 } from "./tasks.svelte";
 import { inLists, isThreadTab, threadIdOf, threadRowOf } from "./thread-tabs";
+import { toast } from "./toasts";
 import { warmCompactionMark } from "./transcript/compaction-mark";
 import {
   errorMessage,

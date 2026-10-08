@@ -1,6 +1,5 @@
 <script lang="ts">
   import { type RuleRow, ruleSentence } from "@cawco/core";
-  import { toast } from "svelte-sonner";
   import RowList from "#lib/cawco/config/RowList.svelte";
   import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
   import SectionRow from "#lib/cawco/config/SectionRow.svelte";
@@ -17,6 +16,7 @@
     since,
     times,
   } from "#lib/cawco/rules.js";
+  import { toast } from "#lib/cawco/toasts.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { Toggle } from "#lib/components/ui/toggle/index.js";

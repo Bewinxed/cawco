@@ -11,7 +11,7 @@
    */
   import type { HarnessKind } from "@cawco/core";
   import type { Snippet } from "svelte";
-  import { toast } from "svelte-sonner";
+  import { toast } from "#lib/cawco/toasts.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as ContextMenu from "#lib/components/ui/context-menu/index.js";
   import {

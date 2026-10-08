@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { toast } from "svelte-sonner";
   import RowList from "#lib/cawco/config/RowList.svelte";
   import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
   import SectionRow from "#lib/cawco/config/SectionRow.svelte";
@@ -12,6 +11,7 @@
     removeDelegateType,
   } from "#lib/cawco/delegate-types.js";
   import HarnessLogo from "#lib/cawco/HarnessLogo.svelte";
+  import { toast } from "#lib/cawco/toasts.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { IconPlus, IconTrash } from "#lib/icons.js";
