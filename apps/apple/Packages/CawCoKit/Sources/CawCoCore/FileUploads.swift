@@ -62,7 +62,9 @@ extension HubConnection {
         var request = URLRequest(url: address.appending(path: "api/files"))
         request.httpMethod = "POST"
         request.setValue(mediaType, forHTTPHeaderField: "Content-Type")
-        request.setValue(name.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? "file", forHTTPHeaderField: "X-File-Name")
+        // `encodeURIComponent`'s ASCII set: `.alphanumerics` would let a non-ASCII letter into the header.
+        let unescaped = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.!~*'()")
+        request.setValue(name.addingPercentEncoding(withAllowedCharacters: unescaped) ?? "file", forHTTPHeaderField: "X-File-Name")
         let (data, response) = try await URLSession.shared.upload(for: request, fromFile: file, delegate: UploadProgress(progress))
         guard (response as? HTTPURLResponse)?.statusCode == 200 else {
             let text = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)

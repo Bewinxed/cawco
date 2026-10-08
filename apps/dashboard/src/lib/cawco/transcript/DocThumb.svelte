@@ -54,8 +54,8 @@
         href?: string;
         /** How far its upload has gone, 0 to 1, while it uploads. */
         progress?: number;
-        /** The upload failed: a press calls `onretry`. */
-        failed?: boolean;
+        /** Why the upload failed, in the hub's words: a press calls `onretry`. */
+        failed?: string;
         onretry?: () => void;
       };
 
@@ -142,10 +142,10 @@
   </a>
 {:else if file?.failed}
   <button
-    aria-label={`Couldn't upload ${name}. Try again`}
+    aria-label={`Couldn't upload ${name}: ${file.failed} Try again`}
     class="doc press-tint"
     onclick={() => file?.onretry?.()}
-    title={name}
+    title={`${name}: ${file.failed}`}
     type="button"
   >
     {@render face()}

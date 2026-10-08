@@ -135,7 +135,7 @@ export async function loadDraft(
       ...file,
       id: newId(),
       progress: file.ref ? 1 : 0,
-      ...(file.ref ? {} : { error: "Couldn't upload" }),
+      ...(file.ref ? {} : { error: "The page reloaded before it finished." }),
     })),
     // The page that was drawing a note's screenshot went with the reload:
     // nothing will answer it now, so the note stands without one.

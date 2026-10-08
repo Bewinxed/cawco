@@ -2581,7 +2581,7 @@
         {#each draft.files as f (f.id)}
           <span class="doc-att" data-flip="pop">
             <DocThumb
-              failed={!!f.error}
+              failed={f.error}
               name={f.name}
               onretry={() => upload(draft, f.id)}
               progress={f.ref || f.error ? undefined : f.progress}

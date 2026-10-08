@@ -19,7 +19,8 @@ export function uploadFile(
       blob.type || "application/octet-stream"
     );
     request.setRequestHeader("X-File-Name", encodeURIComponent(name));
-    request.responseType = "json";
+    // Text, so a refusal keeps the hub's own words ("Files up to 100 MB.").
+    request.responseType = "text";
     request.upload.onprogress = (event) => {
       if (event.lengthComputable && event.total > 0) {
         onprogress(event.loaded / event.total);
@@ -27,16 +28,12 @@ export function uploadFile(
     };
     request.onload = () => {
       if (request.status !== 200) {
-        reject(
-          new Error(
-            typeof request.response === "string"
-              ? request.response
-              : `HTTP ${request.status}`
-          )
-        );
+        reject(new Error(request.responseText || `HTTP ${request.status}`));
         return;
       }
-      const { ref, size, mediaType } = request.response as FileAttachment;
+      const { ref, size, mediaType } = JSON.parse(
+        request.responseText
+      ) as FileAttachment;
       resolve({ kind: "file", name, ref, size, mediaType });
     };
     request.onerror = () => reject(new Error("The hub could not be reached."));
