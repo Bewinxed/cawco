@@ -76,7 +76,7 @@
     type Reading,
     runningIds,
   } from "./older";
-  import { openTrees } from "./open-trees.svelte";
+  import { openTrees, type TreeList } from "./open-trees.svelte";
   import ProjectMark from "./ProjectMark.svelte";
   import { folderOf, projectsFor } from "./projects";
   import { type RailSort, rail } from "./rail.svelte";
@@ -737,7 +737,8 @@
   count: number,
   failed: number,
   front: boolean,
-  trees: Branch[]
+  trees: Branch[],
+  list: TreeList
 )}
   {#if count > 0}
     <OlderRows
@@ -746,23 +747,24 @@
       {front}
       {id}
       keyOf={(node) => node.row.id}
-      list="rail"
+      {list}
       {trees}
     >
       {#snippet tree(
         node
       )}
-        {@render subRow(node)}
+        {@render subRow(node, list)}
       {/snippet}
     </OlderRows>
   {/if}
 {/snippet}
 
 {#snippet subRow(
-  node: Branch
+  node: Branch,
+  list: TreeList
 )}
   {@const row = node.row}
-  {@const unfolded = node.count > 0 && openTrees.has(row.id, "rail")}
+  {@const unfolded = node.count > 0 && openTrees.has(row.id, list)}
   <!-- The row's box (`data-flip="box"`): when its delegates open, it takes
        their room at once and its edge travels down to it, the rows under
        it sliding with that edge (motion/rows). -->
@@ -783,7 +785,7 @@
         ? {
             count: node.count,
             open: unfolded,
-            ontoggle: () => openTrees.toggle(row.id, "rail"),
+            ontoggle: () => openTrees.toggle(row.id, list),
           }
         : null}
       hint={ageHint(row)}
@@ -806,14 +808,15 @@
         {@attach nestFrom(".tree-mark")}
       >
         {#each node.recent as child (child.row.id)}
-          {@render subRow(child)}
+          {@render subRow(child, list)}
         {/each}
         {@render olderRows(
           row.id,
           rowsIn(node.older),
           failedIn(node.older.flatMap((held) => [held.row, ...held.under])),
           inFront(node.older),
-          node.older
+          node.older,
+          list
         )}
       </ul>
     {/if}
@@ -1128,7 +1131,7 @@
                       lists.recent,
                       `rail:${project.id}:recent`
                     ) as node (node.row.id)}
-                      {@render subRow(node)}
+                      {@render subRow(node, "projects")}
                     {/each}
                     <!-- Its older trees are built only while they are out:
                          a project keeps hundreds. -->
@@ -1137,9 +1140,10 @@
                       lists.older.length,
                       failedIn(lists.older),
                       front,
-                      olderOut(project.id, front)
+                      olderOut(project.id, front, "projects")
                         ? branches(lists.older, `rail:${project.id}:older`)
-                        : NO_TREES
+                        : NO_TREES,
+                      "projects"
                     )}
                     {#if lists.older.length + lists.recent.length === 0}
                       <Sidebar.MenuSubItem data-flip>

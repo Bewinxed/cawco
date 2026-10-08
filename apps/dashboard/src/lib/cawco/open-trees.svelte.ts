@@ -1,94 +1,72 @@
 /**
- * Which trees the reader has opened, one id at a time (tree.ts `collapse`).
- * Every tree starts folded; opening one is remembered per browser, and every
- * list that nests sessions reads the one answer, so a parent opened under
- * Finished is open under Working and in its project too.
- *
- * A tree opened in one list shows at once there; every other list shows it
- * in a task of its own just after. Shown in every list in the update the
- * click made, the click rendered the same tree twice and ran past a frame;
- * caught up in the next frame's own callbacks, it made that frame as long. A
- * task later, the other list's opening still starts on the same frame as
- * this one's (both land in the batch motion/rows `atTravel` opens, which
- * waits two frames), so the two never part. A tree closed closes in every
- * list at once (`set`).
+ * Which trees the reader has opened, one id at a time (tree.ts `collapse`),
+ * in each list on its own: a parent opened in its project stays folded under
+ * Working and Finished, and the rail's Working is not the home's. Every tree
+ * starts folded; opening one is remembered per browser, per list.
  */
 import { SvelteSet } from "svelte/reactivity";
 import { readJson, writeJson } from "./storage";
 
-/** A list that shows trees: the rail's projects, or the home's tabs. */
-export type TreeList = "rail" | "home";
+/**
+ * A list that shows trees: the rail's projects, the rail's Working and
+ * Finished tabs, and the home's Working, Finished and Recent.
+ */
+export type TreeList =
+  | "projects"
+  | "rail-working"
+  | "rail-finished"
+  | "home-working"
+  | "home-finished"
+  | "home-recent";
 
-const KEY = "cawco-open-trees";
+const LISTS: readonly TreeList[] = [
+  "projects",
+  "rail-working",
+  "rail-finished",
+  "home-working",
+  "home-finished",
+  "home-recent",
+];
 
-const stored = readJson<unknown>(KEY, []);
-const open = new SvelteSet<string>(
-  Array.isArray(stored)
+const keyOf = (list: TreeList): string => `cawco-open-trees:${list}`;
+
+function storedIds(list: TreeList): string[] {
+  const stored = readJson<unknown>(keyOf(list), []);
+  return Array.isArray(stored)
     ? stored.filter((id): id is string => typeof id === "string")
-    : []
-);
-/** What the other lists show until they catch up. */
-const behind = new SvelteSet<string>(open);
-/** The list the turns of this frame came from; null once every list shows them. */
-let turnedIn = $state<TreeList | null>(null);
-let catchingUp: ReturnType<typeof setTimeout> | undefined;
-
-function catchUp(): void {
-  for (const id of [...behind]) {
-    if (!open.has(id)) {
-      behind.delete(id);
-    }
-  }
-  for (const id of open) {
-    behind.add(id);
-  }
-  turnedIn = null;
+    : [];
 }
 
+const open = Object.fromEntries(
+  LISTS.map((list) => [list, new SvelteSet<string>(storedIds(list))])
+) as Record<TreeList, SvelteSet<string>>;
+
 /**
- * Parents whose older rows are out (older.ts, OlderRows): a project's older
- * sessions, a session's older delegates, in every list that draws them (the
- * wide screen's rail, the drawer's, the home); in memory, so a reload shuts
- * them.
+ * Parents whose older rows are out (older.ts, OlderRows), in each list on its
+ * own: a project's older sessions, a session's older delegates. In memory, so
+ * a reload shuts them.
  */
-export const olderOpen = new SvelteSet<string>();
+export const olderOpen = Object.fromEntries(
+  LISTS.map((list) => [list, new SvelteSet<string>()])
+) as Record<TreeList, SvelteSet<string>>;
 
 export const openTrees = {
   has(id: string, list: TreeList): boolean {
-    return turnedIn !== null && turnedIn !== list
-      ? behind.has(id)
-      : open.has(id);
+    return open[list].has(id);
   },
   set(id: string, opened: boolean, list: TreeList): void {
-    if (opened === open.has(id)) {
+    const ids = open[list];
+    if (opened === ids.has(id)) {
       return;
     }
     if (opened) {
-      open.add(id);
+      ids.add(id);
     } else {
-      open.delete(id);
+      ids.delete(id);
     }
-    writeJson(KEY, [...open]);
-    clearTimeout(catchingUp);
-    if (
-      typeof window === "undefined" ||
-      !opened ||
-      (turnedIn !== null && turnedIn !== list)
-    ) {
-      // On the server, or two lists turned before either caught up: neither
-      // is behind the other. A tree closing draws nothing new, so every list
-      // folds it in this update, in the one batch that starts on the next
-      // frame (motion/rows "close" pace): caught up a task later, the other
-      // list's fold landed after that frame, re-planned the room's edge a
-      // frame behind the rows sliding up under it, and they slid over its
-      // rows.
-      catchUp();
-      return;
-    }
-    turnedIn = list;
-    catchingUp = setTimeout(catchUp, 0);
+    writeJson(keyOf(list), [...ids]);
   },
   toggle(id: string, list: TreeList): void {
-    openTrees.set(id, !open.has(id), list);
+    openTrees.set(id, !open[list].has(id), list);
   },
 };

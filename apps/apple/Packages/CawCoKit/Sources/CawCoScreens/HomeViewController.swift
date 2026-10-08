@@ -920,15 +920,17 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
     private func toggleTree(_ id: String) {
         relay.end()
         branch.end()
-        let opening = !home.openTrees.contains(id)
+        // The tab whose rows are drawn: each keeps its own open trees.
+        let tab = drawnTab
+        let opening = !home.isTreeOpen(id, in: tab)
         let frames = layout.frames(in: collectionView)
         guard let parent = rows[id], let parentPath = dataSource.indexPath(for: .row(id)), let parentFrame = frames[parentPath] else {
-            home.toggleTree(id)
+            home.toggleTree(id, in: tab)
             return
         }
         let held = rows
         let folding = held.keys.filter { isUnder(held[$0]?.line.line, id, in: held) }
-        home.toggleTree(id)
+        home.toggleTree(id, in: tab)
         let next = build()
         if opening {
             commit(next, animated: false)

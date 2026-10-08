@@ -3,11 +3,15 @@
 
   /**
    * Whether a parent's older rows are out: opened by hand, or because the
-   * conversation in front is one of them (`front`). A list that leaves the
-   * rows of a shut box out of what it lists asks the same question.
+   * conversation in front is one of them (`front`), in that list. A list
+   * that leaves the rows of a shut box out of what it lists asks the same
+   * question.
    */
-  export const olderOut = (id: string, front: boolean): boolean =>
-    front || olderOpen.has(id);
+  export const olderOut = (
+    id: string,
+    front: boolean,
+    list: TreeList
+  ): boolean => front || olderOpen[list].has(id);
 </script>
 
 <script generics="T" lang="ts">
@@ -61,7 +65,7 @@
   }: {
     /** The parent whose older rows these are: a project's id, a session's. */
     id: string;
-    /** The list drawing it, so its box keeps a scroll of its own there. */
+    /** The list drawing it: whose open boxes it reads, and its box's scroll. */
     list: TreeList;
     /** The older trees, in the list's order; none while they are not out. */
     trees?: T[];
@@ -113,12 +117,13 @@
   let frame = 0;
   let box = $state<HTMLElement>();
 
-  const out = $derived(!still && olderOut(id, front));
+  const out = $derived(!still && olderOut(id, front, list));
 
   function toggle(): void {
     cancelAnimationFrame(frame);
-    if (olderOpen.has(id) || pending) {
-      olderOpen.delete(id);
+    const opened = olderOpen[list];
+    if (opened.has(id) || pending) {
+      opened.delete(id);
       pending = false;
       return;
     }
@@ -126,7 +131,7 @@
     // The first frame paints the busy row; the rows are drawn on the next.
     frame = requestAnimationFrame(() => {
       frame = requestAnimationFrame(() => {
-        olderOpen.add(id);
+        opened.add(id);
         pending = false;
       });
     });

@@ -39,8 +39,9 @@ public final class HomeModel {
     public var delegates: Bool {
         didSet { UserDefaults.standard.set(delegates, forKey: Keys.delegates) }
     }
-    /// Parents whose delegates are open under them.
-    public private(set) var openTrees: Set<String>
+    /// Parents whose delegates are open under them, in each tab on its own:
+    /// a parent opened under Finished stays folded under Working.
+    public private(set) var openTrees: [Tab: Set<String>]
     /// Machines a tab shows in full, past its first `moreAt`.
     public private(set) var shownWhole: [Tab: Set<String>]
     /// The Recent disclosure is open.
@@ -51,7 +52,7 @@ public final class HomeModel {
     private enum Keys {
         static let tab = "cawco-home-tab"
         static let delegates = "cawco-delegates"
-        static let openTrees = "cawco-open-trees"
+        static func openTrees(_ tab: Tab) -> String { "cawco-open-trees:home-\(tab.rawValue)" }
         static let whole = "cawco-home-tab-all"
         static let recentOpen = "cawco-home-recent-open"
     }
@@ -61,7 +62,9 @@ public final class HomeModel {
         let defaults = UserDefaults.standard
         tab = Tab(rawValue: defaults.string(forKey: Keys.tab) ?? "") ?? .working
         delegates = defaults.bool(forKey: Keys.delegates)
-        openTrees = Set(defaults.stringArray(forKey: Keys.openTrees) ?? [])
+        openTrees = Dictionary(uniqueKeysWithValues: Tab.allCases.map {
+            ($0, Set(defaults.stringArray(forKey: Keys.openTrees($0)) ?? []))
+        })
         recentOpen = defaults.bool(forKey: Keys.recentOpen)
         let whole = defaults.dictionary(forKey: Keys.whole) as? [String: [String]] ?? [:]
         shownWhole = [.working: Set(whole["working"] ?? []), .finished: Set(whole["finished"] ?? [])]
@@ -498,7 +501,8 @@ public final class HomeModel {
     /// A tab's lines by machine, each session followed by its delegates under
     /// the machine its top-level session runs on, capped at `moreAt` trees.
     private func groups(_ tab: Tab, lines: [TreeLine<InstanceRow>]) -> [MachineGroup] {
-        let visible = collapse(lines) { self.openTrees.contains($0) }
+        let open = openTrees[tab] ?? []
+        let visible = collapse(lines) { open.contains($0) }
         var order: [String] = []
         var byMachine: [String: [TreeLine<InstanceRow>]] = [:]
         var top = ""
@@ -547,7 +551,7 @@ public final class HomeModel {
                     Line(line: line, fold: line.descendants.isEmpty ? nil : Fold(
                         count: line.descendants.count,
                         failed: line.descendants.filter(\.isFailed).count,
-                        open: openTrees.contains(line.row.id)
+                        open: open.contains(line.row.id)
                     ))
                 },
                 more: more
@@ -582,13 +586,19 @@ public final class HomeModel {
         }
     }
 
-    public func toggleTree(_ id: String) {
-        if openTrees.contains(id) {
-            openTrees.remove(id)
+    public func isTreeOpen(_ id: String, in tab: Tab) -> Bool {
+        openTrees[tab]?.contains(id) ?? false
+    }
+
+    public func toggleTree(_ id: String, in tab: Tab) {
+        var set = openTrees[tab] ?? []
+        if set.contains(id) {
+            set.remove(id)
         } else {
-            openTrees.insert(id)
+            set.insert(id)
         }
-        UserDefaults.standard.set(Array(openTrees), forKey: Keys.openTrees)
+        openTrees[tab] = set
+        UserDefaults.standard.set(Array(set), forKey: Keys.openTrees(tab))
     }
 
     public func toggleWhole(_ machineId: String, in tab: Tab) {

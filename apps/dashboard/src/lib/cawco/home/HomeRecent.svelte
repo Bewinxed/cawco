@@ -49,7 +49,10 @@
    * SessionTree): a session's delegates hang under its row, folded until its
    * mark is pressed. Built only while Recent is open.
    */
-  const view = new TreeView(() => (recentOpen ? home.recentLines : []), "home");
+  const view = new TreeView(
+    () => (recentOpen ? home.recentLines : []),
+    () => "home-recent"
+  );
   /** The rows the list holds, for each tree to find its own in. */
   const treeRows = $derived(view.folded.map((line) => line.row));
   const recentMatches = $derived.by(() => {

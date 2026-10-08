@@ -28,12 +28,16 @@ export interface Older {
 
 export class TreeView {
   readonly #read: () => Line[];
-  /** The list drawing it: whose open trees it reads (open-trees). */
-  readonly list: TreeList;
+  readonly #list: () => TreeList;
 
-  constructor(lines: () => Line[], list: TreeList) {
+  constructor(lines: () => Line[], list: () => TreeList) {
     this.#read = lines;
-    this.list = list;
+    this.#list = list;
+  }
+
+  /** The list drawing it: whose open trees it reads (open-trees). */
+  get list(): TreeList {
+    return this.#list();
   }
 
   /** The list's rows in tree order (tree.ts). */

@@ -256,6 +256,7 @@
         {markedElsewhere}
         onstart={() => newSession()}
         {stale}
+        {variant}
         waiting={!home.ready}
         bind:relaying
       />

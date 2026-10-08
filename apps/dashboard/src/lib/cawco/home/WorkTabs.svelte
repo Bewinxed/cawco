@@ -106,8 +106,14 @@
     waiting,
     onstart,
     markedElsewhere,
+    variant,
     relaying = $bindable(false),
   }: {
+    /**
+     * Where the tabs stand: the home page's, or the rail's. Each keeps its
+     * own open trees (open-trees).
+     */
+    variant: "page" | "rail";
     /**
      * The open conversation's row is marked elsewhere on screen (the rail's
      * project tree draws it): the selection is one row, so this list leaves
@@ -183,11 +189,11 @@
   const views = {
     working: new TreeView(
       () => tree(rowsOf("working"), { anchor: "last", context: known }),
-      "home"
+      () => (variant === "rail" ? "rail-working" : "home-working")
     ),
     finished: new TreeView(
       () => tree(rowsOf("finished"), { anchor: "first", context: known }),
-      "home"
+      () => (variant === "rail" ? "rail-finished" : "home-finished")
     ),
   };
   /**
@@ -676,7 +682,7 @@
             count={older.count}
             failed={older.failed}
             id={line.key}
-            list="home"
+            list={views[line.tab].list}
             still
             style={leaveAnim(kids.at(-1)?.key ?? line.key)}
             tall
