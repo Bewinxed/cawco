@@ -432,7 +432,7 @@ final class UserTurnView: UIView, RowContent, FitsWidth, UIGestureRecognizerDele
                 shot.configure(src, alt: "Attachment \(i + 1) sent with this message")
                 shot.onOpen = { [weak self, weak shot] in
                     guard let self, let shot else { return }
-                    env.openLightbox(.images(sources, index: sources.firstIndex(of: src) ?? 0), shot)
+                    env.openLightbox(.images(sources.map { Lightbox.Picture(url: $0) }, index: sources.firstIndex(of: src) ?? 0), shot)
                 }
                 views.append(shot)
             } else {

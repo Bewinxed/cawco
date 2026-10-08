@@ -780,9 +780,10 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
             row.addArrangedSubview(number)
         }
         if let trailing { row.addArrangedSubview(trailing) }
+        // `padding-bottom: space-1` over the 1pt seam; at least `c-btn-h-xs` tall, all in.
         row.isLayoutMarginsRelativeArrangement = true
-        row.directionalLayoutMargins.bottom = Space.space1
-        row.heightAnchor.constraint(greaterThanOrEqualToConstant: Size.cBtnHXs + Space.space1).isActive = true
+        row.directionalLayoutMargins.bottom = Space.space1 + 1
+        row.heightAnchor.constraint(greaterThanOrEqualToConstant: Size.cBtnHXs).isActive = true
         let seam = UIView()
         seam.backgroundColor = Palette.seam
         seam.translatesAutoresizingMaskIntoConstraints = false
@@ -844,7 +845,7 @@ final class HostCell: UICollectionViewCell {
 
 /// The kit's Checkbox (ui/checkbox): 16pt at `--radius-xs` on the input
 /// border; checked, the action's solid with its tick in `on-action`, which
-/// fades in over `--dur-toggle`. The hit area is the small control height.
+/// fades in over `--dur-toggle`. It stands 16pt wide in its row, as the web's does.
 final class TaskCheckbox: UIControl {
     private let box = UIView()
     private let tick = GlyphView(.tick, size: 12, tint: Palette.onAction)
@@ -861,12 +862,12 @@ final class TaskCheckbox: UIControl {
         addSubview(box)
         box.addSubview(tick)
         NSLayoutConstraint.activate([
-            widthAnchor.constraint(equalToConstant: Size.cBtnHSm),
-            heightAnchor.constraint(equalToConstant: Size.cBtnHSm),
-            box.widthAnchor.constraint(equalToConstant: 16),
-            box.heightAnchor.constraint(equalToConstant: 16),
+            widthAnchor.constraint(equalToConstant: Size.iconMd),
+            heightAnchor.constraint(equalToConstant: Size.iconMd),
+            box.topAnchor.constraint(equalTo: topAnchor),
+            box.bottomAnchor.constraint(equalTo: bottomAnchor),
             box.leadingAnchor.constraint(equalTo: leadingAnchor),
-            box.centerYAnchor.constraint(equalTo: centerYAnchor),
+            box.trailingAnchor.constraint(equalTo: trailingAnchor),
             tick.centerXAnchor.constraint(equalTo: box.centerXAnchor),
             tick.centerYAnchor.constraint(equalTo: box.centerYAnchor),
         ])
@@ -1021,6 +1022,7 @@ final class TaskTextPart: UIView, UITextViewDelegate {
         editor.heightAnchor.constraint(greaterThanOrEqualToConstant: 64).isActive = true
         let actions = UIStackView(arrangedSubviews: [UIView(), cancel, saveButton])
         actions.spacing = Space.space1
+        actions.alignment = .center
         editing.axis = .vertical
         editing.spacing = Space.space2
         for part in [editor, problem, actions] as [UIView] { editing.addArrangedSubview(part) }

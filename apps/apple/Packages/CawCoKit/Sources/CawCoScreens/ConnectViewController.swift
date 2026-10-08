@@ -174,20 +174,17 @@ final class ConnectViewController: ObservedViewController, UITextFieldDelegate {
         let content = scroll.contentLayoutGuide
         let frame = scroll.frameLayoutGuide
         if mode == .change {
-            // The house sheet's content: its ground, padding and keyboard are the sheet's.
-            view.backgroundColor = .clear
-            let fit = scroll.heightAnchor.constraint(equalTo: column.heightAnchor, constant: Space.space3)
-            fit.priority = .defaultLow
+            // The system sheet under its navigation bar: the column stands in
+            // the sheet's layout margins at its own height, and scrolls above the keyboard.
             NSLayoutConstraint.activate([
                 scroll.leadingAnchor.constraint(equalTo: view.leadingAnchor),
                 scroll.trailingAnchor.constraint(equalTo: view.trailingAnchor),
                 scroll.topAnchor.constraint(equalTo: view.topAnchor),
-                scroll.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+                scroll.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor),
                 column.topAnchor.constraint(equalTo: content.topAnchor, constant: Space.space3),
-                column.bottomAnchor.constraint(equalTo: content.bottomAnchor),
-                column.leadingAnchor.constraint(equalTo: frame.leadingAnchor),
-                column.trailingAnchor.constraint(equalTo: frame.trailingAnchor),
-                fit,
+                column.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -Space.space5),
+                column.leadingAnchor.constraint(equalTo: view.layoutMarginsGuide.leadingAnchor),
+                column.trailingAnchor.constraint(equalTo: view.layoutMarginsGuide.trailingAnchor),
             ])
             return
         }

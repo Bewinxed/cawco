@@ -457,12 +457,20 @@ final class NsRow: UIControl {
         row.isUserInteractionEnabled = false
         row.translatesAutoresizingMaskIntoConstraints = false
         addSubview(row)
+        // On a phone every button in the popover is at least 44 tall (ns-theme.css, `max-width: 640px`).
+        let phone = UIScreen.main.bounds.width <= 640
+        // `padding: 6px 8px`; a row of fixed height (the machines' `height: 44px`) lets its content run into the padding.
+        let top = row.topAnchor.constraint(equalTo: topAnchor, constant: 6)
+        let bottom = row.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -6)
+        top.priority = .defaultHigh
+        bottom.priority = .defaultHigh
         NSLayoutConstraint.activate([
-            heightAnchor.constraint(greaterThanOrEqualToConstant: height),
+            heightAnchor.constraint(greaterThanOrEqualToConstant: phone ? max(height, Size.cBtnHLg) : height),
             row.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
             row.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
-            row.topAnchor.constraint(equalTo: topAnchor, constant: 6),
-            row.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -6),
+            row.centerYAnchor.constraint(equalTo: centerYAnchor),
+            top,
+            bottom,
         ])
         isAccessibilityElement = true
         accessibilityLabel = label
@@ -550,7 +558,8 @@ final class NsSegmented: UIControl {
             stack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -3),
             stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 3),
             stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -3),
-            stack.heightAnchor.constraint(equalToConstant: 26),
+            // `.tab { height: 26px }`; on a phone the popover's `button { min-height: 44px }` (ns-theme.css) outranks it.
+            stack.heightAnchor.constraint(equalToConstant: UIScreen.main.bounds.width <= 640 ? Size.cBtnHLg : 26),
         ])
         for (i, item) in self.items.enumerated() {
             var config = UIButton.Configuration.plain()
@@ -636,13 +645,16 @@ class NsPopoverController: KitPopoverController {
             scroll.bottomAnchor.constraint(equalTo: card.bottomAnchor),
             scroll.leadingAnchor.constraint(equalTo: card.leadingAnchor),
             scroll.trailingAnchor.constraint(equalTo: card.trailingAnchor),
-            rows.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor, constant: 6),
-            rows.bottomAnchor.constraint(equalTo: scroll.contentLayoutGuide.bottomAnchor, constant: -6),
-            rows.leadingAnchor.constraint(equalTo: scroll.frameLayoutGuide.leadingAnchor, constant: 6),
-            rows.trailingAnchor.constraint(equalTo: scroll.frameLayoutGuide.trailingAnchor, constant: -6),
+            rows.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor, constant: Self.inset),
+            rows.bottomAnchor.constraint(equalTo: scroll.contentLayoutGuide.bottomAnchor, constant: -Self.inset),
+            rows.leadingAnchor.constraint(equalTo: scroll.frameLayoutGuide.leadingAnchor, constant: Self.inset),
+            rows.trailingAnchor.constraint(equalTo: scroll.frameLayoutGuide.trailingAnchor, constant: -Self.inset),
         ])
         fit()
     }
+
+    /// `.ns-pop { padding: 6px }` inside its 1pt border.
+    private static let inset = 6 + 1.0
 
     /// Sizes the card to its rows, inside the caps.
     func fit() {
@@ -650,8 +662,8 @@ class NsPopoverController: KitPopoverController {
         let screen = view.window?.windowScene?.screen.bounds.size ?? UIScreen.main.bounds.size
         let phone = traitCollection.horizontalSizeClass == .compact
         let wide = phone ? screen.width - 24 : width
-        let height = rows.systemLayoutSizeFitting(CGSize(width: wide - 12, height: UIView.layoutFittingCompressedSize.height),
-                                                 withHorizontalFittingPriority: .required, verticalFittingPriority: .fittingSizeLevel).height + 12
+        let height = rows.systemLayoutSizeFitting(CGSize(width: wide - Self.inset * 2, height: UIView.layoutFittingCompressedSize.height),
+                                                 withHorizontalFittingPriority: .required, verticalFittingPriority: .fittingSizeLevel).height + Self.inset * 2
         let cap = phone ? min(420, screen.height * 0.55) : 440
         preferredContentSize = CGSize(width: wide, height: min(height, cap))
     }

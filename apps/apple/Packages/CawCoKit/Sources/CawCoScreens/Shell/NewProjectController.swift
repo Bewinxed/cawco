@@ -63,8 +63,9 @@ final class NewProjectController: KitPopoverController, UITextFieldDelegate {
         }
         picker.onResize = { [weak self] in self?.resize() }
         create = KitButton.make("Create", variant: .action, height: .sm) { [weak self] in self?.submit() }
+        // `flex items-center gap-3 pt-1`.
         let createRow = UIStackView(arrangedSubviews: [create, hubProblem, UIView()])
-        createRow.spacing = Space.space3
+        createRow.spacing = Self.gap
         createRow.alignment = .center
         let form = UIStackView(arrangedSubviews: [
             field("Name", nameField),
@@ -74,18 +75,18 @@ final class NewProjectController: KitPopoverController, UITextFieldDelegate {
             createRow,
         ])
         form.axis = .vertical
-        form.spacing = Space.space3
-        form.setCustomSpacing(Space.space3 + 4, after: picker)
+        form.spacing = Self.gap
+        form.setCustomSpacing(Self.gap + Space.space1, after: picker)
         stack.addArrangedSubview(heading)
         stack.addArrangedSubview(form)
         stack.axis = .vertical
-        stack.spacing = Space.space3
+        stack.spacing = Self.gap
         stack.translatesAutoresizingMaskIntoConstraints = false
         card.addSubview(stack)
         NSLayoutConstraint.activate([
-            stack.topAnchor.constraint(equalTo: card.topAnchor, constant: 16),
-            stack.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 16),
-            stack.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -16),
+            stack.topAnchor.constraint(equalTo: card.topAnchor, constant: Self.inset),
+            stack.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: Self.inset),
+            stack.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -Self.inset),
         ])
         resize()
     }
@@ -105,11 +106,16 @@ final class NewProjectController: KitPopoverController, UITextFieldDelegate {
         return column
     }
 
+    /// `gap-3` between the parts.
+    private static let gap = 12.0
+    /// `p-4` inside the popover's 1pt border.
+    private static let inset = 16 + 1.0
+
     /// `w-[340px] max-w-[calc(100vw-2rem)]`, as tall as the form.
     private func resize() {
         let width = min(340, (view.window?.bounds.width ?? UIScreen.main.bounds.width) - 32)
         stack.layoutIfNeeded()
-        let height = stack.systemLayoutSizeFitting(CGSize(width: width - 32, height: 0), withHorizontalFittingPriority: .required, verticalFittingPriority: .fittingSizeLevel).height + 32
+        let height = stack.systemLayoutSizeFitting(CGSize(width: width - Self.inset * 2, height: 0), withHorizontalFittingPriority: .required, verticalFittingPriority: .fittingSizeLevel).height + Self.inset * 2
         preferredContentSize = CGSize(width: width, height: height)
     }
 
@@ -238,8 +244,9 @@ final class DirectoryPickerView: UIStackView {
             go(parent, way: -1)
         }, for: .primaryActionTriggered)
         pathLabel.lineBreakMode = .byTruncatingHead
+        // `flex items-center gap-2`.
         let head = UIStackView(arrangedSubviews: [up, pathLabel])
-        head.spacing = Space.space2
+        head.spacing = Self.gap
         head.alignment = .center
         list.axis = .vertical
         list.translatesAutoresizingMaskIntoConstraints = false
@@ -259,17 +266,22 @@ final class DirectoryPickerView: UIStackView {
             collapse()
         }
         let foot = UIStackView(arrangedSubviews: [UIView(), use])
+        foot.alignment = .center
         let rule = UIView()
         rule.backgroundColor = Palette.border
         rule.heightAnchor.constraint(equalToConstant: 1).isActive = true
+        // `mt-2 flex flex-col gap-2 border-t border-border pt-2`.
         panel.axis = .vertical
-        panel.spacing = Space.space2
+        panel.spacing = Self.gap
         for part in [rule, head, listScroll, foot] { panel.addArrangedSubview(part) }
         panel.isHidden = true
         addArrangedSubview(panel)
-        setCustomSpacing(Space.space2, after: trigger)
+        setCustomSpacing(Self.gap, after: trigger)
         panel.widthAnchor.constraint(equalTo: widthAnchor).isActive = true
     }
+
+    /// Tailwind's `2` (`mt-2`, `gap-2`, `pt-2`).
+    private static let gap = 8.0
 
     @available(*, unavailable)
     required init(coder _: NSCoder) {
@@ -370,7 +382,8 @@ final class DirectoryPickerView: UIStackView {
             config.imageColorTransformer = UIConfigurationColorTransformer { _ in Palette.inkStrong.withAlphaComponent(0.7) }
             config.attributedTitle = AttributedString(dir.name, attributes: AttributeContainer(TypeScale.typeCode.with(points: TypeScale.typeLabel.points).attributes(color: Palette.inkStrong)))
             config.titleLineBreakMode = .byTruncatingTail
-            config.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: 11, bottom: 0, trailing: 11)
+            // The kit's `sm` button: `px-[11px]` inside its 1pt border.
+            config.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: 12, bottom: 0, trailing: 12)
             config.background.cornerRadius = Radius.radiusMd
             let row = UIButton(configuration: config, primaryAction: UIAction { [weak self] _ in
                 guard let self else { return }

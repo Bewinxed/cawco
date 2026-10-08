@@ -39,6 +39,8 @@ const SOLAR_ICONS = [
   "structure-bold",
   "alt-arrow-right-linear",
   "magnifer-bold-duotone",
+  // The lightbox's zoom (Lightbox.svelte `IconZoomIn`).
+  "minimalistic-magnifer-zoom-in-bold-duotone",
   "server-2-bold-duotone",
   "close-circle-bold-duotone",
   "archive-down-minimlistic-bold-duotone",

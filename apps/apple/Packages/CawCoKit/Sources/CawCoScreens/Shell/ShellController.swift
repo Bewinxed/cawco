@@ -647,6 +647,8 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         })
         NavigationItems.configure(connect.navigationItem, leading: [close])
         sheet.sheetPresentationController?.detents = [.medium(), .large()]
+        // HIG (Sheets): a resizable sheet shows its grabber.
+        sheet.sheetPresentationController?.prefersGrabberVisible = true
         dialogPresenter.present(sheet, animated: true)
     }
 

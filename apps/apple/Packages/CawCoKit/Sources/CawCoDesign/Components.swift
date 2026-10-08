@@ -109,6 +109,11 @@ public enum KitButton {
         button.houseStyle()
         button.translatesAutoresizingMaskIntoConstraints = false
         button.heightAnchor.constraint(greaterThanOrEqualToConstant: height.points).isActive = true
+        // A glyph alone is the square `icon-xs` / `icon-sm` / `icon` / `icon-lg` button.
+        if title.isEmpty, glyph != nil {
+            button.configuration?.contentInsets = .zero
+            button.widthAnchor.constraint(equalToConstant: height.points).isActive = true
+        }
         let compact = !stretch
         button.configurationUpdateHandler = { button in
             guard var config = button.configuration else {
@@ -135,7 +140,8 @@ public enum KitButton {
         config.attributedTitle = AttributedString(title, attributes: AttributeContainer(height.role.attributes(color: ink(variant), tracking: -0.01)))
         config.titleLineBreakMode = .byTruncatingTail
         if let glyph {
-            config.image = glyph.image.resized(to: Size.iconMd)
+            // `--btn-icon`: 12 on the xs button, 16 on the rest.
+            config.image = glyph.image.resized(to: height == .xs ? Size.iconSm : Size.iconMd)
             config.imageColorTransformer = UIConfigurationColorTransformer { _ in glyphTint ?? ink(variant) }
             config.imagePadding = height.gap
         }

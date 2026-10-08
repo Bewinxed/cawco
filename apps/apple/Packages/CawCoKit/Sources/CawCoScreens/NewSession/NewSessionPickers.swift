@@ -78,6 +78,8 @@ final class MachinesPopover: NsPopoverController {
             content.configure(glyph: machine.glyph, hue: machine.hue, name: machine.name,
                               meta: (machine.os.isEmpty ? "" : "\(machine.os) · ") + machine.load, presence: presence)
             let row = NsRow(content, label: "\(machine.name), \(machine.load)")
+            // MachinesChip.svelte `.row { height: 44px }`.
+            row.heightAnchor.constraint(equalToConstant: Size.cBtnHLg).isActive = true
             row.isEnabled = machine.online
             row.chosen = selected.contains(machine.id)
             row.addAction(UIAction { [weak self] _ in self?.toggle(machine.id) }, for: .touchUpInside)
@@ -228,6 +230,8 @@ final class ProjectPopover: NsPopoverController, UITextFieldDelegate {
         rows.arrangedSubviews.forEach { $0.removeFromSuperview() }
         for project in projects {
             let row = NsRow(tile: NsTile(GlyphView(.toolFiles, size: 16, tint: project.hue), side: 24), name: project.name, meta: project.path)
+            // ProjectChip.svelte `.row { height: 44px }`.
+            row.heightAnchor.constraint(equalToConstant: Size.cBtnHLg).isActive = true
             row.chosen = project.id == projectId
             row.addAction(UIAction { [weak self] _ in self?.onPick(project) }, for: .touchUpInside)
             rows.addArrangedSubview(row)
@@ -370,7 +374,9 @@ final class LifetimePopover: NsPopoverController {
     override func viewDidLoad() {
         super.viewDidLoad()
         for option in Self.options {
-            let row = NsRow(tile: NsTile(GlyphView(option.glyph, size: 16, tint: option.hue)), name: option.name, meta: option.desc, height: 48, wraps: true)
+            // `.row { min-height: 48px }`, which the phone's `.ns-pop button { min-height: 44px }` outranks.
+            let row = NsRow(tile: NsTile(GlyphView(option.glyph, size: 16, tint: option.hue)), name: option.name, meta: option.desc,
+                            height: UIScreen.main.bounds.width <= 640 ? Size.cBtnHLg : 48, wraps: true)
             row.chosen = option.ephemeral == ephemeral
             row.addAction(UIAction { [weak self] _ in self?.onPick(option.ephemeral) }, for: .touchUpInside)
             rows.addArrangedSubview(row)

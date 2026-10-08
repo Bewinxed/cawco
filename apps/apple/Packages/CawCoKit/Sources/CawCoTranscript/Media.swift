@@ -236,8 +236,15 @@ final class DocThumb: UIControl {
 /// swiped between, zoomed out of the thumbnail tapped; or a document — an
 /// attached file, a diff in full — on a sheet.
 final class Lightbox: UIViewController, UIScrollViewDelegate {
+    /// A picture and what the bar under it says: its caption and its path.
+    struct Picture {
+        let url: URL
+        var caption: String?
+        var path: String?
+    }
+
     enum Item {
-        case images([URL], index: Int)
+        case images([Picture], index: Int)
         case text(name: String, content: String)
         case diff(path: String, old: String, new: String)
     }
@@ -247,6 +254,9 @@ final class Lightbox: UIViewController, UIScrollViewDelegate {
     private let pager = UIScrollView()
     private let counter = UILabel()
     private var index = 0
+    private var zooms: [UIScrollView] = []
+    private let lines = UIStackView()
+    private let original = UIButton(type: .system)
 
     init(_ item: Item, env: RowEnv) {
         self.item = item
@@ -269,16 +279,18 @@ final class Lightbox: UIViewController, UIScrollViewDelegate {
         scrim.backgroundColor = Palette.scrim
         view.pin(scrim)
         switch item {
-        case let .images(urls, start): images(urls, start: start)
+        case let .images(pictures, start): images(pictures, start: start)
         case let .text(name, content): sheet(name: name, content: content, diff: nil)
         case let .diff(path, old, new): sheet(name: path, content: "", diff: (old, new))
         }
     }
 
+    /// The picture viewer's chrome (`.cawco-pswp .pswp__button`): 44pt on the
+    /// raised surface inside a hairline, its glyph 20pt.
     private func button(_ glyph: Glyph, label: String, action: @escaping () -> Void) -> UIButton {
         let button = UIButton(type: .system)
         button.translatesAutoresizingMaskIntoConstraints = false
-        button.setImage(glyph.image, for: .normal)
+        button.setImage(glyph.image.resized(to: Size.iconLg), for: .normal)
         button.tintColor = Palette.inkStrong
         button.backgroundColor = Palette.surfaceRaised
         button.layer.cornerRadius = Radius.radiusSm
@@ -290,22 +302,23 @@ final class Lightbox: UIViewController, UIScrollViewDelegate {
         return button
     }
 
-    private func images(_ urls: [URL], start: Int) {
+    private func images(_ pictures: [Picture], start: Int) {
         index = start
         pager.isPagingEnabled = true
         pager.showsHorizontalScrollIndicator = false
         pager.delegate = self
         view.pin(pager)
         var previous: UIView?
-        for url in urls {
+        for shown in pictures {
             let zoom = UIScrollView()
             zoom.translatesAutoresizingMaskIntoConstraints = false
             zoom.maximumZoomScale = 4
             zoom.delegate = self
+            zooms.append(zoom)
             let picture = UIImageView()
             picture.contentMode = .scaleAspectFit
             picture.translatesAutoresizingMaskIntoConstraints = false
-            ImageStore.shared.load(url) { picture.image = $0 }
+            ImageStore.shared.load(shown.url) { picture.image = $0 }
             zoom.addSubview(picture)
             pager.addSubview(zoom)
             NSLayoutConstraint.activate([
@@ -324,33 +337,113 @@ final class Lightbox: UIViewController, UIScrollViewDelegate {
         }
         previous?.trailingAnchor.constraint(equalTo: pager.contentLayoutGuide.trailingAnchor).isActive = true
         pager.contentLayoutGuide.heightAnchor.constraint(equalTo: pager.frameLayoutGuide.heightAnchor).isActive = true
+        // The top bar (`.pswp__top-bar`, `space-2` in): the counter at its
+        // start, zoom then close at its end `space-2` apart, close 6pt in
+        // from the bar's padding (PhotoSwipe's `--close` margin).
         let close = button(.close, label: "Close image") { [weak self] in self?.dismiss(animated: true) }
+        let zoom = button(.zoomIn, label: "Zoom") { [weak self] in self?.toggleZoom() }
         counter.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(close)
+        view.addSubview(zoom)
         view.addSubview(counter)
+        let bar = describeBar()
+        view.addSubview(bar)
         let safe = view.safeAreaLayoutGuide
         NSLayoutConstraint.activate([
             close.topAnchor.constraint(equalTo: safe.topAnchor, constant: Space.space2),
-            close.trailingAnchor.constraint(equalTo: safe.trailingAnchor, constant: -Space.space2),
+            close.trailingAnchor.constraint(equalTo: safe.trailingAnchor, constant: -(Space.space2 + 6)),
+            zoom.topAnchor.constraint(equalTo: close.topAnchor),
+            zoom.trailingAnchor.constraint(equalTo: close.leadingAnchor, constant: -Space.space2),
             counter.leadingAnchor.constraint(equalTo: safe.leadingAnchor, constant: Space.space2 * 2),
             counter.centerYAnchor.constraint(equalTo: close.centerYAnchor),
+            // `.pswp__description`: `space-3` in from the sides and the foot.
+            bar.leadingAnchor.constraint(equalTo: safe.leadingAnchor, constant: Space.space3),
+            bar.trailingAnchor.constraint(equalTo: safe.trailingAnchor, constant: -Space.space3),
+            bar.bottomAnchor.constraint(equalTo: safe.bottomAnchor, constant: -Space.space3),
         ])
-        updateCounter(urls.count)
+        show(pictures)
         view.layoutIfNeeded()
         pager.contentOffset.x = Double(start) * view.bounds.width
     }
 
-    private func updateCounter(_ total: Int) {
-        counter.isHidden = total < 2
-        counter.attributedText = Styled.string("\(index + 1) / \(total)", TypeScale.typeMeta, color: Palette.inkMuted, tabular: true)
+    /// The bar under the picture (`.pswp__description`): its caption and its
+    /// path, then the way to the original; on the recess inside a hairline.
+    private func describeBar() -> UIView {
+        lines.axis = .vertical
+        lines.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        original.setContentHuggingPriority(.required, for: .horizontal)
+        original.setContentCompressionResistancePriority(.required, for: .horizontal)
+        original.addAction(UIAction { [weak self] _ in self?.openOriginal() }, for: .primaryActionTriggered)
+        let row = UIStackView(arrangedSubviews: [lines, original])
+        row.spacing = Space.space3
+        row.alignment = .center
+        row.isLayoutMarginsRelativeArrangement = true
+        row.directionalLayoutMargins = NSDirectionalEdgeInsets(top: Space.space2, leading: Space.space3, bottom: Space.space2, trailing: Space.space3)
+        row.backgroundColor = Palette.surfaceRecess
+        row.layer.cornerRadius = Radius.radiusSm
+        row.layer.cornerCurve = .continuous
+        row.layer.borderWidth = 1
+        row.layer.borderColor = Palette.borderHairline.resolvedColor(with: traitCollection).cgColor
+        row.translatesAutoresizingMaskIntoConstraints = false
+        return row
+    }
+
+    private var pictures: [Picture] {
+        if case let .images(pictures, _) = item { return pictures }
+        return []
+    }
+
+    /// The counter and the bar, for the picture on screen.
+    private func show(_ pictures: [Picture]) {
+        counter.isHidden = pictures.count < 2
+        counter.attributedText = Styled.string("\(index + 1) / \(pictures.count)", TypeScale.typeMeta, color: Palette.inkMuted, tabular: true)
+        guard pictures.indices.contains(index) else { return }
+        let shown = pictures[index]
+        lines.arrangedSubviews.forEach { $0.removeFromSuperview() }
+        for (text, role) in [(shown.caption, TypeScale.typeMeta), (shown.path, TypeScale.typeCode.with(points: TypeScale.typeMeta.points))] {
+            guard let text, !text.isEmpty else { continue }
+            let line = KitLabel(role, ink: Palette.inkMuted, lines: 0)
+            line.text = text
+            lines.addArrangedSubview(line)
+        }
+        // A picture carried in the transcript itself has no page to open: it is offered as a file.
+        let inline = shown.url.scheme == "data"
+        var words = AttributeContainer(TypeScale.typeMeta.attributes(color: Palette.inkMuted))
+        words.underlineStyle = .single
+        var config = UIButton.Configuration.plain()
+        config.attributedTitle = AttributedString(inline ? "Save original" : "Open original", attributes: words)
+        config.contentInsets = .zero
+        original.configuration = config
+    }
+
+    private func openOriginal() {
+        guard pictures.indices.contains(index) else { return }
+        let url = pictures[index].url
+        guard url.scheme == "data" else {
+            UIApplication.shared.open(url)
+            return
+        }
+        ImageStore.shared.load(url) { [weak self] image in
+            guard let self, let image else { return }
+            let share = UIActivityViewController(activityItems: [image], applicationActivities: nil)
+            share.popoverPresentationController?.sourceView = original
+            present(share, animated: true)
+        }
+    }
+
+    /// The zoom button: the picture on screen to twice its fitted size, or back.
+    private func toggleZoom() {
+        guard zooms.indices.contains(index) else { return }
+        let zoom = zooms[index]
+        zoom.setZoomScale(zoom.zoomScale > 1 ? 1 : 2, animated: !UIAccessibility.isReduceMotionEnabled)
     }
 
     func viewForZooming(in scrollView: UIScrollView) -> UIView? { scrollView === pager ? nil : scrollView.subviews.first }
 
     func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
-        guard scrollView === pager, case let .images(urls, _) = item, view.bounds.width > 0 else { return }
+        guard scrollView === pager, view.bounds.width > 0 else { return }
         index = Int((scrollView.contentOffset.x / view.bounds.width).rounded())
-        updateCounter(urls.count)
+        show(pictures)
     }
 
     private func sheet(name: String, content: String, diff: (old: String, new: String)?) {
@@ -363,10 +456,13 @@ final class Lightbox: UIViewController, UIScrollViewDelegate {
         sheet.boxShadow = Shadow.shadowTile
         let title = LineLabel()
         title.attributedText = Styled.string(name, TypeScale.typeLabel, color: Palette.inkStrong)
-        let copy = button(.copy, label: "Copy") {
+        // `.doc-head`'s CopyButton and close: ghost icon buttons (`size="icon"`, `touch-hit`).
+        let copy = KitButton.make("", glyph: .copy, variant: .ghost) {
             UIPasteboard.general.string = diff?.new ?? content
         }
-        let close = button(.close, label: "Close document") { [weak self] in self?.dismiss(animated: true) }
+        copy.accessibilityLabel = "Copy \(name)"
+        let close = KitButton.make("", glyph: .close, variant: .ghost) { [weak self] in self?.dismiss(animated: true) }
+        close.accessibilityLabel = "Close document"
         let head = railLine([title, copy, close], spacing: Space.space1)
         let headBox = UIView()
         headBox.pin(head, insets: UIEdgeInsets(top: Space.space2, left: Space.space4, bottom: Space.space2, right: Space.space2))
@@ -401,14 +497,21 @@ final class Lightbox: UIViewController, UIScrollViewDelegate {
         scroll.translatesAutoresizingMaskIntoConstraints = false
         let column = UIStackView(arrangedSubviews: [headBox, rule, scroll])
         column.axis = .vertical
-        sheet.pin(column)
+        // The head and the body stand inside the sheet's 1pt border.
+        sheet.pin(column, insets: UIEdgeInsets(top: 1, left: 1, bottom: 1, right: 1))
         view.addSubview(sheet)
         let safe = view.safeAreaLayoutGuide
         let fit = scroll.heightAnchor.constraint(equalTo: scroll.contentLayoutGuide.heightAnchor)
         fit.priority = .defaultLow
+        // `inline-size: min(100%, 60rem)` inside `.doc-view`'s `space-4` padding, centred.
+        let wide = sheet.widthAnchor.constraint(equalTo: safe.widthAnchor, constant: -Space.space4 * 2)
+        wide.priority = .defaultHigh
         NSLayoutConstraint.activate([
-            sheet.leadingAnchor.constraint(equalTo: safe.leadingAnchor, constant: Space.space4),
-            sheet.trailingAnchor.constraint(equalTo: safe.trailingAnchor, constant: -Space.space4),
+            sheet.leadingAnchor.constraint(greaterThanOrEqualTo: safe.leadingAnchor, constant: Space.space4),
+            sheet.trailingAnchor.constraint(lessThanOrEqualTo: safe.trailingAnchor, constant: -Space.space4),
+            sheet.widthAnchor.constraint(lessThanOrEqualToConstant: 960),
+            wide,
+            sheet.centerXAnchor.constraint(equalTo: safe.centerXAnchor),
             sheet.centerYAnchor.constraint(equalTo: safe.centerYAnchor),
             sheet.heightAnchor.constraint(lessThanOrEqualTo: safe.heightAnchor, multiplier: 0.86),
             body.leadingAnchor.constraint(equalTo: scroll.contentLayoutGuide.leadingAnchor, constant: Space.space4),

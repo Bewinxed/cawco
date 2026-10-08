@@ -637,7 +637,8 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
             handle.centerXAnchor.constraint(equalTo: grip.centerXAnchor),
             handle.widthAnchor.constraint(equalToConstant: 100),
             handle.heightAnchor.constraint(equalToConstant: 6),
-            headRow.topAnchor.constraint(equalTo: phone ? handle.bottomAnchor : grip.topAnchor, constant: phone ? 8 : 3),
+            // `.head { padding: 3px 4px 8px }`, under the grabber on a phone.
+            headRow.topAnchor.constraint(equalTo: phone ? handle.bottomAnchor : grip.topAnchor, constant: 3),
             headRow.leadingAnchor.constraint(equalTo: grip.leadingAnchor, constant: 4),
             headRow.trailingAnchor.constraint(equalTo: grip.trailingAnchor, constant: -4),
             headRow.bottomAnchor.constraint(equalTo: grip.bottomAnchor, constant: -8),

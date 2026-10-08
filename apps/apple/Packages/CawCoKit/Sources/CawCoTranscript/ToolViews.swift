@@ -313,8 +313,7 @@ final class ToolLineView: RailRow, RowContent, Disclosing {
 
     private func configureShots(_ block: Block, renderer: ToolDescriptor.Renderer) {
         shots.arrangedSubviews.forEach { $0.removeFromSuperview() }
-        var urls: [URL] = []
-        var views: [(ShotView, URL)] = []
+        var views: [(ShotView, Lightbox.Picture)] = []
         if renderer == .image, let machine = env.machineId,
            let path = block.toolInput["path"] as? String {
             var parts = URLComponents()
@@ -324,20 +323,20 @@ final class ToolLineView: RailRow, RowContent, Disclosing {
                 let shot = ShotView(env: env, thumb: false)
                 let caption = block.toolInput["caption"] as? String
                 shot.configure(url, alt: caption ?? ToolDescriptor.pathLeaf(path), caption: caption, path: path)
-                views.append((shot, url))
+                views.append((shot, Lightbox.Picture(url: url, caption: caption, path: path)))
             }
         }
         for (i, image) in (block.meta["resultImages"] as? [[String: Any]] ?? []).enumerated() {
             guard let url = (image["src"] as? String).flatMap(env.url) else { continue }
             let shot = ShotView(env: env, thumb: false)
             shot.configure(url, alt: "Image \(i + 1) from \(block.toolName ?? "the tool")")
-            views.append((shot, url))
+            views.append((shot, Lightbox.Picture(url: url)))
         }
-        urls = views.map(\.1)
-        for (shot, url) in views {
+        let pictures = views.map(\.1)
+        for (at, (shot, _)) in views.enumerated() {
             shot.onOpen = { [weak self, weak shot] in
                 guard let self, let shot else { return }
-                env.openLightbox(.images(urls, index: urls.firstIndex(of: url) ?? 0), shot)
+                env.openLightbox(.images(pictures, index: at), shot)
             }
             shots.addArrangedSubview(hung(shot))
         }

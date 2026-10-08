@@ -170,11 +170,12 @@ final class ContextPopover: KitPopoverController {
         column.axis = .vertical
         column.translatesAutoresizingMaskIntoConstraints = false
         card.addSubview(column)
+        // `p-0` inside the popover's 1pt border: the parts stand inside it.
         NSLayoutConstraint.activate([
-            column.topAnchor.constraint(equalTo: card.topAnchor),
-            column.leadingAnchor.constraint(equalTo: card.leadingAnchor),
-            column.trailingAnchor.constraint(equalTo: card.trailingAnchor),
-            column.bottomAnchor.constraint(lessThanOrEqualTo: card.bottomAnchor),
+            column.topAnchor.constraint(equalTo: card.topAnchor, constant: 1),
+            column.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 1),
+            column.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -1),
+            column.bottomAnchor.constraint(lessThanOrEqualTo: card.bottomAnchor, constant: -1),
         ])
         draw()
     }
@@ -301,8 +302,8 @@ final class ContextPopover: KitPopoverController {
             column.addArrangedSubview(padded(label(words, ink: Palette.mutedForeground, lines: 0), y: 8))
         }
 
-        let height = column.systemLayoutSizeFitting(CGSize(width: Self.width, height: UIView.layoutFittingCompressedSize.height),
-                                                    withHorizontalFittingPriority: .required, verticalFittingPriority: .fittingSizeLevel).height
+        let height = column.systemLayoutSizeFitting(CGSize(width: Self.width - 2, height: UIView.layoutFittingCompressedSize.height),
+                                                    withHorizontalFittingPriority: .required, verticalFittingPriority: .fittingSizeLevel).height + 2
         preferredContentSize = CGSize(width: Self.width, height: height)
     }
 }

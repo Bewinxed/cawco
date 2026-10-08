@@ -294,8 +294,8 @@ final class JumpPaletteController: UIViewController, UIViewControllerTransitioni
     }
 
     private static let inset = 7.0
-    /// A row's inset from the well: its 1pt edge, the list's 4 and the group's 4.
-    private static let listInset = 9.0
+    /// A row's inset inside the well's 1pt edge: the list's 4 and the group's 4.
+    private static let listInset = 8.0
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -333,7 +333,8 @@ final class JumpPaletteController: UIViewController, UIViewControllerTransitioni
         searchRow.alignment = .center
         searchRow.isLayoutMarginsRelativeArrangement = true
         searchRow.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 0, leading: 11, bottom: 0, trailing: 11)
-        searchRow.heightAnchor.constraint(equalToConstant: 42).isActive = true
+        // `.jump-search { height: 42px }`, its hairline foot included: 41 over the rule.
+        searchRow.heightAnchor.constraint(equalToConstant: 41).isActive = true
 
         list.axis = .vertical
         list.translatesAutoresizingMaskIntoConstraints = false
@@ -368,14 +369,15 @@ final class JumpPaletteController: UIViewController, UIViewControllerTransitioni
             well.bottomAnchor.constraint(equalTo: frameView.bottomAnchor, constant: -Self.inset),
             well.leadingAnchor.constraint(equalTo: frameView.leadingAnchor, constant: Self.inset),
             well.trailingAnchor.constraint(equalTo: frameView.trailingAnchor, constant: -Self.inset),
-            column.topAnchor.constraint(equalTo: well.topAnchor),
-            column.bottomAnchor.constraint(equalTo: well.bottomAnchor),
-            column.leadingAnchor.constraint(equalTo: well.leadingAnchor),
-            column.trailingAnchor.constraint(equalTo: well.trailingAnchor),
+            // Everything stands inside the well's 1pt border.
+            column.topAnchor.constraint(equalTo: well.topAnchor, constant: 1),
+            column.bottomAnchor.constraint(equalTo: well.bottomAnchor, constant: -1),
+            column.leadingAnchor.constraint(equalTo: well.leadingAnchor, constant: 1),
+            column.trailingAnchor.constraint(equalTo: well.trailingAnchor, constant: -1),
             listHeight,
-            // `.jump-list` pads 4 and each group 4 more, inside the well's 1pt edge.
-            list.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor, constant: Self.listInset - 1),
-            list.bottomAnchor.constraint(equalTo: scroll.contentLayoutGuide.bottomAnchor, constant: -(Self.listInset - 1)),
+            // `.jump-list` pads 4 and each group 4 more.
+            list.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor, constant: Self.listInset),
+            list.bottomAnchor.constraint(equalTo: scroll.contentLayoutGuide.bottomAnchor, constant: -Self.listInset),
             list.leadingAnchor.constraint(equalTo: scroll.frameLayoutGuide.leadingAnchor, constant: Self.listInset),
             list.trailingAnchor.constraint(equalTo: scroll.frameLayoutGuide.trailingAnchor, constant: -Self.listInset),
         ])
@@ -698,7 +700,7 @@ final class JumpPaletteController: UIViewController, UIViewControllerTransitioni
         }
         for row in arriving.compactMap({ built[$0] }) where !still { row.alpha = 0 }
         paintSelection()
-        let natural = list.systemLayoutSizeFitting(CGSize(width: max(1, scroll.bounds.width - 8), height: 0), withHorizontalFittingPriority: .required, verticalFittingPriority: .fittingSizeLevel).height + 8
+        let natural = list.systemLayoutSizeFitting(CGSize(width: max(1, scroll.bounds.width - Self.listInset * 2), height: 0), withHorizontalFittingPriority: .required, verticalFittingPriority: .fittingSizeLevel).height + Self.listInset * 2
         listHeight.constant = natural
         if still {
             view.layoutIfNeeded()

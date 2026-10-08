@@ -23,6 +23,7 @@ public enum Glyph: String, CaseIterable, Sendable {
     case structureOn = "structure-bold"
     case chevronRight = "alt-arrow-right-linear"
     case search = "magnifer-bold-duotone"
+    case zoomIn = "minimalistic-magnifer-zoom-in-bold-duotone"
     case server = "server-2-bold-duotone"
     case failed = "close-circle-bold-duotone"
     case archive = "archive-down-minimlistic-bold-duotone"

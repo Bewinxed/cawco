@@ -35,22 +35,25 @@ final class ProjectStartController: KitPopoverController, UITextFieldDelegate {
         prompt.spacing = Space.space1
         let empty = KitButton.make("Start empty", variant: .ghost, height: .sm) { [weak self] in self?.start(nil) }
         let go = KitButton.make("Start", variant: .action, height: .sm) { [weak self] in self?.start(self?.field.text) }
+        // `justify-end gap-2`.
         let actions = UIStackView(arrangedSubviews: [UIView(), empty, go])
-        actions.spacing = Space.space2
+        actions.spacing = 8
         actions.alignment = .center
         stack.addArrangedSubview(prompt)
         stack.addArrangedSubview(actions)
         stack.axis = .vertical
-        stack.spacing = Space.space3
+        // `flex-col gap-3 p-4`, inside the card's 1pt border.
+        stack.spacing = 12
         stack.translatesAutoresizingMaskIntoConstraints = false
         card.addSubview(stack)
+        let inset = 16 + 1.0
         NSLayoutConstraint.activate([
-            stack.topAnchor.constraint(equalTo: card.topAnchor, constant: 16),
-            stack.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 16),
-            stack.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -16),
+            stack.topAnchor.constraint(equalTo: card.topAnchor, constant: inset),
+            stack.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: inset),
+            stack.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -inset),
         ])
         let width = min(320, (view.window?.bounds.width ?? UIScreen.main.bounds.width) - 32)
-        let height = stack.systemLayoutSizeFitting(CGSize(width: width - 32, height: 0), withHorizontalFittingPriority: .required, verticalFittingPriority: .fittingSizeLevel).height + 32
+        let height = stack.systemLayoutSizeFitting(CGSize(width: width - inset * 2, height: 0), withHorizontalFittingPriority: .required, verticalFittingPriority: .fittingSizeLevel).height + inset * 2
         preferredContentSize = CGSize(width: width, height: height)
     }
 
