@@ -1,8 +1,5 @@
 {
-  "frame": [
-    1024,
-    1536
-  ],
+  "frame": [1024, 1536],
   "source": "story-end.png (Sunburst, fal request 01a11b55-bdce-7d30-b7b6-85e66c5cb463)",
   "slots_px": [
     {
@@ -46,31 +43,13 @@
   ],
   "corner_radius_nominal_px": 36,
   "nominal_px": {
-    "x": [
-      96,
-      928
-    ],
+    "x": [96, 928],
     "width": 832,
     "height": 176,
-    "tops_y": [
-      352,
-      592,
-      832
-    ],
+    "tops_y": [352, 592, 832],
     "gap": 64
   },
-  "gaps_px": [
-    56,
-    58
-  ],
-  "fill_measured_rgb": [
-    38.1,
-    37.8,
-    35.8
-  ],
-  "screen_measured_rgb": [
-    15.5,
-    14.9,
-    12.1
-  ]
+  "gaps_px": [56, 58],
+  "fill_measured_rgb": [38.1, 37.8, 35.8],
+  "screen_measured_rgb": [15.5, 14.9, 12.1]
 }
