@@ -30398,6 +30398,13 @@
       "InstanceRow": {
         "type": "object",
         "properties": {
+          "accountId": {
+            "description": "The account the session runs on (`instances.account_id`): placed once as\nit starts and kept for its whole life. Null on a harness without accounts\nand on a session from before accounts existed.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "autopilot": {
             "description": "The supervisor's standing autopilot for this session, set from the\ncomposer popover. `null` means never configured; disabling keeps the\nprompt rather than discarding it, so re-enabling does not mean retyping\nit. Absent on a hub that predates the column.",
             "type": "object",

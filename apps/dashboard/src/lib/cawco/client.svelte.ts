@@ -1932,15 +1932,31 @@ export async function readSpend(): Promise<void> {
 /** What `/api/accounts` answers. */
 export interface AccountsView {
   accounts: Account[];
+  /** Accounts out of placement until a window resets. */
   bench: AccountBench[];
   catalogs: AccountCatalog[];
+  /** Each account's freshest reading: its windows, plan and extra usage. */
   readings: AccountReading[];
+  /** How each provider's new sessions choose among its accounts. */
   routing: ProviderRouting[];
   signins: AccountSignin[];
 }
 
+/** Who hears the hub's accounts signal (see {@link followAccounts}). */
+let accountsFollower: (() => void) | null = null;
+
+/**
+ * Calls `follower` each time the hub says an account moved (a reading, a
+ * sign-in, a catalog), and on connect: the usage forecast's reader
+ * (usage/forecast.svelte.ts) reads again then. One follower.
+ */
+export function followAccounts(follower: () => void): void {
+  accountsFollower = follower;
+}
+
 /** Reads the hub's accounts, their sign-ins and catalogs; a failed read keeps what was there. */
 export async function readAccounts(): Promise<void> {
+  accountsFollower?.();
   const view = await load<AccountsView>("/api/accounts");
   if (view && !equal(state.accounts, view)) {
     state.accounts = view;
@@ -4388,6 +4404,7 @@ export async function spawnSession({
   scratch,
   bootstrap,
   projectId,
+  account,
 }: {
   machineId: string;
   cwd: string;
@@ -4399,6 +4416,8 @@ export async function spawnSession({
   scratch?: SpawnPayload["scratch"];
   bootstrap?: SpawnPayload["bootstrap"];
   projectId?: string;
+  /** The account picked for this session; absent: the hub places it. */
+  account?: string;
 }): Promise<string> {
   const created = await start({
     machineId,
@@ -4410,6 +4429,7 @@ export async function spawnSession({
     scratch,
     bootstrap,
     projectId,
+    ...(account ? { account } : {}),
   });
   if (prompt?.trim()) {
     // Followed before its first prompt goes, on the socket that carries it:

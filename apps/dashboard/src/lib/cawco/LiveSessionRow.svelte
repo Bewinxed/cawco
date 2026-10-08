@@ -19,6 +19,7 @@
   import SessionMark, { sessionStatus, statusWord } from "./SessionMark.svelte";
   import TaskRing from "./TaskRing.svelte";
   import { taskProgress, tasksOf } from "./tasks.svelte";
+  import AccountDot from "./usage/AccountDot.svelte";
   import { dragSession } from "./workspace/dnd.svelte";
 
   interface Props {
@@ -196,6 +197,9 @@
            Under pressure it yields three times as readily as the title, and
            what it keeps it gives up from the left — the leaf is what tells two
            checkouts apart. -->
+        <!-- Which account it runs on, leading what is said beside the title
+             (usage/AccountDot: only with two or more Claude accounts). -->
+        <AccountDot accountId={instance.accountId} inline={false} />
         {#if showCwd}
           <span
             class="hidden min-w-24 shrink-[3] truncate font-mono text-label text-muted-foreground [direction:rtl] sm:block"

@@ -52,6 +52,8 @@
     --account-green: var(--mark-4);
     --account-cyan: var(--mark-5);
     --account-blue: var(--mark-6);
+    /* The part of an account's week rim that sits under its reserve, once the reserve is reached: a mid neutral that reads on paper and at night. */
+    --account-reserved: light-dark(var(--neutral-9), var(--neutral-8));
     --mark-glyph: light-dark(oklch(99% 0 0), var(--neutral-1));
     /* Identity-mark sheen. */
     --mark-overlay: linear-gradient(

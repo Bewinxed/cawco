@@ -54,6 +54,8 @@ public enum Palette {
     public static let accountGreen = Palette.named("account-green")
     public static let accountCyan = Palette.named("account-cyan")
     public static let accountBlue = Palette.named("account-blue")
+    /// The part of an account's week rim that sits under its reserve, once the reserve is reached: a mid neutral that reads on paper and at night.
+    public static let accountReserved = Palette.named("account-reserved")
     public static let markGlyph = Palette.named("mark-glyph")
     /// Identity-mark sheen.
     public static let markOverlay = Gradient(stops: [Ink(light: P3(0.9949, 0.9906, 0.9805, 0.2200), dark: P3(0.0759, 0.0714, 0.0656, 0.2200)), Ink(light: P3(0.1850, 0.1722, 0.1560, 0.0600), dark: P3(0.9247, 0.9128, 0.8883, 0.0600))])

@@ -73,15 +73,6 @@
   type Range = "window" | "today" | "7d" | "30d";
   let range = $state<Range>("window");
 
-  /** The page's clock: the countdowns and projections move a minute at a time. */
-  let now = $state(Date.now());
-  $effect(() => {
-    const timer = setInterval(() => {
-      now = Date.now();
-    }, 60_000);
-    return () => clearInterval(timer);
-  });
-
   /**
    * The quarter hour a provider's current 5-hour window opened in; null
    * without one. Usage is recorded by the quarter hour, so the window's first
@@ -235,7 +226,7 @@
         projectName={filtered.name}
       />
     {:else}
-      <div class="limits"><LimitsBlock {now} /></div>
+      <div class="limits"><LimitsBlock /></div>
       <div class="ranged">
         <Tooltip.Provider>
           <WhereItGoes {since} bind:this={where} />

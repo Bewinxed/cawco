@@ -1,9 +1,4 @@
-import type {
-  ClaudeLimits,
-  InstanceRow,
-  Workflow,
-  WorkflowRun,
-} from "@cawco/core";
+import type { InstanceRow, Workflow, WorkflowRun } from "@cawco/core";
 import { type HubRead, readHub } from "#lib/cawco/hub-read.js";
 import { runIdOf } from "#lib/cawco/workflow-runs.js";
 import type { LayoutServerLoad } from "./$types";
@@ -155,32 +150,6 @@ function currentId(pathname: string): string {
   return match ? decodeURIComponent(match[1]) : "";
 }
 
-/**
- * The account's Claude limits, as the sidebar's usage meter shows them: read
- * here so the first paint draws the meter at the size it will have, not an
- * empty footer that grows when the live reading arrives. Limits belong to the
- * account, so it is the first reading without an error, else the first; null
- * when no machine has reported one. A read the hub refused is carried to the
- * meter, which says so in place of the bar.
- */
-async function usageLimits(
-  fetch: typeof globalThis.fetch
-): Promise<HubRead<ClaudeLimits | null>> {
-  const read = await readHub<{ machines: { limits: ClaudeLimits }[] }>(
-    fetch,
-    "/api/usage/limits"
-  );
-  if (!read.ok) {
-    return read;
-  }
-  const readings = read.value.machines.map((reading) => reading.limits);
-  return {
-    ok: true,
-    value:
-      readings.find((reading) => reading.error === null) ?? readings[0] ?? null,
-  };
-}
-
 export const load: LayoutServerLoad = async ({
   cookies,
   fetch,
@@ -195,8 +164,6 @@ export const load: LayoutServerLoad = async ({
     Number.isFinite(stored) && stored > 0
       ? Math.min(RAIL_MAX, Math.max(RAIL_MIN, Math.round(stored)))
       : RAIL_DEFAULT;
-
-  const usage = await usageLimits(fetch);
 
   let workspace = parse(cookies.get(WORKSPACE_KEY));
   if (workspace) {
@@ -242,12 +209,12 @@ export const load: LayoutServerLoad = async ({
   // whose name read failed says so in the strip until the fleet names it.
   const names: Record<string, HubRead<string>> = {};
   if (!workspace) {
-    return { railWidth, narrow, workspace, names, usage };
+    return { railWidth, narrow, workspace, names };
   }
 
   const open = leavesOf(workspace.root).flatMap((leaf) => leaf.tabs);
   if (open.length === 0) {
-    return { railWidth, narrow, workspace, names, usage };
+    return { railWidth, narrow, workspace, names };
   }
 
   // What the fleet calls these conversations.
@@ -337,5 +304,5 @@ export const load: LayoutServerLoad = async ({
     }
   }
 
-  return { railWidth, narrow, workspace, names, usage };
+  return { railWidth, narrow, workspace, names };
 };

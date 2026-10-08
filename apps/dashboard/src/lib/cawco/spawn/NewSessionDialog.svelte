@@ -1,10 +1,13 @@
 <script lang="ts">
   import {
+    accountName,
     contextFitRefusal,
     type EffortLevel,
     HARNESSES,
     type HarnessKind,
     type PermissionMode,
+    type PlacementExplain,
+    providerOf,
     repoPath,
     SUMMARISER_OUTPUT_RESERVE_TOKENS,
     TARGET_HEADROOM_TOKENS,
@@ -74,6 +77,9 @@
   } from "../permission-modes";
   import { checkoutOf, checkoutOn, placedOn } from "../projects";
   import { rememberSpawn, spawnPrefs } from "../spawnPrefs.svelte";
+  import { startForecast, usage } from "../usage/forecast.svelte";
+  import { fmt, type Part } from "../usage/rings";
+  import type { AccountTool } from "./AccountChip.svelte";
   import LifetimeChip from "./LifetimeChip.svelte";
   import LocationChip from "./LocationChip.svelte";
   import MachinesChip from "./MachinesChip.svelte";
@@ -212,6 +218,12 @@
   const machine = $derived(
     cawco.machines.find((row) => row.machineId === machineId)
   );
+  /**
+   * Whether the first machine is connected, as a value: every board publish
+   * hands over a new `machine` row, and the location check below must run
+   * again when the machine comes or goes, never because the board moved.
+   */
+  const machineOnline = $derived(machine?.status === "online");
   const offlineMachine = $derived(
     cawco.machines.find(
       (row) => machineIds.includes(row.machineId) && row.status !== "online"
@@ -231,35 +243,45 @@
    * The account a Claude session here would start on, as the hub's placement
    * says (`/api/accounts/placement`): its catalog is what the picker offers.
    * Null while unread, for another harness, and with no account signed in.
+   * Placement weighs every account's readings and bench, so it is asked again
+   * whenever the hub's accounts view moves (`cawco.accounts` is replaced only
+   * when it differs): Auto never names an account that has since run out.
    */
-  let placedAccount = $state<string | null>(null);
+  let placement = $state<PlacementExplain | null>(null);
   $effect(() => {
+    const view = cawco.accounts;
     const query = {
       harness,
       machineId,
       ...(model ? { model } : {}),
       ...(projectId ? { projectId } : {}),
     };
-    if (harness !== "claude" || !machineId) {
-      placedAccount = null;
+    if (harness !== "claude" || !machineId || !view) {
+      placement = null;
       return;
     }
     let stale = false;
     placementFor(query)
       .then((placed) => {
         if (!stale) {
-          placedAccount = placed?.accountId ?? null;
+          placement = placed ?? null;
         }
       })
       .catch(() => {
         if (!stale) {
-          placedAccount = null;
+          placement = null;
         }
       });
     return () => {
       stale = true;
     };
   });
+  /** The account picked for this session alone; null: Auto, where placement puts it. */
+  let account = $state<string | null>(null);
+  $effect(() => {
+    startForecast();
+  });
+  const placedAccount = $derived(account ?? placement?.accountId ?? null);
   const offered = $derived(
     models.forHarness(
       harness,
@@ -267,6 +289,63 @@
       harness === "claude" ? placedAccount : undefined
     )
   );
+  /**
+   * The account chip, when the harness's provider has two or more accounts:
+   * Auto with placement's reason, and each account with its rings and a key
+   * line. Not on a continuation: its request (the hub's `continueBody`) has
+   * no account to carry a pick in. A fork never comes through this form; it
+   * starts from a session's menu and runs on its parent's account.
+   */
+  const accountTool = $derived.by((): AccountTool | null => {
+    const provider = providerOf(harness);
+    const own = (cawco.accounts?.accounts ?? [])
+      .filter((one) => one.provider === provider)
+      .sort((a, b) => a.order - b.order);
+    if (continueFrom || own.length < 2) {
+      return null;
+    }
+    const { now } = usage;
+    return {
+      value: account,
+      auto: {
+        id: placement?.accountId ?? null,
+        why: placement?.why ?? "",
+      },
+      onpick: (id) => {
+        account = id;
+      },
+      options: own.map((one) => {
+        const ring =
+          usage.claude?.accounts.find((r) => r.id === one.id) ?? null;
+        let line: Part[] = ["no reading yet"];
+        if (ring?.state === "limit") {
+          line = [
+            "at its limit, back in ",
+            { strong: ring.backAt === null ? "" : fmt(ring.backAt - now) },
+          ];
+        } else if (one.neverBackup) {
+          line = ["never a backup, only when picked"];
+        } else if (ring?.w5) {
+          line = [
+            { strong: `${ring.w5.left}% left` },
+            ...(ring.w5.resetsAt === null
+              ? [" of 5 hours"]
+              : [` of 5 hours, resets in ${fmt(ring.w5.resetsAt - now)}`]),
+          ];
+        }
+        return {
+          id: one.id,
+          name: accountName(one),
+          nick: one.label,
+          email: one.email,
+          color: `var(--account-${one.hue})`,
+          ring,
+          line,
+          disabled: ring?.state === "limit",
+        };
+      }),
+    };
+  });
   const entries = $derived(
     deriveModelEntries(offered, {
       lastSpawnAt: lastSpawnAt(harness),
@@ -487,6 +566,7 @@
     harness = value;
     model = "";
     effort = null;
+    account = null;
   }
   let lastMachine = "";
   $effect(() => {
@@ -556,6 +636,7 @@
       estimate = null;
       model = "";
       effort = null;
+      account = null;
       prompt = sessionStorage.getItem(KEPT_PROMPT) ?? "";
       repo = undefined;
       editing = false;
@@ -689,7 +770,7 @@
     verifiedLocation = "";
     unreadable = false;
     missingMachines = [];
-    if (!(open && ids.length && path) || machine?.status !== "online") {
+    if (!(open && ids.length && path && machineOnline)) {
       return;
     }
     let stale = false;
@@ -915,6 +996,7 @@
           ? undefined
           : { repo: draft.repo, baseDir: draft.baseCwd },
       projectId: toAttach,
+      ...(draft.account ? { account: draft.account } : {}),
     });
   }
   async function start() {
@@ -947,6 +1029,7 @@
       },
       // The person's own pick; "" when they left the harness's default.
       usedModel: model,
+      ...(accountTool && account ? { account } : {}),
     };
     busy = true;
     popover = null;
@@ -1322,6 +1405,7 @@
                 },
                 harness,
                 modes,
+                account: accountTool,
                 permission: permissionMode,
                 onpermission: (value) => {
                   permissionMode = value;

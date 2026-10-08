@@ -194,7 +194,7 @@
            pick i), on the home's own ground, while a machine is online
            (home `limitsShown`). -->
       <div class="usage">
-        <UsageMeter />
+        <UsageMeter variant="home" />
       </div>
     {/if}
     <!-- Only when something does: an empty claim is clutter. It enters and
@@ -355,9 +355,8 @@
   .top.bare {
     padding: 0;
   }
-  /* The strip's edges line up with the status line's text. */
+  /* The strip's card lines up with the status line's text. */
   .usage {
-    --strip-ground: var(--surface-recess);
     margin-inline: -8px;
   }
   .headline {

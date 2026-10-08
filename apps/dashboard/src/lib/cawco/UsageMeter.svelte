@@ -1,27 +1,24 @@
 <script lang="ts">
   /**
    * The usage strip, in the rail's footer and, always, under the phone
-   * home's status line: one cell for each provider that is set up (Claude,
-   * then opencode), equal in width. A cell is the provider's mark, two
-   * numbers (its short window's percent, then its long one's) and one 4px bar
-   * split 1:2 between the two, each with its pace tick. Digits only: which
-   * window a number is, is said by its bar's place and by the list the strip
-   * opens. A cell says a phrase in place of its numbers only when there is
-   * something to do about it: a window near its limit that runs out before
-   * it resets ("out in 40m"), a limit reached ("limit · 2h"), or a reading
-   * gone stale, which says its own provider's age ("read 2h ago").
+   * home's status line, drawn as Rings (the owner's double dial): a cell for
+   * Claude, then one for opencode. Claude's cell is its mark, one ring per
+   * account in carrying order (who carries you now first), the time until
+   * nothing can carry your new sessions ("3h 10m", "5h+"), and under it who
+   * takes over next ("then Work"), or when you're back ("back in 2h 10m").
+   * A ring's inner disc is what is left of the account's 5-hour window, its
+   * rim what is left of its week, in the account's colour. When the carrying
+   * order changes the rings slide to their new places.
    *
-   * The whole strip is one control. It opens every window, grouped by
-   * provider, and the way to the Usage page: a popover by the strip with a
-   * fine pointer, the house bottom sheet on touch. The strip is 44px in
-   * every state, so the footer never moves when a reading lands or changes.
+   * The whole strip is one control. It opens every account with its key and
+   * where the next delegate goes, and the way to the Usage page: a popover
+   * by the strip with a fine pointer, the house bottom sheet on touch. The
+   * strip is 44px in the rail (56px on the phone home) in every state, so
+   * nothing around it moves when a reading lands or changes.
    *
-   * Live: the readings are the client's, which the hub's `usage` frame keeps
-   * current. Until the socket has read them, the Claude reading the layout
-   * was served with draws the strip, so it never grows on hydration.
+   * Live: the forecast is read whenever the hub says an account moved
+   * (usage/forecast.svelte.ts), and the words move on once a minute.
    */
-  import type { ClaudeLimits } from "@cawco/core";
-  import type { Component } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import { Button } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
@@ -30,165 +27,65 @@
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Popover from "#lib/components/ui/popover/index.js";
   import { IconKey, IconUsage } from "#lib/icons.js";
-  import { page } from "$app/state";
   import ClaudeIcon from "~icons/logos/claude-icon";
+  import Arrow from "~icons/solar/arrow-right-linear";
+  import AccountName from "./accounts/AccountName.svelte";
   import { cawco, type Machine } from "./client.svelte";
-  import type { HubRead } from "./hub-read";
   import MachineLogin from "./MachineLogin.svelte";
+  import { dur, motionOk } from "./motion/curves.svelte";
   import { morph } from "./motion/morph.svelte";
   import OpenCodeLogo from "./OpenCodeLogo.svelte";
+  import { claudeGap } from "./usage";
+  import Figure from "./usage/Figure.svelte";
+  import { startForecast, usage } from "./usage/forecast.svelte";
+  import Rings from "./usage/Rings.svelte";
+  import RingsKey from "./usage/RingsKey.svelte";
   import {
-    about,
-    claudeGap,
-    type LimitRow,
-    limitRows,
-    readAgo,
-    resetShort,
-    speakingReading,
-  } from "./usage";
-  import LimitBar from "./usage/LimitBar.svelte";
+    caption,
+    nameFields,
+    openCodeStatus,
+    openCodeStop,
+    plain,
+    type RingAccount,
+    rowStatus,
+    rowTime,
+    stopText,
+  } from "./usage/rings";
+  import Words from "./usage/Words.svelte";
 
-  /** A minute clock: the strip's countdowns show minutes and nothing finer. */
-  let now = $state(Date.now());
+  let {
+    variant = "rail",
+  }: {
+    /** The phone home's strip stands on its own raised card, a size up. */
+    variant?: "rail" | "home";
+  } = $props();
+
   $effect(() => {
-    const timer = setInterval(() => {
-      now = Date.now();
-    }, 60_000);
-    return () => clearInterval(timer);
+    startForecast();
   });
 
-  /** The reading the layout was served with, or why the hub refused it. */
-  const served = $derived(
-    cawco.usageLimitsRead
-      ? null
-      : ((page.data.usage as HubRead<ClaudeLimits | null> | undefined) ?? null)
-  );
-  const claude = $derived(
-    speakingReading(cawco.claudeLimits)?.reading ??
-      (served?.ok ? served.value : null)
-  );
-  const go = $derived(speakingReading(cawco.openCodeGoLimits)?.reading);
+  const claude = $derived(usage.claude);
+  const openCode = $derived(usage.openCode);
+  const now = $derived(usage.now);
+  const shown = $derived(Boolean(claude || openCode));
 
-  /** What a cell says in place of its numbers, and the ink it says it in. */
-  interface Phrase {
-    text: string;
-    tone: "near" | "over" | "stale";
-  }
-  /** One provider on the strip and in the list. */
-  interface Cell {
-    id: LimitRow["provider"];
-    /** The window after the short one: its week, or the long one in trouble. */
-    long: LimitRow | null;
-    mark: Component;
-    name: string;
-    phrase: Phrase | null;
-    rows: LimitRow[];
-    /** Its session window. */
-    short: LimitRow;
-    /** Under the first row in the list when the reading is stale. */
-    staleAge: string | null;
-  }
+  /** One mark's room in the strip: 16px and the 4px between marks. */
+  const SLOT = 20;
 
-  const groupOf = (row: LimitRow) => row.meter.window.group;
+  /** Why there is nothing to draw: a normal state, never a fake 0%. */
+  const empty = $derived(
+    cawco.usageLimitsRead && usage.read
+      ? "Sign in to see limits"
+      : "Reading limits…"
+  );
 
   /**
-   * The row a cell's phrase is about, and the phrase: a limit reached, or
-   * the window that runs out soonest among those near their limit that will
-   * not last to their reset. Nothing else is worth the numbers' place.
-   */
-  function trouble(rows: LimitRow[]): { row: LimitRow; phrase: Phrase } | null {
-    const reached = rows.find((row) => row.meter.used >= 100);
-    if (reached) {
-      const reset = reached.meter.window.resetsAt;
-      return {
-        row: reached,
-        phrase: {
-          text: reset ? `limit · ${resetShort(reset, now)}` : "limit",
-          tone: "over",
-        },
-      };
-    }
-    const [soonest] = rows
-      .filter(
-        ({ meter }) =>
-          (meter.state === "near" || meter.state === "over") &&
-          meter.runsOutIn !== null &&
-          (meter.margin ?? 0) > 0
-      )
-      .sort((a, b) => (a.meter.runsOutIn ?? 0) - (b.meter.runsOutIn ?? 0));
-    if (!soonest || soonest.meter.runsOutIn === null) {
-      return null;
-    }
-    return {
-      row: soonest,
-      phrase: {
-        text: `out in ${about(soonest.meter.runsOutIn)}`,
-        tone: soonest.meter.state === "over" ? "over" : "near",
-      },
-    };
-  }
-
-  function cellOf(
-    id: Cell["id"],
-    name: string,
-    mark: Component,
-    reading:
-      | { stale?: boolean; fetchedAt: number; windows: ClaudeLimits["windows"] }
-      | null
-      | undefined
-  ): Cell | null {
-    const rows = limitRows(id, reading, now);
-    const [first] = rows;
-    if (!(reading && first)) {
-      return null;
-    }
-    const short = rows.find((row) => groupOf(row) === "session") ?? first;
-    const weeks = rows.filter((row) => groupOf(row) === "weekly");
-    // The week every model shares, before a week one model has to itself.
-    const week =
-      weeks.find((row) => !row.meter.window.scopeLabel) ?? weeks[0] ?? null;
-    const staleAge = reading.stale ? readAgo(reading.fetchedAt, now) : null;
-    const worst = staleAge ? null : trouble(rows);
-    const longInTrouble = worst && worst.row !== short ? worst.row : null;
-    return {
-      id,
-      name,
-      mark,
-      rows,
-      short,
-      long: longInTrouble ?? week ?? rows.find((row) => row !== short) ?? null,
-      phrase: staleAge
-        ? { text: staleAge, tone: "stale" }
-        : (worst?.phrase ?? null),
-      staleAge,
-    };
-  }
-
-  const cells = $derived(
-    [
-      cellOf("Claude", "Claude", ClaudeIcon, claude),
-      cellOf("opencode", "opencode Go", OpenCodeLogo, go),
-    ].filter((cell): cell is Cell => cell !== null)
-  );
-
-  /** Why there are no cells: a normal state, never a fake 0%. */
-  const empty = $derived.by(() => {
-    if (served && !served.ok) {
-      return `Limits unreadable: ${served.detail} (${served.status}) · reload to read them again`;
-    }
-    // Until the socket's first frame only Claude's reading is known (the one
-    // the page was served with): with none, opencode may still have one, so
-    // nothing is claimed absent yet.
-    return cawco.usageLimitsRead ? "Sign in to see limits" : "Reading limits…";
-  });
-
-  /**
-   * No limit can be shown once the read is in: the strip is the empty state
-   * (DESIGN.md "Empty"), what is missing, why, and the one action that fixes
-   * it, in the Usage page's words (usage.ts `claudeGap`).
+   * No limit can be shown once everything is read: the strip is the empty
+   * state (DESIGN.md "Empty"), what is missing, why, and the one action that
+   * fixes it, in the Usage page's words (usage.ts `claudeGap`).
    */
   const gap = $derived(
-    cells.length === 0 && cawco.usageLimitsRead
+    !shown && cawco.usageLimitsRead && usage.read
       ? claudeGap(cawco.claudeLimits, cawco.machines)
       : null
   );
@@ -199,10 +96,9 @@
   const KEY_REFUSED = /^HTTP 40[13]\b/;
 
   /**
-   * What the list says of a provider with no windows to show: no machine is
+   * What the list says of a provider with nothing to draw: no machine is
    * signed in to it, or every read failed before any succeeded. Nothing
-   * before the first read (an absence not known yet is not claimed), and
-   * nothing while a reading speaks (its rows show, stale or not).
+   * before the first read (an absence not known yet is not claimed).
    */
   function noteOf(
     name: string,
@@ -212,22 +108,22 @@
     if (!cawco.usageLimitsRead || has) {
       return null;
     }
-    if (readings.length === 0) {
-      return `${name} · sign in on a machine to see its limits`;
-    }
-    const error = readings.find((reading) => reading.error)?.error;
+    const error =
+      readings.length === 0
+        ? "not signed in"
+        : readings.find((reading) => reading.error)?.error;
     if (!error) {
       return null;
     }
     if (error === "not signed in") {
-      return `${name} · sign in on a machine to see its limits`;
+      return `Sign in to ${name} on a machine to see its limits.`;
     }
     if (error === "no reading yet") {
-      return `${name} · limits appear once a session runs`;
+      return `${name}'s limits appear once a session runs.`;
     }
     return KEY_REFUSED.test(error)
-      ? `${name} · key not accepted, sign in again on a machine`
-      : `${name} · could not read limits: ${error}`;
+      ? `${name} turned the key away. Sign in again on a machine.`
+      : `${name}'s limits could not be read: ${error}`;
   }
   const notes = $derived(
     [
@@ -245,39 +141,53 @@
         mark: OpenCodeLogo,
         text: noteOf(
           "opencode Go",
-          Boolean(go),
+          Boolean(openCode),
           Object.values(cawco.openCodeGoLimits)
         ),
       },
     ].filter((note) => note.text !== null)
   );
 
-  const percent = (row: LimitRow) => Math.round(row.meter.used);
+  const weekUsed = (ring: RingAccount) =>
+    ring.week ? `week ${100 - ring.week.left}%` : "";
 
-  /** Every cell, read out: what the strip's one control is called. */
+  /** The strip read out: what its one control is called. */
   const triggerLabel = $derived.by(() => {
-    if (cells.length === 0) {
+    if (!shown) {
       return `${empty}. Show every limit.`;
     }
-    const said = cells.map((cell) => {
-      const windows = [cell.short, cell.long]
-        .filter((row): row is LimitRow => row !== null)
-        .map((row) => `${row.label} ${percent(row)} percent`)
-        .join(", ");
-      return `${cell.name}: ${windows}${cell.phrase ? `, ${cell.phrase.text}` : ""}`;
-    });
+    const said: string[] = [];
+    if (claude) {
+      said.push(
+        `Claude: ${stopText(claude, now)} until you're stopped, ${plain(caption(claude, now))}`
+      );
+    }
+    if (openCode) {
+      said.push(
+        `opencode Go: ${openCodeStop(openCode, now)}, ${weekUsed(openCode)}`
+      );
+    }
     return `${said.join(". ")}. Show every limit.`;
   });
 
-  /** Under a window's name in the list: when it resets, or that it is spent. */
-  const resetLine = (row: LimitRow): string => {
-    const reset = row.meter.window.resetsAt;
-    if (!reset) {
-      return row.meter.used >= 100 ? "Limit reached" : "";
-    }
-    const when = `resets ${resetShort(reset, now)}`;
-    return row.meter.used >= 100 ? `Limit reached · ${when}` : when;
-  };
+  /**
+   * Under reduced motion a mark that changes place fades in at its new
+   * place instead of travelling there.
+   */
+  function slot(node: HTMLElement, first: number) {
+    let at = first;
+    return {
+      update(next: number) {
+        if (next !== at && !motionOk.current) {
+          node.animate([{ opacity: 0 }, { opacity: 1 }], {
+            duration: dur("--dur-fade"),
+            easing: "linear",
+          });
+        }
+        at = next;
+      },
+    };
+  }
 
   /** Touch, or a phone's width: the limits open in the house bottom sheet. */
   const touch = new MediaQuery(
@@ -286,105 +196,143 @@
 </script>
 
 {#snippet face()}
-  {#if cells.length === 0}
+  {#if !shown}
     <span class="noline">{empty}</span>
   {:else}
     <span class="cells">
-      {#each cells as cell (cell.id)}
-        {@const Mark = cell.mark}
-        <span class="cell" data-tone={cell.phrase?.tone}>
-          <span class="top">
-            <span aria-hidden="true" class="mark"><Mark /></span>
-            {#if cell.phrase}
-              <span class="phrase">{cell.phrase.text}</span>
-            {:else}
-              <span class="num">{percent(cell.short)}%</span>
-              {#if cell.long}
-                <span class="dot">·</span>
-                <span class="num">{percent(cell.long)}%</span>
-              {/if}
-            {/if}
+      {#if claude}
+        <span class="cell" data-cell="claude">
+          <span class="l1">
+            <span aria-hidden="true" class="mark"><ClaudeIcon /></span>
+            <span
+              class="marks"
+              style:inline-size="{claude.accounts.length * SLOT - 4}px"
+            >
+              {#each claude.accounts as ring, i (ring.id)}
+                <span
+                  class="slot"
+                  style:transform="translateX({i * SLOT}px)"
+                  use:slot={i}
+                >
+                  <Rings index={i} reveal {ring} size={16} />
+                </span>
+              {/each}
+            </span>
+            <span
+              class="digits"
+              data-strip-digits
+              class:muted={claude.stale !== null}
+              ><Figure text={stopText(claude, now)} /></span
+            >
           </span>
-          <span class="bars" data-two={cell.long ? "" : undefined}>
-            <LimitBar
-              elapsed={cell.short.meter.elapsed}
-              label="{cell.name} {cell.short.label}"
-              size={4}
-              state={cell.short.meter.state}
-              used={cell.short.meter.used}
-            />
-            {#if cell.long}
-              <LimitBar
-                elapsed={cell.long.meter.elapsed}
-                label="{cell.name} {cell.long.label}"
-                size={4}
-                state={cell.long.meter.state}
-                used={cell.long.meter.used}
-              />
-            {/if}
-          </span>
+          <span class="cap" data-strip-caption
+            ><Words parts={caption(claude, now)} /></span
+          >
         </span>
-      {/each}
+      {/if}
+      {#if openCode}
+        <span class="cell oc" data-cell="opencode">
+          <span class="l1">
+            <span aria-hidden="true" class="mark"><OpenCodeLogo /></span>
+            <Rings reveal ring={openCode} size={16} />
+            <span class="digits"
+              ><Figure text={openCodeStop(openCode, now)} /></span
+            >
+          </span>
+          <span class="cap">{weekUsed(openCode)}</span>
+        </span>
+      {/if}
     </span>
   {/if}
+{/snippet}
+
+{#snippet row(
+  ring: RingAccount,
+  time: string,
+  status: ReturnType<typeof rowStatus>
+)}
+  <div class="row" data-account={ring.id} class:limit={ring.state === "limit"}>
+    <Rings {ring} size={24} />
+    <div class="content">
+      <div class="r1">
+        <AccountName account={nameFields(ring)} row wrap />
+        <span class="time" class:muted={ring.state === "stale"}
+          ><Figure text={time} /></span
+        >
+      </div>
+      <p class="status" data-status><Words parts={status} /></p>
+      <RingsKey {ring} />
+    </div>
+  </div>
 {/snippet}
 
 {#snippet limits()}
   <!-- Its size follows what it lists (a provider arriving, a note going). -->
   <div class="pop-body" {@attach morph()}>
-    {#if cells.length === 0 && notes.length === 0}
+    {#if !shown && notes.length === 0}
       <p class="pop-empty">{empty}</p>
     {/if}
-    {#each cells as cell (cell.id)}
-      {@const Mark = cell.mark}
-      <section class="pop-group">
-        <h3 class="pop-provider">
-          <span aria-hidden="true" class="mark"><Mark /></span>
-          {cell.name}
+    {#if claude}
+      <section class="group">
+        <h3 class="provider">
+          <span aria-hidden="true" class="mark"><ClaudeIcon /></span>
+          Claude
         </h3>
-        {#each cell.rows as row, i (row.key)}
-          {@const m = row.meter}
-          {@const under =
-            i === 0 && cell.staleAge ? cell.staleAge : resetLine(row)}
-          <div class="pop-row">
-            <span class="pop-name">
-              <span>{row.label}</span>
-              {#if under}
-                <span class="pop-sub">{under}</span>
-              {/if}
-            </span>
-            <!-- A session's bar is half a longer window's: the short window
-                 reads as the short one before its name is read. -->
+        <div class="rows">
+          {#each claude.accounts as ring (ring.id)}
+            {@render row(
+              ring,
+              rowTime(ring, claude, now),
+              rowStatus(ring, claude, now)
+            )}
+          {/each}
+        </div>
+        {#if claude.delegate}
+          <p class="delegates" data-delegates>
+            <b class="head">Delegates</b>
             <span
-              class="pop-bar"
-              data-short={m.window.group === "session" ? "" : undefined}
+              ><Arrow aria-hidden="true" class="arrow" />
+              <Words
+                parts={[
+                  { strong: claude.delegate.name },
+                  claude.delegateWhy ? ` (${claude.delegateWhy})` : "",
+                ]}
+              /></span
             >
-              <LimitBar
-                elapsed={m.elapsed}
-                label={row.label}
-                size={4}
-                state={m.state}
-                used={m.used}
-              />
-            </span>
-            <span class="num pop-pct">{percent(row)}%</span>
-          </div>
-        {/each}
+          </p>
+        {/if}
       </section>
-    {/each}
+    {/if}
+    {#if openCode}
+      <section class="group">
+        <h3 class="provider">
+          <span aria-hidden="true" class="mark"><OpenCodeLogo /></span>
+          opencode Go
+        </h3>
+        <div class="rows">
+          {@render row(
+            openCode,
+            openCodeStop(openCode, now),
+            openCodeStatus(openCode, now)
+          )}
+        </div>
+      </section>
+    {/if}
     {#each notes as note (note.id)}
       {@const Mark = note.mark}
-      <!-- A provider with no windows to show: why, and what to do about it. -->
+      <!-- A provider with nothing to draw: why, and what to do about it. -->
       <p class="pop-empty pop-note">
         <span aria-hidden="true" class="mark"><Mark /></span>
         {note.text}
       </p>
     {/each}
-    <a class="pop-foot" href="/usage">Open Usage</a>
+    <div class="foot">
+      <Button href="/usage" label="Open Usage" size="sm" variant="outline" />
+    </div>
   </div>
 {/snippet}
 
-<div class="strip" class:gap={gap !== null}>
+<div class="strip" data-variant={variant} class:gap={gap !== null}>
   {#if gap}
     <EmptyState icon={IconUsage} inline line={gap.reason} title="No limits">
       {#snippet action()}
@@ -415,7 +363,7 @@
       {/snippet}
     </EmptyState>
   {:else if touch.current}
-    <!-- On touch every window rises in the house sheet, as a tab's details
+    <!-- On touch every account rises in the house sheet, as a tab's details
          and a peek do; with a fine pointer it is a popover by the strip. -->
     <Drawer.Root>
       <Drawer.Trigger
@@ -457,103 +405,100 @@
 
 <style>
   /* Its ground is the surface it stands on: the rail's by default, the
-     phone home's where the home sets `--strip-ground`. A bar's pace tick is
-     a gap that shows the same paint. */
+     phone home's raised card. A reserve notch is cut in the same paint. */
   .strip {
-    --row-paint: var(--strip-ground, var(--sidebar));
+    --ring-ground: var(--strip-ground, var(--sidebar));
     position: relative;
     inline-size: 100%;
     min-inline-size: 0;
     border-radius: var(--radius-sm);
-    background: var(--row-paint);
+    background: var(--ring-ground);
   }
-  /* Empty: the claim stands in the strip's 44px, its padding the row's. */
+  .strip[data-variant="home"] {
+    --strip-ground: var(--surface-raised);
+    border-radius: var(--radius-md);
+  }
+  /* Empty: the claim stands in the strip's height, its padding the row's. */
   .strip.gap {
     display: flex;
     align-items: center;
     min-block-size: 44px;
     padding: var(--space-1) var(--space-2);
   }
-  /* One control, 44px whatever it says. */
+  /* One control, one height whatever it says. */
   :global(.strip-hit) {
     display: flex;
     align-items: center;
     inline-size: 100%;
     block-size: 44px;
-    padding: 0 8px;
+    padding: 0 var(--space-3);
     border: 0;
     border-radius: var(--radius-sm);
     background: transparent;
     text-align: start;
-    font: var(--type-meta);
-    font-variant-numeric: tabular-nums;
     color: var(--ink-strong);
     cursor: pointer;
     transition: background-color var(--dur-control) var(--ease-out);
 
     @media (hover: hover) and (pointer: fine) {
       &:hover {
-        /* By day the hover step whole; by night the wash it has had. */
-        background: light-dark(
-          var(--surface-hover),
-          color-mix(in oklch, var(--surface-hover) 60%, transparent)
-        );
+        background: var(--surface-hover);
+        --ring-ground: var(--surface-hover);
       }
     }
+    &[aria-expanded="true"],
+    &[data-state="open"] {
+      background: var(--surface-hover);
+      --ring-ground: var(--surface-hover);
+    }
+  }
+  .strip[data-variant="home"] :global(.strip-hit) {
+    block-size: 56px;
+    padding: 0 var(--space-4);
+    border-radius: var(--radius-md);
   }
   .noline {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    font: var(--type-meta);
     color: var(--ink-muted);
   }
-  /* A cell for each provider, equal in width. */
+  /* Claude's cell asks for its whole first line and caption, and never takes
+     less than its marks and digits; opencode's is as wide as it says. Where
+     the rail is too narrow for both, opencode's cell wraps onto a second row
+     the strip does not show (it stays in the strip's label and the popover),
+     rather than Claude's answer being cut: one row of cells, 34px (the first
+     line, 3px, the caption). */
   .cells {
     display: flex;
     flex: 1;
-    gap: var(--space-2);
+    flex-wrap: wrap;
+    column-gap: var(--space-2);
+    block-size: 34px;
     min-inline-size: 0;
+    overflow: clip;
+  }
+  .strip[data-variant="home"] .cells {
+    column-gap: var(--space-6);
   }
   .cell {
-    position: relative;
     display: flex;
-    flex: 1 1 0;
+    flex: none;
     flex-direction: column;
-    gap: 6px;
     justify-content: center;
-    min-inline-size: 0;
+    gap: 3px;
+    block-size: 34px;
   }
-  /* A cell with something to do about it stands on a faint wash of its own:
-     the strip as a whole never tints for one provider's window. */
-  .cell[data-tone="near"],
-  .cell[data-tone="over"] {
-    --wash: var(--meter-wash-near);
-    --row-paint:
-      linear-gradient(var(--wash), var(--wash)),
-      var(--strip-ground, var(--sidebar));
-
-    &::before {
-      content: "";
-      position: absolute;
-      inset: -5px -4px;
-      border-radius: var(--radius-sm);
-      background: var(--wash);
-    }
-    & > * {
-      position: relative;
-    }
+  .cell[data-cell="claude"] {
+    flex: 1 1 auto;
   }
-  .cell[data-tone="over"] {
-    --wash: var(--meter-wash-over);
-  }
-  .top {
+  .l1 {
     display: flex;
     align-items: center;
-    gap: var(--space-1);
-    min-inline-size: 0;
+    gap: 6px;
     block-size: 16px;
-    overflow: hidden;
-    line-height: 16px;
+    min-inline-size: 0;
     white-space: nowrap;
   }
   .mark {
@@ -569,108 +514,174 @@
       block-size: 100%;
     }
   }
-  .dot {
-    color: var(--ink-muted);
+  .group .mark {
+    inline-size: 16px;
+    block-size: 16px;
   }
-  .phrase {
-    overflow: hidden;
-    text-overflow: ellipsis;
+  .marks {
+    position: relative;
+    flex: none;
+    block-size: 16px;
   }
-  [data-tone="near"] .phrase {
-    color: var(--status-attn-ink);
-  }
-  [data-tone="over"] .phrase {
-    color: var(--status-fail-ink);
-  }
-  [data-tone="stale"] .phrase {
-    color: var(--ink-muted);
-  }
-  /* One bar, split between the short window and the long one. */
-  .bars {
+  .slot {
+    position: absolute;
+    inset-block-start: 0;
+    inset-inline-start: 0;
     display: grid;
-    gap: var(--space-1);
-    align-items: center;
+    transition: transform var(--dur-reveal) var(--ease-in-out);
   }
-  .bars[data-two] {
-    grid-template-columns: 1fr 2fr;
+  .digits {
+    font: var(--weight-strong) var(--text-label) / 16px var(--font-body);
+    font-variant-numeric: tabular-nums;
+    color: var(--ink-strong);
+  }
+  .digits.muted,
+  .time.muted {
+    color: var(--ink-muted);
+  }
+  /* One line. Its whole width is what the cell asks for, but it may break
+     anywhere, so it never holds the cell wider than the marks and digits:
+     only when the rail cannot fit it at all does it end in an ellipsis. */
+  .cap {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 1;
+    line-clamp: 1;
+    min-inline-size: 0;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+    font: var(--weight-body) var(--text-meta) / 15px var(--font-body);
+    font-variant-numeric: tabular-nums;
+    color: var(--ink-muted);
+
+    & :global(b) {
+      color: var(--ink-row);
+    }
   }
 
+  /* ── the popover and the sheet ── */
+  .pop-body {
+    --ring-ground: var(--surface-raised);
+    display: flex;
+    flex-direction: column;
+  }
   .pop-empty {
     padding: 10px 12px;
     font: var(--type-meta);
     color: var(--ink-muted);
   }
-  /* A provider's line when it has no windows: led by its mark, parted from
-     what is above it by the hairline that parts one provider from the next. */
   .pop-note {
     display: flex;
     align-items: center;
     gap: 6px;
   }
-  .pop-group {
+  .group {
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    padding: 12px;
+    gap: 6px;
+    padding: 12px 10px;
   }
-  .pop-group + .pop-group,
-  .pop-group + .pop-note,
+  .group + .group,
+  .group + .pop-note,
   .pop-note + .pop-note {
-    border-top: 1px solid var(--border-hairline);
+    border-block-start: 1px solid var(--border-hairline);
   }
-  .pop-provider {
+  .provider {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 7px;
+    padding: 0 var(--space-1) 2px;
     font: var(--type-label);
     color: var(--ink-strong);
   }
-  /* A window: its name over when it resets, its bar, its percent. */
-  .pop-row {
-    --row-paint: var(--surface-raised);
-    display: grid;
-    grid-template-columns: 104px minmax(0, 1fr) 32px;
-    gap: 8px;
-    align-items: center;
-    font: var(--type-meta);
-    font-variant-numeric: tabular-nums;
+  .rows {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
   }
-  .pop-name {
-    min-inline-size: 0;
-    color: var(--ink-strong);
+  /* An account: its ring, then its name and the time that matters, a short
+     status, and its key. */
+  .row {
+    display: grid;
+    grid-template-columns: 24px minmax(0, 1fr);
+    column-gap: 10px;
+    align-items: start;
+    padding: 7px var(--space-1);
+    border-radius: var(--radius-sm);
+    transition: background-color var(--dur-fade) var(--ease-out);
 
-    & > span {
-      display: block;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+    & > :global(svg) {
+      margin-block-start: 1px;
     }
   }
-  .pop-sub {
-    color: var(--ink-muted);
+  .row.limit {
+    background: var(--meter-wash-over);
+    --ring-ground: var(--meter-wash-over);
   }
-  .pop-bar {
-    display: block;
+  .content {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
     min-inline-size: 0;
   }
-  .pop-bar[data-short] {
-    inline-size: 50%;
+  .r1 {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-2);
+    min-inline-size: 0;
   }
-  .pop-pct {
-    text-align: end;
-  }
-  /* The way to the page: plain meta text, coral on hover. */
-  .pop-foot {
-    display: block;
-    padding: 10px 12px;
-    border-top: 1px solid var(--border-hairline);
-    font: var(--type-meta);
+  .time {
+    flex: none;
+    font: var(--type-label);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
     color: var(--ink-strong);
-    text-decoration: none;
-    transition: color var(--dur-control) var(--ease-out);
+  }
+  .status {
+    margin: 0 0 3px;
+    font: var(--type-meta);
+    color: var(--ink-row);
+  }
+  .delegates {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    padding: 6px var(--space-1) 0;
+    font: var(--type-meta);
+    color: var(--ink-row);
 
-    &:hover {
-      color: var(--meter-calm);
+    & > .head {
+      font: var(--type-label);
+      color: var(--ink-strong);
+    }
+    & :global(.arrow) {
+      display: inline-block;
+      inline-size: 12px;
+      block-size: 12px;
+      vertical-align: -2px;
+      color: var(--ink-muted);
+    }
+  }
+  .foot {
+    padding: 10px 14px;
+    border-block-start: 1px solid var(--border-hairline);
+  }
+  :global(.usage-sheet) .group {
+    padding: 12px;
+  }
+  :global(.usage-sheet) .row {
+    min-block-size: 44px;
+    padding: 8px 6px;
+  }
+  :global(.usage-sheet) .foot :global(a) {
+    inline-size: 100%;
+    block-size: 44px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .slot,
+    .row {
+      transition: none;
     }
   }
 </style>

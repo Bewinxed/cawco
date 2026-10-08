@@ -5,7 +5,6 @@
  */
 import type {
   AgentRow,
-  ClaudeExtraUsage,
   ClaudeLimits,
   LimitWindow,
   ProjectCap,
@@ -159,25 +158,6 @@ export function duration(ms: number): string {
   return m > 0 ? `${m}m` : "<1m";
 }
 
-/** About this long: "about 2h", "about 45m" — a projection is never to the minute. */
-export function about(ms: number): string {
-  const min = ms / MINUTE_MS;
-  const fives = Math.max(5, Math.round(min / 5) * 5);
-  if (fives < 60) {
-    return `${fives}m`;
-  }
-  const h = min / 60;
-  if (h < 10) {
-    const half = Math.round(h * 2) / 2;
-    const whole = Math.floor(half);
-    return half === whole ? `${whole}h` : `${whole}h 30m`;
-  }
-  if (h < 48) {
-    return `${Math.round(h)}h`;
-  }
-  return `${Math.round(h / 24)}d`;
-}
-
 const WEEKDAY_TIME = new Intl.DateTimeFormat(undefined, {
   weekday: "short",
   hour: "2-digit",
@@ -327,56 +307,6 @@ export function firstToStop<T extends { meter: Meter }>(
   return [...readings].sort((a, b) => b.meter.used - a.meter.used)[0] ?? null;
 }
 
-/** The projection, as one sentence: what the Limits block leads with. */
-export function projectionSentence(m: Meter, now: number): string {
-  const reset = m.window.resetsAt;
-  if (m.used >= 100) {
-    return reset
-      ? `Limit reached. It resets ${resetLabel(reset, now)}.`
-      : "Limit reached.";
-  }
-  if (m.early) {
-    return "Too early in the window to project.";
-  }
-  if (m.runsOutIn !== null && m.margin !== null) {
-    return `At this pace it runs out in about ${about(m.runsOutIn)}, ${about(m.margin)} before the reset.`;
-  }
-  if (m.lasts) {
-    return "At this pace it lasts to the reset.";
-  }
-  return "";
-}
-
-/** A bar's own line under it: its projection, short. */
-export function projectionNote(m: Meter): string {
-  if (m.early) {
-    return "too early to project";
-  }
-  if (m.runsOutIn !== null) {
-    return `runs out in about ${about(m.runsOutIn)}`;
-  }
-  return m.lasts ? "lasts to the reset" : "";
-}
-
-const DAY_ONLY = new Intl.DateTimeFormat(undefined, {
-  day: "numeric",
-  month: "short",
-});
-
-/**
- * A reset as the rail says it, after its "resets": "4h 38m", "Thu 09:00",
- * and past a week only the day, "Oct 17" — the rail has no room for a time
- * nobody acts on a week out.
- */
-export const resetShort = (resetsAt: string, now: number): string => {
-  const at = new Date(resetsAt).getTime();
-  if (at - now >= 7 * DAY_MS) {
-    return DAY_ONLY.format(at);
-  }
-  const label = resetLabel(resetsAt, now);
-  return label.startsWith("in ") ? label.slice(3) : label;
-};
-
 /** One provider's window, read against the clock: what every limit surface draws. */
 export interface LimitRow {
   key: string;
@@ -416,25 +346,11 @@ export function limitRows(
     }));
 }
 
-/** "read 2h ago": how old a stale reading is. */
-export const readAgo = (fetchedAt: number, now: number): string =>
-  now - fetchedAt < MINUTE_MS
-    ? "read just now"
-    : `read ${duration(now - fetchedAt)} ago`;
-
 /** "max" → "Max": the plan as Claude Code's `subscriptionType` names it. */
 export const planName = (subscription: string | null): string | null =>
   subscription
     ? subscription.charAt(0).toUpperCase() + subscription.slice(1)
     : null;
-
-/** "On · in use", "Off · out of credits": the extra-usage switch in words. */
-export const extraUsageText = (extra: ClaudeExtraUsage): string => {
-  if (!extra.on) {
-    return extra.offReason ? `Off · ${extra.offReason}` : "Off";
-  }
-  return extra.inUse ? "On · in use" : "On";
-};
 
 /**
  * Why Claude's limits cannot be shown, and what fixes it: the one source of

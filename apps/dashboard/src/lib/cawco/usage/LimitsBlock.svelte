@@ -1,202 +1,260 @@
 <script lang="ts">
   /**
-   * The page's lead (design/usage-tracker.md §3, owner pick e): will it last?
-   * The window that will stop you first leads as a percent with its
-   * projection in one sentence; under it every window, grouped by provider.
+   * The page's lead, as Rings: can you keep going, on which account, what
+   * happens when it runs out, and when an account is back. It leads with
+   * the time until nothing can carry your new sessions and that in one
+   * sentence; then one tile per Claude account in carrying order, each its
+   * double dial (the disc its 5-hour window, the rim its week, filled with
+   * what is left), its figure, a sentence, its key and the sessions running
+   * on it; then opencode's plan the same way.
    *
-   * Limits are account-scoped: every machine signed in to one account reads
-   * the same numbers, so a provider's first good reading speaks for all of
-   * them. A Claude reading with no session running on its account is stale
-   * (nothing sees use from elsewhere) and says how old it is. Live: the
-   * readings are the client's, which the hub's `usage` frame keeps current.
+   * Live: the forecast is read whenever the hub says an account moved
+   * (usage/forecast.svelte.ts), and the words move on once a minute.
    */
   import { Button } from "#lib/components/ui/button/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { IconKey } from "#lib/icons.js";
-  import Failed from "~icons/solar/close-circle-bold-duotone";
-  import Attention from "~icons/solar/hand-shake-bold-duotone";
-  import { cawco, type Machine } from "../client.svelte";
-  import HarnessGlyph from "../HarnessGlyph.svelte";
+  import ClaudeIcon from "~icons/logos/claude-icon";
+  import AccountName from "../accounts/AccountName.svelte";
+  import { cawco, type InstanceRow, type Machine } from "../client.svelte";
   import MachineLogin from "../MachineLogin.svelte";
+  import OpenCodeLogo from "../OpenCodeLogo.svelte";
+  import { claudeGap, money, speakingReading } from "../usage";
+  import Figure from "./Figure.svelte";
+  import { startForecast, usage } from "./forecast.svelte";
+  import Rings from "./Rings.svelte";
+  import RingsKey from "./RingsKey.svelte";
   import {
-    claudeGap,
-    extraUsageText,
-    firstToStop,
-    type LimitRow,
-    limitRows,
-    type Meter,
-    money,
-    planName,
-    projectionNote,
-    projectionSentence,
-    readAgo,
-    resetLabel,
-    speakingReading,
-  } from "../usage";
-  import LimitBar from "./LimitBar.svelte";
+    leadSentence,
+    nameFields,
+    openCodeFigure,
+    openCodeSentence,
+    openCodeStop,
+    type Part,
+    type RingAccount,
+    stopText,
+    tileFigure,
+    tileSentence,
+  } from "./rings";
+  import Words from "./Words.svelte";
 
-  let {
-    now,
-  }: {
-    /** The page's clock, a minute at a time. */
-    now: number;
-  } = $props();
+  $effect(() => {
+    startForecast();
+  });
+
+  const claude = $derived(usage.claude);
+  const openCode = $derived(usage.openCode);
+  const now = $derived(usage.now);
+  const read = $derived(usage.read && cawco.usageLimitsRead);
 
   /** The fleet's real spend, the hub's one figure; null while read or failed. */
   const spend = $derived(cawco.spend);
 
-  type Row = LimitRow;
-
-  const claude = $derived(speakingReading(cawco.claudeLimits));
-  const go = $derived(speakingReading(cawco.openCodeGoLimits));
-
-  const claudeRows = $derived(limitRows("Claude", claude?.reading, now));
-  const goRows = $derived(limitRows("opencode", go?.reading, now));
-
-  /** Why there is no Claude bar, and what to do about it (usage.ts `claudeGap`). */
+  /** Why there is no Claude tile, and what to do about it (usage.ts `claudeGap`). */
   const claudeUnknown = $derived(
     claude ? null : claudeGap(cawco.claudeLimits, cawco.machines)
   );
 
-  const providers = $derived(
-    [claudeRows.length > 0, goRows.length > 0].filter(Boolean).length
+  /** Claude's extra usage, as the account's Claude Code last said it. */
+  const extra = $derived(
+    speakingReading(cawco.claudeLimits)?.reading.extraUsage ?? null
   );
-  const lead = $derived(firstToStop([...claudeRows, ...goRows]));
-
-  /**
-   * What the headline percent is of: "the 5-hour window", "the Fable week",
-   * "opencode's month". It names the provider only when two have windows on
-   * screen.
-   */
-  const leadName = $derived.by(() => {
-    if (!lead) {
+  const extraText = $derived.by(() => {
+    if (!extra) {
       return "";
     }
-    const w = lead.meter.window;
-    const base =
-      { session: "5-hour window", weekly: "week", monthly: "month" }[w.group] ??
-      lead.label;
-    const scoped = w.scopeLabel ? `${w.scopeLabel} ${base}` : base;
-    return providers > 1 ? `${lead.provider}'s ${scoped}` : `the ${scoped}`;
+    if (!extra.on) {
+      return extra.offReason ? `off: ${extra.offReason}` : "off";
+    }
+    return extra.inUse ? "on, in use" : "on";
   });
 
-  const resetText = (m: Meter): string => {
-    const reset = m.window.resetsAt;
-    if (!reset) {
-      return "";
+  /** The lead: Claude's answer, or opencode's when it is the only plan. */
+  const lead = $derived.by((): { figure: string; say: Part[] } | null => {
+    if (claude) {
+      return { figure: stopText(claude, now), say: leadSentence(claude, now) };
     }
-    const when = resetLabel(reset, now);
-    if (m.used >= 100) {
-      return `Limit reached · resets ${when}`;
+    if (openCode) {
+      return {
+        figure: openCodeStop(openCode, now),
+        say: openCodeSentence(openCode, now),
+      };
     }
-    return `resets ${when}`;
-  };
+    return null;
+  });
 
-  const showSpend = $derived(
-    spend !== null && (spend.all > 0 || goRows.length > 0)
-  );
+  const titleOf = (row: InstanceRow) =>
+    row.title ?? row.derivedTitle ?? "untitled session";
+  const projectOf = (row: InstanceRow) =>
+    row.projectId ? (cawco.project(row.projectId)?.name ?? null) : null;
+  const tokens = (row: InstanceRow) => {
+    const count = row.keepAlive?.contextTokens;
+    return count ? `${Math.round(count / 1000)}k` : "";
+  };
 
   let loginFor = $state<Machine | null>(null);
   let loginOpen = $state(false);
 </script>
 
+{#snippet running(
+  ring: RingAccount
+)}
+  <div class="running">
+    {#if ring.sessions.length > 0}
+      <span class="heading"
+        >Running <span class="count">{ring.sessions.length}</span></span
+      >
+      <div class="sessions">
+        {#each ring.sessions as row (row.id)}
+          {@const project = projectOf(row)}
+          <div class="session">
+            <span class="what"
+              >{#if project}
+                <span class="project">{project}</span>
+              {/if}
+              {titleOf(row)}</span
+            >
+            <span class="num">{tokens(row)}</span>
+          </div>
+        {/each}
+      </div>
+    {:else}
+      <span class="none">No sessions running</span>
+    {/if}
+  </div>
+{/snippet}
+
+{#snippet tile(
+  ring: RingAccount,
+  index: number,
+  figure: { figure: string; label: string },
+  say: Part[]
+)}
+  <div
+    class="tile"
+    data-account={ring.id}
+    data-tile
+    class:limit={ring.state === "limit"}
+  >
+    <div class="head">
+      <span class="dot" style:--c={ring.color}></span>
+      <AccountName account={nameFields(ring)} wrap />
+    </div>
+    <div class="mark">
+      <Rings {index} reveal {ring} size={56} />
+      <span class="figure">
+        <span
+          class="value"
+          class:muted={ring.state === "limit" || ring.state === "stale"}
+          ><Figure text={figure.figure} /></span
+        >
+        <small>{figure.label}</small>
+      </span>
+    </div>
+    <p class="say" data-status><Words parts={say} /></p>
+    <RingsKey {ring} />
+    {@render running(ring)}
+  </div>
+{/snippet}
+
 <section aria-labelledby="limits-title" class="card">
   <h2 class="title" id="limits-title">Limits</h2>
 
-  {#if !cawco.usageLimitsRead}
+  {#if !read}
     <div class="loading" data-slot="skeleton-rows">
       <Skeleton class="h-7 w-24" />
       <Skeleton class="h-4 w-3/4" />
-      {#each [0, 1, 2] as row (row)}
-        <Skeleton class="h-5 w-full" />
-      {/each}
+      <div class="grid">
+        {#each [0, 1, 2] as one (one)}
+          <Skeleton class="h-48 w-full" />
+        {/each}
+      </div>
     </div>
   {:else}
     {#if lead}
       <div class="lead">
-        <p class="headline">
-          <span class="pct num">{Math.round(lead.meter.used)}%</span>
-          <span class="of">of {leadName}</span>
+        <p class="big">
+          <span class="kpi" data-lead-figure class:muted={claude?.stale}
+            ><Figure text={lead.figure} /></span
+          >
+          <span class="of">until you’re stopped</span>
         </p>
-        {#if projectionSentence(lead.meter, now)}
-          <p class="sentence">{projectionSentence(lead.meter, now)}</p>
+        <p class="sentence" data-lead><Words parts={lead.say} /></p>
+      </div>
+    {/if}
+
+    <div class="provider">
+      <span aria-hidden="true" class="glyph"><ClaudeIcon /></span>
+      <span class="name">Claude</span>
+      {#if claude?.delegate}
+        <span class="right" data-delegates
+          ><Words
+            parts={[
+              "Delegates go to ",
+              { strong: claude.delegate.name },
+              claude.delegateWhy ? ` (${claude.delegateWhy})` : "",
+            ]}
+          /></span
+        >
+      {/if}
+    </div>
+    {#if claude}
+      <div class="grid">
+        {#each claude.accounts as ring, i (ring.id)}
+          {@render tile(
+            ring,
+            i,
+            tileFigure(ring, claude, now),
+            tileSentence(ring, claude, now)
+          )}
+        {/each}
+      </div>
+      {#if extraText}
+        <p class="line"><span class="label">Extra usage</span>{extraText}</p>
+      {/if}
+    {:else if claudeUnknown}
+      <div class="unknown">
+        <p>{claudeUnknown.reason}</p>
+        {#if claudeUnknown.signIn && claudeUnknown.machine}
+          {@const machine = claudeUnknown.machine}
+          <Button
+            icon={IconKey}
+            label="Log in to Claude"
+            onclick={() => {
+              loginFor = machine;
+              loginOpen = true;
+            }}
+            size="sm"
+            variant="outline"
+          />
         {/if}
       </div>
     {/if}
 
-    <div class="windows">
-      <div class="group">
-        <header class="provider">
-          <span class="glyph"><HarnessGlyph harness="claude" /></span>
-          <span class="name">Claude</span>
-          {#if claude && planName(claude.reading.subscription)}
-            <span class="plan">· {planName(claude.reading.subscription)}</span>
-          {/if}
-          {#if claude?.reading.stale}
-            <span class="age">{readAgo(claude.reading.fetchedAt, now)}</span>
-          {/if}
-        </header>
-        {#if claudeUnknown}
-          <div class="unknown">
-            <p>{claudeUnknown.reason}</p>
-            {#if claudeUnknown.signIn && claudeUnknown.machine}
-              {@const machine = claudeUnknown.machine}
-              <Button
-                icon={IconKey}
-                label="Log in to Claude"
-                onclick={() => {
-                  loginFor = machine;
-                  loginOpen = true;
-                }}
-                size="sm"
-                variant="outline"
-              />
-            {/if}
-          </div>
-        {:else}
-          {@render windows(claudeRows)}
-          {#if claude?.reading.extraUsage}
-            {@const extra = claude.reading.extraUsage}
-            <p class="spend">
-              <span class="label">Extra usage</span>
-              <span class="figures"
-                >{extraUsageText(extra)}
-                {#if extra.resetsAt}
-                  · resets {resetLabel(extra.resetsAt, now)}
-                {/if}</span
-              >
-            </p>
-          {/if}
-        {/if}
+    {#if openCode || (spend && spend.all > 0)}
+      <div class="provider">
+        <span aria-hidden="true" class="glyph"><OpenCodeLogo /></span>
+        <span class="name">opencode Go</span>
       </div>
-
-      {#if goRows.length > 0 || showSpend}
-        <div class="group">
-          <header class="provider">
-            <span class="glyph"><HarnessGlyph harness="opencode" /></span>
-            <span class="name">opencode</span>
-            {#if goRows.length > 0}
-              <span class="plan">· Go</span>
-            {/if}
-            {#if go?.reading.stale}
-              <span class="age">{readAgo(go.reading.fetchedAt, now)}</span>
-            {/if}
-          </header>
-          {@render windows(goRows)}
-          {#if showSpend && spend}
-            <p class="spend">
-              <span class="label">Spend</span>
-              <span class="num figures"
-                >{money(spend.today)}
-                today · {money(spend.week)} this week ·
-                {money(spend.all)}
-                all time</span
-              >
-            </p>
-          {/if}
+      {#if openCode}
+        <div class="grid">
+          {@render tile(
+            openCode,
+            0,
+            openCodeFigure(openCode, now),
+            openCodeSentence(openCode, now)
+          )}
         </div>
       {/if}
-    </div>
+      {#if spend && spend.all > 0}
+        <p class="line num">
+          <span class="label">Spend</span>{money(spend.today)}
+          today,
+          {money(spend.week)}
+          this week, {money(spend.all)} all time
+        </p>
+      {/if}
+    {/if}
   {/if}
 </section>
 
@@ -204,48 +262,13 @@
   <MachineLogin machine={loginFor} bind:open={loginOpen} />
 {/if}
 
-{#snippet windows(
-  rows: Row[]
-)}
-  {#each rows as row (row.key)}
-    {@const m = row.meter}
-    {@const note = row === lead ? "" : projectionNote(m)}
-    <div class="row" data-state={m.state}>
-      <span class="label">{row.label}</span>
-      <span class="bar">
-        <LimitBar
-          elapsed={m.elapsed}
-          label={row.label}
-          state={m.state}
-          used={m.used}
-        />
-      </span>
-      <span class="used num">
-        {#if m.state === "near"}
-          <Attention aria-label="Near the limit" class="status" />
-        {:else if m.state === "over" || m.state === "reached"}
-          <Failed
-            aria-label={m.state === "reached"
-              ? "Limit reached"
-              : "Nearly at the limit"}
-            class="status"
-          />
-        {/if}
-        {Math.round(m.used)}%
-      </span>
-      <span class="resets"
-        >{m.runsOutIn !== null && note ? `${note} · ` : ""}{resetText(m)}</span
-      >
-    </div>
-  {/each}
-{/snippet}
-
 <style>
   .card {
+    --ring-ground: var(--surface-recess);
     display: flex;
     flex-direction: column;
-    gap: var(--space-4);
-    padding: var(--space-5);
+    gap: var(--space-5);
+    padding: var(--space-6);
     border-radius: var(--radius-lg);
     background: var(--surface-raised);
     box-shadow: var(--shadow-tile);
@@ -259,125 +282,178 @@
     flex-direction: column;
     gap: var(--space-3);
   }
-
   .lead {
     display: flex;
     flex-direction: column;
-    gap: var(--space-1);
+    gap: 6px;
   }
-  .headline {
+  .big {
     display: flex;
     flex-wrap: wrap;
     align-items: baseline;
-    gap: var(--space-2);
+    gap: 10px;
   }
-  .pct {
+  .kpi {
     font: var(--type-kpi);
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
     color: var(--ink-strong);
+  }
+  .kpi.muted,
+  .value.muted {
+    color: var(--ink-muted);
   }
   .of {
     font: var(--type-body);
     color: var(--ink-muted);
   }
   .sentence {
+    max-inline-size: 60ch;
     font: var(--type-body);
-    color: var(--ink-strong);
-  }
-
-  /* Every provider's windows on one grid, so the bars, percents and resets
-     line up down the whole block; each row takes the columns (subgrid). */
-  .windows {
-    display: grid;
-    grid-template-columns: 7.5rem minmax(0, 1fr) 4.5rem max-content;
-    column-gap: var(--space-3);
-    row-gap: var(--space-1);
-  }
-  .group {
-    display: contents;
+    color: var(--ink-row);
   }
   .provider {
-    grid-column: 1 / -1;
     display: flex;
     align-items: center;
-    gap: var(--space-2);
-    padding-block-end: var(--space-1);
+    gap: 8px;
     font: var(--type-label);
     color: var(--ink-strong);
-  }
-  .group + .group .provider {
-    padding-block-start: var(--space-3);
   }
   .glyph {
     display: inline-flex;
     inline-size: 16px;
     block-size: 16px;
-    color: var(--ink-muted);
+
+    & :global(svg) {
+      inline-size: 100%;
+      block-size: 100%;
+    }
   }
-  .plan {
-    color: var(--ink-muted);
-    font-weight: var(--weight-body);
-  }
-  .age {
+  .right {
     margin-inline-start: auto;
     font: var(--type-meta);
     color: var(--ink-muted);
   }
-
-  /* One window: name, bar, used, reset, on one line; a phone stacks it. */
-  .row {
-    --row-paint: var(--surface-raised);
-    grid-column: 1 / -1;
+  .grid {
     display: grid;
-    grid-template-columns: subgrid;
+    grid-template-columns: repeat(auto-fill, minmax(15.5rem, 1fr));
+    gap: var(--space-3);
+  }
+  /* A tile: its head, its mark and figure, its sentence, its key, its
+     sessions, the groups a step apart. */
+  .tile {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    min-inline-size: 0;
+    padding: var(--space-4);
+    border-radius: var(--radius-md);
+    background: var(--surface-recess);
+    transition: background-color var(--dur-fade) var(--ease-out);
+  }
+  .tile.limit {
+    background: var(--meter-wash-over);
+    --ring-ground: var(--meter-wash-over);
+  }
+  .head {
+    display: flex;
     align-items: center;
-    margin-inline: calc(-1 * var(--space-2));
-    padding: var(--space-2);
-    border-radius: var(--radius-sm);
-    background: var(--row-paint);
+    gap: 7px;
+    min-inline-size: 0;
   }
-  /* Near and over rows get a faint wash and nothing else (owner pick):
-     the fill and the glyph carry the colour, the words stay in ink. */
-  .row[data-state="near"] {
-    --row-paint:
-      linear-gradient(var(--meter-wash-near), var(--meter-wash-near)),
-      var(--surface-raised);
+  .dot {
+    flex: none;
+    inline-size: 8px;
+    block-size: 8px;
+    border-radius: 50%;
+    background: var(--c);
   }
-  .row[data-state="over"],
-  .row[data-state="reached"] {
-    --row-paint:
-      linear-gradient(var(--meter-wash-over), var(--meter-wash-over)),
-      var(--surface-raised);
+  .mark {
+    display: flex;
+    align-items: center;
+    gap: 14px;
   }
-  .label {
-    font: var(--type-label);
+  .figure {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-inline-size: 0;
+
+    & small {
+      font: var(--type-meta);
+      color: var(--ink-muted);
+    }
+  }
+  .value {
+    font: var(--type-title);
+    font-variant-numeric: tabular-nums;
     color: var(--ink-strong);
   }
-  .used {
-    display: inline-flex;
-    align-items: center;
-    justify-content: flex-end;
+  .say {
+    margin: 0;
+    font: var(--type-body);
+    color: var(--ink-row);
+  }
+  .running {
+    display: flex;
+    flex-direction: column;
     gap: var(--space-1);
-    font: var(--type-label);
-    color: var(--ink-strong);
   }
-  .used :global(.status) {
-    inline-size: 16px;
-    block-size: 16px;
+  .heading {
+    font: var(--type-meta);
+    font-weight: var(--weight-strong);
+    color: var(--ink-muted);
   }
-  .row[data-state="near"] :global(.status) {
-    color: var(--meter-near);
+  .count {
+    margin-inline-start: var(--space-1);
   }
-  .row[data-state="over"] :global(.status),
-  .row[data-state="reached"] :global(.status) {
-    color: var(--meter-over);
+  .sessions {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
   }
-  .resets {
+  .session {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-4);
+    padding: 5px 8px;
+    border-radius: var(--radius-sm);
+    background: var(--surface-raised);
+    font: var(--type-meta);
+    color: var(--ink-row);
+
+    & .what {
+      min-inline-size: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    & .num {
+      flex: none;
+      font-variant-numeric: tabular-nums;
+      color: var(--ink-muted);
+    }
+  }
+  .project {
+    color: var(--ink-muted);
+  }
+  .none {
+    padding: 2px 0;
     font: var(--type-meta);
     color: var(--ink-muted);
   }
+  .line {
+    display: flex;
+    gap: var(--space-3);
+    font: var(--type-body);
+    color: var(--ink-row);
 
+    & .label {
+      font: var(--type-label);
+      color: var(--ink-strong);
+    }
+  }
   .unknown {
-    grid-column: 1 / -1;
     display: flex;
     flex-wrap: wrap;
     align-items: center;
@@ -385,56 +461,14 @@
     font: var(--type-body);
     color: var(--ink-muted);
   }
-  .spend {
-    grid-column: 1 / -1;
-    display: grid;
-    grid-template-columns: subgrid;
-    align-items: baseline;
-    padding-block: var(--space-2);
-    font: var(--type-body);
-    color: var(--ink-strong);
-  }
-  .spend .figures {
-    grid-column: 2 / -1;
-  }
-
   @media (max-width: 639px) {
     .card {
       padding: var(--space-4);
     }
-    .windows {
-      grid-template-columns: minmax(0, 1fr);
-    }
-    .spend {
-      grid-template-columns: minmax(0, 1fr);
-      gap: var(--space-1);
-    }
-    .spend .figures {
-      grid-column: 1;
-    }
-    .row {
-      grid-template-columns: minmax(0, 1fr) auto;
-      column-gap: var(--space-3);
-      grid-template-areas:
-        "label used"
-        "bar bar"
-        "resets resets";
-      row-gap: var(--space-1);
-    }
-    .row > .label {
-      grid-area: label;
-    }
-    .row > .used {
-      grid-area: used;
-    }
-    .row > .bar {
-      grid-area: bar;
-    }
-    .row > .resets {
-      grid-area: resets;
-    }
-    .spend .label {
-      min-inline-size: 0;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .tile {
+      transition: none;
     }
   }
 </style>

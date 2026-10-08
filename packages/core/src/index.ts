@@ -671,6 +671,12 @@ export interface SessionTooling {
 
 export interface InstanceRow {
   /**
+   * The account the session runs on (`instances.account_id`): placed once as
+   * it starts and kept for its whole life. Null on a harness without accounts
+   * and on a session from before accounts existed.
+   */
+  accountId?: string | null;
+  /**
    * The supervisor's standing autopilot for this session, set from the
    * composer popover. `null` means never configured; disabling keeps the
    * prompt rather than discarding it, so re-enabling does not mean retyping

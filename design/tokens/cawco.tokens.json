@@ -441,6 +441,16 @@
       "$type": "color",
       "$value": "{color.mark-6}"
     },
+    "account-reserved": {
+      "$type": "color",
+      "$description": "The part of an account's week rim that sits under its reserve, once the reserve is reached: a mid neutral that reads on paper and at night.",
+      "$value": "{color.neutral-9}",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "{color.neutral-8}"
+        }
+      }
+    },
     "mark-glyph": {
       "$type": "color",
       "$value": "oklch(99% 0 0)",

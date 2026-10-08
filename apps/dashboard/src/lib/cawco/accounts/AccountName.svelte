@@ -2,7 +2,10 @@
   /**
    * What an account is called: its email; with a nickname, the nickname and
    * the email under it (or beside it, `row`). An account not signed in yet
-   * has neither, and says so.
+   * has neither, and says so. Where every word must be read (the usage rows
+   * and tiles, `wrap`), a long name wraps onto the next line, and in a row
+   * the email drops under the nickname when there is no room, rather than
+   * ending in an ellipsis.
    */
   import type { Account } from "@cawco/core";
   import { nameOf } from "./model.svelte";
@@ -10,13 +13,15 @@
   let {
     account,
     row = false,
+    wrap = false,
   }: {
     account: Pick<Account, "email" | "id" | "label">;
     row?: boolean;
+    wrap?: boolean;
   } = $props();
 </script>
 
-<span class={["name", row && "row"]}>
+<span class={["name", row && "row", wrap && "wrap"]}>
   <b
     >{account.label || account.email ? nameOf(account) : "Not signed in yet"}</b
   >
@@ -50,5 +55,17 @@
   small {
     font: var(--type-meta);
     color: var(--ink-muted);
+  }
+  .wrap {
+    &.row {
+      flex-wrap: wrap;
+      row-gap: 0;
+    }
+    & b,
+    & small {
+      overflow: visible;
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
   }
 </style>

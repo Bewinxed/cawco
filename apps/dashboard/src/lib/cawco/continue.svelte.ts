@@ -33,6 +33,8 @@ export interface ContinueSource {
 
 /** The New Session form as it was submitted: what a failed continuation reopens with. */
 export interface SessionDraft {
+  /** The account picked for the session; absent: placement chooses. */
+  account?: string;
   baseCwd: string;
   cwd: string;
   effort: EffortLevel | null;

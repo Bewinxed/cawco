@@ -70,6 +70,7 @@
   import SessionMark, { sessionStatus, statusWord } from "./SessionMark.svelte";
   import StoredSessionMenu from "./StoredSessionMenu.svelte";
   import { isThreadTab } from "./thread-tabs";
+  import AccountDot from "./usage/AccountDot.svelte";
   import { runIdOf } from "./workflow-runs";
   import { dragSession } from "./workspace/dnd.svelte";
 
@@ -211,7 +212,9 @@
           {title}</span
         >
         {#if !compact}
-          <span class="cell line">{line}</span>
+          <span class="cell line"
+            ><AccountDot accountId={instance?.accountId} />{line}</span
+          >
         {/if}
       </span>
       <span class="end" {@attach trailWidth}>
