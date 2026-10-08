@@ -34,12 +34,14 @@
   import { untrack } from "svelte";
   import { fade } from "svelte/transition";
   import { TextMorph } from "torph/svelte";
+  import { IconError } from "#lib/icons.js";
   import IconChevron from "~icons/solar/alt-arrow-right-bold-duotone";
   import Caw from "../home/Caw.svelte";
   import CawMark from "../home/CawMark.svelte";
   import { dur, morphMs } from "../motion/curves.svelte";
   import { unfold } from "../motion/fold.svelte";
   import { morph } from "../motion/morph.svelte";
+  import { compactionFailure } from "./compaction-failure";
   import { COMPACTING_MARK, COMPACTION_MARK } from "./compaction-mark";
   import { disclosureAt } from "./disclosure.svelte";
   import MessageBody from "./MessageBody.svelte";
@@ -69,12 +71,26 @@
   /** Caw at work is on the page: until his leave has played out. */
   let working = $state(watched);
 
-  /** What happened, why when the harness said, and what to do now (WORDS.md, Error formula). */
-  const failure = $derived(
-    `Couldn't compact the conversation${
-      row.error ? `: ${row.error.trim().replace(/[.\s]+$/, "")}` : ""
-    }. It stays as it was; send /compact to try again.`
-  );
+  /** Why it failed and the way on, under the line that says it did. */
+  const reason = $derived(compactionFailure(row.error));
+
+  /**
+   * The settle is under way: the word is still turning into "Compacted" and
+   * Caw into his mark. Nothing that offers the brief comes in until it is
+   * over — the chevron a finger always sees would say there is something to
+   * open under a word still reading "Compacting".
+   */
+  let settlingNow = $state(false);
+  $effect(() => {
+    if (!(watched && row.state === "done")) {
+      return;
+    }
+    settlingNow = true;
+    const over = setTimeout(() => {
+      settlingNow = false;
+    }, dur("--dur-panel"));
+    return () => clearTimeout(over);
+  });
 
   /**
    * What the row says to a screen reader, as it changes: that the
@@ -91,7 +107,7 @@
     if (live) {
       said = "Compacting…";
     } else if (failed) {
-      said = failure;
+      said = `Couldn't compact the conversation. ${reason}`;
     }
     const frame = requestAnimationFrame(() => {
       spoken = said;
@@ -148,7 +164,8 @@
   class:arriving={lead !== null && !watched}
   class:failed
   class:live
-  class:settling={watched && row.state === "done"}
+  class:settled={watched && row.state === "done"}
+  class:settling={settlingNow}
   {@attach watched && morph()}
 >
   <span class="arm start">
@@ -183,25 +200,34 @@
           /></span
         >
       {/if}</span
-    >
-    {#if failed}
-      <span class="fail" in:fade={{ duration: dur("--dur-fade") }}
-        >{failure}</span
-      >
-    {:else if watched}
-      <TextMorph
-        as="span"
-        duration={morphMs()}
-        text={live ? "Compacting…" : "Compacted"}
-      />
-    {:else}
-      Compacted
-    {/if}
-    <span class="chev"><IconChevron aria-hidden="true" /></span></span
+    ><span class="word"
+      >{#if failed}
+        <!-- A compaction that failed never reads "Compacted", seen or not. -->
+      {:else if watched}
+        <TextMorph
+          as="span"
+          duration={morphMs()}
+          text={live ? "Compacting…" : "Compacted"}
+        />
+      {:else}
+        Compacted
+      {/if}</span
+    ><span class="chev"><IconChevron aria-hidden="true" /></span></span
   >
   <span class="arm">
     <svg aria-hidden="true" class="wave"><path d={WAVE} /></svg>
   </span>
+  {#if failed}
+    <!-- The transcript's failure line, on the rail: what happened on the
+         line, why and the way on hung at the text column (SystemLine). -->
+    <span class="fail" in:fade={{ duration: dur("--dur-fade") }}>
+      <span class="rail-line"
+        ><span class="rail-cell"><IconError /></span
+        ><b>Couldn't compact the conversation</b></span
+      >
+      <span class="reason rail-hang">{reason}</span>
+    </span>
+  {/if}
 </button>
 {#if watched}
   <span class="sr-only" role="status">{spoken}</span>
@@ -270,6 +296,11 @@
         --chev: 1;
       }
     }
+    /* Settling, nothing offers the brief yet: the chevron comes in once the
+       word reads "Compacted", on its own clock. */
+    &.settling {
+      --chev: 0;
+    }
     transition: color var(--dur-control) var(--ease-out);
   }
   /* The centre: the word, and the chevron's 12px mark a --space-1 gap after
@@ -282,6 +313,13 @@
   .mid {
     white-space: nowrap;
     translate: calc(var(--chev) * var(--room) * -1) 0;
+  }
+  /* While the word turns from "Compacting…" to "Compacted" its box takes the
+     new word's width at once and the letters leaving fade past its end: the
+     cluster read 3.5px off centre for the morph. Clipped across, never up or
+     down, the word is its box throughout. */
+  .settling .word {
+    clip-path: inset(-0.5em 0);
   }
   /* Caw's slot: his still's 18px box, its middle on the word's x-height.
      His rim and his coming in draw a little past it and take no room. One
@@ -300,11 +338,6 @@
     .live & {
       inline-size: var(--tx-compacting-caw);
     }
-    /* No Caw in an error. */
-    .failed & {
-      inline-size: 0;
-      margin-inline-end: 0;
-    }
   }
   /* Whoever stands in the slot, centred on it whatever its width: Caw at
      work leaving where he worked as his mark comes in where it rests. */
@@ -316,16 +349,38 @@
     line-height: 0;
     translate: -50% -50%;
   }
-  /* Failed: one line in the divider's place, as wide as the column. */
+  /* Failed: the transcript's failure line where the divider stood, on the
+     rail like every other line (SystemLine's `.note.fail`): no line, no Caw
+     — he is never in an error — and nothing centred. */
   .failed {
-    grid-template-columns: 0 minmax(0, 1fr) 0;
-    column-gap: 0;
+    display: block;
+    text-align: start;
     color: var(--status-fail-ink);
 
-    .mid {
-      white-space: normal;
-      text-wrap: pretty;
+    & > :is(.arm, .mid) {
+      display: none;
     }
+  }
+  .fail {
+    display: block;
+    margin-inline-start: var(--x-rail);
+    padding-inline-start: calc(var(--x-glyph) - var(--x-rail));
+    background:
+      linear-gradient(var(--status-fail-ink), var(--status-fail-ink)) left top /
+      2px 100% no-repeat;
+    font-size: var(--text-label);
+    font-weight: var(--weight-strong);
+    line-height: var(--leading-body);
+
+    & :global(svg) {
+      inline-size: 12px;
+      block-size: 12px;
+    }
+  }
+  .reason {
+    display: block;
+    margin-block-start: var(--space-1);
+    text-wrap: pretty;
   }
   /* A zero-width box on the word's line, `middle` setting its mark on the
      word's x-height; the mark hangs out of it after the gap. */
@@ -359,8 +414,8 @@
     &.start {
       clip-path: inset(0 calc(var(--chev) * var(--room)) 0 0);
     }
-    /* While it runs, and when it failed, there is no line. */
-    :is(.live, .failed) & {
+    /* While it runs there is no line. */
+    .live & {
       opacity: 0;
     }
   }
@@ -428,13 +483,13 @@
     }
     /* A compaction watched to its end: the line draws out from the word
        as the row settles. */
-    .settling .wave path {
+    .settled .wave path {
       animation: wave-draw var(--dur-pop) var(--ease-out) backwards;
     }
   }
   /* With less motion the line is not drawn: it fades in where it stands. */
   @media (prefers-reduced-motion: reduce) {
-    .settling .arm {
+    .settled .arm {
       transition: opacity var(--dur-fade) var(--ease-out);
     }
   }

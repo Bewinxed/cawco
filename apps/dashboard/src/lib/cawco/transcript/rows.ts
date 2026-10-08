@@ -502,7 +502,10 @@ function compactionAt(
       kind: "compaction",
       // The row this view drew while it compacted, when it saw it begin.
       key: said.get(own) ?? own,
-      state: "done",
+      // How it ended, when the harness stored that with its boundary
+      // (opencode, read back); one this view watched says so itself (`Told`).
+      state: boundary?.metadata?.compactResult === "failed" ? "failed" : "done",
+      error: boundary?.metadata?.compactError,
       session: first.instanceId,
       // A summary the harness stored with no words in it (a compaction that
       // was cut short) is no brief: the divider has nothing to open.
@@ -1012,12 +1015,63 @@ function outcome(
  */
 function quietWhileSettling(
   content: LiveContent | null,
-  told: readonly Told[]
+  told: readonly Told[],
+  rows: Row[],
+  messages: Message[]
 ): LiveContent | null {
-  const settling = told.some(
-    (each) => each.state === "done" && each.boundary === null
+  if (!content?.indicating || content.text) {
+    return content;
+  }
+  // A failure the row has just said is the latest word, as the agent's own
+  // words are (`liveContent`): the turn ends on it a frame later, and the
+  // indicator flashed in under the failure line in that frame.
+  let last = rows.length - 1;
+  while (last >= 0 && unpainted(rows[last])) {
+    last -= 1;
+  }
+  const newest = messages.at(-1)?.id ?? null;
+  const quiet = told.some(
+    (each) =>
+      (each.state === "done" && each.boundary === null) ||
+      (each.state === "failed" &&
+        (each.boundary === null
+          ? each.anchor === newest
+          : rows[last]?.key === each.key))
   );
-  return settling && content?.indicating && !content.text ? null : content;
+  return quiet ? null : content;
+}
+
+/**
+ * A failed compaction is told once, by its own row. The harness that failed
+ * it ends the turn on the same error (opencode: the summary message's error,
+ * live and stored), and drawn, that turn's failure card said it a second
+ * time under the row. A turn failure that says nothing but the compaction's
+ * own error, next after it, is that row's: it is not drawn.
+ */
+function withoutEchoes(rows: Row[]): Row[] {
+  let echoes: Set<Row> | null = null;
+  for (let i = 0; i < rows.length; i += 1) {
+    const row = rows[i];
+    if (!(row.kind === "compaction" && row.state === "failed" && row.error)) {
+      continue;
+    }
+    let next = i + 1;
+    while (next < rows.length && unpainted(rows[next])) {
+      next += 1;
+    }
+    const after = rows[next];
+    const said = after?.kind === "single" ? after.message : null;
+    const errors = said?.metadata?.resultErrors ?? [];
+    if (
+      said?.type === "result.error" &&
+      errors.length > 0 &&
+      errors.every((error) => error.trim() === row.error?.trim())
+    ) {
+      echoes ??= new Set();
+      echoes.add(after);
+    }
+  }
+  return echoes ? rows.filter((row) => !echoes.has(row)) : rows;
 }
 
 /** Each compaction's drawn row by the row it is drawn from, for as long as it stands so. */
@@ -1222,7 +1276,7 @@ export function buildRowsFrom(
 
   const prior = memo?.live ?? NO_LIVE;
   const content =
-    quietWhileSettling(liveContent(session), told) ??
+    quietWhileSettling(liveContent(session), told, rows, messages) ??
     answerLanding(prior, rows);
   const same = prior.on && content !== null && continues(prior, content);
   const gen = same ? prior.gen : prior.gen + 1;
@@ -1247,7 +1301,7 @@ export function buildRowsFrom(
   const ahead = aheadOf(memo, waited, content !== null || tool !== null);
   return {
     rows: [
-      ...drawn.rows,
+      ...withoutEchoes(drawn.rows),
       ...tailRows(session, content, tool, gen, new Set(ahead), {
         ...drawn.voices,
       }),

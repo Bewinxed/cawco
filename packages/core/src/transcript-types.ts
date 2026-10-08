@@ -67,6 +67,12 @@ export interface BlockMetadata {
     | { kind: "text"; name: string; content: string }
     | import("./attachments").ShownFile
   >;
+  compactError?: string;
+  /**
+   * A compaction boundary read back from a harness that stores how it ended
+   * (opencode): `failed` with the harness's words in `compactError`.
+   */
+  compactResult?: "success" | "failed";
   cwd?: string;
   /** The delegate a `tool.handoff` started, read once off its result. */
   delegateInstanceId?: string;

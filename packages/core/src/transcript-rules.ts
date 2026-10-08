@@ -921,6 +921,8 @@ export function mapFrame(
               subtype: "compact_boundary",
               preTokens: sdk.compact_metadata?.pre_tokens,
               trigger: sdk.compact_metadata?.trigger,
+              compactResult: sdk.compact_metadata?.result,
+              compactError: sdk.compact_metadata?.error,
             })
           );
           break;

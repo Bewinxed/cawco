@@ -787,8 +787,15 @@ export interface NeutralSystemMessage {
   // commands_changed
   commands?: SlashCommand[];
   compact_error?: string;
-  // compact_boundary
-  compact_metadata?: { trigger?: "manual" | "auto"; pre_tokens?: number };
+  // compact_boundary. `result` and `error`: how it ended, on a boundary read
+  // back from a harness that stores that (opencode); live, a `status` frame's
+  // `compact_result` says it.
+  compact_metadata?: {
+    trigger?: "manual" | "auto";
+    pre_tokens?: number;
+    result?: "success" | "failed";
+    error?: string;
+  };
   compact_result?: "success" | "failed";
   // model_fallback
   content?: string;

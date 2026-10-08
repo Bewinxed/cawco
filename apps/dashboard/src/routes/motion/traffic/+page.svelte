@@ -164,6 +164,25 @@
       session.busy = false;
       session.sdkStatus = null;
     },
+    /**
+     * The turn failing on the same error: opencode's `result` after a failed
+     * compaction, which ends the turn as every result does.
+     */
+    turnFailed(error: string): void {
+      session.busy = false;
+      session.sdkStatus = null;
+      n += 1;
+      push({
+        id: `result-${n}`,
+        type: "result.error",
+        content: "error during execution",
+        timestamp: now(),
+        metadata: {
+          resultSubtype: "error_during_execution",
+          resultErrors: [error],
+        },
+      });
+    },
   };
 
   /** Seed history, so the bench starts where a real session starts: landed. */
@@ -236,6 +255,20 @@
       streaming,
       run,
       compaction,
+      /**
+       * A transcript read back, as the hub serves it: the blocks are the
+       * session's history before the transcript mounts, so nothing in them
+       * arrives.
+       */
+      load: (blocks: Message[]) => {
+        session = blankSession(INSTANCE);
+        session.messages = blocks.map((block) => ({
+          ...block,
+          instanceId: INSTANCE,
+        }));
+        landed = false;
+        generation += 1;
+      },
       landed: () => landed,
       rows: () => session.messages.length,
       patch: (next: Partial<SessionState>) => Object.assign(session, next),

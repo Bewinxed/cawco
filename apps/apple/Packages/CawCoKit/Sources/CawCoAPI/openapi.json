@@ -24580,6 +24580,17 @@
               ]
             }
           },
+          "compactError": {
+            "type": "string"
+          },
+          "compactResult": {
+            "description": "A compaction boundary read back from a harness that stores how it ended\n(opencode): `failed` with the harness's words in `compactError`.",
+            "enum": [
+              "failed",
+              "success"
+            ],
+            "type": "string"
+          },
           "cwd": {
             "type": "string"
           },
@@ -28812,6 +28823,16 @@
               },
               "pre_tokens": {
                 "type": "number"
+              },
+              "result": {
+                "enum": [
+                  "failed",
+                  "success"
+                ],
+                "type": "string"
+              },
+              "error": {
+                "type": "string"
               }
             }
           },

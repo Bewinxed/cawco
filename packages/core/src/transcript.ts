@@ -438,6 +438,13 @@ export class TranscriptBuilder {
             at: now,
             preTokens: block.metadata?.preTokens ?? 0,
             trigger: block.metadata?.trigger === "manual" ? "manual" : "auto",
+            // Read back from a harness that stores it: how it ended.
+            ...(block.metadata?.compactResult
+              ? {
+                  result: block.metadata.compactResult,
+                  error: block.metadata.compactError,
+                }
+              : {}),
           },
         });
       }

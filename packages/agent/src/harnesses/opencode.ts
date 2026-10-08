@@ -7020,11 +7020,14 @@ function queuedMessages(rows: { info: Message }[]): {
 /**
  * opencode's compaction part as the boundary frame, under the part's own id
  * live and read back alike. It says whether opencode compacted on its own or
- * was asked to; it carries no token count, so the frame carries none.
+ * was asked to; it carries no token count, so the frame carries none. Read
+ * back, it carries how the compaction ended when opencode stored that
+ * (`compactionOutcomes`); live, the outcome comes on a `status` frame.
  */
 function compactBoundary(
   part: CompactionPart,
-  timestamp: string | undefined
+  timestamp: string | undefined,
+  outcome?: CompactionOutcome
 ): NeutralSystemMessage {
   return {
     type: "system",
@@ -7032,8 +7035,47 @@ function compactBoundary(
     uuid: part.id,
     session_id: part.sessionID,
     ...(timestamp ? { timestamp } : {}),
-    compact_metadata: { trigger: part.auto ? "auto" : "manual" },
+    compact_metadata: {
+      trigger: part.auto ? "auto" : "manual",
+      ...outcome,
+    },
   };
+}
+
+type CompactionOutcome = NonNullable<
+  Pick<
+    NonNullable<NeutralSystemMessage["compact_metadata"]>,
+    "result" | "error"
+  >
+>;
+
+/**
+ * How each compaction opencode stored ended, by the user message that opened
+ * it. opencode writes the compaction's summary as an assistant message with
+ * `summary` set, its `parentID` the compaction's message, and counts it
+ * finished only with `finish` set and no `error` (`completedCompactions`,
+ * packages/opencode/src/session/compaction.ts at v1.18.34); a compaction that
+ * failed keeps that message with its `error` (and `finish: "error"`). One
+ * still running has neither, and no outcome.
+ */
+function compactionOutcomes(
+  rows: { info: Message }[]
+): Map<string, CompactionOutcome> {
+  const outcomes = new Map<string, CompactionOutcome>();
+  for (const { info } of rows) {
+    if (info.role !== "assistant" || !info.summary) {
+      continue;
+    }
+    if (info.error) {
+      outcomes.set(info.parentID, {
+        result: "failed",
+        error: errorText(info.error),
+      });
+    } else if (info.finish) {
+      outcomes.set(info.parentID, { result: "success" });
+    }
+  }
+  return outcomes;
 }
 
 /** opencode `{info, parts}` → the neutral transcript entries the folder reads. */
@@ -7049,6 +7091,7 @@ export function toTranscript(
 ): SessionMessage[] {
   const entries: SessionMessage[] = [];
   const unread = queuedMessages(rows).ids;
+  const outcomes = compactionOutcomes(rows);
   for (const { info, parts } of rows) {
     // opencode records when each message was created (`time.created`, epoch
     // ms, on UserMessage and AssistantMessage in @opencode-ai/sdk
@@ -7123,7 +7166,7 @@ export function toTranscript(
             type: "system",
             uuid: part.id,
             session_id: sessionKey,
-            message: compactBoundary(part, timestamp),
+            message: compactBoundary(part, timestamp, outcomes.get(info.id)),
             parent_tool_use_id: null,
             parent_agent_id: null,
             timestamp,
