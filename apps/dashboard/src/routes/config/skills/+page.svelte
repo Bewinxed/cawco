@@ -1,13 +1,17 @@
 <script lang="ts">
-  import type {
-    FleetPlugin,
-    FleetSkillMeta,
-    MarketplacePluginInfo,
+  import {
+    type FleetPlugin,
+    type FleetSkillMeta,
+    type MarketplacePluginInfo,
+    machineLabel,
   } from "@cawco/core";
   import { cawco } from "#lib/cawco/client.svelte.js";
   import FetchSkillPopover from "#lib/cawco/config/FetchSkillPopover.svelte";
   import { hubDown } from "#lib/cawco/config/hub.svelte.js";
   import LinkMarketplacePopover from "#lib/cawco/config/LinkMarketplacePopover.svelte";
+  import PreviousVersions, {
+    type ListedVersion,
+  } from "#lib/cawco/config/PreviousVersions.svelte";
   import RolloutChip from "#lib/cawco/config/RolloutChip.svelte";
   import RowFaults from "#lib/cawco/config/RowFaults.svelte";
   import RowList from "#lib/cawco/config/RowList.svelte";
@@ -25,8 +29,10 @@
     removeMarketplace,
     removePlugin,
     removeSkill,
+    restoreSkillVersion,
     savePlugin,
     saveSkill,
+    skillHistory,
   } from "#lib/cawco/fleet.js";
   import { hubFaults } from "#lib/cawco/fleet-faults.js";
   import MachineInventory from "#lib/cawco/MachineInventory.svelte";
@@ -37,6 +43,7 @@
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import {
     IconBolt,
+    IconHistory,
     IconLayers,
     IconRefresh,
     IconSearch,
@@ -179,6 +186,59 @@
       toast.error(message(err));
     } finally {
       refetching = false;
+    }
+  }
+
+  // ── a skill's previous versions ─────────────────────────────────────
+  // A skill has no editor, so its history opens under its row from the row's
+  // menu: the hook editor's list, read the same way and restored the same way.
+  let historyOf = $state<string | null>(null);
+  let versionsOf = $state<Record<string, ListedVersion[]>>({});
+  let versionsFailed = $state<Record<string, string>>({});
+  let restoring = $state<number | null>(null);
+  let restoreFailed = $state<number | null>(null);
+
+  /** Where a kept version came from: the fleet's own row, or a machine's edited copy. */
+  function sourceLabel(source: string): string {
+    if (!source.startsWith("machine:")) {
+      return "the fleet";
+    }
+    const machineId = source.slice("machine:".length);
+    const machine = machines.find((row) => row.machineId === machineId);
+    return machine ? machineLabel(machine.hostname) : machineId;
+  }
+
+  async function loadVersions(name: string) {
+    delete versionsFailed[name];
+    try {
+      versionsOf[name] = await skillHistory(name);
+    } catch (err) {
+      versionsFailed[name] = message(err);
+    }
+  }
+
+  function toggleHistory(row: FleetSkillMeta) {
+    if (historyOf === row.name) {
+      historyOf = null;
+      return;
+    }
+    historyOf = row.name;
+    // biome-ignore lint/complexity/noVoid: the list reports its own failure in place
+    void loadVersions(row.name);
+  }
+
+  async function restoreSkill(name: string, version: ListedVersion) {
+    restoring = version.id;
+    restoreFailed = null;
+    try {
+      landedSkill(await restoreSkillVersion(version.id));
+      toast.success("Restored — every machine gets it.");
+      await loadVersions(name);
+    } catch (err) {
+      restoreFailed = version.id;
+      toast.error(message(err));
+    } finally {
+      restoring = null;
     }
   }
 
@@ -364,6 +424,14 @@
                 onselect: () => refetchSkill(row),
               },
               {
+                label:
+                  historyOf === row.name
+                    ? "Hide previous versions"
+                    : "Previous versions",
+                icon: IconHistory,
+                onselect: () => toggleHistory(row),
+              },
+              {
                 label: "Remove everywhere",
                 icon: IconTrash,
                 destructive: true,
@@ -398,6 +466,29 @@
                 {machines}
                 onresolved={resolved}
               />
+              {#if historyOf === row.name}
+                {#if versionsOf[row.name] === undefined &&
+                  !versionsFailed[row.name]}
+                  <div
+                    aria-label="Reading {row.name}'s previous versions"
+                    class="listing"
+                    role="status"
+                  >
+                    {#each [0, 1] as line (line)}
+                      <Skeleton class="h-10 w-full" />
+                    {/each}
+                  </div>
+                {:else}
+                  <PreviousVersions
+                    failed={versionsFailed[row.name]}
+                    onrestore={(version) => restoreSkill(row.name, version)}
+                    {restoreFailed}
+                    {restoring}
+                    {sourceLabel}
+                    versions={versionsOf[row.name] ?? []}
+                  />
+                {/if}
+              {/if}
             {/snippet}
           </SectionRow>
         {/each}

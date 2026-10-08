@@ -17,7 +17,6 @@
   } from "#lib/cawco/motion/curves.svelte.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
-  import { reflow } from "#lib/cawco/motion/rows.svelte.js";
   import { toast } from "#lib/cawco/toasts.js";
   import DiffView from "#lib/components/features/DiffView.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -67,13 +66,15 @@
   import EditorSection from "../EditorSection.svelte";
   import Field from "../Field.svelte";
   import PickerChip from "../PickerChip.svelte";
+  import PreviousVersions, {
+    type ListedVersion,
+  } from "../PreviousVersions.svelte";
   import ReadingWell from "../ReadingWell.svelte";
   import SwitchField from "../SwitchField.svelte";
   import { configStore, upsert } from "../store.svelte";
   import TitleInput from "../TitleInput.svelte";
 
   const WHITESPACE = /\s+/;
-  const LATEST = 5;
 
   /**
    * The hook editor. A hook reads back as a sentence like a rule does, but it
@@ -218,10 +219,6 @@
   let versionsLoading = $state(untrack(() => hook !== null));
   let restoring = $state<number | null>(null);
   let restoreFailed = $state<number | null>(null);
-  let allVersions = $state(false);
-  const visibleVersions = $derived(
-    allVersions ? versions : versions.slice(0, LATEST)
-  );
   function loadVersions(current: string) {
     versionsLoading = true;
     versionsFailed = undefined;
@@ -243,7 +240,7 @@
     }
   });
 
-  async function restore(version: HookVersion) {
+  async function restore(version: ListedVersion) {
     restoring = version.id;
     restoreFailed = null;
     try {
@@ -935,60 +932,16 @@
     </EditorSection>
 
     <EditorSection hue={HUE} icon={IconHistory} label="Previous versions">
-      <p class="note">
-        Every save keeps what it replaced. Restoring writes an old version back
-        as this one.
-      </p>
       <!-- Read while the editor stands settling (EditorFrame), so the list
-           is here when it shows. Rows that come and go (Show all, a
-           restore's new version) go through reflow, what follows sliding. -->
-      <div class="history" {@attach reflow()}>
-        {#if versionsFailed}
-          <p class="caution" role="alert">{versionsFailed}</p>
-        {:else if versions.length === 0}
-          <p class="note">Nothing has been saved over yet.</p>
-        {:else}
-          <ul class="versions">
-            {#each visibleVersions as version (version.id)}
-              <li class="version" data-flip>
-                <span class="vtext">
-                  <span class="vname">{version.name}</span>
-                  <span class="note">
-                    {new Date(version.createdAt).toLocaleString()}
-                    · from {sourceLabel(version.source)}
-                    · <span class="font-mono">{version.hash.slice(0, 7)}</span>
-                  </span>
-                </span>
-                <Button
-                  disabled={restoring !== null && restoring !== version.id}
-                  failed={restoreFailed === version.id}
-                  label="Restore"
-                  onclick={() => restore(version)}
-                  pending={restoring === version.id}
-                  pendingLabel="Restoring…"
-                  size="sm"
-                  variant="outline"
-                />
-              </li>
-            {/each}
-          </ul>
-          {#if versions.length > LATEST}
-            <div class="more" data-flip>
-              <Button
-                onclick={() => {
-                  allVersions = !allVersions;
-                }}
-                size="sm"
-                variant="ghost"
-              >
-                {allVersions
-                  ? "Show the latest 5"
-                  : `Show all ${versions.length}`}
-              </Button>
-            </div>
-          {/if}
-        {/if}
-      </div>
+           is here when it shows. -->
+      <PreviousVersions
+        failed={versionsFailed}
+        onrestore={restore}
+        {restoreFailed}
+        {restoring}
+        {sourceLabel}
+        {versions}
+      />
     </EditorSection>
   {/if}
 </EditorFrame>
@@ -1019,14 +972,6 @@
     display: flex;
     flex-direction: column;
   }
-  .history {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-  .more {
-    align-self: flex-start;
-  }
   .pair {
     display: grid;
     gap: 8px 12px;
@@ -1035,33 +980,6 @@
     .pair {
       grid-template-columns: 1fr 1fr;
     }
-  }
-  .versions {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  .version {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    padding: 8px 10px;
-    border-radius: var(--radius-sm);
-    background: var(--surface-recess);
-  }
-  .vtext {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-  .vname {
-    font: var(--type-label);
-    color: var(--ink-strong);
   }
   .busy {
     display: flex;

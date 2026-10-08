@@ -11137,24 +11137,103 @@ export const createServer = (
         fanOutFleet();
         return { ok: true };
       })
+      // What one skill used to be, newest first, without its files.
+      .get(
+        "/api/fleet/skills/history",
+        { query: t.Object({ name: t.String() }) },
+        ({ query }) => db.listFleetSkillHistory(query.name)
+      )
+      // Undo, through the same door as any change to the fleet's copy: what
+      // restoring replaces is itself kept first (`putSkill`), so a restore of
+      // the wrong version is undone the same way. The version's source comes
+      // back with it — a copy taken off a machine is that machine's again.
+      .post(
+        "/api/fleet/skills/restore",
+        { body: t.Object({ id: t.Number() }) },
+        ({ body, status }) => {
+          const version = db.fleetSkillVersion(body.id);
+          if (!version) {
+            return status(404, `no skill version ${body.id}`);
+          }
+          const current = db
+            .listSkills()
+            .find((skill) => skill.name === version.name);
+          try {
+            const skill = db.putSkill({
+              name: version.name,
+              source: version.skillSource,
+              enabled: current?.enabled ?? true,
+              hash: version.hash,
+              bytes: version.bytes,
+              files: version.files,
+            });
+            fanOutFleet();
+            return skill;
+          } catch (error) {
+            return status(
+              400,
+              error instanceof Error ? error.message : String(error)
+            );
+          }
+        }
+      )
       // The click that settles a skill edited on one machine the fleet's way:
-      // `force: true` on that one skill, for that one machine. The machine sets
-      // its edited copy aside (`~/.cawco/replaced-skills`) before it writes the
-      // fleet's, so the edit an overwrite replaces still exists. The other way
-      // to settle it is to adopt that copy (`PUT …/skills/:name` with
-      // `fromMachine`).
+      // `force: true` on that one skill, for that one machine. The machine is
+      // read first, as a hook push reads it: the edited copy an overwrite
+      // destroys exists nowhere else, so it goes into the skill's history
+      // before it goes, and a machine that will not answer stops the push.
+      // The other way to settle it is to adopt that copy (`PUT …/skills/:name`
+      // with `fromMachine`).
       .post(
         "/api/fleet/skills/:name/push",
         { body: t.Object({ machineId: t.String() }) },
-        ({ params, body, status }) => {
+        async ({ params, body, status }) => {
           const agent = registry.agent(body.machineId);
           if (!agent) {
             return status(404, `machine ${body.machineId} is not connected`);
           }
           const config = db.fleetConfig();
-          if (!config.skills?.some((skill) => skill.name === params.name)) {
+          const fleetCopy = config.skills?.find(
+            (skill) => skill.name === params.name
+          );
+          if (!(config.skills && fleetCopy)) {
             return status(404, `the fleet carries no skill ${params.name}`);
           }
+
+          const answer = await callAgent(
+            body.machineId,
+            READ_SKILL_FILES,
+            [params.name],
+            READ_TIMEOUT_MS
+          );
+          if (answer === "offline") {
+            return status(404, `machine ${body.machineId} is not connected`);
+          }
+          if (answer === "timeout") {
+            return status(504, `machine ${body.machineId} did not answer`);
+          }
+          // No copy on the machine is nothing to keep; any other refusal
+          // stops the push, because the copy it would destroy was not read.
+          if (!(answer.ok || answer.error?.startsWith("no skill "))) {
+            return status(
+              500,
+              answer.error ?? "the machine could not read the skill"
+            );
+          }
+          if (answer.ok) {
+            const theirs = answer.result as SkillFile[];
+            const hash = hashFiles(theirs);
+            if (hash !== fleetCopy.hash) {
+              db.recordFleetSkill({
+                name: params.name,
+                skillSource: `machine:${body.machineId}`,
+                hash,
+                files: theirs,
+                source: `machine:${body.machineId}`,
+              });
+            }
+          }
+
           pushFleetConfig(body.machineId, agent, {
             ...config,
             skills: config.skills.map((skill) =>

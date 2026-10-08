@@ -28,6 +28,7 @@ import {
 } from "@cawco/core";
 import { CONTROL_TIMEOUT_MS } from "#lib/config.js";
 import { type Machine, machineControl, machineFs } from "./client.svelte";
+import type { ListedVersion } from "./config/PreviousVersions.svelte";
 import { homeOf } from "./tasks.svelte";
 
 /** The fleet's user-scope CLAUDE.md, as the hub stores it (NEW.md §11). */
@@ -613,6 +614,30 @@ export const pushSkill = (name: string, machineId: string): Promise<unknown> =>
       body: JSON.stringify({ machineId }),
     },
     "overwrite this machine"
+  );
+
+/**
+ * What a skill used to be, newest first, without its files — the hub keeps a
+ * version on every change to the fleet's copy, on a delete, and of a
+ * machine's edited copy an overwrite replaced.
+ */
+export const skillHistory = (name: string): Promise<ListedVersion[]> =>
+  send(
+    `/api/fleet/skills/history?name=${encodeURIComponent(name)}`,
+    {},
+    "load this skill’s history"
+  );
+
+/** Writes a past version back as the fleet's copy, keeping what it replaces. */
+export const restoreSkillVersion = (id: number): Promise<FleetSkillMeta> =>
+  send(
+    "/api/fleet/skills/restore",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    },
+    "restore that version"
   );
 
 /** Resolves the same source again — for a skill whose repo has moved on. */

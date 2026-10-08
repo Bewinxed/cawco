@@ -1649,6 +1649,34 @@ export const fleetHookHistory = sqliteTable("fleet_hook_history", {
     .$defaultFn(() => new Date()),
 });
 
+/**
+ * What a skill used to be. Every change to the fleet's copy records the
+ * version it replaced, and an overwrite records the edited copy it is about to
+ * destroy on a machine, so a skill somebody changed by hand is never one click
+ * away from being gone. Mirrors `fleetHookHistory` and `fleetMemoryHistory`:
+ * keyed to the skill it was a version of, pruned the same way, restored the
+ * same way. Its material is the skill's files, which neither of theirs holds.
+ */
+export const fleetSkillHistory = sqliteTable("fleet_skill_history", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  /** Which skill this was a version of. Deletes take a final snapshot too. */
+  name: text("name").notNull(),
+  /**
+   * The source the fleet's row had for this version, which a restore puts
+   * back: `owner/repo@skill`, a URL, or `machine:<machineId>` for a copy
+   * taken off a machine.
+   */
+  skillSource: text("skill_source").notNull(),
+  hash: text("hash").notNull(),
+  bytes: integer("bytes").notNull(),
+  files: text("files", { mode: "json" }).$type<SkillFile[]>().notNull(),
+  /** `fleet` for the hub's own row; `machine:<machineId>` for an edited copy an overwrite took off it. */
+  source: text("source").notNull(),
+  createdAt: timestamp("created_at")
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
 /** What the supervisor's verdict was on a given evaluation. */
 export type SupervisorVerdict =
   | "silent"

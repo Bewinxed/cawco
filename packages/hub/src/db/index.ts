@@ -63,10 +63,12 @@ import {
   ne,
   notInArray,
   or,
+  type SQL,
   sql,
 } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import { migrate } from "drizzle-orm/bun-sqlite/migrator";
+import type { AnySQLiteColumn, AnySQLiteTable } from "drizzle-orm/sqlite-core";
 import { Context, Effect, Layer } from "effect";
 import { bundledSkills } from "../bundled-skills";
 import { DB_PATH } from "../config";
@@ -91,6 +93,7 @@ import {
   fleetMemory,
   fleetMemoryDocs,
   fleetMemoryHistory,
+  fleetSkillHistory,
   instances,
   machineLimitHistory,
   marketplaces,
@@ -258,6 +261,17 @@ export interface HookVersion {
   id: number;
   name: string;
   /** `fleet` for every version today — a hook has never been edited from a machine. */
+  source: string;
+}
+
+/** One superseded version of one skill, as a listing reads it — without its files. */
+export interface SkillVersion {
+  bytes: number;
+  createdAt: Date;
+  hash: string;
+  id: number;
+  name: string;
+  /** `fleet` for the hub's own row; `machine:<machineId>` for an edited copy an overwrite took off it. */
   source: string;
 }
 
@@ -451,6 +465,10 @@ export interface DbShape {
   readonly fleetMemoryVersion: (
     id: number
   ) => (MemoryVersion & { content: string }) | undefined;
+  /** A skill's superseded version in full: what restoring it writes back. */
+  readonly fleetSkillVersion: (
+    id: number
+  ) => (SkillVersion & { skillSource: string; files: SkillFile[] }) | undefined;
   readonly getCredential: (id: string) => Record<string, unknown> | undefined;
   readonly getFleetHook: (id: string) => FleetHook | undefined;
   /** The fleet's user-scope CLAUDE.md, or undefined while the fleet keeps none. */
@@ -555,6 +573,8 @@ export interface DbShape {
    * are never mixed, because the panel asks about one document at a time.
    */
   readonly listFleetMemoryHistory: (path?: string) => MemoryVersion[];
+  /** Newest first, without the files: one skill's history. */
+  readonly listFleetSkillHistory: (name: string) => SkillVersion[];
   readonly listInstances: () => PublicInstanceRow[];
   /**
    * Every plugin row without its files, `error` and all. What the DASHBOARD
@@ -1064,6 +1084,19 @@ export interface DbShape {
     hash: string;
     source: string;
     path?: string;
+  }) => void;
+  /**
+   * Keeps a skill's version that is about to be replaced or destroyed: the
+   * fleet's own row on a change or a delete (which `putSkill` and
+   * `deleteSkill` do themselves), or a machine's edited copy an overwrite is
+   * taking off it (`source` `machine:<machineId>`).
+   */
+  readonly recordFleetSkill: (version: {
+    name: string;
+    skillSource: string;
+    hash: string;
+    files: SkillFile[];
+    source: string;
   }) => void;
   /** Files a send's record as the hub accepted it: pending, or failed at once. */
   readonly recordScratchWorktree: (
@@ -1608,7 +1641,10 @@ const OPENROUTER_CONNECTION_ID = "openrouter";
 /** How many supervisor event rows to keep — bounded without a scheduler (plan: our choice). */
 const SUPERVISOR_EVENTS_RETENTION = 5000;
 
-/** How far back the memory can be taken. Deep enough to undo a bad day, not a log. */
+/**
+ * How far back a memory document, a hook or a skill can be taken, each within
+ * its own history. Deep enough to undo a bad day, not a log.
+ */
 const HISTORY_LIMIT = 20;
 
 /** What a machine compares its own copy against — sha256 of the text's own bytes. */
@@ -1759,6 +1795,65 @@ const make = (path: string): DbShape => {
       .set({ tools: cells })
       .where(eq(agents.machineId, machineId))
       .run();
+  };
+
+  /**
+   * One history's retention, the same for memory, hooks and skills: the
+   * newest {@link HISTORY_LIMIT} rows of the one thing `of` names are kept.
+   * Pruned within that thing's own history, so a fleet of fifty hooks or
+   * skills does not have every save of one of them evict another's past.
+   */
+  const pruneHistory = (
+    table: AnySQLiteTable,
+    id: AnySQLiteColumn,
+    of: SQL
+  ): void => {
+    const keep = db
+      .select({ id })
+      .from(table)
+      .where(of)
+      .orderBy(desc(id))
+      .limit(HISTORY_LIMIT)
+      .all()
+      .map((row) => row.id as number);
+    db.delete(table)
+      .where(and(of, notInArray(id, keep)))
+      .run();
+  };
+
+  /** A skill's version, kept before it is replaced or destroyed. */
+  const recordFleetSkill = ({
+    name,
+    skillSource,
+    hash,
+    files,
+    source,
+  }: {
+    name: string;
+    skillSource: string;
+    hash: string;
+    files: SkillFile[];
+    source: string;
+  }): void => {
+    db.insert(fleetSkillHistory)
+      .values({
+        name,
+        skillSource,
+        hash,
+        bytes: files.reduce(
+          (total, file) =>
+            total + Buffer.byteLength(file.contentBase64, "base64"),
+          0
+        ),
+        files,
+        source,
+      })
+      .run();
+    pruneHistory(
+      fleetSkillHistory,
+      fleetSkillHistory.id,
+      eq(fleetSkillHistory.name, name)
+    );
   };
 
   const getFleetMemory = () => {
@@ -3486,6 +3581,24 @@ const make = (path: string): DbShape => {
       // last copy that worked: the machines are serving it, and a repo that was
       // unreachable for a minute is no reason to take a working skill off them.
       const keep = error !== undefined && stored?.source === source;
+      // What this change replaces is kept first, as a hook's or a memory
+      // document's is: every refresh, adopt, new source or restore that
+      // moves the fleet's copy leaves the old one in the skill's history.
+      if (
+        !keep &&
+        stored?.hash &&
+        stored.files &&
+        hash !== undefined &&
+        hash !== stored.hash
+      ) {
+        recordFleetSkill({
+          name,
+          skillSource: stored.source,
+          hash: stored.hash,
+          files: stored.files,
+          source: "fleet",
+        });
+      }
       const row = {
         name,
         source,
@@ -3512,8 +3625,44 @@ const make = (path: string): DbShape => {
       return skillMeta(row);
     },
     deleteSkill: (name) => {
+      // A delete takes a final snapshot, as a hook's does.
+      const stored = db
+        .select()
+        .from(skills)
+        .where(eq(skills.name, name))
+        .get();
+      if (stored?.hash && stored.files) {
+        recordFleetSkill({
+          name,
+          skillSource: stored.source,
+          hash: stored.hash,
+          files: stored.files,
+          source: "fleet",
+        });
+      }
       db.delete(skills).where(eq(skills.name, name)).run();
     },
+    recordFleetSkill,
+    listFleetSkillHistory: (name) =>
+      db
+        .select({
+          id: fleetSkillHistory.id,
+          name: fleetSkillHistory.name,
+          hash: fleetSkillHistory.hash,
+          bytes: fleetSkillHistory.bytes,
+          source: fleetSkillHistory.source,
+          createdAt: fleetSkillHistory.createdAt,
+        })
+        .from(fleetSkillHistory)
+        .where(eq(fleetSkillHistory.name, name))
+        .orderBy(desc(fleetSkillHistory.id))
+        .all(),
+    fleetSkillVersion: (id) =>
+      db
+        .select()
+        .from(fleetSkillHistory)
+        .where(eq(fleetSkillHistory.id, id))
+        .get(),
     listFleetAgents: () =>
       db
         .select()
@@ -3612,25 +3761,11 @@ const make = (path: string): DbShape => {
           source: version.source,
         })
         .run();
-      // Pruned within the one hook's own history, exactly as a memory
-      // document's is: a fleet of fifty hooks would otherwise have every
-      // save of any one of them evict another's past.
-      const keep = db
-        .select({ id: fleetHookHistory.id })
-        .from(fleetHookHistory)
-        .where(eq(fleetHookHistory.hookId, version.hookId))
-        .orderBy(desc(fleetHookHistory.id))
-        .limit(HISTORY_LIMIT)
-        .all()
-        .map((row) => row.id);
-      db.delete(fleetHookHistory)
-        .where(
-          and(
-            eq(fleetHookHistory.hookId, version.hookId),
-            notInArray(fleetHookHistory.id, keep)
-          )
-        )
-        .run();
+      pruneHistory(
+        fleetHookHistory,
+        fleetHookHistory.id,
+        eq(fleetHookHistory.hookId, version.hookId)
+      );
     },
     listFleetHookHistory: (hookId) =>
       db
@@ -3741,23 +3876,13 @@ const make = (path: string): DbShape => {
       db.insert(fleetMemoryHistory)
         .values({ content, hash, source, path: docPath ?? null })
         .run();
-      // Pruned within the one document's own history: a set of ten would
-      // otherwise have each save evict the main file's past nine times over.
-      const of =
+      pruneHistory(
+        fleetMemoryHistory,
+        fleetMemoryHistory.id,
         docPath === undefined
           ? isNull(fleetMemoryHistory.path)
-          : eq(fleetMemoryHistory.path, docPath);
-      const keep = db
-        .select({ id: fleetMemoryHistory.id })
-        .from(fleetMemoryHistory)
-        .where(of)
-        .orderBy(desc(fleetMemoryHistory.id))
-        .limit(HISTORY_LIMIT)
-        .all()
-        .map((row) => row.id);
-      db.delete(fleetMemoryHistory)
-        .where(and(of, notInArray(fleetMemoryHistory.id, keep)))
-        .run();
+          : eq(fleetMemoryHistory.path, docPath)
+      );
     },
     listFleetMemoryHistory: (docPath) =>
       db

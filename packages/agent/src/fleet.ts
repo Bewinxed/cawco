@@ -11,7 +11,6 @@
 
 import {
   chmod,
-  mkdir,
   readdir,
   realpath,
   rename,
@@ -1132,24 +1131,6 @@ export const skillDrift = (
     : `edited on this machine (now ${disk.slice(0, 7)}), and the fleet's copy changed since (now ${fleet.slice(0, 7)}) — adopt this machine's copy or overwrite it with the fleet's`;
 };
 
-/**
- * Where an edited skill goes when an overwrite replaces it: kept, outside
- * every skills directory, so no session loads it and nothing is lost.
- */
-const REPLACED_SKILLS_DIR = expandHome("~/.cawco/replaced-skills");
-
-/** Moves an edited skill's directory aside before an overwrite writes the fleet's. */
-export const setAsideSkill = async (dir: string, name: string) => {
-  await mkdir(REPLACED_SKILLS_DIR, { recursive: true });
-  await rename(
-    join(dir, name),
-    join(
-      REPLACED_SKILLS_DIR,
-      `${name}-${new Date().toISOString().replaceAll(":", "-")}`
-    )
-  );
-};
-
 /** What the vendored marketplace holds on this disk now: plugin name → hash. */
 const readVendoredPlugins = async (): Promise<Record<string, string>> => {
   const root = join(VENDOR_DIR, "plugins");
@@ -1371,9 +1352,8 @@ const syncSkillFiles = async (
     }
 
     try {
-      if (drift) {
-        await setAsideSkill(SKILLS_DIR, skill.name);
-      }
+      // A forced write over an edit: the hub took that edited copy into the
+      // skill's history before it sent the force.
       await writeSkill(skill);
       written[skill.name] = skill.hash;
       report[skill.name] = { state: "applied" };

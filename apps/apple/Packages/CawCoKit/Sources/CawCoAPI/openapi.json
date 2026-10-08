@@ -10144,6 +10144,108 @@
         }
       }
     },
+    "/api/fleet/skills/history": {
+      "get": {
+        "parameters": [
+          {
+            "name": "name",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiFleetSkillsHistory",
+        "responses": {
+          "200": {
+            "description": "getApiFleetSkillsHistory 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiFleetSkillsHistory200"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiFleetSkillsHistory 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/fleet/skills/restore": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "id"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiFleetSkillsRestore",
+        "responses": {
+          "200": {
+            "description": "postApiFleetSkillsRestore 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FleetSkillMeta"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiFleetSkillsRestore 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiFleetSkillsRestore 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiFleetSkillsRestore 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/fleet/skills/{name}/push": {
       "post": {
         "parameters": [
@@ -10202,6 +10304,26 @@
               "application/problem+json": {
                 "schema": {
                   "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "postApiFleetSkillsByNamePush 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "postApiFleetSkillsByNamePush 504",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -15376,6 +15498,12 @@
         "required": [
           "ok"
         ]
+      },
+      "getApiFleetSkillsHistory200": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/SkillVersion"
+        }
       },
       "postApiFleetSkillsByNamePush200": {
         "type": "object",
@@ -26328,6 +26456,40 @@
           "ruleId",
           "source",
           "verdict"
+        ]
+      },
+      "SkillVersion": {
+        "description": "One superseded version of one skill, as a listing reads it — without its files.",
+        "type": "object",
+        "properties": {
+          "bytes": {
+            "type": "number"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "hash": {
+            "type": "string"
+          },
+          "id": {
+            "type": "number"
+          },
+          "name": {
+            "type": "string"
+          },
+          "source": {
+            "description": "`fleet` for the hub's own row; `machine:<machineId>` for an edited copy an overwrite took off it.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "bytes",
+          "createdAt",
+          "hash",
+          "id",
+          "name",
+          "source"
         ]
       },
       "MachineMemorySet": {

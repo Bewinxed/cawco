@@ -17,13 +17,7 @@ import type {
   FleetMemory,
   FleetSkillPayload,
 } from "@cawco/core";
-import {
-  heldSkills,
-  memoryPlan,
-  setAsideSkill,
-  skillDrift,
-  writeSkillFile,
-} from "../fleet";
+import { heldSkills, memoryPlan, skillDrift, writeSkillFile } from "../fleet";
 import {
   guardWorkflowSkillRemoval,
   workflowSkillCollision,
@@ -169,9 +163,6 @@ export const syncSkillFiles = async (
     }
 
     try {
-      if (drift) {
-        await setAsideSkill(dir, skill.name);
-      }
       await writeSkill(dir, skill);
       written[skill.name] = skill.hash;
       report[skill.name] = { state: "applied" };
