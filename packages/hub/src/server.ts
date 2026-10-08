@@ -6038,30 +6038,44 @@ export const createServer = (
   };
 
   /**
+   * What a continuation at an account's limit did, as both its sessions'
+   * transcripts say it: on what account it went on, and what it left behind.
+   * Undefined for any other continuation.
+   */
+  const continuedMove = (
+    request: ContinueRequest
+  ): Extract<AccountMove, { kind: "continued" }> | undefined => {
+    const { inherit, account } = request.target;
+    const from = inherit ? db.accounts.get(inherit.fromAccountId) : undefined;
+    const to = account ? db.accounts.get(account) : undefined;
+    return inherit && from && to
+      ? {
+          kind: "continued",
+          from: namedAccount(from),
+          to: namedAccount(to),
+          tokens: inherit.contextTokens,
+          preparedAtPct: inherit.preparedAtPct,
+        }
+      : undefined;
+  };
+
+  /**
    * A session continued on another account at its old one's limit has its
    * successor running in its place: the source ends, "continued on" that
    * account, and its transcript says what went where.
    */
   const succeeded = (job: ContinuationRow): void => {
-    const { inherit, account } = job.request.target;
     const [source] = db.getInstancesByIds([job.sourceInstanceId]);
-    const from = inherit ? db.accounts.get(inherit.fromAccountId) : undefined;
-    const to = account ? db.accounts.get(account) : undefined;
-    if (!(source && inherit && from && to)) {
+    const move = continuedMove(job.request);
+    if (!(source && move)) {
       return;
     }
-    noteAtLimit(source, {
-      kind: "continued",
-      from: namedAccount(from),
-      to: namedAccount(to),
-      tokens: inherit.contextTokens,
-      preparedAtPct: inherit.preparedAtPct,
-    });
+    noteAtLimit(source, move);
     // The work item went with the successor: ending the source is not the
     // item's end.
     db.patchInstance(source.id, { workItemId: null });
     endSession(source.id, "stop");
-    db.noteEndReason(source.id, `continued on ${accountName(to)}`);
+    db.noteEndReason(source.id, `continued on ${move.to.name}`);
     publishInstances(source.machineId);
   };
 
@@ -6159,6 +6173,20 @@ export const createServer = (
         request.target.scratch ? "scratch" : "mainline",
         request.target.fallbackPermissionMode,
         request.target.inherit ? prepared.source.instanceId : undefined
+      );
+    }
+    // A session continued at its account's limit: the tab follows it here
+    // (the dashboard's `followSuccessions`), so its transcript opens on the
+    // line that says why, ahead of the opening, once.
+    const move = continuedMove(request);
+    if (move && db.atLimit.events([row.targetInstanceId]).length === 0) {
+      noteAtLimit(
+        {
+          id: row.targetInstanceId,
+          sessionId: target?.sessionId ?? null,
+          harness: request.target.harness,
+        },
+        move
       );
     }
     sendFromHub(
