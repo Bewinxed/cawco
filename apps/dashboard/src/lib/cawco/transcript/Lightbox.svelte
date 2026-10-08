@@ -5,6 +5,7 @@
   import OutputBlock from "#lib/components/features/tool-cards/OutputBlock.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import { CopyButton } from "#lib/components/ui/copy-button/index.js";
+  import DialogRoot from "#lib/components/ui/dialog/dialog.svelte";
   /**
    * What a thumbnail opens into, one entry point (lightbox-state) for both
    * kinds of attachment.
@@ -205,7 +206,7 @@
   }
 </script>
 
-<DialogPrimitive.Root
+<DialogRoot
   onOpenChange={(open) => {
     if (!open) {
       dismiss();
@@ -279,7 +280,7 @@
       {/if}
     </DialogPrimitive.Content>
   </DialogPrimitive.Portal>
-</DialogPrimitive.Root>
+</DialogRoot>
 
 <style>
   /* ── The document sheet. Content is only the centring box; the sheet is

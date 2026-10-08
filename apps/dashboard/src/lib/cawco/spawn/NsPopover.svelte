@@ -9,6 +9,7 @@
   import type { Snippet } from "svelte";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
+  import PopoverRoot from "#lib/components/ui/popover/popover.svelte";
   import { type PopoverMember, popoverGroup } from "./popover-group.svelte";
 
   let {
@@ -128,7 +129,7 @@
     </button>
   {/if}
 {:else}
-  <PopoverPrimitive.Root onOpenChange={onchange} {open}>
+  <PopoverRoot onOpenChange={onchange} {open}>
     {#if trigger}
       <PopoverPrimitive.Trigger
         aria-label={label}
@@ -187,5 +188,5 @@
         {/snippet}
       </PopoverPrimitive.Content>
     </PopoverPrimitive.Portal>
-  </PopoverPrimitive.Root>
+  </PopoverRoot>
 {/if}

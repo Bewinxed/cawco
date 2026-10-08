@@ -1,6 +1,7 @@
 <script lang="ts">
   import { AlertDialog as AlertDialogPrimitive } from "bits-ui";
   import type { ComponentProps } from "svelte";
+  import { morph } from "#lib/cawco/motion/morph.svelte.js";
   import {
     cn,
     type WithoutChild,
@@ -24,6 +25,16 @@
     >;
     overlayProps?: ComponentProps<typeof AlertDialogOverlay>;
   } = $props();
+
+  // A dialog whose body changes (a failure line, a pending label) tweens to
+  // its new height, as ui/dialog's content does; it is centred, so it grows
+  // from the middle.
+  const resize = morph();
+  $effect(() => {
+    if (ref) {
+      return resize(ref);
+    }
+  });
 </script>
 
 <AlertDialogPortal {...portalProps}>
