@@ -641,7 +641,9 @@
       inline-size: 36px;
       block-size: 36px;
     }
-    @media (prefers-contrast: more) {
+    /* Either setting: the solid raised surface and the control's border, as
+       the Apple apps' GlassCapsule draws it. */
+    @media (prefers-contrast: more), (prefers-reduced-transparency: reduce) {
       background: var(--surface-raised);
       backdrop-filter: none;
       border-color: var(--border-control);
