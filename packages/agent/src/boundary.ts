@@ -217,18 +217,20 @@ const hookRunner = async (id: string): Promise<string[]> => {
   const runner = standalone
     ? [join(binaryRoot(), "run")]
     : [
-        process.execPath,
+        Bun.which("bun") ?? "bun",
         join(import.meta.dir, "..", "..", "cli", "src", "cli.ts"),
       ];
-  const target = runner.at(-1) as string;
-  await access(target, standalone ? constants.X_OK : constants.R_OK).catch(
-    () => {
-      throw refusal(
-        id,
-        `${target} is not there, so its boundary hook could not reach cawco`
-      );
-    }
-  );
+  for (const [index, target] of runner.entries()) {
+    // biome-ignore lint/performance/noAwaitInLoops: one or two paths, each checked before the hook names it
+    await access(target, index === 0 ? constants.X_OK : constants.R_OK).catch(
+      () => {
+        throw refusal(
+          id,
+          `${target} is not there, so its boundary hook could not reach cawco`
+        );
+      }
+    );
+  }
   return runner;
 };
 
