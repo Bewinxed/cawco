@@ -33,9 +33,13 @@ public enum TouchReach {
         collect(in: window, window: window, point: point, clip: window.bounds, into: &found)
         for candidate in found.sorted(by: { $0.gap < $1.gap }) {
             let box = candidate.box
+            // Frontmost where the touch comes from, or else at its centre: a
+            // control drawn past its parent's edge, or a round glass button,
+            // never answers UIKit at the corner of its box.
             let edge = CGPoint(x: min(max(point.x, box.minX + 0.5), box.maxX - 0.5),
                                y: min(max(point.y, box.minY + 0.5), box.maxY - 0.5))
-            guard let top = frontmost(edge), top === candidate.control || top.isDescendant(of: candidate.control) else { continue }
+            let ours = { (view: UIView?) in view.map { $0 === candidate.control || $0.isDescendant(of: candidate.control) } ?? false }
+            guard ours(frontmost(edge)) || ours(frontmost(CGPoint(x: box.midX, y: box.midY))) else { continue }
             return candidate.control
         }
         return direct
