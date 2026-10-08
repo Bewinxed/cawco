@@ -399,6 +399,14 @@ final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteraction
         bounds.insetBy(dx: 0, dy: -6).contains(point)
     }
 
+    /// A tab's close answers a finger from 44pt about it (the web's `.tclose`
+    /// `touch-hit`), past the 24pt row, the 32pt tab and the scroll content
+    /// that hold it. The chevron keeps its drawn box: its reach would take
+    /// the label's end.
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        TouchReach.redirect(super.hitTest(point, with: event), at: point, in: self, to: views.values.map(\.closeButton))
+    }
+
     // MARK: Context menu
 
     func contextMenuInteraction(_ interaction: UIContextMenuInteraction, configurationForMenuAtLocation _: CGPoint) -> UIContextMenuConfiguration? {
@@ -679,16 +687,8 @@ final class TabView: UIView {
         label.ink = chosen || hovering || tab?.needs == true ? Palette.inkStrong : Palette.inkMuted
     }
 
-    /// The close answers a finger from 44pt about it (the web's `.tclose`
-    /// `touch-hit`), past the 24pt row and the 32pt tab that hold it. The
-    /// chevron keeps its drawn box: its reach would take the label's end.
-    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
-        super.point(inside: point, with: event) || TouchReach.reaches(point, in: self, [close])
-    }
-
-    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
-        TouchReach.redirect(super.hitTest(point, with: event), at: point, in: self, to: [close])
-    }
+    /// The close, which the strip lets a finger reach from 44pt about it.
+    var closeButton: UIView { close }
 
     override func layoutSubviews() {
         super.layoutSubviews()

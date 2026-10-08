@@ -35,14 +35,14 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     // Regular width.
     private let rail: SidebarViewController
     private let railHome: HomeViewController
-    private let mainNav = UINavigationController()
+    private let mainNav = UINavigationController(navigationBarClass: TopBar.Bar.self, toolbarClass: nil)
     private let mainMotion = ShellNavigationMotion()
     private let detail: FleetDetailController
     private let mainCrumb = CrumbView("Fleet")
     private let mainCluster = TopBarCluster()
     // Compact width.
     private let board: HomeViewController
-    private let compactNav = UINavigationController()
+    private let compactNav = UINavigationController(navigationBarClass: TopBar.Bar.self, toolbarClass: nil)
     private let compactMotion = ShellNavigationMotion()
     private let compactCrumb = CrumbView("Fleet")
     private let compactCluster = TopBarCluster()
