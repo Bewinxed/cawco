@@ -1006,6 +1006,18 @@ export const createWorkItems = ({
     waitsAtRest.delete(id);
     quiet.delete(id);
   };
+  /**
+   * Refuses a start whose project was deleted while its workspace was being
+   * made: called in the synchronous step that files the project's place.
+   */
+  const projectStands = (projectId: string): void => {
+    if (!db.project(projectId)) {
+      throw new WorkItemRefusal(
+        404,
+        `The project "${projectId}" was deleted, so the work item can't start in it. Pick another.`
+      );
+    }
+  };
   /** Items whose checks this hub process is running now: a resume leaves them to that run. */
   const finishing = new Set<string>();
   /** One landing at a time per repository and branch (landing.ts). */
@@ -1848,6 +1860,7 @@ export const createWorkItems = ({
       // Awaited above: the one-writer check again, in the step that files the item.
       busy();
       if (workspace.state === "archived" && projectId) {
+        projectStands(projectId);
         db.addPlace({
           projectId,
           machineId: workspace.machineId,
@@ -1955,6 +1968,7 @@ export const createWorkItems = ({
       // While it lives, the clone is one of the parent's project's places;
       // archiving the workspace removes it.
       if (parent.projectId) {
+        projectStands(parent.projectId);
         db.addPlace({
           projectId: parent.projectId,
           machineId,

@@ -869,6 +869,16 @@ export const createTasks = (store: TaskStore) => {
     return project.tracker;
   };
 
+  /** Refuses a task write whose project was deleted since the change began. */
+  const stands = (projectId: string): void => {
+    if (!store.project(projectId)) {
+      refuse(
+        404,
+        `The project "${projectId}" was deleted, so its tasks can't change. Pick another.`
+      );
+    }
+  };
+
   /** Refuses a change while the project's tasks live somewhere other than its files. */
   const writable = (projectId: string): void => {
     const tracker = known(projectId);
@@ -1197,10 +1207,14 @@ export const createTasks = (store: TaskStore) => {
     actor: TaskActor,
     message: string
   ): Promise<TaskView> => {
+    // A project deleted since the change began takes no task: before its
+    // folder is written, and again in the step that indexes the task.
+    stands(projectId);
     await writeFolderFile(projectId, path, content, {
       author: actor.author,
       message,
     });
+    stands(projectId);
     store.put([indexRow(projectId, path, number, content, hashOf(content))]);
     return view(
       projectId,
@@ -1317,6 +1331,7 @@ export const createTasks = (store: TaskStore) => {
       const hash = hashOf(content);
       const row = store.index(projectId).find((each) => each.path === path);
       if (row?.hash !== hash) {
+        stands(projectId);
         store.put([indexRow(projectId, path, number, content, hash)]);
       }
       return view(

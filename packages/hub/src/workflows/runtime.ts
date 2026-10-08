@@ -39,6 +39,7 @@ import type {
   WorkflowStepRow,
 } from "../db";
 import { askJev } from "../jev";
+import { WorkItemRefusal } from "../work-items";
 import { createWorkflowEngine, type Outcome } from "./engine";
 import {
   expandRefs,
@@ -1032,7 +1033,10 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
   ): Promise<WorkflowRunRow> => {
     const workflow = db.getWorkflow(workflowId);
     if (!workflow) {
-      throw new Error(`No workflow ${workflowId}.`);
+      throw new WorkItemRefusal(
+        404,
+        `The workflow "${workflowId}" was deleted, so it can't run. Pick another.`
+      );
     }
     const problems = workflow.graph
       ? deps.problems(workflow.graph, workflow.id)
@@ -1055,6 +1059,13 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
       workspace,
       id
     );
+    // Awaited above: the workflow again, in the step that files its run.
+    if (!db.getWorkflow(workflow.id)) {
+      throw new WorkItemRefusal(
+        404,
+        `The workflow "${workflow.name}" was deleted, so it can't run. Pick another.`
+      );
+    }
     const run: WorkflowRunRow = {
       id,
       workflowId: workflow.id,

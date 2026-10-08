@@ -1340,6 +1340,8 @@ export const createCaw = ({
             const named = files?.length
               ? await folderFiles(projectId, files)
               : [];
+            // Awaited above: the thread again, in the step that writes to it.
+            threadIn(projectId, thread);
             const added = db.addThreadMessage({
               threadId: thread,
               author: "caw",

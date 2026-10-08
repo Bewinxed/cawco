@@ -8,6 +8,7 @@ import {
 import { Elysia, ElysiaStatus, status, t } from "elysia";
 import type { DbShape } from "../db";
 import { hidden } from "../hidden";
+import { WorkItemRefusal } from "../work-items";
 import { type createWorkflowRuntime, publicRun } from "./runtime";
 
 const NOT_SLUG = /[^a-z0-9]+/g;
@@ -23,7 +24,10 @@ export function workflowRoutes(
   }
 ) {
   const refusal = (error: unknown) =>
-    status(400, error instanceof Error ? error.message : String(error));
+    status(
+      error instanceof WorkItemRefusal ? error.status : 400,
+      error instanceof Error ? error.message : String(error)
+    );
   const attempt = async <T>(
     action: () => T
   ): Promise<Awaited<T> | ReturnType<typeof refusal>> => {
@@ -205,6 +209,17 @@ export function workflowRoutes(
           throw new Error("A workflow with a live run cannot be deleted.");
         }
         await runtime.forget(runs.map((run) => run.id));
+        // Awaited above: a run launched meanwhile would lose its rows under it.
+        if (
+          db
+            .listWorkflowRuns(row.id)
+            .some((run) => ["running", "waiting"].includes(run.status))
+        ) {
+          throw new WorkItemRefusal(
+            409,
+            "A workflow with a live run cannot be deleted."
+          );
+        }
         db.deleteWorkflow(row.id);
         skills.changed();
         return { ok: true };

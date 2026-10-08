@@ -6200,6 +6200,36 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "postApiWorkflows 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiWorkflows 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiWorkflows 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       }
@@ -6238,8 +6268,28 @@
               }
             }
           },
+          "403": {
+            "description": "getApiWorkflowsById 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
           "404": {
             "description": "getApiWorkflowsById 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "getApiWorkflowsById 409",
             "content": {
               "text/plain": {
                 "schema": {
@@ -6296,6 +6346,26 @@
               }
             }
           },
+          "403": {
+            "description": "putApiWorkflowsById 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "putApiWorkflowsById 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
           "409": {
             "description": "putApiWorkflowsById 409",
             "content": {
@@ -6333,6 +6403,36 @@
           },
           "400": {
             "description": "deleteApiWorkflowsById 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "deleteApiWorkflowsById 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "deleteApiWorkflowsById 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "deleteApiWorkflowsById 409",
             "content": {
               "text/plain": {
                 "schema": {
@@ -6410,6 +6510,36 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "postApiWorkflowsByIdRuns 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiWorkflowsByIdRuns 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiWorkflowsByIdRuns 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       }
@@ -6440,6 +6570,36 @@
           },
           "400": {
             "description": "getApiWorkflowRunsById 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "getApiWorkflowRunsById 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "getApiWorkflowRunsById 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "getApiWorkflowRunsById 409",
             "content": {
               "text/plain": {
                 "schema": {
@@ -6511,6 +6671,36 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "postApiWorkflowRunsByIdCancel 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiWorkflowRunsByIdCancel 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiWorkflowRunsByIdCancel 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       }
@@ -6566,6 +6756,36 @@
           },
           "400": {
             "description": "postApiWorkflowRunsByIdAnswer 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "postApiWorkflowRunsByIdAnswer 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiWorkflowRunsByIdAnswer 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiWorkflowRunsByIdAnswer 409",
             "content": {
               "text/plain": {
                 "schema": {
@@ -6640,6 +6860,36 @@
               }
             }
           },
+          "403": {
+            "description": "postApiWorkflowRunsByIdSteer 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiWorkflowRunsByIdSteer 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiWorkflowRunsByIdSteer 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
           "422": {
             "description": "postApiWorkflowRunsByIdSteer 422",
             "content": {
@@ -6694,6 +6944,36 @@
           },
           "400": {
             "description": "postApiWorkflowRunsByIdRerun 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "postApiWorkflowRunsByIdRerun 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiWorkflowRunsByIdRerun 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiWorkflowRunsByIdRerun 409",
             "content": {
               "text/plain": {
                 "schema": {
@@ -6761,6 +7041,36 @@
           },
           "400": {
             "description": "postApiWorkflowStepsByIdResult 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "postApiWorkflowStepsByIdResult 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiWorkflowStepsByIdResult 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiWorkflowStepsByIdResult 409",
             "content": {
               "text/plain": {
                 "schema": {

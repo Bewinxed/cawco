@@ -75,6 +75,7 @@ import {
   ACCOUNT_HUES,
   ACCOUNT_MOVE,
   ACCOUNT_READ,
+  type Account,
   type AccountMove,
   type AccountProbe,
   type AccountSigninResult,
@@ -4017,6 +4018,26 @@ export const createServer = (
     });
   };
 
+  /**
+   * An account removed while a machine was signing it in: that machine
+   * forgets the dir (and login) it just made for it, as removing the account
+   * would have, and the caller is told why in a sentence.
+   */
+  const undoRemovedSignin = async (
+    account: Account,
+    machineId: string
+  ): Promise<string> => {
+    await callAgent(
+      machineId,
+      CONTROL_FORGET_ACCOUNT,
+      [account.id],
+      SIGNIN_TIMEOUT_MS,
+      "claude"
+    );
+    const named = account.label ?? account.email;
+    return `${named ? `The account "${named}"` : "The account you were adding"} was removed while ${machineName(machineId)} was signing it in, so that sign-in was undone. Add the account again to sign it in.`;
+  };
+
   /** A PATCH changes the live harness first; its receipt files the stored mode. */
   const applyPermissionMode = async (
     row: InstanceRow,
@@ -4758,7 +4779,15 @@ export const createServer = (
     machineId: string,
     payload: SpawnPayload,
     workItemId?: string
-  ): { accountId?: string } | { refusal: string } => {
+  ): { accountId?: string } | { refusal: string; status?: 404 } => {
+    // Checked here, in the same synchronous step as the row's write that
+    // follows: a project deleted after it was picked refuses the start.
+    if (payload.projectId && !db.project(payload.projectId)) {
+      return {
+        status: 404,
+        refusal: `The project "${payload.projectId}" was deleted, so the session can't start in it. Pick another.`,
+      };
+    }
     const held = accountHeld(payload);
     if (held) {
       return held;
@@ -4812,7 +4841,7 @@ export const createServer = (
     };
   };
 
-  /** {@link placeSpawn} for a path that refuses by throwing: its refusal is a 400. */
+  /** {@link placeSpawn} for a path that refuses by throwing: its refusal is a 400, a deleted project's a 404. */
   const placedOrRefused = (
     machineId: string,
     payload: SpawnPayload,
@@ -4820,7 +4849,7 @@ export const createServer = (
   ): { accountId?: string } => {
     const placed = placeSpawn(machineId, payload, workItemId);
     if ("refusal" in placed) {
-      throw new WorkItemRefusal(400, placed.refusal);
+      throw new WorkItemRefusal(placed.status ?? 400, placed.refusal);
     }
     return placed;
   };
@@ -12948,6 +12977,12 @@ export const createServer = (
             SIGNIN_TIMEOUT_MS,
             "claude"
           );
+          if (answer !== "offline" && !db.accounts.get(account.id)) {
+            return status(
+              404,
+              await undoRemovedSignin(account, params.machineId)
+            );
+          }
           // A machine that was asked makes the account's dir (and may be
           // waiting on its login) whether or not a link came back; it holds
           // that dir signed out, as its next register would report, so
@@ -13001,6 +13036,12 @@ export const createServer = (
             return status(
               503,
               `${machineName(params.machineId)} is ${answer === "offline" ? "not connected" : "not answering"}.`
+            );
+          }
+          if (!db.accounts.get(account.id)) {
+            return status(
+              404,
+              await undoRemovedSignin(account, params.machineId)
             );
           }
           if (!answer.ok) {
