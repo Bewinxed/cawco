@@ -35,12 +35,12 @@
     "TRIAL_DAYS": "7",
     // The App Store app record; Apple's verifier requires it for Production.
     "APP_APPLE_ID": "6819139448",
-    // The experiments counted from App Store Server Notifications, and the one
-    // fixed appAccountToken each variant hands StoreKit (no per-user id):
-    // "name:variant=token,variant=token;name:…".
     // Apple allows one notification URL per app: every verified notification's
     // exact body goes on to Yield, the owner's revenue dashboard.
     "ASSN_FORWARD_URL": "https://yield.petralab.ai/api/asc/webhook",
+    // The experiments counted from App Store Server Notifications, and the one
+    // fixed appAccountToken each variant hands StoreKit (no per-user id):
+    // "name:variant=token,variant=token;name:…".
     "EXPERIMENT_TOKENS": "paywall-1:story=5c0f1a7e-0000-4000-8000-00000000057a,poster=5c0f1a7e-0000-4000-8000-0000000057e2"
   },
   // Secrets, set by hand: APNS_TEAM_ID, APNS_KEY_ID, APNS_P8, EXPERIMENT_READ_TOKEN.
