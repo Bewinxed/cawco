@@ -27,6 +27,15 @@ const sessionTitle = () =>
     .max(SESSION_TITLE_MAX)
     .describe(SESSION_TITLE_DESCRIPTION);
 
+/** The account a session runs on, for `delegate` and `start_session`. */
+const accountParameter = () =>
+  z
+    .string()
+    .optional()
+    .describe(
+      "The account the session runs on, by its label or id. Name one only when the user asks for that account; omitted, the hub places it by the fleet's routing."
+    );
+
 /** A work item's acceptance checks: `delegate` files them, `set_item_checks` replaces them. */
 const checksParameter = () =>
   z
@@ -490,6 +499,7 @@ export function handoffTools(deps: HandoffDeps) {
           .describe(
             "Overrides the type's model. Omit to run the type's own model."
           ),
+        account: accountParameter(),
         // Never `fullSend`: only the owner puts a session in Full Send. A
         // session that is in it passes it on by leaving this out.
         permissionMode: z
@@ -513,6 +523,7 @@ export function handoffTools(deps: HandoffDeps) {
         spinOff,
         type,
         model,
+        account,
         permissionMode,
         machine,
       }) => {
@@ -520,6 +531,7 @@ export function handoffTools(deps: HandoffDeps) {
           spinOff,
           type,
           model,
+          account,
           permissionMode,
           machine,
         });
@@ -573,6 +585,7 @@ export function handoffTools(deps: HandoffDeps) {
             "Model id for the harness, e.g. opencode-go/deepseek-v4-flash. Omit for the type's " +
               "own model. Overrides `type`'s model when both are set."
           ),
+        account: accountParameter(),
         cwd: z
           .string()
           .optional()
@@ -656,6 +669,7 @@ export function handoffTools(deps: HandoffDeps) {
         type,
         harness,
         model,
+        account,
         cwd,
         skills,
         workspace,
@@ -674,6 +688,7 @@ export function handoffTools(deps: HandoffDeps) {
           cwd,
           harness,
           model,
+          account,
           skills,
           workspace,
           fork,

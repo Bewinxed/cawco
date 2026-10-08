@@ -1,9 +1,22 @@
-import type { AuthState } from "@cawco/core";
+import {
+  type AccountIdentity,
+  type AccountKind,
+  type AccountSigninResult,
+  type AuthState,
+  sameIdentity,
+} from "@cawco/core";
 import type { Subprocess } from "bun";
+import {
+  accountEnv,
+  linkUserLayer,
+  probeAccount,
+  removeAccountDir,
+} from "./accounts";
 import { probeAuth, resolveClaudeExecutable } from "./auth";
 
 /**
- * Logging a machine in from the dashboard, over the tunnel.
+ * Logging a machine in from the dashboard, over the tunnel: its own
+ * `~/.claude`, or one account's config dir (`~/.cawco/accounts/<id>/claude`).
  *
  * The sign-in is Claude Code's own: the daemon runs the unmodified
  * `claude auth login` under a pseudo-terminal, hands the authorisation link it
@@ -29,9 +42,9 @@ const LINK_TIMEOUT_MS = 30_000;
 const EXCHANGE_TIMEOUT_MS = 60_000;
 
 /**
- * The sign-in in flight: one per daemon, since each `claude auth login` mints
- * its own PKCE challenge and only the process that printed a link can redeem
- * that link's code.
+ * A sign-in in flight: one per config dir, since each `claude auth login`
+ * mints its own PKCE challenge and only the process that printed a link can
+ * redeem that link's code.
  */
 interface SignIn {
   readonly child: Subprocess;
@@ -42,7 +55,10 @@ interface SignIn {
   readonly terminal: Bun.Terminal;
 }
 
-let inFlight: SignIn | undefined;
+/** The sign-ins in flight, by config dir: an account id, or `~/.claude` as null's key. */
+const inFlight = new Map<string, SignIn>();
+const HOME = "~/.claude";
+const keyOf = (account: string | null): string => account ?? HOME;
 
 export interface LoginChallenge {
   /** Where the reader authorises. Opened in *their* browser, not on the machine. */
@@ -82,11 +98,20 @@ const until = (signIn: SignIn, done: () => boolean, ms: number) =>
     signIn.heard();
   });
 
-/** Starts `claude auth login` and hands back the link it prints. */
-export const beginLogin = async (): Promise<LoginChallenge> => {
-  if (inFlight) {
-    end(inFlight);
-    inFlight = undefined;
+/**
+ * Starts `claude auth login` in one config dir (an account's, or `~/.claude`
+ * for null) and hands back the link it prints. A Console account signs in
+ * with `--console`; a subscription with the CLI's default.
+ */
+const beginSignIn = async (
+  account: string | null,
+  kind: AccountKind
+): Promise<LoginChallenge> => {
+  const key = keyOf(account);
+  const previous = inFlight.get(key);
+  if (previous) {
+    end(previous);
+    inFlight.delete(key);
   }
   const executable = resolveClaudeExecutable();
   if (!executable) {
@@ -104,17 +129,26 @@ export const beginLogin = async (): Promise<LoginChallenge> => {
       }
     },
   });
+  const { CLAUDE_CONFIG_DIR: _own, ...env } = process.env;
   signIn = {
-    child: Bun.spawn([executable, "auth", "login"], {
-      // `true` as the browser: the link is for the reader's browser, not one
-      // on this machine.
-      env: { ...process.env, BROWSER: "true" },
-      terminal,
-    }),
+    child: Bun.spawn(
+      [
+        executable,
+        "auth",
+        "login",
+        ...(kind === "console" ? ["--console"] : []),
+      ],
+      {
+        // `true` as the browser: the link is for the reader's browser, not
+        // one on this machine.
+        env: { ...env, ...accountEnv(account), BROWSER: "true" },
+        terminal,
+      }
+    ),
     output: "",
     terminal,
   };
-  inFlight = signIn;
+  inFlight.set(key, signIn);
   const current = signIn;
 
   const prompted = await until(
@@ -125,8 +159,8 @@ export const beginLogin = async (): Promise<LoginChallenge> => {
   const url = said(current).match(LINK)?.[0];
   if (!(prompted && url)) {
     end(current);
-    if (inFlight === current) {
-      inFlight = undefined;
+    if (inFlight.get(key) === current) {
+      inFlight.delete(key);
     }
     throw new Error(
       said(current) || "`claude auth login` printed no sign-in link."
@@ -136,24 +170,26 @@ export const beginLogin = async (): Promise<LoginChallenge> => {
 };
 
 /**
- * Types the code the reader pasted into the waiting `claude auth login`, and
- * answers with what this machine can do afterwards — which is the only claim
- * worth making, since a login that does not work is indistinguishable from no
- * login at all until something tries to use it.
+ * Types the code the reader pasted into the dir's waiting `claude auth
+ * login`, and waits for it to exchange the code and store the login.
  */
-export const completeLogin = async (code: string): Promise<AuthState> => {
+const finishSignIn = async (
+  account: string | null,
+  code: string
+): Promise<void> => {
   const trimmed = code.trim();
   if (!trimmed) {
     throw new Error("Paste the code from the authorisation page.");
   }
-  const signIn = inFlight;
+  const key = keyOf(account);
+  const signIn = inFlight.get(key);
   if (!signIn || signIn.child.exitCode !== null) {
     throw new Error(
       "That code belongs to a login this machine didn't start or already used. Open the authorisation page again."
     );
   }
   // Used or refused, the sign-in is spent either way.
-  inFlight = undefined;
+  inFlight.delete(key);
 
   const from = signIn.output.length;
   signIn.terminal.write(`${trimmed}\r`);
@@ -172,5 +208,81 @@ export const completeLogin = async (code: string): Promise<AuthState> => {
           : "`claude auth login` did not finish signing in.")
     );
   }
+};
+
+/** Starts the machine's own `~/.claude` sign-in and hands back its link. */
+export const beginLogin = (): Promise<LoginChallenge> =>
+  beginSignIn(null, "subscription");
+
+/**
+ * Finishes the machine's own `~/.claude` sign-in, and answers with what this
+ * machine can do afterwards — which is the only claim worth making, since a
+ * login that does not work is indistinguishable from no login at all until
+ * something tries to use it.
+ */
+export const completeLogin = async (code: string): Promise<AuthState> => {
+  await finishSignIn(null, code);
   return await probeAuth();
+};
+
+/**
+ * Starts an account's sign-in in its own config dir, with the fleet's user
+ * layer linked in first so the dir is a whole Claude Code home from its first
+ * session.
+ */
+export const beginAccountLogin = async (
+  account: string,
+  kind: AccountKind
+): Promise<LoginChallenge> => {
+  await linkUserLayer(account);
+  return beginSignIn(account, kind);
+};
+
+/** Runs `claude auth logout` in an account's dir: Claude Code signs it out itself. */
+const logout = async (account: string): Promise<void> => {
+  const executable = resolveClaudeExecutable();
+  if (!executable) {
+    return;
+  }
+  const { CLAUDE_CONFIG_DIR: _own, ...env } = process.env;
+  const child = Bun.spawn([executable, "auth", "logout"], {
+    env: { ...env, ...accountEnv(account) },
+    stdin: "ignore",
+    stdout: "ignore",
+    stderr: "pipe",
+    timeout: 30_000,
+  });
+  if ((await child.exited) !== 0) {
+    const why = Bun.stripANSI(await new Response(child.stderr).text()).trim();
+    throw new Error(why || "`claude auth logout` did not finish.");
+  }
+};
+
+/**
+ * Finishes an account's sign-in, then asks the dir's Claude Code who it is
+ * signed in as. One that answers as someone other than the account already
+ * is (`expected`) is signed straight out again: the dir is that account's
+ * and nobody else's.
+ */
+export const completeAccountLogin = async (
+  code: string,
+  account: string,
+  expected: AccountIdentity | null
+): Promise<AccountSigninResult> => {
+  await finishSignIn(account, code);
+  const probe = await probeAccount(account);
+  if (!probe.identity) {
+    return { state: "signed-out", probe };
+  }
+  if (expected && !sameIdentity(expected, probe.identity)) {
+    await logout(account);
+    return { state: "mismatch", probe };
+  }
+  return { state: "signed-in", probe };
+};
+
+/** Signs an account out of this machine with Claude Code itself, and drops its dir. */
+export const forgetAccount = async (account: string): Promise<void> => {
+  await logout(account);
+  await removeAccountDir(account);
 };

@@ -21,6 +21,8 @@ import { Elysia, t } from "elysia";
 import { DB_PATH } from "./config";
 
 interface DelegateTypeRow {
+  /** The account its sessions prefer; NULL: the provider's strategy chooses. */
+  account: string | null;
   /** sqlite has no boolean: 1, 0, or NULL (the column arrived after the table). */
   can_delegate: number | null;
   /** 1 when the type turns "CawCo's to-dos" on; 0 or NULL leaves it to the fleet. */
@@ -44,6 +46,7 @@ const rowToType = (row: DelegateTypeRow): DelegateType => ({
   ...(row.deny_tools ? { denyTools: JSON.parse(row.deny_tools) } : {}),
   ...(row.can_delegate === null ? {} : { canDelegate: row.can_delegate === 1 }),
   ...(row.cawco_todos === 1 ? { cawcoTodos: true } : {}),
+  ...(row.account ? { account: row.account } : {}),
 });
 
 export interface DelegateTypesShape {
@@ -97,6 +100,9 @@ export const makeDelegateTypes = (
 
   if (!columns.includes("cawco_todos")) {
     sqlite.run("ALTER TABLE delegate_types ADD COLUMN cawco_todos INTEGER");
+  }
+  if (!columns.includes("account")) {
+    sqlite.run("ALTER TABLE delegate_types ADD COLUMN account TEXT");
   }
   // "CawCo's to-dos" is a type's own flag now, not names in its deny list: a
   // type that denied the four ledger tools had it on. Once, the names become
@@ -159,8 +165,8 @@ export const makeDelegateTypes = (
       draft.canDelegate === undefined ? null : Number(draft.canDelegate);
     sqlite
       .query(
-        `INSERT INTO delegate_types (name, description, harness, model, effort, skills, deny_tools, can_delegate, cawco_todos, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO delegate_types (name, description, harness, model, effort, skills, deny_tools, can_delegate, cawco_todos, account, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(name) DO UPDATE SET
            description = excluded.description,
            harness = excluded.harness,
@@ -169,7 +175,8 @@ export const makeDelegateTypes = (
            skills = excluded.skills,
            deny_tools = excluded.deny_tools,
            can_delegate = excluded.can_delegate,
-           cawco_todos = excluded.cawco_todos`
+           cawco_todos = excluded.cawco_todos,
+           account = excluded.account`
       )
       .run(
         draft.name,
@@ -181,6 +188,7 @@ export const makeDelegateTypes = (
         draft.denyTools ? JSON.stringify(draft.denyTools) : null,
         canDelegate,
         draft.cawcoTodos ? 1 : null,
+        draft.account ?? null,
         Date.now()
       );
     return draft;
@@ -236,6 +244,7 @@ export const delegateTypesRoutes = (store: DelegateTypesShape) =>
           denyTools: t.Optional(t.Array(t.String())),
           canDelegate: t.Optional(t.Boolean()),
           cawcoTodos: t.Optional(t.Boolean()),
+          account: t.Optional(t.String()),
         }),
       },
       ({ params, body, status }) => {

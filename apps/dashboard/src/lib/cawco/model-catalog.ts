@@ -5,6 +5,8 @@ import type { HarnessKind, ModelInfo } from "@cawco/core";
  * listed it; a row asked from a running session carries none.
  */
 export type HarnessModel = ModelInfo & {
+  /** The account whose Claude Code offers it; absent for a harness without accounts. */
+  accountId?: string;
   harness: HarnessKind;
   machineId?: string;
 };

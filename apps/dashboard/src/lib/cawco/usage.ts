@@ -50,10 +50,6 @@ const WHOLE_DOLLARS = new Intl.NumberFormat("en-US", {
 export const money = (n: number): string =>
   n >= 1000 ? WHOLE_DOLLARS.format(n) : usd(n);
 
-/** A cap as it is set: "$330" when it is whole dollars, else to the cent. */
-export const capMoney = (n: number): string =>
-  Number.isInteger(n) ? WHOLE_DOLLARS.format(n) : money(n);
-
 /** 13.1M, 581M, 1.5k — the token counts the spec quotes read this way. */
 export const compactNumber = (n: number): string => {
   if (n >= 1_000_000) {
@@ -413,19 +409,6 @@ export const readAgo = (fetchedAt: number, now: number): string =>
     ? "read just now"
     : `read ${duration(now - fetchedAt)} ago`;
 
-const TIER_PREFIX = /^default_claude_/;
-const UNDERSCORE = /_/g;
-const WORD_START = /\b\w/g;
-
-/** "default_claude_max_20x" → "Max 20x". */
-export const planName = (tier: string | null): string | null =>
-  tier
-    ? tier
-        .replace(TIER_PREFIX, "")
-        .replace(UNDERSCORE, " ")
-        .replace(WORD_START, (c) => c.toUpperCase())
-    : null;
-
 /**
  * Why Claude's limits cannot be shown, and what fixes it: the one source of
  * those words for the Usage page's Limits block and the usage strip, so the
@@ -468,16 +451,9 @@ export function claudeGap(
       signIn: true,
     };
   }
-  if (reading.error === "token expired") {
-    return {
-      machine,
-      reason: `The Claude login on ${host} has expired.`,
-      signIn: true,
-    };
-  }
   return {
     machine,
-    reason: `Anthropic didn't answer the limit read (${reading.error}). The next read is automatic.`,
+    reason: `Claude Code hasn't reported the limits of ${host}'s account yet; they appear once a session runs there.`,
     signIn: false,
   };
 }

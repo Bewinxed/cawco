@@ -166,6 +166,9 @@
                   },
                   "cawcoTodos": {
                     "type": "boolean"
+                  },
+                  "account": {
+                    "type": "string"
                   }
                 },
                 "required": [
@@ -7063,8 +7066,7 @@
                       }
                     },
                     "required": [
-                      "harness",
-                      "model"
+                      "harness"
                     ]
                   },
                   "target": {
@@ -7155,8 +7157,7 @@
                       }
                     },
                     "required": [
-                      "harness",
-                      "model"
+                      "harness"
                     ]
                   },
                   "note": {
@@ -11696,6 +11697,87 @@
         }
       }
     },
+    "/api/projects/{id}/accounts": {
+      "put": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "accounts": {
+                    "type": [
+                      "array",
+                      "null"
+                    ],
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "accounts"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "putApiProjectsByIdAccounts",
+        "responses": {
+          "200": {
+            "description": "putApiProjectsByIdAccounts 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/putApiProjectsByIdAccounts200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "putApiProjectsByIdAccounts 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "putApiProjectsByIdAccounts 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "putApiProjectsByIdAccounts 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects/{id}/places/{placeId}": {
       "delete": {
         "parameters": [
@@ -11828,6 +11910,662 @@
         }
       }
     },
+    "/api/accounts": {
+      "get": {
+        "operationId": "getApiAccounts",
+        "responses": {
+          "200": {
+            "description": "getApiAccounts 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiAccounts200"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "provider": {
+                    "type": "string",
+                    "const": "anthropic"
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "subscription",
+                      "console"
+                    ]
+                  },
+                  "label": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "hue": {
+                    "type": "string",
+                    "enum": [
+                      "amber",
+                      "blue",
+                      "cyan",
+                      "green",
+                      "orange"
+                    ]
+                  }
+                },
+                "required": [
+                  "provider",
+                  "kind"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiAccounts",
+        "responses": {
+          "200": {
+            "description": "postApiAccounts 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Account"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiAccounts 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/accounts/{id}": {
+      "patch": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "label": {
+                    "minLength": 1,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "hue": {
+                    "type": "string",
+                    "enum": [
+                      "amber",
+                      "blue",
+                      "cyan",
+                      "green",
+                      "orange"
+                    ]
+                  },
+                  "order": {
+                    "type": "integer"
+                  },
+                  "neverBackup": {
+                    "type": "boolean"
+                  },
+                  "reservePct": {
+                    "minimum": 0,
+                    "maximum": 100,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "patchApiAccountsById",
+        "responses": {
+          "200": {
+            "description": "patchApiAccountsById 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Account"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "patchApiAccountsById 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "patchApiAccountsById 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "deleteApiAccountsById",
+        "responses": {
+          "200": {
+            "description": "deleteApiAccountsById 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/deleteApiAccountsById200"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "deleteApiAccountsById 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "deleteApiAccountsById 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/accounts/routing/{provider}": {
+      "put": {
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "const": "anthropic"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "yours": {
+                    "type": "object",
+                    "properties": {
+                      "strategy": {
+                        "type": "string",
+                        "enum": [
+                          "pinned",
+                          "fill-first",
+                          "spread",
+                          "soonest-reset"
+                        ]
+                      },
+                      "pinnedAccountId": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "strategy"
+                    ]
+                  },
+                  "delegates": {
+                    "type": "object",
+                    "properties": {
+                      "strategy": {
+                        "type": "string",
+                        "enum": [
+                          "pinned",
+                          "fill-first",
+                          "spread",
+                          "soonest-reset"
+                        ]
+                      },
+                      "pinnedAccountId": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "strategy"
+                    ]
+                  },
+                  "atLimit": {
+                    "type": "object",
+                    "properties": {
+                      "move": {
+                        "type": "boolean"
+                      },
+                      "waitMinutes": {
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "moveWholeUnderK": {
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "prepareAtPct": {
+                        "minimum": 0,
+                        "maximum": 100,
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "move",
+                      "waitMinutes",
+                      "moveWholeUnderK",
+                      "prepareAtPct"
+                    ]
+                  }
+                },
+                "required": [
+                  "yours",
+                  "delegates",
+                  "atLimit"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "putApiAccountsRoutingByProvider",
+        "responses": {
+          "200": {
+            "description": "putApiAccountsRoutingByProvider 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/putApiAccountsRoutingByProvider200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "putApiAccountsRoutingByProvider 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "putApiAccountsRoutingByProvider 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/accounts/forecast": {
+      "get": {
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "const": "anthropic"
+            }
+          }
+        ],
+        "operationId": "getApiAccountsForecast",
+        "responses": {
+          "200": {
+            "description": "getApiAccountsForecast 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderForecast"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiAccountsForecast 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/accounts/placement": {
+      "get": {
+        "parameters": [
+          {
+            "name": "harness",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "machineId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "model",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "projectId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "taskId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "yours",
+                "delegates"
+              ]
+            }
+          },
+          {
+            "name": "account",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "forkOf",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiAccountsPlacement",
+        "responses": {
+          "200": {
+            "description": "getApiAccountsPlacement 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiAccountsPlacement200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "getApiAccountsPlacement 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiAccountsPlacement 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/accounts/{id}/machines/{machineId}/signin": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "machineId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "postApiAccountsByIdMachinesByMachineIdSignin",
+        "responses": {
+          "200": {
+            "description": "postApiAccountsByIdMachinesByMachineIdSignin 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiAccountsByIdMachinesByMachineIdSignin200"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiAccountsByIdMachinesByMachineIdSignin 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiAccountsByIdMachinesByMachineIdSignin 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "postApiAccountsByIdMachinesByMachineIdSignin 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/accounts/{id}/machines/{machineId}/signin/complete": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "machineId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "code"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiAccountsByIdMachinesByMachineIdSigninComplete",
+        "responses": {
+          "200": {
+            "description": "postApiAccountsByIdMachinesByMachineIdSigninComplete 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountSigninResult"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiAccountsByIdMachinesByMachineIdSigninComplete 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiAccountsByIdMachinesByMachineIdSigninComplete 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "postApiAccountsByIdMachinesByMachineIdSigninComplete 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/usage/limits": {
       "get": {
         "operationId": "getApiUsageLimits",
@@ -11866,7 +12604,7 @@
       "get": {
         "parameters": [
           {
-            "name": "machineId",
+            "name": "accountId",
             "in": "query",
             "required": true,
             "schema": {
@@ -13511,6 +14249,12 @@
                   "string"
                 ]
               },
+              "accountId": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
               "parentInstanceId": {
                 "type": [
                   "null",
@@ -13605,6 +14349,7 @@
               }
             },
             "required": [
+              "accountId",
               "canDelegate",
               "createdAt",
               "cwd",
@@ -13778,6 +14523,12 @@
                     "string"
                   ]
                 },
+                "accountId": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
                 "parentInstanceId": {
                   "type": [
                     "null",
@@ -13872,6 +14623,7 @@
                 }
               },
               "required": [
+                "accountId",
                 "canDelegate",
                 "createdAt",
                 "cwd",
@@ -15161,6 +15913,12 @@
               ],
               "type": "string"
             },
+            "accounts": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
             "createdAt": {
               "type": "string",
               "format": "date-time"
@@ -15352,6 +16110,12 @@
               "quiet"
             ],
             "type": "string"
+          },
+          "accounts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
           "createdAt": {
             "type": "string",
@@ -15554,6 +16318,12 @@
             ],
             "type": "string"
           },
+          "accounts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time"
@@ -15613,6 +16383,161 @@
           "name",
           "place",
           "placeAdded",
+          "places",
+          "primaryPlaceId",
+          "remote",
+          "reviewLimit",
+          "tracker"
+        ]
+      },
+      "putApiProjectsByIdAccounts200": {
+        "type": "object",
+        "properties": {
+          "primaryPlaceId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "remote": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "tracker": {
+            "$ref": "#/components/schemas/Tracker"
+          },
+          "leadInstanceId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "caw": {
+            "type": "boolean"
+          },
+          "cawHarness": {
+            "enum": [
+              "claude",
+              "opencode"
+            ],
+            "type": "string"
+          },
+          "cawModel": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "leadCostSeen": {
+            "type": "number"
+          },
+          "dispatch": {
+            "type": "boolean"
+          },
+          "maxAttempts": {
+            "type": "number"
+          },
+          "reviewLimit": {
+            "type": "number"
+          },
+          "lands": {
+            "$ref": "#/components/schemas/LandsMode"
+          },
+          "budget": {
+            "$ref": "#/components/schemas/WorkBudget"
+          },
+          "capUsd": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "capPeriod": {
+            "enum": [
+              "day",
+              "month"
+            ],
+            "type": "string"
+          },
+          "onCap": {
+            "enum": [
+              "both",
+              "pause",
+              "quiet"
+            ],
+            "type": "string"
+          },
+          "accounts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "places": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "machineId": {
+                  "type": "string"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "createdAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "kind": {
+                  "$ref": "#/components/schemas/PlaceKind"
+                },
+                "projectId": {
+                  "type": "string"
+                },
+                "isPrimary": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "createdAt",
+                "id",
+                "isPrimary",
+                "kind",
+                "machineId",
+                "path",
+                "projectId"
+              ]
+            }
+          }
+        },
+        "required": [
+          "capUsd",
+          "caw",
+          "cawHarness",
+          "cawModel",
+          "createdAt",
+          "dispatch",
+          "id",
+          "lands",
+          "leadCostSeen",
+          "leadInstanceId",
+          "maxAttempts",
+          "name",
           "places",
           "primaryPlaceId",
           "remote",
@@ -15696,23 +16621,179 @@
           "state"
         ]
       },
+      "getApiAccounts200": {
+        "type": "object",
+        "properties": {
+          "accounts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Account"
+            }
+          },
+          "signins": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccountSignin"
+            }
+          },
+          "routing": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProviderRouting"
+            }
+          },
+          "readings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccountReading"
+            }
+          },
+          "bench": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccountBench"
+            }
+          },
+          "catalogs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccountCatalog"
+            }
+          }
+        },
+        "required": [
+          "accounts",
+          "bench",
+          "catalogs",
+          "readings",
+          "routing",
+          "signins"
+        ]
+      },
+      "deleteApiAccountsById200": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ]
+      },
+      "putApiAccountsRoutingByProvider200": {
+        "type": "object",
+        "properties": {
+          "delegates": {
+            "type": "object",
+            "properties": {
+              "pinnedAccountId": {
+                "type": "string"
+              }
+            }
+          },
+          "yours": {
+            "type": "object",
+            "properties": {
+              "pinnedAccountId": {
+                "type": "string"
+              }
+            }
+          },
+          "atLimit": {
+            "type": "object",
+            "properties": {
+              "move": {
+                "type": "boolean"
+              },
+              "waitMinutes": {
+                "type": "number"
+              },
+              "moveWholeUnderK": {
+                "type": "number"
+              },
+              "prepareAtPct": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "move",
+              "moveWholeUnderK",
+              "prepareAtPct",
+              "waitMinutes"
+            ]
+          },
+          "provider": {
+            "type": "string",
+            "enum": [
+              "anthropic"
+            ]
+          }
+        },
+        "required": [
+          "atLimit",
+          "delegates",
+          "provider",
+          "yours"
+        ]
+      },
+      "getApiAccountsPlacement200": {
+        "type": "object",
+        "properties": {
+          "accountId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "strategy": {
+            "enum": [
+              "explicit",
+              "fill-first",
+              "fork",
+              "none",
+              "only",
+              "pinned",
+              "soonest-reset",
+              "spread",
+              "type"
+            ],
+            "type": "string"
+          },
+          "why": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "accountId",
+          "strategy",
+          "why"
+        ]
+      },
+      "postApiAccountsByIdMachinesByMachineIdSignin200": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ]
+      },
       "getApiUsageLimitsHistory200": {
         "type": "array",
         "items": {
           "type": "object",
           "properties": {
-            "machineId": {
-              "type": "string"
-            },
             "id": {
               "type": "number"
             },
             "kind": {
               "type": "string"
             },
-            "fetchedAt": {
-              "type": "string",
-              "format": "date-time"
+            "accountId": {
+              "type": "string"
             },
             "scopeLabel": {
               "type": [
@@ -15731,13 +16812,17 @@
                 "null",
                 "string"
               ]
+            },
+            "fetchedAt": {
+              "type": "string",
+              "format": "date-time"
             }
           },
           "required": [
+            "accountId",
             "fetchedAt",
             "id",
             "kind",
-            "machineId",
             "percent",
             "resetsAt",
             "scopeLabel",
@@ -16555,6 +17640,26 @@
         "description": "`spawn`: start a session on a harness. `harness` chooses the adapter (absent\nmeans `claude`, for every caller written before harnesses existed); `options`\nrides through to that adapter verbatim — only the callbacks the agent must own\nitself (`canUseTool`/permission hooks, abort) are filled in on arrival, since\nfunctions do not survive the wire. `resume` is the harness-neutral way to\nre-open or fork a stored session; `persistSession: false` asks for a session\nthat is never stored (a spin-off's transcript).",
         "type": "object",
         "properties": {
+          "account": {
+            "description": "The account the session must run on, picked by whoever started it (the\ndashboard, `delegate`, `start_session`). The hub refuses a pick the\nsession's machine, project or task does not allow, and never forwards\nthis field: what reaches the machine is {@link accountDir}.",
+            "type": "string"
+          },
+          "accountDir": {
+            "description": "The account the hub placed the session on, and where its Claude Code\nconfig dir is on the machine: its own `~/.cawco/accounts/<id>/claude`, or\nthe machine's `~/.claude` (`home`). Set by the hub on every spawn of a\nsession with an account — the first and every revive, restore and\nrelaunch — and never by a client.",
+            "type": "object",
+            "properties": {
+              "accountId": {
+                "type": "string"
+              },
+              "home": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "accountId",
+              "home"
+            ]
+          },
           "bootstrap": {
             "description": "Start from a repository instead of a directory that is already there: the\nagent clones `repo` — `owner/name`, or any URL git understands — into a\nsubdirectory of `baseDir` and runs the session in the clone.",
             "type": "object",
@@ -17436,6 +18541,10 @@
         "description": "One named preset. `name` is the key a `delegate` call's `type` asks for.",
         "type": "object",
         "properties": {
+          "account": {
+            "description": "The account its sessions prefer, when placement allows it (the machine,\nproject and task allow it, and it is not benched or past its reserve).\nAbsent: the provider's strategy chooses.",
+            "type": "string"
+          },
           "canDelegate": {
             "description": "Whether a delegate of this type may itself delegate (or start sessions)\nwhen the `delegate` call did not say. `false` (and absent) means a leaf —\nthe same default a bare `delegate` call gets; `true` makes the type a\ncoordinator by default. An explicit `can_delegate` on the call still wins.",
             "type": "boolean"
@@ -18065,6 +19174,13 @@
           "acceptance": {
             "type": "string"
           },
+          "accounts": {
+            "description": "The accounts its attempts may run on; empty: every account.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "after": {
             "type": "array",
             "items": {
@@ -18259,6 +19375,7 @@
         },
         "required": [
           "acceptance",
+          "accounts",
           "after",
           "attempts",
           "blockedBy",
@@ -22698,6 +23815,13 @@
         "description": "What a machine knows about one harness: is it installed, can it work, what can it do.",
         "type": "object",
         "properties": {
+          "accounts": {
+            "description": "Claude only: every Claude Code config dir on the machine and what\n`claude auth status` said of it — `~/.claude` (`account: null`) and each\naccount's `~/.cawco/accounts/<id>/claude`. The hub reads it as where each\naccount is signed in.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ClaudeAccountReport"
+            }
+          },
           "auth": {
             "$ref": "#/components/schemas/AuthState"
           },
@@ -22731,6 +23855,34 @@
           "capabilities",
           "harness",
           "installed"
+        ]
+      },
+      "ClaudeAccountReport": {
+        "description": "What `claude auth status` said about one config dir on a machine: whether\nit is signed in, and how. Who it is signed in as is the hub's to ask\n({@link CONTROL_PROBE_ACCOUNT}), once, where it knows nothing yet.",
+        "type": "object",
+        "properties": {
+          "account": {
+            "description": "The account id for `~/.cawco/accounts/<id>/claude`; null for `~/.claude`.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "kind": {
+            "description": "`console` when `authMethod` says the dir signed in with a Console account.",
+            "enum": [
+              "console",
+              "subscription"
+            ],
+            "type": "string"
+          },
+          "loggedIn": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "account",
+          "loggedIn"
         ]
       },
       "HarnessCapabilities": {
@@ -25779,82 +26931,240 @@
         ],
         "type": "string"
       },
-      "UsageLimitsResponse": {
-        "description": "What `/api/usage/limits` returns: every machine's latest readings.",
+      "Account": {
         "type": "object",
         "properties": {
-          "machines": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "hostname": {
-                  "type": "string"
-                },
-                "limits": {
-                  "$ref": "#/components/schemas/ClaudeLimits"
-                },
-                "machineId": {
-                  "type": "string"
-                },
-                "openCodeGo": {
-                  "$ref": "#/components/schemas/OpenCodeGoLimits"
-                }
-              },
-              "required": [
-                "hostname",
-                "limits",
-                "machineId"
-              ]
-            }
+          "createdAt": {
+            "type": "number"
+          },
+          "email": {
+            "description": "The email it is signed in as ({@link identity}'s); null until its first sign-in.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "hue": {
+            "$ref": "#/components/schemas/AccountHue"
+          },
+          "id": {
+            "type": "string"
+          },
+          "identity": {
+            "description": "Null until its first sign-in on any machine.",
+            "$ref": "#/components/schemas/AccountIdentity"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/AccountKind"
+          },
+          "label": {
+            "description": "A nickname someone gave it; null: it goes by its email ({@link accountName}).",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "neverBackup": {
+            "description": "Never chosen as the fallback when the pinned account cannot take a session.",
+            "type": "boolean"
+          },
+          "order": {
+            "description": "Its place in fill-first order: lowest first.",
+            "type": "number"
+          },
+          "provider": {
+            "description": "Who bills the account. One provider for now; the column is generic.",
+            "type": "string",
+            "enum": [
+              "anthropic"
+            ]
+          },
+          "reservePct": {
+            "description": "New sessions stop being placed on it once its weekly window passes this\npercentage; null: no reserve.",
+            "type": [
+              "null",
+              "number"
+            ]
           }
         },
         "required": [
-          "machines"
+          "createdAt",
+          "email",
+          "hue",
+          "id",
+          "kind",
+          "label",
+          "neverBackup",
+          "order",
+          "provider",
+          "reservePct"
         ]
       },
-      "ClaudeLimits": {
+      "AccountHue": {
+        "description": "The hue an account is drawn in: a `--hue-<name>-500` token.",
+        "enum": [
+          "amber",
+          "blue",
+          "cyan",
+          "green",
+          "orange"
+        ],
+        "type": "string"
+      },
+      "AccountIdentity": {
+        "description": "Who an account is, as Claude Code's initialize response reports it\n(`account.email`, `account.organization` — the organization's name).",
         "type": "object",
         "properties": {
-          "error": {
-            "type": [
-              "null",
-              "string"
-            ]
+          "email": {
+            "type": "string"
           },
-          "fetchedAt": {
+          "organization": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "organization"
+        ]
+      },
+      "AccountKind": {
+        "description": "How the account signs in: a Claude subscription (`claude auth login`), or a\nConsole organization billed by API usage (`claude auth login --console`).",
+        "enum": [
+          "console",
+          "subscription"
+        ],
+        "type": "string"
+      },
+      "AccountSignin": {
+        "type": "object",
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "checkedAt": {
             "type": "number"
           },
-          "planTier": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "spendLimit": {
-            "description": "Extra usage: the pay-as-you-go real money spent past the plan this month,\nand its monthly cap, in dollars (the API's `spend.used` / `spend.limit`\nmoney objects). Null when not reported; the cap is null with extra usage\noff. `spendResetsAt` is when the cap resets (ISO), only when the API\nsays; null otherwise, never guessed.",
-            "type": [
-              "null",
-              "number"
-            ]
-          },
-          "spendResetsAt": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "spendUsed": {
-            "type": [
-              "null",
-              "number"
-            ]
-          },
-          "stale": {
-            "description": "Set when a fetch failed and the caller is served the last good reading.",
+          "home": {
+            "description": "The account lives in the machine's own `~/.claude` (the login it had\nbefore accounts existed), rather than in `~/.cawco/accounts/<id>/claude`.",
             "type": "boolean"
           },
+          "machineId": {
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/SigninState"
+          }
+        },
+        "required": [
+          "accountId",
+          "checkedAt",
+          "home",
+          "machineId",
+          "state"
+        ]
+      },
+      "SigninState": {
+        "description": "Where an account stands on one machine.",
+        "enum": [
+          "mismatch",
+          "signed-in",
+          "signed-out"
+        ],
+        "type": "string"
+      },
+      "ProviderRouting": {
+        "description": "One provider's routing. `yours` places the sessions a person starts;\n`delegates` the ones a session starts.",
+        "type": "object",
+        "properties": {
+          "atLimit": {
+            "$ref": "#/components/schemas/AtLimit"
+          },
+          "delegates": {
+            "$ref": "#/components/schemas/StrategyChoice"
+          },
+          "provider": {
+            "description": "Who bills the account. One provider for now; the column is generic.",
+            "type": "string",
+            "enum": [
+              "anthropic"
+            ]
+          },
+          "yours": {
+            "$ref": "#/components/schemas/StrategyChoice"
+          }
+        },
+        "required": [
+          "atLimit",
+          "delegates",
+          "provider",
+          "yours"
+        ]
+      },
+      "AtLimit": {
+        "description": "What a session does when its account hits its limit (used by part 2).",
+        "type": "object",
+        "properties": {
+          "move": {
+            "type": "boolean"
+          },
+          "moveWholeUnderK": {
+            "type": "number"
+          },
+          "prepareAtPct": {
+            "type": "number"
+          },
+          "waitMinutes": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "move",
+          "moveWholeUnderK",
+          "prepareAtPct",
+          "waitMinutes"
+        ]
+      },
+      "StrategyChoice": {
+        "type": "object",
+        "properties": {
+          "pinnedAccountId": {
+            "description": "The account `pinned` names; ignored by the other strategies.",
+            "type": "string"
+          },
+          "strategy": {
+            "$ref": "#/components/schemas/PlacementStrategy"
+          }
+        },
+        "required": [
+          "strategy"
+        ]
+      },
+      "PlacementStrategy": {
+        "description": "How a provider's new sessions choose among its accounts.",
+        "enum": [
+          "fill-first",
+          "pinned",
+          "soonest-reset",
+          "spread"
+        ],
+        "type": "string"
+      },
+      "AccountReading": {
+        "description": "An account's freshest limit reading, assembled from what its sessions'\nClaude Code reported: the windows from `rate_limit_event`s, the plan from\n`accountInfo()`.",
+        "type": "object",
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "lastSeenAt": {
+            "description": "When the last event or account read for it arrived.",
+            "type": "number"
+          },
+          "overage": {
+            "$ref": "#/components/schemas/AccountOverage"
+          },
           "subscription": {
+            "description": "`subscriptionType` as `accountInfo()` reports it.",
             "type": [
               "null",
               "string"
@@ -25868,14 +27178,43 @@
           }
         },
         "required": [
-          "error",
-          "fetchedAt",
-          "planTier",
-          "spendLimit",
-          "spendResetsAt",
-          "spendUsed",
+          "accountId",
+          "lastSeenAt",
           "subscription",
           "windows"
+        ]
+      },
+      "AccountOverage": {
+        "description": "Extra-usage state, as the session's rate-limit events report it.",
+        "type": "object",
+        "properties": {
+          "disabledReason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "inUse": {
+            "type": "boolean"
+          },
+          "resetsAt": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "status": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "disabledReason",
+          "inUse",
+          "resetsAt",
+          "status"
         ]
       },
       "LimitWindow": {
@@ -25918,6 +27257,290 @@
           "resetsAt",
           "scopeLabel",
           "severity"
+        ]
+      },
+      "AccountBench": {
+        "description": "An account taken out of placement until its window resets.",
+        "type": "object",
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "scope": {
+            "description": "The model scope it is exhausted for; null: every model.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "until": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "accountId",
+          "scope",
+          "until"
+        ]
+      },
+      "AccountCatalog": {
+        "description": "An account's model catalog as its Claude Code last reported it, and the\neffort each model ran at when a session asked for none (learned from the\nsessions themselves; absent until one has).",
+        "type": "object",
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "defaultEfforts": {
+            "type": "object"
+          },
+          "models": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ModelInfo"
+            }
+          },
+          "readAt": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "accountId",
+          "defaultEfforts",
+          "models",
+          "readAt"
+        ]
+      },
+      "ProviderForecast": {
+        "description": "A provider's accounts as a forecast: each account's windows, and which\naccount carries a person's new sessions (`yours`) and a session's\n(`delegates`) from now to the 5-hour horizon.",
+        "type": "object",
+        "properties": {
+          "accounts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccountForecast"
+            }
+          },
+          "delegates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CarrySpan"
+            }
+          },
+          "provider": {
+            "description": "Who bills the account. One provider for now; the column is generic.",
+            "type": "string",
+            "enum": [
+              "anthropic"
+            ]
+          },
+          "yours": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CarrySpan"
+            }
+          }
+        },
+        "required": [
+          "accounts",
+          "delegates",
+          "provider",
+          "yours"
+        ]
+      },
+      "AccountForecast": {
+        "type": "object",
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "lastSeenAt": {
+            "description": "When its Claude Code last reported; null: never.",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "windows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WindowForecast"
+            }
+          }
+        },
+        "required": [
+          "accountId",
+          "lastSeenAt",
+          "windows"
+        ]
+      },
+      "WindowForecast": {
+        "description": "One window of an account, and where it is heading: `pace` is percent per\nhour from the account's successive readings in this window, null when no\nsession runs on it (nothing CawCo can see is spending it); `runsOutAt` is\nwhen it reaches 100% at that pace, only when that lands before its reset.\nA window past its reset with no newer reading is a fresh one: 0%, no pace.",
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "pace": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "resetsAt": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "runsOutAt": {
+            "type": "number"
+          },
+          "scopeLabel": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "utilization": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "kind",
+          "pace",
+          "resetsAt",
+          "scopeLabel",
+          "utilization"
+        ]
+      },
+      "CarrySpan": {
+        "description": "Which account carries new sessions from `from` to `to`; null: none can.",
+        "type": "object",
+        "properties": {
+          "accountId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "from": {
+            "type": "number"
+          },
+          "to": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "accountId",
+          "from",
+          "to"
+        ]
+      },
+      "AccountSigninResult": {
+        "description": "How a sign-in ended, and what the dir's Claude Code said once it had.\n`mismatch`: the dir signed in as someone other than the account already\nis, so the machine logged that dir out again.",
+        "type": "object",
+        "properties": {
+          "probe": {
+            "$ref": "#/components/schemas/AccountProbe",
+            "description": "What Claude Code's own initialize response says about a config dir: who it\nis signed in as (absent when nobody is), its plan, and the models it\noffers. Read by a probe (a session that never takes a turn) and by every\nsession as it starts."
+          },
+          "state": {
+            "$ref": "#/components/schemas/SigninState"
+          }
+        },
+        "required": [
+          "state"
+        ]
+      },
+      "AccountProbe": {
+        "description": "What Claude Code's own initialize response says about a config dir: who it\nis signed in as (absent when nobody is), its plan, and the models it\noffers. Read by a probe (a session that never takes a turn) and by every\nsession as it starts.",
+        "type": "object",
+        "properties": {
+          "identity": {
+            "$ref": "#/components/schemas/AccountIdentity",
+            "description": "Who an account is, as Claude Code's initialize response reports it\n(`account.email`, `account.organization` — the organization's name)."
+          },
+          "models": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ModelInfo"
+            }
+          },
+          "subscriptionType": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "models"
+        ]
+      },
+      "UsageLimitsResponse": {
+        "description": "What `/api/usage/limits` returns: every machine's latest readings. A\nmachine's Claude limits are those of the account it runs Claude Code on by\ndefault (its `~/.claude` login), else of the first account signed in there.",
+        "type": "object",
+        "properties": {
+          "machines": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "hostname": {
+                  "type": "string"
+                },
+                "limits": {
+                  "$ref": "#/components/schemas/ClaudeLimits"
+                },
+                "machineId": {
+                  "type": "string"
+                },
+                "openCodeGo": {
+                  "$ref": "#/components/schemas/OpenCodeGoLimits"
+                }
+              },
+              "required": [
+                "hostname",
+                "limits",
+                "machineId"
+              ]
+            }
+          }
+        },
+        "required": [
+          "machines"
+        ]
+      },
+      "ClaudeLimits": {
+        "description": "A Claude account's limits, as its sessions' Claude Code reported them\n(`rate_limit_event`, `accountInfo()`). A window whose `resetsAt` has passed\nwith no newer report reads 0%.",
+        "type": "object",
+        "properties": {
+          "error": {
+            "description": "Why there are no windows: nothing on the account has reported any yet.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "fetchedAt": {
+            "description": "When Claude Code last reported on the account.",
+            "type": "number"
+          },
+          "subscription": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "windows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LimitWindow"
+            }
+          }
+        },
+        "required": [
+          "error",
+          "fetchedAt",
+          "subscription",
+          "windows"
         ]
       },
       "OpenCodeGoLimits": {
@@ -27218,6 +28841,9 @@
         "description": "A `system` frame. One loose interface rather than a subtype union: the folding\nlayer switches on `subtype` and reads the fields each subtype carries, and a\nharness that emits a subtype nothing here names degrades to a generic line.",
         "type": "object",
         "properties": {
+          "account": {
+            "$ref": "#/components/schemas/AccountProbe"
+          },
           "commands": {
             "type": "array",
             "items": {
@@ -27334,6 +28960,9 @@
             ],
             "type": "string"
           },
+          "rate_limit_info": {
+            "$ref": "#/components/schemas/ObservedRateLimitInfo"
+          },
           "raw": {},
           "read": {
             "type": "array",
@@ -27436,6 +29065,71 @@
           "subtype",
           "type"
         ]
+      },
+      "ObservedRateLimitInfo": {
+        "description": "The `rate_limit_info` payload, structurally. Not imported from the agent\nSDK: `unifiedWindows` is marked `@internal` there, so it is stripped from\nthe published `.d.ts` even though the CLI emits it.",
+        "type": "object",
+        "properties": {
+          "isUsingOverage": {
+            "type": "boolean"
+          },
+          "overageDisabledReason": {
+            "type": "string"
+          },
+          "overageResetsAt": {
+            "type": "number"
+          },
+          "overageStatus": {
+            "type": "string"
+          },
+          "rateLimitType": {
+            "type": "string"
+          },
+          "resetsAt": {
+            "type": "number"
+          },
+          "status": {
+            "type": "string"
+          },
+          "unifiedWindows": {
+            "type": "object",
+            "properties": {
+              "five_hour": {
+                "type": "object",
+                "properties": {
+                  "utilization": {
+                    "type": "number"
+                  },
+                  "resetsAt": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "resetsAt",
+                  "utilization"
+                ]
+              },
+              "seven_day": {
+                "type": "object",
+                "properties": {
+                  "utilization": {
+                    "type": "number"
+                  },
+                  "resetsAt": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "resetsAt",
+                  "utilization"
+                ]
+              }
+            }
+          },
+          "utilization": {
+            "type": "number"
+          }
+        }
       },
       "NeutralRawMessage": {
         "description": "A frame that has no neutral meaning yet, forwarded whole for a future renderer.",

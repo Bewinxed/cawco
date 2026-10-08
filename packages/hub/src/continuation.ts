@@ -40,7 +40,8 @@ export interface ContinuationSource {
 /** What "continue in new session" is asked: who summarises, what starts. */
 export interface ContinueRequest {
   note?: string;
-  summarizer: { harness: HarnessKind; model: string };
+  /** Absent `model`: the harness's own default. */
+  summarizer: { harness: HarnessKind; model?: string };
   /** The same options a dashboard spawn sends; machine and cwd default to the source's. */
   target: {
     bootstrap?: { repo: string; baseDir: string };
@@ -48,7 +49,8 @@ export interface ContinueRequest {
     effort?: EffortLevel;
     harness: HarnessKind;
     machineId?: string;
-    model: string;
+    /** Absent: the harness's own default. */
+    model?: string;
     /** The mode asked for; settled with the fallback by the hub's one rule (`settleMode`). */
     permissionMode?: PermissionMode;
     /** The caller's own mode, taken when none is asked and the harness has modes. */

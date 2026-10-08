@@ -5,6 +5,8 @@ import type { ToolStatus } from "./tools";
 // A project's views: CawCo's A2UI catalog, a view's file, and the data it binds to.
 // biome-ignore lint/performance/noBarrelFile: this is the package's public API surface — packages/core's consumers (hub, cli, dashboard) import from "@cawco/core" as one module, not per-file.
 export * from "./a2ui-catalog";
+// Accounts: several sign-ins per provider, and which one a session runs on.
+export * from "./accounts";
 // "Continue in new session": the size rules the hub and the dashboard share.
 export * from "./archive";
 // Files and texts a turn carries, and the line naming each attached file.
@@ -61,9 +63,7 @@ export * from "./tools";
 export { TRANSCRIPT_PAGE, TranscriptBuilder } from "./transcript";
 export { COMPACT_SUMMARY_KIND, getToolGlance } from "./transcript-rules";
 export * from "./transcript-types";
-// Usage, cost & limits (USAGE-SPEC.md §4). Pure types/math only; `limits.ts`
-// reads credentials with node:fs and lives under the `@cawco/core/usage/limits`
-// subpath instead.
+// Usage, cost & limits (USAGE-SPEC.md §4). Pure types/math only.
 export * from "./usage";
 
 // sessiond's protocol types are deliberately NOT re-exported here. That module
@@ -71,7 +71,7 @@ export * from "./usage";
 // is imported by the dashboard — a browser bundle, where Vite externalises
 // `node:*` and the first property access throws, taking the whole client module
 // down with it. Import them from `@cawco/core/sessiond` instead; the subpath
-// export exists for exactly that, as `./usage/limits` already does.
+// export exists for exactly that, as `./usage/opencode-go` already does.
 
 // How a session with no given title names itself: its first user message,
 // cleaned. Shared so the hub's derived title and the dashboard's transcript
@@ -114,6 +114,21 @@ export interface Envelope<T = unknown> {
  * that is never stored (a spin-off's transcript).
  */
 export interface SpawnPayload {
+  /**
+   * The account the session must run on, picked by whoever started it (the
+   * dashboard, `delegate`, `start_session`). The hub refuses a pick the
+   * session's machine, project or task does not allow, and never forwards
+   * this field: what reaches the machine is {@link accountDir}.
+   */
+  account?: string;
+  /**
+   * The account the hub placed the session on, and where its Claude Code
+   * config dir is on the machine: its own `~/.cawco/accounts/<id>/claude`, or
+   * the machine's `~/.claude` (`home`). Set by the hub on every spawn of a
+   * session with an account — the first and every revive, restore and
+   * relaunch — and never by a client.
+   */
+  accountDir?: { accountId: string; home: boolean };
   /**
    * Start from a repository instead of a directory that is already there: the
    * agent clones `repo` — `owner/name`, or any URL git understands — into a

@@ -29,8 +29,6 @@ import {
   type BinaryUpdateState,
 } from "@cawco/core/binary-updates";
 import { sessiondEndpoint } from "@cawco/core/sessiond";
-import { fetchClaudeLimits } from "@cawco/core/usage/limits";
-import { mergeObserved } from "@cawco/core/usage/observed";
 import { fetchOpenCodeGoLimits } from "@cawco/core/usage/opencode-go";
 import { Data, Duration, Effect, Fiber, Schedule } from "effect";
 import {
@@ -1096,7 +1094,7 @@ const attach = (
     );
 
     // Usage, cost & limits (USAGE-SPEC.md §5): scan the machine's transcripts
-    // and opencode DB, then report absolute bucket totals with the live limit
+    // and opencode DB, then report absolute bucket totals with OpenCode Go's
     // windows. A scan failure must never kill the daemon — it hosts the user's
     // live sessions — so the whole tick is caught and logged.
     yield* Effect.forkScoped(
@@ -1107,21 +1105,16 @@ const attach = (
             rebuilt ? scanner.fullRebuild() : scanner.incremental()
           );
           const buckets = scanner.reportBuckets(Date.now());
-          // The poll is the fallback, not the source: it alone carries plan
-          // tier, spend and the scoped windows, but the session stream has
-          // already reported the session and weekly windows straight off the
-          // response headers, for free. `mergeObserved` lays those over it.
-          const limits = mergeObserved(
-            yield* Effect.promise(() => fetchClaudeLimits())
-          );
           // The OpenCode Go plan's windows, when this machine holds a Go key.
+          // Claude's limits are its accounts', which each session's Claude
+          // Code reports as it runs.
           const openCodeGo = yield* Effect.promise(() =>
             fetchOpenCodeGoLimits()
           );
           send(socket, {
             verb: "usage",
             machineId: identity.machineId,
-            payload: { buckets, limits, openCodeGo },
+            payload: { buckets, openCodeGo },
           });
         }).pipe(
           Effect.catchDefect((error) =>

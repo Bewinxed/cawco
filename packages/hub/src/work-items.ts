@@ -346,6 +346,8 @@ export const resolveSpawnType = (
 
 /** What `delegate` asks for. */
 export interface WorkItemRequest {
+  /** The account its session must run on (an id or label); placement chooses when absent. */
+  account?: string;
   /** What it may spend before the hub stops it; the project's default fills what this leaves out. */
   budget?: WorkBudget;
   canDelegate?: boolean;
@@ -538,6 +540,7 @@ const leaf = (path: string): string =>
  * resumes the parent's conversation under `forkOf`, its current session key.
  */
 interface Settings {
+  account?: string;
   canDelegate: boolean;
   forkOf?: string;
   harness: HarnessKind;
@@ -562,11 +565,12 @@ const spawnOf = (
   title: string,
   parent: InstanceRow,
   workspace: WorkspaceRow,
-  { canDelegate, forkOf, harness, model, skills, type }: Settings
+  { account, canDelegate, forkOf, harness, model, skills, type }: Settings
 ): SpawnPayload => ({
   instanceId,
   cwd: workspace.path,
   harness,
+  ...(account ? { account } : {}),
   ...(parent.projectId ? { projectId: parent.projectId } : {}),
   ...(forkOf ? { resume: { sessionKey: forkOf, fork: true } } : {}),
   ...(model ? { model } : {}),
@@ -1658,6 +1662,7 @@ export const createWorkItems = ({
       model,
       skills: request.skills?.length ? request.skills : type?.skills,
       canDelegate: request.canDelegate ?? type?.canDelegate ?? false,
+      ...(request.account ? { account: request.account } : {}),
     };
     return request.fork
       ? { ...settings, ...forkOf(request, parent) }
@@ -1682,6 +1687,12 @@ export const createWorkItems = ({
     }
     const harness = parent.harness as HarnessKind;
     const model = parent.model ?? undefined;
+    if (request.account) {
+      throw new WorkItemRefusal(
+        400,
+        "A fork runs on its parent's account, which is what keeps the prompt cache. Drop account, or delegate without fork."
+      );
+    }
     if (
       (request.harness && request.harness !== harness) ||
       (request.model && request.model !== model)

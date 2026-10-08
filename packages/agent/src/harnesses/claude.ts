@@ -11,8 +11,7 @@
  */
 
 import type { Dirent } from "node:fs";
-import { access, readdir, readFile, realpath } from "node:fs/promises";
-import { homedir } from "node:os";
+import { access, readdir, realpath } from "node:fs/promises";
 import { join } from "node:path";
 import {
   deleteSession,
@@ -29,6 +28,8 @@ import {
   tagSession,
 } from "@anthropic-ai/claude-agent-sdk";
 import type {
+  AccountIdentity,
+  AccountKind,
   AuthState,
   EffortLevel,
   HarnessCapabilities,
@@ -46,9 +47,14 @@ import type {
   UserQuestionResult,
 } from "@cawco/core";
 import {
+  ACCOUNT_READ,
   ASK_USER_QUESTION,
   CAWCO_ENV,
   CLAUDE_CONVERSATION_GONE,
+  CONTROL_BEGIN_ACCOUNT_LOGIN,
+  CONTROL_COMPLETE_ACCOUNT_LOGIN,
+  CONTROL_FORGET_ACCOUNT,
+  CONTROL_PROBE_ACCOUNT,
   CONTROL_READ_SESSION_CONTEXT,
   CONTROL_SET_EFFORT,
   CONTROL_SET_MODEL,
@@ -57,9 +63,11 @@ import {
   EFFORT_READ,
   INSPECT_CONFIG,
   INSTALL_SESSION_CREDENTIAL,
+  identityOf,
   MARKETPLACE_CATALOG,
   MESSAGES_HELD,
   MESSAGES_READ,
+  RATE_LIMIT_READ,
   READ_HOOK_SCRIPT,
   READ_MEMORY_FILE,
   READ_SKILL_FILES,
@@ -69,7 +77,7 @@ import {
 } from "@cawco/core";
 import { claudeConfigDirs } from "@cawco/core/paths";
 import { sessiondEndpoint } from "@cawco/core/sessiond";
-import { observeRateLimit } from "@cawco/core/usage/observed";
+import { accountEnv, accountReports, probeAccount } from "../accounts";
 import {
   claudeExecutableOptions,
   probeAuth,
@@ -98,7 +106,13 @@ import type {
   HarnessSession,
   TurnExtras,
 } from "../harness";
-import { beginLogin, completeLogin } from "../login";
+import {
+  beginAccountLogin,
+  beginLogin,
+  completeAccountLogin,
+  completeLogin,
+  forgetAccount,
+} from "../login";
 import { parseProcId, procIdFor } from "../proc-id";
 // Type-only, and deliberately so: `session.ts` imports the harness registry
 // this file is part of, so a value import here would close a module cycle.
@@ -1091,6 +1105,36 @@ class ClaudeSession implements HarnessSession {
     this.#pump = this.#pumpMessages(ctx, handle, turn);
     // biome-ignore lint/complexity/noVoid: the reading is said as a frame when it lands; nothing waits for it
     void this.#readEffort();
+    // biome-ignore lint/complexity/noVoid: the reading is said as a frame when it lands; nothing waits for it
+    void this.#readAccount();
+  }
+
+  /**
+   * Says what the session's Claude Code answered at initialize
+   * ({@link ACCOUNT_READ}): who its account is, its plan, and the models it
+   * offers. The hub keeps it as the account's catalog, so a picker has it
+   * with nothing running.
+   */
+  async #readAccount(): Promise<void> {
+    try {
+      const init = await this.#handle.initializationResult();
+      const identity = identityOf(init.account);
+      this.#ctx.frame({
+        type: "system",
+        subtype: ACCOUNT_READ,
+        account: {
+          models: init.models as ModelInfo[],
+          ...(identity ? { identity } : {}),
+          ...(init.account.subscriptionType
+            ? { subscriptionType: init.account.subscriptionType }
+            : {}),
+        },
+      });
+    } catch (error) {
+      console.warn(
+        `[claude] ${this.instanceId}: initialize read failed: ${String(error)}`
+      );
+    }
   }
 
   /**
@@ -1165,12 +1209,15 @@ class ClaudeSession implements HarnessSession {
             ctx.busy(true);
           }
         }
-        // Free account-wide limit data: Claude Code read these off its own
-        // response headers, so they are fresher than anything the polled
-        // `/api/oauth/usage` can return — and cost no request of our own. Only
-        // the reading is kept; the event is not a transcript frame.
+        // The account's limits as Claude Code read them off its own response
+        // headers, the only source CawCo has: passed to the hub as the
+        // session's account's reading, and never a transcript frame.
         if (message.type === "rate_limit_event") {
-          observeRateLimit(message.rate_limit_info);
+          ctx.frame({
+            type: "system",
+            subtype: RATE_LIMIT_READ,
+            rate_limit_info: message.rate_limit_info,
+          });
           continue;
         }
         if (this.#hookFailure(message)) {
@@ -1828,212 +1875,27 @@ const readAsk = (
  */
 const RING_START = 0;
 
-async function listAccountModels(): Promise<
-  { id: string; display_name: string; created_at: string }[] | undefined
-> {
-  try {
-    const headers: Record<string, string> = {
-      "anthropic-version": "2023-06-01",
-    };
-    if (process.env.ANTHROPIC_API_KEY) {
-      headers["x-api-key"] = process.env.ANTHROPIC_API_KEY;
-    } else {
-      const credentials = JSON.parse(
-        await readFile(
-          join(
-            process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude"),
-            ".credentials.json"
-          ),
-          "utf8"
-        )
-      );
-      const token = credentials.claudeAiOauth?.accessToken;
-      if (!token) {
-        return undefined;
-      }
-      headers.Authorization = `Bearer ${token}`;
-      headers["anthropic-beta"] = "oauth-2025-04-20";
-    }
-    const models: { id: string; display_name: string; created_at: string }[] =
-      [];
-    const url = new URL("https://api.anthropic.com/v1/models?limit=100");
-    let hasMore: boolean;
-    do {
-      // biome-ignore lint/performance/noAwaitInLoops: each page needs the previous page's cursor
-      const response = await fetch(url, { headers });
-      if (!response.ok) {
-        return undefined;
-      }
-      const page = (await response.json()) as {
-        data: typeof models;
-        has_more: boolean;
-        last_id: string;
-      };
-      models.push(...page.data);
-      hasMore = page.has_more;
-      url.searchParams.set("after_id", page.last_id);
-    } while (hasMore);
-    return models;
-  } catch {
-    return undefined;
-  }
-}
-
-/** The `[1m]` context suffix an alias's model id may carry. */
-const CONTEXT_SUFFIX = /\[1m\]$/;
-
-/**
- * The model catalog this machine's Claude Code and account offer, probed
- * independently of any session.
- * The SDK supplies CLI aliases and effort capabilities, while the Anthropic
- * models endpoint supplies the full account catalog. Both are queried concurrently
- * and merged alias-first so concrete model IDs do not disappear behind aliases.
- *
- * `supportedModels()` is a `Query` method, which is why this used to be asked
- * of whatever session happened to be running — but a `Query` is not a session.
- * One can be spawned to be asked and thrown away: `maxTurns: 0` with an empty
- * prompt reaches no model and spends nothing, and `persistSession: false`
- * leaves no session behind. Roughly a second, once per agent.
- *
- * A probe that fails answers `undefined`, not `[]`: a machine that cannot say
- * what models it has is not a machine offering none, and the report keeps that
- * difference (see {@link HarnessReport.models}). It never throws — a catalog it
- * could not read is no reason for the machine to fail to report itself at all.
- */
-async function probeModels(): Promise<ModelInfo[] | undefined> {
-  const [aliases, accountModels] = await Promise.all([
-    (async (): Promise<ModelInfo[] | undefined> => {
-      try {
-        const handle = query({
-          prompt: "",
-          options: {
-            maxTurns: 0,
-            persistSession: false,
-            ...claudeExecutableOptions(),
-          },
-        });
-        try {
-          const models = await handle.supportedModels();
-          const measured: ModelInfo[] = [];
-          for (const model of models) {
-            // biome-ignore lint/performance/noAwaitInLoops: each read must follow its alias's switch on the same probe handle
-            await handle.setModel(model.value);
-            const settings = await (
-              handle as unknown as {
-                getSettings: () => Promise<{
-                  applied?: { effort?: EffortLevel | null };
-                }>;
-              }
-            ).getSettings();
-            const defaultEffort = settings.applied?.effort;
-            measured.push({
-              ...model,
-              ...(defaultEffort === undefined ? {} : { defaultEffort }),
-            });
-          }
-          return measured;
-        } finally {
-          // Tearing the child down takes longer than the answer did, and nothing
-          // waits on it — the catalog is already in hand.
-          // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — disposal has no result anyone reads, and awaiting it would double how long `detect()` blocks
-          void handle.return().catch(() => {
-            // the child is going away regardless; a failure to close it politely is
-            // not something the report should carry
-          });
-        }
-      } catch (error) {
-        console.warn(`[claude] model probe failed: ${String(error)}`);
-        return undefined;
-      }
-    })(),
-    listAccountModels(),
-  ]);
-  if (!(aliases || accountModels)) {
-    return undefined;
-  }
-  const defaultModel = aliases?.find((model) => model.value === "default");
-  const values = new Set(aliases?.map((model) => model.value));
-  // An alias resolves to a concrete model (`sonnet` → `claude-sonnet-5`, with
-  // or without a `[1m]` context suffix), so it carries that model's release.
-  const releasedById = new Map(
-    (accountModels ?? []).map((model) => [
-      model.id,
-      model.created_at.slice(0, 10),
-    ])
-  );
-  const dated = (aliases ?? []).map((alias) => {
-    const released = releasedById.get(
-      (alias.resolvedModel ?? alias.value).replace(CONTEXT_SUFFIX, "")
-    );
-    return released ? { ...alias, released } : alias;
-  });
-  return [
-    ...dated,
-    ...(accountModels ?? [])
-      .filter((model) => !values.has(model.id))
-      .sort((a, b) => b.created_at.localeCompare(a.created_at))
-      .map((model) => {
-        const alias = aliases?.find(
-          (row) =>
-            row.resolvedModel?.replace(CONTEXT_SUFFIX, "") === model.id &&
-            row.defaultEffort !== undefined
-        );
-        return {
-          value: model.id,
-          resolvedModel: model.id,
-          displayName: model.display_name,
-          released: model.created_at.slice(0, 10),
-          description: `Released ${model.created_at.slice(0, 10)}`,
-          ...(alias ? { defaultEffort: alias.defaultEffort } : {}),
-          ...(defaultModel
-            ? {
-                supportsEffort: defaultModel.supportsEffort,
-                supportedEffortLevels: defaultModel.supportedEffortLevels,
-                supportsAdaptiveThinking: defaultModel.supportsAdaptiveThinking,
-              }
-            : {}),
-        };
-      }),
-  ];
-}
-
 export class ClaudeHarness implements Harness {
   readonly kind = "claude" as const;
   readonly capabilities = CLAUDE_CAPABILITIES;
   auth: AuthState = "authenticated";
 
   /**
-   * The catalog, probed at most once per agent. Held as the promise rather than
-   * its result so that concurrent `detect()` calls — registration and a
-   * reannounce racing — share one probe instead of spawning a CLI each.
+   * The machine's Claude Code: installed or not, whether `~/.claude` is
+   * signed in, and every account dir's sign-in. No model catalog: that is
+   * each account's, which its sessions' initialize responses report and the
+   * hub keeps.
    */
-  #models: Promise<ModelInfo[] | undefined> | undefined;
-
   async detect(): Promise<HarnessReport> {
-    const auth = await probeAuth();
+    const [auth, accounts] = await Promise.all([probeAuth(), accountReports()]);
     this.auth = auth;
-    const installed = resolveClaudeExecutable() !== undefined;
-    // Nothing to ask when there is no CLI to ask, and an unauthenticated one
-    // answers about an account that is not there.
-    if (installed && auth === "authenticated") {
-      // A probe that failed is not an answer worth keeping: forget it so the
-      // next report asks again, rather than making one bad moment at startup
-      // the machine's catalog for as long as the agent lives.
-      this.#models ??= probeModels().then((list) => {
-        if (!list) {
-          this.#models = undefined;
-        }
-        return list;
-      });
-    }
-    const models = await this.#models;
     return {
       harness: "claude",
-      installed,
+      installed: resolveClaudeExecutable() !== undefined,
       version: undefined,
       auth,
       capabilities: CLAUDE_CAPABILITIES,
-      ...(models ? { models } : {}),
+      accounts,
     };
   }
 
@@ -2080,11 +1942,23 @@ export class ClaudeHarness implements Harness {
       throw new Error(CLAUDE_CONVERSATION_GONE);
     }
     const fleetDenyList = await sessionFleetDenials(spec.cawcoTodos);
+    // The session's account: its Claude Code runs in that account's config
+    // dir, where its credential and transcripts are. The machine's own
+    // `~/.claude` needs nothing set.
+    const account =
+      spec.accountDir && !spec.accountDir.home
+        ? spec.accountDir.accountId
+        : null;
+    const options = spec.options as
+      | { env?: Record<string, string | undefined> }
+      | undefined;
     return new ClaudeSession(
       ctx.instanceId,
       ctx,
       ctx.cwd,
-      spec.options,
+      account
+        ? { ...options, env: { ...options?.env, ...accountEnv(account) } }
+        : spec.options,
       spec.permissionMode,
       spec.model,
       spec.effort,
@@ -2406,6 +2280,18 @@ export class ClaudeHarness implements Harness {
         return beginLogin();
       case "completeLogin":
         return completeLogin(args[0] as string);
+      case CONTROL_BEGIN_ACCOUNT_LOGIN:
+        return beginAccountLogin(args[0] as string, args[1] as AccountKind);
+      case CONTROL_COMPLETE_ACCOUNT_LOGIN:
+        return completeAccountLogin(
+          args[0] as string,
+          args[1] as string,
+          (args[2] as AccountIdentity | null) ?? null
+        );
+      case CONTROL_FORGET_ACCOUNT:
+        return forgetAccount(args[0] as string);
+      case CONTROL_PROBE_ACCOUNT:
+        return probeAccount((args[0] as string | null) ?? null);
       case "unlockKeychain":
         return unlockKeychain(args[0] as string);
       case "probeAuth":

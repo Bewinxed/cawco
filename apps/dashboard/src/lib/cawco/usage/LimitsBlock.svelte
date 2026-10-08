@@ -19,15 +19,12 @@
   import HarnessGlyph from "../HarnessGlyph.svelte";
   import MachineLogin from "../MachineLogin.svelte";
   import {
-    capMoney,
     claudeGap,
-    fillState,
     firstToStop,
     type LimitRow,
     limitRows,
     type Meter,
     money,
-    planName,
     projectionNote,
     projectionSentence,
     readAgo,
@@ -53,30 +50,6 @@
 
   const claudeRows = $derived(limitRows("Claude", claude?.reading, now));
   const goRows = $derived(limitRows("opencode", go?.reading, now));
-
-  /**
-   * Claude's extra usage: real money past the plan against a monthly cap.
-   * Only when a cap is set; it has no clock to pace against, so no tick, and
-   * it never stops a session, so it never leads the block.
-   */
-  const extra = $derived.by(() => {
-    const r = claude?.reading;
-    if (
-      !r ||
-      r.spendLimit === null ||
-      r.spendLimit <= 0 ||
-      r.spendUsed === null
-    ) {
-      return null;
-    }
-    const used = (r.spendUsed / r.spendLimit) * 100;
-    return {
-      used,
-      state: r.stale ? ("stale" as const) : fillState(used),
-      amount: `${money(r.spendUsed)} of ${capMoney(r.spendLimit)}`,
-      resetsAt: r.spendResetsAt,
-    };
-  });
 
   /** Why there is no Claude bar, and what to do about it (usage.ts `claudeGap`). */
   const claudeUnknown = $derived(
@@ -154,12 +127,6 @@
         <header class="provider">
           <span class="glyph"><HarnessGlyph harness="claude" /></span>
           <span class="name">Claude</span>
-          {#if claude && planName(claude.reading.planTier)}
-            <span class="plan">· {planName(claude.reading.planTier)}</span>
-          {/if}
-          {#if claude?.reading.stale}
-            <span class="age">{readAgo(claude.reading.fetchedAt, now)}</span>
-          {/if}
         </header>
         {#if claudeUnknown}
           <div class="unknown">
@@ -180,37 +147,6 @@
           </div>
         {:else}
           {@render windows(claudeRows)}
-          {#if extra}
-            <div class="row extra" data-state={extra.state}>
-              <span class="label">Extra usage</span>
-              <span class="bar">
-                <LimitBar
-                  elapsed={null}
-                  label="Extra usage"
-                  state={extra.state}
-                  used={extra.used}
-                />
-              </span>
-              <span class="amount num">
-                {#if extra.state === "near"}
-                  <Attention aria-label="Near the cap" class="status" />
-                {:else if extra.state === "over" || extra.state === "reached"}
-                  <Failed
-                    aria-label={extra.state === "reached"
-                      ? "Cap reached"
-                      : "Nearly at the cap"}
-                    class="status"
-                  />
-                {/if}
-                {extra.amount}
-                {#if extra.resetsAt}
-                  <span class="resets"
-                    >· resets {resetLabel(extra.resetsAt, now)}</span
-                  >
-                {/if}
-              </span>
-            </div>
-          {/if}
         {/if}
       </div>
 
@@ -404,18 +340,7 @@
     font: var(--type-label);
     color: var(--ink-strong);
   }
-  /* Extra usage's money stands at the bar's tip, across the percent and
-     reset columns: "$12.40 of $330". */
-  .amount {
-    grid-column: 3 / -1;
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-1);
-    font: var(--type-label);
-    color: var(--ink-strong);
-  }
-  .used :global(.status),
-  .amount :global(.status) {
+  .used :global(.status) {
     inline-size: 16px;
     block-size: 16px;
   }
@@ -486,9 +411,6 @@
       grid-area: bar;
     }
     .row > .resets {
-      grid-area: resets;
-    }
-    .row > .amount {
       grid-area: resets;
     }
     .spend .label {

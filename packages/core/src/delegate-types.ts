@@ -11,6 +11,12 @@ import { EFFORT_LEVELS, type EffortLevel, type HarnessKind } from "./harness";
 /** One named preset. `name` is the key a `delegate` call's `type` asks for. */
 export interface DelegateType {
   /**
+   * The account its sessions prefer, when placement allows it (the machine,
+   * project and task allow it, and it is not benched or past its reserve).
+   * Absent: the provider's strategy chooses.
+   */
+  account?: string;
+  /**
    * Whether a delegate of this type may itself delegate (or start sessions)
    * when the `delegate` call did not say. `false` (and absent) means a leaf —
    * the same default a bare `delegate` call gets; `true` makes the type a

@@ -222,8 +222,8 @@
     if (error === "not signed in") {
       return `${name} · sign in on a machine to see its limits`;
     }
-    if (error === "token expired") {
-      return `${name} · login expired, sign in again on a machine`;
+    if (error === "no reading yet") {
+      return `${name} · limits appear once a session runs`;
     }
     return KEY_REFUSED.test(error)
       ? `${name} · key not accepted, sign in again on a machine`

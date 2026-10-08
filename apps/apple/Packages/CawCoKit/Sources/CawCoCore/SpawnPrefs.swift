@@ -70,41 +70,39 @@ public final class SpawnPrefs {
         }
     }
 
-    /// What the New Session form shows before anything is touched, for a
-    /// spawn that has no form (`spawnDefaults`): the machine's default model
-    /// entry by the model it resolves to, and the remembered permission mode
-    /// unless the machine's harness cannot honour it, then the first one it
-    /// can. A harness that reports no modes at all (pi) has none. With no
-    /// form there is no Full Send warning to read: a remembered Full Send
-    /// gives Bypass (`unpicked`).
-    public func formDefaults(harness: Harness, machine: MachineRow?) -> (model: String, permissionMode: PermissionMode?) {
+    /// The permission mode the New Session form shows before anything is
+    /// touched, for a spawn that has no form (`spawnDefaults`): the
+    /// remembered one unless the machine's harness cannot honour it, then the
+    /// first one it can. A harness that reports no modes at all (pi) has
+    /// none. With no form there is no Full Send warning to read: a remembered
+    /// Full Send gives Bypass (`unpicked`). No model: a spawn that names none
+    /// runs on its harness's own default.
+    public func formDefaults(harness: Harness, machine: MachineRow?) -> PermissionMode? {
         let report = machine?.harnesses?.first { $0.harness.rawValue == harness.rawValue }
-        let resolved = report?.models?.first { $0.value == "default" }?.resolvedModel
-        let model = resolved.flatMap { $0 == "default" ? nil : $0 } ?? ""
         let remembered = Self.unpicked(permissionMode)
-        guard let report else { return (model, remembered) }
+        guard let report else { return remembered }
         let honoured = Set(report.capabilities.permissionModes.map(\.rawValue))
-        if honoured.isEmpty { return (model, nil) }
-        if honoured.contains(remembered.rawValue) { return (model, remembered) }
-        return (model, Self.offeredModes.first { honoured.contains($0.rawValue) } ?? remembered)
+        if honoured.isEmpty { return nil }
+        if honoured.contains(remembered.rawValue) { return remembered }
+        return Self.offeredModes.first { honoured.contains($0.rawValue) } ?? remembered
     }
 }
 
 extension HubConnection {
     /// A spawn as it leaves this app (client.svelte.ts `explicit`): a model
-    /// named wherever one is known, and a permission mode named exactly when
-    /// its harness has modes. What the caller set stands; what it left out is
-    /// what the New Session form shows by default, never the machine's own.
+    /// only when one was picked (none runs on the harness's own default,
+    /// never an empty string), and a permission mode named exactly when its
+    /// harness has modes. What the caller set stands; a mode it left out is
+    /// the one the New Session form shows by default.
     public func explicit(machineId: String, _ payload: Components.Schemas.SpawnPayload) -> Components.Schemas.SpawnPayload {
         let harness = payload.harness ?? .claude
         let machine = fleet.machines.first { $0.machineId == machineId }
         let report = machine?.harnesses?.first { $0.harness.rawValue == harness.rawValue }
-        let defaults = spawnPrefs.formDefaults(harness: harness, machine: machine)
         var payload = payload
         // A harness with no permission modes is sent none, whatever the caller carried.
-        payload.permissionMode = report?.capabilities.permissionModes.isEmpty == true ? nil : (payload.permissionMode ?? defaults.permissionMode)
-        let model = payload.model.flatMap { $0.isEmpty ? nil : $0 } ?? defaults.model
-        payload.model = model.isEmpty ? nil : model
+        payload.permissionMode = report?.capabilities.permissionModes.isEmpty == true
+            ? nil : (payload.permissionMode ?? spawnPrefs.formDefaults(harness: harness, machine: machine))
+        payload.model = payload.model.flatMap { $0.isEmpty ? nil : $0 }
         return payload
     }
 

@@ -15,7 +15,6 @@ final class UsageLimitsCard: UsageCard {
     private var now = 0.0
     private var viewport = 0.0
     private var bars: [String: LimitBar] = [:]
-    private var extraBar: LimitBar?
 
     /// The grid's columns: the name, the percent, and between them the bar.
     private static let nameWidth = 120.0
@@ -63,10 +62,6 @@ final class UsageLimitsCard: UsageCard {
                 bar.configure(used: row.meter.used, elapsed: row.meter.elapsed, tone: Self.tone(row.meter.state),
                               reached: row.meter.state == .reached, paint: Self.paint(row.meter.state), label: row.label)
             }
-        }
-        if let extra = limits.extra, let extraBar {
-            extraBar.configure(used: extra.used, elapsed: nil, tone: Self.tone(extra.state), reached: extra.state == .reached,
-                               paint: Self.paint(extra.state), label: "Extra usage")
         }
         body.arrangedSubviews.forEach { $0.removeFromSuperview() }
         guard limits.read else {
@@ -134,12 +129,11 @@ final class UsageLimitsCard: UsageCard {
         grid.spacing = Space.space1
         var resets: [UIView] = []
 
-        grid.addArrangedSubview(provider(.claude, name: "Claude", plan: limits.claudePlan, age: limits.claudeAge, first: true))
+        grid.addArrangedSubview(provider(.claude, name: "Claude", plan: nil, age: nil, first: true))
         if let unknown = limits.claudeUnknown {
             grid.addArrangedSubview(self.unknown(unknown))
         } else {
             for row in limits.claudeRows { grid.addArrangedSubview(window(row, limits, &resets)) }
-            if let extra = limits.extra { grid.addArrangedSubview(self.extra(extra)) }
         }
         if limits.showGo {
             grid.addArrangedSubview(provider(.opencode, name: "opencode", plan: limits.goRows.isEmpty ? nil : "Go", age: limits.goAge, first: false))
@@ -286,45 +280,6 @@ final class UsageLimitsCard: UsageCard {
             name.widthAnchor.constraint(equalToConstant: Self.nameWidth),
             used.widthAnchor.constraint(equalToConstant: Self.usedWidth),
         ])
-        return framed(line, paint: paint)
-    }
-
-    /// `.row.extra`: Claude's extra usage against its cap, with no pace tick;
-    /// its money stands at the bar's tip, across the percent and reset columns.
-    private func extra(_ extra: UsageLimits.Extra) -> UIView {
-        let paint = Self.paint(extra.state)
-        let name = Self.name("Extra usage")
-        let bar = extraBar ?? LimitBar(height: 8)
-        extraBar = bar
-        bar.configure(used: extra.used, elapsed: nil, tone: Self.tone(extra.state), reached: extra.state == .reached, paint: paint, label: "Extra usage")
-        let money = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong)
-        money.tabular = true
-        money.text = extra.amount
-        var amountParts: [UIView] = []
-        if let glyph = Self.status(extra.state, near: "Near the cap", over: "Nearly at the cap", reached: "Cap reached") { amountParts.append(glyph) }
-        amountParts.append(money)
-        let amount = UIStackView(arrangedSubviews: amountParts)
-        amount.spacing = Space.space1
-        amount.alignment = .center
-        if let reset = extra.resetsAt {
-            let resets = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
-            resets.text = "· resets \(Usage.resetLabel(reset, now: now))"
-            amount.addArrangedSubview(resets)
-        }
-        amount.addArrangedSubview(UIView())
-        guard !narrow else {
-            let stack = UIStackView(arrangedSubviews: [name, bar, amount])
-            stack.axis = .vertical
-            stack.spacing = Space.space1
-            return framed(stack, paint: paint)
-        }
-        let line = UIStackView(arrangedSubviews: [name, bar, amount])
-        line.spacing = Space.space3
-        line.alignment = .center
-        name.widthAnchor.constraint(equalToConstant: Self.nameWidth).isActive = true
-        // The amount takes the percent column and whatever the resets take after it.
-        amount.widthAnchor.constraint(greaterThanOrEqualToConstant: Self.usedWidth).isActive = true
-        amount.setContentHuggingPriority(.required, for: .horizontal)
         return framed(line, paint: paint)
     }
 

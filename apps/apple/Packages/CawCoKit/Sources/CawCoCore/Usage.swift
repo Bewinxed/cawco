@@ -295,7 +295,7 @@ public enum Usage {
         if errors.isEmpty { return "\(name) · sign in on a machine to see its limits" }
         guard let error = errors.compactMap(\.self).first else { return nil }
         if error == "not signed in" { return "\(name) · sign in on a machine to see its limits" }
-        if error == "token expired" { return "\(name) · login expired, sign in again on a machine" }
+        if error == "no reading yet" { return "\(name) · limits appear once a session runs" }
         return error.hasPrefix("HTTP 401") || error.hasPrefix("HTTP 403")
             ? "\(name) · key not accepted, sign in again on a machine"
             : "\(name) · could not read limits: \(error)"
@@ -304,10 +304,10 @@ public enum Usage {
     /// `read`: the hub's limits have been read once; before that nothing is claimed absent.
     public static func strip(claude: [String: Components.Schemas.ClaudeLimits], go: [String: Components.Schemas.OpenCodeGoLimits],
                              read: Bool, now: Double) -> Strip {
-        let claudeReading = speaking(claude, error: \.error, stale: { $0.stale ?? false }, windows: \.windows)
+        let claudeReading = speaking(claude, error: \.error, stale: { _ in false }, windows: \.windows)
         let goReading = speaking(go, error: \.error, stale: { $0.stale ?? false }, windows: \.windows)
         let cells = [
-            cell("Claude", "Claude", windows: claudeReading?.windows, stale: claudeReading?.stale ?? false, fetchedAt: claudeReading?.fetchedAt ?? 0, now: now),
+            cell("Claude", "Claude", windows: claudeReading?.windows, stale: false, fetchedAt: claudeReading?.fetchedAt ?? 0, now: now),
             cell("opencode", "opencode Go", windows: goReading?.windows, stale: goReading?.stale ?? false, fetchedAt: goReading?.fetchedAt ?? 0, now: now),
         ].compactMap(\.self)
         let byMachine = { (readings: [String: String?]) in readings.sorted { $0.key < $1.key }.map(\.value) }

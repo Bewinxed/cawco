@@ -21,10 +21,6 @@
       "types": "./src/index.ts",
       "default": "./src/index.ts"
     },
-    "./usage/limits": {
-      "types": "./src/usage/limits.ts",
-      "default": "./src/usage/limits.ts"
-    },
     "./usage/opencode-go": {
       "types": "./src/usage/opencode-go.ts",
       "default": "./src/usage/opencode-go.ts"

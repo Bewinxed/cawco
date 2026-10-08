@@ -338,6 +338,8 @@ private final class RailButton: UIControl {
 
 final class ModelSectionView: UIView, UITextFieldDelegate {
     struct State {
+        /// The account a Claude session here would start on: whose catalog the list offers.
+        var accountId: String?
         var harness: String
         var installed: [String]
         var machineName: String
@@ -543,7 +545,9 @@ final class ModelSectionView: UIView, UITextFieldDelegate {
     }
 
     private var entries: [ModelEntry] {
-        ModelCatalog.entries(ModelCatalog.models(hub.fleet, harness: listHarness, machineIds: state.machineIds), use: SpawnMemory.use(listHarness))
+        ModelCatalog.entries(ModelCatalog.models(hub.fleet, harness: listHarness, machineIds: state.machineIds,
+                                                 accountId: listHarness == "claude" ? state.accountId : nil),
+                             use: SpawnMemory.use(listHarness))
     }
 
     /// The typed-in ids the catalogue does not cover (models.svelte.ts `recent`).

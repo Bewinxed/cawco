@@ -14,27 +14,12 @@ extension Usage {
     private static let hourMs = 60 * minuteMs
     private static let dayMs = 24 * hourMs
 
-    /// A cap as it is set (`capMoney`): "$330" when it is whole dollars, else to the cent.
-    public static func capMoney(_ n: Double) -> String {
-        guard n == n.rounded() else { return money(n) }
-        return "$\(n.formatted(.number.grouping(.automatic).precision(.fractionLength(0)).locale(Locale(identifier: "en_US"))))"
-    }
-
     /// 13.1M, 581M, 1.5k (`compactNumber`).
     public static func compactNumber(_ n: Double) -> String {
         func short(_ v: Double) -> String { v >= 100 ? String(Int(v.rounded())) : String(format: "%.1f", locale: Locale(identifier: "en_US_POSIX"), v) }
         if n >= 1_000_000 { return "\(short(n / 1_000_000))M" }
         if n >= 1000 { return "\(short(n / 1000))k" }
         return String(Int(n))
-    }
-
-    /// "default_claude_max_20x" → "Max 20x" (`planName`).
-    public static func planName(_ tier: String?) -> String? {
-        guard let tier, !tier.isEmpty else { return nil }
-        let bare = tier.hasPrefix("default_claude_") ? String(tier.dropFirst("default_claude_".count)) : tier
-        return bare.split(separator: "_", omittingEmptySubsequences: false)
-            .map { $0.prefix(1).uppercased() + $0.dropFirst() }
-            .joined(separator: " ")
     }
 
     /// When the window started, from its reset and its span (`windowStart`).
@@ -108,15 +93,6 @@ extension Usage {
 /// What the Limits block says: the window that stops you first, then every
 /// window by provider.
 public struct UsageLimits: Sendable {
-    /// Claude's extra usage: real money past the plan against a monthly cap.
-    public struct Extra: Sendable {
-        public let used: Double
-        public let state: Usage.State
-        /// "$12.40 of $330".
-        public let amount: String
-        public let resetsAt: String?
-    }
-
     /// Why there is no Claude bar, and what to do about it.
     public struct Unknown: Sendable {
         public let machineId: String?
@@ -131,10 +107,7 @@ public struct UsageLimits: Sendable {
     public let leadName: String
     public let sentence: String
     public let claudeRows: [Usage.Row]
-    public let claudePlan: String?
-    public let claudeAge: String?
     public let claudeUnknown: Unknown?
-    public let extra: Extra?
     /// The opencode group shows: it has windows, or there is spend to say.
     public let showGo: Bool
     public let goRows: [Usage.Row]
@@ -154,17 +127,10 @@ public struct UsageLimits: Sendable {
 
     @MainActor
     public static func read(fleet: FleetStore, now: Double) -> UsageLimits {
-        let claude = Usage.speaking(fleet.claudeLimits, error: \.error, stale: { $0.stale ?? false }, windows: \.windows)
+        let claude = Usage.speaking(fleet.claudeLimits, error: \.error, stale: { _ in false }, windows: \.windows)
         let go = Usage.speaking(fleet.openCodeGoLimits, error: \.error, stale: { $0.stale ?? false }, windows: \.windows)
-        let claudeRows = claude.map { Usage.rows(provider: "Claude", windows: $0.windows, stale: $0.stale ?? false, now: now) } ?? []
+        let claudeRows = claude.map { Usage.rows(provider: "Claude", windows: $0.windows, stale: false, now: now) } ?? []
         let goRows = go.map { Usage.rows(provider: "opencode", windows: $0.windows, stale: $0.stale ?? false, now: now) } ?? []
-
-        var extra: Extra?
-        if let claude, let limit = claude.spendLimit, limit > 0, let spent = claude.spendUsed {
-            let used = spent / limit * 100
-            extra = Extra(used: used, state: claude.stale == true ? .stale : Usage.fill(used),
-                          amount: "\(Usage.money(spent)) of \(Usage.capMoney(limit))", resetsAt: claude.spendResetsAt)
-        }
 
         var unknown: Unknown?
         if claude == nil {
@@ -174,10 +140,8 @@ public struct UsageLimits: Sendable {
                 switch first.value.error {
                 case "not signed in":
                     unknown = Unknown(machineId: known, reason: "Not signed in to Claude on \(host).", signIn: true)
-                case "token expired":
-                    unknown = Unknown(machineId: known, reason: "The Claude login on \(host) has expired.", signIn: true)
                 default:
-                    unknown = Unknown(machineId: known, reason: "Anthropic did not answer the limit read (\(first.value.error ?? "null")). The next read is automatic.", signIn: false)
+                    unknown = Unknown(machineId: known, reason: "Claude Code has not reported the limits of \(host)'s account yet; they appear once a session runs there.", signIn: false)
                 }
             } else {
                 unknown = Unknown(machineId: nil, reason: "No machine has reported a Claude reading yet.", signIn: false)
@@ -202,10 +166,7 @@ public struct UsageLimits: Sendable {
             leadName: leadName,
             sentence: lead.map { Usage.projectionSentence($0.meter, now: now) } ?? "",
             claudeRows: claudeRows,
-            claudePlan: claude.flatMap { Usage.planName($0.planTier) },
-            claudeAge: claude.flatMap { $0.stale == true ? Usage.readAgo($0.fetchedAt, now: now) : nil },
             claudeUnknown: unknown,
-            extra: extra,
             showGo: !goRows.isEmpty || showSpend,
             goRows: goRows,
             goAge: go.flatMap { $0.stale == true ? Usage.readAgo($0.fetchedAt, now: now) : nil },
@@ -259,7 +220,7 @@ extension UsageRange {
     public func since(fleet: FleetStore) -> [UsageHarness: UsageSince] {
         if self == .window {
             guard fleet.limitsRead else { return [.claude: .pending, .opencode: .pending] }
-            let claude = Usage.speaking(fleet.claudeLimits, error: \.error, stale: { $0.stale ?? false }, windows: \.windows)
+            let claude = Usage.speaking(fleet.claudeLimits, error: \.error, stale: { _ in false }, windows: \.windows)
             let go = Usage.speaking(fleet.openCodeGoLimits, error: \.error, stale: { $0.stale ?? false }, windows: \.windows)
             func fiveHour(_ windows: [Usage.Window]?) -> UsageSince {
                 guard let window = windows?.first(where: { $0.group == "session" }), let start = Usage.windowStart(window) else { return .none }

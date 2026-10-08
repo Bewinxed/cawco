@@ -45,6 +45,8 @@ import type {
   SkillFile,
 } from "@cawco/core";
 import { hookProblem, memoryDocProblem } from "@cawco/core";
+import { accountIds } from "@cawco/core/paths";
+import { accountClaudeJsons, linkUserLayer } from "./accounts";
 import { excludeFromCheckout } from "./checkout-exclude";
 import {
   convergeDeniedTools,
@@ -308,10 +310,10 @@ const readSidecar = async (): Promise<Sidecar> => {
 type ClaudeJson = Record<string, unknown>;
 
 /** The file, or why it could not be read. Missing is a machine with nothing in it. */
-const readClaudeJson = async (): Promise<
-  { ok: true; root: ClaudeJson } | { ok: false; detail: string }
-> => {
-  const file = Bun.file(CLAUDE_JSON);
+const readClaudeJson = async (
+  path = CLAUDE_JSON
+): Promise<{ ok: true; root: ClaudeJson } | { ok: false; detail: string }> => {
+  const file = Bun.file(path);
   if (!(await file.exists())) {
     return { ok: true, root: {} };
   }
@@ -320,7 +322,7 @@ const readClaudeJson = async (): Promise<
   } catch (error) {
     return {
       ok: false,
-      detail: `could not parse ~/.claude.json: ${tail(said(error))}`,
+      detail: `could not parse ${path}: ${tail(said(error))}`,
     };
   }
 };
@@ -330,9 +332,49 @@ const mcpServersOf = (root: ClaudeJson): Record<string, unknown> => ({
 });
 
 /**
- * Merges the fleet's servers into `~/.claude.json` and answers with the names
- * cawco now manages. Every other key in the file, and every server the
- * sidecar does not name, comes back out exactly as it went in.
+ * Merges the fleet's servers into one `.claude.json`: what cawco now manages
+ * goes in, what it managed and no longer does comes out. Every other key in
+ * the file, and every server the sidecar does not name, comes back out
+ * exactly as it went in. Answers why it could not, or nothing.
+ */
+const mergeFleetMcp = async (
+  path: string,
+  wanted: FleetMcpServer[],
+  managed: string[]
+): Promise<string | undefined> => {
+  const file = await readClaudeJson(path);
+  // Nothing is written over a file that cannot be read: the rest of it is the
+  // user's own, and a rewrite from an empty root would take it with them.
+  if (!file.ok) {
+    return file.detail;
+  }
+  const servers = mcpServersOf(file.root);
+  for (const server of wanted) {
+    // The shared launcher preparation admits only runnable machine configs.
+    servers[server.name] = server.config;
+  }
+  const names = wanted.map((server) => server.name);
+  for (const name of managed.filter((one) => !names.includes(one))) {
+    delete servers[name];
+  }
+  try {
+    if (JSON.stringify(mcpServersOf(file.root)) !== JSON.stringify(servers)) {
+      await writeJson(
+        path,
+        { ...file.root, mcpServers: servers },
+        "MCP servers"
+      );
+    }
+  } catch (error) {
+    return `could not write ${path}: ${tail(said(error))}`;
+  }
+  return undefined;
+};
+
+/**
+ * Merges the fleet's servers into `~/.claude.json` and every account dir's
+ * own `.claude.json` (where an account's Claude Code reads them), and answers
+ * with the names cawco now manages. The report is the machine's own file's.
  */
 const syncMcp = async (
   desired: FleetMcpServer[],
@@ -340,44 +382,23 @@ const syncMcp = async (
   report: FleetSyncReport["mcp"]
 ): Promise<string[]> => {
   const wanted = desired.filter((server) => server.enabled);
-  const failed = (detail: string): string[] => {
+  const problem = await mergeFleetMcp(CLAUDE_JSON, wanted, managed);
+  if (problem) {
     for (const server of wanted) {
-      report[server.name] = { state: "failed", detail };
+      report[server.name] = { state: "failed", detail: problem };
     }
     return managed;
-  };
-
-  const file = await readClaudeJson();
-  // Nothing is written over a file that cannot be read: the rest of it is the
-  // user's own, and a rewrite from an empty root would take it with them.
-  if (!file.ok) {
-    return failed(file.detail);
   }
-
-  const servers = mcpServersOf(file.root);
-  for (const server of wanted) {
-    // The shared launcher preparation admits only runnable machine configs.
-    servers[server.name] = server.config;
+  for (const path of accountClaudeJsons()) {
+    // biome-ignore lint/performance/noAwaitInLoops: one account's file at a time, each written whole
+    const failed = await mergeFleetMcp(path, wanted, managed);
+    if (failed) {
+      console.warn(`[fleet] ${failed}`);
+    }
   }
 
   const names = wanted.map((server) => server.name);
   const gone = managed.filter((name) => !names.includes(name));
-  for (const name of gone) {
-    delete servers[name];
-  }
-
-  try {
-    if (JSON.stringify(mcpServersOf(file.root)) !== JSON.stringify(servers)) {
-      await writeJson(
-        CLAUDE_JSON,
-        { ...file.root, mcpServers: servers },
-        "MCP servers"
-      );
-    }
-  } catch (error) {
-    return failed(`could not write ~/.claude.json: ${tail(said(error))}`);
-  }
-
   Object.assign(report, await readMcpRuntime(names));
   for (const name of gone) {
     report[name] = { state: "removed" };
@@ -2123,6 +2144,15 @@ const converge = async (config: FleetConfig): Promise<FleetSyncReport> => {
   if (settings.state === "failed") {
     console.warn(`[fleet] ~/.claude/settings.json: ${settings.detail}`);
   }
+  // Every account's Claude Code reads its user layer from its own dir: the
+  // entries `~/.claude` gained this sync are linked in there too.
+  await Promise.all(
+    accountIds().map((account) =>
+      linkUserLayer(account).catch((error: unknown) =>
+        console.warn(`[fleet] account ${account}: ${said(error)}`)
+      )
+    )
+  );
 
   // What this machine now holds, so the next config can leave those bytes out.
   // Read from what was just written rather than from the desired set: a row

@@ -544,6 +544,8 @@ export interface HandoffActions {
       machine?: string;
       harness?: "claude" | "opencode" | "pi";
       model?: string;
+      /** The account it runs on, by label or id; placed by the hub when omitted. */
+      account?: string;
       skills?: string[];
       /**
        * A named preset from the fleet's delegate types. Its harness/model/
@@ -642,6 +644,8 @@ export interface HandoffActions {
       type?: string;
       /** Overrides the type's model. */
       model?: string;
+      /** The account it runs on, by label or id; placed by the hub when omitted. */
+      account?: string;
       /** This session's own mode when omitted. */
       permissionMode?: PermissionMode;
       /** The machine it runs on, by hostname or machineId; the caller's by default. */
@@ -1239,6 +1243,7 @@ export const handoffActions = ({
         title,
         harness,
         model,
+        account: opts.account,
         permissionMode: opts.permissionMode,
         fallbackPermissionMode: callerMode(rows, instanceId),
         ...(type?.effort ? { effort: type.effort } : {}),

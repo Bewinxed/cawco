@@ -199,6 +199,11 @@ public final class FleetStore {
         spendFailed = false
     }
 
+    /// The hub's accounts (`/api/accounts`): where each is signed in, and its
+    /// model catalog. Read on connect and after every `usage` frame, which the
+    /// hub sends when any of it moves. Nil until read.
+    public internal(set) var accounts: Components.Schemas.GetApiAccounts200?
+
     public internal(set) var claudeLimits: [String: Components.Schemas.ClaudeLimits] = [:]
     public internal(set) var openCodeGoLimits: [String: Components.Schemas.OpenCodeGoLimits] = [:]
 

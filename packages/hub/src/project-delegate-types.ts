@@ -21,8 +21,9 @@
  * description (what a calling model routes by) unless the front matter gives
  * one. A type is a preset: there is no persona text. `deny` (Claude's tool
  * names) and `can_delegate` mean what a fleet type's `denyTools` and
- * `canDelegate` mean, and `cawco_todos: true` turns "CawCo's to-dos" on
- * for its sessions as a fleet type's `cawcoTodos` does.
+ * `canDelegate` mean, `cawco_todos: true` turns "CawCo's to-dos" on for its
+ * sessions as a fleet type's `cawcoTodos` does, and `account:` names the
+ * account its sessions prefer (an account id).
  *
  * Files are the truth: the catalog is read from the folder each time it is
  * asked for, synchronously (a handful of small files), so the work-item path
@@ -109,6 +110,7 @@ const KNOWN_FIELDS = new Set([
   "deny",
   "can_delegate",
   "cawco_todos",
+  "account",
   "description",
 ]);
 
@@ -251,6 +253,7 @@ const parseTypeFile = (
   const effort = fields.scalar("effort");
   const skills = fields.list("skills");
   const deny = fields.list("deny");
+  const account = fields.scalar("account");
   const draft: Partial<DelegateType> = {
     name,
     description: fields.scalar("description") ?? brief,
@@ -259,6 +262,7 @@ const parseTypeFile = (
     ...(effort ? { effort: effort as DelegateType["effort"] } : {}),
     ...(skills?.length ? { skills } : {}),
     ...(deny?.length ? { denyTools: deny } : {}),
+    ...(account ? { account } : {}),
     ...(extra.canDelegate === undefined
       ? {}
       : { canDelegate: extra.canDelegate }),
@@ -330,7 +334,7 @@ export const readProjectTypes = (projectId: string): DelegateCatalog => {
     if (ignored.length > 0) {
       problems.push({
         path,
-        problem: `ignored ${ignored.map((key) => `“${key}”`).join(", ")}: a type reads harness, model, effort, skills, mcp, role, budget, lands, deny, can_delegate and description`,
+        problem: `ignored ${ignored.map((key) => `“${key}”`).join(", ")}: a type reads harness, model, effort, skills, mcp, role, budget, lands, deny, can_delegate, cawco_todos, account and description`,
       });
     }
     if (type) {

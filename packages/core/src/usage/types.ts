@@ -65,22 +65,16 @@ export interface OpenCodeGoLimits {
   windows: LimitWindow[];
 }
 
+/**
+ * A Claude account's limits, as its sessions' Claude Code reported them
+ * (`rate_limit_event`, `accountInfo()`). A window whose `resetsAt` has passed
+ * with no newer report reads 0%.
+ */
 export interface ClaudeLimits {
+  /** Why there are no windows: nothing on the account has reported any yet. */
   error: string | null;
+  /** When Claude Code last reported on the account. */
   fetchedAt: number;
-  planTier: string | null; // rateLimitTier
-  /**
-   * Extra usage: the pay-as-you-go real money spent past the plan this month,
-   * and its monthly cap, in dollars (the API's `spend.used` / `spend.limit`
-   * money objects). Null when not reported; the cap is null with extra usage
-   * off. `spendResetsAt` is when the cap resets (ISO), only when the API
-   * says; null otherwise, never guessed.
-   */
-  spendLimit: number | null;
-  spendResetsAt: string | null;
-  spendUsed: number | null;
-  /** Set when a fetch failed and the caller is served the last good reading. */
-  stale?: boolean;
   subscription: string | null; // subscriptionType
   windows: LimitWindow[];
 }
@@ -174,7 +168,11 @@ export interface UsageSpend {
   weekStart: number;
 }
 
-/** What `/api/usage/limits` returns: every machine's latest readings. */
+/**
+ * What `/api/usage/limits` returns: every machine's latest readings. A
+ * machine's Claude limits are those of the account it runs Claude Code on by
+ * default (its `~/.claude` login), else of the first account signed in there.
+ */
 export interface UsageLimitsResponse {
   machines: {
     hostname: string;

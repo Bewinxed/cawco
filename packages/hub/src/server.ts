@@ -1,12 +1,12 @@
+import { readFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
-import { posix } from "node:path";
+import { join, posix } from "node:path";
 import { generateCodeChallenge, generateCodeVerifier } from "@cawco/auth";
 import type {
   AgentBusyReport,
   AgentRow,
   ArchiveView,
   BuildInfo,
-  ClaudeLimits,
   CommandResult,
   ContinuationJob,
   ControlPayload,
@@ -71,9 +71,14 @@ import type {
   WorkspaceRef,
 } from "@cawco/core";
 import {
+  ACCOUNT_HUES,
+  ACCOUNT_READ,
+  type AccountProbe,
+  type AccountSigninResult,
   AGENT_BUSY,
   ASK_USER_QUESTION,
   ATTACHMENTS_HOME,
+  accountName,
   agentProblem,
   archiveRefusal,
   attachedFileLine,
@@ -81,14 +86,19 @@ import {
   BUCKET_MS,
   CANCEL_BINARY_UPDATE,
   CLAUDE_CONVERSATION_GONE,
+  type ClaudeAccountReport,
   CONFIGURE_BINARY_UPDATES,
+  CONTROL_BEGIN_ACCOUNT_LOGIN,
+  CONTROL_COMPLETE_ACCOUNT_LOGIN,
   CONTROL_CONTEXT_USAGE,
+  CONTROL_FORGET_ACCOUNT,
   CONTROL_GET_SESSION_INFO,
   CONTROL_GET_SESSION_MESSAGES,
   CONTROL_GIT_CHANGES,
   CONTROL_INTERRUPT,
   CONTROL_LIST_SESSIONS,
   CONTROL_MODEL_CATALOG,
+  CONTROL_PROBE_ACCOUNT,
   CONTROL_READ_SESSION_CONTEXT,
   CONTROL_REFRESH_CAWCO_TOOLS,
   CONTROL_RELOAD_SKILLS,
@@ -122,16 +132,20 @@ import {
   MESSAGES_STORED,
   machineLabel,
   memoryDocProblem,
+  PLACEMENT_STRATEGIES,
+  type PlacementExplain,
   PREVIEW_START,
   PREVIEW_STOP,
   PROVIDER_RETRY,
+  type ProviderForecast,
   parseAgentFrontMatter,
+  providerOf,
   QUESTION_DISMISSED,
   questionsOf,
+  RATE_LIMIT_READ,
   READ_HOOK_SCRIPT,
   READ_MEMORY_FILE,
   READ_SKILL_FILES,
-  REMOVED_MACHINE,
   RESOLVE_PERMISSION,
   RESTART_RESUMABLE,
   RULE_TEMPLATES,
@@ -141,6 +155,7 @@ import {
   runDoing,
   SUMMARISER_OUTPUT_RESERVE_TOKENS,
   SUMMARY_CAP_TOKENS,
+  sameIdentity,
   TARGET_HEADROOM_TOKENS,
   TOOL_CATALOG,
   toolSpec,
@@ -159,6 +174,15 @@ import {
 } from "@cawco/core/binary-updates";
 import { Elysia, t, ValidationError } from "elysia";
 import { websocket } from "elysia/websocket";
+import {
+  type AccountProber,
+  keepProbe,
+  machineAccount,
+  machineReadings,
+  noteRateLimit,
+  reconcileAccounts,
+  sessionLimits,
+} from "./accounts";
 import { createAdminAsks } from "./admin-asks";
 import { isAdminWrite } from "./admin-tools";
 import { appleDiagnosticsRoutes } from "./apple-diagnostics";
@@ -202,6 +226,7 @@ import { createDelegationTree } from "./delegation-tree";
 import { createDispatcher, dispatchRoutes } from "./dispatch";
 import { fleetChoicesRoutes } from "./fleet-choices";
 import { FleetMcp } from "./fleet-mcp";
+import { accountForecasts, carrySequence } from "./forecast";
 import { hidden } from "./hidden";
 import { joinRoutes } from "./join";
 import {
@@ -231,6 +256,7 @@ import {
   onPermissionAnswer,
   onWorkflowAnswer,
 } from "./pending";
+import { type PlacementInput, place as placeAccount } from "./placement";
 import { createPlans, planRoutes } from "./plans";
 import {
   isHubDirectory,
@@ -278,6 +304,7 @@ import { type StagesTemplate, TEMPLATES, templateText } from "./stages";
 import { createStreamHub } from "./stream";
 import { suggest } from "./suggest";
 import { SupervisorEngine } from "./supervisor";
+import { TaskDoc } from "./task-file";
 import {
   BUDGET,
   createTasks,
@@ -391,6 +418,17 @@ const UPDATE_TIMEOUT_MS = 10 * 60_000;
 
 /** Reading one file off a machine: it answers about as fast as a disk does. */
 const READ_TIMEOUT_MS = 10_000;
+/**
+ * An account sign-in step on a machine: Claude Code printing its link (the
+ * agent waits up to 30 s), or exchanging the code (up to 60 s) and reading
+ * its status back.
+ */
+const SIGNIN_TIMEOUT_MS = 90_000;
+const accountHue = t.Union(ACCOUNT_HUES.map((hue) => t.Literal(hue)));
+const strategyChoice = t.Object({
+  strategy: t.Union(PLACEMENT_STRATEGIES.map((one) => t.Literal(one))),
+  pinnedAccountId: t.Optional(t.String()),
+});
 /** Deduplicate recently orphaned replies without retaining every request forever. */
 const UNROUTED_REPLY_LIMIT = 4096;
 /**
@@ -496,11 +534,11 @@ const permissionModeSchema = t.Union([
 const continueBody = t.Object({
   summarizer: t.Object({
     harness: harnessSchema,
-    model: t.String({ minLength: 1 }),
+    model: t.Optional(t.String({ minLength: 1 })),
   }),
   target: t.Object({
     harness: harnessSchema,
-    model: t.String({ minLength: 1 }),
+    model: t.Optional(t.String({ minLength: 1 })),
     machineId: t.Optional(t.String({ minLength: 1 })),
     cwd: t.Optional(t.String({ minLength: 1 })),
     effort: t.Optional(
@@ -1968,6 +2006,96 @@ export const createServer = (
       timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     };
   };
+  /** A machine as a sentence names it. */
+  const machineName = (machineId: string): string =>
+    machineLabel(
+      db.listAgents().find((agent) => agent.machineId === machineId)
+        ?.hostname ?? machineId
+    );
+  /**
+   * One config dir's initialize response, read on its machine by a session
+   * that never takes a turn. Undefined, and said in the log, when it could
+   * not be read.
+   */
+  const probeAccount: AccountProber = async (machineId, account) => {
+    const answer = await callAgent(
+      machineId,
+      CONTROL_PROBE_ACCOUNT,
+      [account],
+      SIGNIN_TIMEOUT_MS,
+      "claude"
+    );
+    if (answer === "offline" || answer === "timeout" || !answer.ok) {
+      console.warn(
+        `[hub] account probe on ${machineName(machineId)} (${account ?? "~/.claude"}) failed: ${typeof answer === "string" ? answer : answer.error}`
+      );
+      return;
+    }
+    return answer.result as AccountProbe;
+  };
+
+  /**
+   * Each machine's last account report, squared with the hub's accounts one
+   * at a time. A probe that failed is tried again, 30 s then doubling to 30
+   * minutes, while the machine is connected; a new report starts over.
+   */
+  const accountSyncs = new Map<
+    string,
+    {
+      attempt: number;
+      reports: ClaudeAccountReport[];
+      running: Promise<void>;
+      timer?: ReturnType<typeof setTimeout>;
+    }
+  >();
+  const syncAccounts = (
+    machineId: string,
+    reports?: ClaudeAccountReport[]
+  ): void => {
+    const sync = accountSyncs.get(machineId) ?? {
+      attempt: 0,
+      reports: [],
+      running: Promise.resolve(),
+    };
+    if (reports) {
+      sync.reports = reports;
+      sync.attempt = 0;
+      clearTimeout(sync.timer);
+    }
+    accountSyncs.set(machineId, sync);
+    sync.running = sync.running
+      .then(async () => {
+        const { changed, failed } = await reconcileAccounts(
+          db,
+          machineId,
+          sync.reports,
+          probeAccount
+        );
+        if (changed) {
+          publishUsage(machineId);
+        }
+        if (failed && registry.agent(machineId)) {
+          const delay = Math.min(30 * 60_000, 30_000 * 2 ** sync.attempt);
+          sync.attempt += 1;
+          sync.timer = setTimeout(() => syncAccounts(machineId), delay);
+          sync.timer.unref?.();
+        }
+      })
+      .catch(console.error);
+  };
+
+  /** Every screen's limits and spend, said again after a reading or a sign-in moved. */
+  const publishUsage = (machineId = ""): void => {
+    registry.broadcast({
+      verb: "frames",
+      machineId,
+      payload: {
+        kind: "usage",
+        limits: machineReadings(db),
+        spend: spendNow(),
+      },
+    });
+  };
   /**
    * The PKCE verifier of the OpenRouter connect in progress. One at a time: a
    * new connect replaces it, and a finished exchange spends it.
@@ -3129,6 +3257,43 @@ export const createServer = (
    * inside the boundary or refuses to start it. Any other spawn passes as is.
    */
   const identities = createSessionIdentities(db);
+  /**
+   * Sessions launched with no effort of their own: the first effort each
+   * reads back is its model's default on its account (`putDefaultEffort`),
+   * which a picker shows before anyone chooses.
+   */
+  const effortUnasked = new Set<string>();
+  /** Notes whether a launch going out asked for an effort of its own. */
+  const noteEffortAsked = (payload: SpawnPayload): void => {
+    if (payload.reattachOnly) {
+      return;
+    }
+    if (payload.effort) {
+      effortUnasked.delete(payload.instanceId);
+    } else {
+      effortUnasked.add(payload.instanceId);
+    }
+  };
+  /**
+   * The session's account, every time it is launched: its Claude Code runs
+   * in that account's config dir on the machine, where its transcript and
+   * its credential are.
+   */
+  const accountDirOf = (row: {
+    accountId: string | null;
+    machineId: string;
+  }): SpawnPayload["accountDir"] => {
+    const { accountId, machineId } = row;
+    if (!accountId) {
+      return undefined;
+    }
+    const signin = db.accounts
+      .signins()
+      .find(
+        (one) => one.accountId === accountId && one.machineId === machineId
+      );
+    return { accountId, home: signin?.home ?? false };
+  };
   const bounded = (
     payload: SpawnPayload,
     knownRow?: InstanceRow
@@ -3136,6 +3301,8 @@ export const createServer = (
     const {
       sessionCredential: _callerCredential,
       scratchWorktree: _callerWorktree,
+      account: _pick,
+      accountDir: _callerDir,
       ...asked
     } = payload;
     const owned = db.ownedInstance(payload.instanceId);
@@ -3153,6 +3320,8 @@ export const createServer = (
     const sessionCredential = payload.reattachOnly
       ? undefined
       : identities.mint(payload.instanceId);
+    noteEffortAsked(payload);
+    const accountDir = accountDirOf(stored);
     return {
       // A project's Caw never has edit or shell tools: every spawn of its
       // row — the first, and each revive, restore and relaunch — denies them.
@@ -3164,6 +3333,7 @@ export const createServer = (
       ...(stored.keepAliveTurn ? { keepAliveTurn: stored.keepAliveTurn } : {}),
       ...(workspace ? { workspace } : {}),
       ...(sessionCredential ? { sessionCredential } : {}),
+      ...(accountDir ? { accountDir } : {}),
     };
   };
 
@@ -3408,14 +3578,11 @@ export const createServer = (
     if (ids.length === 0) {
       return [];
     }
-    const usage = db
-      .listUsageLimits()
-      .find((reading) => reading.machineId === machineId)?.payload;
     const now = Date.now();
     return db
       .getInstancesByIds(ids)
       .filter((row) => {
-        const { state } = keepAliveState(row, usage, now);
+        const { state } = keepAliveState(row, sessionLimits(db, row, now), now);
         return (
           row.machineId === machineId &&
           (state === "waiting" || state === "paused-usage")
@@ -4367,6 +4534,192 @@ export const createServer = (
     return threadId ? { threadId } : {};
   };
 
+  /** The accounts a project task allows its attempts (`accounts:`), read from its file; null: every account. */
+  const taskAccounts = (
+    projectId: string | null | undefined,
+    taskId: string | null | undefined
+  ): string[] | null => {
+    if (!(projectId && taskId)) {
+      return null;
+    }
+    const indexed = db.taskIndex(projectId).find((row) => row.id === taskId);
+    if (!indexed) {
+      return null;
+    }
+    try {
+      const { accounts } = new TaskDoc(
+        indexed.path,
+        readFileSync(join(projectRoot(projectId), indexed.path), "utf8")
+      ).read().fields;
+      return accounts.length > 0 ? accounts : null;
+    } catch {
+      return null;
+    }
+  };
+
+  /**
+   * Everything placement reads for a session about to start on `machineId`
+   * (placement.ts): its provider's accounts, where they are signed in, their
+   * readings and bench, the project's and task's lists, the delegate type's
+   * preference, and who started it.
+   */
+  /**
+   * What a spawn itself asks of placement: who started it, the account it
+   * picked, its delegate type's preference, and its project's and task's
+   * allow-lists.
+   */
+  const spawnAsks = (
+    payload: SpawnPayload,
+    task: { projectId?: string | null; taskId?: string | null }
+  ): Pick<
+    PlacementInput,
+    "explicit" | "kind" | "projectAccounts" | "taskAccounts" | "typeAccount"
+  > => {
+    const projectId = payload.projectId ?? task.projectId ?? undefined;
+    const type = payload.delegateType;
+    const typeAccount = type
+      ? projectTypes.resolveTypeFor(type.projectId ?? projectId, type.name)
+          ?.account
+      : undefined;
+    const { parentInstanceId } = peekParent(payload);
+    return {
+      kind: parentInstanceId || payload.spawnedBy ? "delegates" : "yours",
+      projectAccounts: projectId
+        ? (db.project(projectId)?.accounts ?? null)
+        : null,
+      taskAccounts: taskAccounts(projectId, task.taskId),
+      ...(payload.account ? { explicit: payload.account } : {}),
+      ...(typeAccount ? { typeAccount } : {}),
+    };
+  };
+
+  const placementInput = (
+    machineId: string,
+    payload: SpawnPayload,
+    task: { projectId?: string | null; taskId?: string | null },
+    fork: { accountId: string | null } | undefined
+  ): PlacementInput | undefined => {
+    const provider = providerOf(payload.harness ?? "claude");
+    if (!provider) {
+      return undefined;
+    }
+    return {
+      accounts: db.accounts
+        .list()
+        .filter((account) => account.provider === provider),
+      signins: db.accounts.signins(),
+      readings: db.accounts.readings(),
+      bench: db.accounts.bench(),
+      routing: db.accounts.routing(provider),
+      machineId,
+      machineName: db
+        .listAgents()
+        .find((agent) => agent.machineId === machineId)?.hostname,
+      model: payload.model,
+      ...spawnAsks(payload, task),
+      ...(fork ? { fork } : {}),
+      now: Date.now(),
+    };
+  };
+
+  /**
+   * The account a spawn already has, so nothing is placed: its row's (an
+   * account is for the session's whole life), or, for a resumed conversation,
+   * the account of the row it was stored under (its transcript is there).
+   * Undefined for a session to place: a new one, or a fork.
+   */
+  const accountHeld = (
+    payload: SpawnPayload
+  ): { accountId?: string } | undefined => {
+    const [row] = db.getInstancesByIds([payload.instanceId]);
+    if (row?.accountId) {
+      return { accountId: row.accountId };
+    }
+    const { resume } = payload;
+    if (!resume || resume.fork) {
+      return undefined;
+    }
+    const origin = db.instanceBySessionId(resume.sessionKey);
+    return origin?.accountId ? { accountId: origin.accountId } : {};
+  };
+
+  /**
+   * The account a session about to open runs on: its row's, when it has one
+   * (an account is for the session's whole life); a resumed conversation's
+   * stays where its transcript is; a fork takes its origin's; anything else
+   * is placed. A refusal is a sentence for whoever asked.
+   */
+  const placeSpawn = (
+    machineId: string,
+    payload: SpawnPayload,
+    workItemId?: string
+  ): { accountId?: string } | { refusal: string } => {
+    const held = accountHeld(payload);
+    if (held) {
+      return held;
+    }
+    const { resume } = payload;
+    const item = workItemId ? db.workItem(workItemId) : undefined;
+    const input = placementInput(
+      machineId,
+      payload,
+      { projectId: item?.projectId, taskId: item?.taskId },
+      resume
+        ? {
+            accountId:
+              db.instanceBySessionId(resume.sessionKey)?.accountId ?? null,
+          }
+        : undefined
+    );
+    if (!input) {
+      return payload.account
+        ? {
+            refusal: `${payload.harness} sessions do not run on accounts; start it without one. Nothing was started.`,
+          }
+        : {};
+    }
+    const placed = placeAccount(input);
+    if (!placed.ok) {
+      return { refusal: `${placed.refusal} Nothing was started.` };
+    }
+    return placed.accountId ? { accountId: placed.accountId } : {};
+  };
+
+  /** A start as the placement explain query describes it, for placement to read. */
+  const askedStart = (query: {
+    account?: string;
+    harness: string;
+    kind?: "yours" | "delegates";
+    model?: string;
+    projectId?: string;
+    type?: string;
+  }): SpawnPayload => {
+    const { projectId } = query;
+    return {
+      instanceId: "",
+      cwd: "",
+      harness: query.harness as HarnessKind,
+      model: query.model,
+      projectId,
+      account: query.account,
+      ...(query.type ? { delegateType: { name: query.type, projectId } } : {}),
+      ...(query.kind === "delegates" ? { spawnedBy: { instanceId: "" } } : {}),
+    };
+  };
+
+  /** {@link placeSpawn} for a path that refuses by throwing: its refusal is a 400. */
+  const placedOrRefused = (
+    machineId: string,
+    payload: SpawnPayload,
+    workItemId?: string
+  ): { accountId?: string } => {
+    const placed = placeSpawn(machineId, payload, workItemId);
+    if ("refusal" in placed) {
+      throw new WorkItemRefusal(400, placed.refusal);
+    }
+    return placed;
+  };
+
   const issueSpawn = (
     machineId: string,
     asked: SpawnPayload,
@@ -4388,6 +4741,7 @@ export const createServer = (
       throw new WorkItemRefusal(400, settled.refusal);
     }
     const { payload } = settled;
+    const placed = placedOrRefused(machineId, payload, workItemId);
     forgetPending(payload.instanceId, UNREAD.restarted);
     db.openInstance({
       id: payload.instanceId,
@@ -4409,6 +4763,7 @@ export const createServer = (
       ...(payload.role ? { role: payload.role } : {}),
       ...(payload.delegateType ? { delegateType: payload.delegateType } : {}),
       ...threadOfSpawn(peekParent(payload).parentInstanceId, workItemId),
+      ...placed,
     });
     sendSpawn(agent, machineId, {
       verb: "spawn",
@@ -4519,6 +4874,7 @@ export const createServer = (
       throw new Error(settled.refusal);
     }
     const { payload } = settled;
+    const placed = placedOrRefused(machineId, payload);
     const requestId = crypto.randomUUID();
     forgetPending(payload.instanceId, UNREAD.restarted);
     db.openInstance({
@@ -4532,6 +4888,7 @@ export const createServer = (
       kind,
       permissionMode: settled.permissionMode,
       model: payload.model,
+      ...placed,
     });
     publishInstances(machineId);
     const reply = await awaitReply(
@@ -5038,7 +5395,7 @@ export const createServer = (
    */
   const summariserRun = async (
     source: ContinuationSource & { machineId: string },
-    summarizer: { harness: HarnessKind; model: string },
+    summarizer: { harness: HarnessKind; model?: string },
     prompt: string,
     id: string,
     cancelled: () => boolean,
@@ -5057,7 +5414,7 @@ export const createServer = (
           instanceId: id,
           cwd: source.cwd,
           harness: summarizer.harness,
-          model: summarizer.model,
+          ...(summarizer.model ? { model: summarizer.model } : {}),
           title: `Summary of ${source.title}`,
           scratch: {},
           spawnedBy: { instanceId: source.instanceId },
@@ -5115,10 +5472,22 @@ export const createServer = (
   const contextWindowOf = async (
     machineId: string,
     harness: HarnessKind,
-    model: string
+    model: string | undefined
   ): Promise<number | undefined> => {
     if (harness === "claude") {
-      return db.claudeContextWindows()[model];
+      // No model named: Claude Code's own default, which the machine's
+      // account's catalog resolves to a model id.
+      const accountId = machineAccount(db, machineId);
+      const id =
+        model ??
+        db.accounts
+          .catalogs()
+          .find((one) => one.accountId === accountId)
+          ?.models.find((row) => row.value === "default")?.resolvedModel;
+      return id ? db.claudeContextWindows()[id] : undefined;
+    }
+    if (!model) {
+      return undefined;
     }
     const answer = await callAgent(
       machineId,
@@ -5338,7 +5707,7 @@ export const createServer = (
         prepared.summariseInputTokens + SUMMARISER_OUTPUT_RESERVE_TOKENS
       );
       if (refusal) {
-        return `Summarise with ${model}: ${refusal}`;
+        return `Summarise with ${model ?? "the default model"}: ${refusal}`;
       }
     }
     const { harness, model, machineId } = request.target;
@@ -5350,7 +5719,9 @@ export const createServer = (
       ),
       prepared.openingTokens + TARGET_HEADROOM_TOKENS
     );
-    return refusal ? `Continue on ${model}: ${refusal}` : undefined;
+    return refusal
+      ? `Continue on ${model ?? "the default model"}: ${refusal}`
+      : undefined;
   };
 
   /** The stages nothing more happens after. */
@@ -5692,7 +6063,7 @@ export const createServer = (
     instanceId,
     cwd: target.cwd ?? source.cwd,
     harness: target.harness,
-    model: target.model,
+    ...(target.model ? { model: target.model } : {}),
     ...(target.effort ? { effort: target.effort } : {}),
     ...(target.permissionMode ? { permissionMode: target.permissionMode } : {}),
     ...(target.scratch ? { scratch: target.scratch } : {}),
@@ -6016,11 +6387,6 @@ export const createServer = (
   >(
     rows: Row[]
   ) => {
-    const readings = new Map(
-      db
-        .listUsageLimits()
-        .map((reading) => [reading.machineId, reading.payload])
-    );
     const now = Date.now();
     return rows.map((row) => {
       const {
@@ -6039,7 +6405,7 @@ export const createServer = (
         ...visible,
         keepAlive: keepAliveState(
           row as KeepAliveRow,
-          readings.get(row.machineId),
+          sessionLimits(db, row, now),
           now
         ),
       };
@@ -8666,7 +9032,7 @@ export const createServer = (
 
   const keepAliveScheduler = createKeepAliveScheduler({
     rows: db.listInstances,
-    usage: db.listUsageLimits,
+    limits: (row) => sessionLimits(db, row),
     idle: async (row) => {
       if (!registry.agent(row.machineId)) {
         return false;
@@ -11495,6 +11861,29 @@ export const createServer = (
           };
         }
       )
+      // The accounts the project's sessions may run on; null: every account.
+      .put(
+        "/api/projects/:id/accounts",
+        {
+          body: t.Object({
+            accounts: t.Union([t.Array(t.String()), t.Null()]),
+          }),
+        },
+        ({ params, body, status }) => {
+          const project = db.project(params.id);
+          if (!project) {
+            return status(404, `There is no project ${params.id}.`);
+          }
+          const unknown = (body.accounts ?? []).filter(
+            (id) => !db.accounts.get(id)
+          );
+          if (unknown.length > 0) {
+            return status(400, `There is no account ${unknown.join(", ")}.`);
+          }
+          db.setProjectAccounts(project.id, body.accounts);
+          return projectOut(db.project(project.id) ?? project);
+        }
+      )
       .delete("/api/projects/:id/places/:placeId", ({ params, status }) => {
         const leaving = db
           .project(params.id)
@@ -11530,6 +11919,7 @@ export const createServer = (
             type: t.Optional(t.String()),
             harness: t.Optional(harnessSchema),
             model: t.Optional(t.String()),
+            account: t.Optional(t.String()),
             skills: t.Optional(t.Array(t.String())),
             canDelegate: t.Optional(t.Boolean()),
             cwd: t.Optional(t.String()),
@@ -11777,36 +12167,340 @@ export const createServer = (
           );
         }
       })
+      // ── Accounts ─────────────────────────────────────────────────────────────
+      // Several sign-ins per provider, where each is signed in, how new
+      // sessions choose among them, and what their Claude Code reported.
+      .get("/api/accounts", () => ({
+        accounts: db.accounts.list(),
+        signins: db.accounts.signins(),
+        routing: [db.accounts.routing("anthropic")],
+        readings: db.accounts.readings(),
+        bench: db.accounts.bench(),
+        catalogs: db.accounts.catalogs(),
+      }))
+      .post(
+        "/api/accounts",
+        {
+          body: t.Object({
+            provider: t.Literal("anthropic"),
+            kind: t.Union([t.Literal("subscription"), t.Literal("console")]),
+            // A nickname; without one the account goes by its email once signed in.
+            label: t.Optional(t.String({ minLength: 1 })),
+            hue: t.Optional(accountHue),
+          }),
+        },
+        ({ body }) => db.accounts.create(body)
+      )
+      .patch(
+        "/api/accounts/:id",
+        {
+          body: t.Object({
+            // Null clears the nickname: the account goes by its email.
+            label: t.Optional(t.Union([t.String({ minLength: 1 }), t.Null()])),
+            hue: t.Optional(accountHue),
+            order: t.Optional(t.Integer()),
+            neverBackup: t.Optional(t.Boolean()),
+            reservePct: t.Optional(
+              t.Union([t.Integer({ minimum: 0, maximum: 100 }), t.Null()])
+            ),
+          }),
+        },
+        ({ params, body, status }) =>
+          db.accounts.patch(params.id, body) ??
+          status(404, `There is no account ${params.id}.`)
+      )
+      .delete("/api/accounts/:id", async ({ params, status }) => {
+        const account = db.accounts.get(params.id);
+        if (!account) {
+          return status(404, `There is no account ${params.id}.`);
+        }
+        const signins = db.accounts
+          .signins()
+          .filter((one) => one.accountId === account.id);
+        const home = signins.find((one) => one.home);
+        if (home) {
+          return status(
+            409,
+            `${accountName(account)} is the machine's own Claude Code login on ${machineName(home.machineId)}; sign it out there with \`claude auth logout\`, and the account goes with it.`
+          );
+        }
+        const live = db
+          .listInstances()
+          .filter(
+            (row) =>
+              row.accountId === account.id &&
+              ["starting", "running", "sleeping"].includes(row.status)
+          );
+        if (live.length > 0) {
+          return status(
+            409,
+            `${live.length} session${live.length === 1 ? "" : "s"} still run on ${accountName(account)}; stop them first.`
+          );
+        }
+        // Each machine signed in to it signs out with Claude Code itself and
+        // drops the account's dir; one that is offline keeps it until asked.
+        const away: string[] = [];
+        for (const signin of signins) {
+          // biome-ignore lint/performance/noAwaitInLoops: one machine at a time, each told and answered before the next
+          const answer = await callAgent(
+            signin.machineId,
+            CONTROL_FORGET_ACCOUNT,
+            [account.id],
+            SIGNIN_TIMEOUT_MS,
+            "claude"
+          );
+          if (answer === "offline" || answer === "timeout" || !answer.ok) {
+            away.push(machineName(signin.machineId));
+          }
+        }
+        if (away.length > 0) {
+          return status(
+            409,
+            `${away.join(", ")} did not sign ${accountName(account)} out; try again when ${away.length === 1 ? "it is" : "they are"} online.`
+          );
+        }
+        db.accounts.remove(account.id);
+        publishUsage();
+        return { ok: true };
+      })
+      .put(
+        "/api/accounts/routing/:provider",
+        {
+          params: t.Object({ provider: t.Literal("anthropic") }),
+          body: t.Object({
+            yours: strategyChoice,
+            delegates: strategyChoice,
+            atLimit: t.Object({
+              move: t.Boolean(),
+              waitMinutes: t.Integer({ minimum: 0 }),
+              moveWholeUnderK: t.Integer({ minimum: 0 }),
+              prepareAtPct: t.Integer({ minimum: 0, maximum: 100 }),
+            }),
+          }),
+        },
+        ({ params, body, status }) => {
+          for (const choice of [body.yours, body.delegates]) {
+            if (
+              choice.strategy === "pinned" &&
+              choice.pinnedAccountId &&
+              !db.accounts.get(choice.pinnedAccountId)
+            ) {
+              return status(
+                400,
+                `There is no account ${choice.pinnedAccountId} to pin.`
+              );
+            }
+          }
+          const routing = { provider: params.provider, ...body };
+          db.accounts.setRouting(routing);
+          return routing;
+        }
+      )
+      // Each account's windows with their pace and run-out, and which account
+      // carries a person's and a session's new sessions to the 5-hour horizon.
+      .get(
+        "/api/accounts/forecast",
+        { query: t.Object({ provider: t.Literal("anthropic") }) },
+        ({ query }): ProviderForecast => {
+          const now = Date.now();
+          const accounts = db.accounts
+            .list()
+            .filter((account) => account.provider === query.provider);
+          const readings = db.accounts.readings();
+          const history = accounts.flatMap((account) =>
+            db.accounts
+              .history({ accountId: account.id, since: now - 7 * 86_400_000 })
+              .map((row) => ({
+                accountId: row.accountId,
+                kind: row.kind,
+                scopeLabel: row.scopeLabel,
+                percent: row.percent,
+                resetsAt: row.resetsAt,
+                fetchedAt: row.fetchedAt.getTime(),
+              }))
+          );
+          const running = new Set(
+            db
+              .listInstances()
+              .filter((row) => row.status === "running" && row.accountId)
+              .map((row) => row.accountId as string)
+          );
+          const forecasts = accountForecasts(
+            accounts,
+            readings,
+            history,
+            running,
+            now
+          );
+          const signedIn = new Set(
+            db.accounts
+              .signins()
+              .filter((one) => one.state === "signed-in")
+              .map((one) => one.accountId)
+          );
+          const carry = (kind: "yours" | "delegates") =>
+            carrySequence({
+              accounts,
+              bench: db.accounts.bench(now),
+              forecasts,
+              kind,
+              now,
+              readings,
+              routing: db.accounts.routing(query.provider),
+              signedIn,
+            });
+          return {
+            provider: query.provider,
+            accounts: forecasts,
+            yours: carry("yours"),
+            delegates: carry("delegates"),
+          };
+        }
+      )
+      // Which account a session would start on, and why: what the New
+      // session modal says beside "Auto".
+      .get(
+        "/api/accounts/placement",
+        {
+          query: t.Object({
+            harness: t.String(),
+            machineId: t.String(),
+            model: t.Optional(t.String()),
+            projectId: t.Optional(t.String()),
+            taskId: t.Optional(t.String()),
+            type: t.Optional(t.String()),
+            kind: t.Optional(
+              t.Union([t.Literal("yours"), t.Literal("delegates")])
+            ),
+            account: t.Optional(t.String()),
+            forkOf: t.Optional(t.String()),
+          }),
+        },
+        ({ query, status }) => {
+          const input = placementInput(
+            query.machineId,
+            askedStart(query),
+            { projectId: query.projectId, taskId: query.taskId },
+            query.forkOf
+              ? {
+                  accountId:
+                    db.getInstancesByIds([query.forkOf])[0]?.accountId ?? null,
+                }
+              : undefined
+          );
+          if (!input) {
+            return {
+              accountId: null,
+              strategy: "none",
+              why: `${query.harness} sessions do not run on accounts.`,
+            } satisfies PlacementExplain;
+          }
+          const placed = placeAccount(input);
+          if (!placed.ok) {
+            return status(400, placed.refusal);
+          }
+          const { ok: _ok, ...explain } = placed;
+          return explain satisfies PlacementExplain;
+        }
+      )
+      // Signs an account in on a machine with Claude Code's own
+      // `claude auth login`, in the account's own config dir there: the
+      // machine answers the link to authorise in the reader's browser.
+      .post(
+        "/api/accounts/:id/machines/:machineId/signin",
+        async ({ params, status }) => {
+          const account = db.accounts.get(params.id);
+          if (!account) {
+            return status(404, `There is no account ${params.id}.`);
+          }
+          const answer = await callAgent(
+            params.machineId,
+            CONTROL_BEGIN_ACCOUNT_LOGIN,
+            [account.id, account.kind],
+            SIGNIN_TIMEOUT_MS,
+            "claude"
+          );
+          if (answer === "offline" || answer === "timeout") {
+            return status(
+              503,
+              `${machineName(params.machineId)} is ${answer === "offline" ? "not connected" : "not answering"}.`
+            );
+          }
+          if (!answer.ok) {
+            return status(422, answer.error ?? "The sign-in did not start.");
+          }
+          return answer.result as { url: string };
+        }
+      )
+      .post(
+        "/api/accounts/:id/machines/:machineId/signin/complete",
+        { body: t.Object({ code: t.String() }) },
+        async ({ params, body, status }) => {
+          const account = db.accounts.get(params.id);
+          if (!account) {
+            return status(404, `There is no account ${params.id}.`);
+          }
+          const answer = await callAgent(
+            params.machineId,
+            CONTROL_COMPLETE_ACCOUNT_LOGIN,
+            [body.code, account.id, account.identity],
+            SIGNIN_TIMEOUT_MS,
+            "claude"
+          );
+          if (answer === "offline" || answer === "timeout") {
+            return status(
+              503,
+              `${machineName(params.machineId)} is ${answer === "offline" ? "not connected" : "not answering"}.`
+            );
+          }
+          if (!answer.ok) {
+            return status(422, answer.error ?? "The sign-in did not finish.");
+          }
+          const result = answer.result as AccountSigninResult;
+          if (result.state === "signed-in" && result.probe) {
+            if (result.probe.identity && !account.identity) {
+              db.accounts.setIdentity(account.id, result.probe.identity);
+            }
+            keepProbe(db, account.id, result.probe);
+          }
+          db.accounts.putSignin({
+            accountId: account.id,
+            machineId: params.machineId,
+            state: result.state,
+            home: false,
+          });
+          publishUsage(params.machineId);
+          return result;
+        }
+      )
       // ── Usage (USAGE-SPEC.md §6) ─────────────────────────────────────────────
       // The heavy data lives behind these reads; the socket only carries the small
       // limits frame, so the dashboard pulls aggregates when it needs them.
-      .get("/api/usage/limits", (): UsageLimitsResponse => {
-        const agents = db.listAgents();
-        return {
-          machines: db.listUsageLimits().map((row) => ({
+      .get(
+        "/api/usage/limits",
+        (): UsageLimitsResponse => ({
+          machines: machineReadings(db).map((row) => ({
             machineId: row.machineId,
-            hostname:
-              agents.find((agent) => agent.machineId === row.machineId)
-                ?.hostname ?? REMOVED_MACHINE,
+            hostname: row.hostname,
             limits: row.payload,
             openCodeGo: row.openCodeGo,
           })),
-        };
-      })
+        })
+      )
       .get("/api/usage/spend", (): UsageSpend => spendNow())
       .get(
         "/api/usage/limits/history",
         {
           query: t.Object({
-            machineId: t.String(),
+            accountId: t.String(),
             kind: t.Optional(t.String()),
             since: t.Optional(t.Numeric()),
             until: t.Optional(t.Numeric()),
           }),
         },
         ({ query }) =>
-          db.usageLimitHistory({
-            machineId: query.machineId,
+          db.accounts.history({
+            accountId: query.accountId,
             kind: query.kind,
             since: query.since,
             until: query.until,
@@ -12324,6 +13018,15 @@ export const createServer = (
               if (reported) {
                 db.setAgentHarnesses(message.machineId, reported);
                 capabilityReports.delete(message.machineId);
+                // Where each account is signed in on this machine, as its
+                // Claude Code config dirs say; its `~/.claude` login becomes
+                // an account the first time it is seen.
+                const claudeAccounts = reported.find(
+                  (report) => report.harness === "claude"
+                )?.accounts;
+                if (claudeAccounts) {
+                  syncAccounts(message.machineId, claudeAccounts);
+                }
                 db.mergeAgentTools(
                   message.machineId,
                   peekTools(message.payload)
@@ -12349,13 +13052,13 @@ export const createServer = (
               break;
             }
             // The per-machine scanner's usage report (USAGE-SPEC.md §6.4): store
-            // the buckets and the limit reading, then push the small frame of
-            // limits and the fleet's spend, which moves exactly here — the
-            // dashboard pulls the heavy aggregates over REST.
+            // the buckets and the OpenCode Go reading, then push the small
+            // frame of limits and the fleet's spend, which moves exactly here
+            // — the dashboard pulls the heavy aggregates over REST. Claude's
+            // limits are its accounts', which its sessions report.
             case "usage": {
-              const { buckets, limits, openCodeGo } = message.payload as {
+              const { buckets, openCodeGo } = message.payload as {
                 buckets?: UsageBucket[];
-                limits?: ClaudeLimits;
                 openCodeGo?: OpenCodeGoLimits | null;
               };
               if (buckets && buckets.length > 0) {
@@ -12372,22 +13075,10 @@ export const createServer = (
                   );
                 }
               }
-              if (limits) {
-                db.putUsageLimits(
-                  message.machineId,
-                  limits,
-                  openCodeGo ?? null
-                );
+              if (openCodeGo !== undefined) {
+                db.putOpenCodeGoLimits(message.machineId, openCodeGo);
               }
-              registry.broadcast({
-                verb: "frames",
-                machineId: message.machineId,
-                payload: {
-                  kind: "usage",
-                  limits: db.listUsageLimits(),
-                  spend: spendNow(),
-                },
-              });
+              publishUsage(message.machineId);
               break;
             }
             case "frames": {
@@ -12766,13 +13457,74 @@ export const createServer = (
                   frame.message.subtype === EFFORT_READ
                 ) {
                   const { effort } = frame.message;
-                  if (
-                    db.noteInstanceEffort(
-                      message.instanceId,
-                      isEffortLevel(effort) ? effort : EFFORT_NONE
-                    )
-                  ) {
+                  const level = isEffortLevel(effort) ? effort : EFFORT_NONE;
+                  if (db.noteInstanceEffort(message.instanceId, level)) {
                     publishInstances(message.machineId);
+                  }
+                  // Launched with no effort of its own: this is what its
+                  // model runs at by default on its account.
+                  if (effortUnasked.delete(message.instanceId)) {
+                    const [row] = db.getInstancesByIds([message.instanceId]);
+                    const accountId =
+                      row?.accountId ?? machineAccount(db, message.machineId);
+                    if (accountId && row?.model) {
+                      db.accounts.putDefaultEffort(accountId, row.model, level);
+                    }
+                  }
+                  break;
+                }
+                // What the session's Claude Code reported about its account:
+                // its limits, from each `rate_limit_event`, and its plan, once
+                // per start. The account's reading, and no screen's line. A
+                // session from before accounts runs on its machine's own login.
+                if (
+                  frame.message.type === "system" &&
+                  (frame.message.subtype === RATE_LIMIT_READ ||
+                    frame.message.subtype === ACCOUNT_READ)
+                ) {
+                  const [row] = db.getInstancesByIds([message.instanceId]);
+                  const accountId =
+                    row?.accountId ?? machineAccount(db, message.machineId);
+                  if (accountId) {
+                    if (frame.message.rate_limit_info) {
+                      noteRateLimit(
+                        db,
+                        accountId,
+                        frame.message.rate_limit_info
+                      );
+                    }
+                    const read = frame.message.account;
+                    if (read) {
+                      const account = db.accounts.get(accountId);
+                      if (
+                        account?.identity &&
+                        read.identity &&
+                        !sameIdentity(account.identity, read.identity)
+                      ) {
+                        // The dir answers as someone else: not this account's
+                        // catalog, and not this account signed in there.
+                        console.warn(
+                          `[hub] ${message.instanceId} runs on ${accountName(account)} but its Claude Code is signed in as someone else on ${machineName(message.machineId)}`
+                        );
+                        db.accounts.putSignin({
+                          accountId,
+                          machineId: message.machineId,
+                          state: "mismatch",
+                          home: row?.accountId
+                            ? (db.accounts
+                                .signins()
+                                .find(
+                                  (one) =>
+                                    one.accountId === accountId &&
+                                    one.machineId === message.machineId
+                                )?.home ?? false)
+                            : true,
+                        });
+                      } else {
+                        keepProbe(db, accountId, read);
+                      }
+                    }
+                    publishUsage(message.machineId);
                   }
                   break;
                 }
@@ -13520,20 +14272,30 @@ export const createServer = (
                 toDashboard(ws, failure(message, refusal));
                 break;
               }
-              // No session the fleet starts takes its model from a machine's
-              // default: a dashboard spawn always names one, and one that does
-              // not is a path that forgot to. Its permission mode is the one
-              // rule's (`settleMode`): explicit bypass when omitted for a
-              // harness with modes, and none for one that has none.
-              const settled = peek(message.payload, "model")
-                ? settleMode(message.machineId, message.payload as SpawnPayload)
-                : {
-                    refusal:
-                      "A session the dashboard starts must name its model; this spawn named none, so it would have run on the machine's default. Nothing was started.",
-                  };
+              // A spawn that names no model runs on its harness's own default
+              // (Claude Code's, for its account): "no model picked" is the
+              // field's absence, never an empty string. Its permission mode is
+              // the one rule's (`settleMode`): explicit bypass when omitted for
+              // a harness with modes, and none for one that has none.
+              const { model: named, ...rest } = message.payload as SpawnPayload;
+              const settled = settleMode(message.machineId, {
+                ...rest,
+                ...(named ? { model: named } : {}),
+              });
               if ("refusal" in settled) {
                 console.warn(`[hub] refused spawn: ${settled.refusal}`);
                 toDashboard(ws, failure(message, settled.refusal));
+                break;
+              }
+              const placed = message.instanceId
+                ? placeSpawn(message.machineId, {
+                    ...settled.payload,
+                    instanceId: message.instanceId,
+                  })
+                : {};
+              if ("refusal" in placed) {
+                console.warn(`[hub] refused spawn: ${placed.refusal}`);
+                toDashboard(ws, failure(message, placed.refusal));
                 break;
               }
               if (registry.agent(message.machineId) && message.instanceId) {
@@ -13559,8 +14321,9 @@ export const createServer = (
                   title: peek(message.payload, "title"),
                   kind: peekKind(message.payload),
                   permissionMode: settled.permissionMode,
-                  model: peek(message.payload, "model"),
+                  model: settled.payload.model,
                   ...peekParent(message.payload),
+                  ...placed,
                 });
                 if (holdingStarts(message.machineId)) {
                   // The row says starting; the start goes out when the machine can take it.

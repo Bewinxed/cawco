@@ -48,6 +48,7 @@
   import {
     cawco,
     machineFs,
+    placementFor,
     projectAtFolder,
     spawnSession,
   } from "../client.svelte";
@@ -226,11 +227,51 @@
       )
     )
   );
+  /**
+   * The account a Claude session here would start on, as the hub's placement
+   * says (`/api/accounts/placement`): its catalog is what the picker offers.
+   * Null while unread, for another harness, and with no account signed in.
+   */
+  let placedAccount = $state<string | null>(null);
+  $effect(() => {
+    const query = {
+      harness,
+      machineId,
+      ...(model ? { model } : {}),
+      ...(projectId ? { projectId } : {}),
+    };
+    if (harness !== "claude" || !machineId) {
+      placedAccount = null;
+      return;
+    }
+    let stale = false;
+    placementFor(query)
+      .then((placed) => {
+        if (!stale) {
+          placedAccount = placed?.accountId ?? null;
+        }
+      })
+      .catch(() => {
+        if (!stale) {
+          placedAccount = null;
+        }
+      });
+    return () => {
+      stale = true;
+    };
+  });
+  const offered = $derived(
+    models.forHarness(
+      harness,
+      machineIds,
+      harness === "claude" ? placedAccount : undefined
+    )
+  );
   const entries = $derived(
-    deriveModelEntries(models.forHarness(harness, machineIds), {
+    deriveModelEntries(offered, {
       lastSpawnAt: lastSpawnAt(harness),
       lastUsedAt: Object.fromEntries(
-        models.forHarness(harness, machineIds).flatMap((row) => {
+        offered.flatMap((row) => {
           const id = row.resolvedModel ?? row.value;
           const used = lastUsedAt(harness, id);
           return used ? [[id, used]] : [];
@@ -253,16 +294,15 @@
   const efforts = $derived(
     stops.filter((stop) => stop.reachable).map((stop) => stop.value)
   );
-  /** What the slider shows while `effort` is untouched (`null`, omitted from the payload). */
-  const effortShown = $derived.by((): EffortLevel | null => {
-    if (effort) {
-      return effort;
-    }
-    if (selected?.defaultEffort !== undefined) {
-      return selected.defaultEffort;
-    }
-    return efforts.includes("high") ? "high" : (efforts[0] ?? null);
-  });
+  /**
+   * What the slider shows while `effort` is untouched (`null`, omitted from
+   * the payload): the level the model ran at on its account when nobody chose
+   * one, once a session has said it; until then no level, which reads
+   * "Default".
+   */
+  const effortShown = $derived.by(
+    (): EffortLevel | null => effort ?? selected?.defaultEffort ?? null
+  );
   /** A harness that reports no permission modes (pi) has none to pick, so no control shows and none is sent. */
   const modeless = $derived(report?.capabilities.permissionModes.length === 0);
   const modes = $derived(
@@ -362,28 +402,9 @@
     }
     return "";
   });
-  /**
-   * The model a start names: the picked entry, or the machine's default by
-   * the model it resolves to. Unknown while the machine's models are still
-   * being read, and when it names its default no more precisely than
-   * "default"; a start then would name none, and the hub refuses that.
-   */
-  const startModel = $derived(selected?.id ?? model);
-  const modelUnknown = $derived(startModel === "" || startModel === "default");
-  const modelReading = $derived.by(() => {
-    if (!(modelUnknown && machineIds.length)) {
-      return "";
-    }
-    return entries.length
-      ? "Choose a model for this session."
-      : `Reading the models on ${machine?.hostname ?? machineId}…`;
-  });
   const reading = $derived(
     cawco.hub === "connected"
-      ? error ||
-          locationReading ||
-          (locationUnverified ? "Reading…" : "") ||
-          modelReading
+      ? error || locationReading || (locationUnverified ? "Reading…" : "")
       : "No spawn while the hub is unreachable. Reconnect to continue."
   );
   const locationInformational = $derived(
@@ -440,7 +461,6 @@
       Boolean(offlineMachine) ||
       unreadable ||
       locationUnverified ||
-      modelUnknown ||
       (repo !== undefined && !REPO.test(repo.trim()))
   );
   /** The source as the prompt's opening chip; a session title is often its first prompt, so it is cut short. */
@@ -705,7 +725,7 @@
     if (unreadable || offlineMachine) {
       return locationReading;
     }
-    return locationUnverified ? "Reading…" : modelReading;
+    return locationUnverified ? "Reading…" : "";
   }
   function close() {
     submission += 1;
@@ -865,10 +885,8 @@
     }
   }
   /**
-   * The model the form shows as chosen, sent by name so the session never
-   * falls to its machine's default: the picked entry, or the machine's
-   * default entry by the model it resolves to. Empty only when the machine
-   * names its default no more precisely than "default".
+   * The model a start names: the person's pick, or "" when they left the
+   * harness's default, which is sent as no model at all.
    */
   function shownModel(draft: SessionDraft): string {
     return draft.usedModel === "default" ? "" : draft.usedModel;
@@ -925,9 +943,10 @@
       projectId,
       summarizer: {
         harness: summarizerHarness,
-        model: summarizerSelected?.id ?? summarizerModel,
+        model: summarizerModel,
       },
-      usedModel: selected?.id ?? model,
+      // The person's own pick; "" when they left the harness's default.
+      usedModel: model,
     };
     busy = true;
     popover = null;
@@ -987,12 +1006,15 @@
     }
     const toAttach = attachable(draft.projectId, target);
     const id = await startContinuation(source, draft, {
-      summarizer: draft.summarizer,
+      summarizer: {
+        harness: draft.summarizer.harness,
+        ...(draft.summarizer.model ? { model: draft.summarizer.model } : {}),
+      },
       target: {
         machineId: target,
         cwd: draft.cwd,
         harness: draft.harness,
-        model: draft.usedModel,
+        ...(draft.usedModel ? { model: draft.usedModel } : {}),
         ...(modeless ? {} : { permissionMode: draft.permissionMode }),
         ...(draft.effort ? { effort: draft.effort } : {}),
         ...(draft.scratch ? { scratch: draft.scratch } : {}),

@@ -33,17 +33,32 @@ public enum ModelCatalog {
     }
 
     /// A harness's models (models.svelte.ts `catalog` through model-catalog.ts
-    /// `modelsForHarness`): what the machines report, else what a running
-    /// session of it answered; one row a model id; given `machineIds`, a
-    /// reported row only when every one of them reports it, since a spawn
-    /// resolves its model on the machine it runs on. Claude rows carry the
-    /// context window the hub has seen a turn report.
+    /// `modelsForHarness`): what the machines report, and for Claude each
+    /// account's catalog on the machines it is signed in on, else what a
+    /// running session of it answered; one row a model id; given `machineIds`,
+    /// a reported row only when every one of them reports it, since a spawn
+    /// resolves its model on the machine it runs on; given `accountId`, only
+    /// that account's. Claude rows carry the context window the hub has seen
+    /// a turn report.
     @MainActor
-    public static func models(_ fleet: FleetStore, harness: String, machineIds: [String]) -> [Components.Schemas.ModelInfo] {
+    public static func models(_ fleet: FleetStore, harness: String, machineIds: [String], accountId: String? = nil) -> [Components.Schemas.ModelInfo] {
         var reported: [(machineId: String, model: Components.Schemas.ModelInfo)] = []
         for machine in fleet.machines {
             for report in machine.harnesses ?? [] where report.harness.rawValue == harness {
                 for model in report.models ?? [] { reported.append((machine.machineId, model)) }
+            }
+        }
+        if harness == "claude", let view = fleet.accounts {
+            for signin in view.signins where signin.state == .signedIn && (accountId == nil || signin.accountId == accountId) {
+                guard let catalog = view.catalogs.first(where: { $0.accountId == signin.accountId }) else { continue }
+                for model in catalog.models {
+                    var row = model
+                    // The effort it ran at on this account when nobody chose one, once a session said.
+                    if let learned = catalog.defaultEfforts.value[model.resolvedModel ?? model.value] as? String {
+                        row.defaultEffort = .init(rawValue: learned)
+                    }
+                    reported.append((signin.machineId, row))
+                }
             }
         }
         var seen = Set<String>()
@@ -71,9 +86,11 @@ public enum ModelCatalog {
     /// session once a launch, until one answers. Returns whether the list changed.
     @MainActor
     public static func ensure(_ hub: HubConnection, harness: String) async -> Bool {
-        let described = hub.fleet.machines.contains { machine in
+        let reported = hub.fleet.machines.contains { machine in
             (machine.harnesses ?? []).contains { $0.harness.rawValue == harness && !($0.models ?? []).isEmpty }
         }
+        // Claude's catalogs are its accounts', which the hub keeps.
+        let described = reported || (harness == "claude" && !(hub.fleet.accounts?.catalogs.isEmpty ?? true))
         guard !described else { return false }
         let candidates = hub.fleet.rows.filter { $0.status == .running && ($0.harness ?? "claude") == harness && !asked.contains($0.id) }
         for row in candidates {
@@ -109,13 +126,6 @@ public enum ModelCatalog {
             .replacing(/^[A-Za-z][A-Za-z0-9+.\-]*:\/\/[^\/]+\//, with: "")
             .replacing(/^[^\/]+@[^:]+:/, with: "")
             .replacing(/\.git$/, with: "")
-    }
-
-    /// The model the machines resolve "default" to, or "" (models.svelte.ts `defaultModelFor`).
-    @MainActor
-    public static func defaultModel(_ fleet: FleetStore, harness: String, machineIds: [String]) -> String {
-        let id = models(fleet, harness: harness, machineIds: machineIds).first { $0.value == "default" }?.resolvedModel
-        return id.flatMap { $0 == "default" ? nil : $0 } ?? ""
     }
 
     // MARK: Names (model-entries.ts `modelName`)

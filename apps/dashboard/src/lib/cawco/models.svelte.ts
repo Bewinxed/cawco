@@ -8,6 +8,7 @@
  */
 
 import type { HarnessKind, InstanceRow, ModelInfo } from "@cawco/core";
+import { isEffortLevel } from "@cawco/core";
 import { untrack } from "svelte";
 import { cawco, isCustodyRefusal, loadModels } from "./client.svelte";
 import { type HarnessModel, modelsForHarness } from "./model-catalog";
@@ -24,7 +25,10 @@ const RECENT_KEY = `${MODEL_STORAGE_PREFIX}:recent`;
 /** How many typed-in model ids are remembered — a shortlist, not a history. */
 const RECENT_LIMIT = 5;
 
-/** What the form sends when the user has not chosen: nothing, and the SDK picks. */
+/**
+ * The form's value when the user has not chosen: no model is sent at all, and
+ * the harness runs its own default.
+ */
 export const MODEL_DEFAULT = "";
 
 const store = $state({
@@ -225,7 +229,38 @@ function reported(): HarnessModel[] {
       }
     }
   }
-  return rows;
+  return [...rows, ...accountRows()];
+}
+
+/**
+ * Claude's models: each account's catalog, as its Claude Code answered at
+ * initialize and the hub keeps, on every machine the account is signed in
+ * on. A model's default effort is the one its sessions ran at when nobody
+ * chose one; absent until one has.
+ */
+function accountRows(): HarnessModel[] {
+  const view = cawco.accounts;
+  if (!view) {
+    return [];
+  }
+  return view.signins
+    .filter((signin) => signin.state === "signed-in")
+    .flatMap((signin) => {
+      const kept = view.catalogs.find(
+        (one) => one.accountId === signin.accountId
+      );
+      return (kept?.models ?? []).map((model) => {
+        const learned =
+          kept?.defaultEfforts[model.resolvedModel ?? model.value];
+        return {
+          ...model,
+          ...(isEffortLevel(learned) ? { defaultEffort: learned } : {}),
+          harness: "claude" as const,
+          machineId: signin.machineId,
+          accountId: signin.accountId,
+        };
+      });
+    });
 }
 
 /**
@@ -260,26 +295,28 @@ export async function loadModelWindows(): Promise<void> {
   ).claude;
 }
 
-/**
- * The model the New Session form shows when nothing is picked: the machines'
- * own default entry, by the model it resolves to (`deriveModelEntries` names
- * that entry the same way). Empty when no machine names its default more
- * precisely than "default", which the hub then refuses rather than run.
- */
-export function defaultModelFor(harness: string, machineIds: string[]): string {
-  const id = modelsForHarness(catalog(), harness, machineIds).find(
-    (row) => row.value === "default"
-  )?.resolvedModel;
-  return id && id !== "default" ? id : "";
-}
-
 export const models = {
   get offered(): ModelInfo[] {
     return modelsForHarness(catalog());
   },
-  /** A harness's models; given `machineIds`, only what those machines run. */
-  forHarness: (harness?: string, machineIds?: string[]): ModelInfo[] =>
-    modelsForHarness(catalog(), harness, machineIds),
+  /**
+   * A harness's models; given `machineIds`, only what those machines run;
+   * given `accountId`, only what that account's Claude Code offers.
+   */
+  forHarness: (
+    harness?: string,
+    machineIds?: string[],
+    accountId?: string | null
+  ): ModelInfo[] =>
+    modelsForHarness(
+      accountId
+        ? catalog().filter(
+            (row) => row.accountId === undefined || row.accountId === accountId
+          )
+        : catalog(),
+      harness,
+      machineIds
+    ),
   /** Typed-in ids the offered list does not cover, newest first. */
   get recent(): string[] {
     const rows = catalog();

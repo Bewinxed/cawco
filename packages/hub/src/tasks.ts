@@ -268,6 +268,8 @@ export interface StagesTemplateView {
 /** One task, its file read whole, and what its attempts and edges say. */
 export interface TaskView extends TaskFlags {
   acceptance: string;
+  /** The accounts its attempts may run on; empty: every account. */
+  accounts: string[];
   after: string[];
   /** What an attempt may spend before the hub stops it; null: the project's default. */
   budget: WorkBudget | null;
@@ -585,6 +587,7 @@ const viewOf = (
   budget: parsed.fields.budget,
   rank: parsed.fields.rank,
   labels: parsed.fields.labels,
+  accounts: parsed.fields.accounts,
   description: parsed.description,
   acceptance: parsed.acceptance,
   todos: parsed.todos,

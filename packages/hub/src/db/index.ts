@@ -3,7 +3,6 @@ import { dirname } from "node:path";
 import type {
   AgentRow,
   BuildInfo,
-  ClaudeLimits,
   DelegateAskStatus,
   DelegateEvent,
   DelegateEventKind,
@@ -72,7 +71,9 @@ import { Context, Effect, Layer } from "effect";
 import { bundledSkills } from "../bundled-skills";
 import { DB_PATH } from "../config";
 import { workflowSkill } from "../workflows/skills";
+import { type AccountsDb, accountsDb } from "./accounts";
 import {
+  accountSignins,
   agents,
   apnsCredentials,
   canvasChoices,
@@ -120,7 +121,6 @@ import {
   threadMessages,
   tools,
   usageBuckets,
-  usageLimitHistory,
   usageLimits,
   workflowAttempts,
   workflowNotices,
@@ -221,9 +221,6 @@ export interface SettledInstance {
 
 /** How long a session that stopped moving stays in the listings the rails read. */
 const STALE_AFTER_MS = 24 * 60 * 60 * 1000;
-
-/** 30 days — long enough to cover several weekly windows, short enough that the table stays small. */
-const LIMIT_HISTORY_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 /** The span of a usage bucket stored before quarters (`usage_buckets.span_ms`). */
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -277,13 +274,12 @@ export interface HookVersionMaterial {
   script?: string;
 }
 
-/** A stored limit reading, one per machine (USAGE-SPEC.md §6). */
+/** A stored OpenCode Go reading, one per machine (USAGE-SPEC.md §6). */
 export type UsageLimitRow = typeof usageLimits.$inferSelect;
 
-/** One point in a machine's limit-history series (burn rate, not just burn level). */
-export type UsageLimitHistoryRow = typeof usageLimitHistory.$inferSelect;
-
 export interface DbShape {
+  /** Accounts, where they are signed in, how they route, and their limits. */
+  readonly accounts: AccountsDb;
   readonly acknowledgeAddress: (id: string) => void;
   readonly acknowledgeSessionIdentity: (
     instanceId: string,
@@ -583,7 +579,7 @@ export interface DbShape {
   }) => SupervisorEvent[];
   /** The fleet's tool policy (NEW.md §10) — only the tools somebody has ruled on. */
   readonly listToolPolicies: () => ToolPolicy[];
-  /** Every machine's latest limit reading. */
+  /** Every machine's latest OpenCode Go reading. */
   readonly listUsageLimits: () => UsageLimitRow[];
   readonly listWorkflowAttempts: (stepId: string) => WorkflowAttemptRow[];
   /** A run's log, in effect order. */
@@ -740,6 +736,8 @@ export interface DbShape {
     delegateType?: { name: string; projectId?: string };
     /** The thread with the project's Caw it works for; set once, at its spawn. */
     threadId?: string;
+    /** The account placement chose; a row that has one keeps it. */
+    accountId?: string;
   }) => void;
   /** The offers nobody has answered yet. */
   readonly openProjectOffers: () => ProjectOfferRow[];
@@ -902,6 +900,11 @@ export interface DbShape {
     config: FleetMcpServer["config"];
     enabled?: boolean;
   }) => FleetMcpServer;
+  /** Stores the machine's latest OpenCode Go reading; one row per machine. */
+  readonly putOpenCodeGoLimits: (
+    machineId: string,
+    openCodeGo: OpenCodeGoLimits | null
+  ) => void;
   readonly putPlugin: (plugin: {
     id: string;
     enabled?: boolean;
@@ -961,12 +964,6 @@ export interface DbShape {
    * never accumulates.
    */
   readonly putUsageBuckets: (machineId: string, buckets: UsageBucket[]) => void;
-  /** Stores the machine's latest limit reading; one row per machine. */
-  readonly putUsageLimits: (
-    machineId: string,
-    limits: ClaudeLimits,
-    openCodeGo: OpenCodeGoLimits | null
-  ) => void;
   readonly putWorkflow: (row: typeof workflows.$inferInsert) => WorkflowRow;
   /** Records a call in its run's log, or completes the row it already has. */
   readonly putWorkflowLog: (row: typeof workflowRunLog.$inferInsert) => void;
@@ -1184,6 +1181,8 @@ export interface DbShape {
   ) => void;
   /** Store (or replace) the OpenRouter key from a completed PKCE exchange. */
   readonly setOpenRouterConnection: (apiKey: string) => void;
+  /** The accounts the project's sessions may run on; null: every account. */
+  readonly setProjectAccounts: (id: string, accounts: string[] | null) => void;
   /** The project's spend cap and what reaching it does (project-caps.ts). */
   readonly setProjectCap: (
     id: string,
@@ -1413,13 +1412,6 @@ export interface DbShape {
     build?: BuildInfo;
     machineCapabilities?: import("@cawco/core/capabilities").MachineCapabilities;
   }) => void;
-  /** Returns the limit-history series for a machine, optionally filtered by kind and time range. */
-  readonly usageLimitHistory: (q: {
-    machineId: string;
-    kind?: string;
-    since?: number;
-    until?: number;
-  }) => UsageLimitHistoryRow[];
   /**
    * One harness's recorded cost since each boundary and in all, in one SQL
    * pass. A bucket counts toward a boundary when it starts at or after it;
@@ -1795,72 +1787,6 @@ const make = (path: string): DbShape => {
         hash,
         updatedAt,
       }));
-
-  /**
-   * Append the windows whose reading actually moved since last time.
-   *
-   * "Moved" is any of percent, severity or `resetsAt` — the last one matters
-   * most and is the least obvious: a rollover resets percent to a LOW number,
-   * so a diff on percent alone would record the drop as if it were spend
-   * running backwards. Carrying `resetsAt` into the comparison makes the new
-   * window a new series instead.
-   *
-   * `previous` is the payload this same call is about to overwrite, which is
-   * why it must be read before the upsert. Reading it (rather than holding a
-   * last-seen map in memory) keeps the diff correct across a hub restart, and
-   * costs one indexed lookup per push.
-   */
-  const appendLimitHistory = (
-    machineId: string,
-    limits: ClaudeLimits,
-    previous: ClaudeLimits | null,
-    at: Date
-  ): void => {
-    // A failed fetch describes the fetch, not the account. Recording it would
-    // put a fabricated point on the series; a gap is the truthful shape.
-    if (limits.error !== null || limits.windows.length === 0) {
-      return;
-    }
-    const before = new Map(
-      (previous?.error === null ? previous.windows : []).map((w) => [
-        `${w.kind}\u0000${w.scopeLabel ?? ""}`,
-        w,
-      ])
-    );
-    const rows = limits.windows
-      .filter((w) => {
-        const prior = before.get(`${w.kind}\u0000${w.scopeLabel ?? ""}`);
-        return (
-          prior === undefined ||
-          prior.percent !== w.percent ||
-          prior.severity !== w.severity ||
-          prior.resetsAt !== w.resetsAt
-        );
-      })
-      .map((w) => ({
-        machineId,
-        kind: w.kind,
-        scopeLabel: w.scopeLabel,
-        percent: w.percent,
-        severity: w.severity,
-        resetsAt: w.resetsAt,
-        fetchedAt: at,
-      }));
-    if (rows.length === 0) {
-      return;
-    }
-    db.insert(usageLimitHistory).values(rows).run();
-    // Retention, folded into the write that grew the table so nothing else has
-    // to own a timer. Only runs on a push that changed something.
-    db.delete(usageLimitHistory)
-      .where(
-        lte(
-          usageLimitHistory.fetchedAt,
-          new Date(at.getTime() - LIMIT_HISTORY_RETENTION_MS)
-        )
-      )
-      .run();
-  };
 
   /** The column a usage summary groups on. */
   const usageKey = (groupBy: UsageGroupBy) => {
@@ -2584,6 +2510,7 @@ const make = (path: string): DbShape => {
       role,
       delegateType,
       threadId,
+      accountId,
       // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: opens (or reuses) the one live row for a conversation across every optional field a spawn can carry — see the "one conversation, one live row" invariant below.
     }) => {
       const now = new Date();
@@ -2659,6 +2586,7 @@ const make = (path: string): DbShape => {
           delegateType: delegateType?.name,
           delegateTypeProject: delegateType?.projectId,
           threadId,
+          accountId,
           // `starting`, not `running` — this row is written when a spawn is
           // *issued*, and issuing a spawn is not evidence that a process exists.
           // Writing `running` here is the original sin behind the 178-vs-42
@@ -2684,6 +2612,13 @@ const make = (path: string): DbShape => {
             ...(workflowRunId ? { workflowRunId } : {}),
             ...(workflowStepId ? { workflowStepId } : {}),
             ...(threadId ? { threadId } : {}),
+            // A session keeps the account it started on: its transcript and
+            // its prompt cache are that account's.
+            ...(accountId
+              ? {
+                  accountId: sql`COALESCE(${instances.accountId}, ${accountId})`,
+                }
+              : {}),
             // `updatedAt` deliberately absent: a restore or relaunch re-issues
             // an existing session, so its last-activity time is whatever it
             // already was; stamping it here dated every restored session to the
@@ -4176,6 +4111,12 @@ const make = (path: string): DbShape => {
     setProjectTracker: (id, tracker) => {
       db.update(projects).set({ tracker }).where(eq(projects.id, id)).run();
     },
+    setProjectAccounts: (id, list) => {
+      db.update(projects)
+        .set({ accounts: list })
+        .where(eq(projects.id, id))
+        .run();
+    },
     setProjectDispatch: (id, change) => {
       if (Object.keys(change).length > 0) {
         db.update(projects).set(change).where(eq(projects.id, id)).run();
@@ -4727,6 +4668,9 @@ const make = (path: string): DbShape => {
         tx.delete(usageLimits)
           .where(eq(usageLimits.machineId, machineId))
           .run();
+        tx.delete(accountSignins)
+          .where(eq(accountSignins.machineId, machineId))
+          .run();
         tx.delete(agents).where(eq(agents.machineId, machineId)).run();
         return { instanceIds: ids };
       }),
@@ -5175,42 +5119,18 @@ const make = (path: string): DbShape => {
         }
       });
     },
-    putUsageLimits: (machineId, limits, openCodeGo) => {
+    putOpenCodeGoLimits: (machineId, openCodeGo) => {
       const at = new Date();
-      const previous =
-        db
-          .select({ payload: usageLimits.payload })
-          .from(usageLimits)
-          .where(eq(usageLimits.machineId, machineId))
-          .get()?.payload ?? null;
       db.insert(usageLimits)
-        .values({ machineId, payload: limits, openCodeGo, fetchedAt: at })
+        .values({ machineId, openCodeGo, fetchedAt: at })
         .onConflictDoUpdate({
           target: usageLimits.machineId,
-          set: { payload: limits, openCodeGo, fetchedAt: at },
+          set: { openCodeGo, fetchedAt: at },
         })
         .run();
-      appendLimitHistory(machineId, limits, previous, at);
     },
-    usageLimitHistory: ({ machineId, kind, since, until }) =>
-      db
-        .select()
-        .from(usageLimitHistory)
-        .where(
-          and(
-            eq(usageLimitHistory.machineId, machineId),
-            ...(kind ? [eq(usageLimitHistory.kind, kind)] : []),
-            ...(since
-              ? [gte(usageLimitHistory.fetchedAt, new Date(since))]
-              : []),
-            ...(until
-              ? [lte(usageLimitHistory.fetchedAt, new Date(until))]
-              : [])
-          )
-        )
-        .orderBy(usageLimitHistory.fetchedAt)
-        .all(),
     listUsageLimits: () => db.select().from(usageLimits).all(),
+    accounts: accountsDb(db),
     usageSpend: ({ harness, todayStart, weekStart }) => {
       const since = (start: number) =>
         sql<number>`coalesce(sum(case when ${usageBuckets.start} >= ${start} then ${usageBuckets.costUsd} else 0 end), 0)`;

@@ -18,6 +18,7 @@
  * budget: {usd: 2, turns: 40, minutes: 30}
  * rank: a0V
  * labels: [ui]
+ * accounts: [<account id>]
  * ---
  * # Persist the theme toggle
  *
@@ -82,6 +83,7 @@ export const TASK_FIELDS = [
   "budget",
   "rank",
   "labels",
+  "accounts",
 ] as const;
 export type TaskField = (typeof TASK_FIELDS)[number];
 
@@ -93,6 +95,8 @@ const SINGLE_EDGES: ReadonlySet<Edge> = new Set(["parent", "found_in"]);
 export const isSingleEdge = (edge: Edge): boolean => SINGLE_EDGES.has(edge);
 
 export interface TaskFields {
+  /** The accounts its attempts may run on (account ids); empty: every account. */
+  accounts: string[];
   after: string[];
   /** What an attempt may spend before the hub stops it; null: the project's default. */
   budget: WorkBudget | null;
@@ -328,6 +332,7 @@ const FIELD_KEYS = {
   budget: "budget",
   rank: "rank",
   labels: "labels",
+  accounts: "accounts",
 } as const satisfies Record<TaskField, keyof TaskFields>;
 
 /** A front matter field's value, as {@link TaskFields} holds it. */
@@ -377,6 +382,7 @@ const emptyFields = (): TaskFields => ({
   budget: null,
   rank: null,
   labels: [],
+  accounts: [],
 });
 
 /** A list of task ids (`after`, `related`); what is not one goes to `problems`. */
@@ -491,6 +497,7 @@ const LIST_FIELDS: ReadonlySet<string> = new Set([
   "outputs",
   "owns",
   "labels",
+  "accounts",
 ]);
 const SCALAR_FIELDS: ReadonlySet<string> = new Set([
   "stage",
@@ -513,11 +520,8 @@ const readField = (
   } else if (field === "found_in") {
     fields.foundIn = readEdge(field, line, problems);
   } else if (LIST_FIELDS.has(field)) {
-    fields[field as "checks" | "outputs" | "owns" | "labels"] = readList(
-      field,
-      line,
-      problems
-    );
+    fields[field as "checks" | "outputs" | "owns" | "labels" | "accounts"] =
+      readList(field, line, problems);
   } else if (SCALAR_FIELDS.has(field)) {
     fields[field as "stage" | "type" | "group" | "rank"] = scalarOf(line);
   } else if (field === "budget") {

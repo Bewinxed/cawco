@@ -9,6 +9,7 @@ public struct HubAPI: Sendable {
     public var machines: Machines { Machines(client: client) }
     public var instances: Instances { Instances(client: client) }
     public var usage: Usage { Usage(client: client) }
+    public var accounts: Accounts { Accounts(client: client) }
     public var workflows: Workflows { Workflows(client: client) }
     public var fleet: Configuration { Configuration(client: client) }
     public var rules: Rules { Rules(client: client) }
@@ -62,6 +63,11 @@ public struct HubAPI: Sendable {
         public func spend(_ input: Operations.GetApiUsageSpend.Input = .init()) async throws -> Operations.GetApiUsageSpend.Output { try await client.getApiUsageSpend(input) }
         public func summary(_ input: Operations.GetApiUsageSummary.Input) async throws -> Operations.GetApiUsageSummary.Output { try await client.getApiUsageSummary(input) }
         public func history(_ input: Operations.GetApiUsageLimitsHistory.Input) async throws -> Operations.GetApiUsageLimitsHistory.Output { try await client.getApiUsageLimitsHistory(input) }
+    }
+    public struct Accounts: Sendable {
+        let client: Client
+        public func list(_ input: Operations.GetApiAccounts.Input = .init()) async throws -> Operations.GetApiAccounts.Output { try await client.getApiAccounts(input) }
+        public func placement(_ input: Operations.GetApiAccountsPlacement.Input) async throws -> Operations.GetApiAccountsPlacement.Output { try await client.getApiAccountsPlacement(input) }
     }
     public struct Workflows: Sendable {
         let client: Client

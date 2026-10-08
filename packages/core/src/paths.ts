@@ -1,4 +1,4 @@
-import type { Dirent } from "node:fs";
+import { type Dirent, readdirSync } from "node:fs";
 import { readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
@@ -9,21 +9,50 @@ import { sessiondEndpoint } from "./sessiond";
  * the dashboard bundles for the browser.
  */
 
-/** `$CLAUDE_CONFIG_DIR` (comma-separated) else `$XDG_CONFIG_HOME/claude` and `~/.claude`. */
+/** Where every account's Claude Code config dir lives on a machine. */
+export const accountsRoot = (): string => join(homedir(), ".cawco", "accounts");
+
+/**
+ * One account's Claude Code config dir on this machine: its own credential,
+ * transcripts and `.claude.json`, and the fleet's user layer linked in.
+ */
+export const accountConfigDir = (accountId: string): string =>
+  join(accountsRoot(), accountId, "claude");
+
+/** The ids of the accounts that have a config dir on this machine. */
+export const accountIds = (): string[] => {
+  try {
+    return readdirSync(accountsRoot(), { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name);
+  } catch {
+    return [];
+  }
+};
+
+/**
+ * Every Claude Code config dir on this machine: `$CLAUDE_CONFIG_DIR`
+ * (comma-separated) else `$XDG_CONFIG_HOME/claude` and `~/.claude`, and each
+ * account's own dir.
+ */
 export const claudeConfigDirs = (): string[] => {
   const env = process.env.CLAUDE_CONFIG_DIR;
-  if (env) {
-    return env
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
-  }
   const dirs: string[] = [];
-  const xdg = process.env.XDG_CONFIG_HOME;
-  if (xdg) {
-    dirs.push(join(xdg, "claude"));
+  if (env) {
+    dirs.push(
+      ...env
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
+    );
+  } else {
+    const xdg = process.env.XDG_CONFIG_HOME;
+    if (xdg) {
+      dirs.push(join(xdg, "claude"));
+    }
+    dirs.push(join(homedir(), ".claude"));
   }
-  dirs.push(join(homedir(), ".claude"));
+  dirs.push(...accountIds().map(accountConfigDir));
   return dirs;
 };
 

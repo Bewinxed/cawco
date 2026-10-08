@@ -1,8 +1,13 @@
 import type {
+  AccountHue,
+  AccountIdentity,
+  AccountKind,
+  AccountOverage,
+  AccountProvider,
+  AtLimit,
   AuthState,
   BuildInfo,
   CapPeriod,
-  ClaudeLimits,
   ContinuationJob,
   DelegateAskStatus,
   DelegateEventKind,
@@ -15,6 +20,8 @@ import type {
   HookEvent,
   HookHandler,
   LandsMode,
+  LimitWindow,
+  ModelInfo,
   NeutralUserMessage,
   OnCap,
   OpenCodeGoLimits,
@@ -28,7 +35,9 @@ import type {
   SendState,
   SessionEffort,
   SessionTooling,
+  SigninState,
   SkillFile,
+  StrategyChoice,
   ThreadAnswer,
   ThreadMessage,
   ThreadQuestion,
@@ -330,6 +339,8 @@ export const projects = sqliteTable("projects", {
    * (`spend_settings`).
    */
   onCap: text("on_cap").$type<OnCap>(),
+  /** The accounts its sessions may run on; null: every account. */
+  accounts: text("accounts", { mode: "json" }).$type<string[]>(),
   createdAt: timestamp("created_at")
     .notNull()
     .$defaultFn(() => new Date()),
@@ -548,6 +559,12 @@ export const instances = sqliteTable("instances", {
   sessionId: text("session_id"),
   /** Which harness owns `sessionId` — what a resume and a catalog read route on. */
   harness: text("harness"),
+  /**
+   * The account the session runs on, chosen by placement when it started (a
+   * fork's is its origin's). Every later spawn of the row runs on it. Null: a
+   * harness without accounts, or a session from before accounts.
+   */
+  accountId: text("account_id"),
   /** The instance this one is a delegate of (nested under it in every rail). */
   parentInstanceId: text("parent_instance_id"),
   /** The delegating tool call, so the parent transcript can render the round trip. */
@@ -1234,10 +1251,10 @@ export const fleetMemoryHistory = sqliteTable("fleet_memory_history", {
     .$defaultFn(() => new Date()),
 });
 
-/** OAuth credentials the hub refreshes and distributes to agents on spawn. */
+/** Small settings the hub keeps by id: the Telegram bridge's chat. */
 export const credentials = sqliteTable("credentials", {
   id: text("id").primaryKey(),
-  /** `~/.claude/.credentials.json`-shaped blob, stored verbatim. */
+  /** The setting, as JSON. */
   blob: text("blob", { mode: "json" })
     .$type<Record<string, unknown>>()
     .notNull(),
@@ -1296,12 +1313,12 @@ export const usageBuckets = sqliteTable(
 );
 
 /**
- * The last limit reading each machine's daemon fetched from the Anthropic API
- * (USAGE-SPEC.md §6.1). One row per machine — the account it is signed in to.
+ * The OpenCode Go plan's last reading on each machine (USAGE-SPEC.md §6.1),
+ * read with the machine's own Go key. Claude's limits are per account
+ * ({@link accountReadings}).
  */
 export const usageLimits = sqliteTable("usage_limits", {
   machineId: text("machine_id").primaryKey(),
-  payload: text("payload", { mode: "json" }).$type<ClaudeLimits>().notNull(),
   /** The OpenCode Go plan's windows; null on a machine with no Go key. */
   openCodeGo: text("open_code_go", { mode: "json" }).$type<OpenCodeGoLimits>(),
   fetchedAt: timestamp("fetched_at")
@@ -1310,27 +1327,125 @@ export const usageLimits = sqliteTable("usage_limits", {
 });
 
 /**
+ * A provider account (core `Account`): one sign-in placement can put sessions
+ * on. Its credential is never here: it lives in the account's own Claude Code
+ * config dir on each machine signed in to it.
+ */
+export const accounts = sqliteTable("accounts", {
+  id: text("id").primaryKey(),
+  provider: text("provider").$type<AccountProvider>().notNull(),
+  kind: text("kind").$type<AccountKind>().notNull(),
+  /** A nickname; null: the account goes by its identity's email. */
+  label: text("label"),
+  hue: text("hue").$type<AccountHue>().notNull(),
+  order: integer("order").notNull(),
+  neverBackup: integer("never_backup", { mode: "boolean" })
+    .notNull()
+    .default(false),
+  reservePct: integer("reserve_pct"),
+  /** The email and organization `claude auth status` reported at its first sign-in. */
+  identity: text("identity", { mode: "json" }).$type<AccountIdentity>(),
+  createdAt: timestamp("created_at")
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
+/** Where each account is signed in, as each machine's agent last reported it. */
+export const accountSignins = sqliteTable(
+  "account_signins",
+  {
+    accountId: text("account_id")
+      .notNull()
+      .references(() => accounts.id, { onDelete: "cascade" }),
+    machineId: text("machine_id").notNull(),
+    state: text("state").$type<SigninState>().notNull(),
+    /** The account is the machine's own `~/.claude` login, not `~/.cawco/accounts/<id>/claude`. */
+    home: integer("home", { mode: "boolean" }).notNull().default(false),
+    checkedAt: timestamp("checked_at")
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (table) => [primaryKey({ columns: [table.accountId, table.machineId] })]
+);
+
+/** Each provider's routing (core `ProviderRouting`); a provider with no row uses the defaults. */
+export const accountRouting = sqliteTable("account_routing", {
+  provider: text("provider").$type<AccountProvider>().primaryKey(),
+  yours: text("yours", { mode: "json" }).$type<StrategyChoice>().notNull(),
+  delegates: text("delegates", { mode: "json" })
+    .$type<StrategyChoice>()
+    .notNull(),
+  atLimit: text("at_limit", { mode: "json" }).$type<AtLimit>().notNull(),
+});
+
+/**
+ * Each account's freshest limit reading, from what its sessions' Claude Code
+ * reported (`rate_limit_event`, `accountInfo()`), whichever machine they ran on.
+ */
+export const accountReadings = sqliteTable("account_readings", {
+  accountId: text("account_id")
+    .primaryKey()
+    .references(() => accounts.id, { onDelete: "cascade" }),
+  windows: text("windows", { mode: "json" })
+    .$type<LimitWindow[]>()
+    .notNull()
+    .default([]),
+  subscription: text("subscription"),
+  overage: text("overage", { mode: "json" }).$type<AccountOverage>(),
+  lastSeenAt: timestamp("last_seen_at").notNull(),
+});
+
+/**
+ * Each account's model catalog, as its Claude Code answered at initialize (a
+ * probe's, or any of its sessions'), and the effort each model ran at when a
+ * session asked for none. Kept so a picker has the account's models with
+ * nothing running, across agent and hub restarts.
+ */
+export const accountCatalogs = sqliteTable("account_catalogs", {
+  accountId: text("account_id")
+    .primaryKey()
+    .references(() => accounts.id, { onDelete: "cascade" }),
+  models: text("models", { mode: "json" }).$type<ModelInfo[]>().notNull(),
+  defaultEfforts: text("default_efforts", { mode: "json" })
+    .$type<Record<string, string>>()
+    .notNull()
+    .default({}),
+  readAt: timestamp("read_at").notNull(),
+});
+
+/**
+ * Accounts out of placement until their window resets: one of their sessions'
+ * Claude Code said a window refused it. Hub-wide, so every machine sees it.
+ * `scope` is the model scope ("Opus") the window limits; "" is every model.
+ */
+export const accountBench = sqliteTable(
+  "account_bench",
+  {
+    accountId: text("account_id")
+      .notNull()
+      .references(() => accounts.id, { onDelete: "cascade" }),
+    scope: text("scope").notNull(),
+    until: timestamp("until").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.accountId, table.scope] })]
+);
+
+/**
  * Every limit reading that said something new, kept as a series so burn RATE is
- * observable and not just burn LEVEL. `usage_limits` above is one row per
- * machine, overwritten every 60s — it can answer "am I at 39%?" and can never
- * answer "how fast did I get there?", which is the question that actually
- * changes what an operator does next.
+ * observable and not just burn LEVEL: the account's reading is overwritten on
+ * every report, and can answer "am I at 39%?" but never "how fast did I get
+ * there?".
  *
- * One row per window per CHANGE, not per reading: the daemon pushes on a
- * 60-second schedule and `percent` is an integer, so appending unconditionally
- * would write ~1,440 identical rows per window per day to record maybe 100
- * transitions. {@link CawcoDb.putUsageLimits} diffs against the previous
- * reading and writes only what moved (see there for what counts as a change).
- *
- * Readings carrying an `error` are dropped rather than recorded: a daemon whose
- * account is signed out reports no windows at all, and a gap in the series is
- * honest about that where a row of zeroes would not be.
+ * One row per window per CHANGE, not per reading: an integer percent moves
+ * maybe 100 times a day, and every report in between repeats it.
+ * {@link CawcoDb.putAccountReading} diffs against the previous reading and
+ * writes only what moved.
  */
 export const usageLimitHistory = sqliteTable(
   "usage_limit_history",
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
-    machineId: text("machine_id").notNull(),
+    accountId: text("account_id").notNull(),
     /** `session` | `weekly_all` | `weekly_scoped` | … — matches `LimitWindow.kind`. */
     kind: text("kind").notNull(),
     /** `scope.model.display_name` for scoped windows (e.g. "Fable"), else null. */
@@ -1342,14 +1457,14 @@ export const usageLimitHistory = sqliteTable(
     fetchedAt: timestamp("fetched_at").notNull(),
   },
   (table) => [
-    // The only query this table exists to serve: one machine's one window over
+    // The only query this table exists to serve: one account's one window over
     // a time range, in order.
     index("usage_limit_history_series_idx").on(
-      table.machineId,
+      table.accountId,
       table.kind,
       table.fetchedAt
     ),
-    // Retention prunes by age alone, across every machine and kind.
+    // Retention prunes by age alone, across every account and kind.
     index("usage_limit_history_fetched_idx").on(table.fetchedAt),
   ]
 );

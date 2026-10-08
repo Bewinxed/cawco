@@ -447,11 +447,32 @@ public final class HubConnection {
         _ = try await client.postApiSeen(body: .json(.init(ids: ids, kind: kind))).ok
     }
 
+    /// Reads the hub's accounts, their sign-ins and catalogs (client.svelte.ts
+    /// `readAccounts`); a failed read keeps what was there.
+    func readAccounts() {
+        guard let client else { return }
+        Task { [weak self] in
+            guard let view = try? await client.getApiAccounts().ok.body.json else { return }
+            self?.fleet.accounts = view
+        }
+    }
+
+    /// Which account a session would start on, and why (client.svelte.ts
+    /// `placementFor`): the account whose models the picker offers.
+    public func placement(harness: String, machineId: String, model: String?, projectId: String?) async -> String? {
+        guard let client else { return nil }
+        let answer = try? await client.getApiAccountsPlacement(query: .init(
+            harness: harness, machineId: machineId, model: model?.isEmpty == false ? model : nil, projectId: projectId
+        )).ok.body.json
+        return answer?.accountId
+    }
+
     /// Registry reads; true once machines, sessions and projects all landed.
     func refresh() async -> Bool {
         guard let client else {
             return false
         }
+        readAccounts()
         // The reads and their decoding run off the main actor; only what they
         // found is adopted here, so the first frames keep drawing while the
         // fleet is read.
@@ -769,6 +790,8 @@ public final class HubConnection {
             // The small limits frame the hub pushes on each report (USAGE-SPEC.md §6.4).
             fleet.adopt(limits: frame.limits.map { ($0.machineId, $0.payload, $0.openCodeGo) })
             fleet.adopt(spend: frame.spend)
+            // The hub says this when an account's reading, sign-in or catalog moved.
+            readAccounts()
         case .thread:
             // Said once per connection object, never per frame: threads arrive for every Caw thread.
             if !threadsNoted {

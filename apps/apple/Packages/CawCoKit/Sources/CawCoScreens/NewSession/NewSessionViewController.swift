@@ -264,7 +264,32 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
     private var locationUnverified: Bool { !machineIds.isEmpty && !path.isEmpty && verifiedLocation != locationKey }
 
     private func entries(_ harness: String) -> [ModelEntry] {
-        ModelCatalog.entries(ModelCatalog.models(fleet, harness: harness, machineIds: machineIds), use: SpawnMemory.use(harness))
+        let account = harness == "claude" ? placedAccount : nil
+        return ModelCatalog.entries(ModelCatalog.models(fleet, harness: harness, machineIds: machineIds, accountId: account), use: SpawnMemory.use(harness))
+    }
+
+    /// The account a Claude session here would start on, as the hub's
+    /// placement says: its catalog is what the picker offers. Nil while
+    /// unread, for another harness, and with no account signed in.
+    private var placedAccount: String?
+    /// What the last placement read was asked for, so a repaint asks again only when it moved.
+    private var placementAsked = ""
+
+    private func readPlacement() {
+        let key = [harness, machineId, model, projectId ?? ""].joined(separator: "\u{1}")
+        guard key != placementAsked else { return }
+        placementAsked = key
+        guard harness == "claude", !machineId.isEmpty else {
+            placedAccount = nil
+            return
+        }
+        let (machine, picked, project) = (machineId, model, projectId)
+        Task { [weak self] in
+            let account = await self?.hub.placement(harness: "claude", machineId: machine, model: picked, projectId: project)
+            guard let self, self.placementAsked == key else { return }
+            self.placedAccount = account
+            self.requestRefresh()
+        }
     }
 
     private func chosen(_ entries: [ModelEntry], _ model: String) -> ModelEntry? {
@@ -279,13 +304,11 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
         return Self.effortLevels.filter(levels.contains)
     }
 
-    /// What the slider shows while `effort` is untouched (nil, left out of the payload).
-    private var effortShown: String? {
-        if let effort { return effort }
-        if let measured = selected?.defaultEffort { return measured }
-        let reachable = efforts
-        return reachable.contains("high") ? "high" : reachable.first
-    }
+    /// What the slider shows while `effort` is untouched (nil, left out of
+    /// the payload): the level the model ran at on its account when nobody
+    /// chose one, once a session has said it; until then no level, which
+    /// reads "Default".
+    private var effortShown: String? { effort ?? selected?.defaultEffort }
 
     /// A harness that reports no permission modes (pi) has none to pick, so no control shows and none is sent.
     private var modeless: Bool { report.map { $0.capabilities.permissionModes.isEmpty } ?? false }
@@ -344,25 +367,12 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
         return ""
     }
 
-    /// The model a start names: the picked entry, or the machine's default by
-    /// the model it resolves to. Unknown while the machine's models are still
-    /// being read, and when it names its default no more precisely than
-    /// "default"; a start then would name none, and the hub refuses that.
-    private var startModel: String { selected?.id ?? model }
-    private var modelUnknown: Bool { startModel.isEmpty || startModel == "default" }
-    private var modelReading: String {
-        guard modelUnknown, !machineIds.isEmpty else { return "" }
-        return entries(harness).isEmpty
-            ? "Reading the models on \(machine?.hostname ?? machineId)…"
-            : "Choose a model for this session."
-    }
-
     private var readingText: String {
         guard connected else { return "No spawn while the hub is unreachable. Reconnect to continue." }
         if !error.isEmpty { return error }
         let location = locationReading
         if !location.isEmpty { return location }
-        return locationUnverified ? "Reading…" : modelReading
+        return locationUnverified ? "Reading…" : ""
     }
 
     private var locationInformational: Bool {
@@ -394,7 +404,7 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
     }
 
     private var cantStart: Bool {
-        continueBlocked || !connected || machineIds.isEmpty || offlineMachine != nil || unreadable || locationUnverified || modelUnknown || !repoValid
+        continueBlocked || !connected || machineIds.isEmpty || offlineMachine != nil || unreadable || locationUnverified || !repoValid
     }
 
     private var startLabel: String {
@@ -759,7 +769,8 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
                 self?.requestRefresh()
             }
         )
-        return .init(harness: harness, installed: installed, machineName: machine?.hostname ?? machineId, machineIds: machineIds, model: model, tools: tools)
+        return .init(accountId: placedAccount, harness: harness, installed: installed, machineName: machine?.hostname ?? machineId,
+                     machineIds: machineIds, model: model, tools: tools)
     }
 
     private func tint() {
@@ -810,6 +821,7 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
 
     private func paint() {
         guard layoutCompact != nil else { return }
+        readPlacement()
         let picked = machineItems.filter { machineIds.contains($0.id) }
         machinesChip.show(Glyph.machineServer.image, tint: Palette.hueCyan500,
                           label: picked.isEmpty ? "Select machine" : (picked.count == 1 ? picked[0].name : "\(picked.count) machines"))
@@ -1064,7 +1076,7 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
         if !repoValid { return "Enter a repository as owner/repository." }
         if path.isEmpty { return "Enter the directory this session should work in." }
         if unreadable || offlineMachine != nil { return locationReading }
-        return locationUnverified ? "Reading…" : modelReading
+        return locationUnverified ? "Reading…" : ""
     }
 
     private func submit() {
@@ -1079,7 +1091,8 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
         let draft = SessionDraft(
             machineIds: machineIds, baseCwd: path, cwd: workdir, prompt: prompt, harness: harness, permissionMode: permissionMode, model: model,
             effort: effort, spinOff: spinOff, repo: repo?.trimmingCharacters(in: .whitespaces), projectId: projectId,
-            summarizerHarness: summarizerHarness, summarizerModel: summarizerSelected?.id ?? summarizerModel, usedModel: selected?.id ?? model
+            // The person's own picks; "" when they left the harness's default.
+            summarizerHarness: summarizerHarness, summarizerModel: summarizerModel, usedModel: model
         )
         let sendsMode = !modeless
         busy = true
@@ -1127,9 +1140,8 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
         }
     }
 
-    /// The model the form shows as chosen, sent by name so the session never
-    /// falls to its machine's default. Empty only when the machine names its
-    /// default no more precisely than "default".
+    /// The model a start names: the person's pick, or "" when they left the
+    /// harness's default, which is sent as no model at all.
     private static func shown(_ draft: SessionDraft) -> String {
         draft.usedModel == "default" ? "" : draft.usedModel
     }
@@ -1179,9 +1191,9 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
         guard await verifyBeforeSpawn(target, draft.baseCwd, current: current), current() else { return }
         let note = draft.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         let request = HubConnection.ContinuationRequest(
-            summarizer: .init(harness: try Self.wire(draft.summarizerHarness), model: draft.summarizerModel),
+            summarizer: .init(harness: try Self.wire(draft.summarizerHarness), model: draft.summarizerModel.isEmpty ? nil : draft.summarizerModel),
             target: .init(
-                harness: try Self.wire(draft.harness), model: draft.usedModel, machineId: target, cwd: draft.cwd,
+                harness: try Self.wire(draft.harness), model: Self.shown(draft).isEmpty ? nil : Self.shown(draft), machineId: target, cwd: draft.cwd,
                 effort: try draft.effort.map(Self.wire),
                 permissionMode: sendsMode ? try Self.wire(draft.permissionMode) : nil,
                 scratch: draft.spinOff ? .init(worktree: false, baseCwd: draft.cwd) : nil,

@@ -4,6 +4,9 @@
  * changes its stream carries (NEW.md §6).
  */
 import type {
+  Account,
+  AccountCatalog,
+  AccountSignin,
   AgentRow,
   AvailableCommand,
   BuildInfo,
@@ -32,6 +35,7 @@ import type {
   PermissionPresentation,
   PermissionResult,
   PermissionUpdate,
+  PlacementExplain,
   ProjectCap,
   ProjectOfferSummary,
   ProjectSpend,
@@ -838,6 +842,12 @@ const state = $state({
   openCodeGoLimits: {} as Record<string, OpenCodeGoLimits>,
   /** The hub's limit readings have been read once, so an empty map means none, not not-yet. */
   usageLimitsRead: false,
+  /**
+   * The hub's accounts (`/api/accounts`): who they are, where each is signed
+   * in, and each one's model catalog. Read on connect and after every
+   * `kind: 'usage'` frame, which the hub sends when any of it moves.
+   */
+  accounts: null as AccountsView | null,
   /**
    * The fleet's spend as the hub reckons it (`/api/usage/spend`, then every
    * `kind: 'usage'` frame); null until it lands.
@@ -1908,6 +1918,46 @@ export async function readSpend(): Promise<void> {
   }
 }
 
+/** What `/api/accounts` answers. */
+export interface AccountsView {
+  accounts: Account[];
+  catalogs: AccountCatalog[];
+  signins: AccountSignin[];
+}
+
+/** Reads the hub's accounts, their sign-ins and catalogs; a failed read keeps what was there. */
+export async function readAccounts(): Promise<void> {
+  const view = await load<AccountsView>("/api/accounts");
+  if (view && !equal(state.accounts, view)) {
+    state.accounts = view;
+  }
+}
+
+/**
+ * Which account a session would start on, and why (`/api/accounts/placement`):
+ * the account whose models a picker offers. Undefined when it cannot be read;
+ * a refusal is thrown in the hub's words.
+ */
+export async function placementFor(query: {
+  harness: string;
+  machineId: string;
+  model?: string;
+  projectId?: string;
+}): Promise<PlacementExplain | undefined> {
+  const params = new URLSearchParams(
+    Object.entries(query).filter(
+      (entry): entry is [string, string] => entry[1] !== undefined
+    )
+  );
+  const response = await fetch(`/api/accounts/placement?${params}`);
+  if (response.status === 400) {
+    throw new Error(await response.text());
+  }
+  return response.ok
+    ? ((await response.json()) as PlacementExplain)
+    : undefined;
+}
+
 /** The `kind: 'usage'` frame's readings, in the shape `/api/usage/limits` serves. */
 const usageLimitReadings = (readings: UsageLimitsReading[]) =>
   readings.map((reading) => ({
@@ -1998,6 +2048,7 @@ async function refresh(): Promise<boolean> {
   // Same reason as the limits below: the frames that carry spend come once a
   // minute per machine, and a dashboard opened between them has none yet.
   readSpend();
+  readAccounts();
   // Off the board's wait: an offer is a quiet card, not part of the fleet.
   readProjectOffers();
   // Every project's threads, for the rail; frames keep them from here.
@@ -2462,6 +2513,8 @@ function handleFrame(frame: FramePayload): void {
     // The small limits frame the hub pushes on each report (USAGE-SPEC.md §6.4).
     adoptUsageLimits(usageLimitReadings(frame.limits));
     adoptSpend(frame.spend);
+    // The hub says this when an account's reading, sign-in or catalog moved.
+    readAccounts();
     return;
   }
 
@@ -4155,22 +4208,21 @@ function userMessage(text: string, uuid: string): SendPayload["message"] {
   };
 }
 
-/** Spawns a session on `machineId` and registers the view it streams into. */
 /**
- * A spawn as it leaves this dashboard, with a model always named, and a
- * permission mode named exactly when its harness has modes. What the path
- * says stands (the form's choice, the session's own settings); what it
- * leaves out is what the New Session form shows by default
- * ({@link spawnDefaults}), never the machine's default. The hub settles the
- * same rule (`settleMode`) and refuses a spawn that breaks it.
+ * A spawn as it leaves this dashboard: a model only when one was picked (none
+ * runs on the harness's own default, never an empty string), and a permission
+ * mode named exactly when its harness has modes. What the path says stands
+ * (the form's choice, the session's own settings); a mode it leaves out is
+ * the one the New Session form shows by default ({@link spawnDefaults}). The
+ * hub settles the same rule (`settleMode`).
  */
 function explicit(machineId: string, payload: SpawnPayload): SpawnPayload {
   const harness = payload.harness ?? "claude";
   const report = state.machines
     .find((machine) => machine.machineId === machineId)
     ?.harnesses?.find((entry) => entry.harness === harness);
-  const defaults = spawnDefaults(harness, machineId, report);
-  const { permissionMode, ...rest } = payload;
+  const defaults = spawnDefaults(harness, report);
+  const { permissionMode, model, ...rest } = payload;
   // A harness with no permission modes (pi) is sent none, whatever the
   // path carried (a stored row's, a remembered preference).
   const mode =
@@ -4179,7 +4231,7 @@ function explicit(machineId: string, payload: SpawnPayload): SpawnPayload {
       : (permissionMode ?? defaults.permissionMode);
   return {
     ...rest,
-    model: payload.model || defaults.model || undefined,
+    ...(model ? { model } : {}),
     ...(mode ? { permissionMode: mode } : {}),
   };
 }
@@ -6270,6 +6322,10 @@ export const cawco = {
   /** Every machine's OpenCode Go windows, by machineId. */
   get openCodeGoLimits(): Readonly<Record<string, OpenCodeGoLimits>> {
     return state.openCodeGoLimits;
+  },
+  /** The hub's accounts, their sign-ins and catalogs; null until read. */
+  get accounts(): AccountsView | null {
+    return state.accounts;
   },
   /** The hub's limit readings have landed at least once. */
   get usageLimitsRead() {

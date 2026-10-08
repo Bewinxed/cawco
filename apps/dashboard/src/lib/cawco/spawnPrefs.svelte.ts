@@ -5,7 +5,7 @@ import type {
   HarnessReport,
   PermissionMode,
 } from "@cawco/core";
-import { defaultModelFor, MODEL_DEFAULT } from "./models.svelte";
+import { MODEL_DEFAULT } from "./models.svelte";
 import {
   fallbackMode,
   permissionModesFor,
@@ -93,36 +93,33 @@ export const spawnPrefs = {
 };
 
 /**
- * What the New Session form shows before anything is touched, for a spawn
- * that has no form: its default model entry, and the remembered permission
- * mode unless the machine's harness cannot honour it, then the nearest one it
- * can — the same correction the form makes. A harness that reports no
- * modes at all (pi) has none, and none is given. A path that starts a session
- * without saying either takes these, never the machine's own defaults. With
- * no form there is no Full Send warning to read, so a remembered Full Send
- * starts these on Bypass ({@link unpickedMode}).
+ * The permission mode the New Session form shows before anything is touched,
+ * for a spawn that has no form: the remembered one unless the machine's
+ * harness cannot honour it, then the nearest one it can — the same
+ * correction the form makes. A harness that reports no modes at all (pi) has
+ * none, and none is given. With no form there is no Full Send warning to
+ * read, so a remembered Full Send starts these on Bypass ({@link
+ * unpickedMode}). No model: a spawn that names none runs on its harness's own
+ * default.
  *
  * Full Send is remembered only as a form's own choice: the form reaches it
  * through its confirmation, or opens on it under its warning.
  */
 export function spawnDefaults(
   harness: HarnessKind,
-  machineId: string,
   report?: HarnessReport
-): { model: string; permissionMode?: PermissionMode } {
-  const model = defaultModelFor(harness, [machineId]);
+): { permissionMode?: PermissionMode } {
   if (report?.capabilities.permissionModes.length === 0) {
-    return { model };
+    return {};
   }
   const remembered = unpickedMode(store.permissionMode);
   if (!report) {
-    return { model, permissionMode: remembered };
+    return { permissionMode: remembered };
   }
   const honoured = permissionModesFor(harness)
     .map((mode) => mode.value)
     .filter((mode) => report.capabilities.permissionModes.includes(mode));
   return {
-    model,
     permissionMode: honoured.includes(remembered)
       ? remembered
       : (fallbackMode(remembered, honoured) ?? remembered),

@@ -119,6 +119,21 @@ export const isEffortLevel = (value: unknown): value is EffortLevel =>
  */
 export const EFFORT_READ = "effort";
 
+/**
+ * The `system` subtype an agent passes a Claude session's `rate_limit_event`
+ * on in, its `rate_limit_info` as Claude Code reported it. The hub reads it as
+ * the session's account's limit reading; it never reaches a screen.
+ */
+export const RATE_LIMIT_READ = "rate_limit";
+
+/**
+ * The `system` subtype an agent says, once per Claude session start, what the
+ * session's Claude Code answered at initialize (`initializationResult()`):
+ * who it is signed in as, its plan, and the models it offers. The hub keeps
+ * it as the session's account's catalog and plan; it never reaches a screen.
+ */
+export const ACCOUNT_READ = "account";
+
 /** A session's own word on what it is doing right now. */
 export type NeutralStatus = "compacting" | "requesting" | null;
 
@@ -766,6 +781,9 @@ export const promptCacheUsage = (result: NeutralResultMessage) => {
  * harness that emits a subtype nothing here names degrades to a generic line.
  */
 export interface NeutralSystemMessage {
+  // account ({@link ACCOUNT_READ}) — what the session's Claude Code said at
+  // initialize: who it is signed in as, its plan, and its models
+  account?: import("./accounts").AccountProbe;
   // commands_changed
   commands?: SlashCommand[];
   compact_error?: string;
@@ -791,6 +809,8 @@ export interface NeutralSystemMessage {
   model?: string;
   patch?: { description?: string; status?: string; error?: string };
   permissionMode?: PermissionMode;
+  // rate_limit ({@link RATE_LIMIT_READ}) — the `rate_limit_info` Claude Code reported
+  rate_limit_info?: import("./usage/observed").ObservedRateLimitInfo;
   raw?: unknown;
   // read ({@link MESSAGES_READ}) — the sends the harness has now consumed
   read?: string[];
@@ -902,6 +922,13 @@ export interface HarnessCapabilities {
 
 /** What a machine knows about one harness: is it installed, can it work, what can it do. */
 export interface HarnessReport {
+  /**
+   * Claude only: every Claude Code config dir on the machine and what
+   * `claude auth status` said of it — `~/.claude` (`account: null`) and each
+   * account's `~/.cawco/accounts/<id>/claude`. The hub reads it as where each
+   * account is signed in.
+   */
+  accounts?: import("./accounts").ClaudeAccountReport[];
   auth: AuthState;
   /** Why sign-in is unavailable or could not be checked, without credential data. */
   authReason?: string;
