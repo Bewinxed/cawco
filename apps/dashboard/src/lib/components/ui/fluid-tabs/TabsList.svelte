@@ -130,6 +130,36 @@
     return () => cancelAnimationFrame(frame);
   });
 
+  /**
+   * Folder tabs overlap like a drawer of real folders (owner: "spacing
+   * between inactive tabs should overlap a bit just like actual folder
+   * tabs"), so which one is drawn over which is a choice: the chosen tab on
+   * top, then each tab above the ones farther from it, so every edge tucks
+   * behind its neighbour toward the chosen tab. With none chosen the first
+   * is on top. Each tab is its own stack, ranked here on the item the track
+   * lays out (a host may wrap the tab), and the focus ring rides above them
+   * all. A tap on an overlap goes to the tab drawn there.
+   */
+  $effect(() => {
+    const track = node;
+    const { items } = rects;
+    const chosen = list.optimisticIndex ?? -1;
+    if (!track?.closest('[data-variant="folder"]')) {
+      return;
+    }
+    const top = items.length + 1;
+    items.forEach((item, i) => {
+      let laid: HTMLElement = item;
+      while (laid.parentElement && laid.parentElement !== track) {
+        laid = laid.parentElement;
+      }
+      laid.style.zIndex = String(
+        i === chosen ? top : items.length - Math.abs(i - Math.max(chosen, 0))
+      );
+    });
+    track.style.setProperty("--stack-top", String(top + 1));
+  });
+
   const selectedRect = $derived(rects.at(list.optimisticIndex));
   const focusRect = $derived(rects.at(list.focusedIndex));
 
@@ -456,12 +486,10 @@
       }
     }
   }
-  /* A segmented track that scrolls keeps every label whole and scrolls past
-     the edge (its fades say there is more); folder tabs shrink toward an
-     ellipsis the way a browser's tabs do, so they keep the item's shrink. */
-  :global([data-variant="segmented"])
-    .ff-tabs-list.scrollable
-    > :global(.ff-tab) {
+  /* A track that scrolls keeps every tab at its own width and scrolls past
+     the edge (its fades say there is more), never squeezing a tab toward an
+     ellipsis to fit: a tab's own cap is what ends a long title. */
+  .ff-tabs-list.scrollable > :global(.ff-tab) {
     flex-shrink: 0;
   }
   :global([data-size="compact"]) .ff-tabs-list {
@@ -489,7 +517,12 @@
        the track keeps that much room at each end so a scrolling track
        does not clip the first or last flare. */
     --flare: var(--radius);
-    padding-inline: var(--flare);
+    /* Neighbouring tabs overlap by the flare: a tucked edge lies exactly
+       under the chosen sheet's foot, and the gap between tabs is gone. The
+       track's leading pad takes the first tab's overlap back. */
+    --overlap: var(--flare);
+    gap: 0;
+    padding-inline: calc(var(--flare) + var(--overlap)) var(--flare);
     padding-block-end: 0;
     border-radius: 0;
     background: none;
@@ -504,6 +537,16 @@
       --wipe-in: right;
       --wipe-out: left;
     }
+  }
+
+  /* Each folder tab, or the host's box round it, steps back over its
+     leading neighbour by the overlap and stands in its own stack, ranked
+     from the chosen tab by the script. */
+  :global([data-variant="folder"])
+    .ff-tabs-list
+    > :global(:not(.segment, .ring, .kit-ghost, .end-room)) {
+    position: relative;
+    margin-inline-start: calc(-1 * var(--overlap));
   }
 
   /* The room after the last tab (`endRoom`): none at rest, its gap taken
@@ -562,13 +605,11 @@
   }
   /* The hover ghost is the kit's (app.css .kit-ghost), cut to the tab's
      own shape and filled as the kit fills it: surface-hover, whole.
-     Folder tabs: the ghost glides over the unchosen tabs' tints and under
-     the chosen sheet (TabItem: tint 0, ghost 1, sheet 2, contents 3), in
-     the tabs' own hover tint. Clicking the tab under it, the sheet wipes
-     in over the ghost, so the hover becomes the selection. */
+     Folder tabs overlap, each in its own stack, so no one layer can glide
+     between a tab's card and its label: the tab under the pointer lights
+     its own card in the hover tint instead (TabItem, `data-ghosted`). */
   :global([data-variant="folder"]) .ff-tabs-list > :global(.kit-ghost) {
-    z-index: 1;
-    background: var(--tab-hover, var(--surface-hover));
+    display: none;
   }
   /* The focus ring, gliding from tab to tab: the app's one ring, drawn on
      the tab's own box (a tab sits flush in the strip). */
@@ -585,6 +626,7 @@
     }
   }
   :global([data-variant="folder"]) .ring {
+    z-index: var(--stack-top);
     border-radius: calc(var(--radius) + 2px) calc(var(--radius) + 2px) 0 0;
   }
 </style>

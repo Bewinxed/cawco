@@ -133,9 +133,10 @@
   /* The measured box: the hit and whatever trails it. The overlays are
      aimed at this, so a trailing control sits inside the segment. */
   /* The tab box makes no stacking context of its own: its contents rise
-     above the overlays (the sheet is z-index 2, the list's hover ghost 1),
-     while anything the box paints behind them — a folder tab's tint —
-     stays under both. */
+     above the overlays (the sheet is z-index 2, a segmented list's hover
+     ghost 1), while anything the box paints behind them — a folder tab's
+     tint — stays under both. A folder track stacks each tab apart
+     (TabsList), and these layers order within it. */
   .ff-tab {
     position: relative;
     display: flex;
@@ -218,11 +219,24 @@
     }
   }
   /* Folder tabs stand behind the sheet in their own tint: a rounded-top
-     card the size of the tab, under the sheet's layer, so the chosen
-     sheet's shoulders and flared foot draw over a neighbour's card rather
-     than being cut by it. The chosen tab's card is hidden under the sheet
-     and swaps with it at once. */
+     card the size of the tab, under the sheet's layer. Each tab is its own
+     stack, ranked by the track (TabsList) with the chosen one on top, so
+     the chosen sheet's shoulders and flared foot draw over a neighbour's
+     card, and neighbours overlap by the flare. The chosen tab's card is
+     hidden under the sheet and swaps with it at once. */
   :global([data-variant="folder"]) .ff-tab {
+    /* The trailing pad is the full pad: an edge tucked under a neighbour
+       by the overlap still leaves the close control clear of it. */
+    &:not(:has(.hit:last-child)) {
+      padding-inline-end: var(--px);
+    }
+    /* Under the pointer the tab lights its own card in the hover tint (the
+       track's ghost cannot glide between overlapping stacks). */
+    @media (hover: hover) {
+      &[data-ghosted]:not(.selected)::before {
+        background: var(--tab-hover, var(--surface-hover));
+      }
+    }
     &::before {
       content: "";
       position: absolute;

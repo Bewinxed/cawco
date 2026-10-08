@@ -11,8 +11,9 @@ import UIKit
 /// His compacted head (assets/mascot/README.md, `compacted`: a head that
 /// fills its box, built for 18 pt) on a glass capsule (`GlassCapsule`), or
 /// on the bar's glass group where he shares one. What waits is arcs on his
-/// circle's rim, one for each, closing whole past nine; no digit is drawn on
-/// him. When something new arrives he plays his needs-you beat once
+/// circle's rim, one for each; past nine a second lap refills them on top in
+/// the fail glyph's ink, and past two laps the ring closes whole in it; no
+/// digit is drawn on him. When something new arrives he plays his needs-you beat once
 /// (`CawBeat`; his guide: "a gentle beat… never a hello") and holds still
 /// again; with less motion only the arcs change. A tap or a drag down from
 /// him moves the drawer (`NeedsDrawer`), which the shell owns.
@@ -32,13 +33,17 @@ final class NeedsCawButton: UIControl {
     private let beatView = UIImageView()
     /// What waits, on his circle's rim (NeedsCaw.svelte, The count): an arc
     /// for each, `arc`° long with `arcGap`° between, from 12 o'clock
-    /// clockwise; past `arcs` of them the ring closes whole. No digit is
+    /// clockwise, in the attention ink; past `arcs` the count refills the
+    /// same arcs on top in the fail glyph's ink (the tenth redraws the
+    /// first), and past two laps the ring closes whole in it. No digit is
     /// drawn on him: the number is in his VoiceOver label and the drawer.
     static let arc = 30.0
     static let arcGap = 8.0
     static let arcs = 9
-    /// One layer per arc and one for the closed ring, each drawn along itself.
+    /// One layer per arc, one per second-lap arc over it, and one for the
+    /// closed ring, each drawn along itself.
     private let arcLayers = (0 ..< NeedsCawButton.arcs).map { _ in CAShapeLayer() }
+    private let lapLayers = (0 ..< NeedsCawButton.arcs).map { _ in CAShapeLayer() }
     private let wholeRing = CAShapeLayer()
     private(set) var count = 0
     private var beating = false
@@ -64,7 +69,7 @@ final class NeedsCawButton: UIControl {
         }
         beatView.alpha = 0
         beatView.contentMode = .scaleAspectFit
-        for ring in arcLayers + [wholeRing] {
+        for ring in arcLayers + lapLayers + [wholeRing] {
             ring.fillColor = nil
             ring.lineWidth = Size.cCawRing
             ring.lineCap = .round
@@ -118,18 +123,25 @@ final class NeedsCawButton: UIControl {
         // A round cap reaches half the stroke past the path's end: taken off
         // each end, so the arc as seen is `arc`° and the gaps `arcGap`°.
         let cap = Size.cCawRing / 2 / rim
-        for (k, ring) in arcLayers.enumerated() {
+        for (k, (ring, lap)) in zip(arcLayers, lapLayers).enumerated() {
             let from = top + CGFloat(k) * CGFloat(Self.arc + Self.arcGap) * degree
-            ring.path = UIBezierPath(arcCenter: centre, radius: rim, startAngle: from + cap, endAngle: from + CGFloat(Self.arc) * degree - cap, clockwise: true).cgPath
+            let path = UIBezierPath(arcCenter: centre, radius: rim, startAngle: from + cap, endAngle: from + CGFloat(Self.arc) * degree - cap, clockwise: true).cgPath
+            ring.path = path
+            lap.path = path
         }
         wholeRing.path = UIBezierPath(arcCenter: centre, radius: rim, startAngle: top, endAngle: top + 2 * .pi, clockwise: true).cgPath
     }
 
-    /// The arcs take the scheme's attention ink.
+    /// The first lap takes the scheme's attention ink; the second lap and
+    /// the closed ring the fail glyph's.
     private func inkRing() {
         let ink = Palette.statusAttnGlyph.resolvedColor(with: traitCollection).cgColor
-        for ring in arcLayers + [wholeRing] {
+        let lapInk = Palette.statusFailGlyph.resolvedColor(with: traitCollection).cgColor
+        for ring in arcLayers {
             ring.strokeColor = ink
+        }
+        for ring in lapLayers + [wholeRing] {
+            ring.strokeColor = lapInk
         }
     }
 
@@ -169,10 +181,12 @@ final class NeedsCawButton: UIControl {
         accessibilityLabel = next > 0 ? "Needs you, \(next)" : quiet
         accessibilityValue = open ? "Open" : nil
         let animated = window != nil
-        for (k, ring) in arcLayers.enumerated() {
-            show(ring, next > k, animated: animated)
+        let closed = next > 2 * Self.arcs
+        for (k, (ring, lap)) in zip(arcLayers, lapLayers).enumerated() {
+            show(ring, !closed && next > k, animated: animated)
+            show(lap, !closed && next > Self.arcs + k, animated: animated)
         }
-        show(wholeRing, next > Self.arcs, animated: animated)
+        show(wholeRing, closed, animated: animated)
     }
 
     /// His needs-you beat, once; nothing with less motion.

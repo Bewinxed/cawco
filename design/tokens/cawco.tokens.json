@@ -2224,6 +2224,11 @@
       "$value": "36px",
       "$description": "A session tab row: its list's 4px pad over 32px tabs (PaneTabs)."
     },
+    "c-tab-max-w": {
+      "$type": "dimension",
+      "$value": "240px",
+      "$description": "The widest a session tab grows: its title, padding and close control. Below it a tab is as wide as its title; only a title past it ends in an ellipsis, and a row of tabs that will not fit scrolls (PaneTabs)."
+    },
     "c-bar-group-pad": {
       "$type": "dimension",
       "$value": "4px",

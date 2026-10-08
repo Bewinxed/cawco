@@ -945,17 +945,18 @@
     max-height: calc(88dvh - 24px - env(safe-area-inset-bottom));
     overflow: hidden;
   }
-  /* The two trailing controls sit 4px apart and their hit areas meet
-     between them. On a coarse pointer the close button stands 24px off the
-     chevron and 8px off the tab's end, so each 44px area reaches its full
-     width before meeting a neighbour's. The chevron's leading half falls on
-     its own tab's label, which opens the same details. */
+  /* The trailing controls sit 4px after the title and 4px apart, on every
+     pointer (owner: "a lot of wasted space until the x button"); where the
+     chevron stands beside the close, their hit areas meet between them. A
+     phone's tab has no chevron, so its close takes the whole 44px, its
+     leading half over the title's end, which chooses the same tab. */
   .tdetails,
   .tclose {
     --hit-gap-x: 4px;
-
-    @media (pointer: coarse) {
-      --hit-gap-x: 24px;
+  }
+  .tclose {
+    @media (max-width: 899px) {
+      --hit-gap-x: initial;
     }
   }
   /* The session track scrolls sideways, and a scroll container clips on both
@@ -1095,19 +1096,32 @@
      card (surface-recess-deep, by day surface-hover's own step) toward
      the chosen sheet's surface; by night it is the hover step. */
   :global(.session-tabs[data-slot="tabs"] .ff-tabs-list) {
-    --px: 10px;
+    --px: 12px;
     --text: var(--text-label);
     --item: 32px;
     --sheet: var(--surface-recess);
     --tab-hover: light-dark(var(--surface-recess), var(--surface-hover));
   }
+  /* The phone's row: tabs a row's height tall, standing on the bar's
+     floor with no pad above them, and the strip's ends fading over a short
+     run so a tab slides under the toggle and Caw rather than being cut. */
+  @media (max-width: 899px) {
+    :global(.session-tabs:not(.hosted)[data-slot="tabs"] .ff-tabs-list) {
+      --item: var(--c-tab-row-h);
+      --pad: 0px;
+      --fade-len: 16px;
+    }
+  }
 
+  /* As wide as its title, its pad and its controls, up to the cap; only a
+     title past the cap ends in an ellipsis, and a strip that will not fit
+     scrolls (TabsList) rather than squeezing its tabs. */
   .tab {
     position: relative;
     display: flex;
     flex: 0 0 auto;
     min-inline-size: 0;
-    max-inline-size: 200px;
+    max-inline-size: var(--c-tab-max-w);
 
     /* Parked on you: the label carries the strong ink whether or not it
        is chosen, so the ask is legible from across the strip. It comes up
@@ -1155,13 +1169,10 @@
     border-radius: var(--radius-xs);
     color: var(--ink-muted);
     cursor: pointer;
+    /* 4px from the title's end to the glyph: the 16px glyph stands 2px
+       inside its 20px box. */
+    margin-inline-start: 2px;
 
-    @media not (pointer: coarse) {
-      margin-inline-start: 4px;
-    }
-    @media (pointer: coarse) {
-      margin-inline: 24px 8px;
-    }
     & :global(svg) {
       display: block;
       inline-size: 16px;

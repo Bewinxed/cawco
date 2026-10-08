@@ -128,8 +128,11 @@
    * His count is drawn on his circle's rim, never written on him (owner:
    * "lines along the rim of the circle that increase with the count, to a
    * limit"): an arc for each thing waiting, from 12 o'clock clockwise,
-   * ARC° long with GAP° between; past ARCS of them the ring closes whole,
-   * which says "a lot". Nothing of it leaves his circle, so nothing of it
+   * ARC° long with GAP° between, in the attention ink. Past ARCS the count
+   * refills the same arcs on top in a second ink, the fail glyph (owner:
+   * "for more than 9 dashes we can refill again with another color"), so
+   * the tenth redraws the first; past two laps the ring closes whole in the
+   * second ink, which says "a lot". Nothing of it leaves his circle, so nothing of it
    * leaves the screen. The number itself is in his label, his tooltip and
    * the drawer's head. His circle is the bar's control height across,
    * round his item's centre: the narrow bar's glass circle, and the wide
@@ -149,8 +152,12 @@
   const RIM_STROKE = 2;
   /** The rim's radius: the inset in from his circle's edge, half the stroke in. */
   const RIM = RING_BOX / 2 - RIM_INSET - RIM_STROKE / 2;
-  const arcCount = $derived(Math.min(count, ARCS));
-  const ringClosed = $derived(count > ARCS);
+  /** The first lap's arcs, the second lap's on top of them, and past both the closed ring. */
+  const ringClosed = $derived(count > 2 * ARCS);
+  const arcCount = $derived(ringClosed ? 0 : Math.min(count, ARCS));
+  const lapCount = $derived(
+    ringClosed ? 0 : Math.min(Math.max(count - ARCS, 0), ARCS)
+  );
   const tipText = $derived(count > 0 ? `${count} need you` : quiet);
 
   /** A point on the rim, `deg` clockwise from 12 o'clock. */
@@ -922,7 +929,8 @@
         class:on={smiling}
       ></span>
     </span>
-    <!-- What waits, on his rim: an arc each, closed whole past ARCS. -->
+    <!-- What waits, on his rim: an arc each, a second lap on top in its
+         own ink past ARCS, closed whole past two laps. -->
     <svg
       aria-hidden="true"
       class="rim"
@@ -932,9 +940,17 @@
       {#each { length: arcCount }, k (k)}
         <path class="arc" d={arcPath(k)} pathLength="1" transition:drawn />
       {/each}
+      {#each { length: lapCount }, k (k)}
+        <path
+          class="arc lap"
+          d={arcPath(k)}
+          pathLength="1"
+          transition:drawn
+        />
+      {/each}
       {#if ringClosed}
         <circle
-          class="arc whole"
+          class="arc lap whole"
           cx={RING_BOX / 2}
           cy={RING_BOX / 2}
           pathLength="1"
@@ -991,6 +1007,10 @@
     stroke-linecap: round;
     stroke-dasharray: 1;
     stroke-dashoffset: 0;
+  }
+  /* The second lap, and the closed ring past it: the fail glyph's ink. */
+  .arc.lap {
+    stroke: var(--status-fail-glyph);
   }
   /* His head: the face, the beat and the smile in one cell, squashed once
      under a press (DESIGN.md, The Press Rule) with motion allowed. */

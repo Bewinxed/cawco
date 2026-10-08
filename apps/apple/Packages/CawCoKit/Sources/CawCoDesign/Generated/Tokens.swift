@@ -466,6 +466,8 @@ public enum Size {
     public static let cTopBarH: Double = 44
     /// A session tab row: its list's 4px pad over 32px tabs (PaneTabs).
     public static let cTabRowH: Double = 36
+    /// The widest a session tab grows: its title, padding and close control. Below it a tab is as wide as its title; only a title past it ends in an ellipsis, and a row of tabs that will not fit scrolls (PaneTabs).
+    public static let cTabMaxW: Double = 240
     /// The top bar's icon group's inset round its items, and the bar's round its controls: the 44px bar less the 36px control height, halved. The group is a capsule and its items sit concentric inside it.
     public static let cBarGroupPad: Double = 4
     /// An item in the top bar's icon group: the group's height, the bar's control height, less its inset on both sides.

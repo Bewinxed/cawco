@@ -600,6 +600,8 @@
     --c-top-bar-h: 44px;
     /* A session tab row: its list's 4px pad over 32px tabs (PaneTabs). */
     --c-tab-row-h: 36px;
+    /* The widest a session tab grows: its title, padding and close control. Below it a tab is as wide as its title; only a title past it ends in an ellipsis, and a row of tabs that will not fit scrolls (PaneTabs). */
+    --c-tab-max-w: 240px;
     /* The top bar's icon group's inset round its items, and the bar's round its controls: the 44px bar less the 36px control height, halved. The group is a capsule and its items sit concentric inside it. */
     --c-bar-group-pad: 4px;
     /* An item in the top bar's icon group: the group's height, the bar's control height, less its inset on both sides. */
