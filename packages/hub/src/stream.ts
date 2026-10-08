@@ -48,7 +48,7 @@ import {
   type StreamReset,
   type StreamSubscribe,
 } from "@cawco/core";
-import { type HubSocket, toDashboard } from "./registry";
+import { type HubSocket, refusalFrame, toDashboard } from "./registry";
 
 export { RING_SIZE };
 
@@ -336,6 +336,12 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
     ackTo(socket, { type: "command.ack", commandId, stage: "failed", reason });
   };
 
+  /** A stream message too malformed to act on: logged, and the sender told which field. */
+  const refuse = (socket: HubSocket, raw: unknown, fault: string): void => {
+    console.warn(`[hub] ${fault}`, raw);
+    deliver(socket, refusalFrame(raw, fault));
+  };
+
   const sequence = (
     sessionId: string,
     frame: SessionStreamFrame
@@ -617,7 +623,7 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
     raw: Record<string, unknown>
   ): void => {
     if (!nonEmpty(raw.sessionId)) {
-      console.warn("[hub] dropped stream.subscribe with no session", raw);
+      refuse(socket, raw, "stream.subscribe refused: `sessionId` is missing");
       return;
     }
     subscribe(socket, {
@@ -637,14 +643,22 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
    * new to it is answered with its plan whole, and every frame after comes
    * as it comes to the session's followers.
    */
-  const followPlans = (socket: HubSocket, raw: unknown): void => {
-    if (!(Array.isArray(raw) && raw.every(nonEmpty))) {
-      console.warn("[hub] dropped plan.follow with no session list", raw);
+  const followPlans = (
+    socket: HubSocket,
+    raw: Record<string, unknown>
+  ): void => {
+    const { instanceIds } = raw;
+    if (!(Array.isArray(instanceIds) && instanceIds.every(nonEmpty))) {
+      refuse(
+        socket,
+        raw,
+        "plan.follow refused: `instanceIds` is not a list of session ids"
+      );
       return;
     }
     const entry = entryFor(socket);
     const before = entry.plans;
-    entry.plans = new Set(raw);
+    entry.plans = new Set(instanceIds);
     for (const instanceId of entry.plans) {
       if (!before.has(instanceId)) {
         ports.planSnapshot(instanceId, (plan) => deliver(socket, plan));
@@ -653,10 +667,16 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
   };
 
   /** A client found a gap in a session's plan: the plan whole, to it alone. */
-  const resyncPlan = (socket: HubSocket, instanceId: unknown): void => {
-    if (nonEmpty(instanceId)) {
-      ports.planSnapshot(instanceId, (plan) => deliver(socket, plan));
+  const resyncPlan = (
+    socket: HubSocket,
+    raw: Record<string, unknown>
+  ): void => {
+    const { instanceId } = raw;
+    if (!nonEmpty(instanceId)) {
+      refuse(socket, raw, "plan.resync refused: `instanceId` is missing");
+      return;
     }
+    ports.planSnapshot(instanceId, (plan) => deliver(socket, plan));
   };
 
   const handleClientMessage = (socket: HubSocket, raw: unknown): boolean => {
@@ -670,18 +690,18 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
     }
 
     if (raw.type === "plan.follow") {
-      followPlans(socket, raw.instanceIds);
+      followPlans(socket, raw);
       return true;
     }
 
     if (raw.type === "plan.resync") {
-      resyncPlan(socket, raw.instanceId);
+      resyncPlan(socket, raw);
       return true;
     }
 
     if (raw.type === "command") {
       if (!nonEmpty(raw.commandId)) {
-        console.warn("[hub] dropped command with no id", raw);
+        refuse(socket, raw, "command refused: `commandId` is missing");
         return true;
       }
       if (!COMMAND_KINDS.has(raw.kind as string)) {
@@ -692,7 +712,14 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
       return true;
     }
 
-    return false;
+    // An envelope carries no `type`: one that names a type this protocol
+    // does not have is this protocol's to refuse, by that name.
+    refuse(
+      socket,
+      raw,
+      `unknown stream message type "${raw.type}": the stream takes stream.subscribe, plan.follow, plan.resync or command`
+    );
+    return true;
   };
 
   /**

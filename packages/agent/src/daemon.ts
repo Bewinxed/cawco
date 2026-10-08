@@ -987,6 +987,39 @@ const attach = (
       })();
     };
 
+    /**
+     * The hub refused a frame this daemon sent and says why: logged, since a
+     * `frames` envelope is never work for the supervisor. Whether it was one.
+     */
+    const refusedByHub = (envelope: Envelope): boolean => {
+      const refused = envelope.payload as
+        | { kind?: string; message?: string }
+        | undefined;
+      if (envelope.verb !== "frames" || refused?.kind !== "error") {
+        return false;
+      }
+      Effect.runFork(
+        Effect.logWarning(
+          `hub refused a frame from this machine: ${refused.message ?? "no reason given"}`
+        )
+      );
+      return true;
+    };
+
+    /** A stop is logged and its sequence noted the moment it arrives, before it is routed. */
+    const receiveStop = (envelope: Envelope): void => {
+      if (envelope.verb !== "stop") {
+        return;
+      }
+      const stop = envelope.payload as import("@cawco/core").StopPayload;
+      Effect.runFork(
+        Effect.logInfo(
+          `[agent] stop session=${stop.instanceId} request=${stop.requestId ?? "none"} machine=${identity.machineId} outcome=received elapsedMs=0`
+        )
+      );
+      supervisor.receivedStop(stop.stopSequence ?? 0);
+    };
+
     /** What arrives ahead of the register ack: custody, taken on the ack. Whether it was taken. */
     const beforeAck = (envelope: Envelope): boolean => {
       if (envelope.verb === "register") {
@@ -1023,18 +1056,10 @@ const attach = (
 
     socket.addEventListener("message", (event) => {
       const envelope = JSON.parse(String(event.data)) as Envelope;
-      if (envelope.verb === "stop") {
-        const stop = envelope.payload as import("@cawco/core").StopPayload;
-        Effect.runFork(
-          Effect.logInfo(
-            `[agent] stop session=${stop.instanceId} request=${stop.requestId ?? "none"} machine=${identity.machineId} outcome=received elapsedMs=0`
-          )
-        );
-        supervisor.receivedStop(
-          (envelope.payload as import("@cawco/core").StopPayload)
-            .stopSequence ?? 0
-        );
+      if (refusedByHub(envelope)) {
+        return;
       }
+      receiveStop(envelope);
       if (
         envelope.verb === "control" &&
         (envelope.payload as import("@cawco/core").ControlPayload).method ===

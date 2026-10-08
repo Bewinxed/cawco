@@ -1,4 +1,4 @@
-import type { Envelope } from "@cawco/core";
+import type { Envelope, ErrorFrame, Verb } from "@cawco/core";
 import { Context, Effect, Layer } from "effect";
 
 /**
@@ -22,6 +22,47 @@ export interface HubSocket {
  */
 export const toDashboard = (socket: HubSocket, frame: unknown): unknown =>
   socket.send(frame, true);
+
+/**
+ * The hub's answer to a frame it will not act on, on every socket: an `error`
+ * frame saying why, under the ids the frame carried, so the request it refuses
+ * is answered rather than left to time out. A frame too malformed to carry an
+ * id is still answered: the sender learns which field broke it.
+ */
+export const refusalFrame = (
+  frame: unknown,
+  message: string,
+  verb?: Verb
+): Envelope<ErrorFrame> => {
+  const field = (key: string): string | undefined => {
+    const value =
+      typeof frame === "object" && frame !== null
+        ? (frame as Record<string, unknown>)[key]
+        : undefined;
+    return typeof value === "string" ? value : undefined;
+  };
+  return {
+    verb: "frames",
+    machineId: field("machineId") ?? "",
+    instanceId: field("instanceId"),
+    requestId: field("requestId"),
+    payload: { kind: "error", ...(verb ? { verb } : {}), message },
+  };
+};
+
+/**
+ * What a frame that is not an envelope lacks, in the sender's terms: the
+ * fields every envelope must carry as strings.
+ */
+export const envelopeFault = (frame: unknown): string => {
+  if (typeof frame !== "object" || frame === null || Array.isArray(frame)) {
+    return "frame refused: it is not a JSON object with `verb` and `machineId`";
+  }
+  const missing = ["verb", "machineId"].filter(
+    (key) => typeof (frame as Record<string, unknown>)[key] !== "string"
+  );
+  return `frame refused: ${missing.map((key) => `\`${key}\``).join(" and ")} ${missing.length > 1 ? "are" : "is"} missing or not a string`;
+};
 
 export interface RegistryShape {
   /** `older`: the page behind the socket was built for a wire before this hub's. */

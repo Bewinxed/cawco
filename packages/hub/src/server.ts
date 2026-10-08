@@ -11,6 +11,7 @@ import type {
   ControlPayload,
   DelegateEvent,
   Envelope,
+  ErrorFrame,
   FleetConfig,
   FleetHoldings,
   FleetHook,
@@ -68,7 +69,6 @@ import type {
   UsageBucket,
   UsageLimitsResponse,
   UsageSpend,
-  Verb,
   WorkspaceRef,
 } from "@cawco/core";
 import {
@@ -298,7 +298,13 @@ import {
 } from "./project-placements";
 import { placePath, readRemote } from "./projects";
 import { createPush, pushRoutes } from "./push";
-import { type HubSocket, type RegistryShape, toDashboard } from "./registry";
+import {
+  envelopeFault,
+  type HubSocket,
+  type RegistryShape,
+  refusalFrame,
+  toDashboard,
+} from "./registry";
 import { RuleEngine } from "./rules";
 import { createSessionIdentities } from "./session-identity";
 import { createSessionLifecycle } from "./session-lifecycle";
@@ -653,16 +659,8 @@ const registerAck = (
 });
 
 /** Sent back as a frame, the only verb a dashboard renders. */
-const failure = (
-  envelope: Envelope,
-  message: string
-): Envelope<{ kind: "error"; verb: Verb; message: string }> => ({
-  verb: "frames",
-  machineId: envelope.machineId,
-  instanceId: envelope.instanceId,
-  requestId: envelope.requestId,
-  payload: { kind: "error", verb: envelope.verb, message },
-});
+const failure = (envelope: Envelope, message: string): Envelope<ErrorFrame> =>
+  refusalFrame(envelope, message, envelope.verb);
 
 /**
  * The hub routes on envelope fields and is otherwise payload-opaque (NEW.md
@@ -12690,13 +12688,20 @@ export const createServer = (
         // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: dispatches every agent socket verb (register, frames, pulse, control_result, etc.) through one handler; splitting it would scatter the ordering guarantees across several functions.
         message: guardedAgentMessage(async (ws, message) => {
           if (!isEnvelope(message)) {
-            console.warn("[hub] dropped malformed frame", message);
+            const fault = envelopeFault(message);
+            console.warn(`[hub] agent ${fault}`, message);
+            ws.send(refusalFrame(message, fault));
             return;
           }
+          // Only the machine's registered connection speaks for it: a
+          // superseded or unregistered one is not acted on, and is told so.
           if (
             message.verb !== "register" &&
             registry.agent(message.machineId)?.id !== ws.id
           ) {
+            const fault = `${message.verb} refused: this connection is not machine ${message.machineId}'s registered one; register first`;
+            console.warn(`[hub] ${fault}`);
+            ws.send(refusalFrame(message, fault));
             return;
           }
 
@@ -14275,10 +14280,11 @@ export const createServer = (
               }
               break;
             }
-            default:
-              console.warn(
-                `[hub] unhandled verb ${message.verb} from ${message.machineId}`
-              );
+            default: {
+              const fault = `unknown verb "${message.verb}": a machine sends register, heartbeat, frames or usage`;
+              console.warn(`[hub] ${fault}, from ${message.machineId}`);
+              ws.send(refusalFrame(message, fault));
+            }
           }
         }),
         // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: releases each kind of machine-owned state when its socket goes away.
@@ -14403,7 +14409,9 @@ export const createServer = (
             return;
           }
           if (!isEnvelope(message)) {
-            console.warn("[hub] dropped malformed dashboard frame", message);
+            const fault = envelopeFault(message);
+            console.warn(`[hub] dashboard ${fault}`, message);
+            toDashboard(ws, refusalFrame(message, fault));
             return;
           }
 
@@ -14532,12 +14540,15 @@ export const createServer = (
               // Answered on `control_result` too, so the same requester map routes it.
               forward(message, ws);
               break;
-            default:
+            default: {
               // The client is named: a verb no build sends any more comes
               // from a page or app still running an older one.
+              const fault = `unknown verb "${message.verb}": a dashboard sends spawn, stop, control or fs`;
               console.warn(
-                `[hub] unhandled dashboard verb ${message.verb} from ${ws.headers["user-agent"] ?? "a client with no user agent"} at ${ws.headers.origin ?? ws.remoteAddress}`
+                `[hub] ${fault}, from ${ws.headers["user-agent"] ?? "a client with no user agent"} at ${ws.headers.origin ?? ws.remoteAddress}`
               );
+              toDashboard(ws, refusalFrame(message, fault));
+            }
           }
         }),
         close(ws) {
