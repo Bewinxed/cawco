@@ -98,13 +98,7 @@ import type {
   HarnessSession,
   TurnExtras,
 } from "../harness";
-import {
-  beginLogin,
-  clearCredentials,
-  completeLogin,
-  exportCredentials,
-  importCredentials,
-} from "../login";
+import { beginLogin, completeLogin } from "../login";
 import { parseProcId, procIdFor } from "../proc-id";
 // Type-only, and deliberately so: `session.ts` imports the harness registry
 // this file is part of, so a value import here would close a module cycle.
@@ -2412,12 +2406,6 @@ export class ClaudeHarness implements Harness {
         return beginLogin();
       case "completeLogin":
         return completeLogin(args[0] as string);
-      case "clearCredentials":
-        return clearCredentials();
-      case "exportCredentials":
-        return exportCredentials();
-      case "importCredentials":
-        return importCredentials(args[0] as Record<string, unknown>);
       case "unlockKeychain":
         return unlockKeychain(args[0] as string);
       case "probeAuth":

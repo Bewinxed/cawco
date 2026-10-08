@@ -145,10 +145,10 @@ class MachineAuthDialog: KitDialogController {
     }
 }
 
-/// Logs a machine in from here (MachineLogin.svelte): the machine builds the
-/// authorisation link as the dialog opens, the reader authorises in their
-/// own browser and pastes the code back. What lands on the machine is a
-/// token Claude Code reads.
+/// Logs a machine in from here (MachineLogin.svelte): the machine starts
+/// Claude Code's own `claude auth login` as the dialog opens and passes its
+/// link here, the reader authorises in their own browser and pastes the code
+/// back into that sign-in. Claude Code on the machine keeps the login.
 final class MachineLoginController: MachineAuthDialog, UITextFieldDelegate {
     private let codeField = KitField(placeholder: "Paste the code from that page", mono: true)
     private let asking = KitLabel(TypeScale.typeLabel.withWeight(.regular), ink: Palette.mutedForeground, lines: 0)

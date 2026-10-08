@@ -7,12 +7,12 @@
   /**
    * Logs a machine in from here.
    *
-   * The machine opens no browser and shows no prompt: the daemon builds the
-   * authorisation URL, the reader authorises in *their* browser wherever they
-   * are, and pastes the code back. What lands on the machine is a token in
-   * `~/.claude/.credentials.json` — the file Claude Code reads — so a Mac whose
-   * login keychain is locked stops being a problem rather than being worked
-   * around.
+   * The sign-in is Claude Code's own: the daemon runs `claude auth login` on
+   * the machine and passes its authorisation link here, the reader authorises
+   * in *their* browser wherever they are, and the code they paste back is
+   * typed into that same process. Claude Code exchanges it and keeps the login
+   * in its own store — the keychain, or `.credentials.json` when a Mac's
+   * keychain refuses the write — so a locked keychain does not stop it.
    */
   import { IconExternal, IconKey } from "#lib/icons.js";
   import { type Machine, machineControl } from "./client.svelte";
