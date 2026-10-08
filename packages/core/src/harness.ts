@@ -670,6 +670,18 @@ export const MESSAGES_READ = "read";
 export const PROVIDER_RETRY = "provider_retry";
 
 /**
+ * The `system` subtype saying the agent stopped a session that failed the same
+ * way {@link REPEATED_FAILURE_LIMIT} times in a row with no send in between —
+ * a harness looping on its own (opencode's overflow compaction retried a
+ * request that could never fit, once fifteen times in ninety seconds). Its
+ * `content` is the failure's own words.
+ */
+export const REPEATED_FAILURE = "repeated_failure";
+
+/** How many identical failures in a row stop a session ({@link REPEATED_FAILURE}). */
+export const REPEATED_FAILURE_LIMIT = 3;
+
+/**
  * The `system` subtype saying which id the harness stores each send under
  * (`storedAs`, by the send's uuid), said as soon as the harness knows it.
  */

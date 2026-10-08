@@ -19,6 +19,7 @@ import type {
   SlashCommand,
   UserQuestionResult,
 } from "./harness";
+import { REPEATED_FAILURE, REPEATED_FAILURE_LIMIT } from "./harness";
 import {
   parseDelegateAsk,
   parseHandoffMarker,
@@ -939,6 +940,17 @@ export function mapFrame(
                 exitCode: sdk.exit_code,
               }
             )
+          );
+          break;
+        // The agent stopped a session failing the same way again and again
+        // with nobody sending: a failure card, titled by the stop, with the
+        // failure's own words under it.
+        case REPEATED_FAILURE:
+          mapping.blocks.push(
+            systemLine(base, "ui.error", sdk.content ?? "", {
+              subtype: REPEATED_FAILURE,
+              errorTitle: `Stopped after the same failure ${REPEATED_FAILURE_LIMIT} times in a row`,
+            })
           );
           break;
         case "permission_denied": {

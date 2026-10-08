@@ -136,6 +136,15 @@ export interface HarnessSession {
   /** Interrupt the current turn. */
   // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
   interrupt(): Promise<void>;
+  /**
+   * The supervisor stopped this session for failing the same way again and
+   * again ({@link import("@cawco/core").REPEATED_FAILURE}), in `words`: kept
+   * in the session's own history, so a transcript read back says so as the
+   * live one did. A runtime that starts no turn of its own between sends
+   * cannot loop that way, and has none.
+   */
+  // biome-ignore lint/style/useConsistentMethodSignatures: matches the session methods
+  noteStopped?(words: string): Promise<void>;
   /** Settle a parked permission by its `requestId`. */
   // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
   resolvePermission(requestId: string, result: PermissionResult): void;

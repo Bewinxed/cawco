@@ -24,6 +24,7 @@ import type {
   HarnessKind,
   IngestMark,
   NeutralMessage,
+  NeutralResultMessage,
   NeutralSessionInfo,
   PermissionResult,
   RepoInfo,
@@ -53,6 +54,8 @@ import {
   PREVIEW_START,
   PREVIEW_STOP,
   promptCacheUsage,
+  REPEATED_FAILURE,
+  REPEATED_FAILURE_LIMIT,
   RESOLVE_PERMISSION,
   readIngested,
   repoPath,
@@ -585,6 +588,11 @@ export class SessionSupervisor {
   /** The sessions with a turn in flight — from the `send` that starts one until the turn ends. */
   readonly #busy = new Set<string>();
   readonly #keepAlive = new Map<string, string>();
+  /**
+   * Each session's run of identical failed turns since its last send: the
+   * failure's words and how many times in a row ({@link #watchFailure}).
+   */
+  readonly #failureRun = new Map<string, { words: string; count: number }>();
   readonly #cacheCold = new Set<string>();
   readonly #realPromptEpoch = new Map<string, number>();
   #promptEpoch = 0;
@@ -1291,6 +1299,7 @@ export class SessionSupervisor {
     this.#cacheCold.delete(instanceId);
     this.#realPromptEpoch.delete(instanceId);
     this.#keepAlive.delete(instanceId);
+    this.#failureRun.delete(instanceId);
     this.#busy.delete(instanceId);
     this.#activeAt.delete(instanceId);
     this.#line.delete(instanceId);
@@ -1949,6 +1958,9 @@ export class SessionSupervisor {
         });
         if (message.type === "result") {
           this.#keepAlive.delete(instanceId);
+          if (!keepAlive) {
+            this.#watchFailure(instanceId, adapter.kind, message, holder);
+          }
         }
       },
       permission: (request) => {
@@ -2015,6 +2027,61 @@ export class SessionSupervisor {
         }
       },
     };
+  }
+
+  /**
+   * A session that fails the same way {@link REPEATED_FAILURE_LIMIT} times in
+   * a row, with no send in between, is looping on its own — opencode
+   * compacting, continuing and overflowing again, unattended, until someone
+   * noticed. Its turn is stopped and the transcript says why, in the
+   * failure's own words; the failures themselves are already rows of their
+   * own. Any other ending, and any send, starts the count again.
+   */
+  #watchFailure(
+    instanceId: string,
+    harness: HarnessKind,
+    result: NeutralResultMessage,
+    holder: { session: HarnessSession | null }
+  ): void {
+    if (!result.is_error) {
+      this.#failureRun.delete(instanceId);
+      return;
+    }
+    const words = result.errors?.length
+      ? result.errors.join("\n")
+      : (result.result ?? result.subtype);
+    const prior = this.#failureRun.get(instanceId);
+    const count = prior?.words === words ? prior.count + 1 : 1;
+    if (count < REPEATED_FAILURE_LIMIT) {
+      this.#failureRun.set(instanceId, { words, count });
+      return;
+    }
+    this.#failureRun.delete(instanceId);
+    console.warn(
+      `[agent] ${instanceId}: stopped after ${count} identical failures: ${words}`
+    );
+    this.sink({
+      kind: "frame",
+      instanceId,
+      harness,
+      message: {
+        type: "system",
+        subtype: REPEATED_FAILURE,
+        uuid: crypto.randomUUID(),
+        timestamp: new Date().toISOString(),
+        ...(result.session_id ? { session_id: result.session_id } : {}),
+        content: words,
+      },
+    });
+    const { session } = holder;
+    session
+      ?.interrupt()
+      .then(() => session.noteStopped?.(words))
+      .catch((error: unknown) => {
+        console.warn(
+          `[agent] ${instanceId}: stopping its repeated failure failed: ${String(error)}`
+        );
+      });
   }
 
   /** A real turn can refresh a cache only after all known prompt writes. */
@@ -2536,6 +2603,9 @@ export class SessionSupervisor {
         this.#realPromptEpoch.set(instanceId, this.#promptEpoch);
       }
       this.#touch(instanceId);
+      // A send is the reader trying again: whatever failed before it is not
+      // the session looping on its own.
+      this.#failureRun.delete(instanceId);
     }
     session.send(message, { attachments, images, urgent });
   }

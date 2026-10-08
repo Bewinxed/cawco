@@ -72,6 +72,11 @@ export interface BlockMetadata {
   delegateInstanceId?: string;
   /** The delegate's brief headline, carried beside {@link delegateInstanceId}. */
   delegateTitle?: string;
+  /**
+   * A failure card's heading (`ui.error`, `ui.session_error`); a missing
+   * session's when unset on a session error, "Turn failed" otherwise.
+   */
+  errorTitle?: string;
   exitCode?: number;
   handoffBrief?: string;
   handoffKind?: "handoff" | "start" | "delegate";

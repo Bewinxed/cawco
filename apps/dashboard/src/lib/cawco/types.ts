@@ -49,8 +49,6 @@ export type SendRowState =
 export interface MessageMetadata extends BlockMetadata {
   /** A folded command line's command (SystemLine). */
   command?: string;
-  /** The `ui.session_error` card's heading; a missing session when unset. */
-  errorTitle?: string;
   /** A project's Caw's turn: the project folder's files it wrote, drawn as chips under it. */
   files?: string[];
   /** A project's Caw's turn: the tasks it is about (`tsk-12`), drawn as cards under it. */

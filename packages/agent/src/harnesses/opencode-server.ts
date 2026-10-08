@@ -10,11 +10,30 @@ export const SERVER_CUTOVER_TIMEOUT_MS = 60_000;
 
 export interface ServerIdentity {
   epoch: string;
+  /**
+   * The launch flags this generation was started with ({@link launchOf}),
+   * when this owner started it. A generation adopted from outside — an older
+   * agent's, or the stable-name server — carries none, and so matches no
+   * spec: its flags are unknown.
+   */
+  launch?: string;
   pid: number;
   procId: string;
   startedAt: string;
   url: string;
 }
+
+/**
+ * A spec's launch flags: its environment apart from the config content,
+ * which is verified against the running server on its own. Two generations
+ * with the same flags were started the same way.
+ */
+export const launchOf = (spec: ProcSpec): string =>
+  JSON.stringify(
+    Object.entries(spec.env ?? {})
+      .filter(([name]) => name !== "OPENCODE_CONFIG_CONTENT")
+      .sort(([a], [b]) => a.localeCompare(b))
+  );
 
 interface ServerRecord {
   active: ServerIdentity | null;
@@ -218,7 +237,10 @@ export class OpencodeServerOwner {
         },
         signal
       );
-      const identity = await this.#identify(client, procId, url);
+      const identity = {
+        ...(await this.#identify(client, procId, url)),
+        launch: launchOf(spec),
+      };
       signal.throwIfAborted();
       return identity;
     } catch (error) {

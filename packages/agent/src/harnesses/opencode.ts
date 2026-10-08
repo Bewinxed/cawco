@@ -73,6 +73,8 @@ import {
   MESSAGES_STORED,
   mcpFleetState,
   PROVIDER_RETRY,
+  REPEATED_FAILURE,
+  REPEATED_FAILURE_LIMIT,
   VERIFY_SESSION_CREDENTIAL,
 } from "@cawco/core";
 import type { RestartHold } from "@cawco/core/binary-updates";
@@ -130,7 +132,11 @@ import {
   readOpencodeCredentials,
   storeOpencodeCredential,
 } from "./opencode-credentials";
-import { OpencodeServerOwner, type ServerIdentity } from "./opencode-server";
+import {
+  launchOf,
+  OpencodeServerOwner,
+  type ServerIdentity,
+} from "./opencode-server";
 
 interface RecoveryRound {
   attempt: number;
@@ -160,6 +166,146 @@ function withImageAttachments(
       },
     }));
   return images.length ? [{ type: "text", text: output }, ...images] : output;
+}
+
+type ToolPart = Extract<Part, { type: "tool" }>;
+type ToolUseBlock = Extract<NeutralContentBlock, { type: "tool_use" }>;
+type ToolResultBlock = Extract<NeutralContentBlock, { type: "tool_result" }>;
+
+/** An MCP result's content as a direct call's would read: its words, and its pictures after them. */
+function mcpContentOf(content: unknown): string | NeutralContentBlock[] {
+  const blocks = Array.isArray(content)
+    ? (content as {
+        type?: string;
+        text?: string;
+        data?: string;
+        mimeType?: string;
+      }[])
+    : [];
+  const text = blocks
+    .filter((block) => block.type === "text" && typeof block.text === "string")
+    .map((block) => block.text)
+    .join("\n\n");
+  const images: NeutralContentBlock[] = blocks
+    .filter(
+      (block) =>
+        block.type === "image" &&
+        typeof block.data === "string" &&
+        typeof block.mimeType === "string"
+    )
+    .map((block) => ({
+      type: "image",
+      source: {
+        type: "base64",
+        media_type: block.mimeType as string,
+        data: block.data as string,
+      },
+    }));
+  return images.length ? [{ type: "text", text }, ...images] : text;
+}
+
+/**
+ * The calls a code-mode program ({@link CODE_MODE_TOOL}) made, each as the
+ * tool call and result it would be made directly — the rows the transcript
+ * already draws for it, under the name and input a direct call carries.
+ *
+ * OpenCode records each call's path, input and status on the program's part
+ * as it runs (`metadata.toolCalls`, in the order they started, `<call>/<n>`
+ * in its hooks), and nothing of what one returned. The bridge plugin writes
+ * what each call that succeeded answered, under its own tool name, onto the
+ * part (`metadata.calls`): as the program returns, or — a program that threw
+ * has no `after` — once its part has settled in error, as a second update.
+ * A call that failed answered nothing OpenCode keeps; the program's error is
+ * the words of the failure that ended it.
+ *
+ * `live`: a call that succeeded in a program that threw has its answer still
+ * to come, in that second update, and is left open until it does. Read back,
+ * whatever the part holds is all there is.
+ */
+function codeModeCalls(
+  part: ToolPart,
+  live: boolean
+): { key: string; use: ToolUseBlock; result?: ToolResultBlock }[] {
+  if (part.tool !== CODE_MODE_TOOL || part.state.status === "pending") {
+    return [];
+  }
+  const meta = (part.state as { metadata?: unknown }).metadata as
+    | {
+        toolCalls?: { tool: string; status: string; input?: unknown }[];
+        calls?: {
+          id: string;
+          tool: string;
+          input?: Record<string, unknown>;
+          content?: unknown;
+          isError?: boolean;
+          structuredContent?: Record<string, unknown>;
+        }[];
+      }
+    | undefined;
+  const threw = part.state.status === "error" ? part.state.error : undefined;
+  const settled = part.state.status === "completed" || threw !== undefined;
+  const calls = meta?.toolCalls ?? [];
+  // A program stops at the first failure it does not catch: the last call
+  // that failed in a program that threw is that one.
+  const fatal =
+    threw === undefined
+      ? -1
+      : calls.findLastIndex((call) => call.status !== "completed");
+  return calls.map((call, index) => {
+    const id = `${part.callID}/${index + 1}`;
+    const answered = meta?.calls?.find((row) => row.id === id);
+    const use: ToolUseBlock = {
+      type: "tool_use",
+      id,
+      // `server.tool` is the path the program wrote; the hook's name is the
+      // one a direct call carries.
+      name: answered?.tool ?? call.tool.replace(".", "_"),
+      input: toolInputOf(
+        answered?.input ?? (call.input as Record<string, unknown>) ?? {}
+      ),
+    };
+    if (answered) {
+      return {
+        key: id,
+        use,
+        result: {
+          type: "tool_result",
+          tool_use_id: id,
+          content: mcpContentOf(answered.content),
+          is_error: answered.isError === true,
+          ...(answered.structuredContent
+            ? { structuredContent: answered.structuredContent }
+            : {}),
+        },
+      };
+    }
+    if (!settled) {
+      return { key: id, use };
+    }
+    if (call.status === "completed") {
+      // Its answer is the plugin's to write; live, it is on its way.
+      return live && threw !== undefined
+        ? { key: id, use }
+        : {
+            key: id,
+            use,
+            result: { type: "tool_result", tool_use_id: id, content: "" },
+          };
+    }
+    return {
+      key: id,
+      use,
+      result: {
+        type: "tool_result",
+        tool_use_id: id,
+        content:
+          index === fatal
+            ? threw
+            : "Failed inside its code-mode program, which caught the error; OpenCode keeps no words for it.",
+        is_error: true,
+      },
+    };
+  });
 }
 
 const BASE62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
@@ -228,6 +374,34 @@ const STATIC_POLICY = {
   },
   tools: { websearch: false },
 } as const;
+
+/**
+ * OpenCode's code mode: MCP tools leave the request's tool list and the model
+ * reaches them through one `execute` tool, whose description lists a bounded
+ * catalog and a `tools.$codemode.search` for the rest. Upstream's own answer
+ * to MCP schemas filling the context (anomalyco/opencode#8625, #12520): "We
+ * added support for codemode instead of a tool search, you can enable with:
+ * OPENCODE_EXPERIMENTAL_CODE_MODE=true … v2 of opencode ships with it enabled
+ * by default" — https://github.com/anomalyco/opencode/issues/12520.
+ *
+ * Measured on 1.18.34 with the fleet's MCP servers connected, ElevenLabs's
+ * 160 tools and 1.13 MB of input schemas among them: a turn's request went
+ * from 1,425,289 bytes and 416 tools — more than every model under ~400k
+ * tokens of input would take, so each of them refused every turn — to
+ * 55,154 bytes and 15 tools. The calls a program makes come back as rows of
+ * their own ({@link codeModeCalls}).
+ */
+const CODE_MODE_TOOL = "execute";
+
+/** The `opencode serve` this agent launches, under its launch config. */
+const serverSpec = (config: Record<string, unknown>) => ({
+  command: resolveBin("opencode") ?? "opencode",
+  args: ["serve", "--hostname=127.0.0.1", "--port=0"],
+  env: {
+    OPENCODE_EXPERIMENTAL_CODE_MODE: "true",
+    OPENCODE_CONFIG_CONTENT: JSON.stringify(config),
+  },
+});
 
 /** The hub's MCP server as opencode configures a remote server. */
 const cawcoMcp = () => ({
@@ -667,6 +841,10 @@ const boundaryOf = (directory) => {
   return undefined;
 };
 const OUTPUT_LIMIT = 30000;
+// What each code-mode program's calls answered, by session and the program's
+// own call, until the program's result is written: OpenCode records each
+// call's name, input and status on the \`execute\` part, never what it returned.
+const codeCalls = new Map();
 const sessionHeld = (sessionID) => {
   try { return JSON.parse(readFileSync(cawcoCredentials, "utf8"))[sessionID]; } catch { return undefined; }
 };
@@ -704,7 +882,7 @@ const boundedBash = (held) => tool({
     return { title: args.description, output: cut + notes, metadata: { exit, description: args.description } };
   },
 });
-export const CawcoContext = async ({ directory }) => {
+export const CawcoContext = async ({ directory, serverUrl }) => {
 const bounded = boundaryOf(directory);
 const cawcoStep = async (context) => {
   const response = await fetch(cawcoBase + "/api/instances");
@@ -758,6 +936,51 @@ return ({
       }
       output.args.__cawco = { credential };
     }
+  },
+  // A call a code-mode program made runs as \`<program's call>/<n>\`; what it
+  // answered is kept, and written onto the program's own result as
+  // \`metadata.calls\` when it ends, so the transcript shows each call as the
+  // row it would be when made directly — live, and read back alike.
+  "tool.execute.after": async (input, output) => {
+    const slash = input.callID.indexOf("/");
+    if (slash > 0) {
+      const key = input.sessionID + " " + input.callID.slice(0, slash);
+      const { __cawco, ...args } = input.args ?? {};
+      codeCalls.set(key, [...(codeCalls.get(key) ?? []), {
+        id: input.callID,
+        tool: input.tool,
+        input: args,
+        content: output.content ?? [],
+        ...(output.isError ? { isError: true } : {}),
+        ...(output.structuredContent ? { structuredContent: output.structuredContent } : {}),
+      }]);
+      return;
+    }
+    if (input.tool === ${JSON.stringify(CODE_MODE_TOOL)}) {
+      const key = input.sessionID + " " + input.callID;
+      output.metadata = { ...output.metadata, calls: codeCalls.get(key) ?? [] };
+      codeCalls.delete(key);
+    }
+  },
+  // A program that throws ends without its \`after\`: the calls it made before
+  // the throw are written onto its part once it has settled, which OpenCode
+  // never writes again.
+  event: async ({ event }) => {
+    if (event.type !== "message.part.updated") return;
+    const part = event.properties.part;
+    if (part.type !== "tool" || part.tool !== ${JSON.stringify(CODE_MODE_TOOL)} || part.state.status !== "error") return;
+    const key = part.sessionID + " " + part.callID;
+    const calls = codeCalls.get(key);
+    if (!calls) return;
+    codeCalls.delete(key);
+    const url = new URL("/session/" + part.sessionID + "/message/" + part.messageID + "/part/" + part.id, serverUrl);
+    url.searchParams.set("directory", directory);
+    const written = await fetch(url, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ...part, state: { ...part.state, metadata: { ...part.state.metadata, calls } } }),
+    });
+    if (!written.ok) throw new Error("Could not record what a code-mode program's calls answered: " + written.status + " " + await written.text());
   },
   // Every shell a session's tool opens acts as that session: \`cawco tool\`
   // there sends its own credential. A shell no session opened gets none.
@@ -1436,6 +1659,12 @@ export class OpencodeSession implements HarnessSession {
   /** The reasoning part whose live block is open, so it is closed exactly once. */
   #openThinking: string | null = null;
   readonly #toolsEmitted = new Map<string, "called" | "resolved">();
+  /**
+   * Code-mode calls drawn and not yet answered: a call that succeeded in a
+   * program that threw waits for the answer the bridge plugin writes after
+   * ({@link codeModeCalls}), and one that never comes is closed with the turn.
+   */
+  readonly #codeModeOpen = new Set<string>();
   #busy = false;
   /** Live turn transitions outrank status/history snapshots already in flight. */
   #turnRevision = 0;
@@ -2111,6 +2340,11 @@ export class OpencodeSession implements HarnessSession {
           });
           this.#toolsEmitted.set(part.callID, "called");
         }
+        this.#codeModeFrames(
+          part,
+          this.#pendingOf(part.messageID),
+          this.#toolsEmitted
+        );
         // One tool_result per call, once it completes or errors.
         if (
           (status === "completed" || status === "error") &&
@@ -2119,7 +2353,7 @@ export class OpencodeSession implements HarnessSession {
           const output =
             status === "completed" ? part.state.output : part.state.error;
           const metadata =
-            status === "completed"
+            status === "completed" && part.tool !== CODE_MODE_TOOL
               ? (part.state as { metadata?: Record<string, unknown> }).metadata
               : undefined;
           const structuredContent =
@@ -2151,6 +2385,51 @@ export class OpencodeSession implements HarnessSession {
       default:
         break;
     }
+  }
+
+  /**
+   * A code-mode program's calls ({@link codeModeCalls}): each one once, as
+   * soon as the program has made it, and each result once the program has
+   * ended — ahead of the program's own result.
+   */
+  #codeModeFrames(
+    part: ToolPart,
+    pending: PendingMessage,
+    emitted: Map<string, "called" | "resolved">,
+    parentToolUseId?: string
+  ): void {
+    for (const { key, use, result } of codeModeCalls(part, true)) {
+      if (!emitted.has(key)) {
+        this.#ctx.frame({
+          type: "assistant",
+          uuid: part.messageID,
+          ...this.#createdOf(part.messageID),
+          contentOffset: blockIndex(pending, key),
+          ...(parentToolUseId ? { parent_tool_use_id: parentToolUseId } : {}),
+          message: { content: [use] },
+        });
+        emitted.set(key, "called");
+        if (!parentToolUseId) {
+          this.#codeModeOpen.add(key);
+        }
+      }
+      if (result && emitted.get(key) !== "resolved") {
+        this.#resolveCodeModeCall(result, parentToolUseId);
+        emitted.set(key, "resolved");
+        this.#codeModeOpen.delete(key);
+      }
+    }
+  }
+
+  #resolveCodeModeCall(
+    result: ToolResultBlock,
+    parentToolUseId?: string
+  ): void {
+    this.#ctx.frame({
+      type: "user",
+      ...(parentToolUseId ? { parent_tool_use_id: parentToolUseId } : {}),
+      message: { role: "user", content: [result] },
+    });
   }
 
   /** Keeps when opencode created a message, as {@link toTranscript} dates it. */
@@ -2420,6 +2699,12 @@ export class OpencodeSession implements HarnessSession {
           });
           state.toolsEmitted.set(part.callID, "called");
         }
+        this.#codeModeFrames(
+          part,
+          this.#pendingChild(state, part.messageID),
+          state.toolsEmitted,
+          callID
+        );
         if (
           (status === "completed" || status === "error") &&
           emitted !== "resolved"
@@ -2511,6 +2796,17 @@ export class OpencodeSession implements HarnessSession {
     // The live trace ends before the settled blocks replace it.
     this.#closeThinking();
     this.#flushMessages(this.#pending, this.#roles);
+    // As read back: a code-mode call whose answer was never written ended
+    // with nothing OpenCode kept.
+    for (const key of this.#codeModeOpen) {
+      this.#resolveCodeModeCall({
+        type: "tool_result",
+        tool_use_id: key,
+        content: "",
+      });
+      this.#toolsEmitted.set(key, "resolved");
+    }
+    this.#codeModeOpen.clear();
     // Whatever was written behind an answer that never completed is read now.
     this.#answering = undefined;
     this.#releaseReads();
@@ -3737,6 +4033,36 @@ export class OpencodeSession implements HarnessSession {
     );
   }
 
+  /**
+   * Written into the session as a message that starts no turn (`noReply`),
+   * under a mark {@link toTranscript} reads back as the stop the live stream
+   * drew. Its words reach the model as context too, so a later turn knows
+   * why the last one ended. Counted as written here, so it is no send read.
+   */
+  async noteStopped(words: string): Promise<void> {
+    const messageID = messageId();
+    this.#written.add(messageID);
+    const written = await reached(
+      this.#client.session.prompt({
+        sessionID: this.#opencodeSessionId(),
+        directory: this.#directory,
+        messageID,
+        noReply: true,
+        parts: [
+          {
+            type: "text",
+            synthetic: true,
+            text: `CawCo stopped this session: it failed the same way ${REPEATED_FAILURE_LIMIT} times in a row, with nothing sent in between.\n\n${words}`,
+            metadata: { cawco: REPEATED_FAILURE, words },
+          },
+        ],
+      })
+    );
+    if (written.error) {
+      throw new Error(errorText(written.error));
+    }
+  }
+
   async stop(): Promise<void> {
     this.#lifetime.abort();
     this.#onRelease();
@@ -4509,11 +4835,7 @@ export class OpencodeHarness implements Harness {
       // candidate is ready. The owner alone launches, publishes and retires.
       const config = await this.#launchConfig();
       await this.#serverOwner.replace(
-        {
-          command: resolveBin("opencode") ?? "opencode",
-          args: ["serve", "--hostname=127.0.0.1", "--port=0"],
-          env: { OPENCODE_CONFIG_CONTENT: JSON.stringify(config) },
-        },
+        serverSpec(config),
         async (identity, signal) => {
           const candidate = createOpencodeClient({
             baseUrl: identity.url,
@@ -4524,7 +4846,13 @@ export class OpencodeHarness implements Harness {
           if (!(await this.#readsThisConfig(candidate))) {
             throw new Error("Candidate reads another global config root.");
           }
-          await this.#verifyApply(candidate, targetHash, targetVersion, signal);
+          await this.#verifyApply(
+            candidate,
+            identity,
+            targetHash,
+            targetVersion,
+            signal
+          );
         },
         (identity) => {
           const client = this.#adopt(identity.url);
@@ -4612,10 +4940,19 @@ export class OpencodeHarness implements Harness {
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: disk provenance + runtime leaf + MCP status verification; each layer independent with own logging
   async #verifyApply(
     client: OpencodeClient,
+    identity: ServerIdentity,
     targetHash: string | null,
     targetVersion: string | null,
     signal?: AbortSignal
   ): Promise<void> {
+    // The flags it runs under are read nowhere else: a generation started
+    // without them (an older agent's, without code mode) is restarted.
+    const launch = launchOf(serverSpec({}));
+    if (identity.launch !== launch) {
+      throw new Error(
+        `launch verification failed: started with ${identity.launch ?? "unknown flags"}, launching with ${launch}`
+      );
+    }
     const health = await reached(
       client.global.health({
         signal: signal ?? AbortSignal.timeout(RECOVERY_TIMEOUT_MS),
@@ -4862,12 +5199,8 @@ export class OpencodeHarness implements Harness {
         // so every agent restart took the machine's opencode sessions with it.
         // The server goes under sessiond instead and we attach as a client —
         // the same client the bundled pair would have handed us.
-        const identity = await this.#serverOwner.ensure({
-          // The owner chooses the ephemeral port and captures the process identity.
-          command: resolveBin("opencode") ?? "opencode",
-          args: ["serve", "--hostname=127.0.0.1", "--port=0"],
-          env: { OPENCODE_CONFIG_CONTENT: JSON.stringify(config) },
-        });
+        // The owner chooses the ephemeral port and captures the process identity.
+        const identity = await this.#serverOwner.ensure(serverSpec(config));
         const client = this.#adopt(identity.url);
 
         // Convergence keeps the server matching the machine's global config;
@@ -4898,7 +5231,12 @@ export class OpencodeHarness implements Harness {
             try {
               // No directory is initialized yet; this verifies the global
               // resolved config (no directory query).
-              await this.#verifyApply(client, initialHash, initialVersion);
+              await this.#verifyApply(
+                client,
+                identity,
+                initialHash,
+                initialVersion
+              );
               this.#appliedHash = initialHash;
               this.#appliedVersion = initialVersion;
               this.#verifiedProcId = identity.procId;
@@ -6702,8 +7040,44 @@ export function toTranscript(
     // the moment its call ended.
     const timestamp = new Date(info.time.created).toISOString();
     if (info.role === "user") {
+      // CawCo's own stop of a session failing the same way again and again
+      // (`noteStopped`), read back as the line the live stream drew.
+      const stopped = parts.find(
+        (part): part is TextPart =>
+          part.type === "text" &&
+          (part.metadata as { cawco?: unknown } | undefined)?.cawco ===
+            REPEATED_FAILURE
+      );
+      if (stopped) {
+        entries.push({
+          type: "system",
+          uuid: stopped.id,
+          session_id: sessionKey,
+          message: {
+            type: "system",
+            subtype: REPEATED_FAILURE,
+            uuid: stopped.id,
+            session_id: sessionKey,
+            timestamp,
+            content: String(
+              (stopped.metadata as { words?: unknown }).words ?? ""
+            ),
+          },
+          parent_tool_use_id: null,
+          parent_agent_id: null,
+          timestamp,
+        });
+        continue;
+      }
+      // What opencode writes into a user message itself (`synthetic`: the
+      // note a compaction continues with, a read file's contents) is not
+      // anyone's words, and the live stream never draws it: read back, a
+      // message that is nothing else is no row at all.
       const text = parts
-        .filter((part): part is TextPart => part.type === "text")
+        .filter(
+          (part): part is TextPart =>
+            part.type === "text" && !part.synthetic && !part.ignored
+        )
         .map((part) => part.text)
         .join("\n");
       const content = withImageAttachments(
@@ -6758,6 +7132,7 @@ export function toTranscript(
           name: toolNameOf(part.tool),
           input: toolInputOf(part.state.input),
         });
+        blocks.push(...codeModeCalls(part, false).map(({ use }) => use));
       }
     }
     if (blocks.length) {
@@ -6786,13 +7161,31 @@ export function toTranscript(
       if (part.type !== "tool") {
         continue;
       }
+      // A program's calls resolve as it ends, so they carry its end.
+      const programEnd =
+        part.state.status === "completed" || part.state.status === "error"
+          ? new Date(part.state.time.end).toISOString()
+          : timestamp;
+      for (const { key, result } of codeModeCalls(part, false)) {
+        if (result) {
+          entries.push({
+            type: "user",
+            uuid: `${info.id}:${key}`,
+            session_id: sessionKey,
+            message: { role: "user", content: [result] },
+            parent_tool_use_id: null,
+            parent_agent_id: null,
+            timestamp: programEnd,
+          });
+        }
+      }
       if (part.state.status === "completed" || part.state.status === "error") {
         const output =
           part.state.status === "completed"
             ? part.state.output
             : part.state.error;
         const metadata =
-          part.state.status === "completed"
+          part.state.status === "completed" && part.tool !== CODE_MODE_TOOL
             ? (part.state as { metadata?: Record<string, unknown> }).metadata
             : undefined;
         const structuredContent =
