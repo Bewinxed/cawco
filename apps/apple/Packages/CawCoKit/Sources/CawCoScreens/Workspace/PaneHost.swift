@@ -43,7 +43,6 @@ final class PaneHost {
             let session = SessionViewController(hub: hub, id: id)
             session.onReturnToFleet = { [weak self] in self?.onReturnToFleet(id) }
             session.onOpenSession = { [weak self] id in self?.onOpen(id) }
-            session.onContinue = { [weak self] id in self?.continueInNewSession(id) }
             if let values = parked.removeValue(forKey: id) { session.restoreValues(values) }
             made = session
         }

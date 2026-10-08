@@ -148,7 +148,8 @@ public final class RootViewController: ObservedViewController {
 
     /// Whether Approve and Deny have an ask to act on.
     public var canAnswer: Bool { firstAsk != nil }
-    public var canControlSession: Bool { board.selected?.canControl == true }
+    public var canStopSession: Bool { board.selected?.canStop == true }
+    public var canSteerSession: Bool { board.selected?.canSend == true }
     public func stopSession() { board.selected?.stopTurn() }
     public func steerSession() { board.selected?.focusComposer() }
     public var canOpenSessionWindow: Bool { board.selected != nil && UIApplication.shared.supportsMultipleScenes }

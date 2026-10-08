@@ -31,8 +31,6 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
     var onReturnToFleet: () -> Void = {}
     /// Opens another session, or a run's board row (`BoardRun.prefix + runId`), as a board row opens.
     var onOpenSession: (String) -> Void = { _ in }
-    /// "Continue in new session…" for this one (PaneHost `continueInNewSession`).
-    var onContinue: (String) -> Void = { _ in }
 
     /// How far up from the pane's foot the group's composer (and the cards
     /// standing on it) reaches; the transcript's last line clears it.
@@ -154,17 +152,16 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
         let row = hub.fleet.byId[sessionId]
         transcriptView.configure(transcript)
 
-        let live = canControl
-        composerBinding.writable = live
+        composerBinding.writable = canSend
         let command = sent.flatMap { hub.ledger.commands[$0] }
         let withdrawal = withdrawing.flatMap { hub.ledger.commands[$0] }
         if command?.stage == .submitted || withdrawal?.stage == .submitted || withdrawal?.stage == .accepted {
             composerBinding.action = .sending
         } else {
-            composerBinding.action = transcript.tail?.busy == true && live ? .stop : .send
+            composerBinding.action = transcript.tail?.busy == true && canStop ? .stop : .send
         }
         composerBinding.sendError = editNote ?? (command?.stage == .failed ? "Couldn't send that message.\(command?.reason.map { " \($0)" } ?? "")" : nil)
-        composerBinding.sendBlock = sendBlock(row)
+        composerBinding.sendBlock = sendBlock()
         syncCards(machineId: row?.machineId)
         composerBinding.publish()
         syncPreview()
@@ -433,7 +430,7 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
     /// tap. Nothing is said unasked (HIG Alerts: "Avoid using an alert merely
     /// to provide information"). The first seconds of a connect, and a swipe,
     /// are too brief to explain.
-    private func sendBlock(_ row: InstanceRow?) -> SendBlock? {
+    private func sendBlock() -> SendBlock? {
         // The hub answered in a shape this app cannot read (HubConnection
         // `incompatible`, the same check, words and `/health` version the
         // connect screen uses): the fix is an update, so it is told in an alert.
@@ -448,14 +445,7 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
                 UIAction(title: "Reconnect", image: Glyph.refresh.image) { [weak hub] _ in hub?.reconnectNow() },
             ]))
         }
-        guard hub.state == .connected, row?.isLive != true else { return nil }
-        let reason = row?.status == .sleeping ? "This session is asleep" : "This session has ended"
-        return SendBlock(reason: reason, menu: UIMenu(title: reason, children: [
-            UIAction(title: "Continue in new session…", image: Glyph.arrowRight.image) { [weak self] _ in
-                guard let self else { return }
-                onContinue(sessionId)
-            },
-        ]))
+        return nil
     }
 
     /// The one reason that carries its fix in an alert: this app and the hub
@@ -473,7 +463,12 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
     }
 
     func focusComposer() { composerBinding.focus() }
-    var canControl: Bool { hub.fleet.byId[sessionId]?.isLive == true && hub.state == .connected }
+    /// Composer.svelte's rule: a conversation on the board takes a message
+    /// whatever its status, while the hub is there. The hub wakes a sleeping
+    /// or stopped session to read it (server.ts `deliverSend`).
+    var canSend: Bool { hub.state == .connected && hub.fleet.byId[sessionId]?.isListed == true }
+    /// Stop has a turn to end only in a live session (Composer.svelte `busy`).
+    var canStop: Bool { hub.state == .connected && hub.fleet.byId[sessionId]?.isLive == true }
 
     /// The first permission parked here, for the menu bar's Approve and Deny.
     private var pendingAsk: ParkedAsk? { hub.needs.parked[sessionId]?.first { !$0.isQuestion } }
@@ -484,13 +479,13 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
     }
 
     func stopTurn() {
-        guard let row = hub.fleet.byId[sessionId], row.isLive, hub.state == .connected else { return }
+        guard canStop, let row = hub.fleet.byId[sessionId] else { return }
         sent = hub.sessions.stop(row)
         requestRefresh()
     }
 
     private func send(_ words: String, _ attachments: [ComposerAttachment]) {
-        guard let row = hub.fleet.byId[sessionId], row.isLive, hub.state == .connected else { return }
+        guard canSend, let row = hub.fleet.byId[sessionId] else { return }
         editNote = nil
         var images: [(mediaType: String, data: Data)] = []
         var texts: [(name: String, content: String)] = []
@@ -521,7 +516,7 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
     /// Claude's harness (the only one that recalls a single pending send),
     /// with the session live and the hub there.
     private func canWithdraw(_ id: String) -> Bool {
-        canControl && harness == "claude" && SentMessages.isQueued(id, in: transcript)
+        canStop && harness == "claude" && SentMessages.isQueued(id, in: transcript)
     }
 
     /// The reader's newest message, when it is queued and can be withdrawn.

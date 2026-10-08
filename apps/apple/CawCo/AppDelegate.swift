@@ -113,8 +113,10 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
             command.attributes = board?.canAnswer == true ? [] : .disabled
         case #selector(reconnectHub):
             command.attributes = board?.canReconnect == true ? [] : .disabled
-        case #selector(stopSession), #selector(steerSession):
-            command.attributes = board?.canControlSession == true ? [] : .disabled
+        case #selector(stopSession):
+            command.attributes = board?.canStopSession == true ? [] : .disabled
+        case #selector(steerSession):
+            command.attributes = board?.canSteerSession == true ? [] : .disabled
         case #selector(openSessionWindow):
             command.attributes = board?.canOpenSessionWindow == true ? [] : .disabled
         default:

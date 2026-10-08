@@ -171,11 +171,13 @@ final class PaneGroupController: UIViewController, UIDropInteractionDelegate {
         view.addGestureRecognizer(tap)
         stack.traceName = "sessions:\(leafId)"
         stack.isScrollEnabled = swipeable
+        // Held for the swipe and no longer: released on every end of it, a
+        // landing, a swipe let go back where it began, or one onto no tab.
         stack.onBegin = { [weak self] in self?.dock.held = true }
+        stack.onEnd = { [weak self] in self?.dock.held = false }
         stack.onScroll = { [weak self] position in self?.pagingMoved(position) }
         stack.onLand = { [weak self] page in
             guard let self, shownTabs.indices.contains(page) else { return }
-            dock.held = false
             let id = shownTabs[page]
             // Where the group swipes, the pages drew the sheet's way over and
             // it stands where they brought it: the switch is not drawn again.

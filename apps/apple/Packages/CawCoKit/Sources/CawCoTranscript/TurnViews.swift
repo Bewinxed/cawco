@@ -331,7 +331,7 @@ final class UserTurnView: UIView, RowContent, UIGestureRecognizerDelegate {
         retry.setAttributedTitle(Styled.string(sending ? "Sending…" : "Try again", TypeScale.typeLabel, color: Palette.inkStrong), for: .normal)
         retry.isEnabled = !sending
         failure.isHidden = !failed
-        retry.isHidden = !failed || env.hub?.fleet.byId[env.sessionId]?.isLive != true
+        retry.isHidden = !failed || env.hub.map { $0.state != .connected || $0.fleet.byId[env.sessionId]?.isListed != true } ?? true
         retry.layer.borderColor = Palette.wellEdge.resolvedColor(with: traitCollection).cgColor
     }
 
@@ -438,7 +438,7 @@ final class UserTurnView: UIView, RowContent, UIGestureRecognizerDelegate {
     /// A failed send, sent again (MessageRow `tryAgain`): its own words, as a
     /// new send; the hub retires this row as the retry is taken.
     private func tryAgain() {
-        guard let block, let hub = env.hub, let row = hub.fleet.byId[env.sessionId], row.isLive else { return }
+        guard let block, let hub = env.hub, hub.state == .connected, let row = hub.fleet.byId[env.sessionId], row.isListed else { return }
         retried = hub.sessions.steer(row, text: block.content)
         retry.setAttributedTitle(Styled.string("Sending…", TypeScale.typeLabel, color: Palette.inkStrong), for: .normal)
         retry.isEnabled = false

@@ -9,6 +9,9 @@ public final class PagingScrollView: UIScrollView, UIScrollViewDelegate {
     public var onBegin: () -> Void = {}
     public var onScroll: (Double) -> Void = { _ in }
     public var onLand: (Int) -> Void = { _ in }
+    /// The motion that `onBegin` told of is over: told on every end, before
+    /// `onLand`, and also when it settles on no page (none laid out).
+    public var onEnd: () -> Void = {}
     /// The page the system will settle on, told the moment the finger lets go.
     public var onTarget: (Int) -> Void = { _ in }
     public var mayBegin: (CGPoint) -> Bool = { _ in true }
@@ -95,8 +98,13 @@ public final class PagingScrollView: UIScrollView, UIScrollViewDelegate {
     }
 
     private func land() {
-        guard moving, !reducing, length > 0, count > 0 else { return }
+        guard moving, !reducing else { return }
         moving = false
+        onEnd()
+        guard length > 0, count > 0 else {
+            trace("ended")
+            return
+        }
         let page = min(count - 1, max(0, Int(position.rounded())))
         trace("landed")
         onLand(page)
