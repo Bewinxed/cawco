@@ -209,21 +209,27 @@
     min-height: 0;
     background: var(--surface-recess);
   }
+  /* The section's gutter, so the editor's card stands where the section's
+     did, level with the rail. */
   .scroll {
+    display: flex;
     flex: 1 1 auto;
+    flex-direction: column;
     min-height: 0;
     overflow-y: auto;
-    padding: 7px 21px;
+    padding: var(--space-2) var(--space-5);
   }
+  /* The section's card: an inset panel on the recess, filling the pane's
+     height above the commit row. */
   .body {
     display: flex;
+    flex: 1 0 auto;
     flex-direction: column;
-    gap: 18px;
+    gap: var(--space-6);
     max-width: 980px;
-    padding: 18px 18px 20px;
+    padding: var(--space-6) var(--space-7);
     border-radius: var(--radius-lg);
     background: var(--surface-raised);
-    box-shadow: var(--shadow-tile);
   }
   .head {
     display: flex;
@@ -247,7 +253,7 @@
     grid-area: 1 / 1;
     display: flex;
     flex-direction: column;
-    gap: 18px;
+    gap: var(--space-5);
     min-width: 0;
 
     &.veiled {
@@ -285,11 +291,6 @@
   }
   .narrow-menu {
     display: none;
-  }
-  @media (max-width: 900px) {
-    .scroll {
-      padding: 7px;
-    }
   }
   @media (max-width: 640px) {
     .narrow-menu {

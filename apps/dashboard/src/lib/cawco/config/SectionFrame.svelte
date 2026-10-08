@@ -142,7 +142,9 @@
 
 <style>
   .ground {
+    display: flex;
     flex: 1 1 auto;
+    flex-direction: column;
     min-width: 0;
     min-height: 0;
     overflow-y: auto;
@@ -151,15 +153,19 @@
     padding: var(--space-2) var(--space-5);
     background: var(--surface-recess);
   }
+  /* An inset panel in the rail's recipe: raised on the recess, which is the
+     seam, so no line or shadow. It fills the pane's height, its bottom one
+     gutter above the pane's, level with the rail's; taller rows scroll the
+     ground. */
   .body {
     display: flex;
+    flex: 1 0 auto;
     flex-direction: column;
-    gap: 18px;
+    gap: var(--space-6);
     max-width: 980px;
-    padding: 18px 18px 20px;
+    padding: var(--space-6) var(--space-7);
     border-radius: var(--radius-lg);
     background: var(--surface-raised);
-    box-shadow: var(--shadow-tile);
   }
   /* The skeleton and the rows share one cell, so the rows fade in where the
      skeleton was. Standing at a kept height, the cell takes the room the
@@ -178,7 +184,7 @@
     grid-area: 1 / 1;
     display: flex;
     flex-direction: column;
-    gap: 18px;
+    gap: var(--space-5);
     min-width: 0;
   }
   .head {
@@ -196,7 +202,7 @@
   }
   .title {
     font: var(--type-title);
-    letter-spacing: -0.01em;
+    letter-spacing: var(--track-title);
     color: var(--ink-strong);
   }
   .purpose,

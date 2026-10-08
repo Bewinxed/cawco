@@ -126,10 +126,10 @@
     flex-direction: column;
     padding: 0 var(--space-2) var(--space-5);
   }
-  /* A panel standing in the Configure page's gutter, in the page card's own
-     recipe (raised, radius-lg, tile shadow), so it needs no divider: the
-     recess around it is the seam. Raised, not recessed: in light the fill a
-     chosen row takes is the recess's own step (n-3), so on the recess the
+  /* An inset panel standing in the Configure page's gutter, in the page
+     card's own recipe (raised, radius-lg, no line, no shadow): the recess
+     around both panels is the seam. Raised, not recessed: in light the fill
+     a chosen row takes is the recess's own step (n-3), so on the recess the
      selection would not show at all. */
   .rail[data-variant="rail"] {
     position: relative;
@@ -138,7 +138,6 @@
     overflow-y: auto;
     border-radius: var(--radius-lg);
     background: var(--surface-raised);
-    box-shadow: var(--shadow-tile);
   }
   .rail[data-variant="list"] {
     padding: 0 var(--space-2) var(--space-2);
