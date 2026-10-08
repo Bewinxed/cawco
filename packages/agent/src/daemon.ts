@@ -47,6 +47,7 @@ import { harnesses } from "./harnesses";
 import type { PiHarness } from "./harnesses/pi";
 import { PI_AUTH_CHECK_INTERVAL_MS } from "./harnesses/pi-auth";
 import { cache as transcriptCache } from "./harnesses/transcript-cache";
+import { endSignIns } from "./login";
 import { startMcpGateway } from "./mcp-oauth";
 import { servingPreviews } from "./preview";
 import { parseProcId, SESSION_PROC_KINDS } from "./proc-id";
@@ -1405,6 +1406,8 @@ export const runDaemon = (auth?: AuthState, rediscover = false): void => {
     void Effect.runPromise(Fiber.interrupt(daemon)).then(() => process.exit(0));
   };
   process.on("SIGINT", drain).on("SIGTERM", drain);
+  // However the daemon ends, a `claude auth login` it holds ends with it.
+  process.on("exit", endSignIns);
   process.on("unhandledRejection", (reason: unknown) => {
     Effect.runFork(
       Effect.logError(

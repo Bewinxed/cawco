@@ -213,9 +213,23 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
     setIdentity: (id, identity) => {
       db.update(accounts).set({ identity }).where(eq(accounts.id, id)).run();
     },
+    // The schema's cascade is the rows' intent, but SQLite enforces no foreign
+    // key without `PRAGMA foreign_keys`: the account's own rows go with it here.
     remove: (id) =>
-      db.delete(accounts).where(eq(accounts.id, id)).returning().all().length >
-      0,
+      db.transaction((tx) => {
+        tx.delete(accountSignins).where(eq(accountSignins.accountId, id)).run();
+        tx.delete(accountReadings)
+          .where(eq(accountReadings.accountId, id))
+          .run();
+        tx.delete(accountCatalogs)
+          .where(eq(accountCatalogs.accountId, id))
+          .run();
+        tx.delete(accountBench).where(eq(accountBench.accountId, id)).run();
+        return (
+          tx.delete(accounts).where(eq(accounts.id, id)).returning().all()
+            .length > 0
+        );
+      }),
     signins: () =>
       db
         .select()

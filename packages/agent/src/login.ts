@@ -70,6 +70,18 @@ const end = (signIn: SignIn) => {
   signIn.terminal.close();
 };
 
+/**
+ * Ends every sign-in still waiting for a code, synchronously, for the
+ * daemon's exit: the CLI outlives the daemon's terminal otherwise, and a
+ * daemon started again knows nothing of it, so nothing could ever end it.
+ */
+export const endSignIns = (): void => {
+  for (const signIn of inFlight.values()) {
+    end(signIn);
+  }
+  inFlight.clear();
+};
+
 /** What the CLI printed since `from`, as the text a terminal would show. */
 const said = (signIn: SignIn, from = 0) =>
   Bun.stripANSI(signIn.output.slice(from)).trim();
@@ -281,8 +293,19 @@ export const completeAccountLogin = async (
   return { state: "signed-in", probe };
 };
 
-/** Signs an account out of this machine with Claude Code itself, and drops its dir. */
+/**
+ * Signs an account out of this machine with Claude Code itself, and drops its
+ * dir. A `claude auth login` it began there and that still waits for a code
+ * is ended first, and gone before the dir is: nothing of the account stays.
+ */
 export const forgetAccount = async (account: string): Promise<void> => {
+  const key = keyOf(account);
+  const waiting = inFlight.get(key);
+  if (waiting) {
+    inFlight.delete(key);
+    end(waiting);
+    await waiting.child.exited;
+  }
   await logout(account);
   await removeAccountDir(account);
 };

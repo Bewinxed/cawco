@@ -12567,6 +12567,28 @@ export const createServer = (
             SIGNIN_TIMEOUT_MS,
             "claude"
           );
+          // A machine that was asked makes the account's dir (and may be
+          // waiting on its login) whether or not a link came back; it holds
+          // that dir signed out, as its next register would report, so
+          // removing the account forgets it there.
+          if (
+            answer !== "offline" &&
+            !db.accounts
+              .signins()
+              .some(
+                (one) =>
+                  one.accountId === account.id &&
+                  one.machineId === params.machineId
+              )
+          ) {
+            db.accounts.putSignin({
+              accountId: account.id,
+              machineId: params.machineId,
+              state: "signed-out",
+              home: false,
+            });
+            publishUsage(params.machineId);
+          }
           if (answer === "offline" || answer === "timeout") {
             return status(
               503,
