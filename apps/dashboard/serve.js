@@ -214,7 +214,7 @@ function proxyPreviewHttp(req, res, info) {
  * pipes `fs.createReadStream(file)` into the response with no `'error'`
  * listener, and the ENOENT from `open()` becomes an unhandled error that exits
  * the process. A hashed asset that is no longer in this build is answered
- * before sirv sees it: from an earlier build's tree (`EARLIER`) when one
+ * before sirv sees it: from an earlier build's tree (`earlier`) when one
  * holds it, else with a 404; the listener on the piped stream covers the file that
  * disappears between that check and sirv's open, where the 200 head is already
  * committed and the response can only be cut off.
@@ -253,13 +253,21 @@ const ACCEPTS_BROTLI = /(br|brotli)/i;
  * page restored from the browser's cache. Answered with a 404 they leave it
  * half loaded; a stylesheet that 404s left the update notice unstyled. A
  * hashed name is its content, so a file found under that name in any of
- * them is the file the page asked for. Listed once: an earlier build cannot
- * appear while this process runs.
+ * them is the file the page asked for.
+ *
+ * Listed on each miss, never once at startup. In a checkout the publish
+ * swaps `build/` under this running process, which still renders its own
+ * build's pages until the restart: a page loaded in that window names the
+ * hashes now in `.build-old`, which did not exist when this process started.
+ * A miss is rare (a page from another build), so the listing costs nothing
+ * on the ordinary path.
  */
-const EARLIER = (() => {
+const OLD_CHECKOUT = fileURLToPath(
+  new URL("./.build-old/client", import.meta.url)
+);
+function earlier() {
   if (!standalone) {
-    const old = fileURLToPath(new URL("./.build-old/client", import.meta.url));
-    return existsSync(old) ? [old] : [];
+    return existsSync(OLD_CHECKOUT) ? [OLD_CHECKOUT] : [];
   }
   // <runtime>/<release>/dashboard/client
   const releases = resolve(CLIENT_DIR, "..", "..", "..");
@@ -269,7 +277,7 @@ const EARLIER = (() => {
     .map((client) => ({ client, at: statSync(client).mtimeMs }))
     .sort((a, b) => b.at - a.at)
     .map(({ client }) => client);
-})();
+}
 
 /** What a hashed asset is answered with, as sirv answers the current ones. */
 const IMMUTABLE = { "Cache-Control": "public,max-age=31536000,immutable" };
@@ -279,7 +287,7 @@ const IMMUTABLE = { "Cache-Control": "public,max-age=31536000,immutable" };
  * manifest…) at startup, so between a deploy's swap and the restart it answers
  * with the old Content-Length over the new bytes. Those files are served here
  * from a stat taken on each request, with the headers sirv gave them; so are
- * an earlier build's hashed assets, from its own tree (`EARLIER`). Returns
+ * an earlier build's hashed assets, from its own tree (`earlier`). Returns
  * false when the path is not a file under `root`, leaving it to the caller.
  */
 function serveFile(req, res, pathname, root = CLIENT_DIR, extra = {}) {
@@ -369,11 +377,14 @@ function serveApp(req, res) {
     pathname.startsWith(IMMUTABLE_PREFIX) &&
     !existsSync(`${CLIENT_DIR}${pathname}`)
   ) {
-    const earlier = EARLIER.find((root) => existsSync(`${root}${pathname}`));
+    const found = earlier().find((root) => existsSync(`${root}${pathname}`));
     if (
-      !(reading && earlier && serveFile(req, res, pathname, earlier, IMMUTABLE))
+      !(reading && found && serveFile(req, res, pathname, found, IMMUTABLE))
     ) {
-      res.writeHead(404);
+      // Never stored: a cache in front (the Cloudflare tunnel keeps a 404 on
+      // a .css path for minutes) would go on answering it after the file is
+      // there, and the page that asked stays unstyled.
+      res.writeHead(404, { "Cache-Control": "no-store" });
       res.end();
     }
     return;
