@@ -41,6 +41,11 @@
  * on, and the tween runs on that fold's clock: the edge and the row land
  * together, and the box is never held at a size the fold then leaves.
  *
+ * A `fold` (motion/fold) inside it is a height change no mutation
+ * announces: while one runs the container starts no tween of its own and
+ * follows the fold frame by frame, and a fold that starts cancels the tween
+ * in flight, so the two never fight over the box's height.
+ *
  * `rows`: what changes inside is a `reflow`'s rows (a run's steps opening
  * a result under one, motion/branch), so the container's edge moves with
  * them: at their batch's pace (motion/rows `atTravel`), from the frame it
@@ -48,7 +53,7 @@
  * the rows inside are never cut by it.
  */
 import { CURVE, dur, ease, motionOk } from "./curves.svelte";
-import { leaving, unfolding } from "./fold.svelte";
+import { folding, foldStarts, leaving, unfolding } from "./fold.svelte";
 import { heldToTravel } from "./rows.svelte";
 
 interface Size {
@@ -222,6 +227,25 @@ export function morph({
       );
     };
 
+    /**
+     * A `fold` (motion/fold) is moving something inside: the box follows it
+     * frame by frame, and starts no tween of its own to fight it.
+     */
+    const foldsInside = () => {
+      for (const el of folding) {
+        if (el !== node && node.contains(el)) {
+          return true;
+        }
+      }
+      return false;
+    };
+    /** A fold starting inside cancels the tween in flight. */
+    const foldStarted = (el: HTMLElement) => {
+      if (el !== node && node.contains(el)) {
+        box.stop();
+      }
+    };
+
     /** How far its edge moves: down, or across too (`width`). */
     const moves = (from: Size, to: Size) =>
       Math.max(Math.abs(to.h - from.h), width ? Math.abs(to.w - from.w) : 0);
@@ -254,7 +278,12 @@ export function morph({
         const moved =
           Math.abs(to.h - from.h) > 0.5 ||
           (width && Math.abs(to.w - from.w) > 0.5);
-        if (!(moved && motionOk.current) || from.h === 0 || to.h === 0) {
+        if (
+          !(moved && motionOk.current) ||
+          from.h === 0 ||
+          to.h === 0 ||
+          foldsInside()
+        ) {
           return;
         }
         const frames: Keyframe[] = [
@@ -312,8 +341,10 @@ export function morph({
       changed.add(box);
     });
     content.observe(node, CHANGES);
+    foldStarts.add(foldStarted);
 
     return () => {
+      foldStarts.delete(foldStarted);
       box.stop();
       changed.delete(box);
       laidOut.disconnect();

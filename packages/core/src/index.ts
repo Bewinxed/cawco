@@ -39,6 +39,8 @@ export * from "./join";
 export * from "./permission-presentation";
 // A session's plan: its steps, its spec, its task's to-dos, and their live frames.
 export * from "./plan";
+// Which projects a session lists in: the rail and the hub's forget read one rule.
+export * from "./project-membership";
 // How an `AskUserQuestion` answer is shaped, wherever it is answered from —
 // the dashboard, a parent session's `answer_delegate`, the Telegram bridge.
 // Shared because the tool's schema is unforgiving: the answers go back inside
@@ -972,6 +974,7 @@ export type FramePayload =
   | import("./frames").ThreadMessageFrame
   | import("./frames").TasksChangedFrame
   | import("./frames").ProjectCapFrame
+  | import("./frames").ProjectStopFrame
   | import("./frames").DelegateEventFrame
   | import("./frames").SupervisorEventFrame
   | import("./frames").SupervisorStatusFrame

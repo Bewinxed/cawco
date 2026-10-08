@@ -16,23 +16,17 @@
   import { machineLabel } from "@cawco/core";
   import { MediaQuery } from "svelte/reactivity";
   import type { Machine, ProjectRow } from "#lib/cawco/client.svelte.js";
-  import {
-    cawco,
-    deleteProject,
-    spawnSession,
-  } from "#lib/cawco/client.svelte.js";
+  import { cawco, spawnSession } from "#lib/cawco/client.svelte.js";
+  import { forgetProject } from "#lib/cawco/forget.svelte.js";
   import { conversationHref } from "#lib/cawco/links.js";
   import { dur, easeInOut, motionOk } from "#lib/cawco/motion/curves.svelte.js";
-  import { route } from "#lib/cawco/motion/route.svelte.js";
-  import { handOver, land } from "#lib/cawco/motion/share.svelte.js";
+  import { depart, handOver } from "#lib/cawco/motion/share.svelte.js";
   import OsMark from "#lib/cawco/OsMark.svelte";
   import { unpickedMode } from "#lib/cawco/permission-modes.js";
   import { checkoutOf } from "#lib/cawco/projects.js";
   import { newSession } from "#lib/cawco/spawn/new-session.svelte.js";
   import { rememberSpawn, spawnPrefs } from "#lib/cawco/spawnPrefs.svelte.js";
   import { toast } from "#lib/cawco/toasts.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
-  import * as AlertDialog from "#lib/components/ui/alert-dialog/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
@@ -69,9 +63,6 @@
   const narrow = new MediaQuery("(max-width: 639px)");
   let spawnOpen = $state(false);
   let spawnPrompt = $state("");
-  let forgetOpen = $state(false);
-  let forgetting = $state(false);
-  let forgotten = $state(false);
   let more = $state<HTMLElement | null>(null);
 
   const message = (error: unknown) =>
@@ -156,19 +147,6 @@
     spawnOpen = false;
     // biome-ignore lint/complexity/noVoid: fire-and-forget navigation after the spawn already succeeded
     void goto(conversationHref(instanceId, cawco.instanceIndex));
-  }
-
-  async function forget() {
-    forgetting = true;
-    forgotten = false;
-    try {
-      await deleteProject(project.id);
-      forgotten = true;
-      forgetOpen = false;
-    } finally {
-      forgetting = false;
-    }
-    await goto(route.spoke, { replace: true });
   }
 </script>
 
@@ -353,45 +331,20 @@
         <!-- The one destructive row, as every menu draws one: the house's
              destructive item, set apart at the end. -->
         <DropdownMenu.Separator />
+        <!-- The forget flies out of the ⋯ it was asked from (forget.svelte.ts):
+             taken again now, so a slow pick through the menu still flies. -->
         <DropdownMenu.Item
           onSelect={() => {
-            forgetOpen = true;
+            if (more) {
+              depart(more);
+            }
+            forgetProject(project);
           }}
           variant="destructive"
           >Forget project…</DropdownMenu.Item
         >
       </DropdownMenu.Content>
     </DropdownMenu.Root>
-    <AlertDialog.Root bind:open={forgetOpen}>
-      <!-- Opens out of the button that asked for it. -->
-      <AlertDialog.Content
-        {@attach land(() => `forget:${project.id}`, { uniform: true })}
-      >
-        <AlertDialog.Header>
-          <AlertDialog.Title>Forget {project.name}?</AlertDialog.Title>
-          <AlertDialog.Description>
-            The grouping is removed. The checkout and its sessions stay on disk.
-          </AlertDialog.Description>
-        </AlertDialog.Header>
-        <AlertDialog.Footer>
-          <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-          <AlertDialog.Action>
-            {#snippet child({
-              props,
-            })}
-              <Button
-                {...props}
-                failed={!forgotten}
-                label="Forget"
-                onclick={forget}
-                pending={forgetting}
-                pendingLabel="Forgetting…"
-              />
-            {/snippet}
-          </AlertDialog.Action>
-        </AlertDialog.Footer>
-      </AlertDialog.Content>
-    </AlertDialog.Root>
   </div>
 </header>
 

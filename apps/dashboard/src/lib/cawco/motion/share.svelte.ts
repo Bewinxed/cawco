@@ -192,8 +192,35 @@ export interface LandOptions {
   uniform?: boolean;
 }
 
+/**
+ * Where the destination rests: its box with its own entrance (a CSS
+ * animation, a dialog's rise) read at its end. The flight's transform
+ * replaces the entrance's while it runs, so a box read on the entrance's
+ * first frame (a dialog 6px low) started the flight that far off its source.
+ */
+function restingRect(node: HTMLElement): DOMRect {
+  const entering = node
+    .getAnimations()
+    .filter(
+      (animation) =>
+        animation instanceof CSSAnimation &&
+        Number.isFinite(Number(animation.effect?.getComputedTiming().endTime))
+    );
+  const was = entering.map((animation) => animation.currentTime);
+  for (const animation of entering) {
+    animation.currentTime = Number(
+      animation.effect?.getComputedTiming().endTime
+    );
+  }
+  const rect = node.getBoundingClientRect();
+  entering.forEach((animation, at) => {
+    animation.currentTime = was[at];
+  });
+  return rect;
+}
+
 function fly(node: HTMLElement, from: Departure, options: LandOptions) {
-  const to = node.getBoundingClientRect();
+  const to = restingRect(node);
   if (to.width === 0 || to.height === 0) {
     return;
   }

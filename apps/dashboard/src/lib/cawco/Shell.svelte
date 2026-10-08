@@ -42,6 +42,7 @@
   import ConfirmDialog from "./ConfirmDialog.svelte";
   import { cawco, hubSocketUrl, reconnectNow } from "./client.svelte";
   import { continuing } from "./continue.svelte";
+  import ForgetProjectDialog from "./ForgetProjectDialog.svelte";
   import { sessionName } from "./home/home-state.svelte";
   import JumpPalette, { type JumpOpener } from "./JumpPalette.svelte";
   import { machinesPopover } from "./join/join.svelte";
@@ -1065,6 +1066,8 @@
   <JumpPalette opener={jumpOpener} bind:open={jumpOpen} />
   <!-- One dialog for every destructive confirm in the app (see confirm.svelte.ts). -->
   <ConfirmDialog />
+  <!-- One Forget project dialog for every opener (forget.svelte.ts). -->
+  <ForgetProjectDialog />
   <!-- One Connect a machine dialog for every entry that adds one (join/join.svelte.ts). -->
   <AddMachineDialog />
   <!-- One New Session dialog for every opener (the rail's rows, the phone's

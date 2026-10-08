@@ -12100,6 +12100,123 @@
         }
       }
     },
+    "/api/projects/{id}/running": {
+      "get": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiProjectsByIdRunning",
+        "responses": {
+          "200": {
+            "description": "getApiProjectsByIdRunning 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiProjectsByIdRunning200"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "getApiProjectsByIdRunning 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/stop": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "instanceIds": {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "instanceIds"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiProjectsByIdStop",
+        "responses": {
+          "200": {
+            "description": "postApiProjectsByIdStop 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiProjectsByIdStop200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiProjectsByIdStop 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiProjectsByIdStop 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiProjectsByIdStop 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects/{id}": {
       "delete": {
         "parameters": [
@@ -12120,6 +12237,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/deleteApiProjectsById200"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "deleteApiProjectsById 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -16630,6 +16757,31 @@
           "tracker"
         ]
       },
+      "getApiProjectsByIdRunning200": {
+        "type": "object",
+        "properties": {
+          "sessions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RunningSession"
+            }
+          }
+        },
+        "required": [
+          "sessions"
+        ]
+      },
+      "postApiProjectsByIdStop200": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ]
+      },
       "deleteApiProjectsById200": {
         "type": "object",
         "properties": {
@@ -18035,6 +18187,9 @@
             "$ref": "#/components/schemas/ProjectCapFrame"
           },
           {
+            "$ref": "#/components/schemas/ProjectStopFrame"
+          },
+          {
             "$ref": "#/components/schemas/DelegateEventFrame"
           },
           {
@@ -18076,6 +18231,7 @@
             "thread.message": "#/components/schemas/ThreadMessageFrame",
             "tasks.changed": "#/components/schemas/TasksChangedFrame",
             "project.cap": "#/components/schemas/ProjectCapFrame",
+            "project.stop": "#/components/schemas/ProjectStopFrame",
             "delegate_event": "#/components/schemas/DelegateEventFrame",
             "supervisor_event": "#/components/schemas/SupervisorEventFrame",
             "supervisor_status": "#/components/schemas/SupervisorStatusFrame",
@@ -27703,6 +27859,42 @@
         ],
         "type": "string"
       },
+      "RunningSession": {
+        "description": "One running session of a project, in tree order (parents first).",
+        "type": "object",
+        "properties": {
+          "cwd": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "machineId": {
+            "type": "string"
+          },
+          "parentId": {
+            "description": "The nearest running session it is a delegate of; null for a lead.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "title": {
+            "description": "Its name as the rails give it (null: nobody named it; the client names it by its folder).",
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "cwd",
+          "id",
+          "machineId",
+          "parentId",
+          "title"
+        ]
+      },
       "WorkspaceState": {
         "description": "A workspace's life: `active` while its checkout is kept; `archived` once its boundary and clone are gone.",
         "enum": [
@@ -31710,6 +31902,41 @@
         },
         "required": [
           "kind",
+          "projectId"
+        ]
+      },
+      "ProjectStopFrame": {
+        "description": "Hub-originated: one session a project's forget asked to stop\n(`POST /api/projects/:id/stop`) has stopped, as its machine confirmed, or\ncould not be stopped, with the hub's reason. Never sent for the request\nitself: a session is stopped only once its machine says so.",
+        "type": "object",
+        "properties": {
+          "error": {
+            "description": "Why it could not be stopped (`failed` only).",
+            "type": "string"
+          },
+          "instanceId": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "project.stop"
+            ]
+          },
+          "outcome": {
+            "enum": [
+              "failed",
+              "stopped"
+            ],
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "instanceId",
+          "kind",
+          "outcome",
           "projectId"
         ]
       },

@@ -7,9 +7,6 @@
    */
   import type { Snippet } from "svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
-  import * as AlertDialog from "#lib/components/ui/alert-dialog/index.js";
-  import { Button } from "#lib/components/ui/button/index.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as ContextMenu from "#lib/components/ui/context-menu/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import {
@@ -22,9 +19,11 @@
     IconTrash,
   } from "#lib/icons.js";
   import { goto } from "$app/navigation";
-  import { cawOf, deleteProject, type ProjectRow } from "./client.svelte";
+  import { cawOf, type ProjectRow } from "./client.svelte";
   import { folderPrefs } from "./folder-prefs.svelte";
+  import { forgetProject } from "./forget.svelte";
   import { HUES } from "./identity";
+  import { depart } from "./motion/share.svelte";
   import { rail } from "./rail.svelte";
   import { newThreadTabId } from "./thread-tabs";
 
@@ -32,8 +31,6 @@
     children: Snippet;
     /** The directory itself: what every preference here is keyed by. */
     cwd: string;
-    /** What the reader calls this directory — the folder's own heading. */
-    name: string;
     /** Shut every other folder. Only the rail has folders to shut. */
     oncollapseothers?: () => void;
     /** Start a session here, prefilled with this directory. */
@@ -43,7 +40,6 @@
   }
 
   let {
-    name,
     cwd,
     project = null,
     onnew,
@@ -87,25 +83,8 @@
     };
   });
 
-  let confirmingForget = $state(false);
-  let busy = $state(false);
-  /** The last forget went through (a failed one leaves the dialog open). */
-  let forgotten = $state(false);
-
-  async function forget() {
-    if (!project) {
-      return;
-    }
-    busy = true;
-    forgotten = false;
-    try {
-      await deleteProject(project.id);
-      forgotten = true;
-      confirmingForget = false;
-    } finally {
-      busy = false;
-    }
-  }
+  /** The menu's Forget row: where the forget flies out of. */
+  let forgetItem = $state<HTMLElement | null>(null);
 </script>
 
 <ContextMenu.Root bind:open>
@@ -209,11 +188,17 @@
 
     {#if project}
       <ContextMenu.Separator />
+      <!-- The forget flies out of this row (forget.svelte.ts). -->
       <ContextMenu.Item
+        data-share="forget:{project.id}"
         onSelect={() => {
-          confirmingForget = true;
+          if (forgetItem) {
+            depart(forgetItem);
+          }
+          forgetProject(project);
         }}
         variant="destructive"
+        bind:ref={forgetItem}
       >
         <IconTrash />
         Forget project…
@@ -221,31 +206,3 @@
     {/if}
   </ContextMenu.Content>
 </ContextMenu.Root>
-
-<AlertDialog.Root bind:open={confirmingForget}>
-  <AlertDialog.Content>
-    <AlertDialog.Header>
-      <AlertDialog.Title>Forget {name}?</AlertDialog.Title>
-      <AlertDialog.Description>
-        The grouping is removed. The checkout and its sessions stay on disk.
-      </AlertDialog.Description>
-    </AlertDialog.Header>
-    <AlertDialog.Footer>
-      <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-      <AlertDialog.Action>
-        {#snippet child({
-          props,
-        })}
-          <Button
-            {...props}
-            failed={!forgotten}
-            label="Forget"
-            onclick={forget}
-            pending={busy}
-            pendingLabel="Forgetting…"
-          />
-        {/snippet}
-      </AlertDialog.Action>
-    </AlertDialog.Footer>
-  </AlertDialog.Content>
-</AlertDialog.Root>

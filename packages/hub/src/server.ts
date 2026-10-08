@@ -308,6 +308,7 @@ import {
   placedHooks,
   placesChanged,
 } from "./project-placements";
+import { createProjectStops } from "./project-stops";
 import { placePath, readRemote } from "./projects";
 import { createPush, pushRoutes } from "./push";
 import {
@@ -5467,6 +5468,8 @@ export const createServer = (
       return machine.hostname;
     },
     confirmed: (row) => {
+      // A forget waiting on this session's end hears it now, not at the ask.
+      projectStops.confirmed(row.id);
       if (row.workflowStepId && row.workflowRunId) {
         workflowRuntime.endConfirmed(row.workflowRunId);
       }
@@ -5671,6 +5674,17 @@ export const createServer = (
       closePreview(instanceId).catch(console.error);
     }
   };
+  // A project's running sessions, stopped before it is forgotten, each
+  // reported to the dashboard as its machine confirms the end (project-stops.ts).
+  const projectStops = createProjectStops({
+    db,
+    pulse: (id) => pulses.get(id),
+    stop: (id) => endSession(id, "stop"),
+    online: (machineId) => !!registry.agent(machineId),
+    publish: (payload) =>
+      registry.broadcast({ verb: "frames", machineId: "hub", payload }),
+    timeoutMs: READ_TIMEOUT_MS,
+  });
   const waitForEnd = (instanceId: string): Promise<void> =>
     new Promise((resolve, reject) => {
       const deadline = Date.now() + SPAWN_START_TIMEOUT_MS;
@@ -12914,7 +12928,51 @@ export const createServer = (
           };
         }
       )
-      .delete("/api/projects/:id", async ({ params }) => {
+      // The project's running sessions, each lead followed by its delegates:
+      // what a forget stops first (project-stops.ts).
+      .get("/api/projects/:id/running", ({ params, status }) => {
+        if (!db.project(params.id)) {
+          return status(404, "This project is no longer recorded. Refresh.");
+        }
+        return { sessions: projectStops.running(params.id) };
+      })
+      // Stops the named sessions of the project in one request. Each one's
+      // end is reported by a `project.stop` frame as its machine confirms it,
+      // or as it fails, never at the ask.
+      .post(
+        "/api/projects/:id/stop",
+        {
+          body: t.Object({
+            instanceIds: t.Array(t.String({ minLength: 1 }), { minItems: 1 }),
+          }),
+        },
+        ({ params, body, status }) => {
+          if (!db.project(params.id)) {
+            return status(404, "This project is no longer recorded. Refresh.");
+          }
+          try {
+            projectStops.stop(params.id, body.instanceIds);
+          } catch (error) {
+            return status(
+              400,
+              error instanceof Error ? error.message : String(error)
+            );
+          }
+          return { ok: true };
+        }
+      )
+      .delete("/api/projects/:id", async ({ params, status }) => {
+        // Never orphaned: a project is forgotten only once nothing of it runs.
+        const project = db.project(params.id);
+        const still = project ? projectStops.stillRunning(params.id) : 0;
+        if (project && still > 0) {
+          return status(
+            409,
+            still === 1
+              ? `1 session still runs in ${project.name}; stop it first.`
+              : `${still} sessions still run in ${project.name}; stop them first.`
+          );
+        }
         const machines = new Set(
           db.project(params.id)?.places.map((place) => place.machineId)
         );
@@ -14323,6 +14381,12 @@ export const createServer = (
                 peek(message.payload, "verb") === "stop" &&
                 ownedSession?.endIntent
               ) {
+                // A forget waiting on it says why; the stop stays owed, and a
+                // later confirmation still reports it stopped.
+                projectStops.failed(
+                  ownedSession.id,
+                  (message.payload as ErrorFrame).message
+                );
                 break;
               }
               // A continuation's summariser: an internal worker only its

@@ -19,10 +19,9 @@
  * a parent turning from context to a listed row, or back, keeps its place.
  */
 
-export interface TreeRow {
-  id: string;
-  parentInstanceId?: string | null;
-}
+import { type MemberTreeRow, topsIn } from "@cawco/core";
+
+export type TreeRow = MemberTreeRow;
 
 export interface TreeLine<T> {
   /** Not in the list: the parent of rows that are, drawn for them. */
@@ -106,32 +105,6 @@ function fillDescendants<T extends TreeRow>(lines: TreeLine<T>[]): void {
       }
     }
   }
-}
-
-/**
- * The row at the top of each row's chain of parents, among the rows `byId`
- * holds: the session a delegate's work comes down from. A row with no
- * parent, or whose parent `byId` does not hold, is its own top; a chain that
- * loops stops where it would repeat. The one walker for every caller that
- * places a row by its tree (the tree itself, a project's recent and older
- * split, which projects a row lists in).
- */
-export function topsIn<T extends TreeRow>(
-  byId: ReadonlyMap<string, T>
-): (row: T) => T {
-  return (row) => {
-    const seen = new Set<string>([row.id]);
-    let at = row;
-    for (
-      let up = at.parentInstanceId ? byId.get(at.parentInstanceId) : undefined;
-      up && !seen.has(up.id);
-      up = at.parentInstanceId ? byId.get(at.parentInstanceId) : undefined
-    ) {
-      seen.add(up.id);
-      at = up;
-    }
-    return at;
-  };
 }
 
 /** `rows` in tree order. */

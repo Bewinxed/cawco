@@ -1,5 +1,5 @@
 <script lang="ts" module>
-  import type { Component } from "svelte";
+  import type { Component, Snippet } from "svelte";
   import type {
     HTMLAnchorAttributes,
     HTMLButtonAttributes,
@@ -86,6 +86,13 @@
       pendingLabel?: string;
       /** The work that just ended failed: no check. */
       failed?: boolean;
+      /**
+       * The share of the work done (0 to 1), for work that counts: above 0
+       * the slot draws a ring filled to it instead of the spinner.
+       */
+      progress?: number;
+      /** Drawn in the icon slot over its icon: what lands there. */
+      arrivals?: Snippet;
     };
 </script>
 
@@ -106,6 +113,8 @@
     pending = false,
     pendingLabel,
     failed = false,
+    progress,
+    arrivals,
     onclick,
     children,
     ...restProps
@@ -124,7 +133,15 @@
   {#if label === undefined && icon === undefined}
     {@render children?.()}
   {:else}
-    <PendingContent {failed} {icon} {label} {pending} {pendingLabel} />
+    <PendingContent
+      {arrivals}
+      {failed}
+      {icon}
+      {label}
+      {pending}
+      {pendingLabel}
+      {progress}
+    />
   {/if}
 {/snippet}
 

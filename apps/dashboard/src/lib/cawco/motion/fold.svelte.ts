@@ -19,6 +19,16 @@ export interface FoldOptions {
 }
 
 const running = new WeakMap<HTMLElement, Animation>();
+
+/**
+ * Every element a `fold` is moving now, and who hears a fold start. A
+ * `morph` around a fold (motion/morph) follows it frame by frame instead of
+ * tweening: a fold is a height change no mutation announces, so a tween the
+ * morph started for something else (a label, a line of text) and the fold
+ * would each set the box's height, and the box would jump between them.
+ */
+export const folding = new Set<HTMLElement>();
+export const foldStarts = new Set<(node: HTMLElement) => void>();
 /** Layouts whose gap an unfolding child brings with it. */
 const STACKS = /flex|grid/;
 
@@ -93,21 +103,31 @@ export function fold(
     from_.opacity = startOpacity;
     to.opacity = open ? 1 : 0;
   }
+  for (const heard of foldStarts) {
+    heard(node);
+  }
   const animation = node.animate([from_, to], {
     duration: ms,
     easing,
     fill: "forwards",
   });
   running.set(node, animation);
+  folding.add(node);
   animation.finished.then(
     () => {
       if (running.get(node) === animation) {
+        folding.delete(node);
         settle();
         animation.cancel();
       }
     },
     () => {
-      /* superseded by the next fold, which owns the node now */
+      // Superseded by the next fold, which owns the node now; cancelled by
+      // anything else, nothing moves it any more.
+      if (running.get(node) === animation || !running.has(node)) {
+        running.delete(node);
+        folding.delete(node);
+      }
     }
   );
   return animation;

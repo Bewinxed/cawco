@@ -44,6 +44,7 @@ import type {
   ProjectCap,
   ProjectOfferSummary,
   ProjectSpend,
+  ProjectStopFrame,
   ProjectView,
   ProviderRouting,
   SendAttachment,
@@ -2655,6 +2656,13 @@ function handleFrame(frame: FramePayload): void {
     return;
   }
 
+  if (frame.kind === "project.stop") {
+    for (const listener of projectStopListeners) {
+      listener(frame);
+    }
+    return;
+  }
+
   if (frame.kind === "tasks.changed") {
     state.tasksChanged[frame.projectId] =
       (state.tasksChanged[frame.projectId] ?? 0) + 1;
@@ -5245,14 +5253,85 @@ export const setProjectBudget = (
   askHub(`${projectPath(projectId)}/dispatch`, json("PATCH", { budget }));
 
 /** Forgets the project; the sessions started from it stay, just unattached. */
+/**
+ * Forgets a project. The hub refuses while any of its sessions still runs
+ * (409, saying how many); that answer is thrown as it is. The board's list
+ * keeps the project until `readProjects`: the forget dialog first takes the
+ * reader off the project's page, so the page never stands on a project the
+ * list no longer has.
+ */
 export async function deleteProject(id: string): Promise<void> {
   const response = await fetch(`/api/projects/${id}`, { method: "DELETE" });
   if (!response.ok) {
     throw new Error(
-      `Could not forget this project — the hub answered ${response.status}. Try again.`
+      (await response.text()) ||
+        `Could not forget this project — the hub answered ${response.status}. Try again.`
     );
   }
-  await refresh();
+}
+
+/** Reads the projects again, as the hub has them now. */
+export async function readProjects(): Promise<void> {
+  const projects = await load<ProjectRow[]>("/api/projects");
+  if (projects) {
+    state.projects = reconcileRows(state.projects, projects, (row) => row.id);
+  }
+}
+
+/** One running session of a project, in tree order (parents first). */
+export interface RunningSession {
+  cwd: string;
+  id: string;
+  machineId: string;
+  /** The nearest running session it is a delegate of; null for a lead. */
+  parentId: string | null;
+  title: string | null;
+}
+
+/** A project's running sessions as the hub lists them: what a forget stops first. */
+export async function projectRunning(id: string): Promise<RunningSession[]> {
+  const response = await fetch(`/api/projects/${id}/running`);
+  if (!response.ok) {
+    throw new Error(
+      (await response.text()) ||
+        `Could not list this project's sessions — the hub answered ${response.status}. Try again.`
+    );
+  }
+  return ((await response.json()) as { sessions: RunningSession[] }).sessions;
+}
+
+const projectStopListeners = new Set<(frame: ProjectStopFrame) => void>();
+
+/**
+ * Hears each `project.stop` frame: a session a forget asked to stop has
+ * stopped (its machine confirmed), or could not be. Returns the unsubscribe.
+ */
+export function onProjectStop(
+  listener: (frame: ProjectStopFrame) => void
+): () => void {
+  projectStopListeners.add(listener);
+  return () => projectStopListeners.delete(listener);
+}
+
+/**
+ * Stops the named sessions of a project in one request. Each one's outcome
+ * arrives later, by `onProjectStop`, as its machine confirms the end.
+ */
+export async function stopProjectSessions(
+  id: string,
+  instanceIds: string[]
+): Promise<void> {
+  const response = await fetch(`/api/projects/${id}/stop`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ instanceIds }),
+  });
+  if (!response.ok) {
+    throw new Error(
+      (await response.text()) ||
+        `Could not stop this project's sessions — the hub answered ${response.status}. Try again.`
+    );
+  }
 }
 
 /**

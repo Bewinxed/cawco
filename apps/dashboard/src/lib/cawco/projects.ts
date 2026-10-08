@@ -1,27 +1,12 @@
+import { primaryPlaceOf } from "@cawco/core";
 import type { ProjectPlace, ProjectRow } from "./client.svelte";
 
-interface Location {
-  cwd: string;
-  machineId: string;
-  projectId?: string | null;
-}
-
-/** A folder on one machine. */
-interface Spot {
-  machineId: string;
-  path: string;
-}
-
-const TRAILING_SLASH = /\/+$/;
-const folder = (cwd: string): string => cwd.replace(TRAILING_SLASH, "") || "/";
-const contains = (root: string, path: string): boolean =>
-  root === path || path.startsWith(root === "/" ? "/" : `${root}/`);
-const older = (a: ProjectRow, b: ProjectRow): boolean =>
-  a.createdAt < b.createdAt || (a.createdAt === b.createdAt && a.id < b.id);
+/* Which projects a row lists in is core's `projectsFor` (project-membership):
+   the rail and the hub's forget read the one rule. */
 
 /** The project's primary checkout; undefined while it has none (only its folder on the hub). */
 export const checkoutOf = (project: ProjectRow): ProjectPlace | undefined =>
-  project.places.find((place) => place.id === project.primaryPlaceId);
+  primaryPlaceOf(project);
 
 /**
  * The folder a project is known by (its hue, its rail row): its primary
@@ -29,119 +14,6 @@ export const checkoutOf = (project: ProjectRow): ProjectPlace | undefined =>
  */
 export const folderOf = (project: ProjectRow): string =>
   checkoutOf(project)?.path ?? `projects/${project.id}`;
-
-/**
- * Where an owned row counts from: the owner's place on the row's machine that
- * holds the row's folder (the deepest), else the owner's primary checkout,
- * else the row's own folder.
- */
-function homeOf(owner: ProjectRow, row: Location): Spot {
-  const cwd = folder(row.cwd);
-  const primary = checkoutOf(owner);
-  let home: Spot = primary
-    ? { machineId: primary.machineId, path: folder(primary.path) }
-    : { machineId: row.machineId, path: cwd };
-  let depth = -1;
-  for (const place of owner.places) {
-    const path = folder(place.path);
-    if (
-      place.machineId === row.machineId &&
-      contains(path, cwd) &&
-      path.length > depth
-    ) {
-      home = { machineId: place.machineId, path };
-      depth = path.length;
-    }
-  }
-  return home;
-}
-
-/** Each machine's folders that are places, and the oldest project at each. */
-type PlaceIndex = Map<string, Map<string, ProjectRow>>;
-
-/**
- * The place index of each projects list, built the first time a list is
- * asked about. The store replaces its list whole whenever a project or a
- * place changes (`reconcileRows`), so a list's index never goes stale.
- * Every row label asks for its projects, and the Recent list labels every
- * row each time the board changes: rebuilt per ask, the index was a pass
- * over every place of every project per row, which held the page for
- * hundreds of milliseconds at a time on a fleet with many sessions.
- */
-const indexes = new WeakMap<ProjectRow[], PlaceIndex>();
-
-function placeIndex(projects: ProjectRow[]): PlaceIndex {
-  const held = indexes.get(projects);
-  if (held) {
-    return held;
-  }
-  const index: PlaceIndex = new Map();
-  for (const project of projects) {
-    for (const place of project.places) {
-      let oldest = index.get(place.machineId);
-      if (!oldest) {
-        oldest = new Map();
-        index.set(place.machineId, oldest);
-      }
-      const path = folder(place.path);
-      const previous = oldest.get(path);
-      if (!previous || older(project, previous)) {
-        oldest.set(path, project);
-      }
-    }
-  }
-  indexes.set(projects, index);
-  return index;
-}
-
-/** Every folder that holds `path` (`contains`), the folder itself first, then outward. */
-function holders(path: string): string[] {
-  const out = [path];
-  for (let i = path.length - 1; i > 0; i -= 1) {
-    if (path[i] === "/") {
-      out.push(path.slice(0, i));
-    }
-  }
-  if (path.startsWith("/") && !out.includes("/")) {
-    out.push("/");
-  }
-  return out;
-}
-
-/**
- * Explicit ownership wins; then every project with a place on the row's
- * machine whose folder holds the row's, deepest first. Ambiguous folders
- * belong to their oldest project.
- */
-export function projectsFor(
-  projects: ProjectRow[],
-  row: Location
-): ProjectRow[] {
-  const owner = projects.find((project) => project.id === row.projectId);
-  const at: Spot = owner
-    ? homeOf(owner, row)
-    : { machineId: row.machineId, path: folder(row.cwd) };
-  const oldest = placeIndex(projects).get(at.machineId);
-  if (!oldest) {
-    return owner ? [owner] : [];
-  }
-  // Each project once, at the deepest of its places that holds the folder.
-  const depth = new Map<string, { project: ProjectRow; depth: number }>();
-  for (const path of holders(at.path)) {
-    const project = oldest.get(path);
-    if (!project || (owner && (path === at.path || project.id === owner.id))) {
-      continue;
-    }
-    const held = depth.get(project.id);
-    if (!held || path.length > held.depth) {
-      depth.set(project.id, { project, depth: path.length });
-    }
-  }
-  const claimed = [...depth.values()]
-    .sort((a, b) => b.depth - a.depth)
-    .map((held) => held.project);
-  return owner ? [owner, ...claimed] : claimed;
-}
 
 /** Where a session on `machineId` starts in the project: its checkout there, the primary first. */
 export function checkoutOn(

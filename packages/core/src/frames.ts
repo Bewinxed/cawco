@@ -292,6 +292,21 @@ export interface ProjectCapFrame {
   projectId: string;
 }
 
+/**
+ * Hub-originated: one session a project's forget asked to stop
+ * (`POST /api/projects/:id/stop`) has stopped, as its machine confirmed, or
+ * could not be stopped, with the hub's reason. Never sent for the request
+ * itself: a session is stopped only once its machine says so.
+ */
+export interface ProjectStopFrame {
+  /** Why it could not be stopped (`failed` only). */
+  error?: string;
+  instanceId: string;
+  kind: "project.stop";
+  outcome: "stopped" | "failed";
+  projectId: string;
+}
+
 export interface TasksChangedFrame {
   instanceId?: undefined;
   /**

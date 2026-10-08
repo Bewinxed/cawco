@@ -13,7 +13,13 @@
  *   groups above shows, and the transcripts stored on the machines.
  */
 import type { NeutralSessionInfo, ProjectCap, WorkflowRun } from "@cawco/core";
-import { archiveRefusal, machineLabel, questionsOf } from "@cawco/core";
+import {
+  archiveRefusal,
+  machineLabel,
+  projectsFor,
+  questionsOf,
+  topsIn,
+} from "@cawco/core";
 import {
   type BlockedRequest,
   cawco,
@@ -33,10 +39,9 @@ import {
 } from "../links";
 import { signInWarning } from "../machine";
 import { heldOrder } from "../motion/held-order.svelte";
-import { projectsFor } from "../projects";
 import { rail } from "../rail.svelte";
 import { threadTabId } from "../thread-tabs";
-import { hasParent, rooted, topsIn, tree } from "../tree";
+import { hasParent, rooted, tree } from "../tree";
 import { runHref } from "../workflow-runs";
 import { workflowState } from "../workflow-state.svelte";
 import { choices } from "./choices.svelte";

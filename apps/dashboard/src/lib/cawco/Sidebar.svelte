@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { machineLabel } from "@cawco/core";
+  import { machineLabel, projectsFor, topsIn } from "@cawco/core";
   /**
    * Fleet sidebar — reimplemented on top of the shadcn-svelte sidebar primitives
    * (ui/sidebar/*), following the Fluid Functionalism inset preset pattern:
@@ -78,13 +78,13 @@
   } from "./older";
   import { openTrees, type TreeList } from "./open-trees.svelte";
   import ProjectMark from "./ProjectMark.svelte";
-  import { folderOf, projectsFor } from "./projects";
+  import { folderOf } from "./projects";
   import { type RailSort, rail } from "./rail.svelte";
   import SessionHover from "./SessionHover.svelte";
   import SessionRow, { ROW_PILL } from "./SessionRow.svelte";
   import { newSession } from "./spawn/new-session.svelte";
   import { inLists, isThreadTab } from "./thread-tabs";
-  import { rooted, topsIn, tree } from "./tree";
+  import { rooted, tree } from "./tree";
   import UsageMeter from "./UsageMeter.svelte";
   import { workflowState } from "./workflow-state.svelte";
   import { workspace } from "./workspace/workspace.svelte";
@@ -1079,7 +1079,6 @@
               >
                 <FolderMenu
                   cwd={folderOf(project)}
-                  name={project.name}
                   oncollapseothers={() => collapseOthers(project.id)}
                   onnew={() => newSession({ projectId: project.id })}
                   {project}

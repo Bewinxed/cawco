@@ -26,15 +26,10 @@
     overlayProps?: ComponentProps<typeof AlertDialogOverlay>;
   } = $props();
 
-  // A dialog whose body changes (a failure line, a pending label) tweens to
-  // its new height, as ui/dialog's content does; it is centred, so it grows
-  // from the middle.
+  // A dialog whose body changes (a failure line, a pending label, a row
+  // folding shut) tweens to its new height; the tray around it follows. It is
+  // centred, so it grows from the middle.
   const resize = morph();
-  $effect(() => {
-    if (ref) {
-      return resize(ref);
-    }
-  });
 </script>
 
 <AlertDialogPortal {...portalProps}>
@@ -49,7 +44,12 @@
     bind:ref
     {...restProps}
   >
-    <div class="kit-dialog-body grid gap-6 text-body text-foreground">
+    <!-- One column no wider than the tray: a row's unwrapping title is cut
+         to it, never pushes past it. -->
+    <div
+      class="kit-dialog-body grid grid-cols-[minmax(0,1fr)] gap-6 text-body text-foreground"
+      {@attach resize}
+    >
       {@render children?.()}
     </div>
   </AlertDialogPrimitive.Content>
