@@ -13,11 +13,14 @@
     notice,
     ondismiss,
     onreload,
+    reloading = false,
   }: {
     notice: Notice;
     ondismiss: () => void;
     /** Given while this tab is older than the dashboard serving it. */
     onreload?: () => void;
+    /** Reload was chosen: the card stands as it is until the tab goes. */
+    reloading?: boolean;
   } = $props();
 </script>
 
@@ -29,7 +32,7 @@
   <div class="actions">
     <Button onclick={ondismiss} size="sm" variant="secondary">Dismiss</Button>
     {#if onreload}
-      <Button onclick={onreload} size="sm">Reload</Button>
+      <Button label="Reload" onclick={onreload} pending={reloading} size="sm" />
     {/if}
   </div>
 </article>

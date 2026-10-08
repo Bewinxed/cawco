@@ -29,6 +29,8 @@ export { default as IconBook } from "~icons/solar/book-bold-duotone";
 export { default as IconBox } from "~icons/solar/box-bold-duotone";
 export { default as IconSubagent } from "~icons/solar/branching-paths-down-bold-duotone";
 export { default as IconFork } from "~icons/solar/branching-paths-up-bold-duotone";
+/** A release's Fixed section (ReleaseNotes). */
+export { default as IconBug } from "~icons/solar/bug-bold-duotone";
 export { default as IconUsage } from "~icons/solar/chart-2-bold-duotone";
 export { default as IconChat } from "~icons/solar/chat-square-bold-duotone";
 export { default as IconSuccess } from "~icons/solar/check-circle-bold-duotone";
@@ -78,6 +80,8 @@ export {
   default as IconGlobe,
   default as IconToolWeb,
 } from "~icons/solar/global-bold-duotone";
+/** A release's Improved section (ReleaseNotes). */
+export { default as IconGraphUp } from "~icons/solar/graph-up-bold-duotone";
 /** A person is asked for: the Needs-you glyph (DESIGN.md, Session status). */
 export { default as IconNeedsYou } from "~icons/solar/hand-shake-bold-duotone";
 export { default as IconHistory } from "~icons/solar/history-bold-duotone";
@@ -155,6 +159,8 @@ export { default as IconUnfold } from "~icons/solar/sort-vertical-bold-duotone";
 export { default as IconCollapseOthers } from "~icons/solar/square-double-alt-arrow-up-bold-duotone";
 export { default as IconExternal } from "~icons/solar/square-top-down-bold-duotone";
 export { default as IconExternalLink } from "~icons/solar/square-top-up-bold-duotone";
+/** A release's New section (ReleaseNotes). */
+export { default as IconStars } from "~icons/solar/stars-bold-duotone";
 export { default as IconStop } from "~icons/solar/stop-bold-duotone";
 export { default as IconSun } from "~icons/solar/sun-bold-duotone";
 export { default as IconLab } from "~icons/solar/test-tube-bold-duotone";

@@ -267,12 +267,34 @@
     ])
   ) as Notice;
 
+  /** A landing's notice in a tab older than the dashboard: notes, Configure and Reload. */
+  const UPDATED_RELOAD = noticeFor(
+    input({
+      newerBuild: "e3cbba1",
+      machines: trio([
+        { phase: "installed", installedVersion: "1.4.2", landed: LANDED },
+        {},
+        {},
+      ]),
+    }),
+    machineLabel
+  ) as Notice;
+
   // The real toast: one id, and the box changes in place.
   const ID = "cawco-update-demo";
   const demo = $state<{ notice: Notice; onPage: boolean }>({
     notice: NOTICES[3],
     onPage: false,
   });
+  /**
+   * Reload here does not reload: it changes the notice under the box at
+   * once, as an acknowledgement can, so the box can be seen to hold.
+   */
+  function demoAction(action: NonNullable<Notice["action"]>) {
+    if (action === "reload") {
+      demo.notice = NOTICES.at(-1) as Notice;
+    }
+  }
   function showAsToast(notice: Notice) {
     demo.notice = notice;
     if (toast.getActiveToasts().some((active) => active.id === ID)) {
@@ -284,7 +306,7 @@
       dismissible: false,
       componentProps: {
         view: demo,
-        onaction: () => undefined,
+        onaction: demoAction,
         ondismiss: () => undefined,
         onsettle: remeasure(ID),
       },
@@ -351,6 +373,23 @@
         />
       </div>
     {/each}
+  </div>
+
+  <h1>Updated, in a tab older than the dashboard</h1>
+  <div class="notices" data-states="notice-reload">
+    <div class="one" data-notice="reload">
+      <UpdateNotice
+        onaction={noop}
+        ondismiss={noop}
+        view={{ notice: UPDATED_RELOAD, onPage: false }}
+      />
+      <Button
+        label="Show as toast"
+        onclick={() => showAsToast(UPDATED_RELOAD)}
+        size="sm"
+        variant="outline"
+      />
+    </div>
   </div>
 
   <h1>Updated, with notes written before sections</h1>

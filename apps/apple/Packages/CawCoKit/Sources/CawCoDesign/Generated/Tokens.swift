@@ -234,6 +234,13 @@ public enum Palette {
     public static let dataBad = Palette.named("data-bad")
     public static let diffAddBg = Palette.named("diff-add-bg")
     public static let diffDelBg = Palette.named("diff-del-bg")
+    /// Release-note section labels (ReleaseNotes): New green, Improved cyan, Fixed amber. Each ink sits on its own faint fill at 4.5:1 or more in both themes.
+    public static let noteNewInk = Palette.named("note-new-ink")
+    public static let noteNewBg = Palette.named("note-new-bg")
+    public static let noteImprovedInk = Palette.named("note-improved-ink")
+    public static let noteImprovedBg = Palette.named("note-improved-bg")
+    public static let noteFixedInk = Palette.named("note-fixed-ink")
+    public static let noteFixedBg = Palette.named("note-fixed-bg")
     public static let chart1 = Palette.named("chart-1")
     public static let chartBrand = Palette.named("chart-brand")
     public static let chart2 = Palette.named("chart-2")

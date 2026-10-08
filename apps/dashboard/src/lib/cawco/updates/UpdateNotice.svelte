@@ -10,10 +10,14 @@
    * bullets) and, when there are more, the toast opens in place to all of
    * them, as Family's trays do (https://benji.org/family-values): Caw and
    * the title hold their place and only the notes grow, the box's height
-   * morphs, the rows it gains fly in on the list switch's stagger, the
-   * close glyph turns into the back chevron that closes it again, and
-   * "Show all N changes" morphs letter by letter into "Show less". Esc
-   * closes it too.
+   * morphs, the rows it gains fly in on the list switch's stagger, and the
+   * close glyph turns into the back chevron: the one way to close them
+   * again (Family's one icon for one job). "Show all N changes" opens them
+   * and is gone while they stand open. Esc closes them too.
+   *
+   * Reload holds the whole box as it stands, notes and open or closed
+   * included, until the tab goes: what the acknowledgement changes upstream
+   * never reaches it, and Reload shows its pending state.
    */
   import { tick } from "svelte";
   import { fade } from "svelte/transition";
@@ -22,7 +26,6 @@
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
   import CloseBack from "#lib/components/icons/CloseBack.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
-  import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import { IconError } from "#lib/icons.js";
   import Caw, { type CawStatus } from "../home/Caw.svelte";
@@ -51,7 +54,19 @@
     closeToast?: () => void;
   } = $props();
 
-  const notice = $derived(view.notice);
+  /** The notice as it stood when Reload was chosen; the box shows it until the tab goes. */
+  let held = $state.raw<Notice | null>(null);
+  const notice = $derived(held ?? view.notice);
+
+  function act(action: NonNullable<Notice["action"]>): void {
+    if (held) {
+      return;
+    }
+    if (action === "reload") {
+      held = $state.snapshot(view.notice) as Notice;
+    }
+    onaction(action);
+  }
   const status = $derived(notice.caw.status as CawStatus);
   /** The first busy line takes the one spinner; the rest are plain words. */
   const spinnerAt = $derived(notice.lines.findIndex((l) => l.state === "busy"));
@@ -66,6 +81,8 @@
   const notesId = $props.id();
   let notesBox = $state<HTMLElement>();
   let noticeBox = $state<HTMLElement>();
+  let closeButton = $state<HTMLButtonElement>();
+  let moreButton = $state<HTMLButtonElement>();
   /** Bumped on every open or close, so only the last one reports it settled. */
   let turn = 0;
 
@@ -86,10 +103,9 @@
    * Once the box's morph has run (or at once, with nothing to run), says
    * the box stands at its new height. The morph starts in the microtask
    * after the notes change, so a frame later it is on the box. It can start
-   * again on the way: the button's words morph a frame after the notes do,
-   * and that change cancels the tween in flight (its `finished` settles)
-   * and tweens on from where it stood. So the box is waited on until no
-   * tween is left on it.
+   * again on the way: a later change cancels the tween in flight (its
+   * `finished` settles) and tweens on from where it stood. So the box is
+   * waited on until no tween is left on it.
    */
   async function settle(next: boolean): Promise<void> {
     turn += 1;
@@ -111,8 +127,16 @@
       return;
     }
     const had = notesBox?.querySelectorAll(ROWS).length ?? 0;
+    // "Show all" leaves as the notes open and the chevron is the way back,
+    // so the keyboard's place moves between the two.
+    const focused = document.activeElement;
     openOn = next ? shownKey : null;
     await tick();
+    if (next && focused === moreButton) {
+      closeButton?.focus();
+    } else if (!next && focused === closeButton) {
+      moreButton?.focus();
+    }
     const box = notesBox;
     if (!box) {
       return;
@@ -172,7 +196,9 @@
   <!-- One icon, two roles: it dismisses the notice, and while the notes
        stand open it is the way back to their summary. -->
   <button
-    aria-label={open ? "Show less" : "Dismiss"}
+    aria-controls={open ? notesId : undefined}
+    aria-expanded={open ? true : undefined}
+    aria-label={open ? "Back to the summary" : "Dismiss"}
     class="x touch-hit pointer-hit"
     onclick={() => {
       if (open) {
@@ -184,6 +210,7 @@
       closeToast?.();
     }}
     type="button"
+    bind:this={closeButton}
   >
     <CloseBack back={open} class="size-3" />
   </button>
@@ -209,17 +236,16 @@
     >
       <ReleaseNotes source={open ? notes.full : notes.summary} />
     </div>
-    {#if opens}
+    {#if opens && !open}
       <button
         aria-controls={notesId}
-        aria-expanded={open}
+        aria-expanded="false"
         class="more touch-hit pointer-hit"
-        onclick={() => setOpen(!open)}
+        onclick={() => setOpen(true)}
         type="button"
+        bind:this={moreButton}
       >
-        <MorphText
-          text={open ? "Show less" : `Show all ${notes.count} changes`}
-        />
+        Show all {notes.count} changes
       </button>
     {/if}
   {/if}
@@ -253,21 +279,22 @@
         <Button
           class="primary"
           label="Retry"
-          onclick={() => onaction("retry")}
+          onclick={() => act("retry")}
           size="sm"
         />
       {:else if notice.action === "install-all"}
         <Button
           class="primary"
           label="Install now"
-          onclick={() => onaction("install-all")}
+          onclick={() => act("install-all")}
           size="sm"
         />
       {:else if notice.action === "reload"}
         <Button
           class="primary"
           label="Reload"
-          onclick={() => onaction("reload")}
+          onclick={() => act("reload")}
+          pending={held !== null}
           size="sm"
         />
       {/if}
@@ -401,18 +428,23 @@
   .closing {
     color: var(--ink-muted);
   }
-  /* The words keep one left edge beside Caw; the buttons need no such edge,
-     so their row takes the whole width under him. */
+  /* One footer row under Caw and the words, the whole width: the quiet way
+     to the settings at the leading edge, the act at the trailing edge (also
+     when it is the only one), both on one baseline at every width. */
   .buttons {
     grid-column: 1 / -1;
     display: flex;
-    flex-wrap: wrap;
-    justify-content: space-between;
+    align-items: center;
     gap: 8px;
     margin-top: 8px;
   }
+  .buttons > :global(*) {
+    flex: none;
+  }
   /* The way to the settings is there to be found, not to compete with the act. */
   .buttons > :global(.quiet) {
+    min-inline-size: 0;
+    flex-shrink: 1;
     color: var(--ink-muted);
   }
   @media (hover: hover) {
@@ -420,23 +452,7 @@
       color: var(--ink-strong);
     }
   }
-  .buttons > :global(*) {
-    flex: 1;
-  }
-  /* The quiet way to the settings hugs its words at the leading edge at every width. */
-  .buttons > :global(.quiet) {
-    flex: none;
-  }
-  @media (min-width: 640px) {
-    .buttons > :global(*) {
-      flex: none;
-    }
-    .buttons {
-      justify-content: space-between;
-    }
-    /* The primary stands at the trailing edge, also when it is the only button. */
-    .buttons > :global(.primary) {
-      margin-inline-start: auto;
-    }
+  .buttons > :global(.primary) {
+    margin-inline-start: auto;
   }
 </style>

@@ -345,6 +345,13 @@
     );
     --diff-add-bg: oklch(from var(--success-9) l c h / 0.15);
     --diff-del-bg: oklch(from var(--error-9) l c h / 0.15);
+    /* Release-note section labels (ReleaseNotes): New green, Improved cyan, Fixed amber. Each ink sits on its own faint fill at 4.5:1 or more in both themes. */
+    --note-new-ink: light-dark(oklch(44% 0.11 149), oklch(86% 0.12 149));
+    --note-new-bg: light-dark(oklch(95% 0.04 149), oklch(31% 0.055 149));
+    --note-improved-ink: light-dark(oklch(44% 0.1 225), oklch(86% 0.1 225));
+    --note-improved-bg: light-dark(oklch(95% 0.035 225), oklch(31% 0.05 225));
+    --note-fixed-ink: light-dark(oklch(46% 0.1 70), oklch(87% 0.13 79));
+    --note-fixed-bg: light-dark(oklch(95% 0.05 85), oklch(32% 0.055 79));
     --chart-1: light-dark(var(--neutral-12), var(--neutral-11));
     --chart-brand: var(--coral-9);
     --chart-2: var(--info-9);

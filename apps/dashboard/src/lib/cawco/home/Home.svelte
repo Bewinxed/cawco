@@ -24,7 +24,12 @@
   import { newerBuild } from "../served-build.svelte";
   import { newSession } from "../spawn/new-session.svelte";
   import UsageMeter from "../UsageMeter.svelte";
-  import { reloadId, unseenLandings, updatedNotice } from "../updates/model";
+  import {
+    type Notice,
+    reloadId,
+    unseenLandings,
+    updatedNotice,
+  } from "../updates/model";
   import { reloadAcknowledging } from "../updates/update-notice.svelte";
   import { updates } from "../updates/updates.svelte";
   import Caw from "./Caw.svelte";
@@ -52,9 +57,15 @@
       ? updatedNotice(unseenLandings(cawco.machines, notices.seen))
       : null
   );
+  /**
+   * The card as it stood when Reload was chosen: acknowledging drops the
+   * landing from `updated`, and the card holds still until the tab goes.
+   */
+  let reloadingWith = $state.raw<Notice | null>(null);
+  const card = $derived(reloadingWith ?? updated);
   // While the card is on screen it is the landing's one surface: the toast stands aside.
   $effect(() => {
-    if (!updated) {
+    if (!card) {
       return;
     }
     // Untracked: the count is written here, never followed.
@@ -72,6 +83,10 @@
     void notices.acknowledge(updated?.acks ?? []);
   }
   function reloadForUpdate(): void {
+    if (reloadingWith) {
+      return;
+    }
+    reloadingWith = updated;
     const build = newerBuild();
     // biome-ignore lint/complexity/noVoid: the tab goes once the acknowledgement is in
     void reloadAcknowledging([
@@ -200,7 +215,7 @@
        `waiting`), so the tab row is where it will be and the list
        cross-fades in under it; nothing else here is claimed before then. -->
   <div class="groups">
-    {#if updated}
+    {#if card}
       <!-- An update nobody has seen stays here until it is dismissed. -->
       <section
         aria-label="Update"
@@ -210,9 +225,10 @@
         out:crossOut
       >
         <UpdateCard
-          notice={updated}
+          notice={card}
           ondismiss={dismissUpdate}
-          onreload={newerBuild() ? reloadForUpdate : undefined}
+          onreload={reloadingWith || newerBuild() ? reloadForUpdate : undefined}
+          reloading={reloadingWith !== null}
         />
       </section>
     {/if}

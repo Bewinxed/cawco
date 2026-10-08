@@ -1481,6 +1481,61 @@
       "$type": "color",
       "$value": "oklch(from {color.error-9} l c h / 0.15)"
     },
+    "note-new-ink": {
+      "$type": "color",
+      "$value": "oklch(44% 0.11 149)",
+      "$description": "Release-note section labels (ReleaseNotes): New green, Improved cyan, Fixed amber. Each ink sits on its own faint fill at 4.5:1 or more in both themes.",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(86% 0.12 149)"
+        }
+      }
+    },
+    "note-new-bg": {
+      "$type": "color",
+      "$value": "oklch(95% 0.04 149)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(31% 0.055 149)"
+        }
+      }
+    },
+    "note-improved-ink": {
+      "$type": "color",
+      "$value": "oklch(44% 0.1 225)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(86% 0.1 225)"
+        }
+      }
+    },
+    "note-improved-bg": {
+      "$type": "color",
+      "$value": "oklch(95% 0.035 225)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(31% 0.05 225)"
+        }
+      }
+    },
+    "note-fixed-ink": {
+      "$type": "color",
+      "$value": "oklch(46% 0.1 70)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(87% 0.13 79)"
+        }
+      }
+    },
+    "note-fixed-bg": {
+      "$type": "color",
+      "$value": "oklch(95% 0.05 85)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(32% 0.055 79)"
+        }
+      }
+    },
     "chart-1": {
       "$type": "color",
       "$value": "{color.neutral-12}",
