@@ -27090,7 +27090,7 @@
         ]
       },
       "AccountHue": {
-        "description": "The hue an account is drawn in: a `--hue-<name>-500` token.",
+        "description": "The colour an account is drawn in: the `--account-<name>` token.",
         "enum": [
           "amber",
           "blue",
